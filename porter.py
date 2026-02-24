@@ -31,6 +31,11 @@ AVATAR_EXTS  = {"jpg", "jpeg", "png", "webp", "gif"}
 SESSION_TTL  = 30 * 24 * 3600   # 30 days
 _sessions: dict = {}             # token -> {username, expires}
 
+RUNTIME_DIR       = Path("/home/lobster/documents/porter/runtime")
+MEMORY_DIR        = Path("/home/lobster/documents/porter/memory")
+MEMORY_NAMESPACES = {"projects", "people", "decisions", "compliance",
+                     "transcripts", "artifacts", "indexes", "pointers"}
+
 # ── config helpers ────────────────────────────────────────────────────────
 
 def _hash_password(password: str, salt: str) -> str:
@@ -78,6 +83,40 @@ def get_session(token: str) -> dict | None:
 
 def delete_session(token: str) -> None:
     _sessions.pop(token, None)
+
+# ── runtime / memory helpers ───────────────────────────────────────────────
+
+def porter_uri_to_path(uri: str) -> "Path | None":
+    """Resolve a porter:// URI to an absolute Path, blocking traversal."""
+    if not isinstance(uri, str) or not uri.startswith("porter://"):
+        return None
+    rest = uri[len("porter://"):]          # e.g. "runtime/checkpoints/foo" or "projects/bar.md"
+    parts = rest.split("/", 1)
+    ns = parts[0]
+    tail = parts[1] if len(parts) > 1 else ""
+    if ns == "runtime":
+        base = RUNTIME_DIR
+    elif ns in MEMORY_NAMESPACES:
+        base = MEMORY_DIR / ns
+    else:
+        return None
+    try:
+        if tail:
+            resolved = (base / tail).resolve()
+        else:
+            resolved = base.resolve()
+        resolved.relative_to(base.resolve())   # raises ValueError on traversal
+        return resolved
+    except Exception:
+        return None
+
+def ensure_runtime_dirs():
+    for d in ("checkpoints", "leases", "drafts", "tmp"):
+        (RUNTIME_DIR / d).mkdir(parents=True, exist_ok=True)
+
+def ensure_memory_dirs():
+    for ns in MEMORY_NAMESPACES:
+        (MEMORY_DIR / ns).mkdir(parents=True, exist_ok=True)
 
 # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -2523,6 +2562,67 @@ class Handler(BaseHTTPRequestHandler):
                 while chunk := f.read(65536):
                     self.wfile.write(chunk)
 
+        # ── P0: runtime recover ────────────────────────────────────────────
+        elif parsed.path == "/runtime/recover":
+            if not self.auth_check(redirect=False): return
+            task_id = qs.get("task_id", [""])[0]
+            if not task_id or not re.match(r'^[\w\-\.]+$', task_id):
+                self.reply_json({"error": "invalid task_id"}, 400); return
+            lease_path = RUNTIME_DIR / "leases" / f"{task_id}.json"
+            ckpt_path  = RUNTIME_DIR / "checkpoints" / f"{task_id}.jsonl"
+            drafts_dir = RUNTIME_DIR / "drafts" / task_id
+            lease = json.loads(lease_path.read_text()) if lease_path.exists() else None
+            steps = []
+            if ckpt_path.exists():
+                for line in ckpt_path.read_text().splitlines():
+                    line = line.strip()
+                    if line:
+                        try:
+                            steps.append(json.loads(line))
+                        except Exception:
+                            pass
+            chunks = []
+            if drafts_dir.exists():
+                chunks = sorted(p.name for p in drafts_dir.iterdir() if p.is_file())
+            last_step = steps[-1] if steps else None
+            last_status = (last_step or {}).get("status", "")
+            resumable = lease is not None and last_status != "done"
+            self.reply_json({
+                "task_id":   task_id,
+                "lease":     lease,
+                "steps":     steps,
+                "chunks":    chunks,
+                "last_step": last_step,
+                "resumable": resumable,
+            })
+
+        # ── P1: memory fetch ───────────────────────────────────────────────
+        elif parsed.path == "/memory/fetch":
+            if not self.auth_check(redirect=False): return
+            uri      = qs.get("uri",   [""])[0]
+            from_ln  = int(qs.get("from",  ["1"])[0])
+            n_lines  = int(qs.get("lines", ["0"])[0])
+            fpath = porter_uri_to_path(uri)
+            if fpath is None:
+                self.reply_json({"error": "invalid uri"}, 400); return
+            if not fpath.exists():
+                self.reply_json({"error": "not found"}, 404); return
+            content = fpath.read_text(encoding="utf-8", errors="replace")
+            all_lines = content.splitlines(keepends=True)
+            total_lines = len(all_lines)
+            if n_lines > 0:
+                start = max(0, from_ln - 1)
+                sliced = all_lines[start:start + n_lines]
+                content = "".join(sliced)
+            st = fpath.stat()
+            self.reply_json({
+                "uri":         uri,
+                "content":     content,
+                "size":        st.st_size,
+                "modified":    st.st_mtime,
+                "total_lines": total_lines,
+            })
+
         else:
             self.reply_html("<h1>Not found</h1>", 404)
 
@@ -2801,6 +2901,258 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
+        # ── P0: runtime checkpoint ─────────────────────────────────────────
+        elif parsed.path == "/runtime/checkpoint":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            task_id   = data.get("task_id", "")
+            step_id   = data.get("step_id", "")
+            operation = data.get("operation", "")
+            status    = data.get("status", "")
+            metadata  = data.get("metadata", {})
+            errors = []
+            if not task_id or not re.match(r'^[\w\-\.]+$', task_id):
+                errors.append("task_id must be non-empty and match [\\w\\-\\.]+")
+            if not step_id:
+                errors.append("step_id is required")
+            if not operation:
+                errors.append("operation is required")
+            if status not in ("started", "partial", "done", "failed"):
+                errors.append("status must be one of: started, partial, done, failed")
+            if errors:
+                self.reply_json({"error": "; ".join(errors)}, 400); return
+            now = time.time()
+            entry = {
+                "task_id":   task_id,
+                "step_id":   step_id,
+                "operation": operation,
+                "status":    status,
+                "timestamp": now,
+                "metadata":  metadata,
+            }
+            ckpt_path = RUNTIME_DIR / "checkpoints" / f"{task_id}.jsonl"
+            with open(ckpt_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
+            self.reply_json({"ok": True, "step_id": step_id, "timestamp": now})
+
+        # ── P0: runtime heartbeat ──────────────────────────────────────────
+        elif parsed.path == "/runtime/heartbeat":
+            if not self.auth_check(redirect=False): return
+            data    = self.read_json_body()
+            task_id = data.get("task_id", "")
+            if not task_id or not re.match(r'^[\w\-\.]+$', task_id):
+                self.reply_json({"error": "task_id must be non-empty and match [\\w\\-\\.]+"}, 400); return
+            owner = data.get("owner", "agent")
+            ttl   = int(data.get("ttl", 300))
+            now   = time.time()
+            lease_path = RUNTIME_DIR / "leases" / f"{task_id}.json"
+            if lease_path.exists():
+                try:
+                    lease = json.loads(lease_path.read_text())
+                except Exception:
+                    lease = {}
+            else:
+                lease = {}
+            lease.update({
+                "task_id":        task_id,
+                "owner":          owner,
+                "last_heartbeat": now,
+                "expires_at":     now + ttl,
+                "state":          lease.get("state", "running"),
+            })
+            if "started_at" not in lease:
+                lease["started_at"] = now
+            lease_path.write_text(json.dumps(lease, indent=2))
+            self.reply_json({"ok": True, "task_id": task_id, "expires_at": lease["expires_at"]})
+
+        # ── P0: runtime finalize ───────────────────────────────────────────
+        elif parsed.path == "/runtime/finalize":
+            if not self.auth_check(redirect=False): return
+            data      = self.read_json_body()
+            task_id   = data.get("task_id", "")
+            temp_uri  = data.get("temp_uri", "")
+            final_uri = data.get("final_uri", "")
+            if not task_id or not re.match(r'^[\w\-\.]+$', task_id):
+                self.reply_json({"error": "invalid task_id"}, 400); return
+            temp_path  = porter_uri_to_path(temp_uri)
+            final_path = porter_uri_to_path(final_uri)
+            if temp_path is None:
+                self.reply_json({"error": "invalid temp_uri"}, 400); return
+            if final_path is None:
+                self.reply_json({"error": "invalid final_uri"}, 400); return
+            if not temp_path.exists() or temp_path.stat().st_size == 0:
+                self.reply_json({"error": "temp file missing or empty"}, 400); return
+            final_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(temp_path), str(final_path))
+            now = time.time()
+            # append finalize entry to checkpoint log
+            ckpt_path = RUNTIME_DIR / "checkpoints" / f"{task_id}.jsonl"
+            entry = json.dumps({"step_id": "finalize", "status": "done", "timestamp": now})
+            with open(ckpt_path, "a", encoding="utf-8") as f:
+                f.write(entry + "\n")
+            # update lease state
+            lease_path = RUNTIME_DIR / "leases" / f"{task_id}.json"
+            if lease_path.exists():
+                try:
+                    lease = json.loads(lease_path.read_text())
+                    lease["state"] = "complete"
+                    lease_path.write_text(json.dumps(lease, indent=2))
+                except Exception:
+                    pass
+            self.reply_json({"ok": True, "final_uri": final_uri, "timestamp": now})
+
+        # ── P1: memory search ──────────────────────────────────────────────
+        elif parsed.path == "/memory/search":
+            if not self.auth_check(redirect=False): return
+            data        = self.read_json_body()
+            query       = data.get("query", "")
+            limit       = min(int(data.get("limit", 10)), 50)
+            filter_tags = data.get("tags", [])
+            if not isinstance(filter_tags, list):
+                filter_tags = []
+            results = []
+            for dirpath, _dirs, filenames in os.walk(str(MEMORY_DIR)):
+                for fname in filenames:
+                    fp = Path(dirpath) / fname
+                    ext = fp.suffix.lower()
+                    try:
+                        if ext == ".json":
+                            raw = fp.read_text(encoding="utf-8", errors="replace")
+                            obj = json.loads(raw)
+                            if "id" not in obj or "porter_uri" not in obj:
+                                continue
+                            title   = obj.get("title", fp.stem)
+                            summary = obj.get("summary", "")
+                            tags    = obj.get("tags", [])
+                            content = title + " " + summary
+                        elif ext in (".md", ".txt"):
+                            raw  = fp.read_text(encoding="utf-8", errors="replace")
+                            lines = raw.splitlines()
+                            title = fp.stem
+                            for ln in lines:
+                                if ln.startswith("# "):
+                                    title = ln[2:].strip()
+                                    break
+                            tags_val = []
+                            for ln in lines:
+                                m = re.match(r'^tags:\s*(.+)', ln, re.IGNORECASE)
+                                if m:
+                                    tags_val = [t.strip() for t in m.group(1).split(",") if t.strip()]
+                                    break
+                            tags    = tags_val
+                            summary = ""
+                            content = raw
+                        else:
+                            continue
+                        # tag filter
+                        if filter_tags and not any(t in tags for t in filter_tags):
+                            continue
+                        # relevance score
+                        q_lower = query.lower()
+                        score = 0
+                        if q_lower and q_lower in title.lower():
+                            score = 2
+                        elif q_lower and q_lower in content.lower():
+                            score = 1
+                        if score == 0 and query:
+                            continue
+                        # build porter:// uri
+                        try:
+                            rel = fp.relative_to(MEMORY_DIR)
+                            parts = rel.parts
+                            uri = "porter://" + "/".join(parts)
+                        except Exception:
+                            uri = f"porter://artifacts/{fp.name}"
+                        results.append({
+                            "uri":     uri,
+                            "title":   title,
+                            "summary": summary,
+                            "tags":    tags,
+                            "score":   score,
+                        })
+                    except Exception:
+                        continue
+            results.sort(key=lambda r: r["score"], reverse=True)
+            results = results[:limit]
+            self.reply_json({"results": results, "total": len(results)})
+
+        # ── P1: memory upsert ──────────────────────────────────────────────
+        elif parsed.path == "/memory/upsert":
+            if not self.auth_check(redirect=False): return
+            data    = self.read_json_body()
+            uri     = data.get("uri", "")
+            content = data.get("content", "")
+            tags    = data.get("tags", [])
+            if not uri:
+                self.reply_json({"error": "uri is required"}, 400); return
+            if not content:
+                self.reply_json({"error": "content is required"}, 400); return
+            fpath = porter_uri_to_path(uri)
+            if fpath is None:
+                self.reply_json({"error": "invalid uri"}, 400); return
+            created = not fpath.exists()
+            fpath.parent.mkdir(parents=True, exist_ok=True)
+            fpath.write_text(content, encoding="utf-8")
+            from datetime import datetime, timezone
+            version = datetime.now(timezone.utc).isoformat()
+            self.reply_json({"ok": True, "uri": uri, "version": version, "created": created})
+
+        # ── P1: memory pointer ─────────────────────────────────────────────
+        elif parsed.path == "/memory/pointer":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            ptr_id     = data.get("id", "")
+            title      = data.get("title", "")
+            summary    = data.get("summary", "")
+            porter_uri = data.get("porter_uri", "")
+            tags       = data.get("tags", [])
+            confidence = data.get("confidence", "medium")
+            # collect all validation errors
+            errors = []
+            if not ptr_id or not re.match(r'^[\w\-]+$', ptr_id) or len(ptr_id) > 64:
+                errors.append("id must be non-empty, match [\\w\\-]+, max 64 chars")
+            if not title:
+                errors.append("title is required")
+            if not summary:
+                errors.append("summary is required")
+            if not porter_uri or not porter_uri.startswith("porter://"):
+                errors.append("porter_uri must start with porter://")
+            if confidence not in ("high", "medium", "low"):
+                errors.append("confidence must be one of: high, medium, low")
+            if not isinstance(tags, list):
+                errors.append("tags must be a list")
+            if errors:
+                self.reply_json({"error": "; ".join(errors)}, 400); return
+            from datetime import datetime, timezone
+            now_iso = datetime.now(timezone.utc).isoformat()
+            ptr_path = MEMORY_DIR / "pointers" / f"{ptr_id}.json"
+            created_at = now_iso
+            if ptr_path.exists():
+                try:
+                    existing = json.loads(ptr_path.read_text())
+                    created_at = existing.get("created_at", now_iso)
+                except Exception:
+                    pass
+            pointer = {
+                "id":      ptr_id,
+                "title":   title,
+                "summary": summary,
+                "source":  {"porter_uri": porter_uri, "version": now_iso},
+                "tags":    tags,
+                "confidence":     confidence,
+                "created_at":     created_at,
+                "updated_at":     now_iso,
+                "last_validated": now_iso,
+            }
+            ptr_path.parent.mkdir(parents=True, exist_ok=True)
+            ptr_path.write_text(json.dumps(pointer, indent=2))
+            self.reply_json({
+                "ok":        True,
+                "id":        ptr_id,
+                "uri":       f"porter://pointers/{ptr_id}.json",
+                "updated_at": now_iso,
+            })
+
         else:
             self.reply_html("<h1>Not found</h1>", 404)
 
@@ -2808,6 +3160,8 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     _config.update(load_config())
+    ensure_runtime_dirs()
+    ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
     print(f"\n  Porter v0.4.2 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
