@@ -566,14 +566,15 @@ body {
 /* ── sidebar collapsed ── */
 body.sidebar-collapsed { --sidebar: 52px; }
 body.sidebar-collapsed .logo-text,
+body.sidebar-collapsed .logo-mark,
 body.sidebar-collapsed .nav-label,
 body.sidebar-collapsed .loc-name,
 body.sidebar-collapsed .ver-link,
 body.sidebar-collapsed .sidebar-footer,
 body.sidebar-collapsed .user-name,
 body.sidebar-collapsed .user-sub { display: none; }
-body.sidebar-collapsed .logo { padding: 0 9px 18px; }
-body.sidebar-collapsed .hbg-btn { margin-left: 0; }
+body.sidebar-collapsed .logo { padding: 0 0 18px; justify-content: center; }
+body.sidebar-collapsed .hbg-btn { margin-left: 0; width: 100%; justify-content: center; }
 body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 body.sidebar-collapsed .user-card { padding: 10px 0; justify-content: center; }
 body.sidebar-collapsed .user-card > svg { display: none; }
@@ -2125,16 +2126,27 @@ function renderAgents(agents) {
     return;
   }
   const roleColor = { viewer:'var(--text3)', writer:'var(--text2)', operator:'var(--accent)', admin:'var(--danger)' };
-  el.innerHTML = agents.map(a => `
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--raised);border-radius:8px;margin-bottom:8px;border:1px solid var(--border)">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(a.name)}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${escHtml(a.type)} · <span style="color:${roleColor[a.role]||'var(--text3)'}">${a.role}</span> · <span style="font-family:monospace">${a.id}</span></div>
+  el.innerHTML = agents.map(a => {
+    const keyRow = a.raw_key
+      ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px">
+           <code style="flex:1;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text2)">${escHtml(a.raw_key)}</code>
+           <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;flex-shrink:0" onclick="copyText('${escHtml(a.raw_key)}',this)">Copy</button>
+         </div>`
+      : `<div style="font-size:11px;color:var(--text3);margin-top:5px;font-style:italic">Key hidden — rotate to reveal</div>`;
+    return `
+    <div style="padding:10px 12px;background:var(--raised);border-radius:8px;margin-bottom:8px;border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(a.name)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${escHtml(a.type)} · <span style="color:${roleColor[a.role]||'var(--text3)'}">${a.role}</span> · <span style="font-family:monospace">${a.id}</span></div>
+        </div>
+        <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
+        <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Revoke</button>
       </div>
-      <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
-      <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Revoke</button>
-    </div>`).join('');
+      ${keyRow}
+    </div>`;
+  }).join('');
 }
 
 function openCreateAgent() {
@@ -2167,6 +2179,15 @@ async function createAgent() {
 function copyAgentKey() {
   const val = document.getElementById('agent-key-val').textContent;
   navigator.clipboard.writeText(val).then(() => toast('Key copied', 'ok'));
+}
+
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+    toast('Key copied', 'ok');
+  });
 }
 
 async function doRotateKey(id, name) {
@@ -4449,6 +4470,7 @@ class Handler(BaseHTTPRequestHandler):
                     "name":       name,
                     "type":       agent_type,
                     "key_hash":   _hash_agent_key(raw_key),
+                    "raw_key":    raw_key,
                     "role":       role,
                     "namespaces": namespaces,
                     "created_at": datetime.now(timezone.utc).isoformat(),
@@ -4479,8 +4501,9 @@ class Handler(BaseHTTPRequestHandler):
             agent    = _agent_by_id(agent_id)
             if not agent:
                 self.reply_json({"error": "agent not found"}, 404); return
-            raw_key          = secrets.token_hex(32)
+            raw_key           = secrets.token_hex(32)
             agent["key_hash"] = _hash_agent_key(raw_key)
+            agent["raw_key"]  = raw_key
             save_config(_config)
             self.reply_json({"ok": True, "key": raw_key})
 
