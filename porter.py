@@ -1039,22 +1039,23 @@ body.density-compact .file-name { padding: 6px 0; }
 .settings-page { display: none; }
 .settings-page.active { display: block; }
 .settings-page-title { font-size: 18px; font-weight: 700; color: var(--text);
-  margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
-.settings-field { margin-bottom: 18px; }
+  margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.settings-field { margin-bottom: 12px; }
 .settings-field label { display: block; font-size: 12px; font-weight: 500;
-  color: var(--text2); margin-bottom: 6px; }
+  color: var(--text2); margin-bottom: 5px; }
+.settings-fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .settings-input { width: 100%; background: var(--raised); border: 1px solid var(--border2);
   border-radius: var(--radius); padding: 9px 12px; font-size: 14px; color: var(--text);
   font-family: inherit; outline: none; transition: .15s; }
 .settings-input:focus { border-color: var(--accent); }
-.avatar-section { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
-.avatar-large { width: 64px; height: 64px; border-radius: 50%; background: var(--accent); color: #000;
-  font-size: 24px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+.avatar-section { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.avatar-large { width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: #000;
+  font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; overflow: hidden; cursor: pointer; transition: opacity .15s; }
 .avatar-large:hover { opacity: .85; }
 .avatar-large img { width: 100%; height: 100%; object-fit: cover; }
-.avatar-hint { font-size: 12px; color: var(--text3); margin-top: 4px; }
-.settings-save-row { display: flex; justify-content: flex-end; margin-top: 16px; }
+.avatar-hint { font-size: 11px; color: var(--text3); margin-top: 3px; }
+.settings-save-row { display: flex; justify-content: flex-end; margin-top: 12px; }
 .settings-row { display: flex; align-items: center; justify-content: space-between;
   padding: 14px 0; border-bottom: 1px solid var(--border); }
 .settings-row:last-child { border-bottom: none; }
@@ -1065,7 +1066,8 @@ body.density-compact .file-name { padding: 6px 0; }
 .seg-ctrl button { background: none; border: none; font-family: inherit; font-size: 11px;
   color: var(--text3); cursor: pointer; padding: 3px 8px; border-radius: 4px; transition: .1s; }
 .seg-ctrl button.active { background: var(--raised); color: var(--text); font-weight: 600; }
-.pw-section { margin-top: 28px; border-top: 1px solid var(--border); padding-top: 20px; }
+.pw-section { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
+.pw-helper { font-size: 11px; color: var(--text3); margin-bottom: 12px; line-height: 1.5; }
 .pw-section-title { font-size: 12px; font-weight: 600; color: var(--text3);
   text-transform: uppercase; letter-spacing: .6px; margin-bottom: 16px; }
 
@@ -1291,30 +1293,35 @@ body.density-compact .file-name { padding: 6px 0; }
         <div class="avatar-section">
           <div class="avatar-large" id="saAvatar" onclick="triggerAvatarUpload()" title="Click to change photo"></div>
           <div>
-            <div style="font-size:13px;color:var(--text2)">Profile photo</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text)">Profile photo</div>
             <div class="avatar-hint">Click to upload · JPG, PNG, WebP, GIF</div>
           </div>
         </div>
-        <div class="settings-field">
-          <label>Display name</label>
-          <input type="text" class="settings-input" id="sa-name" placeholder="Your name">
-        </div>
-        <div class="settings-field">
-          <label>Email</label>
-          <input type="email" class="settings-input" id="sa-email" placeholder="you@example.com">
+        <div class="settings-fields-row">
+          <div class="settings-field">
+            <label>Display name</label>
+            <input type="text" class="settings-input" id="sa-name" placeholder="Your name">
+          </div>
+          <div class="settings-field">
+            <label>Email</label>
+            <input type="email" class="settings-input" id="sa-email" placeholder="you@example.com">
+          </div>
         </div>
         <div class="settings-save-row">
           <button class="btn btn-primary" onclick="saveAccount()">Save changes</button>
         </div>
         <div class="pw-section">
           <div class="pw-section-title">Change password</div>
-          <div class="settings-field">
-            <label>Current password</label>
-            <input type="password" class="settings-input" id="sa-pwCurrent" autocomplete="current-password">
-          </div>
-          <div class="settings-field">
-            <label>New password <span style="color:var(--text3);font-weight:400">(min 8 characters)</span></label>
-            <input type="password" class="settings-input" id="sa-pwNew" autocomplete="new-password">
+          <div class="pw-helper">Owner mode — you're already authenticated. Enter and confirm your new password.</div>
+          <div class="settings-fields-row">
+            <div class="settings-field">
+              <label>New password <span style="color:var(--text3);font-weight:400">(min 8 chars)</span></label>
+              <input type="password" class="settings-input" id="sa-pwNew" autocomplete="new-password">
+            </div>
+            <div class="settings-field">
+              <label>Confirm new password</label>
+              <input type="password" class="settings-input" id="sa-pwConfirm" autocomplete="new-password">
+            </div>
           </div>
           <div class="settings-save-row">
             <button class="btn btn-ghost" onclick="changePassword()">Update password</button>
@@ -1678,8 +1685,8 @@ function openSettings(tab = 'account') {
 }
 function closeSettings() {
   document.getElementById('settingsPanel').classList.remove('open');
-  document.getElementById('sa-pwCurrent').value = '';
   document.getElementById('sa-pwNew').value = '';
+  document.getElementById('sa-pwConfirm').value = '';
 }
 function switchSettingsTab(tab) {
   document.querySelectorAll('.settings-nav-item').forEach(el =>
@@ -1911,14 +1918,15 @@ async function saveAccount() {
 }
 
 async function changePassword() {
-  const current = document.getElementById('sa-pwCurrent').value;
   const newPw   = document.getElementById('sa-pwNew').value;
-  if (!current || !newPw) { toast('Fill in both password fields', 'err'); return; }
+  const confirm = document.getElementById('sa-pwConfirm').value;
+  if (!newPw || !confirm) { toast('Enter and confirm your new password', 'err'); return; }
   if (newPw.length < 8) { toast('New password must be at least 8 characters', 'err'); return; }
-  const res = await api('/api/password/change', { current, new: newPw });
+  if (newPw !== confirm) { toast('Passwords do not match', 'err'); return; }
+  const res = await api('/api/password/change', { new: newPw });
   if (res && res.ok) {
-    document.getElementById('sa-pwCurrent').value = '';
     document.getElementById('sa-pwNew').value = '';
+    document.getElementById('sa-pwConfirm').value = '';
     toast('Password changed', 'ok');
   } else {
     toast((res && res.error) || 'Password change failed', 'err');
@@ -3427,13 +3435,15 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/password/change":
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
-            current_pw = data.get("current", "")
+            current_pw = data.get("current", "")  # optional in owner mode
             new_pw     = data.get("new", "")
-            cfg = _config
-            if _hash_password(current_pw, cfg.get("salt", "")) != cfg.get("password_hash"):
-                self.reply_json({"ok": False, "error": "Current password is incorrect"}, 401); return
             if len(new_pw) < 8:
                 self.reply_json({"ok": False, "error": "New password must be at least 8 characters"}, 400); return
+            # Owner mode: skip current-password check when caller is already authenticated
+            # (session cookie verified above). If current was supplied, still validate it.
+            cfg = _config
+            if current_pw and _hash_password(current_pw, cfg.get("salt", "")) != cfg.get("password_hash"):
+                self.reply_json({"ok": False, "error": "Current password is incorrect"}, 401); return
             new_salt = secrets.token_hex(16)
             _config["salt"] = new_salt
             _config["password_hash"] = _hash_password(new_pw, new_salt)
