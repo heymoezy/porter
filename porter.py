@@ -546,14 +546,6 @@ body {
   height: 100%; background: var(--accent); border-radius: 2px;
   transition: width .4s ease;
 }
-.ver-link {
-  display:block; padding: 5px 20px;
-  font-size:11px; font-weight:500; letter-spacing:.2px;
-  color:var(--text3);
-  cursor:pointer; transition:color .15s; border:none; background:none;
-  text-align:left; font-family:inherit;
-}
-.ver-link:hover { color:var(--accent); }
 
 /* hamburger toggle — icon-only button inside logo row */
 .hbg-btn {
@@ -571,7 +563,7 @@ body.sidebar-collapsed .logo-text,
 body.sidebar-collapsed .logo-mark,
 body.sidebar-collapsed .nav-label,
 body.sidebar-collapsed .loc-name,
-body.sidebar-collapsed .ver-link,
+
 body.sidebar-collapsed .sidebar-footer,
 body.sidebar-collapsed .user-name,
 body.sidebar-collapsed .user-sub { display: none; }
@@ -1193,7 +1185,6 @@ body.density-compact .file-name { padding: 6px 0; }
   <div class="nav-label">Locations</div>
   <div id="locations"></div>
   <div class="sidebar-footer" id="sfooter"></div>
-  <button class="ver-link" onclick="openSettings('changelog')" title="What's new">v0.6.0 — What's new</button>
   <div class="user-card" id="userCard" onclick="openSettings('account')">
     <div class="user-avatar" id="ucAvatar"></div>
     <div style="min-width:0;flex:1">
@@ -1311,6 +1302,10 @@ body.density-compact .file-name { padding: 6px 0; }
       </button>
       <div style="flex:1"></div>
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          v0.6.0 — What's new
+        </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           Sign out
@@ -2347,6 +2342,8 @@ async function init() {
 async function navigate(root, path) {
   curRoot = root; curPath = path;
   document.title = path ? `Porter · ${root}/${path}` : `Porter · ${root}`;
+  // close settings if open so the file list is visible
+  closeSettings();
   // close preview if open
   if (previewOpen) {
     previewOpen = false; previewDirty = false; previewName = null;
