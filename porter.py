@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.7.0 — self-hosted file manager"""
+"""Porter v0.8.0 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -21,13 +21,12 @@ from urllib.parse import parse_qs, unquote, urlparse
 PORT = 8877
 HOST = "76.13.190.52"
 
-SERVE_DIRS: dict = {}   # populated at startup from config; do not hardcode here
+SERVE_DIRS: dict = {}   # populated at startup from nodes; do not hardcode here
 
-DEFAULT_LOCATIONS = [
-    {"id": "vps-home", "label": "Documents", "type": "local",
-     "path": "/home/lobster/documents"},
-    {"id": "websites",  "label": "Websites",  "type": "local",
-     "path": "/home/websites"},
+# Default mounts for the initial local node (used only on very first run)
+DEFAULT_MOUNTS = [
+    {"id": "vps-home", "label": "Documents", "path": "/home/lobster/documents", "visible": True},
+    {"id": "websites",  "label": "Websites",  "path": "/home/websites",           "visible": True},
 ]
 DEFAULT_PREFERENCES: dict = {
     "onboarding_complete": False,
@@ -48,6 +47,7 @@ _sessions: dict = {}             # token -> {username, expires}
 
 RUNTIME_DIR       = Path("/home/lobster/documents/porter/runtime")
 MEMORY_DIR        = Path("/home/lobster/documents/porter/memory")
+USAGE_DIR         = RUNTIME_DIR / "usage"
 MEMORY_NAMESPACES = {"projects", "people", "decisions", "compliance",
                      "transcripts", "artifacts", "indexes", "pointers"}
 
@@ -91,10 +91,29 @@ def load_config() -> dict:
         print("  [porter] Change your password immediately in Settings.")
         changed = True
 
-    # ── locations migration ──
-    if "locations" not in cfg:
-        cfg["locations"] = [dict(loc) for loc in DEFAULT_LOCATIONS]
+    # ── nodes migration (v0.8: node-first model replaces flat locations) ──
+    if "nodes" not in cfg:
+        hn = socket.gethostname()
+        # migrate existing flat locations as mounts under the local node
+        legacy = cfg.get("locations", [])
+        if not legacy:
+            legacy = [dict(m) for m in DEFAULT_MOUNTS]
+        local_node = {
+            "id":           hn,
+            "label":        hn,
+            "type":         "local",
+            "hostname":     hn,
+            "tailscale_ip": None,
+            "mounts": [
+                {"id": loc["id"], "label": loc.get("label", loc["id"]),
+                 "path": loc.get("path", ""), "visible": True}
+                for loc in legacy
+            ],
+        }
+        cfg["nodes"] = [local_node]
         changed = True
+    # keep legacy "locations" key only for external backward-compat reads;
+    # all internal code now uses nodes[*].mounts
 
     # ── agents ──
     if "agents" not in cfg:
@@ -116,11 +135,19 @@ def save_config(cfg: dict) -> None:
     CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
 
 def _load_serve_dirs(cfg: dict) -> None:
-    """Repopulate global SERVE_DIRS from config locations (local type only)."""
+    """Repopulate global SERVE_DIRS from nodes[*].mounts (local nodes only)."""
     SERVE_DIRS.clear()
-    for loc in cfg.get("locations", []):
-        if loc.get("type") == "local" and loc.get("id") and loc.get("path"):
-            SERVE_DIRS[loc["id"]] = Path(loc["path"])
+    for node in cfg.get("nodes", []):
+        if node.get("type") == "local":
+            for mount in node.get("mounts", []):
+                mid = mount.get("id"); mp = mount.get("path", "")
+                if mid and mp:
+                    SERVE_DIRS[mid] = Path(mp)
+    # legacy fallback: flat locations array (pre-0.8 configs not yet migrated)
+    if not SERVE_DIRS:
+        for loc in cfg.get("locations", []):
+            if loc.get("type") == "local" and loc.get("id") and loc.get("path"):
+                SERVE_DIRS[loc["id"]] = Path(loc["path"])
 
 def _hash_agent_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.encode()).hexdigest()
@@ -186,7 +213,7 @@ def porter_uri_to_path(uri: str) -> "Path | None":
         return None
 
 def ensure_runtime_dirs():
-    for d in ("checkpoints", "leases", "drafts", "tmp"):
+    for d in ("checkpoints", "leases", "drafts", "tmp", "usage"):
         (RUNTIME_DIR / d).mkdir(parents=True, exist_ok=True)
 
 def ensure_memory_dirs():
@@ -527,6 +554,16 @@ body {
 .loc.active svg { opacity: 1; }
 .loc-name { font-size: 13px; font-weight: 500; display:flex; flex-direction:column; gap:1px; }
 .loc-sub  { font-size: 10px; color: var(--text3); font-weight: 400; line-height: 1; }
+/* node grouping in sidebar */
+.node-hdr {
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 20px 3px; cursor: default; user-select: none;
+  font-size: 10px; font-weight: 600; letter-spacing: .5px;
+  color: var(--text3); text-transform: uppercase;
+}
+.mount-item { padding-left: 30px; }
+body.sidebar-collapsed .node-hdr { display: none; }
+body.sidebar-collapsed .mount-item { padding-left: 0; justify-content: center; }
 #locations { flex: 1; overflow-y: auto; }
 .sidebar-footer {
   padding: 16px 20px 0;
@@ -1289,12 +1326,16 @@ body.density-compact .file-name { padding: 6px 0; }
         Account
       </button>
       <button class="settings-nav-item" id="snav-locations" onclick="switchSettingsTab('locations')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-        Locations
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        Nodes &amp; Mounts
       </button>
       <button class="settings-nav-item" id="snav-agents" onclick="switchSettingsTab('agents')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
         Agents
+      </button>
+      <button class="settings-nav-item" id="snav-usage" onclick="switchSettingsTab('usage')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Usage
       </button>
       <button class="settings-nav-item" id="snav-network" onclick="switchSettingsTab('network')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/></svg>
@@ -1304,7 +1345,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.7.0 — What's new
+          v0.8.0 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -1365,85 +1406,72 @@ body.density-compact .file-name { padding: 6px 0; }
         </div>
       </div>
 
-      <!-- Locations page -->
+      <!-- Nodes & Mounts page -->
       <div class="settings-page" id="spage-locations">
-        <div class="settings-page-title">Locations</div>
-        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">Directories Porter can browse. Changes take effect immediately.</div>
+        <div class="settings-page-title">Nodes &amp; Mounts</div>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">Machines and mounted paths Porter can browse. Add a node first, then mount paths under it.</div>
         <div id="loc-list"></div>
-        <div style="margin-top:18px">
-          <button class="btn btn-primary" onclick="openAddLocation()">+ Add location</button>
+
+        <!-- mount add/edit form -->
+        <div id="mount-form" style="display:none;margin-top:16px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">Mount path</div>
+          <input type="hidden" id="nm-node-id">
+          <input type="hidden" id="nm-mount-id">
+          <div class="settings-field">
+            <label>Label</label>
+            <input type="text" class="settings-input" id="nm-label" placeholder="Documents">
+          </div>
+          <div class="settings-field">
+            <label>Absolute path</label>
+            <input type="text" class="settings-input" id="nm-path" placeholder="/home/user/files">
+          </div>
+          <div class="settings-save-row" style="gap:8px">
+            <button class="btn btn-ghost" onclick="testMountPath()">Test path</button>
+            <div style="flex:1"></div>
+            <button class="btn btn-ghost" onclick="cancelMountForm()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveMountForm()">Save</button>
+          </div>
+          <div id="nm-status" style="font-size:12px;margin-top:6px;color:var(--text3)"></div>
         </div>
-        <!-- add/edit form (hidden by default) -->
-        <div id="loc-form" style="display:none;margin-top:20px;padding:16px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
-          <!-- Step 0: type picker -->
-          <div id="lf-step0">
-            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px">What are you adding?</div>
-            <div class="loc-type-grid">
-              <button class="loc-type-card" onclick="selectLocType('local')">
-                <span class="loc-card-title">📁 Local folder</span>
-                <span class="loc-card-desc">A directory on this server</span>
-              </button>
-              <button class="loc-type-card" onclick="selectLocType('vps')">
-                <span class="loc-card-title">⚡ VPS quick pick</span>
-                <span class="loc-card-desc">Common paths on this machine</span>
-              </button>
-              <button class="loc-type-card" onclick="selectLocType('tailscale')">
-                <span class="loc-card-title">🔗 Remote via Tailscale</span>
-                <span class="loc-card-desc">Connect another device on your tailnet</span>
-              </button>
-              <button class="loc-type-card" disabled>
-                <span class="loc-card-title">🐙 GitHub repository</span>
-                <span class="loc-card-desc">Coming soon</span>
-              </button>
-            </div>
-            <div style="text-align:right">
-              <button class="btn btn-ghost" onclick="cancelLocationForm()">Cancel</button>
-            </div>
+
+        <!-- add node form (Add Node button → node-type picker) -->
+        <div id="loc-form" style="display:none;margin-top:16px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">Add Node</div>
+          <input type="hidden" id="lf-edit-id">
+          <input type="hidden" id="lf-type">
+          <div class="loc-type-grid">
+            <button class="loc-type-card" onclick="addLocalNode()">
+              <span class="loc-card-title">🖥 This machine</span>
+              <span class="loc-card-desc">Add another local node instance</span>
+            </button>
+            <button class="loc-type-card" onclick="addTailscaleNode()">
+              <span class="loc-card-title">🔗 Tailscale peer</span>
+              <span class="loc-card-desc">Discover and add a peer from your tailnet</span>
+            </button>
+            <button class="loc-type-card" disabled>
+              <span class="loc-card-title">🐙 GitHub repository</span>
+              <span class="loc-card-desc">Coming soon</span>
+            </button>
           </div>
-          <!-- Step 1: details (varies by type) -->
-          <div id="lf-step1" style="display:none">
-            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px" id="loc-form-title">Add location</div>
+          <!-- tailscale peer selector (hidden until tailscale chosen) -->
+          <div id="lf-ts-picker" style="display:none;margin-top:12px">
             <div class="settings-field">
-              <label>Label</label>
-              <input type="text" class="settings-input" id="lf-label" placeholder="My Files">
+              <label>Select peer</label>
+              <select class="settings-input" id="lf-ts-peer" onchange="onTsPeerSelect()" style="cursor:pointer">
+                <option value="">Loading peers…</option>
+              </select>
             </div>
-            <!-- VPS quick picks -->
-            <div id="lf-quickpicks" style="display:none;margin-bottom:12px">
-              <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Quick picks — click to pre-fill path:</div>
-              <div class="loc-quickpicks">
-                <button class="btn btn-ghost" style="font-size:11px" onclick="quickPick('Home','/home/lobster')">~ Home</button>
-                <button class="btn btn-ghost" style="font-size:11px" onclick="quickPick('Documents','/home/lobster/documents')">Documents</button>
-                <button class="btn btn-ghost" style="font-size:11px" onclick="quickPick('Uploads','/home/lobster/uploads')">Uploads</button>
-                <button class="btn btn-ghost" style="font-size:11px" onclick="quickPick('Websites','/home/websites')">Websites</button>
-              </div>
-            </div>
-            <!-- Tailscale peer picker -->
-            <div id="lf-ts-picker" style="display:none">
-              <div class="settings-field">
-                <label>Remote device</label>
-                <select class="settings-input" id="lf-ts-peer" onchange="onTsPeerSelect()" style="cursor:pointer">
-                  <option value="">Loading peers…</option>
-                </select>
-              </div>
-              <div class="settings-field">
-                <label>IP / hostname <span style="color:var(--text3);font-weight:400">— or enter manually below</span></label>
-                <input type="text" class="settings-input" id="lf-ts-host" placeholder="100.x.x.x or hostname">
-              </div>
-              <div id="lf-ts-status" style="font-size:11px;color:var(--text3);margin-bottom:10px"></div>
-            </div>
-            <div class="settings-field">
-              <label id="lf-path-label">Absolute path on device</label>
-              <input type="text" class="settings-input" id="lf-path" placeholder="/home/user/files">
-            </div>
+            <div id="lf-ts-status" style="font-size:11px;color:var(--text3);margin-bottom:10px"></div>
             <div class="settings-save-row" style="gap:8px">
-              <button class="btn btn-ghost" onclick="backToTypePicker()">← Back</button>
-              <button class="btn btn-ghost" onclick="testLocationPath()" style="margin-left:auto">Test path</button>
-              <button class="btn btn-primary" onclick="saveLocation()">Save</button>
+              <button class="btn btn-ghost" onclick="cancelLocationForm()">Cancel</button>
+              <button class="btn btn-primary" id="lf-ts-add-btn" disabled onclick="addTailscaleNodeFromPeer()">Add Node</button>
             </div>
-            <div id="lf-status" style="font-size:12px;margin-top:8px;color:var(--text3)"></div>
-            <input type="hidden" id="lf-edit-id">
-            <input type="hidden" id="lf-type">
           </div>
+          <div id="lf-status" style="font-size:12px;margin-top:8px;color:var(--text3)"></div>
+        </div>
+
+        <div style="margin-top:16px;display:flex;gap:8px">
+          <button class="btn btn-primary" onclick="openAddLocation()">+ Add Node</button>
         </div>
       </div>
 
@@ -1509,6 +1537,52 @@ body.density-compact .file-name { padding: 6px 0; }
       </div>
 
       <!-- What's new / Changelog page -->
+      <!-- Agent Usage page -->
+      <div class="settings-page" id="spage-usage">
+        <div class="settings-page-title">Agent Usage</div>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:16px">Current availability and usage windows for all registered agents.</div>
+        <div id="usage-panel"><div style="color:var(--text3);font-size:13px">Loading…</div></div>
+        <div style="margin-top:16px">
+          <button class="btn btn-ghost" style="font-size:12px" onclick="openUsageSnapshot()">+ Report usage</button>
+        </div>
+        <!-- manual snapshot form -->
+        <div id="usage-snap-form" style="display:none;margin-top:14px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:13px;font-weight:600;margin-bottom:12px">Report agent usage</div>
+          <div class="settings-field">
+            <label>Agent</label>
+            <select class="settings-input" id="us-agent" style="cursor:pointer"></select>
+          </div>
+          <div class="settings-field">
+            <label>Paste raw status output <span style="color:var(--text3);font-weight:400">(or fill fields manually)</span></label>
+            <textarea class="settings-input" id="us-raw" rows="3" placeholder="Paste CLI output here…" style="font-family:monospace;font-size:11px;resize:vertical" oninput="parseUsageRaw()"></textarea>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div class="settings-field" style="flex:1">
+              <label>Status</label>
+              <select class="settings-input" id="us-status" style="cursor:pointer">
+                <option value="available">Available</option>
+                <option value="degraded">Degraded (&gt;75%)</option>
+                <option value="rate_limited">Rate limited (&gt;90%)</option>
+                <option value="exhausted">Exhausted (100%)</option>
+                <option value="unknown">Unknown</option>
+              </select>
+            </div>
+            <div class="settings-field" style="flex:1">
+              <label>Usage %</label>
+              <input type="number" class="settings-input" id="us-pct" min="0" max="100" placeholder="0–100">
+            </div>
+          </div>
+          <div class="settings-field">
+            <label>Resets at (UTC ISO, optional)</label>
+            <input type="text" class="settings-input" id="us-resets" placeholder="2026-02-25T02:00:00Z">
+          </div>
+          <div class="settings-save-row" style="gap:8px">
+            <button class="btn btn-ghost" onclick="cancelUsageSnapshot()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitUsageSnapshot()">Save snapshot</button>
+          </div>
+        </div>
+      </div>
+
       <div class="settings-page" id="spage-changelog">
         <div class="settings-page-title">What's new</div>
         <div id="changelog-content"></div>
@@ -1914,9 +1988,10 @@ function openSettings(tab = 'account') {
   switchSettingsTab(tab); syncSettingsUI();
   document.getElementById('settingsPanel').classList.add('open');
   if (tab === 'locations')  loadLocations();
-  if (tab === 'agents')     loadAgents();
+  if (tab === 'agents')     { loadAgents(); }
   if (tab === 'changelog')  populateChangelog();
   if (tab === 'network')    startTsPolling();
+  if (tab === 'usage')      loadUsage();
   if (tab === 'config')     loadConfigSummary();
 }
 function closeSettings() {
@@ -1935,6 +2010,7 @@ function switchSettingsTab(tab) {
   if (tab === 'changelog') populateChangelog();
   if (tab === 'locations') loadLocations();
   if (tab === 'agents')    loadAgents();
+  if (tab === 'usage')     loadUsage();
 }
 function populateChangelog() {
   const el = document.getElementById('changelog-content');
@@ -1945,84 +2021,156 @@ function populateChangelog() {
   ).join('');
 }
 
-// ── locations ──────────────────────────────────────────────────────────────
+// ── nodes & mounts ─────────────────────────────────────────────────────────
 let _editLocId = null;
 
 async function loadLocations() {
-  const data = await api('/api/locations');
+  const data = await api('/api/nodes');
   if (!data) return;
-  renderLocations(data.locations || []);
-  _renderSidebarLocs(data.locations || [], curRoot);
+  renderNodes(data.nodes || []);
+  _renderSidebarNodes(data.nodes || [], curRoot);
 }
 
-function renderLocations(locs) {
+function renderNodes(nodes) {
   const el = document.getElementById('loc-list');
-  if (!locs.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No locations yet.</div>';
+  if (!nodes.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No nodes configured yet.</div>';
     return;
   }
-  el.innerHTML = locs.map(l => {
-    const isRemote = (l.type === 'tailscale' || l.type === 'remote');
-    const typeBadge = isRemote
-      ? '<span class="loc-badge loc-badge--remote">Remote</span>'
-      : '<span class="loc-badge loc-badge--local">Local</span>';
-    const rwBadge = l.exists
-      ? (l.writable
-          ? '<span class="loc-badge loc-badge--rw">Read/Write</span>'
-          : '<span class="loc-badge loc-badge--ro">Read only</span>')
-      : '<span class="loc-badge loc-badge--ro">Not found</span>';
-    return `
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--raised);border-radius:8px;margin-bottom:8px;border:1px solid var(--border)">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      <div style="flex:1;min-width:0">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-          <span style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(l.label)}</span>
-          ${typeBadge} ${rwBadge}
+  el.innerHTML = nodes.map(node => {
+    const typeBadge = node.type === 'local'
+      ? '<span class="loc-badge loc-badge--local">Local</span>'
+      : '<span class="loc-badge loc-badge--remote">' + escHtml(node.type) + '</span>';
+    const mountRows = (node.mounts || []).map(m => {
+      const rwBadge = m.exists
+        ? (m.writable ? '<span class="loc-badge loc-badge--rw">rw</span>' : '<span class="loc-badge loc-badge--ro">ro</span>')
+        : '<span class="loc-badge loc-badge--ro">not found</span>';
+      return `
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid var(--border)">
+        ${_locIcon({...m, type: node.type})}
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:5px">
+            <span style="font-size:12px;font-weight:500;color:var(--text)">${escHtml(m.label)}</span>
+            ${rwBadge}
+          </div>
+          <div style="font-size:10px;color:var(--text3);font-family:monospace;margin-top:1px">${escHtml(m.path)}</div>
         </div>
-        <div style="font-size:11px;color:var(--text3);font-family:monospace">${escHtml(l.path)}</div>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="openEditMount('${escHtml(node.id)}','${escHtml(m.id)}','${escHtml(m.label)}','${escHtml(m.path)}')">Edit</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;color:var(--danger)" onclick="deleteMount('${escHtml(node.id)}','${escHtml(m.id)}','${escHtml(m.label)}')">✕</button>
+      </div>`;
+    }).join('');
+    const emptyMounts = !node.mounts || !node.mounts.length
+      ? '<div style="padding:10px;font-size:12px;color:var(--text3);border-top:1px solid var(--border)">No mounts yet — add a path below.</div>' : '';
+    return `
+    <div style="background:var(--raised);border-radius:8px;margin-bottom:12px;border:1px solid var(--border);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(node.label)}</span>
+            ${typeBadge}
+            ${node.hostname ? `<span style="font-size:11px;color:var(--text3)">${escHtml(node.hostname)}</span>` : ''}
+          </div>
+        </div>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="openAddMount('${escHtml(node.id)}')">+ Mount</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;color:var(--danger)" onclick="deleteNode('${escHtml(node.id)}','${escHtml(node.label)}')">✕</button>
       </div>
-      <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="editLocation(${JSON.stringify(JSON.stringify(l))})">Edit</button>
-      <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--danger)" onclick="removeLocation('${escHtml(l.id)}','${escHtml(l.label)}')">Remove</button>
+      ${mountRows}${emptyMounts}
     </div>`;
   }).join('');
 }
 
-function openAddLocation() {
-  _editLocId = null;
+// node / mount CRUD
+async function deleteNode(nodeId, label) {
+  if (!confirm(`Remove node "${label}" and all its mounts?`)) return;
+  const res = await api('/api/nodes', { action: 'delete_node', id: nodeId });
+  if (res && res.ok) { toast('Node removed', 'ok'); loadLocations(); }
+  else toast((res && res.error) || 'Remove failed', 'err');
+}
+async function deleteMount(nodeId, mountId, label) {
+  if (!confirm(`Remove mount "${label}"?`)) return;
+  const res = await api('/api/nodes', { action: 'delete_mount', node_id: nodeId, mount_id: mountId });
+  if (res && res.ok) { toast('Mount removed', 'ok'); loadLocations(); }
+  else toast((res && res.error) || 'Remove failed', 'err');
+}
+function openAddMount(nodeId) {
   document.getElementById('lf-edit-id').value = '';
-  document.getElementById('lf-type').value = '';
+  document.getElementById('nm-node-id').value = nodeId;
   document.getElementById('lf-label').value = '';
   document.getElementById('lf-path').value = '';
   document.getElementById('lf-status').textContent = '';
-  document.getElementById('lf-step0').style.display = 'block';
-  document.getElementById('lf-step1').style.display = 'none';
-  document.getElementById('lf-quickpicks').style.display = 'none';
+  document.getElementById('loc-form').style.display = 'none';
+  document.getElementById('mount-form').style.display = 'block';
+}
+function openEditMount(nodeId, mountId, label, path) {
+  document.getElementById('nm-node-id').value = nodeId;
+  document.getElementById('nm-mount-id').value = mountId;
+  document.getElementById('nm-label').value = label;
+  document.getElementById('nm-path').value = path;
+  document.getElementById('mount-form').style.display = 'block';
+}
+function cancelMountForm() { document.getElementById('mount-form').style.display = 'none'; }
+async function saveMountForm() {
+  const nodeId  = document.getElementById('nm-node-id').value;
+  const mountId = document.getElementById('nm-mount-id').value;
+  const label   = document.getElementById('nm-label').value.trim();
+  const path    = document.getElementById('nm-path').value.trim();
+  if (!label || !path) { toast('Label and path required', 'err'); return; }
+  const action = mountId ? 'update_mount' : 'add_mount';
+  const body   = mountId
+    ? { action, node_id: nodeId, mount_id: mountId, updates: { label, path } }
+    : { action, node_id: nodeId, mount: { label, path } };
+  const res = await api('/api/nodes', body);
+  if (res && res.ok) {
+    cancelMountForm(); toast(mountId ? 'Mount updated' : 'Mount added', 'ok'); loadLocations();
+  } else toast((res && res.error) || 'Save failed', 'err');
+}
+async function testMountPath() {
+  const path = document.getElementById('nm-path').value.trim();
+  if (!path) return;
+  const res = await api('/api/locations/test', { path });
+  const st  = document.getElementById('nm-status');
+  if (!st) return;
+  if (res && res.exists) st.textContent = res.writable ? '✓ Found, writable' : '✓ Found, read-only';
+  else st.textContent = '✗ Path not found on server';
+}
+
+function openAddLocation() {
+  document.getElementById('lf-status').textContent = '';
   document.getElementById('lf-ts-picker').style.display = 'none';
   document.getElementById('loc-form').style.display = 'block';
 }
 
-function selectLocType(type) {
-  document.getElementById('lf-type').value = type;
-  document.getElementById('lf-step0').style.display = 'none';
-  document.getElementById('lf-step1').style.display = 'block';
-  const isVps = type === 'vps';
-  const isTs  = type === 'tailscale';
-  document.getElementById('lf-quickpicks').style.display = isVps ? 'block' : 'none';
-  document.getElementById('lf-ts-picker').style.display  = isTs  ? 'block' : 'none';
-  const titles = { local: 'Add local folder', vps: 'Add VPS path', tailscale: 'Connect remote device (Tailscale)' };
-  document.getElementById('loc-form-title').textContent = titles[type] || 'Add location';
-  document.getElementById('lf-path-label').textContent = isTs ? 'Absolute path on remote device' : 'Absolute path';
-  if (isTs) loadTailscalePeers();
+async function addLocalNode() {
+  const hn = (window._serverHostname || 'local');
+  const res = await api('/api/nodes', { action: 'add_node', id: hn, label: hn, type: 'local', hostname: hn });
+  if (res && res.ok) {
+    toast('Node added — now add mounts', 'ok');
+    cancelLocationForm(); loadLocations();
+  } else toast((res && res.error) || 'Failed', 'err');
 }
 
-function backToTypePicker() {
-  document.getElementById('lf-step0').style.display = 'block';
-  document.getElementById('lf-step1').style.display = 'none';
+function addTailscaleNode() {
+  document.getElementById('lf-ts-picker').style.display = 'block';
+  loadTailscalePeers();
+}
+
+async function addTailscaleNodeFromPeer() {
+  const sel = document.getElementById('lf-ts-peer');
+  const ip  = sel.value;
+  const opt = sel.selectedOptions[0];
+  const name = opt ? (opt.getAttribute('data-name') || ip) : ip;
+  if (!ip) { toast('Select a peer first', 'err'); return; }
+  const res = await api('/api/nodes', { action: 'add_node', id: name, label: name, type: 'tailscale', hostname: name, tailscale_ip: ip });
+  if (res && res.ok) {
+    toast('Tailscale node added — now add mounts', 'ok');
+    cancelLocationForm(); loadLocations();
+  } else toast((res && res.error) || 'Failed', 'err');
 }
 
 function quickPick(label, path) {
-  document.getElementById('lf-label').value = label;
-  document.getElementById('lf-path').value  = path;
+  document.getElementById('nm-label').value = label;
+  document.getElementById('nm-path').value  = path;
 }
 
 async function loadTailscalePeers() {
@@ -2053,79 +2201,25 @@ async function loadTailscalePeers() {
 
 function onTsPeerSelect() {
   const sel = document.getElementById('lf-ts-peer');
-  const ip  = sel.value;
-  if (!ip) return;
-  document.getElementById('lf-ts-host').value = ip;
-  const opt = sel.selectedOptions[0];
-  const name = opt ? (opt.getAttribute('data-name') || '') : '';
-  if (name && !document.getElementById('lf-label').value) {
-    document.getElementById('lf-label').value = name;
-  }
-}
-
-function editLocation(jsonStr) {
-  const l = JSON.parse(jsonStr);
-  _editLocId = l.id;
-  document.getElementById('lf-edit-id').value = l.id;
-  document.getElementById('lf-type').value    = l.type || 'local';
-  document.getElementById('lf-label').value   = l.label;
-  document.getElementById('lf-path').value    = l.path;
-  document.getElementById('lf-status').textContent = '';
-  document.getElementById('loc-form-title').textContent = 'Edit location';
-  document.getElementById('lf-step0').style.display = 'none';
-  document.getElementById('lf-step1').style.display = 'block';
-  document.getElementById('lf-quickpicks').style.display = 'none';
-  document.getElementById('lf-ts-picker').style.display  = 'none';
-  document.getElementById('loc-form').style.display = 'block';
+  const btn = document.getElementById('lf-ts-add-btn');
+  if (btn) btn.disabled = !sel.value;
 }
 
 function cancelLocationForm() {
   document.getElementById('loc-form').style.display = 'none';
 }
 
-async function testLocationPath() {
-  const path = document.getElementById('lf-path').value.trim();
-  if (!path) { document.getElementById('lf-status').textContent = 'Enter a path first.'; return; }
-  const res = await api('/api/locations/test', { path });
-  const st  = document.getElementById('lf-status');
-  if (!res) { st.textContent = 'Test failed.'; return; }
-  if (!res.exists) { st.style.color = 'var(--danger)'; st.textContent = '✕ Path does not exist'; return; }
-  const flags = [];
-  if (res.readable) flags.push('readable');
-  if (res.writable) flags.push('writable');
-  st.style.color = 'var(--success)';
-  st.textContent = '✓ ' + (flags.join(' + ') || 'found');
-}
-
-async function saveLocation() {
-  const label = document.getElementById('lf-label').value.trim();
-  const path  = document.getElementById('lf-path').value.trim();
-  const id    = document.getElementById('lf-edit-id').value;
-  if (!label || !path) { toast('Label and path are required', 'err'); return; }
-  const action   = id ? 'update' : 'add';
-  const location = id ? { id, label, type: 'local', path } : { label, type: 'local', path };
-  const res = await api('/api/locations', { action, location });
-  if (res && res.ok) {
-    toast(id ? 'Location updated' : 'Location added', 'ok');
-    cancelLocationForm();
-    loadLocations();
-  } else {
-    toast((res && res.error) || 'Save failed', 'err');
-  }
-}
-
-async function removeLocation(id, label) {
-  if (!confirm(`Remove location "${label}"? This does not delete files.`)) return;
-  const res = await api('/api/locations', { action: 'remove', location: { id } });
-  if (res && res.ok) { toast('Location removed', 'ok'); loadLocations(); }
-  else toast((res && res.error) || 'Remove failed', 'err');
-}
+// expose server hostname for addLocalNode
+fetch('/api/nodes').then(r=>r.json()).then(d=>{
+  if (d.nodes && d.nodes[0]) window._serverHostname = d.nodes[0].hostname || d.nodes[0].id;
+}).catch(()=>{});
 
 // ── agents ──────────────────────────────────────────────────────────────────
 
 async function loadAgents() {
   const data = await api('/api/agents');
   if (!data) return;
+  window._cachedAgents = data.agents || [];
   renderAgents(data.agents || []);
 }
 
@@ -2215,6 +2309,112 @@ async function doRevokeAgent(id, name) {
   const res = await api('/api/agents', { action: 'revoke', id });
   if (res && res.ok) { toast('Agent revoked', 'ok'); loadAgents(); }
   else toast((res && res.error) || 'Revoke failed', 'err');
+}
+
+// ── agent usage tracker ──────────────────────────────────────────────────
+const STATUS_COLOR = {
+  available:'var(--accent)', degraded:'#f5a623', rate_limited:'#e55', exhausted:'#c00', unknown:'var(--text3)'
+};
+const STATUS_LABEL = {
+  available:'Available', degraded:'Degraded', rate_limited:'Rate limited', exhausted:'Exhausted', unknown:'Unknown'
+};
+
+async function loadUsage() {
+  const data = await api('/agent-usage/current');
+  if (!data) return;
+  renderUsage(data.agents || []);
+}
+
+function renderUsage(agents) {
+  const el = document.getElementById('usage-panel');
+  if (!agents.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px">No agents registered. Add agents in the Agents tab.</div>';
+    return;
+  }
+  el.innerHTML = agents.map(a => {
+    const color  = STATUS_COLOR[a.status] || STATUS_COLOR.unknown;
+    const label  = STATUS_LABEL[a.status] || 'Unknown';
+    const pct    = a.usage_percent != null ? `${a.usage_percent}%` : '—';
+    const resets = a.window_resets_at ? _usageCountdown(a.window_resets_at) : '';
+    const snapped = a.captured_at ? _usageAgo(a.captured_at) : 'never';
+    return `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--raised);border-radius:8px;margin-bottom:8px;border:1px solid var(--border)">
+      <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:13px;font-weight:600">${escHtml(a.name)}</span>
+          <span style="font-size:11px;font-weight:600;color:${color}">${label}</span>
+          <span style="font-size:11px;color:var(--text3)">${pct}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">
+          ${resets ? `Resets ${resets} · ` : ''}Updated ${snapped}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _usageCountdown(isoStr) {
+  const ms = new Date(isoStr) - Date.now();
+  if (isNaN(ms) || ms < 0) return 'soon';
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `in ${h}h ${m}m` : `in ${m}m`;
+}
+function _usageAgo(isoStr) {
+  const ms = Date.now() - new Date(isoStr);
+  if (isNaN(ms) || ms < 0) return 'just now';
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  return `${Math.floor(m/60)}h ago`;
+}
+
+async function parseUsageRaw() {
+  const raw = document.getElementById('us-raw').value.trim();
+  if (!raw) return;
+  const agentEl = document.getElementById('us-agent');
+  const provider = agentEl.options[agentEl.selectedIndex]?.dataset?.type || 'claude_code';
+  const res = await api('/agent-usage/parse', { raw, provider });
+  if (!res) return;
+  if (res.status)        document.getElementById('us-status').value = res.status;
+  if (res.usage_percent != null) document.getElementById('us-pct').value = res.usage_percent;
+  if (res.window_resets_at) document.getElementById('us-resets').value = res.window_resets_at;
+}
+
+function openUsageSnapshot() {
+  // populate agent dropdown
+  const sel = document.getElementById('us-agent');
+  sel.innerHTML = '';
+  (window._cachedAgents || []).forEach(a => {
+    const opt = document.createElement('option');
+    opt.value = a.id; opt.textContent = a.name; opt.dataset.type = a.type;
+    sel.appendChild(opt);
+  });
+  document.getElementById('us-raw').value = '';
+  document.getElementById('us-status').value = 'unknown';
+  document.getElementById('us-pct').value = '';
+  document.getElementById('us-resets').value = '';
+  document.getElementById('usage-snap-form').style.display = 'block';
+}
+function cancelUsageSnapshot() { document.getElementById('usage-snap-form').style.display = 'none'; }
+async function submitUsageSnapshot() {
+  const agentEl  = document.getElementById('us-agent');
+  const agent_id = agentEl.value;
+  if (!agent_id) { toast('Select an agent', 'err'); return; }
+  const provider    = agentEl.options[agentEl.selectedIndex]?.dataset?.type || 'unknown';
+  const status      = document.getElementById('us-status').value;
+  const usage_pct   = document.getElementById('us-pct').value;
+  const resets_at   = document.getElementById('us-resets').value.trim() || undefined;
+  const res = await api('/agent-usage/snapshot', {
+    agent_id, provider, status,
+    usage_percent: usage_pct !== '' ? parseInt(usage_pct) : undefined,
+    window_resets_at: resets_at,
+    source_type: 'manual',
+  });
+  if (res && res.ok) {
+    cancelUsageSnapshot(); toast('Snapshot saved', 'ok'); loadUsage();
+  } else toast((res && res.error) || 'Save failed', 'err');
 }
 
 // ── user profile ──
@@ -2314,27 +2514,64 @@ function _locIcon(l) {
   }
   return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>';
 }
-function _renderSidebarLocs(locs, activeRoot) {
+function _renderSidebarNodes(nodes, activeRoot) {
   const el = document.getElementById('locations');
   el.innerHTML = '';
-  locs.forEach(l => {
-    const div = document.createElement('div');
-    div.className = 'loc' + (l.id === activeRoot ? ' active' : '');
-    div.dataset.root = l.id;
-    const sub = l.hostname ? `<span class="loc-sub">${escHtml(l.hostname)}</span>` : '';
-    div.innerHTML = `${_locIcon(l)}<span class="loc-name">${escHtml(l.label)}${sub}</span>`;
-    div.onclick = () => navigate(l.id, '');
-    el.appendChild(div);
+  nodes.forEach(node => {
+    const mounts = (node.mounts || []).filter(m => m.visible !== false);
+    if (!mounts.length) return;
+    // node header (hidden in collapsed state via CSS)
+    const hdr = document.createElement('div');
+    hdr.className = 'node-hdr';
+    hdr.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>${escHtml(node.label)}</span>`;
+    el.appendChild(hdr);
+    // mount items indented under node
+    mounts.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'loc mount-item' + (m.id === activeRoot ? ' active' : '');
+      div.dataset.root = m.id;
+      div.innerHTML = `${_locIcon({...m, type: node.type})}<span class="loc-name">${escHtml(m.label)}</span>`;
+      div.onclick = () => navigate(m.id, '');
+      el.appendChild(div);
+    });
   });
+}
+// kept for backward compat during transition
+function _renderSidebarLocs(locs, activeRoot) {
+  // group by node_id if available, else render flat
+  const byNode = {};
+  locs.forEach(l => {
+    const nid = l.node_id || '__flat__';
+    (byNode[nid] = byNode[nid] || []).push(l);
+  });
+  if (Object.keys(byNode).length === 1 && byNode['__flat__']) {
+    // flat legacy: no node grouping
+    const el = document.getElementById('locations');
+    el.innerHTML = '';
+    locs.forEach(l => {
+      const div = document.createElement('div');
+      div.className = 'loc' + (l.id === activeRoot ? ' active' : '');
+      div.dataset.root = l.id; div.innerHTML = `${_locIcon(l)}<span class="loc-name">${escHtml(l.label)}</span>`;
+      div.onclick = () => navigate(l.id, ''); el.appendChild(div);
+    });
+  } else {
+    // has node context: build pseudo-nodes and delegate
+    const nodes = Object.entries(byNode).map(([nid, ms]) => ({id:nid, label:nid, type:'local', mounts:ms}));
+    _renderSidebarNodes(nodes, activeRoot);
+  }
 }
 
 async function init() {
   loadSettings();
   await loadMe();
-  const locData = await api('/api/locations');
-  const locs = (locData && locData.locations) || [];
-  _renderSidebarLocs(locs, null);
-  if (locs.length) navigate(locs[0].id, '');
+  const nodeData = await api('/api/nodes');
+  const nodes = (nodeData && nodeData.nodes) || [];
+  _renderSidebarNodes(nodes, null);
+  // navigate to first visible mount
+  for (const node of nodes) {
+    const firstMount = (node.mounts || []).find(m => m.visible !== false);
+    if (firstMount) { navigate(firstMount.id, ''); break; }
+  }
   await maybeShowWizard();
 }
 
@@ -2997,6 +3234,27 @@ function toggleShortcuts() {
 
 // ── changelog ──
 const CHANGELOG = [
+  { ver:'v0.8.0', date:'2026-02-24', notes:[
+    'Nodes & Mounts model: locations renamed to a two-layer node→mount hierarchy (machine first, then paths)',
+    'Auto-migration: existing flat locations migrated to local node on first start; node ID = hostname (srv1379868)',
+    'GET /api/nodes: full node tree with per-mount exists/writable stats',
+    'POST /api/nodes: add_node, delete_node, add_mount, update_mount, delete_mount actions',
+    'GET /api/locations: backward-compatible flat view derived from nodes; existing integrations unaffected',
+    'Sidebar: locations grouped under node headers; mount items indented; node headers hidden when collapsed',
+    'Settings: Locations tab renamed to "Nodes & Mounts"; node cards with expandable mount rows',
+    'Settings: add-location flow replaced with node-first form (Local Node / Tailscale Node)',
+    'Tailscale peer discovery populates node form; mount paths configured manually per node',
+    'Agent Usage Tracker: POST /agent-usage/snapshot stores per-agent usage state to runtime/usage/',
+    'Agent Usage Tracker: GET /agent-usage/current returns latest snapshot per registered agent',
+    'Agent Usage Tracker: POST /agent-usage/parse extracts usage % and reset time from raw CLI text',
+    'Usage parser: supports claude_code and openclaw providers; auto-derives status from usage %',
+    'Settings: Usage tab — agent status cards with countdown to reset and threshold indicators',
+    'Usage tab: manual snapshot form with provider selector and raw-text paste parser',
+    'All new endpoints auth-gated (401 JSON for unauthenticated requests)',
+    'Mount path safety: all paths validated via existing safe_resolve on file operations',
+    'USAGE_DIR = runtime/usage/ created at startup alongside existing runtime dirs',
+    'Version bump: v0.7.0 → v0.8.0',
+  ]},
   { ver:'v0.7.0', date:'2026-02-24', notes:[
     'Collapsible sidebar — hamburger toggle in logo row; icon-only 52px rail when collapsed; preference saved to localStorage',
     'Account: owner-mode password change no longer requires current password (single-user local)',
@@ -3622,18 +3880,40 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"roots": list(SERVE_DIRS.keys())})
 
         # ── locations ─────────────────────────────────────────────────────
-        elif parsed.path == "/api/locations":
+        elif parsed.path == "/api/nodes":
             if not self.auth_check(redirect=False): return
             hn = socket.gethostname()
+            out = []
+            for node in _config.get("nodes", []):
+                n = dict(node)
+                n["mounts"] = []
+                for mount in node.get("mounts", []):
+                    m = dict(mount)
+                    p = Path(m.get("path", ""))
+                    m["exists"]   = p.exists()
+                    m["writable"] = os.access(str(p), os.W_OK) if m["exists"] else False
+                    n["mounts"].append(m)
+                if n.get("type") == "local":
+                    n["hostname"] = hn
+                out.append(n)
+            self.reply_json({"nodes": out})
+
+        elif parsed.path == "/api/locations":
+            if not self.auth_check(redirect=False): return
+            # backward-compat flat view derived from nodes
+            hn = socket.gethostname()
             locs = []
-            for loc in _config.get("locations", []):
-                entry = dict(loc)
-                p = Path(entry.get("path", ""))
-                entry["exists"]   = p.exists()
-                entry["writable"] = os.access(str(p), os.W_OK) if entry["exists"] else False
-                if entry.get("type", "local") == "local":
-                    entry["hostname"] = hn
-                locs.append(entry)
+            for node in _config.get("nodes", []):
+                for mount in node.get("mounts", []):
+                    entry = dict(mount)
+                    entry["type"]    = node.get("type", "local")
+                    entry["node_id"] = node["id"]
+                    p = Path(entry.get("path", ""))
+                    entry["exists"]   = p.exists()
+                    entry["writable"] = os.access(str(p), os.W_OK) if entry["exists"] else False
+                    if node.get("type") == "local":
+                        entry["hostname"] = hn
+                    locs.append(entry)
             self.reply_json({"locations": locs})
 
         elif parsed.path in ("/api/tailscale/peers", "/api/tailscale/status"):
@@ -3701,14 +3981,16 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             prefs = _config.get("preferences", {})
             locs  = []
-            for loc in _config.get("locations", []):
-                p = Path(loc.get("path", ""))
-                locs.append({
-                    "id": loc.get("id"), "label": loc.get("label"),
-                    "type": loc.get("type", "local"), "path": loc.get("path"),
-                    "exists": p.exists(),
-                    "writable": os.access(str(p), os.W_OK) if p.exists() else False,
-                })
+            for node in _config.get("nodes", []):
+                for mount in node.get("mounts", []):
+                    p = Path(mount.get("path", ""))
+                    locs.append({
+                        "id": mount.get("id"), "label": mount.get("label"),
+                        "type": node.get("type", "local"), "path": mount.get("path"),
+                        "node": node.get("id"),
+                        "exists": p.exists(),
+                        "writable": os.access(str(p), os.W_OK) if p.exists() else False,
+                    })
             agents = [
                 {"id": a.get("id"), "name": a.get("name"), "role": a.get("role"),
                  "type": a.get("type"), "status": a.get("status")}
@@ -3874,6 +4156,31 @@ class Handler(BaseHTTPRequestHandler):
                 "modified":    st.st_mtime,
                 "total_lines": total_lines,
             })
+
+        elif parsed.path == "/agent-usage/current":
+            if not self.auth_check(redirect=False): return
+            from datetime import datetime, timezone
+            USAGE_DIR.mkdir(parents=True, exist_ok=True)
+            results = []
+            for agent in _config.get("agents", []):
+                aid = agent.get("id", "")
+                snap_file = USAGE_DIR / f"{aid}.json"
+                snap = {}
+                if snap_file.exists():
+                    try: snap = json.loads(snap_file.read_text())
+                    except Exception: pass
+                results.append({
+                    "agent_id":    aid,
+                    "name":        agent.get("name", aid),
+                    "type":        agent.get("type", ""),
+                    "role":        agent.get("role", ""),
+                    "status":      snap.get("status", "unknown"),
+                    "usage_percent": snap.get("usage_percent"),
+                    "window_resets_at": snap.get("window_resets_at"),
+                    "captured_at": snap.get("captured_at"),
+                    "provider":    snap.get("provider", agent.get("type", "")),
+                })
+            self.reply_json({"agents": results, "count": len(results)})
 
         else:
             self.reply_html("<h1>Not found</h1>", 404)
@@ -4428,52 +4735,129 @@ class Handler(BaseHTTPRequestHandler):
                 "updated_at": now_iso,
             })
 
-        # ── locations CRUD ─────────────────────────────────────────────────
+        # ── nodes + mounts CRUD ────────────────────────────────────────────
+        elif parsed.path == "/api/nodes":
+            if not self.auth_check(redirect=False): return
+            data   = self.read_json_body()
+            action = data.get("action", "")
+
+            if action == "add_node":
+                raw_id = re.sub(r'[^\w\-]', '-', data.get("id", "")).lower().strip('-') or secrets.token_hex(4)
+                existing = {n["id"] for n in _config.get("nodes", [])}
+                nid = raw_id; sfx = 2
+                while nid in existing: nid = f"{raw_id}-{sfx}"; sfx += 1
+                new_node = {
+                    "id": nid, "label": data.get("label", nid).strip(),
+                    "type": data.get("type", "local"),
+                    "hostname": data.get("hostname", ""),
+                    "tailscale_ip": data.get("tailscale_ip"),
+                    "mounts": [],
+                }
+                _config.setdefault("nodes", []).append(new_node)
+                _load_serve_dirs(_config); save_config(_config)
+                self.reply_json({"ok": True, "node": new_node})
+
+            elif action == "delete_node":
+                nid    = data.get("id", "")
+                before = len(_config.get("nodes", []))
+                _config["nodes"] = [n for n in _config.get("nodes", []) if n["id"] != nid]
+                if len(_config["nodes"]) < before:
+                    _load_serve_dirs(_config); save_config(_config)
+                    self.reply_json({"ok": True})
+                else:
+                    self.reply_json({"error": "node not found"}, 404)
+
+            elif action == "add_mount":
+                nid   = data.get("node_id", "")
+                m     = data.get("mount", {})
+                mlbl  = m.get("label", "").strip()
+                mpath = m.get("path",  "").strip()
+                if not mlbl or not mpath:
+                    self.reply_json({"error": "label and path required"}, 400); return
+                mid = re.sub(r'[^\w\-]', '-', mlbl).lower().strip('-') or secrets.token_hex(4)
+                all_ids = {mt["id"] for nd in _config.get("nodes", []) for mt in nd.get("mounts", [])}
+                base = mid; sfx = 2
+                while mid in all_ids: mid = f"{base}-{sfx}"; sfx += 1
+                new_mount = {"id": mid, "label": mlbl, "path": mpath, "visible": True}
+                for node in _config.get("nodes", []):
+                    if node["id"] == nid:
+                        node.setdefault("mounts", []).append(new_mount)
+                        _load_serve_dirs(_config); save_config(_config)
+                        self.reply_json({"ok": True, "mount": new_mount}); return
+                self.reply_json({"error": "node not found"}, 404)
+
+            elif action == "update_mount":
+                nid = data.get("node_id", ""); mid = data.get("mount_id", "")
+                upd = data.get("updates", {})
+                for node in _config.get("nodes", []):
+                    if node["id"] == nid:
+                        for mount in node.get("mounts", []):
+                            if mount["id"] == mid:
+                                for k in ("label", "path", "visible"):
+                                    if k in upd: mount[k] = upd[k]
+                                _load_serve_dirs(_config); save_config(_config)
+                                self.reply_json({"ok": True, "mount": mount}); return
+                        self.reply_json({"error": "mount not found"}, 404); return
+                self.reply_json({"error": "node not found"}, 404)
+
+            elif action == "delete_mount":
+                nid = data.get("node_id", ""); mid = data.get("mount_id", "")
+                for node in _config.get("nodes", []):
+                    if node["id"] == nid:
+                        before = len(node.get("mounts", []))
+                        node["mounts"] = [m for m in node.get("mounts", []) if m["id"] != mid]
+                        if len(node["mounts"]) < before:
+                            _load_serve_dirs(_config); save_config(_config)
+                            self.reply_json({"ok": True}); return
+                        self.reply_json({"error": "mount not found"}, 404); return
+                self.reply_json({"error": "node not found"}, 404)
+
+            else:
+                self.reply_json({"error": "unknown action"}, 400)
+
+        # ── locations (backward-compat, thin wrapper over nodes) ──────────
         elif parsed.path == "/api/locations":
             if not self.auth_check(redirect=False): return
             data   = self.read_json_body()
             action = data.get("action", "")
             loc    = data.get("location", {})
+            # delegate add/remove to the default local node's mounts
+            local_node = next((n for n in _config.get("nodes", []) if n.get("type") == "local"), None)
 
-            if action == "add":
-                loc_id    = re.sub(r'[^\w\-]', '-', loc.get("label", "")).lower().strip('-') or secrets.token_hex(4)
-                loc_type  = loc.get("type", "local")
-                loc_path  = loc.get("path", "").strip()
-                loc_label = loc.get("label", "").strip()
-                if not loc_label or not loc_path:
+            if action == "add" and local_node:
+                mlbl  = loc.get("label", "").strip()
+                mpath = loc.get("path",  "").strip()
+                if not mlbl or not mpath:
                     self.reply_json({"error": "label and path are required"}, 400); return
-                # ensure unique id
-                existing_ids = {l["id"] for l in _config.get("locations", [])}
-                base_id = loc_id
-                n = 2
-                while loc_id in existing_ids:
-                    loc_id = f"{base_id}-{n}"; n += 1
-                new_loc = {"id": loc_id, "label": loc_label, "type": loc_type, "path": loc_path}
-                _config.setdefault("locations", []).append(new_loc)
-                _load_serve_dirs(_config)
-                save_config(_config)
-                self.reply_json({"ok": True, "location": new_loc})
+                mid = re.sub(r'[^\w\-]', '-', mlbl).lower().strip('-') or secrets.token_hex(4)
+                all_ids = {mt["id"] for nd in _config.get("nodes", []) for mt in nd.get("mounts", [])}
+                base = mid; sfx = 2
+                while mid in all_ids: mid = f"{base}-{sfx}"; sfx += 1
+                new_mount = {"id": mid, "label": mlbl, "path": mpath, "visible": True}
+                local_node.setdefault("mounts", []).append(new_mount)
+                _load_serve_dirs(_config); save_config(_config)
+                self.reply_json({"ok": True, "location": {**new_mount, "type": "local"}})
 
             elif action == "update":
-                loc_id = loc.get("id", "")
-                for i, l in enumerate(_config.get("locations", [])):
-                    if l["id"] == loc_id:
-                        l.update({k: loc[k] for k in ("label", "type", "path") if k in loc})
-                        _load_serve_dirs(_config)
-                        save_config(_config)
-                        self.reply_json({"ok": True, "location": l}); return
+                lid = loc.get("id", "")
+                for node in _config.get("nodes", []):
+                    for mount in node.get("mounts", []):
+                        if mount["id"] == lid:
+                            for k in ("label", "path"):
+                                if k in loc: mount[k] = loc[k]
+                            _load_serve_dirs(_config); save_config(_config)
+                            self.reply_json({"ok": True, "location": mount}); return
                 self.reply_json({"error": "not found"}, 404)
 
             elif action == "remove":
-                loc_id = loc.get("id", "")
-                before = len(_config.get("locations", []))
-                _config["locations"] = [l for l in _config.get("locations", []) if l["id"] != loc_id]
-                if len(_config["locations"]) < before:
-                    _load_serve_dirs(_config)
-                    save_config(_config)
-                    self.reply_json({"ok": True})
-                else:
-                    self.reply_json({"error": "not found"}, 404)
+                lid = loc.get("id", "")
+                for node in _config.get("nodes", []):
+                    before = len(node.get("mounts", []))
+                    node["mounts"] = [m for m in node.get("mounts", []) if m["id"] != lid]
+                    if len(node["mounts"]) < before:
+                        _load_serve_dirs(_config); save_config(_config)
+                        self.reply_json({"ok": True}); return
+                self.reply_json({"error": "not found"}, 404)
 
             else:
                 self.reply_json({"error": "unknown action"}, 400)
@@ -4491,6 +4875,64 @@ class Handler(BaseHTTPRequestHandler):
                 try:    writable = os.access(str(tpath), os.W_OK)
                 except Exception: pass
             self.reply_json({"ok": exists, "exists": exists, "readable": readable, "writable": writable})
+
+        # ── agent usage tracker ────────────────────────────────────────────
+        elif parsed.path == "/agent-usage/snapshot":
+            if not self.auth_check(redirect=False): return
+            from datetime import datetime, timezone
+            d = self.read_json_body()
+            agent_id = d.get("agent_id", "").strip()
+            if not agent_id:
+                self.reply_json({"error": "agent_id required"}, 400); return
+            status = d.get("status", "unknown")
+            if status not in ("available", "degraded", "rate_limited", "exhausted", "unknown"):
+                status = "unknown"
+            snapshot = {
+                "agent_id":         agent_id,
+                "provider":         d.get("provider", "unknown"),
+                "captured_at":      datetime.now(timezone.utc).isoformat(),
+                "status":           status,
+                "usage_percent":    d.get("usage_percent"),
+                "window_started_at":d.get("window_started_at"),
+                "window_resets_at": d.get("window_resets_at"),
+                "source_type":      d.get("source_type", "api"),
+            }
+            USAGE_DIR.mkdir(parents=True, exist_ok=True)
+            (USAGE_DIR / f"{agent_id}.json").write_text(json.dumps(snapshot, indent=2))
+            self.reply_json({"ok": True, "captured_at": snapshot["captured_at"]})
+
+        elif parsed.path == "/agent-usage/parse":
+            if not self.auth_check(redirect=False): return
+            d = self.read_json_body()
+            raw    = d.get("raw", "")
+            provider = d.get("provider", "claude_code")
+            result = {"status": "unknown", "usage_percent": None,
+                      "window_resets_at": None, "source_type": "cli_parse"}
+            if provider == "claude_code":
+                # match "X%" usage patterns
+                m = re.search(r'(\d+)\s*%', raw)
+                if m:
+                    pct = int(m.group(1))
+                    result["usage_percent"] = pct
+                    result["status"] = "exhausted" if pct >= 100 else \
+                                       "rate_limited" if pct >= 90 else \
+                                       "degraded"    if pct >= 75 else "available"
+                # match reset/resets timestamp
+                m2 = re.search(r'[Rr]eset[s]?\D{0,10}(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2})', raw)
+                if m2:
+                    result["window_resets_at"] = m2.group(1).replace(" ", "T") + ":00Z"
+            elif provider == "openclaw":
+                m = re.search(r'(\d+)\s*%', raw)
+                if m:
+                    pct = int(m.group(1))
+                    result["usage_percent"] = pct
+                    result["status"] = "exhausted" if pct >= 100 else \
+                                       "rate_limited" if pct >= 90 else \
+                                       "degraded"    if pct >= 75 else "available"
+                m2 = re.search(r'[Rr]eset[s]?\D{0,10}(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2})', raw)
+                if m2:
+                    result["window_resets_at"] = m2.group(1).replace(" ", "T") + ":00Z"
+            self.reply_json(result)
 
         # ── agents CRUD ────────────────────────────────────────────────────
         elif parsed.path == "/api/agents":

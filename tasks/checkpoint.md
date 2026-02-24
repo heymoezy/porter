@@ -1,20 +1,26 @@
 # Checkpoint
 project: porter
-task: UI/UX implementation — locations, agents, permissions, onboarding wizard
-status: complete
-step: 5 of 5
-completed:
-  - [x] Commit 1: Config data model + migration + backend API routes
-  - [x] Commit 2: Settings UI — Locations + Agents + Permissions tabs, version badge
-  - [x] Commit 3: Onboarding wizard (first-run 4-step flow)
-  - [x] Commit 4: Permission enforcement (Bearer token, role caps) + upload UX
-  - [x] Commit 5: Tests (51 total) + version bump v0.6.0 + changelog entry
-next_action: n/a — task complete
+task: P0.5 Locations Model v2 + P1 Agent Usage Tracker
+status: in_progress
+step: 1 of 8
+completed: []
+next_action: Implement P0.5 backend — nodes migration, _load_serve_dirs, /api/nodes GET+POST
 modified_files:
   - /home/lobster/documents/porter/porter.py
-  - /home/lobster/documents/porter/tests/test_p0_p1.py
 notes: |
-  All 5 commits landed on master. Porter is now v0.6.0.
-  New features: dynamic locations/agents/preferences config, Settings tabs,
-  onboarding wizard, agent Bearer token auth with ROLE_CAPS enforcement.
-  51-test suite covers P0, P1, capability enforcement, and config API.
+  P0.5 (BLOCKER first):
+  - Config migration: locations → nodes[0].mounts
+  - _load_serve_dirs reads from nodes[*].mounts (fallback to legacy locations)
+  - GET /api/nodes: full node tree with mount stats
+  - POST /api/nodes: add_node/delete_node/add_mount/update_mount/delete_mount
+  - GET /api/locations: backward compat, derives from nodes
+  - Sidebar: node-grouped tree (_renderSidebarNodes)
+  - Settings: "Nodes & Mounts" tab, renderNodes(), loadNodes()
+
+  P1 (Agent Usage Tracker):
+  - Storage: runtime/usage/<agent_id>.json
+  - POST /agent-usage/snapshot, GET /agent-usage/current, POST /agent-usage/parse
+  - UI: new "Usage" settings tab with countdown + threshold pills
+
+  Version bump: 0.8.0
+  Security: all new endpoints auth-gated; mount paths validated via existing safe_resolve
