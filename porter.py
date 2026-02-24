@@ -1037,6 +1037,48 @@ body.density-compact .file-name { padding: 6px 0; }
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+
+/* ── onboarding wizard ── */
+.wiz-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.85);
+  backdrop-filter: blur(6px); z-index: 500; display: none; align-items: center;
+  justify-content: center; }
+.wiz-overlay.open { display: flex; }
+.wiz-dialog { background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; width: 520px; padding: 40px 48px;
+  box-shadow: 0 40px 100px rgba(0,0,0,.8); }
+.wiz-step { display: none; }
+.wiz-step.active { display: block; }
+.wiz-step-badge { font-size: 11px; font-weight: 600; letter-spacing: .8px;
+  color: var(--accent); text-transform: uppercase; margin-bottom: 12px; }
+.wiz-title { font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.wiz-subtitle { font-size: 14px; color: var(--text2); margin-bottom: 28px; line-height: 1.5; }
+.wiz-actions { display: flex; gap: 10px; margin-top: 28px; align-items: center; }
+.wiz-actions .btn-skip { background: none; border: none; color: var(--text3);
+  font-size: 13px; cursor: pointer; padding: 0; margin-left: auto; font-family: inherit; }
+.wiz-actions .btn-skip:hover { color: var(--text2); }
+.wiz-type-cards { display: flex; gap: 10px; margin-bottom: 20px; }
+.wiz-type-card { flex: 1; padding: 12px 8px; border: 1px solid var(--border);
+  border-radius: 10px; cursor: pointer; transition: .15s; background: var(--bg); text-align: center; }
+.wiz-type-card:hover:not(.disabled) { border-color: var(--accent); }
+.wiz-type-card.selected { border-color: var(--accent); background: rgba(247,147,26,.07); }
+.wiz-type-card.disabled { opacity: .4; cursor: not-allowed; }
+.wiz-card-icon { font-size: 20px; margin-bottom: 4px; }
+.wiz-card-label { font-size: 12px; font-weight: 600; color: var(--text); }
+.wiz-card-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.wiz-checklist { list-style: none; padding: 0; margin: 0 0 8px; }
+.wiz-checklist li { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0;
+  border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text2); }
+.wiz-checklist li:last-child { border-bottom: none; }
+.wiz-check-icon { color: #4caf50; flex-shrink: 0; }
+.wiz-check-skip { color: var(--text3); flex-shrink: 0; }
+.wiz-progress { display: flex; gap: 6px; margin-bottom: 28px; }
+.wiz-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); transition: .2s; }
+.wiz-dot.done { background: var(--accent); }
+.wiz-dot.active { background: var(--accent); box-shadow: 0 0 0 3px rgba(247,147,26,.25); }
+.wiz-key-box { font-family: monospace; font-size: 12px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;
+  word-break: break-all; color: var(--text); margin-bottom: 8px; }
+.wiz-key-note { font-size: 12px; color: var(--danger); margin-bottom: 16px; }
 </style>
 </head>
 <body>
@@ -1872,6 +1914,7 @@ async function init() {
     locs.appendChild(el);
   });
   if (roots.length) navigate(roots[0], '');
+  await maybeShowWizard();
 }
 
 // ── navigation ──
@@ -2769,8 +2812,239 @@ function enc(s) { return encodeURIComponent(s); }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function esc(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 
+// ── onboarding wizard ──────────────────────────────────────────────────────
+let _wizStep = 1, _wizLocAdded = false, _wizAgentCreated = false;
+let _wizAgentKey = '', _wizAgentRole = 'writer';
+const WIZ_TOTAL = 4;
+
+function _wizUpdateProgress() {
+  const bar = document.getElementById('wizProgress');
+  bar.innerHTML = Array.from({length: WIZ_TOTAL}, (_, i) => {
+    const n = i + 1;
+    const cls = n < _wizStep ? 'done' : n === _wizStep ? 'active' : '';
+    return `<div class="wiz-dot ${cls}"></div>`;
+  }).join('');
+}
+
+function wizShowStep(n) {
+  _wizStep = n;
+  document.querySelectorAll('.wiz-step').forEach((el, i) => {
+    el.classList.toggle('active', i + 1 === n);
+  });
+  if (n === 3 && !_wizAgentCreated) {
+    document.getElementById('wiz-agent-key-section').style.display = 'none';
+    document.getElementById('wiz-agent-btn').textContent = 'Create agent';
+    document.getElementById('wiz-agent-btn').onclick = wizCreateAgent;
+    document.getElementById('wiz-agent-skip').style.display = '';
+  }
+  if (n === WIZ_TOTAL) _wizBuildChecklist();
+  _wizUpdateProgress();
+}
+
+function wizNext() { wizShowStep(_wizStep + 1); }
+function wizPrev() { wizShowStep(_wizStep - 1); }
+function wizSkipStep() { wizNext(); }
+
+async function wizSkip() {
+  await api('/api/preferences', { onboarding_complete: true });
+  document.getElementById('wizOverlay').classList.remove('open');
+}
+
+async function wizTestPath() {
+  const path = document.getElementById('wiz-loc-path').value.trim();
+  const res = document.getElementById('wiz-path-result');
+  if (!path) { res.textContent = 'Enter a path first.'; res.style.color = 'var(--danger)'; return; }
+  const r = await api('/api/locations/test', { path });
+  if (r && r.ok && r.readable) {
+    res.textContent = r.writable ? '✓ Path exists and is writable' : '✓ Path exists (read-only)';
+    res.style.color = '#4caf50';
+  } else {
+    res.textContent = (r && r.error) || 'Path not accessible';
+    res.style.color = 'var(--danger)';
+  }
+}
+
+async function wizSaveLocation() {
+  const label = document.getElementById('wiz-loc-label').value.trim();
+  const path  = document.getElementById('wiz-loc-path').value.trim();
+  if (!label || !path) { toast('Enter a label and path', 'err'); return; }
+  const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'location';
+  const r = await api('/api/locations', { action: 'add', id, label, type: 'local', path });
+  if (r && r.ok) {
+    _wizLocAdded = true;
+    toast('Location added', 'ok');
+    wizNext();
+  } else {
+    toast((r && r.error) || 'Failed to add location', 'err');
+  }
+}
+
+async function wizCreateAgent() {
+  const name = document.getElementById('wiz-agent-name').value.trim();
+  _wizAgentRole = document.getElementById('wiz-agent-role').value;
+  if (!name) { toast('Enter an agent name', 'err'); return; }
+  const r = await api('/api/agents', { action: 'create', name, role: _wizAgentRole, namespaces: [] });
+  if (r && r.ok) {
+    _wizAgentCreated = true;
+    _wizAgentKey = r.key || '';
+    document.getElementById('wiz-agent-key-display').textContent = _wizAgentKey;
+    document.getElementById('wiz-agent-key-section').style.display = 'block';
+    const btn = document.getElementById('wiz-agent-btn');
+    btn.textContent = 'Continue';
+    btn.onclick = wizNext;
+    document.getElementById('wiz-agent-skip').style.display = 'none';
+    toast('Agent created — copy your key!', 'ok');
+  } else {
+    toast((r && r.error) || 'Failed to create agent', 'err');
+  }
+}
+
+function wizCopyKey() {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(_wizAgentKey).then(() => toast('Key copied', 'ok'));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = _wizAgentKey;
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); ta.remove();
+    toast('Key copied', 'ok');
+  }
+}
+
+function _wizBuildChecklist() {
+  const items = [
+    { done: _wizLocAdded,
+      label: 'File location added',
+      skip:  'No location added — add one in Settings → Locations' },
+    { done: _wizAgentCreated,
+      label: `Agent created (role: ${_wizAgentRole})`,
+      skip:  'No agent connected — add one in Settings → Agents' },
+  ];
+  document.getElementById('wiz-checklist').innerHTML = items.map(it => `
+    <li>
+      <span class="${it.done ? 'wiz-check-icon' : 'wiz-check-skip'}">${it.done ? '✓' : '—'}</span>
+      <span>${it.done ? it.label : it.skip}</span>
+    </li>`).join('');
+}
+
+async function wizFinish() {
+  await api('/api/preferences', { onboarding_complete: true });
+  document.getElementById('wizOverlay').classList.remove('open');
+  init(); // refresh sidebar with any newly added locations
+}
+
+async function maybeShowWizard() {
+  const prefs = await api('/api/preferences');
+  if (prefs && prefs.onboarding_complete === false) {
+    wizShowStep(1);
+    document.getElementById('wizOverlay').classList.add('open');
+  }
+}
+// ── end wizard ─────────────────────────────────────────────────────────────
+
 init();
 </script>
+
+<!-- ── onboarding wizard ── -->
+<div class="wiz-overlay" id="wizOverlay">
+  <div class="wiz-dialog">
+    <div class="wiz-progress" id="wizProgress"></div>
+
+    <!-- Step 1: Welcome -->
+    <div class="wiz-step active" id="wiz-step-1">
+      <div class="wiz-step-badge">Welcome</div>
+      <div class="wiz-title">Set up Porter</div>
+      <div class="wiz-subtitle">Connect your file locations and optionally register AI agents. Takes about 2 minutes.</div>
+      <div class="wiz-actions">
+        <button class="btn" onclick="wizNext()">Start setup</button>
+        <button class="btn-skip" onclick="wizSkip()">Skip for now</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Add Location -->
+    <div class="wiz-step" id="wiz-step-2">
+      <div class="wiz-step-badge">Step 1 of 3</div>
+      <div class="wiz-title">Add a location</div>
+      <div class="wiz-subtitle">Connect a directory on this server. You can add more later in Settings → Locations.</div>
+      <div class="wiz-type-cards">
+        <div class="wiz-type-card selected">
+          <div class="wiz-card-icon">📁</div>
+          <div class="wiz-card-label">Local directory</div>
+          <div class="wiz-card-sub">This server</div>
+        </div>
+        <div class="wiz-type-card disabled">
+          <div class="wiz-card-icon">🔌</div>
+          <div class="wiz-card-label">SSH server</div>
+          <div class="wiz-card-sub">Coming soon</div>
+        </div>
+        <div class="wiz-type-card disabled">
+          <div class="wiz-card-icon">🐙</div>
+          <div class="wiz-card-label">GitHub repo</div>
+          <div class="wiz-card-sub">Coming soon</div>
+        </div>
+      </div>
+      <div class="settings-field">
+        <label>Label</label>
+        <input class="settings-input" id="wiz-loc-label" placeholder="e.g. My Files" />
+      </div>
+      <div class="settings-field">
+        <label>Absolute path</label>
+        <div style="display:flex;gap:8px">
+          <input class="settings-input" id="wiz-loc-path" placeholder="/home/user/files" style="flex:1" />
+          <button class="btn-secondary" onclick="wizTestPath()">Test</button>
+        </div>
+        <div id="wiz-path-result" style="font-size:12px;margin-top:6px;color:var(--text3)"></div>
+      </div>
+      <div class="wiz-actions">
+        <button class="btn" onclick="wizSaveLocation()">Add & Continue</button>
+        <button class="btn-secondary" onclick="wizPrev()">Back</button>
+        <button class="btn-skip" onclick="wizSkipStep()">Skip this step</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Connect Agent -->
+    <div class="wiz-step" id="wiz-step-3">
+      <div class="wiz-step-badge">Step 2 of 3</div>
+      <div class="wiz-title">Connect an agent</div>
+      <div class="wiz-subtitle">Issue an API key for an AI agent. You can skip this and add agents later in Settings → Agents.</div>
+      <div class="settings-field">
+        <label>Agent name</label>
+        <input class="settings-input" id="wiz-agent-name" placeholder="e.g. openclaw" />
+      </div>
+      <div class="settings-field">
+        <label>Role</label>
+        <select class="settings-input" id="wiz-agent-role">
+          <option value="viewer">Viewer — read only</option>
+          <option value="writer" selected>Writer — read + write files</option>
+          <option value="operator">Operator — + checkpoint / finalize</option>
+          <option value="admin">Admin — full access</option>
+        </select>
+      </div>
+      <div id="wiz-agent-key-section" style="display:none">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">API key — copy now, shown once</div>
+        <div class="wiz-key-box" id="wiz-agent-key-display"></div>
+        <div class="wiz-key-note">Save this key — it will not be shown again.</div>
+        <button class="btn-secondary" onclick="wizCopyKey()" style="margin-bottom:16px">Copy key</button>
+      </div>
+      <div class="wiz-actions">
+        <button class="btn" id="wiz-agent-btn" onclick="wizCreateAgent()">Create agent</button>
+        <button class="btn-secondary" onclick="wizPrev()">Back</button>
+        <button class="btn-skip" id="wiz-agent-skip" onclick="wizSkipStep()">Skip this step</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Complete -->
+    <div class="wiz-step" id="wiz-step-4">
+      <div class="wiz-step-badge">Done</div>
+      <div class="wiz-title">Porter is ready</div>
+      <div class="wiz-subtitle">Here's what was configured. Adjust everything anytime in Settings.</div>
+      <ul class="wiz-checklist" id="wiz-checklist"></ul>
+      <div class="wiz-actions">
+        <button class="btn" onclick="wizFinish()">Open Porter</button>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
 """
