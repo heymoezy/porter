@@ -1,18 +1,21 @@
-# Porter × OpenClaw Memory Layer
+# Porter × Agent Sync (Current Working Pack)
 
-This folder contains execution-ready documentation for implementing Porter as the long-term memory substrate for OpenClaw/agent workflows.
+This directory is the active instruction set for Claude Code.
 
-## Goal
-Keep `MEMORY.md` small and high-signal, while using Porter as the canonical, searchable source of truth across devices.
+## Read in order
+1. `06-reconciliation-and-priority-plan.md`
+2. `07-ux-and-configuration-plan.md`
+3. `08-ui-wireframes-and-user-flows.md`
+4. `09-claude-implementation-prd.md`
+5. `tasks/claude-ui-execution-checklist.md`
+6. `prompts/claude-ui-master-prompt.md`
 
-## Files
-- `docs/01-product-spec.md` — product concept and positioning
-- `docs/02-architecture-and-data-model.md` — technical design and schemas
-- `docs/03-openclaw-integration-plan.md` — implementation plan for agent integration
-- `tasks/claude-code-execution-checklist.md` — build checklist for Claude Code
-- `prompts/claude-code-master-prompt.md` — copy/paste prompt to start implementation
+## Current focus
+- User-facing setup (locations, agents, permissions)
+- Clear onboarding wizard
+- Permission enforcement and role-based controls
+- Backward-compatible migration from hardcoded defaults
+- Keep existing Porter file workflows intact
 
-## Quick start for Claude Code
-1. Read all docs in order (01 → 03)
-2. Execute `tasks/claude-code-execution-checklist.md`
-3. Use `prompts/claude-code-master-prompt.md` as your kickoff instruction
+## Note
+Older planning files were removed after implementation/hardening to keep this folder clean and execution-focused.
