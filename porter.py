@@ -1063,6 +1063,7 @@ body.density-compact .file-name { padding: 6px 0; }
   <div class="nav-label">Locations</div>
   <div id="locations"></div>
   <div class="sidebar-footer" id="sfooter"></div>
+  <button class="ver-link" onclick="openChangelog()" title="View release notes">Porter v0.5.0 — Release notes</button>
   <div class="user-card" id="userCard" onclick="openSettings('account')">
     <div class="user-avatar" id="ucAvatar"></div>
     <div style="min-width:0;flex:1">
@@ -1243,6 +1244,18 @@ body.density-compact .file-name { padding: 6px 0; }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         Account
       </button>
+      <button class="settings-nav-item" id="snav-locations" onclick="switchSettingsTab('locations')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Locations
+      </button>
+      <button class="settings-nav-item" id="snav-agents" onclick="switchSettingsTab('agents')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
+        Agents
+      </button>
+      <button class="settings-nav-item" id="snav-permissions" onclick="switchSettingsTab('permissions')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        Permissions
+      </button>
       <button class="settings-nav-item" id="snav-appearance" onclick="switchSettingsTab('appearance')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
         Appearance
@@ -1336,10 +1349,107 @@ body.density-compact .file-name { padding: 6px 0; }
             <button onclick="setSetting('fontSize',14)" data-val="14">14</button>
           </div>
         </div>
-        <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border)">
-          <div style="font-size:12px;color:var(--text3)">Porter v0.5.0</div>
-          <button class="btn" style="margin-top:8px;padding:5px 10px;font-size:12px;background:none;border-color:var(--border2);color:var(--text2)" onclick="closeSettings();openChangelog()">Release notes →</button>
+      </div>
+
+      <!-- Locations page -->
+      <div class="settings-page" id="spage-locations">
+        <div class="settings-page-title">Locations</div>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">Directories Porter can browse. Changes take effect immediately.</div>
+        <div id="loc-list"></div>
+        <div style="margin-top:18px">
+          <button class="btn btn-primary" onclick="openAddLocation()">+ Add location</button>
         </div>
+        <!-- add/edit form (hidden by default) -->
+        <div id="loc-form" style="display:none;margin-top:20px;padding:16px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
+          <div class="settings-page-title" style="font-size:14px;margin-bottom:14px" id="loc-form-title">Add location</div>
+          <div class="settings-field">
+            <label>Label</label>
+            <input type="text" class="settings-input" id="lf-label" placeholder="My Files">
+          </div>
+          <div class="settings-field">
+            <label>Absolute path</label>
+            <input type="text" class="settings-input" id="lf-path" placeholder="/home/user/files">
+          </div>
+          <div class="settings-save-row" style="gap:8px">
+            <button class="btn btn-primary" onclick="saveLocation()">Save</button>
+            <button class="btn btn-ghost" onclick="cancelLocationForm()">Cancel</button>
+            <button class="btn btn-ghost" onclick="testLocationPath()" style="margin-left:auto">Test path</button>
+          </div>
+          <div id="lf-status" style="font-size:12px;margin-top:8px;color:var(--text3)"></div>
+          <input type="hidden" id="lf-edit-id">
+        </div>
+      </div>
+
+      <!-- Agents page -->
+      <div class="settings-page" id="spage-agents">
+        <div class="settings-page-title">Agents</div>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">API clients that connect to Porter. Each agent gets a unique key.</div>
+        <div id="agent-list"></div>
+        <div style="margin-top:18px">
+          <button class="btn btn-primary" onclick="openCreateAgent()">+ Create agent</button>
+        </div>
+        <!-- create form -->
+        <div id="agent-form" style="display:none;margin-top:20px;padding:16px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
+          <div class="settings-page-title" style="font-size:14px;margin-bottom:14px">New agent</div>
+          <div class="settings-field">
+            <label>Name</label>
+            <input type="text" class="settings-input" id="af-name" placeholder="Claude Code">
+          </div>
+          <div class="settings-field">
+            <label>Type</label>
+            <select class="settings-input" id="af-type" style="cursor:pointer">
+              <option value="claude-code">Claude Code</option>
+              <option value="openclaw">OpenClaw</option>
+              <option value="generic">Generic API client</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label>Role</label>
+            <select class="settings-input" id="af-role" style="cursor:pointer">
+              <option value="viewer">Viewer — read only</option>
+              <option value="writer" selected>Writer — read + write + checkpoint</option>
+              <option value="operator">Operator — writer + finalize</option>
+              <option value="admin">Admin — full access</option>
+            </select>
+          </div>
+          <div class="settings-save-row" style="gap:8px">
+            <button class="btn btn-primary" onclick="createAgent()">Create &amp; copy key</button>
+            <button class="btn btn-ghost" onclick="cancelAgentForm()">Cancel</button>
+          </div>
+        </div>
+        <!-- new key display -->
+        <div id="agent-key-box" style="display:none;margin-top:20px;padding:14px;background:rgba(247,147,26,.08);border:1px solid rgba(247,147,26,.3);border-radius:8px">
+          <div style="font-size:12px;color:var(--accent);font-weight:600;margin-bottom:8px">⚠ Copy this key now — it won't be shown again</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <code style="flex:1;font-size:12px;word-break:break-all;color:var(--text)" id="agent-key-val"></code>
+            <button class="btn btn-ghost" style="flex-shrink:0;font-size:12px" onclick="copyAgentKey()">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Permissions page -->
+      <div class="settings-page" id="spage-permissions">
+        <div class="settings-page-title">Permissions</div>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">Role capabilities for each namespace. Set per-agent role in the Agents tab.</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="color:var(--text3)">
+              <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Role</th>
+              <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Read</th>
+              <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Write</th>
+              <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Checkpoint</th>
+              <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Finalize</th>
+              <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Admin</th>
+            </tr>
+          </thead>
+          <tbody id="perm-matrix">
+            <tr><td style="padding:7px 8px;color:var(--text2)">Viewer</td>   <td style="text-align:center">✓</td><td></td><td></td><td></td><td></td></tr>
+            <tr><td style="padding:7px 8px;color:var(--text2)">Writer</td>   <td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td></tr>
+            <tr><td style="padding:7px 8px;color:var(--text2)">Operator</td> <td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td></tr>
+            <tr><td style="padding:7px 8px;color:var(--text2)">Admin</td>    <td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:24px;font-size:13px;color:var(--text3)">Namespaces available: projects · people · decisions · compliance · transcripts · artifacts · indexes · pointers · runtime</div>
       </div>
 
     </div><!-- /settings-content -->
@@ -1479,6 +1589,8 @@ function syncSettingsUI() {
 function openSettings(tab = 'account') {
   switchSettingsTab(tab); syncSettingsUI();
   document.getElementById('settingsOverlay').classList.add('open');
+  if (tab === 'locations') loadLocations();
+  if (tab === 'agents')    loadAgents();
 }
 function closeSettings() {
   document.getElementById('settingsOverlay').classList.remove('open');
@@ -1490,6 +1602,174 @@ function switchSettingsTab(tab) {
     el.classList.toggle('active', el.id === 'snav-' + tab));
   document.querySelectorAll('.settings-page').forEach(el =>
     el.classList.toggle('active', el.id === 'spage-' + tab));
+}
+
+// ── locations ──────────────────────────────────────────────────────────────
+let _editLocId = null;
+
+async function loadLocations() {
+  const data = await api('/api/locations');
+  if (!data) return;
+  renderLocations(data.locations || []);
+  // also refresh sidebar
+  await initLocations();
+}
+
+function renderLocations(locs) {
+  const el = document.getElementById('loc-list');
+  if (!locs.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No locations yet.</div>';
+    return;
+  }
+  el.innerHTML = locs.map(l => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--raised);border-radius:8px;margin-bottom:8px;border:1px solid var(--border)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(l.label)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;font-family:monospace">${escHtml(l.path)}</div>
+      </div>
+      <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="editLocation(${JSON.stringify(JSON.stringify(l))})">Edit</button>
+      <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--danger)" onclick="removeLocation('${escHtml(l.id)}','${escHtml(l.label)}')">Remove</button>
+    </div>`).join('');
+}
+
+function openAddLocation() {
+  _editLocId = null;
+  document.getElementById('lf-edit-id').value = '';
+  document.getElementById('lf-label').value = '';
+  document.getElementById('lf-path').value = '';
+  document.getElementById('lf-status').textContent = '';
+  document.getElementById('loc-form-title').textContent = 'Add location';
+  document.getElementById('loc-form').style.display = 'block';
+}
+
+function editLocation(jsonStr) {
+  const l = JSON.parse(jsonStr);
+  _editLocId = l.id;
+  document.getElementById('lf-edit-id').value = l.id;
+  document.getElementById('lf-label').value = l.label;
+  document.getElementById('lf-path').value = l.path;
+  document.getElementById('lf-status').textContent = '';
+  document.getElementById('loc-form-title').textContent = 'Edit location';
+  document.getElementById('loc-form').style.display = 'block';
+}
+
+function cancelLocationForm() {
+  document.getElementById('loc-form').style.display = 'none';
+}
+
+async function testLocationPath() {
+  const path = document.getElementById('lf-path').value.trim();
+  if (!path) { document.getElementById('lf-status').textContent = 'Enter a path first.'; return; }
+  const res = await api('/api/locations/test', { path });
+  const st  = document.getElementById('lf-status');
+  if (!res) { st.textContent = 'Test failed.'; return; }
+  if (!res.exists) { st.style.color = 'var(--danger)'; st.textContent = '✕ Path does not exist'; return; }
+  const flags = [];
+  if (res.readable) flags.push('readable');
+  if (res.writable) flags.push('writable');
+  st.style.color = 'var(--success)';
+  st.textContent = '✓ ' + (flags.join(' + ') || 'found');
+}
+
+async function saveLocation() {
+  const label = document.getElementById('lf-label').value.trim();
+  const path  = document.getElementById('lf-path').value.trim();
+  const id    = document.getElementById('lf-edit-id').value;
+  if (!label || !path) { toast('Label and path are required', 'err'); return; }
+  const action   = id ? 'update' : 'add';
+  const location = id ? { id, label, type: 'local', path } : { label, type: 'local', path };
+  const res = await api('/api/locations', { action, location });
+  if (res && res.ok) {
+    toast(id ? 'Location updated' : 'Location added', 'ok');
+    cancelLocationForm();
+    loadLocations();
+  } else {
+    toast((res && res.error) || 'Save failed', 'err');
+  }
+}
+
+async function removeLocation(id, label) {
+  if (!confirm(`Remove location "${label}"? This does not delete files.`)) return;
+  const res = await api('/api/locations', { action: 'remove', location: { id } });
+  if (res && res.ok) { toast('Location removed', 'ok'); loadLocations(); }
+  else toast((res && res.error) || 'Remove failed', 'err');
+}
+
+// ── agents ──────────────────────────────────────────────────────────────────
+
+async function loadAgents() {
+  const data = await api('/api/agents');
+  if (!data) return;
+  renderAgents(data.agents || []);
+}
+
+function renderAgents(agents) {
+  const el = document.getElementById('agent-list');
+  if (!agents.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No agents yet.</div>';
+    return;
+  }
+  const roleColor = { viewer:'var(--text3)', writer:'var(--text2)', operator:'var(--accent)', admin:'var(--danger)' };
+  el.innerHTML = agents.map(a => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--raised);border-radius:8px;margin-bottom:8px;border:1px solid var(--border)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(a.name)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${escHtml(a.type)} · <span style="color:${roleColor[a.role]||'var(--text3)'}">${a.role}</span> · <span style="font-family:monospace">${a.id}</span></div>
+      </div>
+      <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
+      <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Revoke</button>
+    </div>`).join('');
+}
+
+function openCreateAgent() {
+  document.getElementById('agent-key-box').style.display = 'none';
+  document.getElementById('agent-form').style.display = 'block';
+  document.getElementById('af-name').value = '';
+}
+
+function cancelAgentForm() {
+  document.getElementById('agent-form').style.display = 'none';
+}
+
+async function createAgent() {
+  const name = document.getElementById('af-name').value.trim();
+  const type = document.getElementById('af-type').value;
+  const role = document.getElementById('af-role').value;
+  if (!name) { toast('Name is required', 'err'); return; }
+  const res = await api('/api/agents', { action: 'create', name, type, role });
+  if (res && res.ok) {
+    cancelAgentForm();
+    document.getElementById('agent-key-val').textContent = res.key;
+    document.getElementById('agent-key-box').style.display = 'block';
+    toast('Agent created', 'ok');
+    loadAgents();
+  } else {
+    toast((res && res.error) || 'Create failed', 'err');
+  }
+}
+
+function copyAgentKey() {
+  const val = document.getElementById('agent-key-val').textContent;
+  navigator.clipboard.writeText(val).then(() => toast('Key copied', 'ok'));
+}
+
+async function doRotateKey(id, name) {
+  if (!confirm(`Rotate key for "${name}"? The old key will stop working immediately.`)) return;
+  const res = await api('/api/agents/rotate-key', { id });
+  if (res && res.ok) {
+    document.getElementById('agent-key-val').textContent = res.key;
+    document.getElementById('agent-key-box').style.display = 'block';
+    toast('Key rotated — copy it now', 'ok');
+  } else toast((res && res.error) || 'Rotate failed', 'err');
+}
+
+async function doRevokeAgent(id, name) {
+  if (!confirm(`Revoke agent "${name}"? This cannot be undone.`)) return;
+  const res = await api('/api/agents', { action: 'revoke', id });
+  if (res && res.ok) { toast('Agent revoked', 'ok'); loadAgents(); }
+  else toast((res && res.error) || 'Revoke failed', 'err');
 }
 
 // ── user profile ──
