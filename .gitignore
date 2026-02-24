@@ -1,7 +1,14 @@
 porter_config.json
 porter_avatar.*
-runtime/drafts/
-runtime/tmp/
+runtime/checkpoints/*
+!runtime/checkpoints/.gitkeep
+runtime/leases/*
+!runtime/leases/.gitkeep
+runtime/drafts/*
+!runtime/drafts/.gitkeep
+runtime/tmp/*
+!runtime/tmp/.gitkeep
+memory/projects/test-*
 __pycache__/
 *.pyc
 *.db

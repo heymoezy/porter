@@ -77,6 +77,10 @@ def run_all(suites):
 
     test("login", t_login)
 
+    # Unique task ID per run — avoids accumulated lease state across runs
+    import time as _t
+    ROUNDTRIP_TASK = f"roundtrip-{int(_t.time())}"
+
     # ── P0 ───────────────────────────────────────────────────────────────────
     if "p0" in suites:
 
@@ -98,7 +102,7 @@ def run_all(suites):
 
         def t_checkpoint_started():
             code, payload = authed.post("/runtime/checkpoint", {
-                "task_id":   "roundtrip-task",
+                "task_id":   ROUNDTRIP_TASK,
                 "step_id":   "step-1",
                 "operation": "fetch-context",
                 "status":    "started",
@@ -109,23 +113,23 @@ def run_all(suites):
 
         def t_heartbeat():
             code, payload = authed.post("/runtime/heartbeat", {
-                "task_id": "roundtrip-task",
+                "task_id": ROUNDTRIP_TASK,
                 "owner":   "claude-code",
                 "ttl":     60,
             }, expect_code=200)
             assert payload.get("ok"), payload
-            assert payload["task_id"] == "roundtrip-task"
+            assert payload["task_id"] == ROUNDTRIP_TASK
             assert "expires_at" in payload
 
         def t_recover_resumable():
-            code, payload = authed.get("/runtime/recover?task_id=roundtrip-task", expect_code=200)
-            assert payload["task_id"] == "roundtrip-task"
+            code, payload = authed.get(f"/runtime/recover?task_id={ROUNDTRIP_TASK}", expect_code=200)
+            assert payload["task_id"] == ROUNDTRIP_TASK
             assert payload["resumable"] is True, f"expected resumable=True, got {payload}"
             assert len(payload["steps"]) >= 1
 
         def t_checkpoint_done():
             code, payload = authed.post("/runtime/checkpoint", {
-                "task_id":   "roundtrip-task",
+                "task_id":   ROUNDTRIP_TASK,
                 "step_id":   "step-2",
                 "operation": "write-output",
                 "status":    "done",
@@ -141,7 +145,7 @@ def run_all(suites):
                 "content": "finalize test content",
             }, expect_code=200)
             code, payload = authed.post("/runtime/finalize", {
-                "task_id":   "roundtrip-task",
+                "task_id":   ROUNDTRIP_TASK,
                 "temp_uri":  temp_uri,
                 "final_uri": final_uri,
             }, expect_code=200)
@@ -149,7 +153,7 @@ def run_all(suites):
             assert payload["final_uri"] == final_uri
 
         def t_recover_not_resumable():
-            code, payload = authed.get("/runtime/recover?task_id=roundtrip-task", expect_code=200)
+            code, payload = authed.get(f"/runtime/recover?task_id={ROUNDTRIP_TASK}", expect_code=200)
             # last step is the finalize done entry
             assert payload["resumable"] is False, f"expected resumable=False, got {payload}"
 
@@ -171,19 +175,124 @@ def run_all(suites):
                 "task_id": "valid-id", "step_id": "s1", "operation": "x", "status": "unknown",
             }, expect_code=400)
 
-        test("P0 auth gate: /runtime/checkpoint", t_auth_checkpoint)
-        test("P0 auth gate: /runtime/heartbeat",  t_auth_heartbeat)
-        test("P0 auth gate: /runtime/recover",    t_auth_recover)
-        test("P0 auth gate: /runtime/finalize",   t_auth_finalize)
-        test("P0 checkpoint(started)",            t_checkpoint_started)
-        test("P0 heartbeat",                      t_heartbeat)
-        test("P0 recover(resumable=True)",         t_recover_resumable)
-        test("P0 checkpoint(done)",               t_checkpoint_done)
-        test("P0 finalize",                       t_finalize)
-        test("P0 recover(resumable=False)",        t_recover_not_resumable)
-        test("P0 validation: bad task_id",        t_bad_task_id)
-        test("P0 validation: missing step_id",    t_missing_step_id)
-        test("P0 validation: bad status",         t_bad_status)
+        # ── hardening: lease expiry ───────────────────────────────────────
+        def t_recover_expired_lease():
+            import json as _json, time as _time
+            from pathlib import Path as _Path
+            task_id = "hardening-expired-task"
+            now = _time.time()
+            lease = {
+                "task_id":        task_id,
+                "owner":          "test",
+                "started_at":     now - 400,
+                "last_heartbeat": now - 400,
+                "expires_at":     now - 1,   # already expired
+                "state":          "running",
+            }
+            lease_path = _Path("/home/lobster/documents/porter/runtime/leases") / f"{task_id}.json"
+            lease_path.write_text(_json.dumps(lease))
+            ckpt_path = _Path("/home/lobster/documents/porter/runtime/checkpoints") / f"{task_id}.jsonl"
+            ckpt_path.write_text(
+                _json.dumps({"step_id": "s1", "status": "partial", "timestamp": now - 400}) + "\n"
+            )
+            code, payload = authed.get(f"/runtime/recover?task_id={task_id}", expect_code=200)
+            assert payload["lease_expired"] is True, f"expected lease_expired=True: {payload}"
+            assert payload["resumable"] is False, f"expected resumable=False: {payload}"
+
+        def t_recover_active_partial():
+            import json as _json, time as _time
+            from pathlib import Path as _Path
+            task_id = "hardening-active-task"
+            now = _time.time()
+            lease = {
+                "task_id":        task_id,
+                "owner":          "test",
+                "started_at":     now,
+                "last_heartbeat": now,
+                "expires_at":     now + 3600,
+                "state":          "running",
+            }
+            lease_path = _Path("/home/lobster/documents/porter/runtime/leases") / f"{task_id}.json"
+            lease_path.write_text(_json.dumps(lease))
+            ckpt_path = _Path("/home/lobster/documents/porter/runtime/checkpoints") / f"{task_id}.jsonl"
+            ckpt_path.write_text(
+                _json.dumps({"step_id": "s1", "status": "partial", "timestamp": now}) + "\n"
+            )
+            code, payload = authed.get(f"/runtime/recover?task_id={task_id}", expect_code=200)
+            assert payload["lease_expired"] is False, f"expected lease_expired=False: {payload}"
+            assert payload["resumable"] is True, f"expected resumable=True: {payload}"
+
+        # ── hardening: finalize ───────────────────────────────────────────
+        def t_finalize_atomic():
+            temp_uri  = "porter://projects/hardening-tmp-atomic.txt"
+            final_uri = "porter://projects/hardening-final-atomic.txt"
+            authed.post("/memory/upsert", {
+                "uri": temp_uri, "content": "atomic content",
+            }, expect_code=200)
+            code, payload = authed.post("/runtime/finalize", {
+                "task_id":   "hardening-atomic-task",
+                "temp_uri":  temp_uri,
+                "final_uri": final_uri,
+            }, expect_code=200)
+            assert payload.get("ok"), payload
+            # verify final exists and temp is gone
+            code2, fetched = authed.get(
+                "/memory/fetch?" + urllib.parse.urlencode({"uri": final_uri}),
+                expect_code=200,
+            )
+            assert fetched["content"] == "atomic content", fetched
+            code3, _ = authed.get(
+                "/memory/fetch?" + urllib.parse.urlencode({"uri": temp_uri}),
+                expect_code=404,
+            )
+
+        def t_finalize_missing_temp():
+            code, payload = authed.post("/runtime/finalize", {
+                "task_id":   "hardening-missing-task",
+                "temp_uri":  "porter://projects/nonexistent-hardening-tmp.txt",
+                "final_uri": "porter://projects/nonexistent-hardening-final.txt",
+            }, expect_code=400)
+            assert "error" in payload, payload
+
+        # ── hardening: heartbeat TTL ──────────────────────────────────────
+        def t_heartbeat_ttl_too_low():
+            code, payload = authed.post("/runtime/heartbeat", {
+                "task_id": "ttl-test", "ttl": 10,
+            }, expect_code=400)
+            assert "error" in payload, payload
+
+        def t_heartbeat_ttl_too_high():
+            code, payload = authed.post("/runtime/heartbeat", {
+                "task_id": "ttl-test", "ttl": 7200,
+            }, expect_code=400)
+            assert "error" in payload, payload
+
+        def t_heartbeat_ttl_valid():
+            code, payload = authed.post("/runtime/heartbeat", {
+                "task_id": "ttl-test", "ttl": 60,
+            }, expect_code=200)
+            assert payload.get("ok"), payload
+
+        test("P0 auth gate: /runtime/checkpoint",     t_auth_checkpoint)
+        test("P0 auth gate: /runtime/heartbeat",      t_auth_heartbeat)
+        test("P0 auth gate: /runtime/recover",        t_auth_recover)
+        test("P0 auth gate: /runtime/finalize",       t_auth_finalize)
+        test("P0 checkpoint(started)",                t_checkpoint_started)
+        test("P0 heartbeat",                          t_heartbeat)
+        test("P0 recover(resumable=True)",            t_recover_resumable)
+        test("P0 checkpoint(done)",                   t_checkpoint_done)
+        test("P0 finalize",                           t_finalize)
+        test("P0 recover(resumable=False)",           t_recover_not_resumable)
+        test("P0 validation: bad task_id",            t_bad_task_id)
+        test("P0 validation: missing step_id",        t_missing_step_id)
+        test("P0 validation: bad status",             t_bad_status)
+        test("P0 hardening: expired lease → not resumable", t_recover_expired_lease)
+        test("P0 hardening: active lease + partial → resumable", t_recover_active_partial)
+        test("P0 hardening: finalize atomic",         t_finalize_atomic)
+        test("P0 hardening: finalize missing temp",   t_finalize_missing_temp)
+        test("P0 hardening: ttl too low → 400",       t_heartbeat_ttl_too_low)
+        test("P0 hardening: ttl too high → 400",      t_heartbeat_ttl_too_high)
+        test("P0 hardening: ttl valid",               t_heartbeat_ttl_valid)
 
     # ── P1 ───────────────────────────────────────────────────────────────────
     if "p1" in suites:
@@ -300,6 +409,25 @@ def run_all(suites):
                 "porter_uri": "porter://projects/f.md", "confidence": "medium",
             }, expect_code=400)
 
+        # ── hardening: search totals ─────────────────────────────────────
+        def t_search_totals():
+            # seed two files that both match a unique query term
+            authed.post("/memory/upsert", {
+                "uri":     "porter://projects/totals-alpha.md",
+                "content": "# totals alpha\nsome totals alpha content",
+            }, expect_code=200)
+            authed.post("/memory/upsert", {
+                "uri":     "porter://projects/totals-beta.md",
+                "content": "# totals beta\nsome totals beta content",
+            }, expect_code=200)
+            code, payload = authed.post("/memory/search", {
+                "query": "totals", "limit": 1,
+            }, expect_code=200)
+            assert payload["returned"] == 1, f"returned={payload.get('returned')}"
+            assert payload["total"] >= 2, f"total={payload.get('total')} (expected >=2)"
+            assert payload["total"] > payload["returned"], \
+                f"total={payload['total']} should exceed returned={payload['returned']}"
+
         test("P1 auth gate: /memory/upsert",  t_auth_upsert)
         test("P1 auth gate: /memory/fetch",   t_auth_fetch)
         test("P1 auth gate: /memory/pointer", t_auth_pointer)
@@ -310,6 +438,7 @@ def run_all(suites):
         test("P1 pointer preserves created_at", t_pointer_preserves_created_at)
         test("P1 search finds note",          t_search_finds_note)
         test("P1 search tag filter",          t_search_tag_filter)
+        test("P1 hardening: search totals (total > returned)", t_search_totals)
         test("P1 validation: bad confidence", t_pointer_bad_confidence)
         test("P1 validation: missing fields", t_pointer_missing_fields)
         test("P1 validation: empty content",  t_upsert_empty_content)

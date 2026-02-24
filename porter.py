@@ -36,6 +36,10 @@ MEMORY_DIR        = Path("/home/lobster/documents/porter/memory")
 MEMORY_NAMESPACES = {"projects", "people", "decisions", "compliance",
                      "transcripts", "artifacts", "indexes", "pointers"}
 
+HEARTBEAT_TTL_MIN = 30    # seconds
+HEARTBEAT_TTL_MAX = 3600  # seconds
+HEARTBEAT_TTL_DEF = 300   # seconds
+
 # ── config helpers ────────────────────────────────────────────────────────
 
 def _hash_password(password: str, salt: str) -> str:
@@ -2586,14 +2590,24 @@ class Handler(BaseHTTPRequestHandler):
                 chunks = sorted(p.name for p in drafts_dir.iterdir() if p.is_file())
             last_step = steps[-1] if steps else None
             last_status = (last_step or {}).get("status", "")
-            resumable = lease is not None and last_status != "done"
+            now = time.time()
+            lease_expired = False
+            if lease is not None:
+                lease_expired = lease.get("expires_at", 0) <= now
+            resumable = (
+                lease is not None
+                and not lease_expired
+                and lease.get("state", "running") in ("running", "interrupted")
+                and last_status != "done"
+            )
             self.reply_json({
-                "task_id":   task_id,
-                "lease":     lease,
-                "steps":     steps,
-                "chunks":    chunks,
-                "last_step": last_step,
-                "resumable": resumable,
+                "task_id":      task_id,
+                "lease":        lease,
+                "steps":        steps,
+                "chunks":       chunks,
+                "last_step":    last_step,
+                "resumable":    resumable,
+                "lease_expired": lease_expired,
             })
 
         # ── P1: memory fetch ───────────────────────────────────────────────
@@ -2943,7 +2957,14 @@ class Handler(BaseHTTPRequestHandler):
             if not task_id or not re.match(r'^[\w\-\.]+$', task_id):
                 self.reply_json({"error": "task_id must be non-empty and match [\\w\\-\\.]+"}, 400); return
             owner = data.get("owner", "agent")
-            ttl   = int(data.get("ttl", 300))
+            try:
+                ttl = int(data.get("ttl", HEARTBEAT_TTL_DEF))
+            except (TypeError, ValueError):
+                self.reply_json({"error": "ttl must be an integer"}, 400); return
+            if not (HEARTBEAT_TTL_MIN <= ttl <= HEARTBEAT_TTL_MAX):
+                self.reply_json({
+                    "error": f"ttl must be between {HEARTBEAT_TTL_MIN} and {HEARTBEAT_TTL_MAX}"
+                }, 400); return
             now   = time.time()
             lease_path = RUNTIME_DIR / "leases" / f"{task_id}.json"
             if lease_path.exists():
@@ -2983,11 +3004,17 @@ class Handler(BaseHTTPRequestHandler):
             if not temp_path.exists() or temp_path.stat().st_size == 0:
                 self.reply_json({"error": "temp file missing or empty"}, 400); return
             final_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(temp_path), str(final_path))
+            os.replace(str(temp_path), str(final_path))
             now = time.time()
-            # append finalize entry to checkpoint log
+            # append finalize entry to checkpoint log (full metadata)
             ckpt_path = RUNTIME_DIR / "checkpoints" / f"{task_id}.jsonl"
-            entry = json.dumps({"step_id": "finalize", "status": "done", "timestamp": now})
+            entry = json.dumps({
+                "step_id":   "finalize",
+                "status":    "done",
+                "timestamp": now,
+                "temp_uri":  temp_uri,
+                "final_uri": final_uri,
+            })
             with open(ckpt_path, "a", encoding="utf-8") as f:
                 f.write(entry + "\n")
             # update lease state
@@ -3076,8 +3103,13 @@ class Handler(BaseHTTPRequestHandler):
                     except Exception:
                         continue
             results.sort(key=lambda r: r["score"], reverse=True)
+            total_before_limit = len(results)
             results = results[:limit]
-            self.reply_json({"results": results, "total": len(results)})
+            self.reply_json({
+                "results":  results,
+                "total":    total_before_limit,
+                "returned": len(results),
+            })
 
         # ── P1: memory upsert ──────────────────────────────────────────────
         elif parsed.path == "/memory/upsert":
