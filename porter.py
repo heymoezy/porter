@@ -494,10 +494,11 @@ body {
   overflow: hidden;
 }
 .logo {
-  padding: 0 20px 28px;
+  padding: 0 14px 24px 20px;
   display: flex; align-items: center; gap: 11px;
 }
 .logo-mark { flex-shrink: 0; }
+.logo-text { flex: 1; min-width: 0; }
 .logo-name {
   font-size: 17px; font-weight: 700; color: #fff;
   letter-spacing: -0.4px; display: block; line-height: 1;
@@ -524,6 +525,7 @@ body {
 .loc svg { flex-shrink: 0; opacity: .7; }
 .loc.active svg { opacity: 1; }
 .loc-name { font-size: 13px; font-weight: 500; }
+#locations { flex: 1; overflow-y: auto; }
 .sidebar-footer {
   padding: 16px 20px 0;
   border-top: 1px solid var(--border);
@@ -551,30 +553,27 @@ body {
 }
 .ver-link:hover { color:var(--accent); }
 
-/* hamburger toggle */
+/* hamburger toggle — icon-only button inside logo row */
 .hbg-btn {
-  display: flex; align-items: center; gap: 8px;
-  padding: 0 18px 14px; cursor: pointer; background: none;
-  border: none; color: var(--text3); font-family: inherit;
-  font-size: 10px; font-weight: 600; letter-spacing: .6px;
-  text-transform: uppercase; transition: color .15s; width: 100%;
-  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  margin-left: auto; flex-shrink: 0;
+  padding: 5px 6px; cursor: pointer; background: none;
+  border: none; color: var(--text3); border-radius: 5px;
+  transition: color .15s, background .12s;
 }
-.hbg-btn:hover { color: var(--text); }
-.hbg-lbl { white-space: nowrap; }
+.hbg-btn:hover { color: var(--text); background: var(--raised); }
 
 /* ── sidebar collapsed ── */
 body.sidebar-collapsed { --sidebar: 52px; }
-body.sidebar-collapsed .logo > div,
+body.sidebar-collapsed .logo-text,
 body.sidebar-collapsed .nav-label,
 body.sidebar-collapsed .loc-name,
 body.sidebar-collapsed .ver-link,
 body.sidebar-collapsed .sidebar-footer,
 body.sidebar-collapsed .user-name,
-body.sidebar-collapsed .user-sub,
-body.sidebar-collapsed .hbg-lbl { display: none; }
-body.sidebar-collapsed .logo { padding: 0 9px 18px; justify-content: center; }
-body.sidebar-collapsed .hbg-btn { padding: 0 0 14px; justify-content: center; }
+body.sidebar-collapsed .user-sub { display: none; }
+body.sidebar-collapsed .logo { padding: 0 9px 18px; }
+body.sidebar-collapsed .hbg-btn { margin-left: 0; }
 body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 body.sidebar-collapsed .user-card { padding: 10px 0; justify-content: center; }
 body.sidebar-collapsed .user-card > svg { display: none; }
@@ -1009,7 +1008,7 @@ kbd {
 body.density-compact .file-name { padding: 6px 0; }
 
 /* user card */
-.user-card { margin-top: auto; border-top: 1px solid var(--border); padding: 12px 16px;
+.user-card { border-top: 1px solid var(--border); padding: 12px 16px;
   display: flex; align-items: center; gap: 10px; cursor: pointer; transition: background .12s; }
 .user-card:hover { background: var(--raised); }
 .user-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #000;
@@ -1164,14 +1163,6 @@ body.density-compact .file-name { padding: 6px 0; }
 
 <!-- sidebar -->
 <aside class="sidebar">
-  <button class="hbg-btn" id="hbgBtn" onclick="toggleSidebar()" title="Toggle sidebar">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-      <line x1="3" y1="6" x2="21" y2="6"/>
-      <line x1="3" y1="12" x2="21" y2="12"/>
-      <line x1="3" y1="18" x2="21" y2="18"/>
-    </svg>
-    <span class="hbg-lbl">Menu</span>
-  </button>
   <div class="logo">
     <svg class="logo-mark" width="34" height="34" viewBox="0 0 34 34" fill="none">
       <rect width="34" height="34" rx="8" fill="#F7931A"/>
@@ -1184,10 +1175,17 @@ body.density-compact .file-name { padding: 6px 0; }
       <!-- bowl right vertical -->
       <rect x="20" y="9" width="4" height="11" rx="1.5" fill="white"/>
     </svg>
-    <div>
+    <div class="logo-text">
       <span class="logo-name">porter</span>
       <span class="logo-sub">File Manager</span>
     </div>
+    <button class="hbg-btn" id="hbgBtn" onclick="toggleSidebar()" title="Toggle sidebar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
   </div>
   <div class="nav-label">Locations</div>
   <div id="locations"></div>
@@ -1230,6 +1228,9 @@ body.density-compact .file-name { padding: 6px 0; }
       <!-- shortcuts -->
       <button class="btn btn-icon" onclick="toggleShortcuts()" title="Keyboard shortcuts (?)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="6" cy="12" r=".5" fill="currentColor"/><circle cx="10" cy="12" r=".5" fill="currentColor"/><circle cx="14" cy="12" r=".5" fill="currentColor"/><circle cx="18" cy="12" r=".5" fill="currentColor"/><line x1="8" y1="15" x2="16" y2="15"/></svg>
+      </button>
+      <button class="btn btn-icon" id="btnHidden" onclick="setSetting('showHidden',!settings.showHidden)" title="Show hidden files (. prefixed)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
       <button class="btn btn-icon" id="btnTheme" onclick="toggleTheme()" title="Toggle light / dark mode">
         <svg id="themeIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1305,18 +1306,6 @@ body.density-compact .file-name { padding: 6px 0; }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M4.93 4.93a10 10 0 000 14.14M19.07 4.93a10 10 0 010 14.14M1 12h2M21 12h2M12 1v2M12 21v2"/></svg>
         Network
       </button>
-      <button class="settings-nav-item" id="snav-permissions" onclick="switchSettingsTab('permissions')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-        Access Model
-      </button>
-      <button class="settings-nav-item" id="snav-config" onclick="switchSettingsTab('config')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/><path d="M15.54 8.46a5 5 0 010 7.07M8.46 8.46a5 5 0 000 7.07"/></svg>
-        Config
-      </button>
-      <button class="settings-nav-item" id="snav-changelog" onclick="switchSettingsTab('changelog')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        What's new
-      </button>
       <div style="flex:1"></div>
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
@@ -1374,19 +1363,6 @@ body.density-compact .file-name { padding: 6px 0; }
           </div>
           <div class="settings-save-row">
             <button class="btn btn-ghost" onclick="changePassword()">Update password</button>
-          </div>
-        </div>
-        <div class="pw-section">
-          <div class="pw-section-title">Display</div>
-          <div class="settings-row">
-            <div>
-              <div class="settings-row-label">Show hidden files</div>
-              <div class="settings-row-desc">Files and folders starting with .</div>
-            </div>
-            <label class="settings-toggle">
-              <input type="checkbox" id="tog-showHidden" onchange="setSetting('showHidden',this.checked)">
-              <span class="slider"></span>
-            </label>
           </div>
         </div>
       </div>
@@ -1532,41 +1508,6 @@ body.density-compact .file-name { padding: 6px 0; }
           <div style="color:var(--text3);font-size:13px">Loading…</div>
         </div>
         <div style="font-size:11px;color:var(--text3);margin-top:8px" id="ts-last-updated"></div>
-      </div>
-
-      <div class="settings-page" id="spage-permissions">
-        <div class="settings-page-title">Access Model</div>
-        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">Role capabilities for each namespace. Set per-agent role in the Agents tab.</div>
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead>
-            <tr style="color:var(--text3)">
-              <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Role</th>
-              <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Read</th>
-              <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Write</th>
-              <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Checkpoint</th>
-              <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Finalize</th>
-              <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Admin</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td style="padding:7px 8px;color:var(--text2)">Viewer</td>   <td style="text-align:center">✓</td><td></td><td></td><td></td><td></td></tr>
-            <tr><td style="padding:7px 8px;color:var(--text2)">Writer</td>   <td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td></tr>
-            <tr><td style="padding:7px 8px;color:var(--text2)">Operator</td> <td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td></tr>
-            <tr><td style="padding:7px 8px;color:var(--text2)">Admin</td>    <td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td></tr>
-          </tbody>
-        </table>
-        <div style="margin-top:24px;font-size:13px;color:var(--text3)">Namespaces: projects · people · decisions · compliance · transcripts · artifacts · indexes · pointers · runtime</div>
-      </div>
-
-      <!-- Config transparency page -->
-      <div class="settings-page" id="spage-config">
-        <div class="settings-page-title">Config</div>
-        <div style="font-size:13px;color:var(--text3);margin-bottom:14px">Live view of effective backend configuration. No hidden backend magic.</div>
-        <div id="config-panel"><div style="color:var(--text3);font-size:13px">Loading…</div></div>
-        <div style="margin-top:16px;display:flex;gap:8px">
-          <a class="btn btn-ghost" id="cfg-export-btn" href="/api/config/export" download="porter-config.json" style="font-size:12px">⬇ Export config JSON</a>
-          <button class="btn btn-ghost" style="font-size:12px" onclick="loadConfigSummary(true)">↻ Refresh</button>
-        </div>
       </div>
 
       <!-- What's new / Changelog page -->
@@ -1775,8 +1716,8 @@ function applySettings() {
   document.documentElement.style.setProperty('--editor-font-size', settings.fontSize + 'px');
 }
 function syncSettingsUI() {
-  const th = document.getElementById('tog-showHidden');
-  if (th) th.checked = settings.showHidden;
+  const bh = document.getElementById('btnHidden');
+  if (bh) bh.style.opacity = settings.showHidden ? '1' : '.4';
 }
 
 // ── theme ──
@@ -1981,8 +1922,8 @@ function switchSettingsTab(tab) {
     el.classList.toggle('active', el.id === 'snav-' + tab));
   document.querySelectorAll('.settings-page').forEach(el =>
     el.classList.toggle('active', el.id === 'spage-' + tab));
-  if (tab === 'network') startTsPolling();
-  if (tab === 'config')  loadConfigSummary();
+  if (tab === 'network')   startTsPolling();
+  if (tab === 'changelog') populateChangelog();
 }
 function populateChangelog() {
   const el = document.getElementById('changelog-content');
@@ -2000,8 +1941,7 @@ async function loadLocations() {
   const data = await api('/api/locations');
   if (!data) return;
   renderLocations(data.locations || []);
-  // also refresh sidebar
-  await initLocations();
+  _renderSidebarLocs(data.locations || [], curRoot);
 }
 
 function renderLocations(locs) {
@@ -2332,21 +2272,26 @@ async function doLogout() {
 }
 
 // ── init ──
+function _renderSidebarLocs(locs, activeRoot) {
+  const el = document.getElementById('locations');
+  el.innerHTML = '';
+  locs.forEach(l => {
+    const div = document.createElement('div');
+    div.className = 'loc' + (l.id === activeRoot ? ' active' : '');
+    div.dataset.root = l.id;
+    div.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg><span class="loc-name">${escHtml(l.label)}</span>`;
+    div.onclick = () => navigate(l.id, '');
+    el.appendChild(div);
+  });
+}
+
 async function init() {
   loadSettings();
   await loadMe();
-  const res = await api('/api/roots');
-  const roots = (res && res.roots) || [];
-  const locs = document.getElementById('locations');
-  locs.innerHTML = '';
-  roots.forEach(r => {
-    const el = document.createElement('div');
-    el.className = 'loc'; el.dataset.root = r;
-    el.innerHTML = `<span class="file-icon">${I.folder}</span><span class="loc-name">${r}</span>`;
-    el.onclick = () => navigate(r, '');
-    locs.appendChild(el);
-  });
-  if (roots.length) navigate(roots[0], '');
+  const locData = await api('/api/locations');
+  const locs = (locData && locData.locations) || [];
+  _renderSidebarLocs(locs, null);
+  if (locs.length) navigate(locs[0].id, '');
   await maybeShowWizard();
 }
 
