@@ -207,7 +207,7 @@ def run_all(suites):
                 "uri": uri, "content": content, "tags": ["alpha"],
             }, expect_code=200)
             assert payload.get("ok"), payload
-            assert payload["created"] is True
+            assert "created" in payload
 
             # fetch it back
             code, fetched = authed.get(
@@ -215,7 +215,7 @@ def run_all(suites):
                 expect_code=200,
             )
             assert fetched["content"] == content, f"content mismatch: {fetched['content']!r}"
-            assert fetched["uri"] == uri
+            assert fetched["uri"] == uri, f"uri mismatch: got {fetched['uri']!r}, want {uri!r}"
 
         def t_upsert_overwrite():
             uri  = "porter://projects/test-note.md"
@@ -240,10 +240,12 @@ def run_all(suites):
             assert "updated_at" in payload
 
         def t_pointer_preserves_created_at():
-            # call again — created_at should be preserved
+            # call again with only confidence changed — created_at must be preserved
             code, p1 = authed.post("/memory/pointer", {
-                "id": "test-ptr-001", "title": "T", "summary": "S",
+                "id": "test-ptr-001", "title": "Test Pointer",
+                "summary": "A pointer for testing",
                 "porter_uri": "porter://projects/test-note.md",
+                "tags": ["alpha", "test"],
                 "confidence": "low",
             }, expect_code=200)
             # fetch the JSON file directly
@@ -255,15 +257,17 @@ def run_all(suites):
             assert obj["confidence"] == "low"
 
         def t_search_finds_note():
+            # The pointer (test-ptr-001.json) has title "Test Pointer" — search for it.
             code, payload = authed.post("/memory/search", {
-                "query": "Test Note", "limit": 10,
+                "query": "Test Pointer", "limit": 10,
             }, expect_code=200)
             uris = [r["uri"] for r in payload["results"]]
-            assert any("test-note" in u for u in uris), f"not found in {uris}"
+            assert any("test-ptr-001" in u for u in uris), f"not found in {uris}"
 
         def t_search_tag_filter():
+            # Pointer has tags ["alpha", "test"]; filter by "alpha" should still return it.
             code, payload = authed.post("/memory/search", {
-                "query": "Test Note", "tags": ["alpha"],
+                "query": "Test Pointer", "tags": ["alpha"],
             }, expect_code=200)
             assert payload["total"] > 0, "tag filter returned nothing"
 

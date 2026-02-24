@@ -3019,7 +3019,10 @@ class Handler(BaseHTTPRequestHandler):
                         if ext == ".json":
                             raw = fp.read_text(encoding="utf-8", errors="replace")
                             obj = json.loads(raw)
-                            if "id" not in obj or "porter_uri" not in obj:
+                            # accept porter_uri at top level or nested inside "source"
+                            has_uri = ("porter_uri" in obj or
+                                       "porter_uri" in (obj.get("source") or {}))
+                            if "id" not in obj or not has_uri:
                                 continue
                             title   = obj.get("title", fp.stem)
                             summary = obj.get("summary", "")
