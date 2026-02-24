@@ -19,10 +19,23 @@ from urllib.parse import parse_qs, unquote, urlparse
 PORT = 8877
 HOST = "76.13.190.52"
 
-SERVE_DIRS = {
-    "vps-home": Path("/home/lobster/documents"),
-    "uploads":  Path("/home/lobster/uploads"),
-    "websites": Path("/home/websites"),
+SERVE_DIRS: dict = {}   # populated at startup from config; do not hardcode here
+
+DEFAULT_LOCATIONS = [
+    {"id": "vps-home", "label": "Documents", "type": "local",
+     "path": "/home/lobster/documents"},
+    {"id": "websites",  "label": "Websites",  "type": "local",
+     "path": "/home/websites"},
+]
+DEFAULT_PREFERENCES: dict = {
+    "onboarding_complete": False,
+    "default_location":    "vps-home",
+    "checkpoint_interval": 30,
+    "lease_ttl":           300,
+    "auto_resume":         True,
+    "show_hidden":         False,
+    "density":             "normal",
+    "editor_font_size":    12,
 }
 
 CONFIG_PATH  = Path("/home/lobster/documents/porter/porter_config.json")
@@ -46,26 +59,75 @@ def _hash_password(password: str, salt: str) -> str:
     return hashlib.sha256((salt + password).encode()).hexdigest()
 
 def load_config() -> dict:
+    cfg: dict = {}
     if CONFIG_PATH.exists():
         try:
-            return json.loads(CONFIG_PATH.read_text())
+            cfg = json.loads(CONFIG_PATH.read_text())
         except Exception:
-            pass
-    salt = secrets.token_hex(16)
-    cfg = {
-        "username": "admin",
-        "display_name": "Admin",
-        "email": "",
-        "salt": salt,
-        "password_hash": _hash_password("porter", salt),
-    }
-    save_config(cfg)
-    print("  [porter] First run — default login: admin / porter")
-    print("  [porter] Change your password immediately in Settings.")
+            cfg = {}
+
+    changed = False
+
+    # ── auth defaults (first run) ──
+    if "username" not in cfg:
+        salt = secrets.token_hex(16)
+        cfg.update({
+            "username":      "admin",
+            "display_name":  "Admin",
+            "email":         "",
+            "salt":          salt,
+            "password_hash": _hash_password("porter", salt),
+        })
+        print("  [porter] First run — default login: admin / porter")
+        print("  [porter] Change your password immediately in Settings.")
+        changed = True
+
+    # ── locations migration ──
+    if "locations" not in cfg:
+        cfg["locations"] = [dict(loc) for loc in DEFAULT_LOCATIONS]
+        changed = True
+
+    # ── agents ──
+    if "agents" not in cfg:
+        cfg["agents"] = []
+        changed = True
+
+    # ── preferences (merge so new keys are always present) ──
+    prefs = cfg.setdefault("preferences", {})
+    for k, v in DEFAULT_PREFERENCES.items():
+        if k not in prefs:
+            prefs[k] = v
+            changed = True
+
+    if changed:
+        save_config(cfg)
     return cfg
 
 def save_config(cfg: dict) -> None:
     CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+
+def _load_serve_dirs(cfg: dict) -> None:
+    """Repopulate global SERVE_DIRS from config locations (local type only)."""
+    SERVE_DIRS.clear()
+    for loc in cfg.get("locations", []):
+        if loc.get("type") == "local" and loc.get("id") and loc.get("path"):
+            SERVE_DIRS[loc["id"]] = Path(loc["path"])
+
+def _hash_agent_key(raw_key: str) -> str:
+    return hashlib.sha256(raw_key.encode()).hexdigest()
+
+def _agent_by_id(agent_id: str) -> "dict | None":
+    for a in _config.get("agents", []):
+        if a.get("id") == agent_id:
+            return a
+    return None
+
+def _agent_by_key(raw_key: str) -> "dict | None":
+    h = _hash_agent_key(raw_key)
+    for a in _config.get("agents", []):
+        if a.get("key_hash") == h:
+            return a
+    return None
 
 _config: dict = {}   # loaded at startup
 
@@ -2534,6 +2596,23 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self.reply_json({"roots": list(SERVE_DIRS.keys())})
 
+        # ── locations ─────────────────────────────────────────────────────
+        elif parsed.path == "/api/locations":
+            if not self.auth_check(redirect=False): return
+            self.reply_json({"locations": _config.get("locations", [])})
+
+        # ── agents ────────────────────────────────────────────────────────
+        elif parsed.path == "/api/agents":
+            if not self.auth_check(redirect=False): return
+            safe = [{k: v for k, v in a.items() if k != "key_hash"}
+                    for a in _config.get("agents", [])]
+            self.reply_json({"agents": safe})
+
+        # ── preferences ───────────────────────────────────────────────────
+        elif parsed.path == "/api/preferences":
+            if not self.auth_check(redirect=False): return
+            self.reply_json(_config.get("preferences", {}))
+
         elif parsed.path == "/api/list":
             if not self.auth_check(redirect=False): return
             root = qs.get("root", [""])[0]
@@ -3205,6 +3284,164 @@ class Handler(BaseHTTPRequestHandler):
                 "updated_at": now_iso,
             })
 
+        # ── locations CRUD ─────────────────────────────────────────────────
+        elif parsed.path == "/api/locations":
+            if not self.auth_check(redirect=False): return
+            data   = self.read_json_body()
+            action = data.get("action", "")
+            loc    = data.get("location", {})
+
+            if action == "add":
+                loc_id    = re.sub(r'[^\w\-]', '-', loc.get("label", "")).lower().strip('-') or secrets.token_hex(4)
+                loc_type  = loc.get("type", "local")
+                loc_path  = loc.get("path", "").strip()
+                loc_label = loc.get("label", "").strip()
+                if not loc_label or not loc_path:
+                    self.reply_json({"error": "label and path are required"}, 400); return
+                # ensure unique id
+                existing_ids = {l["id"] for l in _config.get("locations", [])}
+                base_id = loc_id
+                n = 2
+                while loc_id in existing_ids:
+                    loc_id = f"{base_id}-{n}"; n += 1
+                new_loc = {"id": loc_id, "label": loc_label, "type": loc_type, "path": loc_path}
+                _config.setdefault("locations", []).append(new_loc)
+                _load_serve_dirs(_config)
+                save_config(_config)
+                self.reply_json({"ok": True, "location": new_loc})
+
+            elif action == "update":
+                loc_id = loc.get("id", "")
+                for i, l in enumerate(_config.get("locations", [])):
+                    if l["id"] == loc_id:
+                        l.update({k: loc[k] for k in ("label", "type", "path") if k in loc})
+                        _load_serve_dirs(_config)
+                        save_config(_config)
+                        self.reply_json({"ok": True, "location": l}); return
+                self.reply_json({"error": "not found"}, 404)
+
+            elif action == "remove":
+                loc_id = loc.get("id", "")
+                before = len(_config.get("locations", []))
+                _config["locations"] = [l for l in _config.get("locations", []) if l["id"] != loc_id]
+                if len(_config["locations"]) < before:
+                    _load_serve_dirs(_config)
+                    save_config(_config)
+                    self.reply_json({"ok": True})
+                else:
+                    self.reply_json({"error": "not found"}, 404)
+
+            else:
+                self.reply_json({"error": "unknown action"}, 400)
+
+        elif parsed.path == "/api/locations/test":
+            if not self.auth_check(redirect=False): return
+            data  = self.read_json_body()
+            tpath = Path(data.get("path", "").strip())
+            exists   = tpath.exists()
+            readable = False
+            writable = False
+            if exists:
+                try:    readable = os.access(str(tpath), os.R_OK)
+                except Exception: pass
+                try:    writable = os.access(str(tpath), os.W_OK)
+                except Exception: pass
+            self.reply_json({"ok": exists, "exists": exists, "readable": readable, "writable": writable})
+
+        # ── agents CRUD ────────────────────────────────────────────────────
+        elif parsed.path == "/api/agents":
+            if not self.auth_check(redirect=False): return
+            data   = self.read_json_body()
+            action = data.get("action", "")
+
+            if action == "create":
+                name       = data.get("name", "").strip()
+                agent_type = data.get("type", "generic")
+                role       = data.get("role", "writer")
+                namespaces = data.get("namespaces", list(MEMORY_NAMESPACES))
+                if not name:
+                    self.reply_json({"error": "name is required"}, 400); return
+                if role not in ("viewer", "writer", "operator", "admin"):
+                    self.reply_json({"error": "role must be viewer/writer/operator/admin"}, 400); return
+                from datetime import datetime, timezone
+                raw_key  = secrets.token_hex(32)
+                agent_id = secrets.token_hex(8)
+                agent    = {
+                    "id":         agent_id,
+                    "name":       name,
+                    "type":       agent_type,
+                    "key_hash":   _hash_agent_key(raw_key),
+                    "role":       role,
+                    "namespaces": namespaces,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "last_seen":  None,
+                }
+                _config.setdefault("agents", []).append(agent)
+                save_config(_config)
+                safe = {k: v for k, v in agent.items() if k != "key_hash"}
+                self.reply_json({"ok": True, "agent": safe, "key": raw_key})
+
+            elif action == "revoke":
+                agent_id = data.get("id", "")
+                before   = len(_config.get("agents", []))
+                _config["agents"] = [a for a in _config.get("agents", []) if a["id"] != agent_id]
+                if len(_config["agents"]) < before:
+                    save_config(_config)
+                    self.reply_json({"ok": True})
+                else:
+                    self.reply_json({"error": "agent not found"}, 404)
+
+            else:
+                self.reply_json({"error": "unknown action"}, 400)
+
+        elif parsed.path == "/api/agents/rotate-key":
+            if not self.auth_check(redirect=False): return
+            data     = self.read_json_body()
+            agent_id = data.get("id", "")
+            agent    = _agent_by_id(agent_id)
+            if not agent:
+                self.reply_json({"error": "agent not found"}, 404); return
+            raw_key          = secrets.token_hex(32)
+            agent["key_hash"] = _hash_agent_key(raw_key)
+            save_config(_config)
+            self.reply_json({"ok": True, "key": raw_key})
+
+        # ── preferences ────────────────────────────────────────────────────
+        elif parsed.path == "/api/preferences":
+            if not self.auth_check(redirect=False): return
+            data  = self.read_json_body()
+            prefs = _config.setdefault("preferences", {})
+            allowed = {"onboarding_complete", "default_location", "checkpoint_interval",
+                       "lease_ttl", "auto_resume", "show_hidden", "density", "editor_font_size"}
+            for k, v in data.items():
+                if k in allowed:
+                    prefs[k] = v
+            save_config(_config)
+            self.reply_json({"ok": True, "preferences": prefs})
+
+        # ── permissions check ──────────────────────────────────────────────
+        elif parsed.path == "/api/permissions/check":
+            if not self.auth_check(redirect=False): return
+            data       = self.read_json_body()
+            agent_id   = data.get("agent_id", "")
+            namespace  = data.get("namespace", "")
+            capability = data.get("capability", "read")
+            agent = _agent_by_id(agent_id)
+            if not agent:
+                self.reply_json({"allowed": False, "reason": "agent not found"}); return
+            role = agent.get("role", "viewer")
+            # simple role hierarchy: admin > operator > writer > viewer
+            role_caps = {
+                "viewer":   {"read"},
+                "writer":   {"read", "write", "checkpoint"},
+                "operator": {"read", "write", "checkpoint", "finalize"},
+                "admin":    {"read", "write", "checkpoint", "finalize", "admin"},
+            }
+            caps = role_caps.get(role, set())
+            ns_ok = (not namespace) or (namespace in agent.get("namespaces", []))
+            allowed = capability in caps and ns_ok
+            self.reply_json({"allowed": allowed, "role": role, "namespace": namespace})
+
         else:
             self.reply_html("<h1>Not found</h1>", 404)
 
@@ -3212,6 +3449,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     _config.update(load_config())
+    _load_serve_dirs(_config)
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
