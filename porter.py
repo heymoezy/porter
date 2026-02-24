@@ -10,6 +10,7 @@ import os
 import re
 import secrets
 import shutil
+import subprocess
 import time
 import zipfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -1068,6 +1069,28 @@ body.density-compact .file-name { padding: 6px 0; }
 .seg-ctrl button.active { background: var(--raised); color: var(--text); font-weight: 600; }
 .pw-section { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
 .pw-helper { font-size: 11px; color: var(--text3); margin-bottom: 12px; line-height: 1.5; }
+
+/* location type picker */
+.loc-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.loc-type-card {
+  display: flex; flex-direction: column; gap: 5px; padding: 14px 16px;
+  background: var(--raised); border: 1px solid var(--border2); border-radius: 8px;
+  cursor: pointer; text-align: left; font-family: inherit; width: 100%;
+  transition: border-color .15s, background .15s;
+}
+.loc-type-card:not(:disabled):hover { border-color: var(--accent); background: rgba(247,147,26,.05); }
+.loc-type-card:disabled { opacity: .45; cursor: default; }
+.loc-card-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.loc-card-desc  { font-size: 11px; color: var(--text3); }
+.loc-badge {
+  display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px;
+  border-radius: 4px; font-size: 10px; font-weight: 600; letter-spacing: .3px;
+}
+.loc-badge--local  { background: rgba(80,200,120,.12);  color: #5c9; }
+.loc-badge--remote { background: rgba(100,140,255,.12); color: #89f; }
+.loc-badge--rw { background: rgba(247,147,26,.10); color: var(--accent); }
+.loc-badge--ro { background: rgba(150,150,150,.10); color: var(--text3); }
+.loc-quickpicks { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .pw-section-title { font-size: 12px; font-weight: 600; color: var(--text3);
   text-transform: uppercase; letter-spacing: .6px; margin-bottom: 16px; }
 
@@ -1352,22 +1375,75 @@ body.density-compact .file-name { padding: 6px 0; }
         </div>
         <!-- add/edit form (hidden by default) -->
         <div id="loc-form" style="display:none;margin-top:20px;padding:16px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
-          <div class="settings-page-title" style="font-size:14px;margin-bottom:14px" id="loc-form-title">Add location</div>
-          <div class="settings-field">
-            <label>Label</label>
-            <input type="text" class="settings-input" id="lf-label" placeholder="My Files">
+          <!-- Step 0: type picker -->
+          <div id="lf-step0">
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px">What are you adding?</div>
+            <div class="loc-type-grid">
+              <button class="loc-type-card" onclick="selectLocType('local')">
+                <span class="loc-card-title">📁 Local folder</span>
+                <span class="loc-card-desc">A directory on this server</span>
+              </button>
+              <button class="loc-type-card" onclick="selectLocType('vps')">
+                <span class="loc-card-title">⚡ VPS quick pick</span>
+                <span class="loc-card-desc">Common paths on this machine</span>
+              </button>
+              <button class="loc-type-card" onclick="selectLocType('tailscale')">
+                <span class="loc-card-title">🔗 Remote via Tailscale</span>
+                <span class="loc-card-desc">Connect another device on your tailnet</span>
+              </button>
+              <button class="loc-type-card" disabled>
+                <span class="loc-card-title">🐙 GitHub repository</span>
+                <span class="loc-card-desc">Coming soon</span>
+              </button>
+            </div>
+            <div style="text-align:right">
+              <button class="btn btn-ghost" onclick="cancelLocationForm()">Cancel</button>
+            </div>
           </div>
-          <div class="settings-field">
-            <label>Absolute path</label>
-            <input type="text" class="settings-input" id="lf-path" placeholder="/home/user/files">
+          <!-- Step 1: details (varies by type) -->
+          <div id="lf-step1" style="display:none">
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px" id="loc-form-title">Add location</div>
+            <div class="settings-field">
+              <label>Label</label>
+              <input type="text" class="settings-input" id="lf-label" placeholder="My Files">
+            </div>
+            <!-- VPS quick picks -->
+            <div id="lf-quickpicks" style="display:none;margin-bottom:12px">
+              <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Quick picks — click to pre-fill path:</div>
+              <div class="loc-quickpicks">
+                <button class="btn btn-ghost" style="font-size:11px" onclick="quickPick('Home','/home/lobster')">~ Home</button>
+                <button class="btn btn-ghost" style="font-size:11px" onclick="quickPick('Documents','/home/lobster/documents')">Documents</button>
+                <button class="btn btn-ghost" style="font-size:11px" onclick="quickPick('Uploads','/home/lobster/uploads')">Uploads</button>
+                <button class="btn btn-ghost" style="font-size:11px" onclick="quickPick('Websites','/home/websites')">Websites</button>
+              </div>
+            </div>
+            <!-- Tailscale peer picker -->
+            <div id="lf-ts-picker" style="display:none">
+              <div class="settings-field">
+                <label>Remote device</label>
+                <select class="settings-input" id="lf-ts-peer" onchange="onTsPeerSelect()" style="cursor:pointer">
+                  <option value="">Loading peers…</option>
+                </select>
+              </div>
+              <div class="settings-field">
+                <label>IP / hostname <span style="color:var(--text3);font-weight:400">— or enter manually below</span></label>
+                <input type="text" class="settings-input" id="lf-ts-host" placeholder="100.x.x.x or hostname">
+              </div>
+              <div id="lf-ts-status" style="font-size:11px;color:var(--text3);margin-bottom:10px"></div>
+            </div>
+            <div class="settings-field">
+              <label id="lf-path-label">Absolute path on device</label>
+              <input type="text" class="settings-input" id="lf-path" placeholder="/home/user/files">
+            </div>
+            <div class="settings-save-row" style="gap:8px">
+              <button class="btn btn-ghost" onclick="backToTypePicker()">← Back</button>
+              <button class="btn btn-ghost" onclick="testLocationPath()" style="margin-left:auto">Test path</button>
+              <button class="btn btn-primary" onclick="saveLocation()">Save</button>
+            </div>
+            <div id="lf-status" style="font-size:12px;margin-top:8px;color:var(--text3)"></div>
+            <input type="hidden" id="lf-edit-id">
+            <input type="hidden" id="lf-type">
           </div>
-          <div class="settings-save-row" style="gap:8px">
-            <button class="btn btn-primary" onclick="saveLocation()">Save</button>
-            <button class="btn btn-ghost" onclick="cancelLocationForm()">Cancel</button>
-            <button class="btn btn-ghost" onclick="testLocationPath()" style="margin-left:auto">Test path</button>
-          </div>
-          <div id="lf-status" style="font-size:12px;margin-top:8px;color:var(--text3)"></div>
-          <input type="hidden" id="lf-edit-id">
         </div>
       </div>
 
@@ -1720,36 +1796,121 @@ function renderLocations(locs) {
     el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No locations yet.</div>';
     return;
   }
-  el.innerHTML = locs.map(l => `
+  el.innerHTML = locs.map(l => {
+    const isRemote = (l.type === 'tailscale' || l.type === 'remote');
+    const typeBadge = isRemote
+      ? '<span class="loc-badge loc-badge--remote">Remote</span>'
+      : '<span class="loc-badge loc-badge--local">Local</span>';
+    const rwBadge = l.exists
+      ? (l.writable
+          ? '<span class="loc-badge loc-badge--rw">Read/Write</span>'
+          : '<span class="loc-badge loc-badge--ro">Read only</span>')
+      : '<span class="loc-badge loc-badge--ro">Not found</span>';
+    return `
     <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--raised);border-radius:8px;margin-bottom:8px;border:1px solid var(--border)">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(l.label)}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px;font-family:monospace">${escHtml(l.path)}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(l.label)}</span>
+          ${typeBadge} ${rwBadge}
+        </div>
+        <div style="font-size:11px;color:var(--text3);font-family:monospace">${escHtml(l.path)}</div>
       </div>
       <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="editLocation(${JSON.stringify(JSON.stringify(l))})">Edit</button>
       <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--danger)" onclick="removeLocation('${escHtml(l.id)}','${escHtml(l.label)}')">Remove</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function openAddLocation() {
   _editLocId = null;
   document.getElementById('lf-edit-id').value = '';
+  document.getElementById('lf-type').value = '';
   document.getElementById('lf-label').value = '';
   document.getElementById('lf-path').value = '';
   document.getElementById('lf-status').textContent = '';
-  document.getElementById('loc-form-title').textContent = 'Add location';
+  document.getElementById('lf-step0').style.display = 'block';
+  document.getElementById('lf-step1').style.display = 'none';
+  document.getElementById('lf-quickpicks').style.display = 'none';
+  document.getElementById('lf-ts-picker').style.display = 'none';
   document.getElementById('loc-form').style.display = 'block';
+}
+
+function selectLocType(type) {
+  document.getElementById('lf-type').value = type;
+  document.getElementById('lf-step0').style.display = 'none';
+  document.getElementById('lf-step1').style.display = 'block';
+  const isVps = type === 'vps';
+  const isTs  = type === 'tailscale';
+  document.getElementById('lf-quickpicks').style.display = isVps ? 'block' : 'none';
+  document.getElementById('lf-ts-picker').style.display  = isTs  ? 'block' : 'none';
+  const titles = { local: 'Add local folder', vps: 'Add VPS path', tailscale: 'Connect remote device (Tailscale)' };
+  document.getElementById('loc-form-title').textContent = titles[type] || 'Add location';
+  document.getElementById('lf-path-label').textContent = isTs ? 'Absolute path on remote device' : 'Absolute path';
+  if (isTs) loadTailscalePeers();
+}
+
+function backToTypePicker() {
+  document.getElementById('lf-step0').style.display = 'block';
+  document.getElementById('lf-step1').style.display = 'none';
+}
+
+function quickPick(label, path) {
+  document.getElementById('lf-label').value = label;
+  document.getElementById('lf-path').value  = path;
+}
+
+async function loadTailscalePeers() {
+  const sel = document.getElementById('lf-ts-peer');
+  const st  = document.getElementById('lf-ts-status');
+  sel.innerHTML = '<option value="">Loading…</option>';
+  st.textContent = '';
+  const data = await api('/api/tailscale/peers');
+  if (!data || !data.available) {
+    sel.innerHTML = '<option value="">No peers found — enter IP manually</option>';
+    st.style.color = 'var(--text3)';
+    st.textContent = data && data.error ? '⚠ ' + data.error + '. Enter the device IP/hostname manually below.' : '';
+    return;
+  }
+  const peers = data.peers || [];
+  if (!peers.length) {
+    sel.innerHTML = '<option value="">No peers on tailnet — enter IP manually</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">— Select device —</option>' +
+    peers.map(p => {
+      const online = p.online ? '● ' : '○ ';
+      return `<option value="${escHtml(p.ip)}" data-name="${escHtml(p.name)}">${online}${escHtml(p.name || p.ip)} (${escHtml(p.ip)}) ${p.os ? '· ' + escHtml(p.os) : ''}</option>`;
+    }).join('');
+  st.style.color = 'var(--success)';
+  st.textContent = `✓ ${peers.length} device${peers.length !== 1 ? 's' : ''} on tailnet`;
+}
+
+function onTsPeerSelect() {
+  const sel = document.getElementById('lf-ts-peer');
+  const ip  = sel.value;
+  if (!ip) return;
+  document.getElementById('lf-ts-host').value = ip;
+  const opt = sel.selectedOptions[0];
+  const name = opt ? (opt.getAttribute('data-name') || '') : '';
+  if (name && !document.getElementById('lf-label').value) {
+    document.getElementById('lf-label').value = name;
+  }
 }
 
 function editLocation(jsonStr) {
   const l = JSON.parse(jsonStr);
   _editLocId = l.id;
   document.getElementById('lf-edit-id').value = l.id;
-  document.getElementById('lf-label').value = l.label;
-  document.getElementById('lf-path').value = l.path;
+  document.getElementById('lf-type').value    = l.type || 'local';
+  document.getElementById('lf-label').value   = l.label;
+  document.getElementById('lf-path').value    = l.path;
   document.getElementById('lf-status').textContent = '';
   document.getElementById('loc-form-title').textContent = 'Edit location';
+  document.getElementById('lf-step0').style.display = 'none';
+  document.getElementById('lf-step1').style.display = 'block';
+  document.getElementById('lf-quickpicks').style.display = 'none';
+  document.getElementById('lf-ts-picker').style.display  = 'none';
   document.getElementById('loc-form').style.display = 'block';
 }
 
@@ -3241,7 +3402,43 @@ class Handler(BaseHTTPRequestHandler):
         # ── locations ─────────────────────────────────────────────────────
         elif parsed.path == "/api/locations":
             if not self.auth_check(redirect=False): return
-            self.reply_json({"locations": _config.get("locations", [])})
+            locs = []
+            for loc in _config.get("locations", []):
+                entry = dict(loc)
+                p = Path(entry.get("path", ""))
+                entry["exists"]   = p.exists()
+                entry["writable"] = os.access(str(p), os.W_OK) if entry["exists"] else False
+                locs.append(entry)
+            self.reply_json({"locations": locs})
+
+        elif parsed.path == "/api/tailscale/peers":
+            if not self.auth_check(redirect=False): return
+            try:
+                result = subprocess.run(
+                    ["tailscale", "status", "--json"],
+                    capture_output=True, text=True, timeout=5
+                )
+                if result.returncode != 0:
+                    self.reply_json({"peers": [], "error": "tailscale not running", "available": False}); return
+                ts = json.loads(result.stdout)
+                peers = []
+                for _, v in ts.get("Peer", {}).items():
+                    name = v.get("HostName", "")
+                    if "funnel-ingress" in name or not name: continue
+                    ips = [ip for ip in v.get("TailscaleIPs", []) if ":" not in ip]
+                    if not ips: continue
+                    peers.append({
+                        "name":     name,
+                        "dns_name": v.get("DNSName", "").rstrip("."),
+                        "ip":       ips[0],
+                        "online":   v.get("Online", False),
+                        "os":       v.get("OS", ""),
+                    })
+                self.reply_json({"peers": peers, "available": True})
+            except FileNotFoundError:
+                self.reply_json({"peers": [], "error": "tailscale not found", "available": False})
+            except Exception as e:
+                self.reply_json({"peers": [], "error": str(e), "available": False})
 
         # ── agents ────────────────────────────────────────────────────────
         elif parsed.path == "/api/agents":
