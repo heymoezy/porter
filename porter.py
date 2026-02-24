@@ -10,6 +10,7 @@ import os
 import re
 import secrets
 import shutil
+import socket
 import subprocess
 import time
 import zipfile
@@ -524,7 +525,8 @@ body {
               background: rgba(247,147,26,.06); }
 .loc svg { flex-shrink: 0; opacity: .7; }
 .loc.active svg { opacity: 1; }
-.loc-name { font-size: 13px; font-weight: 500; }
+.loc-name { font-size: 13px; font-weight: 500; display:flex; flex-direction:column; gap:1px; }
+.loc-sub  { font-size: 10px; color: var(--text3); font-weight: 400; line-height: 1; }
 #locations { flex: 1; overflow-y: auto; }
 .sidebar-footer {
   padding: 16px 20px 0;
@@ -546,8 +548,8 @@ body {
 }
 .ver-link {
   display:block; padding: 5px 20px;
-  font-size:10px; font-weight:600; letter-spacing:.8px;
-  text-transform:uppercase; color:var(--text3);
+  font-size:11px; font-weight:500; letter-spacing:.2px;
+  color:var(--text3);
   cursor:pointer; transition:color .15s; border:none; background:none;
   text-align:left; font-family:inherit;
 }
@@ -1304,8 +1306,8 @@ body.density-compact .file-name { padding: 6px 0; }
         Agents
       </button>
       <button class="settings-nav-item" id="snav-network" onclick="switchSettingsTab('network')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M4.93 4.93a10 10 0 000 14.14M19.07 4.93a10 10 0 010 14.14M1 12h2M21 12h2M12 1v2M12 21v2"/></svg>
-        Network
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/></svg>
+        Tailscale
       </button>
       <div style="flex:1"></div>
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
@@ -1500,7 +1502,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <!-- Permissions page -->
       <!-- Network / Tailscale page -->
       <div class="settings-page" id="spage-network">
-        <div class="settings-page-title">Network</div>
+        <div class="settings-page-title">Tailscale</div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
           <div style="font-size:13px;color:var(--text3)">Tailscale connectivity and peer devices on your tailnet.</div>
           <button class="btn btn-ghost" style="font-size:12px;flex-shrink:0" id="ts-refresh-btn" onclick="loadTailscaleStatus(true)">↻ Refresh</button>
@@ -1773,19 +1775,30 @@ function renderTailscaleStatus(data) {
   const el = document.getElementById('ts-panel');
   if (!el) return;
   if (!data.available) {
-    el.innerHTML = `
+    const notInstalled = (data.error || '').includes('not found');
+    el.innerHTML = notInstalled ? `
       <div class="ts-status-card">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
           <span class="ts-dot ts-dot--off"></span>
-          <span style="font-weight:600;color:var(--text)">Tailscale unavailable</span>
+          <span style="font-weight:600;color:var(--text)">Tailscale not installed</span>
         </div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:14px">${escHtml(data.error || 'Could not reach Tailscale daemon.')}</div>
-        <div style="font-size:12px;color:var(--text2)"><b>Fallback options:</b></div>
-        <ul style="font-size:12px;color:var(--text3);margin:8px 0 0 18px;line-height:1.8">
-          <li>Add locations by entering an IP/hostname manually in the Locations tab</li>
-          <li>Install Tailscale: <code style="background:var(--raised);padding:1px 5px;border-radius:3px">curl -fsSL https://tailscale.com/install.sh | sh</code></li>
-          <li>Connect via SSH and mount paths manually</li>
-        </ul>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
+          Install Tailscale on this machine to connect remote devices and access files across your network.
+        </div>
+        <div style="font-size:12px;font-weight:600;color:var(--text3);margin-bottom:6px">Install on this server:</div>
+        <code style="display:block;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:12px;color:var(--text2);margin-bottom:14px">curl -fsSL https://tailscale.com/install.sh | sh</code>
+        <div style="font-size:12px;color:var(--text3)">Then run <code style="background:var(--raised);padding:1px 5px;border-radius:3px">sudo tailscale up</code> to authenticate and join your tailnet.</div>
+      </div>` : `
+      <div class="ts-status-card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span class="ts-dot ts-dot--off"></span>
+          <span style="font-weight:600;color:var(--text)">Tailscale not connected</span>
+        </div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
+          Tailscale is installed but not currently running on this machine.
+        </div>
+        <div style="font-size:12px;color:var(--text3)">Start it with: <code style="background:var(--raised);padding:1px 5px;border-radius:3px">sudo tailscale up</code></div>
+        <div style="font-size:12px;color:var(--text3);margin-top:6px">Or add locations manually via IP/hostname in the Locations tab.</div>
       </div>`;
     return;
   }
@@ -1925,6 +1938,8 @@ function switchSettingsTab(tab) {
     el.classList.toggle('active', el.id === 'spage-' + tab));
   if (tab === 'network')   startTsPolling();
   if (tab === 'changelog') populateChangelog();
+  if (tab === 'locations') loadLocations();
+  if (tab === 'agents')    loadAgents();
 }
 function populateChangelog() {
   const el = document.getElementById('changelog-content');
@@ -2293,6 +2308,17 @@ async function doLogout() {
 }
 
 // ── init ──
+function _locIcon(l) {
+  const lbl = (l.label || '').toLowerCase();
+  const type = l.type || 'local';
+  if (type === 'tailscale' || type === 'remote') {
+    return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/></svg>';
+  }
+  if (lbl.includes('web') || lbl.includes('site') || lbl.includes('www')) {
+    return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>';
+  }
+  return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>';
+}
 function _renderSidebarLocs(locs, activeRoot) {
   const el = document.getElementById('locations');
   el.innerHTML = '';
@@ -2300,7 +2326,8 @@ function _renderSidebarLocs(locs, activeRoot) {
     const div = document.createElement('div');
     div.className = 'loc' + (l.id === activeRoot ? ' active' : '');
     div.dataset.root = l.id;
-    div.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg><span class="loc-name">${escHtml(l.label)}</span>`;
+    const sub = l.hostname ? `<span class="loc-sub">${escHtml(l.hostname)}</span>` : '';
+    div.innerHTML = `${_locIcon(l)}<span class="loc-name">${escHtml(l.label)}${sub}</span>`;
     div.onclick = () => navigate(l.id, '');
     el.appendChild(div);
   });
@@ -3582,12 +3609,15 @@ class Handler(BaseHTTPRequestHandler):
         # ── locations ─────────────────────────────────────────────────────
         elif parsed.path == "/api/locations":
             if not self.auth_check(redirect=False): return
+            hn = socket.gethostname()
             locs = []
             for loc in _config.get("locations", []):
                 entry = dict(loc)
                 p = Path(entry.get("path", ""))
                 entry["exists"]   = p.exists()
                 entry["writable"] = os.access(str(p), os.W_OK) if entry["exists"] else False
+                if entry.get("type", "local") == "local":
+                    entry["hostname"] = hn
                 locs.append(entry)
             self.reply_json({"locations": locs})
 
