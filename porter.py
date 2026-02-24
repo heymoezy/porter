@@ -1070,6 +1070,24 @@ body.density-compact .file-name { padding: 6px 0; }
 .pw-section { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
 .pw-helper { font-size: 11px; color: var(--text3); margin-bottom: 12px; line-height: 1.5; }
 
+/* tailscale / network status */
+.ts-status-card { background: var(--raised); border: 1px solid var(--border2);
+  border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+.ts-status-row { display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.ts-status-row:last-child { border-bottom: none; }
+.ts-stat-label { color: var(--text3); font-size: 12px; }
+.ts-stat-val { color: var(--text); font-weight: 500; }
+.ts-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+.ts-dot--on  { background: #4caf50; box-shadow: 0 0 6px rgba(76,175,80,.4); }
+.ts-dot--off { background: var(--text3); }
+.ts-peer-row { display: flex; align-items: center; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.ts-peer-row:last-child { border-bottom: none; }
+.ts-peer-name { font-weight: 500; color: var(--text); flex: 1; }
+.ts-peer-ip { font-family: monospace; color: var(--text3); font-size: 11px; }
+.ts-peer-os { color: var(--text3); font-size: 11px; }
+
 /* location type picker */
 .loc-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
 .loc-type-card {
@@ -1283,9 +1301,13 @@ body.density-compact .file-name { padding: 6px 0; }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
         Agents
       </button>
+      <button class="settings-nav-item" id="snav-network" onclick="switchSettingsTab('network')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M4.93 4.93a10 10 0 000 14.14M19.07 4.93a10 10 0 010 14.14M1 12h2M21 12h2M12 1v2M12 21v2"/></svg>
+        Network
+      </button>
       <button class="settings-nav-item" id="snav-permissions" onclick="switchSettingsTab('permissions')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-        Permissions
+        Access Model
       </button>
       <button class="settings-nav-item" id="snav-changelog" onclick="switchSettingsTab('changelog')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -1495,8 +1517,21 @@ body.density-compact .file-name { padding: 6px 0; }
       </div>
 
       <!-- Permissions page -->
+      <!-- Network / Tailscale page -->
+      <div class="settings-page" id="spage-network">
+        <div class="settings-page-title">Network</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div style="font-size:13px;color:var(--text3)">Tailscale connectivity and peer devices on your tailnet.</div>
+          <button class="btn btn-ghost" style="font-size:12px;flex-shrink:0" id="ts-refresh-btn" onclick="loadTailscaleStatus(true)">↻ Refresh</button>
+        </div>
+        <div id="ts-panel">
+          <div style="color:var(--text3);font-size:13px">Loading…</div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:8px" id="ts-last-updated"></div>
+      </div>
+
       <div class="settings-page" id="spage-permissions">
-        <div class="settings-page-title">Permissions</div>
+        <div class="settings-page-title">Access Model</div>
         <div style="font-size:13px;color:var(--text3);margin-bottom:18px">Role capabilities for each namespace. Set per-agent role in the Agents tab.</div>
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead>
@@ -1751,6 +1786,102 @@ function toggleSidebar() {
   try { localStorage.setItem('porter_sidebar', collapsed ? '1' : '0'); } catch(e) {}
 }
 
+// ── Tailscale network status ──
+let _tsCache = null;
+let _tsPollTimer = null;
+
+async function loadTailscaleStatus(force = false) {
+  const now = Date.now();
+  if (!force && _tsCache && (now - _tsCache.ts < 20000)) {
+    renderTailscaleStatus(_tsCache.data); updateTsLastUpdated(_tsCache.ts); return;
+  }
+  const btn = document.getElementById('ts-refresh-btn');
+  if (btn) btn.textContent = '↻ Refreshing…';
+  const data = await api('/api/tailscale/status');
+  if (btn) btn.textContent = '↻ Refresh';
+  if (!data) return;
+  _tsCache = { data, ts: Date.now() };
+  renderTailscaleStatus(data);
+  updateTsLastUpdated(_tsCache.ts);
+}
+
+function updateTsLastUpdated(ts) {
+  const el = document.getElementById('ts-last-updated');
+  if (!el) return;
+  const d = new Date(ts);
+  el.textContent = 'Last checked: ' + d.toLocaleTimeString();
+}
+
+function renderTailscaleStatus(data) {
+  const el = document.getElementById('ts-panel');
+  if (!el) return;
+  if (!data.available) {
+    el.innerHTML = `
+      <div class="ts-status-card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span class="ts-dot ts-dot--off"></span>
+          <span style="font-weight:600;color:var(--text)">Tailscale unavailable</span>
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:14px">${escHtml(data.error || 'Could not reach Tailscale daemon.')}</div>
+        <div style="font-size:12px;color:var(--text2)"><b>Fallback options:</b></div>
+        <ul style="font-size:12px;color:var(--text3);margin:8px 0 0 18px;line-height:1.8">
+          <li>Add locations by entering an IP/hostname manually in the Locations tab</li>
+          <li>Install Tailscale: <code style="background:var(--raised);padding:1px 5px;border-radius:3px">curl -fsSL https://tailscale.com/install.sh | sh</code></li>
+          <li>Connect via SSH and mount paths manually</li>
+        </ul>
+      </div>`;
+    return;
+  }
+  const s = data.self || {};
+  const onlinePeers  = (data.peers || []).filter(p => p.online);
+  const offlinePeers = (data.peers || []).filter(p => !p.online);
+  el.innerHTML = `
+    <div class="ts-status-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <span class="ts-dot ts-dot--on"></span>
+        <span style="font-weight:600;color:var(--text)">Tailscale connected</span>
+      </div>
+      <div class="ts-status-row">
+        <span class="ts-stat-label">This device</span>
+        <span class="ts-stat-val">${escHtml(s.name || '—')}</span>
+      </div>
+      <div class="ts-status-row">
+        <span class="ts-stat-label">Tailscale IP</span>
+        <span class="ts-stat-val" style="font-family:monospace">${escHtml(s.ip || '—')}</span>
+      </div>
+      <div class="ts-status-row">
+        <span class="ts-stat-label">Tailnet</span>
+        <span class="ts-stat-val">${escHtml(s.tailnet || '—')}</span>
+      </div>
+      <div class="ts-status-row">
+        <span class="ts-stat-label">Peers online</span>
+        <span class="ts-stat-val" style="color:${onlinePeers.length ? 'var(--accent)' : 'var(--text3)'}">${onlinePeers.length} of ${data.peers_total}</span>
+      </div>
+    </div>
+    ${data.peers && data.peers.length ? `
+    <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Devices</div>
+    <div class="ts-status-card" style="padding:0 16px">
+      ${[...onlinePeers, ...offlinePeers].map(p => `
+      <div class="ts-peer-row">
+        <span class="ts-dot ${p.online ? 'ts-dot--on' : 'ts-dot--off'}"></span>
+        <span class="ts-peer-name">${escHtml(p.name)}</span>
+        <span class="ts-peer-os">${escHtml(p.os)}</span>
+        <span class="ts-peer-ip">${escHtml(p.ip)}</span>
+        <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;flex-shrink:0"
+          onclick="openSettings('locations');selectLocType('tailscale')" title="Add path from this device">+ Path</button>
+      </div>`).join('')}
+    </div>` : '<div style="font-size:13px;color:var(--text3)">No peer devices found on your tailnet.</div>'}`;
+}
+
+function startTsPolling() {
+  stopTsPolling();
+  loadTailscaleStatus();
+  _tsPollTimer = setInterval(() => loadTailscaleStatus(), 20000);
+}
+function stopTsPolling() {
+  if (_tsPollTimer) { clearInterval(_tsPollTimer); _tsPollTimer = null; }
+}
+
 // ── settings panel ──
 function openSettings(tab = 'account') {
   switchSettingsTab(tab); syncSettingsUI();
@@ -1758,17 +1889,21 @@ function openSettings(tab = 'account') {
   if (tab === 'locations')  loadLocations();
   if (tab === 'agents')     loadAgents();
   if (tab === 'changelog')  populateChangelog();
+  if (tab === 'network')    startTsPolling();
 }
 function closeSettings() {
+  stopTsPolling();
   document.getElementById('settingsPanel').classList.remove('open');
   document.getElementById('sa-pwNew').value = '';
   document.getElementById('sa-pwConfirm').value = '';
 }
 function switchSettingsTab(tab) {
+  if (tab !== 'network') stopTsPolling();
   document.querySelectorAll('.settings-nav-item').forEach(el =>
     el.classList.toggle('active', el.id === 'snav-' + tab));
   document.querySelectorAll('.settings-page').forEach(el =>
     el.classList.toggle('active', el.id === 'spage-' + tab));
+  if (tab === 'network') startTsPolling();
 }
 function populateChangelog() {
   const el = document.getElementById('changelog-content');
@@ -3411,15 +3546,18 @@ class Handler(BaseHTTPRequestHandler):
                 locs.append(entry)
             self.reply_json({"locations": locs})
 
-        elif parsed.path == "/api/tailscale/peers":
+        elif parsed.path in ("/api/tailscale/peers", "/api/tailscale/status"):
             if not self.auth_check(redirect=False): return
+            want_status = parsed.path == "/api/tailscale/status"
             try:
                 result = subprocess.run(
                     ["tailscale", "status", "--json"],
                     capture_output=True, text=True, timeout=5
                 )
                 if result.returncode != 0:
-                    self.reply_json({"peers": [], "error": "tailscale not running", "available": False}); return
+                    base = {"available": False, "error": "tailscale not running", "peers": []}
+                    if want_status: base.update({"self": None, "peers_online": 0, "peers_total": 0})
+                    self.reply_json(base); return
                 ts = json.loads(result.stdout)
                 peers = []
                 for _, v in ts.get("Peer", {}).items():
@@ -3434,11 +3572,32 @@ class Handler(BaseHTTPRequestHandler):
                         "online":   v.get("Online", False),
                         "os":       v.get("OS", ""),
                     })
-                self.reply_json({"peers": peers, "available": True})
+                if want_status:
+                    self_node = ts.get("Self", {})
+                    self_ips  = [ip for ip in self_node.get("TailscaleIPs", []) if ":" not in ip]
+                    tailnet   = self_node.get("DNSName", "").split(".", 1)[-1].rstrip(".") if "." in self_node.get("DNSName", "") else ""
+                    self.reply_json({
+                        "available":    True,
+                        "self": {
+                            "name":    self_node.get("HostName", ""),
+                            "ip":      self_ips[0] if self_ips else "",
+                            "tailnet": tailnet,
+                            "os":      self_node.get("OS", ""),
+                        },
+                        "peers_online": sum(1 for p in peers if p["online"]),
+                        "peers_total":  len(peers),
+                        "peers":        peers,
+                    })
+                else:
+                    self.reply_json({"peers": peers, "available": True})
             except FileNotFoundError:
-                self.reply_json({"peers": [], "error": "tailscale not found", "available": False})
+                base = {"available": False, "error": "tailscale not found", "peers": []}
+                if want_status: base.update({"self": None, "peers_online": 0, "peers_total": 0})
+                self.reply_json(base)
             except Exception as e:
-                self.reply_json({"peers": [], "error": str(e), "available": False})
+                base = {"available": False, "error": str(e), "peers": []}
+                if want_status: base.update({"self": None, "peers_online": 0, "peers_total": 0})
+                self.reply_json(base)
 
         # ── agents ────────────────────────────────────────────────────────
         elif parsed.path == "/api/agents":
