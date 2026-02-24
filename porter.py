@@ -1309,6 +1309,10 @@ body.density-compact .file-name { padding: 6px 0; }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
         Access Model
       </button>
+      <button class="settings-nav-item" id="snav-config" onclick="switchSettingsTab('config')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/><path d="M15.54 8.46a5 5 0 010 7.07M8.46 8.46a5 5 0 000 7.07"/></svg>
+        Config
+      </button>
       <button class="settings-nav-item" id="snav-changelog" onclick="switchSettingsTab('changelog')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
         What's new
@@ -1552,6 +1556,17 @@ body.density-compact .file-name { padding: 6px 0; }
           </tbody>
         </table>
         <div style="margin-top:24px;font-size:13px;color:var(--text3)">Namespaces: projects · people · decisions · compliance · transcripts · artifacts · indexes · pointers · runtime</div>
+      </div>
+
+      <!-- Config transparency page -->
+      <div class="settings-page" id="spage-config">
+        <div class="settings-page-title">Config</div>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:14px">Live view of effective backend configuration. No hidden backend magic.</div>
+        <div id="config-panel"><div style="color:var(--text3);font-size:13px">Loading…</div></div>
+        <div style="margin-top:16px;display:flex;gap:8px">
+          <a class="btn btn-ghost" id="cfg-export-btn" href="/api/config/export" download="porter-config.json" style="font-size:12px">⬇ Export config JSON</a>
+          <button class="btn btn-ghost" style="font-size:12px" onclick="loadConfigSummary(true)">↻ Refresh</button>
+        </div>
       </div>
 
       <!-- What's new / Changelog page -->
@@ -1882,6 +1897,68 @@ function stopTsPolling() {
   if (_tsPollTimer) { clearInterval(_tsPollTimer); _tsPollTimer = null; }
 }
 
+// ── config summary ──
+let _cfgCache = null;
+async function loadConfigSummary(force = false) {
+  if (!force && _cfgCache) { renderConfigSummary(_cfgCache); return; }
+  const data = await api('/api/config/summary');
+  if (!data) return;
+  _cfgCache = data;
+  renderConfigSummary(data);
+}
+function renderConfigSummary(d) {
+  const el = document.getElementById('config-panel');
+  if (!el) return;
+  const row = (label, val) =>
+    `<div class="ts-status-row"><span class="ts-stat-label">${label}</span><span class="ts-stat-val" style="text-align:right;max-width:65%">${val}</span></div>`;
+  const section = (title, rows) =>
+    `<div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">${title}</div>
+      <div class="ts-status-card" style="padding:0 16px">${rows}</div>
+    </div>`;
+  const auth  = d.auth || {};
+  const rt    = d.runtime || {};
+  const prefs = d.preferences || {};
+  const fmtTtl = s => s >= 86400 ? (s/86400|0)+'d' : s >= 3600 ? (s/3600|0)+'h' : s+'s';
+  el.innerHTML =
+    section('Auth', [
+      row('Username',     escHtml(auth.username || '—')),
+      row('Display name', escHtml(auth.display_name || '—')),
+      row('Mode',         escHtml(auth.mode || '—')),
+      row('Session TTL',  fmtTtl(auth.session_ttl || 0)),
+    ].join('')) +
+    section(`Locations (${(d.locations||[]).length})`,
+      (d.locations||[]).length
+        ? d.locations.map(l => `
+          <div class="ts-status-row">
+            <span class="ts-stat-label">${escHtml(l.label)}</span>
+            <span class="ts-stat-val" style="display:flex;align-items:center;gap:5px;font-size:11px">
+              <span class="loc-badge ${l.type==='local'?'loc-badge--local':'loc-badge--remote'}">${escHtml(l.type)}</span>
+              <span class="loc-badge ${l.writable?'loc-badge--rw':'loc-badge--ro'}">${l.writable?'rw':'ro'}</span>
+              <span style="font-family:monospace;color:var(--text3)">${escHtml(l.path)}</span>
+            </span>
+          </div>`).join('')
+        : row('—', 'No locations configured')) +
+    section(`Agents (${(d.agents||[]).filter(a=>a.status!=='revoked').length} active)`,
+      (d.agents||[]).filter(a=>a.status!=='revoked').length
+        ? d.agents.filter(a=>a.status!=='revoked').map(a =>
+            row(escHtml(a.name),
+              `<span class="loc-badge loc-badge--ro">${escHtml(a.role)}</span>`)).join('')
+        : row('—', 'No active agents')) +
+    section('Preferences', [
+      row('Default location',    escHtml(prefs.default_location || '—')),
+      row('Checkpoint interval', (prefs.checkpoint_interval||30)+'s'),
+      row('Lease TTL',           fmtTtl(prefs.lease_ttl||300)),
+      row('Auto resume',         prefs.auto_resume ? 'yes' : 'no'),
+    ].join('')) +
+    section('Runtime', [
+      row('Runtime dir',      `<span style="font-family:monospace;font-size:10px;word-break:break-all">${escHtml(rt.runtime_dir||'—')}</span>`),
+      row('Memory dir',       `<span style="font-family:monospace;font-size:10px;word-break:break-all">${escHtml(rt.memory_dir||'—')}</span>`),
+      row('Heartbeat TTL',    `${rt.heartbeat_ttl_min||30}s – ${rt.heartbeat_ttl_max||3600}s`),
+      row('Namespaces',       escHtml((rt.namespaces||[]).join(' · '))),
+    ].join(''));
+}
+
 // ── settings panel ──
 function openSettings(tab = 'account') {
   switchSettingsTab(tab); syncSettingsUI();
@@ -1890,6 +1967,7 @@ function openSettings(tab = 'account') {
   if (tab === 'agents')     loadAgents();
   if (tab === 'changelog')  populateChangelog();
   if (tab === 'network')    startTsPolling();
+  if (tab === 'config')     loadConfigSummary();
 }
 function closeSettings() {
   stopTsPolling();
@@ -1904,6 +1982,7 @@ function switchSettingsTab(tab) {
   document.querySelectorAll('.settings-page').forEach(el =>
     el.classList.toggle('active', el.id === 'spage-' + tab));
   if (tab === 'network') startTsPolling();
+  if (tab === 'config')  loadConfigSummary();
 }
 function populateChangelog() {
   const el = document.getElementById('changelog-content');
@@ -3605,6 +3684,60 @@ class Handler(BaseHTTPRequestHandler):
             safe = [{k: v for k, v in a.items() if k != "key_hash"}
                     for a in _config.get("agents", [])]
             self.reply_json({"agents": safe})
+
+        # ── config summary / export ───────────────────────────────────────
+        elif parsed.path == "/api/config/summary":
+            if not self.auth_check(redirect=False): return
+            prefs = _config.get("preferences", {})
+            locs  = []
+            for loc in _config.get("locations", []):
+                p = Path(loc.get("path", ""))
+                locs.append({
+                    "id": loc.get("id"), "label": loc.get("label"),
+                    "type": loc.get("type", "local"), "path": loc.get("path"),
+                    "exists": p.exists(),
+                    "writable": os.access(str(p), os.W_OK) if p.exists() else False,
+                })
+            agents = [
+                {"id": a.get("id"), "name": a.get("name"), "role": a.get("role"),
+                 "type": a.get("type"), "status": a.get("status")}
+                for a in _config.get("agents", [])
+            ]
+            self.reply_json({
+                "auth": {
+                    "username":     _config.get("username", "admin"),
+                    "display_name": _config.get("display_name", ""),
+                    "mode":         "single-user owner",
+                    "session_ttl":  SESSION_TTL,
+                },
+                "locations": locs,
+                "preferences": prefs,
+                "agents": agents,
+                "runtime": {
+                    "runtime_dir":  str(RUNTIME_DIR),
+                    "memory_dir":   str(MEMORY_DIR),
+                    "namespaces":   sorted(MEMORY_NAMESPACES),
+                    "heartbeat_ttl_min":  HEARTBEAT_TTL_MIN,
+                    "heartbeat_ttl_max":  HEARTBEAT_TTL_MAX,
+                    "heartbeat_ttl_def":  HEARTBEAT_TTL_DEF,
+                },
+            })
+
+        elif parsed.path == "/api/config/export":
+            if not self.auth_check(redirect=False): return
+            STRIP = {"password_hash", "salt", "key_hash", "raw_key"}
+            def _sanitize(obj):
+                if isinstance(obj, dict):
+                    return {k: _sanitize(v) for k, v in obj.items() if k not in STRIP}
+                if isinstance(obj, list): return [_sanitize(i) for i in obj]
+                return obj
+            export = _sanitize(dict(_config))
+            body = json.dumps(export, indent=2, default=str).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Disposition", 'attachment; filename="porter-config.json"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers(); self.wfile.write(body)
 
         # ── preferences ───────────────────────────────────────────────────
         elif parsed.path == "/api/preferences":
