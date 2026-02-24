@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.5.0 — self-hosted file manager"""
+"""Porter v0.6.0 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1112,7 +1112,7 @@ body.density-compact .file-name { padding: 6px 0; }
   <div class="nav-label">Locations</div>
   <div id="locations"></div>
   <div class="sidebar-footer" id="sfooter"></div>
-  <button class="ver-link" onclick="openChangelog()" title="View release notes">Porter v0.5.0 — Release notes</button>
+  <button class="ver-link" onclick="openChangelog()" title="View release notes">Porter v0.6.0 — Release notes</button>
   <div class="user-card" id="userCard" onclick="openSettings('account')">
     <div class="user-avatar" id="ucAvatar"></div>
     <div style="min-width:0;flex:1">
@@ -2581,6 +2581,18 @@ function toggleShortcuts() {
 
 // ── changelog ──
 const CHANGELOG = [
+  { ver:'v0.6.0', date:'2026-02-24', notes:[
+    'Settings: Locations tab — list, add, edit, remove, test-path; replaces hardcoded SERVE_DIRS',
+    'Settings: Agents tab — create agents, one-time key display, rotate key, revoke',
+    'Settings: Permissions tab — role capability matrix (viewer/writer/operator/admin)',
+    'Onboarding wizard: 4-step first-run flow (Welcome → Location → Agent → Complete)',
+    'Agent auth: Bearer token accepted on all runtime/memory endpoints',
+    'Permission enforcement: viewer blocked from write/checkpoint/finalize (403)',
+    'Invalid Bearer → 401; insufficient role → 403 with reason message',
+    'Version badge moved to sidebar bottom-left (always visible, opens release notes)',
+    'Config: locations/agents/preferences stored in porter_config.json with backward-compat migration',
+    '51-test suite covering P0, P1, capability enforcement, and config API',
+  ]},
   { ver:'v0.5.0', date:'2026-02-24', notes:[
     'P0: Durable checkpoint runtime — agents survive API-limit interruptions with zero lost work',
     'P0: /runtime/checkpoint — write-ahead log, one JSON line per step',
@@ -4047,7 +4059,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.5.0 ready (localhost only)")
+    print(f"\n  Porter v0.6.0 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:

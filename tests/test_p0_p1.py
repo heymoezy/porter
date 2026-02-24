@@ -53,6 +53,44 @@ class Client:
     def post(self, path, body=None, **kw):
         return self.request("POST", path, body=body, **kw)
 
+
+class BearerClient:
+    """Stateless HTTP client for agent Bearer-token tests (no cookie jar)."""
+
+    def request(self, method, path, body=None, bearer=None, expect_code=None):
+        url = BASE + path
+        if body is not None:
+            data = json.dumps(body).encode()
+            req = urllib.request.Request(
+                url, data=data,
+                headers={"Content-Type": "application/json"},
+                method=method,
+            )
+        else:
+            req = urllib.request.Request(url, method=method)
+        if bearer:
+            req.add_header("Authorization", f"Bearer {bearer}")
+        try:
+            resp = urllib.request.urlopen(req)
+            code = resp.getcode()
+            raw  = resp.read()
+        except urllib.error.HTTPError as e:
+            code = e.code
+            raw  = e.read()
+        try:
+            payload = json.loads(raw)
+        except Exception:
+            payload = raw.decode(errors="replace")
+        if expect_code is not None and code != expect_code:
+            raise AssertionError(f"{method} {path} → HTTP {code}, expected {expect_code}. body={payload!r}")
+        return code, payload
+
+    def get(self, path, bearer=None, **kw):
+        return self.request("GET", path, bearer=bearer, **kw)
+
+    def post(self, path, body=None, bearer=None, **kw):
+        return self.request("POST", path, body=body, bearer=bearer, **kw)
+
 # ── test runner ────────────────────────────────────────────────────────────
 
 _results = []
@@ -445,6 +483,150 @@ def run_all(suites):
         test("P1 fetch: not found",           t_fetch_not_found)
         test("P1 validation: bad pointer id", t_pointer_bad_id)
 
+    # ── capability enforcement (Bearer token) ─────────────────────────────────
+    if "cap" in suites:
+        bearer = BearerClient()
+        _cap_agent = {}   # mutable dict so closures can write to it
+
+        def t_cap_create_viewer():
+            code, payload = authed.post("/api/agents", {
+                "action": "create", "name": "test-viewer-cap",
+                "role": "viewer", "namespaces": [],
+            }, expect_code=200)
+            assert payload.get("ok"), payload
+            _cap_agent["id"]  = payload["agent"]["id"]
+            _cap_agent["key"] = payload["key"]
+
+        def t_cap_viewer_can_read():
+            key = _cap_agent.get("key", "")
+            # File won't exist → 404 (not 401/403 — auth passed)
+            code, _ = bearer.get(
+                "/memory/fetch?uri=porter://projects/captest-nofile.md",
+                bearer=key, expect_code=404,
+            )
+
+        def t_cap_viewer_no_write():
+            key = _cap_agent.get("key", "")
+            code, payload = bearer.post(
+                "/memory/upsert",
+                {"uri": "porter://projects/captest.md", "content": "x"},
+                bearer=key, expect_code=403,
+            )
+            assert payload.get("error") == "forbidden", payload
+
+        def t_cap_viewer_no_checkpoint():
+            key = _cap_agent.get("key", "")
+            code, payload = bearer.post(
+                "/runtime/checkpoint",
+                {"task_id": "captest-chk", "step_id": "s1",
+                 "operation": "op", "status": "started"},
+                bearer=key, expect_code=403,
+            )
+
+        def t_cap_viewer_no_finalize():
+            key = _cap_agent.get("key", "")
+            code, payload = bearer.post(
+                "/runtime/finalize",
+                {"task_id": "t", "temp_uri": "porter://runtime/tmp/x",
+                 "final_uri": "porter://projects/x"},
+                bearer=key, expect_code=403,
+            )
+
+        def t_cap_invalid_bearer():
+            code, payload = bearer.get(
+                "/memory/fetch?uri=porter://projects/x.md",
+                bearer="not-a-real-key", expect_code=401,
+            )
+
+        def t_cap_revoke_viewer():
+            code, payload = authed.post("/api/agents", {
+                "action": "revoke", "id": _cap_agent["id"],
+            }, expect_code=200)
+            assert payload.get("ok"), payload
+
+        test("cap: create viewer agent",             t_cap_create_viewer)
+        test("cap: viewer can read (→ 404 not 403)", t_cap_viewer_can_read)
+        test("cap: viewer no write → 403",           t_cap_viewer_no_write)
+        test("cap: viewer no checkpoint → 403",      t_cap_viewer_no_checkpoint)
+        test("cap: viewer no finalize → 403",        t_cap_viewer_no_finalize)
+        test("cap: invalid Bearer → 401",            t_cap_invalid_bearer)
+        test("cap: revoke viewer agent",             t_cap_revoke_viewer)
+
+    # ── config API (locations / agents / preferences) ─────────────────────────
+    if "cfg" in suites:
+
+        def t_cfg_locations_list():
+            code, payload = authed.get("/api/locations", expect_code=200)
+            assert "locations" in payload, payload
+            assert isinstance(payload["locations"], list)
+
+        def t_cfg_location_add():
+            code, payload = authed.post("/api/locations", {
+                "action": "add",
+                "location": {"label": "Test Loc", "type": "local", "path": "/tmp"},
+            }, expect_code=200)
+            assert payload.get("ok"), payload
+            # The server auto-generates an id from the label
+            t_cfg_location_add._loc_id = payload.get("location", {}).get("id", "test-loc")
+            _, locs = authed.get("/api/locations", expect_code=200)
+            ids = [l["id"] for l in locs.get("locations", [])]
+            assert t_cfg_location_add._loc_id in ids, ids
+
+        def t_cfg_location_test_path():
+            code, payload = authed.post("/api/locations/test", {"path": "/tmp"}, expect_code=200)
+            assert payload.get("ok"), payload
+            assert payload.get("readable"), payload
+
+        def t_cfg_location_remove():
+            loc_id = getattr(t_cfg_location_add, "_loc_id", "test-loc")
+            code, payload = authed.post("/api/locations", {
+                "action": "remove",
+                "location": {"id": loc_id},
+            }, expect_code=200)
+            assert payload.get("ok"), payload
+            _, locs = authed.get("/api/locations", expect_code=200)
+            ids = [l["id"] for l in locs.get("locations", [])]
+            assert loc_id not in ids, ids
+
+        def t_cfg_preferences_get():
+            code, payload = authed.get("/api/preferences", expect_code=200)
+            for key in ("onboarding_complete", "checkpoint_interval", "auto_resume"):
+                assert key in payload, f"missing key '{key}' in {payload}"
+
+        def t_cfg_preferences_set():
+            code, payload = authed.post("/api/preferences",
+                                        {"checkpoint_interval": 45}, expect_code=200)
+            assert payload.get("ok"), payload
+            _, prefs = authed.get("/api/preferences", expect_code=200)
+            assert prefs["checkpoint_interval"] == 45, prefs
+            authed.post("/api/preferences", {"checkpoint_interval": 30})  # restore
+
+        def t_cfg_agent_lifecycle():
+            code, payload = authed.post("/api/agents", {
+                "action": "create", "name": "test-cfg-agent",
+                "role": "writer", "namespaces": ["projects"],
+            }, expect_code=200)
+            assert payload.get("ok"), payload
+            assert "key" in payload, payload
+            agent_id = payload["agent"]["id"]
+            # Rotate key
+            code, r2 = authed.post("/api/agents/rotate-key",
+                                   {"id": agent_id}, expect_code=200)
+            assert r2.get("ok"), r2
+            assert r2.get("key") != payload["key"], "rotated key must differ"
+            # Revoke
+            code, r3 = authed.post("/api/agents",
+                                   {"action": "revoke", "id": agent_id}, expect_code=200)
+            assert r3.get("ok"), r3
+
+        test("cfg: GET /api/locations → list",      t_cfg_locations_list)
+        test("cfg: add location",                   t_cfg_location_add)
+        test("cfg: test location path",             t_cfg_location_test_path)
+        test("cfg: remove location",                t_cfg_location_remove)
+        test("cfg: GET /api/preferences → keys",    t_cfg_preferences_get)
+        test("cfg: POST /api/preferences → saves",  t_cfg_preferences_set)
+        test("cfg: agent create / rotate / revoke", t_cfg_agent_lifecycle)
+
     # ── summary ──────────────────────────────────────────────────────────────
     passed = sum(1 for r in _results if r[0] == "PASS")
     failed = sum(1 for r in _results if r[0] == "FAIL")
@@ -459,8 +641,9 @@ def run_all(suites):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--suite", default="all", choices=["p0", "p1", "all"])
+    parser.add_argument("--suite", default="all",
+                        choices=["p0", "p1", "cap", "cfg", "all"])
     args = parser.parse_args()
-    suites = {"p0", "p1"} if args.suite == "all" else {args.suite}
-    print(f"\nPorter P0+P1 tests — suite={args.suite}\n")
+    suites = {"p0", "p1", "cap", "cfg"} if args.suite == "all" else {args.suite}
+    print(f"\nPorter tests — suite={args.suite}\n")
     run_all(suites)

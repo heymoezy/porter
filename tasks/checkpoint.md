@@ -1,25 +1,20 @@
 # Checkpoint
 project: porter
 task: UI/UX implementation — locations, agents, permissions, onboarding wizard
-status: in_progress
-step: 1 of 5
+status: complete
+step: 5 of 5
 completed:
-  - [ ] Commit 1: Config data model + migration + backend API routes
-  - [ ] Commit 2: Settings UI — Locations + Agents tabs
-  - [ ] Commit 3: Onboarding wizard (first-run 5-step flow)
-  - [ ] Commit 4: Permission enforcement + upload UX cleanup
-  - [ ] Commit 5: Tests + version bump + migration notes
-next_action: Commit 1 — extend config schema, dynamic SERVE_DIRS, add location/agent/preference API routes
+  - [x] Commit 1: Config data model + migration + backend API routes
+  - [x] Commit 2: Settings UI — Locations + Agents + Permissions tabs, version badge
+  - [x] Commit 3: Onboarding wizard (first-run 4-step flow)
+  - [x] Commit 4: Permission enforcement (Bearer token, role caps) + upload UX
+  - [x] Commit 5: Tests (51 total) + version bump v0.6.0 + changelog entry
+next_action: n/a — task complete
 modified_files:
   - /home/lobster/documents/porter/porter.py
+  - /home/lobster/documents/porter/tests/test_p0_p1.py
 notes: |
-  Config additions (non-breaking):
-    locations: [{id, label, type, path}] — migrated from SERVE_DIRS; uploads excluded from default seeding
-    agents: [{id, name, type, key_hash, role, namespaces, created_at, last_seen}]
-    preferences: {onboarding_complete, default_location, checkpoint_interval, lease_ttl, auto_resume}
-  SERVE_DIRS becomes dynamic dict, repopulated on load and after settings changes.
-  Agent key: sha256-hashed at rest; raw key returned once on creation only.
-  New routes: GET/POST /api/locations, GET/POST /api/agents,
-              POST /api/agents/revoke, POST /api/agents/rotate-key,
-              GET/POST /api/preferences, POST /api/permissions/check,
-              POST /api/locations/test
+  All 5 commits landed on master. Porter is now v0.6.0.
+  New features: dynamic locations/agents/preferences config, Settings tabs,
+  onboarding wizard, agent Bearer token auth with ROLE_CAPS enforcement.
+  51-test suite covers P0, P1, capability enforcement, and config API.
