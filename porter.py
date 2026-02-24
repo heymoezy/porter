@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.6.0 — self-hosted file manager"""
+"""Porter v0.7.0 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1304,7 +1304,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.6.0 — What's new
+          v0.7.0 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2997,17 +2997,35 @@ function toggleShortcuts() {
 
 // ── changelog ──
 const CHANGELOG = [
+  { ver:'v0.7.0', date:'2026-02-24', notes:[
+    'Collapsible sidebar — hamburger toggle in logo row; icon-only 52px rail when collapsed; preference saved to localStorage',
+    'Account: owner-mode password change no longer requires current password (single-user local)',
+    'Account: compact 2-column layout; display settings moved to a separate subsection',
+    'Locations: guided type picker (Local folder / VPS path / Tailscale device / GitHub — coming soon)',
+    'Locations: Tailscale peer discovery via tailscale status --json with manual-entry fallback',
+    'Locations: writability badges (rw / ro / not found) on each location row',
+    'Locations: device hostname shown as subtitle under each local location label',
+    'Locations: distinct icons — folder for Documents, globe for web roots, node graph for Tailscale',
+    'Tailscale tab (renamed from Network): live status with 20 s polling, peer list, last-updated timestamp',
+    'Tailscale tab: smart CTAs — "Install Tailscale" command block when not found; start instructions when not running',
+    'Access Model tab (renamed from Permissions): simplified, links role assignment to Agents tab',
+    'Show/hide hidden files moved from Account settings to main toolbar as eye-icon toggle',
+    'Agent keys now stored and visible in the Agents tab — monospace box with one-click copy button',
+    'Agents without a stored key show "Rotate key to reveal" prompt',
+    'Settings tabs (Locations, Agents) now load data when clicked, not only when settings first opens',
+    'Sidebar location click now closes settings panel — no need to close settings manually before navigating',
+    'Version / What\'s new moved from sidebar to Settings footer (above Sign out)',
+    'Sidebar labels now use /api/locations (proper labels) instead of raw root IDs',
+    'Disk usage bar pinned to sidebar bottom via flex layout',
+  ]},
   { ver:'v0.6.0', date:'2026-02-24', notes:[
     'Settings: Locations tab — list, add, edit, remove, test-path; replaces hardcoded SERVE_DIRS',
-    'Settings: Agents tab — create agents, one-time key display, rotate key, revoke',
-    'Settings: Permissions tab — role capability matrix (viewer/writer/operator/admin)',
+    'Settings: Agents tab — create agents, rotate key, revoke',
+    'Settings: Access Model tab — role capability overview',
     'Onboarding wizard: 4-step first-run flow (Welcome → Location → Agent → Complete)',
     'Agent auth: Bearer token accepted on all runtime/memory endpoints',
     'Permission enforcement: viewer blocked from write/checkpoint/finalize (403)',
-    'Invalid Bearer → 401; insufficient role → 403 with reason message',
-    'Version badge moved to sidebar bottom-left (always visible, opens release notes)',
     'Config: locations/agents/preferences stored in porter_config.json with backward-compat migration',
-    '51-test suite covering P0, P1, capability enforcement, and config API',
   ]},
   { ver:'v0.5.0', date:'2026-02-24', notes:[
     'P0: Durable checkpoint runtime — agents survive API-limit interruptions with zero lost work',
