@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.4.2 — self-hosted file manager"""
+"""Porter v0.5.0 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1275,7 +1275,7 @@ body.density-compact .file-name { padding: 6px 0; }
           </div>
         </div>
         <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border)">
-          <div style="font-size:12px;color:var(--text3)">Porter v0.4.2</div>
+          <div style="font-size:12px;color:var(--text3)">Porter v0.5.0</div>
           <button class="btn" style="margin-top:8px;padding:5px 10px;font-size:12px;background:none;border-color:var(--border2);color:var(--text2)" onclick="closeSettings();openChangelog()">Release notes →</button>
         </div>
       </div>
@@ -2189,6 +2189,23 @@ function toggleShortcuts() {
 
 // ── changelog ──
 const CHANGELOG = [
+  { ver:'v0.5.0', date:'2026-02-24', notes:[
+    'P0: Durable checkpoint runtime — agents survive API-limit interruptions with zero lost work',
+    'P0: /runtime/checkpoint — write-ahead log, one JSON line per step',
+    'P0: /runtime/heartbeat — lease ownership with configurable TTL (30–3600 s)',
+    'P0: /runtime/recover — returns full step history, resumable flag, lease expiry status',
+    'P0: /runtime/finalize — atomic os.replace() promotion from temp to final URI',
+    'P1: Memory connector API — OpenClaw/Claude use Porter as long-term memory store',
+    'P1: /memory/upsert — write any text file via porter:// URI',
+    'P1: /memory/fetch — read back with optional line-range slicing',
+    'P1: /memory/pointer — structured pointer JSON with confidence, tags, created_at preservation',
+    'P1: /memory/search — full-walk scorer over .json/.md/.txt with tag filtering; total/returned counts',
+    'Hardening: resume logic respects lease expiry and lease.state field',
+    'Hardening: heartbeat TTL validated to 30–3600 s range',
+    'Hardening: search response includes total (pre-limit) and returned (post-limit) counts',
+    'Hardening: runtime/ and memory/ paths excluded from git; .gitkeep placeholders added',
+    'docs/runtime.md: documents generated paths, lifecycle, resume semantics, atomic promotion',
+  ]},
   { ver:'v0.4.2', date:'2026-02-23', notes:[
     'File row separators made nearly invisible — removes spreadsheet grid feel',
     'Folder names now bold and bright — primary navigation items stand out',
@@ -3198,7 +3215,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.4.2 ready (localhost only)")
+    print(f"\n  Porter v0.5.0 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
