@@ -489,6 +489,8 @@ body {
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
   padding: 20px 0;
+  transition: width .2s ease, min-width .2s ease;
+  overflow: hidden;
 }
 .logo {
   padding: 0 20px 28px;
@@ -547,6 +549,34 @@ body {
   text-align:left; font-family:inherit;
 }
 .ver-link:hover { color:var(--accent); }
+
+/* hamburger toggle */
+.hbg-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 18px 14px; cursor: pointer; background: none;
+  border: none; color: var(--text3); font-family: inherit;
+  font-size: 10px; font-weight: 600; letter-spacing: .6px;
+  text-transform: uppercase; transition: color .15s; width: 100%;
+  flex-shrink: 0;
+}
+.hbg-btn:hover { color: var(--text); }
+.hbg-lbl { white-space: nowrap; }
+
+/* ── sidebar collapsed ── */
+body.sidebar-collapsed { --sidebar: 52px; }
+body.sidebar-collapsed .logo > div,
+body.sidebar-collapsed .nav-label,
+body.sidebar-collapsed .loc-name,
+body.sidebar-collapsed .ver-link,
+body.sidebar-collapsed .sidebar-footer,
+body.sidebar-collapsed .user-name,
+body.sidebar-collapsed .user-sub,
+body.sidebar-collapsed .hbg-lbl { display: none; }
+body.sidebar-collapsed .logo { padding: 0 9px 18px; justify-content: center; }
+body.sidebar-collapsed .hbg-btn { padding: 0 0 14px; justify-content: center; }
+body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
+body.sidebar-collapsed .user-card { padding: 10px 0; justify-content: center; }
+body.sidebar-collapsed .user-card > svg { display: none; }
 
 /* ── main ── */
 .main {
@@ -1091,6 +1121,14 @@ body.density-compact .file-name { padding: 6px 0; }
 
 <!-- sidebar -->
 <aside class="sidebar">
+  <button class="hbg-btn" id="hbgBtn" onclick="toggleSidebar()" title="Toggle sidebar">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+      <line x1="3" y1="6" x2="21" y2="6"/>
+      <line x1="3" y1="12" x2="21" y2="12"/>
+      <line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+    <span class="hbg-lbl">Menu</span>
+  </button>
   <div class="logo">
     <svg class="logo-mark" width="34" height="34" viewBox="0 0 34 34" fill="none">
       <rect width="34" height="34" rx="8" fill="#F7931A"/>
@@ -1592,6 +1630,7 @@ function loadSettings() {
   } catch(e) { settings = { ...SETTINGS_DEFAULTS }; }
   applySettings(); syncSettingsUI();
   applyTheme(localStorage.getItem('porter_theme') || 'dark');
+  if (localStorage.getItem('porter_sidebar') === '1') document.body.classList.add('sidebar-collapsed');
 }
 function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
 function setSetting(key, val) {
@@ -1623,6 +1662,10 @@ function applyTheme(t) {
 }
 function toggleTheme() {
   applyTheme(document.documentElement.classList.contains('light') ? 'dark' : 'light');
+}
+function toggleSidebar() {
+  const collapsed = document.body.classList.toggle('sidebar-collapsed');
+  try { localStorage.setItem('porter_sidebar', collapsed ? '1' : '0'); } catch(e) {}
 }
 
 // ── settings panel ──
