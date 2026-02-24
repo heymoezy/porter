@@ -1,33 +1,46 @@
 # Checkpoint
 project: porter
-task: P0.5 Locations Model v2 + P1 Agent Usage Tracker
+task: Implement P2 (Task Operations) + P3 (Policy Presets) + P4 (Stability) → v0.9.0
 status: complete
-step: 8 of 8
+step: 3 of 3
 completed:
-  - [x] P0.5 backend — load_config migration, _load_serve_dirs, /api/nodes GET+POST
-  - [x] P0.5 backward compat — /api/locations derives from nodes
-  - [x] P1 backend — /agent-usage/snapshot, /agent-usage/current, /agent-usage/parse
-  - [x] Frontend — _renderSidebarNodes, renderNodes, node CRUD JS
-  - [x] Frontend — Usage tab JS (loadUsage, renderUsage, parseUsageRaw, snapshot form)
-  - [x] Settings HTML — Nodes & Mounts tab, Usage tab
-  - [x] Bug fix — GET /agent-usage/current was in do_POST, moved to do_GET
-  - [x] Changelog v0.8.0 added, compile clean, service running, API tests pass
-  - [x] Committed: e2c6c58
-next_action: n/a — complete. Next sprint: P2 Task Operations Panel
+  - [x] Read porter.py structure and identified all anchor points
+  - [x] P2: AUDIT_LOG constant, POLICY_PRESETS constant
+  - [x] P2: _append_audit() and _safe_lease_running() module-level helpers
+  - [x] P2: policy_preset added to DEFAULT_PREFERENCES (default "balanced")
+  - [x] P2: POST /api/preferences accepts policy_preset
+  - [x] P2: Concurrency enforcement in POST /runtime/checkpoint (bearer agents, 429 on limit)
+  - [x] P2: GET /api/tasks — lists all tasks with state, owner, step count
+  - [x] P2: GET /api/audit — newest-first audit log
+  - [x] P2: POST /api/tasks — pause/resume/cancel/clear_completed/update_agent_concurrency
+  - [x] P2: Agent cards get concurrency input row
+  - [x] P2: CSS — .sp-header, .task-card/.task-hdr/.task-meta/.task-actions/.task-badge
+  - [x] P2: Settings nav — Tasks button (after Usage)
+  - [x] P2: Settings page — spage-tasks with task-list
+  - [x] P2: JS — loadTasks, renderTasks, taskAction, clearCompletedTasks, _tsAgo, saveAgentConcurrency
+  - [x] P3: GET /api/policy/presets — 5 presets with active marker
+  - [x] P3: CSS — .policy-grid/.policy-card/.policy-name/.policy-desc/.policy-active-pill
+  - [x] P3: Settings nav — Policy button (after Tasks)
+  - [x] P3: Settings page — spage-policy with policy-presets-grid
+  - [x] P3: JS — loadPolicy, renderPolicy, setPolicy, _policyIcon
+  - [x] P4: switchSettingsTab updated for tasks and policy branches
+  - [x] P4: CHANGELOG v0.9.0 entry added at top
+  - [x] P4: Version bump v0.8.0 → v0.9.0 (docstring, footer, startup print)
+  - [x] P4: Python compiles clean
+  - [x] P4: Service restarted, all regression tests pass
+next_action: n/a — complete. Next sprint: P5 or further enhancements
 modified_files:
   - /home/lobster/documents/porter/porter.py
 notes: |
   All tests passed:
-  - Auth gate: /api/nodes + /agent-usage/current → 401 without cookie ✓
-  - GET /api/nodes: node tree with mount stats ✓
-  - POST /api/nodes add_mount + delete_mount round-trip ✓
-  - GET /api/locations backward compat (flat view, node_id field added) ✓
-  - POST /agent-usage/snapshot → 200, stored to runtime/usage/<id>.json ✓
-  - GET /agent-usage/current → enriched per-agent snapshots ✓
-  - POST /agent-usage/parse: 75% → degraded, 100% → exhausted, reset parsed ✓
-  - Missing agent_id → 400 ✓
-
-  Config migration verified: porter_config.json now has nodes[] with srv1379868
-  local node containing vps-home and websites mounts.
-
-  Next: P2 Task Operations Panel (running tasks, pause/resume/cancel, concurrency limits)
+  - Auth gate: /api/tasks + /api/audit + /api/policy/presets → 401 without cookie ✓
+  - GET /api/tasks: returns tasks with state (stalled/complete) ✓
+  - Task pause/resume/cancel lifecycle ✓
+  - clear_completed: removed 16 old tasks ✓
+  - POST /api/tasks update_agent_concurrency ✓
+  - Concurrency enforcement: 429 HTTP status on limit exceeded ✓
+  - GET /api/policy/presets: 5 presets, balanced active ✓
+  - POST /api/preferences policy_preset: set/get round-trip ✓
+  - Audit log: 4 entries after test operations ✓
+  - Dead code absent: editLocation/saveLocation/removeLocation/testLocationPath not found ✓
+  - config/summary still works (locations derived from nodes) ✓

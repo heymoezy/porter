@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.8.0 — self-hosted file manager"""
+"""Porter v0.9.0 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -37,6 +37,7 @@ DEFAULT_PREFERENCES: dict = {
     "show_hidden":         False,
     "density":             "normal",
     "editor_font_size":    12,
+    "policy_preset":       "balanced",
 }
 
 CONFIG_PATH  = Path("/home/lobster/documents/porter/porter_config.json")
@@ -48,6 +49,41 @@ _sessions: dict = {}             # token -> {username, expires}
 RUNTIME_DIR       = Path("/home/lobster/documents/porter/runtime")
 MEMORY_DIR        = Path("/home/lobster/documents/porter/memory")
 USAGE_DIR         = RUNTIME_DIR / "usage"
+AUDIT_LOG         = RUNTIME_DIR / "audit.jsonl"
+
+POLICY_PRESETS: list = [
+    {
+        "id":          "cost-sensitive",
+        "label":       "Cost-Sensitive",
+        "description": "Maximise local model use; cloud only as last resort. Best for high-volume or budget-constrained workloads.",
+        "settings":    {"prefer_local": True,  "max_cloud_tokens_per_task": 2000,  "local_fallback": True},
+    },
+    {
+        "id":          "balanced",
+        "label":       "Balanced",
+        "description": "Default strategy — local models handle classification and summaries; cloud handles complex tasks. Good all-rounder.",
+        "settings":    {"prefer_local": True,  "max_cloud_tokens_per_task": 8000,  "local_fallback": True},
+    },
+    {
+        "id":          "speed-first",
+        "label":       "Speed-First",
+        "description": "Route to the fastest available model regardless of cost. Local if fast enough, cloud otherwise.",
+        "settings":    {"prefer_local": False, "max_cloud_tokens_per_task": 16000, "local_fallback": True},
+    },
+    {
+        "id":          "quality-first",
+        "label":       "Quality-First",
+        "description": "Always route to the highest-capability model. Local models skipped except for trivial tasks.",
+        "settings":    {"prefer_local": False, "max_cloud_tokens_per_task": 32000, "local_fallback": False},
+    },
+    {
+        "id":          "local-first",
+        "label":       "Local-First",
+        "description": "Never use cloud models. All tasks stay on-device. Tasks may fail if local model is insufficient.",
+        "settings":    {"prefer_local": True,  "max_cloud_tokens_per_task": 0,     "local_fallback": False},
+    },
+]
+
 MEMORY_NAMESPACES = {"projects", "people", "decisions", "compliance",
                      "transcripts", "artifacts", "indexes", "pointers"}
 
@@ -215,6 +251,34 @@ def porter_uri_to_path(uri: str) -> "Path | None":
 def ensure_runtime_dirs():
     for d in ("checkpoints", "leases", "drafts", "tmp", "usage"):
         (RUNTIME_DIR / d).mkdir(parents=True, exist_ok=True)
+
+def _append_audit(action: str, target: str, actor: str,
+                  actor_type: str = "session", details: dict | None = None) -> None:
+    from datetime import datetime, timezone
+    entry = {
+        "ts":         time.time(),
+        "ts_iso":     datetime.now(timezone.utc).isoformat(),
+        "actor":      actor,
+        "actor_type": actor_type,
+        "action":     action,
+        "target":     target,
+        "details":    details or {},
+    }
+    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(AUDIT_LOG, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass  # audit failures must never break callers
+
+def _safe_lease_running(lease_file, agent_id: str, now: float) -> bool:
+    try:
+        l = json.loads(Path(lease_file).read_text())
+        return (l.get("owner") == agent_id and
+                l.get("state") == "running" and
+                l.get("expires_at", 0) > now)
+    except Exception:
+        return False
 
 def ensure_memory_dirs():
     for ns in MEMORY_NAMESPACES:
@@ -1072,6 +1136,36 @@ body.density-compact .file-name { padding: 6px 0; }
 .settings-page.active { display: block; }
 .settings-page-title { font-size: 18px; font-weight: 700; color: var(--text);
   margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.sp-header { display:flex; align-items:center; margin-bottom:14px; padding-bottom:10px;
+  border-bottom:1px solid var(--border); }
+.sp-header h2 { font-size:18px; font-weight:700; color:var(--text); margin:0; }
+/* Task operation cards */
+.task-card { background:var(--bg2); border:1px solid var(--border);
+             border-radius:8px; padding:16px; margin-bottom:10px; }
+.task-hdr  { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+.task-id   { font-family:monospace; font-size:13px; color:var(--text1); flex:1;
+             overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.task-meta { display:flex; gap:14px; flex-wrap:wrap; font-size:12px;
+             color:var(--text2); margin-bottom:10px; }
+.task-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.task-badge { font-size:11px; padding:2px 8px; border-radius:20px; font-weight:600; white-space:nowrap; }
+.task-badge.badge-running   { background:#dcfce7; color:#15803d; }
+.task-badge.badge-paused    { background:#fef9c3; color:#854d0e; }
+.task-badge.badge-stalled   { background:#fee2e2; color:#b91c1c; }
+.task-badge.badge-complete  { background:#e0f2fe; color:#0369a1; }
+.task-badge.badge-cancelled { background:var(--bg3); color:var(--text2); }
+/* Policy preset cards */
+.policy-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; }
+@media(max-width:600px) { .policy-grid { grid-template-columns:1fr; } }
+.policy-card { border:2px solid var(--border); border-radius:10px; padding:16px;
+               cursor:pointer; transition:border-color .15s; }
+.policy-card:hover  { border-color:var(--accent); background:var(--bg2); }
+.policy-card.active { border-color:var(--accent); background:var(--bg2); }
+.policy-name { font-weight:600; font-size:14px; margin-bottom:4px; }
+.policy-desc { font-size:12px; color:var(--text2); line-height:1.5; }
+.policy-active-pill { display:inline-block; margin-top:8px; font-size:11px;
+                      background:var(--accent); color:#fff; padding:2px 8px;
+                      border-radius:20px; font-weight:600; }
 .settings-field { margin-bottom: 12px; }
 .settings-field label { display: block; font-size: 12px; font-weight: 500;
   color: var(--text2); margin-bottom: 5px; }
@@ -1337,6 +1431,14 @@ body.density-compact .file-name { padding: 6px 0; }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Usage
       </button>
+      <button class="settings-nav-item" id="snav-tasks" onclick="switchSettingsTab('tasks')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/><line x1="3" y1="8" x2="21" y2="8"/></svg>
+        Tasks
+      </button>
+      <button class="settings-nav-item" id="snav-policy" onclick="switchSettingsTab('policy')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/><circle cx="18" cy="14" r="4"/><line x1="21" y1="17" x2="23" y2="19"/></svg>
+        Policy
+      </button>
       <button class="settings-nav-item" id="snav-network" onclick="switchSettingsTab('network')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/></svg>
         Tailscale
@@ -1345,7 +1447,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.8.0 — What's new
+          v0.9.0 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -1581,6 +1683,26 @@ body.density-compact .file-name { padding: 6px 0; }
             <button class="btn btn-primary" onclick="submitUsageSnapshot()">Save snapshot</button>
           </div>
         </div>
+      </div>
+
+      <!-- Task Operations page -->
+      <div class="settings-page" id="spage-tasks">
+        <div class="sp-header">
+          <h2>Task Operations</h2>
+          <button class="btn btn-sm btn-ghost" onclick="clearCompletedTasks()"
+                  style="margin-left:auto">Clear completed</button>
+        </div>
+        <div id="tasks-list"><div style="color:var(--text2);padding:20px 0">Loading…</div></div>
+      </div>
+
+      <!-- Policy Presets page -->
+      <div class="settings-page" id="spage-policy">
+        <div class="sp-header"><h2>Policy Presets</h2></div>
+        <p style="color:var(--text2);margin:0 0 4px">
+          Select a routing strategy. Agents use this preset for model selection and cost behaviour.
+          Preset-based control only — no autonomous optimizer.
+        </p>
+        <div class="policy-grid" id="policy-presets-grid"></div>
       </div>
 
       <div class="settings-page" id="spage-changelog">
@@ -1992,6 +2114,8 @@ function openSettings(tab = 'account') {
   if (tab === 'changelog')  populateChangelog();
   if (tab === 'network')    startTsPolling();
   if (tab === 'usage')      loadUsage();
+  if (tab === 'tasks')      loadTasks();
+  if (tab === 'policy')     loadPolicy();
   if (tab === 'config')     loadConfigSummary();
 }
 function closeSettings() {
@@ -2011,6 +2135,8 @@ function switchSettingsTab(tab) {
   if (tab === 'locations') loadLocations();
   if (tab === 'agents')    loadAgents();
   if (tab === 'usage')     loadUsage();
+  if (tab === 'tasks')     loadTasks();
+  if (tab === 'policy')    loadPolicy();
 }
 function populateChangelog() {
   const el = document.getElementById('changelog-content');
@@ -2237,6 +2363,14 @@ function renderAgents(agents) {
            <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;flex-shrink:0" onclick="copyText('${escHtml(a.raw_key)}',this)">Copy</button>
          </div>`
       : `<div style="font-size:11px;color:var(--text3);margin-top:5px;font-style:italic">Key hidden — rotate to reveal</div>`;
+    const concurrencyRow = `
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <span style="font-size:12px;color:var(--text2);flex-shrink:0">Max concurrent tasks:</span>
+        <input id="conc-${a.id}" type="number" min="0" value="${a.max_concurrent||0}"
+               style="width:70px;background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:3px 7px;font-size:12px;color:var(--text);font-family:inherit">
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="saveAgentConcurrency('${a.id}')">Save</button>
+        <span style="font-size:11px;color:var(--text3)">(0 = unlimited)</span>
+      </div>`;
     return `
     <div style="padding:10px 12px;background:var(--raised);border-radius:8px;margin-bottom:8px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:10px">
@@ -2249,6 +2383,7 @@ function renderAgents(agents) {
         <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Revoke</button>
       </div>
       ${keyRow}
+      ${concurrencyRow}
     </div>`;
   }).join('');
 }
@@ -2309,6 +2444,111 @@ async function doRevokeAgent(id, name) {
   const res = await api('/api/agents', { action: 'revoke', id });
   if (res && res.ok) { toast('Agent revoked', 'ok'); loadAgents(); }
   else toast((res && res.error) || 'Revoke failed', 'err');
+}
+
+async function saveAgentConcurrency(agentId) {
+  const val = parseInt(document.getElementById('conc-' + agentId).value, 10);
+  if (isNaN(val) || val < 0) { toast('Must be a number ≥ 0', 'err'); return; }
+  const res = await api('/api/tasks', { action: 'update_agent_concurrency', agent_id: agentId, max_concurrent: val });
+  if (res && res.ok) toast('Concurrency saved', 'ok');
+  else toast((res && res.error) || 'Save failed', 'err');
+}
+
+// ── task operations ───────────────────────────────────────────────────────
+
+function _tsAgo(unixTs) {
+  if (!unixTs) return 'never';
+  const secs = Math.floor(Date.now() / 1000 - unixTs);
+  if (secs < 60)   return secs + 's ago';
+  if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+  if (secs < 86400) return Math.floor(secs / 3600) + 'h ago';
+  return Math.floor(secs / 86400) + 'd ago';
+}
+
+async function loadTasks() {
+  const data = await api('/api/tasks');
+  if (!data) return;
+  renderTasks(data.tasks || []);
+}
+
+function renderTasks(tasks) {
+  const el = document.getElementById('tasks-list');
+  if (!tasks.length) {
+    el.innerHTML = '<div style="color:var(--text2);padding:20px 0">No tasks found.</div>';
+    return;
+  }
+  el.innerHTML = tasks.map(t => {
+    const state = t.state || 'unknown';
+    const badgeCls = 'task-badge badge-' + state;
+    const canPause  = state === 'running' || state === 'stalled';
+    const canResume = state === 'paused';
+    const canCancel = state !== 'complete' && state !== 'cancelled';
+    const actions = [
+      canPause  ? `<button class="btn btn-sm btn-ghost" onclick="taskAction('pause','${t.task_id}')">Pause</button>` : '',
+      canResume ? `<button class="btn btn-sm btn-ghost" onclick="taskAction('resume','${t.task_id}')">Resume</button>` : '',
+      canCancel ? `<button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="taskAction('cancel','${t.task_id}')">Cancel</button>` : '',
+    ].filter(Boolean).join('');
+    return `<div class="task-card">
+      <div class="task-hdr">
+        <span class="task-id">${escHtml(t.task_id)}</span>
+        <span class="${badgeCls}">${state}</span>
+      </div>
+      <div class="task-meta">
+        <span>Owner: ${escHtml(t.owner_name || t.owner || '—')}</span>
+        <span>Steps: ${t.step_count || 0}</span>
+        <span>Heartbeat: ${_tsAgo(t.last_heartbeat)}</span>
+        ${t.started_at ? '<span>Started: ' + _tsAgo(t.started_at) + '</span>' : ''}
+      </div>
+      ${actions ? '<div class="task-actions">' + actions + '</div>' : ''}
+    </div>`;
+  }).join('');
+}
+
+async function taskAction(action, taskId) {
+  const res = await api('/api/tasks', { action, task_id: taskId });
+  if (res && res.ok) { loadTasks(); }
+  else toast((res && res.error) || 'Action failed', 'err');
+}
+
+async function clearCompletedTasks() {
+  const res = await api('/api/tasks', { action: 'clear_completed' });
+  if (res && res.ok) { toast(`Cleared ${res.removed} task(s)`, 'ok'); loadTasks(); }
+  else toast((res && res.error) || 'Clear failed', 'err');
+}
+
+// ── policy presets ────────────────────────────────────────────────────────
+
+function _policyIcon(id) {
+  const icons = {
+    'cost-sensitive': '💰',
+    'balanced':       '⚖️',
+    'speed-first':    '⚡',
+    'quality-first':  '🏆',
+    'local-first':    '🖥️',
+  };
+  return icons[id] || '🔧';
+}
+
+async function loadPolicy() {
+  const data = await api('/api/policy/presets');
+  if (!data) return;
+  renderPolicy(data.presets || []);
+}
+
+function renderPolicy(presets) {
+  const el = document.getElementById('policy-presets-grid');
+  el.innerHTML = presets.map(p => `
+    <div class="policy-card ${p.active ? 'active' : ''}" onclick="setPolicy('${p.id}')">
+      <div class="policy-name">${_policyIcon(p.id)} ${escHtml(p.label)}</div>
+      <div class="policy-desc">${escHtml(p.description)}</div>
+      ${p.active ? '<span class="policy-active-pill">Active</span>' : ''}
+    </div>`).join('');
+}
+
+async function setPolicy(id) {
+  const res = await api('/api/preferences', { policy_preset: id });
+  if (res && res.ok) { toast('Policy updated', 'ok'); loadPolicy(); }
+  else toast((res && res.error) || 'Update failed', 'err');
 }
 
 // ── agent usage tracker ──────────────────────────────────────────────────
@@ -3234,6 +3474,21 @@ function toggleShortcuts() {
 
 // ── changelog ──
 const CHANGELOG = [
+  { ver:'v0.9.0', date:'2026-02-24', notes:[
+    'P2: GET /api/tasks — list all tasks with state, owner, step count, heartbeat age',
+    'P2: POST /api/tasks — pause/resume/cancel/clear_completed/update_agent_concurrency',
+    'P2: GET /api/audit — newest-first audit log of all privileged task+concurrency actions',
+    'P2: Task Operations settings tab — task cards with status badges and action buttons',
+    'P2: Concurrency enforcement on /runtime/checkpoint for bearer agents with max_concurrent set',
+    'P2: Audit trail on all task state changes (actor, action, target, iso timestamp)',
+    'P2: Agent cards in Agents tab now show concurrency input (0 = unlimited)',
+    'P3: GET /api/policy/presets — 5 presets with descriptions, active marker, settings dict',
+    'P3: Policy Presets settings tab — Cost-Sensitive/Balanced/Speed-First/Quality-First/Local-First',
+    'P3: policy_preset persisted via POST /api/preferences; default = "balanced"',
+    'P4: Regression tested all core flows; no regressions found',
+    'P4: Dead code absence verified; backward compat preserved',
+    'Version bump: v0.8.0 → v0.9.0',
+  ]},
   { ver:'v0.8.0', date:'2026-02-24', notes:[
     'Nodes & Mounts model: locations renamed to a two-layer node→mount hierarchy (machine first, then paths)',
     'Auto-migration: existing flat locations migrated to local node on first start; node ID = hostname (srv1379868)',
@@ -4182,6 +4437,87 @@ class Handler(BaseHTTPRequestHandler):
                 })
             self.reply_json({"agents": results, "count": len(results)})
 
+        # ── P2: task list ──────────────────────────────────────────────────
+        elif parsed.path == "/api/tasks":
+            if not self.auth_check(redirect=False): return
+            leases_dir = RUNTIME_DIR / "leases"
+            ckpts_dir  = RUNTIME_DIR / "checkpoints"
+            now        = time.time()
+            tasks      = []
+            if leases_dir.exists():
+                for lf in leases_dir.glob("*.json"):
+                    try:
+                        lease = json.loads(lf.read_text())
+                    except Exception:
+                        continue
+                    task_id = lease.get("task_id", lf.stem)
+                    state   = lease.get("state", "running")
+                    if state == "running" and lease.get("expires_at", 0) < now:
+                        state = "stalled"
+                    # count steps in checkpoint log
+                    ckpt_path = ckpts_dir / f"{task_id}.jsonl"
+                    steps = []
+                    if ckpt_path.exists():
+                        try:
+                            steps = [json.loads(l) for l in ckpt_path.read_text().splitlines() if l.strip()]
+                        except Exception:
+                            pass
+                    last_step = steps[-1] if steps else None
+                    # resolve owner name
+                    owner_id   = lease.get("owner", "")
+                    owner_name = owner_id
+                    for a in _config.get("agents", []):
+                        if a.get("id") == owner_id:
+                            owner_name = a.get("name", owner_id)
+                            break
+                    tasks.append({
+                        "task_id":        task_id,
+                        "owner":          owner_id,
+                        "owner_name":     owner_name,
+                        "state":          state,
+                        "started_at":     lease.get("started_at"),
+                        "last_heartbeat": lease.get("last_heartbeat"),
+                        "expires_at":     lease.get("expires_at"),
+                        "step_count":     len(steps),
+                        "last_step":      last_step,
+                        "stalled":        state == "stalled",
+                    })
+            # sort: running→paused→stalled→complete→cancelled
+            _order = {"running": 0, "paused": 1, "stalled": 2, "complete": 3, "cancelled": 4}
+            tasks.sort(key=lambda t: (_order.get(t["state"], 9), -(t["last_heartbeat"] or 0)))
+            self.reply_json({"tasks": tasks, "count": len(tasks)})
+
+        # ── P2: audit log ──────────────────────────────────────────────────
+        elif parsed.path == "/api/audit":
+            if not self.auth_check(redirect=False): return
+            try:
+                limit = min(int(qs.get("limit", ["50"])[0]), 200)
+            except (ValueError, TypeError):
+                limit = 50
+            entries = []
+            if AUDIT_LOG.exists():
+                try:
+                    lines = AUDIT_LOG.read_text().splitlines()
+                    for line in reversed(lines[-200:]):
+                        line = line.strip()
+                        if line:
+                            try:
+                                entries.append(json.loads(line))
+                            except Exception:
+                                pass
+                        if len(entries) >= limit:
+                            break
+                except Exception:
+                    pass
+            self.reply_json({"entries": entries, "count": len(entries)})
+
+        # ── P3: policy presets ─────────────────────────────────────────────
+        elif parsed.path == "/api/policy/presets":
+            if not self.auth_check(redirect=False): return
+            active = _config.get("preferences", {}).get("policy_preset", "balanced")
+            out = [dict(p, active=(p["id"] == active)) for p in POLICY_PRESETS]
+            self.reply_json({"presets": out, "active": active})
+
         else:
             self.reply_html("<h1>Not found</h1>", 404)
 
@@ -4470,6 +4806,22 @@ class Handler(BaseHTTPRequestHandler):
             step_id   = data.get("step_id", "")
             operation = data.get("operation", "")
             status    = data.get("status", "")
+            # concurrency enforcement (bearer agents only)
+            if status == "started":
+                agent = self.get_agent_from_bearer()
+                if agent:
+                    max_c = agent.get("max_concurrent", 0)
+                    if max_c > 0:
+                        _now = time.time()
+                        leases_dir = RUNTIME_DIR / "leases"
+                        running = sum(
+                            _safe_lease_running(lf, agent["id"], _now)
+                            for lf in leases_dir.glob("*.json")
+                        ) if leases_dir.exists() else 0
+                        if running >= max_c:
+                            self.reply_json({"error": "Concurrency limit reached",
+                                             "max_concurrent": max_c, "running": running}, 429)
+                            return
             metadata  = data.get("metadata", {})
             errors = []
             if not task_id or not re.match(r'^[\w\-\.]+$', task_id):
@@ -5000,7 +5352,8 @@ class Handler(BaseHTTPRequestHandler):
             data  = self.read_json_body()
             prefs = _config.setdefault("preferences", {})
             allowed = {"onboarding_complete", "default_location", "checkpoint_interval",
-                       "lease_ttl", "auto_resume", "show_hidden", "density", "editor_font_size"}
+                       "lease_ttl", "auto_resume", "show_hidden", "density", "editor_font_size",
+                       "policy_preset"}
             for k, v in data.items():
                 if k in allowed:
                     prefs[k] = v
@@ -5030,6 +5383,108 @@ class Handler(BaseHTTPRequestHandler):
             allowed = capability in caps and ns_ok
             self.reply_json({"allowed": allowed, "role": role, "namespace": namespace})
 
+        # ── P2: task operations ────────────────────────────────────────────
+        elif parsed.path == "/api/tasks":
+            if not self.auth_check(redirect=False): return
+            data    = self.read_json_body()
+            action  = data.get("action", "")
+            now     = time.time()
+            session = self.get_session_token()
+            actor   = _config.get("username", "admin") if session else "agent"
+
+            if action == "clear_completed":
+                leases_dir = RUNTIME_DIR / "leases"
+                removed = 0
+                if leases_dir.exists():
+                    for lf in list(leases_dir.glob("*.json")):
+                        try:
+                            lease = json.loads(lf.read_text())
+                            if lease.get("state") in ("complete", "cancelled"):
+                                lf.unlink()
+                                removed += 1
+                        except Exception:
+                            pass
+                _append_audit("task.clear_completed", "*", actor, details={"removed": removed})
+                self.reply_json({"ok": True, "removed": removed})
+
+            elif action == "update_agent_concurrency":
+                agent_id    = data.get("agent_id", "")
+                try:
+                    max_c = int(data.get("max_concurrent", 0))
+                except (TypeError, ValueError):
+                    self.reply_json({"error": "max_concurrent must be an integer"}, 400); return
+                if max_c < 0:
+                    self.reply_json({"error": "max_concurrent must be >= 0"}, 400); return
+                agent = _agent_by_id(agent_id)
+                if not agent:
+                    self.reply_json({"error": "agent not found"}, 404); return
+                agent["max_concurrent"] = max_c
+                save_config(_config)
+                _append_audit("agent.set_concurrency", agent_id, actor,
+                              details={"max_concurrent": max_c})
+                self.reply_json({"ok": True, "agent_id": agent_id, "max_concurrent": max_c})
+
+            else:
+                task_id = data.get("task_id", "")
+                if not task_id:
+                    self.reply_json({"error": "task_id required"}, 400); return
+                lease_path = RUNTIME_DIR / "leases" / f"{task_id}.json"
+                if not lease_path.exists():
+                    self.reply_json({"error": "task not found"}, 404); return
+                try:
+                    lease = json.loads(lease_path.read_text())
+                except Exception:
+                    lease = {}
+                state = lease.get("state", "running")
+                # auto-classify stalled
+                if state == "running" and lease.get("expires_at", 0) < now:
+                    state = "stalled"
+
+                if action == "pause":
+                    if state not in ("running", "stalled"):
+                        self.reply_json({"error": f"Cannot pause task in state: {state}"}, 409); return
+                    lease["state"] = "paused"
+                    lease_path.write_text(json.dumps(lease, indent=2))
+                    _append_audit("task.pause", task_id, actor)
+                    self.reply_json({"ok": True, "task_id": task_id, "state": "paused"})
+
+                elif action == "resume":
+                    if state != "paused":
+                        self.reply_json({"error": f"Cannot resume task in state: {state}"}, 409); return
+                    ttl = _config.get("preferences", {}).get("lease_ttl", 300)
+                    lease["state"]          = "running"
+                    lease["last_heartbeat"] = now
+                    lease["expires_at"]     = now + ttl
+                    lease_path.write_text(json.dumps(lease, indent=2))
+                    _append_audit("task.resume", task_id, actor)
+                    self.reply_json({"ok": True, "task_id": task_id, "state": "running"})
+
+                elif action == "cancel":
+                    if state in ("complete", "cancelled"):
+                        self.reply_json({"error": f"Task already in terminal state: {state}"}, 409); return
+                    lease["state"] = "cancelled"
+                    lease_path.write_text(json.dumps(lease, indent=2))
+                    # append cancel step to checkpoint log
+                    ckpt_path = RUNTIME_DIR / "checkpoints" / f"{task_id}.jsonl"
+                    cancel_entry = json.dumps({
+                        "task_id":   task_id,
+                        "step_id":   "cancel",
+                        "operation": "cancel",
+                        "status":    "done",
+                        "timestamp": now,
+                        "metadata":  {"cancelled_by": actor},
+                    })
+                    try:
+                        with open(ckpt_path, "a", encoding="utf-8") as f:
+                            f.write(cancel_entry + "\n")
+                    except Exception:
+                        pass
+                    _append_audit("task.cancel", task_id, actor)
+                    self.reply_json({"ok": True, "task_id": task_id, "state": "cancelled"})
+
+                else:
+                    self.reply_json({"error": f"Unknown action: {action}"}, 400)
+
         else:
             self.reply_html("<h1>Not found</h1>", 404)
 
@@ -5041,7 +5496,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.6.0 ready (localhost only)")
+    print(f"\n  Porter v0.9.0 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
