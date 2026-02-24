@@ -540,7 +540,7 @@ body {
   transition: width .4s ease;
 }
 .ver-link {
-  display:block; margin-top:10px; padding-bottom:2px;
+  display:block; padding: 5px 20px;
   font-size:10px; font-weight:600; letter-spacing:.8px;
   text-transform:uppercase; color:var(--text3);
   cursor:pointer; transition:color .15s; border:none; background:none;
@@ -552,6 +552,7 @@ body {
 .main {
   flex: 1; display: flex; flex-direction: column; min-width: 0;
   overflow: hidden; transition: padding-right .2s ease;
+  position: relative;
 }
 .main.preview-open { padding-right: var(--preview); }
 
@@ -919,18 +920,18 @@ kbd {
 }
 .shortcut-desc { font-size: 13px; color: var(--text2); }
 
-/* changelog modal */
-.changelog-modal {
-  background:var(--raised); border:1px solid var(--border2);
-  border-radius:12px; width:460px; max-height:70vh;
-  display:flex; flex-direction:column; overflow:hidden;
-  box-shadow:0 20px 60px rgba(0,0,0,.6);
+/* light theme */
+:root.light {
+  --bg:      #F4F4F4;
+  --surface: #FFFFFF;
+  --raised:  #EBEBEB;
+  --border:  #DEDEDE;
+  --border2: #CECECE;
+  --text:    #1A1A1A;
+  --text2:   #555555;
+  --text3:   #999999;
 }
-.changelog-header {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:18px 24px; border-bottom:1px solid var(--border); flex-shrink:0;
-}
-.changelog-body { overflow-y:auto; padding:16px 24px 24px; }
+:root.light ::-webkit-scrollbar-thumb { background: #ccc; }
 .cl-ver-row {
   display:flex; align-items:baseline; gap:10px;
   margin-top:20px; padding-bottom:8px; border-bottom:1px solid var(--border);
@@ -988,14 +989,12 @@ body.density-compact .file-name { padding: 6px 0; }
   overflow: hidden; text-overflow: ellipsis; }
 .user-sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
 
-/* settings overlay */
-.settings-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75);
-  backdrop-filter: blur(4px); z-index: 400; display: none; align-items: center; justify-content: center; }
-.settings-overlay.open { display: flex; }
-.settings-dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-  width: 700px; height: 500px; display: flex; overflow: hidden; position: relative;
-  box-shadow: 0 30px 80px rgba(0,0,0,.7); }
-.settings-nav { width: 180px; background: var(--bg); border-right: 1px solid var(--border);
+/* settings panel — full main-area, no backdrop */
+#settingsPanel { display: none; position: absolute; inset: 0; z-index: 50;
+  background: var(--bg); flex-direction: row; }
+#settingsPanel.open { display: flex; }
+.settings-nav { width: 200px; min-width: 200px; background: var(--surface);
+  border-right: 1px solid var(--border);
   padding: 20px 0; display: flex; flex-direction: column; }
 .settings-nav-title { padding: 0 16px 16px; font-size: 11px; font-weight: 600;
   letter-spacing: .8px; color: var(--text3); text-transform: uppercase; }
@@ -1112,7 +1111,7 @@ body.density-compact .file-name { padding: 6px 0; }
   <div class="nav-label">Locations</div>
   <div id="locations"></div>
   <div class="sidebar-footer" id="sfooter"></div>
-  <button class="ver-link" onclick="openChangelog()" title="View release notes">Porter v0.6.0 — Release notes</button>
+  <button class="ver-link" onclick="openSettings('changelog')" title="What's new">v0.6.0 — What's new</button>
   <div class="user-card" id="userCard" onclick="openSettings('account')">
     <div class="user-avatar" id="ucAvatar"></div>
     <div style="min-width:0;flex:1">
@@ -1150,6 +1149,11 @@ body.density-compact .file-name { padding: 6px 0; }
       <!-- shortcuts -->
       <button class="btn btn-icon" onclick="toggleShortcuts()" title="Keyboard shortcuts (?)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="6" cy="12" r=".5" fill="currentColor"/><circle cx="10" cy="12" r=".5" fill="currentColor"/><circle cx="14" cy="12" r=".5" fill="currentColor"/><circle cx="18" cy="12" r=".5" fill="currentColor"/><line x1="8" y1="15" x2="16" y2="15"/></svg>
+      </button>
+      <button class="btn btn-icon" id="btnTheme" onclick="toggleTheme()" title="Toggle light / dark mode">
+        <svg id="themeIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+        </svg>
       </button>
       <button class="btn btn-ghost" id="btnMkdir" onclick="openMkdir()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
@@ -1197,94 +1201,9 @@ body.density-compact .file-name { padding: 6px 0; }
     </div>
     <div id="listing"></div>
   </div>
-</main>
 
-<!-- preview panel -->
-<div class="preview-panel" id="previewPanel">
-  <div class="preview-header">
-    <span class="preview-filename" id="previewFilename">—</span>
-    <div class="preview-actions">
-      <button class="btn btn-ghost" id="btnEdit" onclick="openEditor()" style="display:none;padding:5px 10px;font-size:12px">Edit</button>
-      <button class="btn btn-primary" id="btnSave" onclick="saveFile()" style="display:none;padding:5px 10px;font-size:12px">Save</button>
-      <button class="btn btn-icon" onclick="closePreview()" title="Close (Esc)" style="padding:6px 7px">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-  </div>
-  <div class="preview-body" id="previewBody"></div>
-</div>
-
-<!-- hidden file input -->
-<input type="file" id="fileInput" style="display:none" multiple>
-
-<!-- upload progress -->
-<div class="upload-bar" id="uploadBar">
-  <div class="upload-bar-name" id="uploadName">Uploading…</div>
-  <progress class="ubar" id="uploadProgress"></progress>
-</div>
-
-<!-- toast container -->
-<div id="toasts"></div>
-
-<!-- dropdown (shared, moved via JS) -->
-<div class="dropdown" id="dropdown" style="display:none"></div>
-
-<!-- main modal -->
-<div class="overlay" id="overlay" style="display:none" onclick="if(event.target===this)closeModal()">
-  <div class="modal" id="modal">
-    <h3 id="modalTitle"></h3>
-    <p id="modalDesc"></p>
-    <input type="text" id="modalInput" style="display:none">
-    <div class="modal-actions" id="modalActions"></div>
-  </div>
-</div>
-
-<!-- folder picker overlay -->
-<div class="overlay" id="fpOverlay" style="display:none" onclick="if(event.target===this)closeFolderPicker()">
-  <div class="fp-modal">
-    <div class="fp-modal-header">
-      <h3>Move to…</h3>
-      <p>Select a destination folder</p>
-    </div>
-    <div class="fp-list" id="fpList"></div>
-    <div class="fp-modal-footer">
-      <button class="btn btn-ghost" onclick="closeFolderPicker()">Cancel</button>
-      <button class="btn btn-primary" onclick="confirmFolderPicker()">Move here</button>
-    </div>
-  </div>
-</div>
-
-<!-- shortcuts overlay -->
-<div class="overlay" id="shortcutsOverlay" style="display:none" onclick="if(event.target===this)toggleShortcuts()">
-  <div class="shortcuts-modal">
-    <h3>Keyboard Shortcuts</h3>
-    <div class="shortcuts-grid">
-      <kbd>/</kbd><span class="shortcut-desc">Search files</span>
-      <kbd>r</kbd><span class="shortcut-desc">Refresh listing</span>
-      <kbd>n</kbd><span class="shortcut-desc">New folder</span>
-      <kbd>u</kbd><span class="shortcut-desc">Upload files</span>
-      <kbd>Backspace</kbd><span class="shortcut-desc">Go up one level</span>
-      <kbd>Esc</kbd><span class="shortcut-desc">Close / cancel</span>
-      <kbd>?</kbd><span class="shortcut-desc">Toggle this overlay</span>
-    </div>
-  </div>
-</div>
-
-<!-- changelog overlay -->
-<div class="overlay" id="changelogOverlay" style="display:none"
-     onclick="if(event.target===this)closeChangelog()">
-  <div class="changelog-modal">
-    <div class="changelog-header">
-      <span style="font-size:15px;font-weight:600;">Release Notes</span>
-      <button class="btn btn-icon" onclick="closeChangelog()">✕</button>
-    </div>
-    <div class="changelog-body" id="changelogBody"></div>
-  </div>
-</div>
-
-<!-- settings overlay -->
-<div class="settings-overlay" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
-  <div class="settings-dialog">
+  <!-- settings panel — covers file browser when open, no overlay backdrop -->
+  <div id="settingsPanel">
 
     <!-- left nav -->
     <div class="settings-nav">
@@ -1305,11 +1224,10 @@ body.density-compact .file-name { padding: 6px 0; }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
         Permissions
       </button>
-      <button class="settings-nav-item" id="snav-appearance" onclick="switchSettingsTab('appearance')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
-        Appearance
+      <button class="settings-nav-item" id="snav-changelog" onclick="switchSettingsTab('changelog')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        What's new
       </button>
-      <!-- spacer pushes logout to bottom -->
       <div style="flex:1"></div>
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
@@ -1322,9 +1240,10 @@ body.density-compact .file-name { padding: 6px 0; }
     <!-- right content -->
     <div class="settings-content">
 
-      <!-- close button -->
+      <!-- close / back button -->
       <button class="btn btn-icon" onclick="closeSettings()"
-              style="position:absolute;top:14px;right:14px;padding:6px 7px;border:none">
+              style="position:absolute;top:14px;right:14px;padding:6px 7px;border:none"
+              title="Close settings (Esc)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
 
@@ -1363,39 +1282,17 @@ body.density-compact .file-name { padding: 6px 0; }
             <button class="btn btn-ghost" onclick="changePassword()">Update password</button>
           </div>
         </div>
-      </div>
-
-      <!-- Appearance page -->
-      <div class="settings-page" id="spage-appearance">
-        <div class="settings-page-title">Appearance</div>
-        <div class="settings-row">
-          <div>
-            <div class="settings-row-label">Row density</div>
-          </div>
-          <div class="seg-ctrl" id="seg-density">
-            <button onclick="setSetting('density','comfortable')" data-val="comfortable">Cosy</button>
-            <button onclick="setSetting('density','compact')" data-val="compact">Compact</button>
-          </div>
-        </div>
-        <div class="settings-row">
-          <div>
-            <div class="settings-row-label">Show hidden files</div>
-            <div class="settings-row-desc">Files and folders starting with .</div>
-          </div>
-          <label class="settings-toggle">
-            <input type="checkbox" id="tog-showHidden" onchange="setSetting('showHidden',this.checked)">
-            <span class="slider"></span>
-          </label>
-        </div>
-        <div class="settings-row">
-          <div>
-            <div class="settings-row-label">Editor font size</div>
-          </div>
-          <div class="seg-ctrl" id="seg-fontSize">
-            <button onclick="setSetting('fontSize',11)" data-val="11">11</button>
-            <button onclick="setSetting('fontSize',12)" data-val="12">12</button>
-            <button onclick="setSetting('fontSize',13)" data-val="13">13</button>
-            <button onclick="setSetting('fontSize',14)" data-val="14">14</button>
+        <div class="pw-section">
+          <div class="pw-section-title">Display</div>
+          <div class="settings-row">
+            <div>
+              <div class="settings-row-label">Show hidden files</div>
+              <div class="settings-row-desc">Files and folders starting with .</div>
+            </div>
+            <label class="settings-toggle">
+              <input type="checkbox" id="tog-showHidden" onchange="setSetting('showHidden',this.checked)">
+              <span class="slider"></span>
+            </label>
           </div>
         </div>
       </div>
@@ -1491,19 +1388,98 @@ body.density-compact .file-name { padding: 6px 0; }
               <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Admin</th>
             </tr>
           </thead>
-          <tbody id="perm-matrix">
+          <tbody>
             <tr><td style="padding:7px 8px;color:var(--text2)">Viewer</td>   <td style="text-align:center">✓</td><td></td><td></td><td></td><td></td></tr>
             <tr><td style="padding:7px 8px;color:var(--text2)">Writer</td>   <td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td></tr>
             <tr><td style="padding:7px 8px;color:var(--text2)">Operator</td> <td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td></tr>
             <tr><td style="padding:7px 8px;color:var(--text2)">Admin</td>    <td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td></tr>
           </tbody>
         </table>
-        <div style="margin-top:24px;font-size:13px;color:var(--text3)">Namespaces available: projects · people · decisions · compliance · transcripts · artifacts · indexes · pointers · runtime</div>
+        <div style="margin-top:24px;font-size:13px;color:var(--text3)">Namespaces: projects · people · decisions · compliance · transcripts · artifacts · indexes · pointers · runtime</div>
+      </div>
+
+      <!-- What's new / Changelog page -->
+      <div class="settings-page" id="spage-changelog">
+        <div class="settings-page-title">What's new</div>
+        <div id="changelog-content"></div>
       </div>
 
     </div><!-- /settings-content -->
-  </div><!-- /settings-dialog -->
+  </div><!-- /settingsPanel -->
+
+</main>
+
+<!-- preview panel -->
+<div class="preview-panel" id="previewPanel">
+  <div class="preview-header">
+    <span class="preview-filename" id="previewFilename">—</span>
+    <div class="preview-actions">
+      <button class="btn btn-ghost" id="btnEdit" onclick="openEditor()" style="display:none;padding:5px 10px;font-size:12px">Edit</button>
+      <button class="btn btn-primary" id="btnSave" onclick="saveFile()" style="display:none;padding:5px 10px;font-size:12px">Save</button>
+      <button class="btn btn-icon" onclick="closePreview()" title="Close (Esc)" style="padding:6px 7px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="preview-body" id="previewBody"></div>
 </div>
+
+<!-- hidden file input -->
+<input type="file" id="fileInput" style="display:none" multiple>
+
+<!-- upload progress -->
+<div class="upload-bar" id="uploadBar">
+  <div class="upload-bar-name" id="uploadName">Uploading…</div>
+  <progress class="ubar" id="uploadProgress"></progress>
+</div>
+
+<!-- toast container -->
+<div id="toasts"></div>
+
+<!-- dropdown (shared, moved via JS) -->
+<div class="dropdown" id="dropdown" style="display:none"></div>
+
+<!-- main modal -->
+<div class="overlay" id="overlay" style="display:none" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal">
+    <h3 id="modalTitle"></h3>
+    <p id="modalDesc"></p>
+    <input type="text" id="modalInput" style="display:none">
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+
+<!-- folder picker overlay -->
+<div class="overlay" id="fpOverlay" style="display:none" onclick="if(event.target===this)closeFolderPicker()">
+  <div class="fp-modal">
+    <div class="fp-modal-header">
+      <h3>Move to…</h3>
+      <p>Select a destination folder</p>
+    </div>
+    <div class="fp-list" id="fpList"></div>
+    <div class="fp-modal-footer">
+      <button class="btn btn-ghost" onclick="closeFolderPicker()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmFolderPicker()">Move here</button>
+    </div>
+  </div>
+</div>
+
+<!-- shortcuts overlay -->
+<div class="overlay" id="shortcutsOverlay" style="display:none" onclick="if(event.target===this)toggleShortcuts()">
+  <div class="shortcuts-modal">
+    <h3>Keyboard Shortcuts</h3>
+    <div class="shortcuts-grid">
+      <kbd>/</kbd><span class="shortcut-desc">Search files</span>
+      <kbd>r</kbd><span class="shortcut-desc">Refresh listing</span>
+      <kbd>n</kbd><span class="shortcut-desc">New folder</span>
+      <kbd>u</kbd><span class="shortcut-desc">Upload files</span>
+      <kbd>Backspace</kbd><span class="shortcut-desc">Go up one level</span>
+      <kbd>Esc</kbd><span class="shortcut-desc">Close / cancel</span>
+      <kbd>?</kbd><span class="shortcut-desc">Toggle this overlay</span>
+    </div>
+  </div>
+</div>
+
 
 <!-- hidden avatar file input -->
 <input type="file" id="avatarInput" style="display:none" accept="image/jpeg,image/png,image/webp,image/gif">
@@ -1615,6 +1591,7 @@ function loadSettings() {
     }
   } catch(e) { settings = { ...SETTINGS_DEFAULTS }; }
   applySettings(); syncSettingsUI();
+  applyTheme(localStorage.getItem('porter_theme') || 'dark');
 }
 function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
 function setSetting(key, val) {
@@ -1626,23 +1603,38 @@ function applySettings() {
   document.documentElement.style.setProperty('--editor-font-size', settings.fontSize + 'px');
 }
 function syncSettingsUI() {
-  document.querySelectorAll('#seg-density button').forEach(b =>
-    b.classList.toggle('active', b.dataset.val === settings.density));
-  document.querySelectorAll('#seg-fontSize button').forEach(b =>
-    b.classList.toggle('active', +b.dataset.val === settings.fontSize));
   const th = document.getElementById('tog-showHidden');
   if (th) th.checked = settings.showHidden;
 }
 
-// ── settings overlay ──
+// ── theme ──
+function applyTheme(t) {
+  const light = t === 'light';
+  document.documentElement.classList.toggle('light', light);
+  const icon = document.getElementById('themeIcon');
+  if (icon) {
+    icon.innerHTML = light
+      // sun
+      ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+      // moon
+      : '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>';
+  }
+  try { localStorage.setItem('porter_theme', t); } catch(e) {}
+}
+function toggleTheme() {
+  applyTheme(document.documentElement.classList.contains('light') ? 'dark' : 'light');
+}
+
+// ── settings panel ──
 function openSettings(tab = 'account') {
   switchSettingsTab(tab); syncSettingsUI();
-  document.getElementById('settingsOverlay').classList.add('open');
-  if (tab === 'locations') loadLocations();
-  if (tab === 'agents')    loadAgents();
+  document.getElementById('settingsPanel').classList.add('open');
+  if (tab === 'locations')  loadLocations();
+  if (tab === 'agents')     loadAgents();
+  if (tab === 'changelog')  populateChangelog();
 }
 function closeSettings() {
-  document.getElementById('settingsOverlay').classList.remove('open');
+  document.getElementById('settingsPanel').classList.remove('open');
   document.getElementById('sa-pwCurrent').value = '';
   document.getElementById('sa-pwNew').value = '';
 }
@@ -1651,6 +1643,14 @@ function switchSettingsTab(tab) {
     el.classList.toggle('active', el.id === 'snav-' + tab));
   document.querySelectorAll('.settings-page').forEach(el =>
     el.classList.toggle('active', el.id === 'spage-' + tab));
+}
+function populateChangelog() {
+  const el = document.getElementById('changelog-content');
+  if (!el || el.childElementCount) return;  // already populated
+  el.innerHTML = CHANGELOG.map(v =>
+    `<div class="cl-ver-row"><span class="cl-vtag">${v.ver}</span><span class="cl-vdate">${v.date}</span></div>
+     <ul class="cl-notes">${v.notes.map(n=>`<li>${escHtml(n)}</li>`).join('')}</ul>`
+  ).join('');
 }
 
 // ── locations ──────────────────────────────────────────────────────────────
@@ -2663,27 +2663,12 @@ const CHANGELOG = [
   ]},
 ];
 
-function openChangelog() {
-  document.getElementById('changelogBody').innerHTML = CHANGELOG.map(v =>
-    `<div class="cl-ver-row">
-       <span class="cl-vtag">${v.ver}</span>
-       <span class="cl-vdate">${v.date}</span>
-     </div>
-     <ul class="cl-notes">${v.notes.map(n=>`<li>${escHtml(n)}</li>`).join('')}</ul>`
-  ).join('');
-  document.getElementById('changelogOverlay').style.display = 'flex';
-}
-function closeChangelog() {
-  document.getElementById('changelogOverlay').style.display = 'none';
-}
-
 document.addEventListener('keydown', function(e) {
   const tag = (document.activeElement.tagName || '').toLowerCase();
   const inInput = tag === 'input' || tag === 'textarea' || document.activeElement.isContentEditable;
 
   if (e.key === 'Escape') {
-    if (document.getElementById('settingsOverlay').classList.contains('open')) { closeSettings(); return; }
-    if (document.getElementById('changelogOverlay').style.display !== 'none') { closeChangelog(); return; }
+    if (document.getElementById('settingsPanel').classList.contains('open')) { closeSettings(); return; }
     if (document.getElementById('shortcutsOverlay').style.display !== 'none') { toggleShortcuts(); return; }
     if (document.getElementById('fpOverlay').style.display !== 'none') { closeFolderPicker(); return; }
     if (document.getElementById('overlay').style.display !== 'none') { closeModal(); return; }
