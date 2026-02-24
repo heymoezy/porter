@@ -53,6 +53,13 @@ HEARTBEAT_TTL_MIN = 30    # seconds
 HEARTBEAT_TTL_MAX = 3600  # seconds
 HEARTBEAT_TTL_DEF = 300   # seconds
 
+ROLE_CAPS: dict[str, set] = {
+    "viewer":   {"read"},
+    "writer":   {"read", "write", "checkpoint"},
+    "operator": {"read", "write", "checkpoint", "finalize"},
+    "admin":    {"read", "write", "checkpoint", "finalize", "admin"},
+}
+
 # ── config helpers ────────────────────────────────────────────────────────
 
 def _hash_password(password: str, salt: str) -> str:
@@ -3100,6 +3107,39 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"error": "unauthorized"}, 401)
         return False
 
+    def get_agent_from_bearer(self) -> dict | None:
+        """Return the agent dict if a valid Bearer token is present, else None."""
+        auth = self.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return None
+        raw_key = auth[7:].strip()
+        if not raw_key:
+            return None
+        key_hash = _hash_agent_key(raw_key)
+        for agent in _config.get("agents", []):
+            if agent.get("key_hash") == key_hash and agent.get("status") != "revoked":
+                return agent
+        return None
+
+    def auth_check_cap(self, capability: str) -> bool:
+        """Auth check that accepts a session cookie (browser) OR a Bearer token with
+        the required capability (agent).  Sends 401/403 JSON and returns False on denial."""
+        # Browser session → full access
+        token = self.get_session_token()
+        if token and get_session(token):
+            return True
+        # Agent Bearer token → check capability
+        agent = self.get_agent_from_bearer()
+        if agent:
+            if capability in ROLE_CAPS.get(agent.get("role", "viewer"), set()):
+                return True
+            self.reply_json({"error": "forbidden",
+                             "reason": f"role '{agent.get('role')}' lacks '{capability}' capability"}, 403)
+            return False
+        # No valid auth
+        self.reply_json({"error": "unauthorized"}, 401)
+        return False
+
     def do_GET(self):
         parsed = urlparse(self.path)
         qs = parse_qs(parsed.query)
@@ -3218,7 +3258,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P0: runtime recover ────────────────────────────────────────────
         elif parsed.path == "/runtime/recover":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("read"): return
             task_id = qs.get("task_id", [""])[0]
             if not task_id or not re.match(r'^[\w\-\.]+$', task_id):
                 self.reply_json({"error": "invalid task_id"}, 400); return
@@ -3262,7 +3302,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P1: memory fetch ───────────────────────────────────────────────
         elif parsed.path == "/memory/fetch":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("read"): return
             uri      = qs.get("uri",   [""])[0]
             from_ln  = int(qs.get("from",  ["1"])[0])
             n_lines  = int(qs.get("lines", ["0"])[0])
@@ -3567,7 +3607,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P0: runtime checkpoint ─────────────────────────────────────────
         elif parsed.path == "/runtime/checkpoint":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("checkpoint"): return
             data = self.read_json_body()
             task_id   = data.get("task_id", "")
             step_id   = data.get("step_id", "")
@@ -3601,7 +3641,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P0: runtime heartbeat ──────────────────────────────────────────
         elif parsed.path == "/runtime/heartbeat":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("checkpoint"): return
             data    = self.read_json_body()
             task_id = data.get("task_id", "")
             if not task_id or not re.match(r'^[\w\-\.]+$', task_id):
@@ -3638,7 +3678,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P0: runtime finalize ───────────────────────────────────────────
         elif parsed.path == "/runtime/finalize":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("finalize"): return
             data      = self.read_json_body()
             task_id   = data.get("task_id", "")
             temp_uri  = data.get("temp_uri", "")
@@ -3680,7 +3720,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P1: memory search ──────────────────────────────────────────────
         elif parsed.path == "/memory/search":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("read"): return
             data        = self.read_json_body()
             query       = data.get("query", "")
             limit       = min(int(data.get("limit", 10)), 50)
@@ -3763,7 +3803,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P1: memory upsert ──────────────────────────────────────────────
         elif parsed.path == "/memory/upsert":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("write"): return
             data    = self.read_json_body()
             uri     = data.get("uri", "")
             content = data.get("content", "")
@@ -3784,7 +3824,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P1: memory pointer ─────────────────────────────────────────────
         elif parsed.path == "/memory/pointer":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("write"): return
             data = self.read_json_body()
             ptr_id     = data.get("id", "")
             title      = data.get("title", "")
