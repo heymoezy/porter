@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.1 — self-hosted file manager"""
+"""Porter v0.12.2 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.1</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.2</div>
   </div>
 </aside>
 
@@ -1755,13 +1755,8 @@ body.density-compact .file-name { padding: 6px 0; }
     </div>
     <div class="module-section">
       <div class="module-section-title">Connectivity (Tailscale)</div>
-      <div style="font-size:13px;color:var(--text3);margin-bottom:12px">Connect/disconnect network transport first, then expose mounted paths.</div>
-      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-        <button class="btn btn-ghost" style="font-size:12px" onclick="tailscaleControl('test')">Test</button>
-        <button class="btn btn-primary" style="font-size:12px" onclick="tailscaleControl('up')">Connect</button>
-        <button class="btn btn-danger" style="font-size:12px" onclick="tailscaleControl('down')">Disconnect</button>
-      </div>
-      <div id="ts-control-status" style="margin-bottom:10px;font-size:12px;color:var(--text3)"></div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:12px">Transport controls are disabled on this server to prevent lockouts. Status is still visible below.</div>
+      <div id="ts-control-status" style="margin-bottom:10px;font-size:12px;color:var(--text3)">Connect/Disconnect is disabled by policy.</div>
       <div id="ts-panel-locations"><div style="color:var(--text3);font-size:13px">Loading connectivity&#8230;</div></div>
       <div id="ts-last-updated-locations" style="margin-top:8px;font-size:11px;color:var(--text3)"></div>
     </div>
@@ -1956,15 +1951,19 @@ body.density-compact .file-name { padding: 6px 0; }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         Profile
       </button>
-      <button class="settings-nav-item" id="snav-network" onclick="switchModule('locations');loadTailscaleStatus(true)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/></svg>
-        Connectivity (moved to Locations)
+      <button class="settings-nav-item" id="snav-password" onclick="switchSettingsTab('password')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        Password
+      </button>
+      <button class="settings-nav-item" id="snav-billing" onclick="switchSettingsTab('billing')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        Billing
       </button>
       <div style="flex:1"></div>
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.1 — What's new
+          v0.12.2 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2008,21 +2007,7 @@ body.density-compact .file-name { padding: 6px 0; }
         <div class="settings-save-row">
           <button class="btn btn-primary" onclick="saveAccount()">Save changes</button>
         </div>
-        <div class="pw-section">
-          <div class="pw-section-title">Change password</div>
-          <div class="pw-helper">Owner mode — you're already authenticated. Enter and confirm your new password.</div>
-          <div class="settings-field">
-            <label>New password <span style="color:var(--text3);font-weight:400">(min 8 chars)</span></label>
-            <input type="password" class="settings-input" id="sa-pwNew" autocomplete="new-password">
-          </div>
-          <div class="settings-field">
-            <label>Confirm new password</label>
-            <input type="password" class="settings-input" id="sa-pwConfirm" autocomplete="new-password">
-          </div>
-          <div class="settings-save-row">
-            <button class="btn btn-ghost" onclick="changePassword()">Update password</button>
-          </div>
-        </div>
+        <!-- moved to Password tab -->
       </div>
 
       <!-- Locations page -->
@@ -2192,17 +2177,31 @@ body.density-compact .file-name { padding: 6px 0; }
         </div>
       </div>
 
-      <!-- Network / Tailscale page -->
-      <div class="settings-page" id="spage-network">
-        <div class="settings-page-title">Tailscale</div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <div style="font-size:13px;color:var(--text3)">Tailscale connectivity and peer devices on your tailnet.</div>
-          <button class="btn btn-ghost" style="font-size:12px;flex-shrink:0" id="ts-refresh-btn" onclick="loadTailscaleStatus(true)">↻ Refresh</button>
+      <!-- Password page -->
+      <div class="settings-page" id="spage-password">
+        <div class="settings-page-title">Password</div>
+        <div class="pw-helper">Owner mode — you're already authenticated. Enter and confirm your new password.</div>
+        <div class="settings-field" style="margin-top:14px">
+          <label>New password <span style="color:var(--text3);font-weight:400">(min 8 chars)</span></label>
+          <input type="password" class="settings-input" id="sa-pwNew" autocomplete="new-password">
         </div>
-        <div id="ts-panel">
-          <div style="color:var(--text3);font-size:13px">Loading…</div>
+        <div class="settings-field">
+          <label>Confirm new password</label>
+          <input type="password" class="settings-input" id="sa-pwConfirm" autocomplete="new-password">
         </div>
-        <div style="font-size:11px;color:var(--text3);margin-top:8px" id="ts-last-updated"></div>
+        <div class="settings-save-row">
+          <button class="btn btn-primary" onclick="changePassword()">Update password</button>
+        </div>
+      </div>
+
+      <!-- Billing page -->
+      <div class="settings-page" id="spage-billing">
+        <div class="settings-page-title">Billing</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Stripe integration placeholder.</div>
+        <div style="background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:14px">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">Coming soon</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:6px">Subscription, invoices, payment method management, and usage-based charges will appear here once Stripe is connected.</div>
+        </div>
       </div>
 
       <!-- Task Operations page -->
@@ -2355,6 +2354,12 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.2', date:'2026-02-25', notes:[
+    'Settings IA cleanup: removed "Connectivity (moved to Locations)" from Settings navigation',
+    'Settings split: Profile and Password are now separate tabs',
+    'Settings added: Billing tab placeholder for upcoming Stripe integration',
+    'Safety hardening: Tailscale connect/disconnect controls remain disabled to prevent VPS lockouts',
+  ]},
   { ver:'v0.12.1', date:'2026-02-25', notes:[
     'Locations adds Connect/Disconnect/Test controls for Tailscale transport',
     'Tailscale nodes are now gated by connectivity state in Locations/Files navigation',
@@ -2965,7 +2970,6 @@ function closeSettings() {
 }
 function switchSettingsTab(tab) {
   if (tab === 'usage') tab = 'agents';
-  if (tab === 'network') { switchModule('locations'); loadTailscaleStatus(true); return; }
   const modules = ['tasks','agents','locations','policy','policies'];
   if (modules.includes(tab)) { switchModule(tab === 'policy' ? 'policies' : tab); return; }
   stopTsPolling();
@@ -2973,7 +2977,6 @@ function switchSettingsTab(tab) {
     el.classList.toggle('active', el.id === 'snav-' + tab));
   document.querySelectorAll('.settings-page').forEach(el =>
     el.classList.toggle('active', el.id === 'spage-' + tab));
-  if (tab === 'network') startTsPolling();
   if (tab === 'changelog') {
     populateChangelog();
     setTimeout(populateChangelog, 0);
@@ -3253,7 +3256,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.1',
+      ver: 'v0.12.2',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -5730,30 +5733,10 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/tailscale/control":
             if not self.auth_check(redirect=False): return
-            data = self.read_json_body()
-            action = str(data.get("action", "test")).strip().lower()
-            if action not in {"up", "down", "test"}:
-                self.reply_json({"ok": False, "error": "Invalid action"}, 400); return
-            try:
-                if action == "test":
-                    r = subprocess.run(["tailscale", "status", "--json"], capture_output=True, text=True, timeout=8)
-                    if r.returncode == 0:
-                        self.reply_json({"ok": True, "message": "Tailscale reachable"})
-                    else:
-                        self.reply_json({"ok": False, "error": (r.stderr or r.stdout or "tailscale status failed").strip()}, 400)
-                    return
-                cmd = ["tailscale", "up"] if action == "up" else ["tailscale", "down"]
-                r = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
-                if r.returncode != 0:
-                    msg = (r.stderr or r.stdout or f"tailscale {action} failed").strip()
-                    self.reply_json({"ok": False, "error": msg}, 400); return
-                self.reply_json({"ok": True, "message": "Connected" if action == "up" else "Disconnected"})
-            except FileNotFoundError:
-                self.reply_json({"ok": False, "error": "tailscale not installed"}, 400)
-            except subprocess.TimeoutExpired:
-                self.reply_json({"ok": False, "error": f"tailscale {action} timed out"}, 400)
-            except Exception as e:
-                self.reply_json({"ok": False, "error": str(e)}, 400)
+            self.reply_json({
+                "ok": False,
+                "error": "Tailscale connect/disconnect is disabled on this server to prevent lockouts"
+            }, 403)
 
         elif parsed.path == "/api/profile/update":
             if not self.auth_check(redirect=False): return
@@ -6792,7 +6775,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.1 ready (localhost only)")
+    print(f"\n  Porter v0.12.2 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
