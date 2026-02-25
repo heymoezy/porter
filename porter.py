@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.27 — self-hosted file manager"""
+"""Porter v0.12.28 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.27</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.28</div>
   </div>
 </aside>
 
@@ -1962,7 +1962,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.27 — What's new
+          v0.12.28 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2353,6 +2353,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.28', date:'2026-02-25', notes:[
+    'Locations nickname UX updated: action label changed to "Set nickname"',
+    'Added explicit middle Nickname column with visible current nickname value',
+    'Maintained clean 4-field row layout: Device, Nickname, OS/IP, Action',
+  ]},
   { ver:'v0.12.27', date:'2026-02-25', notes:[
     'Moved nickname editing into the primary Locations window (inline input + save per device)',
     'Replaced clumsy label wording with cleaner action text (Edit name)',
@@ -3415,7 +3420,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.27',
+      ver: 'v0.12.28',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3515,6 +3520,9 @@ function renderNodes(nodes) {
 
   el.innerHTML = `
     <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin:12px 0 8px">Device names</div>
+    <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:10px;padding:8px 12px;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.6px">
+      <div>Device</div><div>Nickname</div><div>OS / IP</div><div></div>
+    </div>
     <div style="background:var(--raised);border:1px solid var(--border);border-radius:8px;overflow:hidden">
       ${configured.map((node, idx) => {
         const nType = String(node.type || '').toLowerCase();
@@ -3529,13 +3537,16 @@ function renderNodes(nodes) {
         const os = isSelf ? (selfTs && selfTs.os ? selfTs.os : 'linux') : (peer && peer.os ? peer.os : '—');
         const ip = isSelf ? (selfTs && selfTs.ip ? selfTs.ip : (node.tailscale_ip || '—')) : ((peer && peer.ip) || node.tailscale_ip || '—');
         return `
-          <div style="display:grid;grid-template-columns:1.3fr 1fr auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)">
+          <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)">
             <div style="min-width:0">
               <div style="font-size:13px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(deviceName)}</div>
-              <div style="font-size:11px;color:var(--text3)">${escHtml(String(os))} · <span style="font-family:monospace">${escHtml(String(ip))}</span></div>
             </div>
-            <input id="nick_primary_${idx}" class="settings-input" style="height:32px;padding:6px 9px;font-size:12px" placeholder="Nickname" value="${escHtml(nickname)}" />
-            <button class="btn btn-ghost" style="font-size:11px;padding:4px 9px" onclick="saveNicknameInline('${escHtml(node.id)}','${escHtml(node.type || 'tailscale')}',${node._virtual ? 'true' : 'false'},'${escHtml(node.hostname || '')}','${escHtml(node.tailscale_ip || '')}','${escHtml(deviceName)}','nick_primary_${idx}')">Save</button>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div style="font-size:12px;color:${nickname ? 'var(--accent)' : 'var(--text3)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nickname || '—'}</div>
+              <input id="nick_primary_${idx}" class="settings-input" style="height:32px;padding:6px 9px;font-size:12px" placeholder="Set nickname" value="${escHtml(nickname)}" />
+            </div>
+            <div style="font-size:12px;color:var(--text2);white-space:nowrap">${escHtml(String(os))} · <span style="font-family:monospace">${escHtml(String(ip))}</span></div>
+            <button class="btn btn-ghost" style="font-size:11px;padding:4px 9px" onclick="saveNicknameInline('${escHtml(node.id)}','${escHtml(node.type || 'tailscale')}',${node._virtual ? 'true' : 'false'},'${escHtml(node.hostname || '')}','${escHtml(node.tailscale_ip || '')}','${escHtml(deviceName)}','nick_primary_${idx}')">Set nickname</button>
           </div>`;
       }).join('')}
     </div>`;
@@ -7077,7 +7088,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.27 ready (localhost only)")
+    print(f"\n  Porter v0.12.28 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
