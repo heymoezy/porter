@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.11.5 — self-hosted file manager"""
+"""Porter v0.11.6 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -205,6 +205,7 @@ def load_config() -> dict:
         salt = secrets.token_hex(16)
         cfg.update({
             "username":      "admin",
+            "full_name":     "",
             "display_name":  "Admin",
             "email":         "",
             "salt":          salt,
@@ -212,6 +213,11 @@ def load_config() -> dict:
         })
         print("  [porter] First run — default login: admin / porter")
         print("  [porter] Change your password immediately in Settings.")
+        changed = True
+
+    # profile key migration
+    if "full_name" not in cfg:
+        cfg["full_name"] = ""
         changed = True
 
     # ── nodes migration (v0.8: node-first model replaces flat locations) ──
@@ -1444,13 +1450,14 @@ body.density-compact .file-name { padding: 6px 0; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
       <span class="mnav-label">Overview</span>
     </button>
-    <button class="mnav-item" id="mnav-files" onclick="switchModule('files')">
+    <button class="mnav-item" id="mnav-files" onclick="closeSettings(); switchModule('files')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
       <span class="mnav-label">Files</span>
     </button>
     <div id="loc-subnav">
       <div class="nav-label" style="padding-left:34px">Locations</div>
       <div id="locations"></div>
+      <div id="sfooter-files" style="padding:8px 10px 0 34px;color:var(--text3);font-size:11px"></div>
     </div>
     <button class="mnav-item" id="mnav-tasks" onclick="switchModule('tasks')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/><line x1="3" y1="8" x2="21" y2="8"/></svg>
@@ -1499,8 +1506,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.11.5</div>
-    <div id="sfooter"></div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.11.6</div>
   </div>
 </aside>
 
@@ -1914,7 +1920,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.11.5 — What's new
+          v0.11.6 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -1943,15 +1949,17 @@ body.density-compact .file-name { padding: 6px 0; }
             <div class="avatar-hint">Click to upload · JPG, PNG, WebP, GIF</div>
           </div>
         </div>
-        <div class="settings-fields-row">
-          <div class="settings-field">
-            <label>Display name</label>
-            <input type="text" class="settings-input" id="sa-name" placeholder="Your name">
-          </div>
-          <div class="settings-field">
-            <label>Email</label>
-            <input type="email" class="settings-input" id="sa-email" placeholder="you@example.com">
-          </div>
+        <div class="settings-field">
+          <label>Full name</label>
+          <input type="text" class="settings-input" id="sa-full-name" placeholder="Your full name">
+        </div>
+        <div class="settings-field">
+          <label>What should Porter call you?</label>
+          <input type="text" class="settings-input" id="sa-name" placeholder="Preferred name">
+        </div>
+        <div class="settings-field">
+          <label>Email address</label>
+          <input type="email" class="settings-input" id="sa-email" placeholder="you@example.com">
         </div>
         <div class="settings-save-row">
           <button class="btn btn-primary" onclick="saveAccount()">Save changes</button>
@@ -1959,15 +1967,13 @@ body.density-compact .file-name { padding: 6px 0; }
         <div class="pw-section">
           <div class="pw-section-title">Change password</div>
           <div class="pw-helper">Owner mode — you're already authenticated. Enter and confirm your new password.</div>
-          <div class="settings-fields-row">
-            <div class="settings-field">
-              <label>New password <span style="color:var(--text3);font-weight:400">(min 8 chars)</span></label>
-              <input type="password" class="settings-input" id="sa-pwNew" autocomplete="new-password">
-            </div>
-            <div class="settings-field">
-              <label>Confirm new password</label>
-              <input type="password" class="settings-input" id="sa-pwConfirm" autocomplete="new-password">
-            </div>
+          <div class="settings-field">
+            <label>New password <span style="color:var(--text3);font-weight:400">(min 8 chars)</span></label>
+            <input type="password" class="settings-input" id="sa-pwNew" autocomplete="new-password">
+          </div>
+          <div class="settings-field">
+            <label>Confirm new password</label>
+            <input type="password" class="settings-input" id="sa-pwConfirm" autocomplete="new-password">
           </div>
           <div class="settings-save-row">
             <button class="btn btn-ghost" onclick="changePassword()">Update password</button>
@@ -2305,10 +2311,13 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.11.5', date:'2026-02-25', notes:[
-    'Fix: stabilized Settings/What\'s new navigation after module regressions',
+  { ver:'v0.11.6', date:'2026-02-25', notes:[
+    'Profile UI: split into Full name, "What should Porter call you?", and Email address (stacked layout)',
+    'Profile data: full_name added to config + /api/me + /api/profile/update',
+    'Password UI: New password and Confirm password moved to separate rows for small-window readability',
+    'Files UX: selecting Files now closes Settings and keeps location selection in secondary navigation',
+    'Sidebar info: free space + item count moved from primary footer into Files secondary location rail',
     'Fix: removed broken main-nav What\'s new entry (use Settings footer entry)',
-    'Fix: changelog renderer now hard-falls back and cannot render an empty panel',
   ]},
   { ver:'v0.11.1', date:'2026-02-25', notes:[
     'Bugfix: cron infinite loop and broken */step syntax resolved',
@@ -2742,10 +2751,11 @@ function renderConfigSummary(d) {
   const fmtTtl = s => s >= 86400 ? (s/86400|0)+'d' : s >= 3600 ? (s/3600|0)+'h' : s+'s';
   el.innerHTML =
     section('Auth', [
-      row('Username',     escHtml(auth.username || '—')),
-      row('Display name', escHtml(auth.display_name || '—')),
-      row('Mode',         escHtml(auth.mode || '—')),
-      row('Session TTL',  fmtTtl(auth.session_ttl || 0)),
+      row('Username',       escHtml(auth.username || '—')),
+      row('Full name',      escHtml(auth.full_name || '—')),
+      row('Preferred name', escHtml(auth.display_name || '—')),
+      row('Mode',           escHtml(auth.mode || '—')),
+      row('Session TTL',    fmtTtl(auth.session_ttl || 0)),
     ].join('')) +
     section(`Locations (${(d.locations||[]).length})`,
       (d.locations||[]).length
@@ -2801,6 +2811,7 @@ function switchModule(name) {
   document.querySelectorAll('.module-panel').forEach(el =>
     el.classList.toggle('active', el.id === name + '-module' || (name === 'settings' && el.id === 'settingsPanel')));
   const isFiles = name === 'files';
+  if (isFiles) closeSettings();
   document.body.classList.toggle('files-active', isFiles);
   ['mainToolbar','fileArea','banner','searchCountBar','selectionToolbar'].forEach(id => {
     const el = document.getElementById(id);
@@ -3120,7 +3131,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.11.5',
+      ver: 'v0.11.6',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3763,16 +3774,19 @@ async function loadMe() {
   document.getElementById('ucName').textContent = data.display_name || data.username;
   renderAvatar(document.getElementById('ucAvatar'), data);
   renderAvatar(document.getElementById('saAvatar'), data);
+  document.getElementById('sa-full-name').value = data.full_name || '';
   document.getElementById('sa-name').value = data.display_name || '';
   document.getElementById('sa-email').value = data.email || '';
 }
 
 async function saveAccount() {
+  const full_name = document.getElementById('sa-full-name').value.trim();
   const display_name = document.getElementById('sa-name').value.trim();
   const email = document.getElementById('sa-email').value.trim();
-  if (!display_name) { toast('Display name cannot be empty', 'err'); return; }
-  const res = await api('/api/profile/update', { display_name, email });
+  if (!display_name) { toast('Preferred name cannot be empty', 'err'); return; }
+  const res = await api('/api/profile/update', { full_name, display_name, email });
   if (res && res.ok) {
+    currentUser.full_name = res.full_name;
     currentUser.display_name = res.display_name;
     currentUser.email = res.email;
     document.getElementById('ucName').textContent = res.display_name;
@@ -3899,6 +3913,7 @@ async function init() {
 async function navigate(root, path) {
   curRoot = root; curPath = path;
   document.title = path ? `Porter · ${root}/${path}` : `Porter · ${root}`;
+  closeSettings();
   // Ensure we are in files module
   if (_currentModule !== 'files') switchModule('files');
   // close preview if open
@@ -4053,7 +4068,8 @@ function rowHTML(e) {
 }
 
 function updateFooter(count) {
-  const el = document.getElementById('sfooter');
+  const el = document.getElementById('sfooter-files');
+  if (!el) return;
   let html = '';
   if (diskInfo) {
     const pct = Math.min(100, Math.round(diskInfo.used / diskInfo.total * 100));
@@ -5035,6 +5051,7 @@ class Handler(BaseHTTPRequestHandler):
             )
             self.reply_json({
                 "username":     cfg.get("username", ""),
+                "full_name":    cfg.get("full_name", ""),
                 "display_name": cfg.get("display_name", ""),
                 "email":        cfg.get("email", ""),
                 "has_avatar":   has_avatar,
@@ -5183,6 +5200,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({
                 "auth": {
                     "username":     _config.get("username", "admin"),
+                    "full_name":    _config.get("full_name", ""),
                     "display_name": _config.get("display_name", ""),
                     "mode":         "single-user owner",
                     "session_ttl":  SESSION_TTL,
@@ -5569,14 +5587,16 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/profile/update":
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
+            full_name = data.get("full_name", "").strip()
             display_name = data.get("display_name", "").strip()
             email = data.get("email", "").strip()
             if not display_name:
-                self.reply_json({"ok": False, "error": "Display name cannot be empty"}, 400); return
+                self.reply_json({"ok": False, "error": "Preferred name cannot be empty"}, 400); return
+            _config["full_name"] = full_name
             _config["display_name"] = display_name
             _config["email"] = email
             save_config(_config)
-            self.reply_json({"ok": True, "display_name": display_name, "email": email})
+            self.reply_json({"ok": True, "full_name": full_name, "display_name": display_name, "email": email})
 
         elif parsed.path == "/api/password/change":
             if not self.auth_check(redirect=False): return
@@ -6601,7 +6621,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.11.5 ready (localhost only)")
+    print(f"\n  Porter v0.11.6 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
