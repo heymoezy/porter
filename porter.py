@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.23 — self-hosted file manager"""
+"""Porter v0.12.24 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.23</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.24</div>
   </div>
 </aside>
 
@@ -1962,7 +1962,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.23 — What's new
+          v0.12.24 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2353,6 +2353,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.24', date:'2026-02-25', notes:[
+    'Locations cleanup: removed all visible "Nickname: ..." rows',
+    'Self device no longer uses Hostinger-style label in device name rendering',
+    'Nickname remains available only as an explicit Set/Edit action per device',
+  ]},
   { ver:'v0.12.23', date:'2026-02-25', notes:[
     'Locations cleanup: removed the prior table section entirely',
     'Devices list now shows canonical name + optional nickname + OS/IP with a single Nickname action',
@@ -3361,7 +3366,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.23',
+      ver: 'v0.12.24',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3471,8 +3476,10 @@ function renderNodes(nodes) {
         const nId = String(node.id || '').toLowerCase();
         const nHost = String(node.hostname || '').toLowerCase();
         const isSelf = (nType === 'local' || nType === 'vps') && (serverHost && (nId === serverHost || nHost === serverHost));
-        const canonical = isSelf ? `${node.hostname || node.id} (this device)` : (node.hostname || node.id || node.label || 'device');
-        const nickname = (node.label || '').trim();
+        const canonical = isSelf ? `${node.hostname || node.id} (this device)` : (node.hostname || node.id || 'device');
+        const rawLabel = (node.label || '').trim();
+        const hostRef = String(node.hostname || node.id || '').trim();
+        const nickname = (rawLabel && rawLabel !== hostRef) ? rawLabel : '';
         const peer = node._peer || peerByHost.get(String(node.hostname || '').toLowerCase()) || peerByIp.get(String(node.tailscale_ip || '').toLowerCase());
         const os = isSelf ? (selfTs && selfTs.os ? selfTs.os : 'linux') : (peer && peer.os ? peer.os : '—');
         const ip = isSelf ? (selfTs && selfTs.ip ? selfTs.ip : (node.tailscale_ip || '—')) : ((peer && peer.ip) || node.tailscale_ip || '—');
@@ -3481,10 +3488,9 @@ function renderNodes(nodes) {
         <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border)">
           <div style="flex:1;min-width:0">
             <div style="font-size:13px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(canonical)}</div>
-            ${nickname ? `<div style="font-size:12px;color:var(--accent);margin-top:2px">Nickname: ${escHtml(nickname)}</div>` : ''}
           </div>
           <div style="font-size:12px;color:var(--text2);white-space:nowrap">${escHtml(String(os))} · <span style="font-family:monospace">${escHtml(String(ip))}</span></div>
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="setDeviceNickname('${escHtml(node.id)}','${escHtml(node.type || 'tailscale')}',${node._virtual ? 'true' : 'false'},'${escHtml(node.hostname || '')}','${escHtml(node.tailscale_ip || '')}','${escHtml(canonical)}','${escHtml(nickname)}')">Nickname</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="setDeviceNickname('${escHtml(node.id)}','${escHtml(node.type || 'tailscale')}',${node._virtual ? 'true' : 'false'},'${escHtml(node.hostname || '')}','${escHtml(node.tailscale_ip || '')}','${escHtml(canonical)}','${escHtml(nickname)}')">${nickname ? 'Edit nickname' : 'Set nickname'}</button>
         </div>`;
       }).join('')}
     </div>`;
@@ -7020,7 +7026,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.23 ready (localhost only)")
+    print(f"\n  Porter v0.12.24 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
