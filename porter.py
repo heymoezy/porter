@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.55 — self-hosted file manager"""
+"""Porter v0.12.56 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1558,7 +1558,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.55</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.56</div>
   </div>
 </aside>
 
@@ -2051,7 +2051,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.55 — What's new
+          v0.12.56 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2442,6 +2442,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.56', date:'2026-02-25', notes:[
+    'Decomplexify pass: removed dead nickname/connect helper code paths',
+    'Removed remote connect pseudo-flow from Files sidebar (local browse only, remote clearly deferred)',
+    'Simplified sidebar action logic to reduce state bugs and maintenance overhead',
+  ]},
   { ver:'v0.12.55', date:'2026-02-25', notes:[
     'Added persistent in-UI decision rubric for cancel vs recover behavior in Tasks',
     'Task cards now flag stale tasks with explicit recommend-cancel guidance',
@@ -3073,41 +3078,6 @@ function isTailscaleNodeConnected(node) {
   });
 }
 
-function _nodeForDevice(name, ip, isSelf) {
-  const host = String(name || '').toLowerCase();
-  const ipL = String(ip || '').toLowerCase();
-  const nodes = Array.isArray(_lastNodes) ? _lastNodes : [];
-  const serverHost = String(window._serverHostname || '').toLowerCase();
-  if (isSelf) {
-    return nodes.find(n => {
-      const t = String(n.type || '').toLowerCase();
-      const id = String(n.id || '').toLowerCase();
-      const hn = String(n.hostname || '').toLowerCase();
-      return (t === 'local' || t === 'vps') && (id === serverHost || hn === serverHost);
-    }) || null;
-  }
-  return nodes.find(n => {
-    const id = String(n.id || '').toLowerCase();
-    const hn = String(n.hostname || '').toLowerCase();
-    const tsip = String(n.tailscale_ip || '').toLowerCase();
-    const lbl = String(n.label || '').toLowerCase();
-    return id === host || hn === host || tsip === ipL || lbl === host;
-  }) || null;
-}
-
-async function nicknameFromDevice(name, ip, isSelf) {
-  const n = _nodeForDevice(name, ip, isSelf);
-  const canonical = `${name}${isSelf ? ' (this device)' : ''}`;
-  if (!n) {
-    const id = isSelf ? (window._serverHostname || name) : `peer:${String(name||'').toLowerCase().replace(/[^a-z0-9.-]+/g,'-')}`;
-    return setDeviceNickname(id, 'tailscale', true, name, ip, canonical, '');
-  }
-  const raw = String(n.label || '').trim();
-  const hostRef = String(n.hostname || n.id || '').trim();
-  const current = (raw && raw !== hostRef) ? raw : '';
-  return setDeviceNickname(n.id, n.type || 'tailscale', false, n.hostname || name, n.tailscale_ip || ip, canonical, current);
-}
-
 async function tailscaleControl(action) {
   const st = document.getElementById('ts-control-status');
   if (st) st.textContent = action === 'up' ? 'Connecting…' : action === 'down' ? 'Disconnecting…' : 'Testing…';
@@ -3703,7 +3673,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.55',
+      ver: 'v0.12.56',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4627,8 +4597,6 @@ async function doLogout() {
 }
 
 // ── init ──
-window._remoteConnectPending = window._remoteConnectPending || {};
-
 function _locIcon(l) {
   const lbl = (l.label || '').toLowerCase();
   const type = l.type || 'local';
@@ -4685,8 +4653,6 @@ function _renderSidebarNodes(nodes, activeRoot) {
       const connected = node._virtual ? (node._online !== false) : isTailscaleNodeConnected(node);
       const canAttach = connected && _isSelfNode(node);
       const isRemote = !_isSelfNode(node);
-      const canConnect = connected && isRemote;
-      const pendingConnect = !!(window._remoteConnectPending && window._remoteConnectPending[node.id]);
 
       const card = document.createElement('div');
       card.className = 'node-hdr';
@@ -4695,14 +4661,13 @@ function _renderSidebarNodes(nodes, activeRoot) {
       const actionBtn = document.createElement('button');
       actionBtn.className = 'btn btn-ghost';
       actionBtn.style.cssText = 'margin-left:6px;font-size:10px;padding:1px 7px';
-      actionBtn.title = canAttach ? 'Browse and attach path' : (canConnect ? (pendingConnect ? 'Waiting for remote agent' : 'Connect remote agent') : 'Device offline');
-      actionBtn.textContent = canAttach ? 'Browse' : (canConnect ? (pendingConnect ? 'Pending…' : 'Connect') : 'Offline');
-      actionBtn.disabled = !canAttach && !canConnect;
-      actionBtn.style.opacity = (canAttach || canConnect) ? '1' : '.55';
+      actionBtn.title = canAttach ? 'Browse and attach path' : (!connected ? 'Device offline' : 'Remote browse coming next');
+      actionBtn.textContent = canAttach ? 'Browse' : (!connected ? 'Offline' : 'Coming next');
+      actionBtn.disabled = !canAttach;
+      actionBtn.style.opacity = canAttach ? '1' : '.55';
       actionBtn.onclick = (e) => {
         e.stopPropagation();
         if (canAttach) quickExposePath(node);
-        else if (canConnect) connectRemoteBrowser(node);
       };
       card.appendChild(actionBtn);
       el.appendChild(card);
@@ -4710,11 +4675,10 @@ function _renderSidebarNodes(nodes, activeRoot) {
       if (!mounts.length) {
         const empty = document.createElement('div');
         empty.className = 'loc mount-item';
-        empty.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="loc-name">${canAttach ? 'No paths attached yet' : (canConnect ? (pendingConnect ? 'Waiting for Porter Agent over Tailscale' : 'Tailscale OK · install Porter Agent to browse') : 'Device offline')}</span>`;
+        empty.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="loc-name">${canAttach ? 'No paths attached yet' : (!connected ? 'Device offline' : (isRemote ? 'Remote browse coming next' : 'Unavailable'))}</span>`;
         empty.style.opacity = '.78';
         empty.onclick = () => {
           if (canAttach) quickExposePath(node);
-          else if (canConnect) connectRemoteBrowser(node);
         };
         el.appendChild(empty);
         return;
@@ -4739,10 +4703,6 @@ function _isSelfNode(node) {
   const nHost = String(node.hostname || '').toLowerCase();
   const serverHost = String(window._serverHostname || '').toLowerCase();
   return (nType === 'local' || nType === 'vps') && !!serverHost && (nId === serverHost || nHost === serverHost);
-}
-
-async function connectRemoteBrowser(node) {
-  toast('Remote browse is not enabled in simplified mode yet.', 'err');
 }
 
 async function quickExposePath(node) {
@@ -7659,7 +7619,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.55 ready (localhost only)")
+    print(f"\n  Porter v0.12.56 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
