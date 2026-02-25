@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.56 — self-hosted file manager"""
+"""Porter v0.12.57 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1531,11 +1531,11 @@ body.density-compact .file-name { padding: 6px 0; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/><circle cx="18" cy="14" r="4"/></svg>
       <span class="mnav-label">Policies</span>
     </button>
-    <button class="mnav-item" id="mnav-tools" onclick="switchModule('tools')">
+    <button class="mnav-item" id="mnav-tools" style="display:none" onclick="switchModule('tools')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
       <span class="mnav-label">Tools</span>
     </button>
-    <button class="mnav-item" id="mnav-audit" onclick="switchModule('audit')">
+    <button class="mnav-item" id="mnav-audit" style="display:none" onclick="switchModule('audit')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
       <span class="mnav-label">Activity</span>
     </button>
@@ -1558,7 +1558,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.56</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.57</div>
   </div>
 </aside>
 
@@ -2051,7 +2051,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.56 — What's new
+          v0.12.57 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2442,6 +2442,10 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.57', date:'2026-02-25', notes:[
+    'Primary nav declutter: hid Tools and Activity from left rail while retaining module access internally',
+    'Focuses default operator flow on Command Center, Locations, Files, Agents, Tasks',
+  ]},
   { ver:'v0.12.56', date:'2026-02-25', notes:[
     'Decomplexify pass: removed dead nickname/connect helper code paths',
     'Removed remote connect pseudo-flow from Files sidebar (local browse only, remote clearly deferred)',
@@ -3673,7 +3677,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.56',
+      ver: 'v0.12.57',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -7619,7 +7623,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.56 ready (localhost only)")
+    print(f"\n  Porter v0.12.57 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
