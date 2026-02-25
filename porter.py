@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.19 — self-hosted file manager"""
+"""Porter v0.12.20 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.19</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.20</div>
   </div>
 </aside>
 
@@ -1962,7 +1962,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.19 — What's new
+          v0.12.20 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2353,6 +2353,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.20', date:'2026-02-25', notes:[
+    'Locations simplified to nickname management only (no extra management cards)',
+    'All discovered/configured devices appear as a clean rename list',
+    'Virtual peers can now be renamed directly (auto-promoted to saved location before rename)',
+  ]},
   { ver:'v0.12.19', date:'2026-02-25', notes:[
     'Locations now shows all devices (configured + discovered peers), not just VPS',
     'Location naming cleaned: self shows server identity; rename action is in Locations',
@@ -3342,7 +3347,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.19',
+      ver: 'v0.12.20',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3433,55 +3438,38 @@ function renderNodes(nodes) {
   }
 
   const serverHost = String(window._serverHostname || '').toLowerCase();
-  const typeLabels = { local: 'VPS device', vps: 'VPS device', tailscale: 'Tailnet peer device' };
-  const typeCss    = { local: 'loc-badge--vps', vps: 'loc-badge--vps', tailscale: 'loc-badge--remote' };
-
-  el.innerHTML = '';
-  configured.forEach(node => {
+  el.innerHTML = configured.map(node => {
     const nType = String(node.type || '').toLowerCase();
     const nId = String(node.id || '').toLowerCase();
     const nHost = String(node.hostname || '').toLowerCase();
     const isSelf = (nType === 'local' || nType === 'vps') && (serverHost && (nId === serverHost || nHost === serverHost));
     const displayName = isSelf ? `${node.hostname || node.id} (this device)` : (node.label || node.hostname || node.id);
-    const kind = typeLabels[node.type] || String(node.type || 'device');
-    const mounts = (node.mounts || []);
-    const mCount = mounts.length;
-    const status = node._virtual
-      ? (node._online === false ? 'Discovered (offline)' : 'Discovered (online)')
-      : `${mCount} path${mCount !== 1 ? 's' : ''} configured`;
-
-    const card = document.createElement('div');
-    card.style.cssText = 'background:var(--raised);border-radius:8px;margin-bottom:10px;border:1px solid var(--border);padding:10px 12px';
-    card.innerHTML = `
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(displayName)}</span>
-        <span class="loc-badge ${typeCss[node.type] || 'loc-badge--remote'}">${escHtml(kind)}</span>
-        ${node.hostname ? `<span style="font-size:11px;color:var(--text3)">${escHtml(node.hostname)}</span>` : ''}
-        <span style="margin-left:auto;font-size:12px;color:var(--text3)">${escHtml(status)}</span>
+    const status = node._virtual ? (node._online === false ? 'offline' : 'online') : 'configured';
+    return `
+      <div style="background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:13px;font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(displayName)}</span>
+        <span style="font-size:11px;color:var(--text3)">${status}</span>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="renameLocation('${escHtml(node.id)}', '${escHtml(node.label || node.hostname || node.id)}', '${escHtml(node.type || 'tailscale')}', ${node._virtual ? 'true' : 'false'}, '${escHtml(node.hostname || '')}', '${escHtml(node.tailscale_ip || '')}')">✎ Rename</button>
       </div>`;
+  }).join('');
+}
 
-    const actions = document.createElement('div');
-    actions.style.cssText = 'margin-top:8px;display:flex;gap:8px;justify-content:flex-end';
-
-    if (node._virtual) {
-      const addBtn = document.createElement('button');
-      addBtn.className = 'btn btn-ghost';
-      addBtn.style.cssText = 'font-size:11px;padding:3px 8px';
-      addBtn.textContent = 'Add location';
-      addBtn.onclick = () => quickExposePath(node);
-      actions.appendChild(addBtn);
-    } else {
-      const renBtn = document.createElement('button');
-      renBtn.className = 'btn btn-ghost';
-      renBtn.style.cssText = 'font-size:11px;padding:3px 8px';
-      renBtn.textContent = '✎ Rename';
-      renBtn.onclick = () => openEditNode(node.id, node.label || node.hostname || node.id, node.type || 'tailscale');
-      actions.appendChild(renBtn);
+async function renameLocation(nodeId, label, type, isVirtual, hostname, tailscaleIp) {
+  if (isVirtual) {
+    const created = await api('/api/nodes', {
+      action: 'add_node',
+      id: nodeId,
+      label: label || hostname || nodeId,
+      type: type || 'tailscale',
+      hostname: hostname || '',
+      tailscale_ip: tailscaleIp || '',
+    });
+    if (!created || !created.ok) {
+      toast((created && created.error) || 'Failed to create location for rename', 'err');
+      return;
     }
-
-    card.appendChild(actions);
-    el.appendChild(card);
-  });
+  }
+  openEditNode(nodeId, label || hostname || nodeId, type || 'tailscale');
 }
 
 // node / mount CRUD
@@ -6980,7 +6968,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.19 ready (localhost only)")
+    print(f"\n  Porter v0.12.20 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
