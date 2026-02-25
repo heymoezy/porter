@@ -1481,7 +1481,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <span class="mnav-label">Audit</span>
     </button>
     <div class="mnav-sep"></div>
-    <button class="mnav-item" id="mnav-settings" onclick="switchModule('settings')">
+    <button class="mnav-item" id="mnav-settings" onclick="openSettings('profile')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
       <span class="mnav-label">Settings</span>
     </button>
@@ -1493,11 +1493,8 @@ body.density-compact .file-name { padding: 6px 0; }
       <svg id="sidebarThemeIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
       <span class="mnav-label">Appearance</span>
     </button>
-    <button class="mnav-item" onclick="navigate(curRoot,curPath)" title="Refresh view">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-      <span class="mnav-label">Refresh</span>
-    </button>
-    <button class="mnav-item" onclick="switchModule('settings'); switchSettingsTab('changelog')">
+    <!-- refresh removed: action caused confusing hangs when no active file location selected -->
+    <button class="mnav-item" onclick="openSettings('changelog')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       <span class="mnav-label">What's new</span>
     </button>
@@ -1940,7 +1937,7 @@ body.density-compact .file-name { padding: 6px 0; }
       </button>
 
       <!-- Profile page -->
-      <div class="settings-page" id="spage-profile">
+      <div class="settings-page active" id="spage-profile">
         <div class="settings-page-title">Profile</div>
         <div class="avatar-section">
           <div class="avatar-large" id="saAvatar" onclick="triggerAvatarUpload()" title="Click to change photo"></div>
@@ -1982,7 +1979,7 @@ body.density-compact .file-name { padding: 6px 0; }
       </div>
 
       <!-- Locations page -->
-      <div class="settings-page active" id="spage-locations">
+      <div class="settings-page" id="spage-locations">
         <div class="settings-page-title">Locations</div>
         <div style="font-size:13px;color:var(--text3);margin-bottom:18px">Machines and paths Porter can browse. Add a location first, then add paths under it.</div>
         <div id="loc-list"></div>
@@ -2451,8 +2448,16 @@ function applySettings() {
 function syncSettingsUI() {
   const bh = document.getElementById('btnHidden');
   if (bh) bh.style.opacity = settings.showHidden ? '1' : '.4';
-  const activeTab = document.querySelector('.settings-nav-item.active');
-  if (!activeTab) switchSettingsTab('profile');
+  // Keep settings nav/page state consistent. If mismatch, force profile tab.
+  const activeNav = document.querySelector('.settings-nav-item.active');
+  const activePage = document.querySelector('.settings-page.active');
+  if (!activeNav || !activePage) {
+    switchSettingsTab('profile');
+    return;
+  }
+  const navTab = activeNav.id.replace('snav-', '');
+  const pageTab = activePage.id.replace('spage-', '');
+  if (navTab !== pageTab) switchSettingsTab(navTab || 'profile');
 }
 
 // ── theme ──
