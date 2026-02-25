@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.57 — self-hosted file manager"""
+"""Porter v0.12.58 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1558,7 +1558,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.57</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.58</div>
   </div>
 </aside>
 
@@ -1720,16 +1720,15 @@ body.density-compact .file-name { padding: 6px 0; }
       </div>
       <div id="tw-output" style="font-size:12px;color:var(--text2)"></div>
     </div>
-    <div id="tasks-decision-rubric" style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">Cancel vs Recover — persistent rulebook</div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45">
+    <details id="tasks-decision-rubric" style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+      <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text)">Decision rules (cancel vs recover)</summary>
+      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-top:8px">
         <div><strong>Recover</strong> when task just stalled (fresh heartbeat expiry) and work should continue.</div>
         <div><strong>Cancel</strong> when heartbeat is long stale, task exceeded TTL badly, or Recover already failed once.</div>
         <div><strong>Keep paused</strong> only if intentionally paused by operator.</div>
         <div><strong>Clear completed</strong> after verifying outputs, to keep queue actionable.</div>
       </div>
-      <div style="margin-top:8px;font-size:11px;color:var(--text3)">Tip: stale running task + no heartbeat for long period = zombie; cancel safely and relaunch clean.</div>
-    </div>
+    </details>
     <div id="tasks-module-list"><div style="color:var(--text2);padding:20px 0">Loading&#8230;</div></div>
   </div>
 
@@ -2051,7 +2050,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.57 — What's new
+          v0.12.58 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2442,6 +2441,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.58', date:'2026-02-25', notes:[
+    'Tasks decomplex pass: removed always-on rule block and made rules collapsible',
+    'Primary guidance remains context-triggered via dynamic "Right now" instruction',
+    'Reduced cognitive load in Tasks without removing operator clarity',
+  ]},
   { ver:'v0.12.57', date:'2026-02-25', notes:[
     'Primary nav declutter: hid Tools and Activity from left rail while retaining module access internally',
     'Focuses default operator flow on Command Center, Locations, Files, Agents, Tasks',
@@ -3677,7 +3681,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.57',
+      ver: 'v0.12.58',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -7623,7 +7627,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.57 ready (localhost only)")
+    print(f"\n  Porter v0.12.58 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
