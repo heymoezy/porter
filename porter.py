@@ -1893,7 +1893,7 @@ body.density-compact .file-name { padding: 6px 0; }
   </div>
 
   <!-- settings panel — module panel, shown when settings module active -->
-  <div id="settingsPanel" class="module-panel">
+  <div id="settingsPanel">
 
     <!-- left nav -->
     <div class="settings-nav">
@@ -2687,10 +2687,20 @@ function switchModule(name) {
 function openSettings(tab = 'profile') {
   const moduleMap = { tasks:'tasks', agents:'agents', locations:'locations', policy:'policies', usage:'agents' };
   if (moduleMap[tab]) { switchModule(moduleMap[tab]); return; }
-  switchModule('settings');
   switchSettingsTab(tab);
+  syncSettingsUI();
+  const panel = document.getElementById('settingsPanel');
+  if (panel) panel.classList.add('open');
 }
-function closeSettings() { switchModule('files'); }
+function closeSettings() {
+  stopTsPolling();
+  const panel = document.getElementById('settingsPanel');
+  if (panel) panel.classList.remove('open');
+  const pn = document.getElementById('sa-pwNew');
+  const pc = document.getElementById('sa-pwConfirm');
+  if (pn) pn.value = '';
+  if (pc) pc.value = '';
+}
 function switchSettingsTab(tab) {
   if (tab === 'usage') tab = 'agents';
   const modules = ['tasks','agents','locations','policy','policies'];
