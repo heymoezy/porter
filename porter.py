@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.9.0 — self-hosted file manager"""
+"""Porter v0.11.5 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -14,6 +14,8 @@ import socket
 import subprocess
 import time
 import zipfile
+import calendar
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
@@ -84,12 +86,97 @@ POLICY_PRESETS: list = [
     },
 ]
 
+DEFAULT_TOOL_POLICY = {
+    "mode": "auto",
+    "strategy": "balanced",
+    "allowed_providers": [],
+    "denied_providers": [],
+    "budget_guardrails": {"max_tokens_per_task": 8000, "max_tokens_per_day": 100000},
+}
+
 MEMORY_NAMESPACES = {"projects", "people", "decisions", "compliance",
                      "transcripts", "artifacts", "indexes", "pointers"}
 
 HEARTBEAT_TTL_MIN = 30    # seconds
 HEARTBEAT_TTL_MAX = 3600  # seconds
 HEARTBEAT_TTL_DEF = 300   # seconds
+
+def _cron_expand(field, lo, hi):
+    result = set()
+    for part in field.split(','):
+        part = part.strip()
+        if '/' in part:
+            base, step = part.split('/', 1); step = int(step)
+            if base == '*' or base == '':
+                r_start, r_end = lo, hi
+            elif '-' in base:
+                r_start, r_end = map(int, base.split('-', 1))
+            else:
+                r_start = r_end = int(base)
+            result.update(range(r_start, r_end + 1, step))
+        elif '-' in part:
+            a, b = part.split('-', 1); result.update(range(int(a), int(b) + 1))
+        elif part == '*': result.update(range(lo, hi + 1))
+        else: result.add(int(part))
+    return sorted(v for v in result if lo <= v <= hi)
+
+def _cron_next(expr):
+    try:
+        fields = expr.strip().split()
+        if len(fields) != 5: return None
+        mf, hf, df, mof, wf = fields
+        minutes = _cron_expand(mf, 0, 59); hours = _cron_expand(hf, 0, 23)
+        months = _cron_expand(mof, 1, 12); doms = _cron_expand(df, 1, 31)
+        dows = _cron_expand(wf, 0, 6)
+        if not minutes or not hours or not months: return None
+        
+        dom_star = df == '*'; dow_star = wf == '*'
+        now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        t = now + timedelta(minutes=1)
+        limit = now + timedelta(days=366 * 4)
+        
+        while t < limit:
+            if t.month not in months:
+                # jump to start of next valid month
+                nxt_mo = next((m for m in months if m > t.month), months[0])
+                if nxt_mo <= t.month: t = t.replace(year=t.year+1)
+                t = t.replace(month=nxt_mo, day=1, hour=0, minute=0); continue
+            
+            _, max_day = calendar.monthrange(t.year, t.month)
+            py_dow = (t.weekday() + 1) % 7 # 0=Sun
+            
+            if dom_star and dow_star: day_ok = True
+            elif dom_star: day_ok = py_dow in dows
+            elif dow_star: day_ok = t.day in doms and t.day <= max_day
+            else: day_ok = (t.day in doms and t.day <= max_day) or (py_dow in dows)
+            
+            if not day_ok:
+                t += timedelta(days=1); t = t.replace(hour=0, minute=0); continue
+            
+            if t.hour not in hours:
+                nxt_h = next((h for h in hours if h > t.hour), None)
+                if nxt_h is not None: t = t.replace(hour=nxt_h, minute=minutes[0])
+                else: t += timedelta(days=1); t = t.replace(hour=0, minute=0)
+                continue
+                
+            if t.minute not in minutes:
+                nxt_m = next((m for m in minutes if m > t.minute), None)
+                if nxt_m is not None: t = t.replace(minute=nxt_m)
+                else:
+                    t += timedelta(hours=1); t = t.replace(minute=minutes[0])
+                continue
+            
+            return t
+        return None
+    except Exception: return None
+
+def _cron_next_display(expr):
+    nxt = _cron_next(expr)
+    if not nxt: return 'invalid'
+    secs = int((nxt - datetime.now(timezone.utc)).total_seconds())
+    if secs < 3600: return f"in {secs//60}m"
+    if secs < 86400: h=secs//3600; m=(secs%3600)//60; return f"in {h}h {m}m"
+    d=secs//86400; h=(secs%86400)//3600; return f"in {d}d {h}h"
 
 ROLE_CAPS: dict[str, set] = {
     "viewer":   {"read"},
@@ -629,6 +716,18 @@ body {
 body.sidebar-collapsed .node-hdr { display: none; }
 body.sidebar-collapsed .mount-item { padding-left: 0; justify-content: center; }
 #locations { flex: 1; overflow-y: auto; }
+.module-nav { display:flex; flex-direction:column; gap:2px; padding:8px 10px; overflow-y:auto; }
+.mnav-item { display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:6px;
+  font-size:13px; color:var(--text2); cursor:pointer; background:transparent; border:none;
+  width:100%; text-align:left; font-family:inherit; }
+.mnav-item:hover { background:var(--raised); color:var(--text); }
+.mnav-item.active { background:rgba(247,147,26,.10); color:var(--accent); font-weight:500; }
+.mnav-sep { height:1px; background:var(--border); margin:6px 10px; }
+body.sidebar-collapsed .mnav-label { display:none; }
+body.sidebar-collapsed .mnav-item { justify-content:center; padding:8px; }
+body.sidebar-collapsed .module-nav { padding:8px 4px; }
+#loc-subnav { display:none; }
+body.files-active #loc-subnav { display:block; }
 .sidebar-footer {
   padding: 16px 20px 0;
   border-top: 1px solid var(--border);
@@ -662,7 +761,7 @@ body.sidebar-collapsed .mount-item { padding-left: 0; justify-content: center; }
 body.sidebar-collapsed { --sidebar: 52px; }
 body.sidebar-collapsed .logo-text,
 body.sidebar-collapsed .logo-mark,
-body.sidebar-collapsed .nav-label,
+body.sidebar-collapsed .mnav-label,
 body.sidebar-collapsed .loc-name,
 
 body.sidebar-collapsed .sidebar-footer,
@@ -671,8 +770,6 @@ body.sidebar-collapsed .user-sub { display: none; }
 body.sidebar-collapsed .logo { padding: 0 0 18px; justify-content: center; }
 body.sidebar-collapsed .hbg-btn { margin-left: 0; width: 100%; justify-content: center; }
 body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
-body.sidebar-collapsed .user-card { padding: 10px 0; justify-content: center; }
-body.sidebar-collapsed .user-card > svg { display: none; }
 
 /* ── main ── */
 .main {
@@ -1134,6 +1231,34 @@ body.density-compact .file-name { padding: 6px 0; }
 .settings-content { flex: 1; overflow-y: auto; padding: 28px 32px; position: relative; }
 .settings-page { display: none; }
 .settings-page.active { display: block; }
+.module-panel { display:none; position:relative; flex:1; flex-direction:column;
+  overflow-y:auto; padding:24px 28px; background:var(--bg); }
+.module-panel.active { display:flex; }
+.module-hdr { display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-shrink:0; }
+.module-title { font-size:20px; font-weight:700; color:var(--text); flex:1; }
+.module-section { background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:16px; margin-bottom:16px; flex-shrink:0; }
+.module-section-title { font-size:11px; font-weight:600; text-transform:uppercase;
+  letter-spacing:.6px; color:var(--text3); margin-bottom:12px; }
+.sched-card { background:var(--bg2); border:1px solid var(--border); border-radius:8px;
+  padding:14px 16px; margin-bottom:10px; display:flex; align-items:center; gap:12px; }
+.tool-card { background:var(--bg2); border:1px solid var(--border); border-radius:8px;
+  padding:14px 16px; margin-bottom:10px; display:flex; align-items:center; gap:12px; }
+.ov-metric { background:var(--bg2); border:1px solid var(--border); border-radius:10px;
+  padding:14px 16px; display:flex; flex-direction:column; gap:4px; }
+.ov-metric-val { font-size:28px; font-weight:700; color:var(--text); }
+.ov-metric-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; }
+.audit-row { padding:10px 0; border-bottom:1px solid var(--border); font-size:12px;
+  display:flex; gap:10px; align-items:baseline; }
+.agent-clarity { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+.badge-production { background:#dcfce7; color:#15803d; font-size:10px; padding:2px 7px;
+  border-radius:20px; font-weight:600; }
+.badge-test { background:#fef9c3; color:#854d0e; font-size:10px; padding:2px 7px;
+  border-radius:20px; font-weight:600; }
+.badge-ephemeral { background:#f3e8ff; color:#7c3aed; font-size:10px; padding:2px 7px;
+  border-radius:20px; font-weight:600; }
+.badge-system { background:#e0f2fe; color:#0369a1; font-size:10px; padding:2px 7px;
+  border-radius:20px; font-weight:600; }
 .settings-page-title { font-size: 18px; font-weight: 700; color: var(--text);
   margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 .sp-header { display:flex; align-items:center; margin-bottom:14px; padding-bottom:10px;
@@ -1230,6 +1355,7 @@ body.density-compact .file-name { padding: 6px 0; }
   border-radius: 4px; font-size: 10px; font-weight: 600; letter-spacing: .3px;
 }
 .loc-badge--local  { background: rgba(80,200,120,.12);  color: #5c9; }
+.loc-badge--vps    { background: rgba(100,160,255,.12); color: #6af; }
 .loc-badge--remote { background: rgba(100,140,255,.12); color: #89f; }
 .loc-badge--rw { background: rgba(247,147,26,.10); color: var(--accent); }
 .loc-badge--ro { background: rgba(150,150,150,.10); color: var(--text3); }
@@ -1313,25 +1439,80 @@ body.density-compact .file-name { padding: 6px 0; }
       </svg>
     </button>
   </div>
-  <div class="nav-label">Locations</div>
-  <div id="locations"></div>
-  <div class="sidebar-footer" id="sfooter"></div>
-  <div class="user-card" id="userCard" onclick="openSettings('account')">
-    <div class="user-avatar" id="ucAvatar"></div>
-    <div style="min-width:0;flex:1">
-      <div class="user-name" id="ucName">—</div>
-      <div class="user-sub">Administrator</div>
+  <nav class="module-nav">
+    <button class="mnav-item active" id="mnav-overview" onclick="switchModule('overview')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span class="mnav-label">Overview</span>
+    </button>
+    <button class="mnav-item" id="mnav-files" onclick="switchModule('files')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+      <span class="mnav-label">Files</span>
+    </button>
+    <div id="loc-subnav">
+      <div class="nav-label" style="padding-left:34px">Locations</div>
+      <div id="locations"></div>
     </div>
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="2" style="opacity:.4;flex-shrink:0">
-      <polyline points="9 18 15 12 9 6"/>
-    </svg>
+    <button class="mnav-item" id="mnav-tasks" onclick="switchModule('tasks')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/><line x1="3" y1="8" x2="21" y2="8"/></svg>
+      <span class="mnav-label">Tasks</span>
+    </button>
+    <button class="mnav-item" id="mnav-agents" onclick="switchModule('agents')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
+      <span class="mnav-label">Agents</span>
+    </button>
+    <button class="mnav-item" id="mnav-locations" onclick="switchModule('locations')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      <span class="mnav-label">Locations</span>
+    </button>
+    <button class="mnav-item" id="mnav-schedules" onclick="switchModule('schedules')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span class="mnav-label">Schedules</span>
+    </button>
+    <button class="mnav-item" id="mnav-policies" onclick="switchModule('policies')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/><circle cx="18" cy="14" r="4"/></svg>
+      <span class="mnav-label">Policies</span>
+    </button>
+    <button class="mnav-item" id="mnav-tools" onclick="switchModule('tools')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+      <span class="mnav-label">Tools</span>
+    </button>
+    <button class="mnav-item" id="mnav-audit" onclick="switchModule('audit')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      <span class="mnav-label">Audit</span>
+    </button>
+    <div class="mnav-sep"></div>
+    <button class="mnav-item" id="mnav-settings" onclick="switchModule('settings')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span class="mnav-label">Settings</span>
+    </button>
+  </nav>
+
+  <div class="mnav-sep"></div>
+  <div class="module-nav" style="padding-top:0">
+    <button class="mnav-item" onclick="toggleTheme()" title="Toggle appearance">
+      <svg id="sidebarThemeIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      <span class="mnav-label">Appearance</span>
+    </button>
+    <button class="mnav-item" onclick="navigate(curRoot,curPath)" title="Refresh view">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+      <span class="mnav-label">Refresh</span>
+    </button>
+    <button class="mnav-item" onclick="switchModule('settings'); switchSettingsTab('changelog')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span class="mnav-label">What's new</span>
+    </button>
+  </div>
+
+  <div style="flex:1"></div>
+  <div class="sidebar-footer">
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.11.5</div>
+    <div id="sfooter"></div>
   </div>
 </aside>
 
 <!-- main -->
 <main class="main" id="mainEl">
-  <div class="toolbar">
+  <div class="toolbar" id="mainToolbar">
     <div class="breadcrumb" id="breadcrumb"></div>
     <div class="toolbar-actions">
       <!-- search -->
@@ -1346,21 +1527,8 @@ body.density-compact .file-name { padding: 6px 0; }
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
-      <!-- refresh -->
-      <button class="btn btn-icon" onclick="navigate(curRoot,curPath)" title="Refresh (r)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-      </button>
-      <!-- shortcuts -->
-      <button class="btn btn-icon" onclick="toggleShortcuts()" title="Keyboard shortcuts (?)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="6" cy="12" r=".5" fill="currentColor"/><circle cx="10" cy="12" r=".5" fill="currentColor"/><circle cx="14" cy="12" r=".5" fill="currentColor"/><circle cx="18" cy="12" r=".5" fill="currentColor"/><line x1="8" y1="15" x2="16" y2="15"/></svg>
-      </button>
       <button class="btn btn-icon" id="btnHidden" onclick="setSetting('showHidden',!settings.showHidden)" title="Show hidden files (. prefixed)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-      </button>
-      <button class="btn btn-icon" id="btnTheme" onclick="toggleTheme()" title="Toggle light / dark mode">
-        <svg id="themeIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-        </svg>
       </button>
       <button class="btn btn-ghost" id="btnMkdir" onclick="openMkdir()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
@@ -1409,35 +1577,340 @@ body.density-compact .file-name { padding: 6px 0; }
     <div id="listing"></div>
   </div>
 
-  <!-- settings panel — covers file browser when open, no overlay backdrop -->
-  <div id="settingsPanel">
+  <!-- module panels -->
+  <div id="overview-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Overview</span>
+      <span style="font-size:12px;color:var(--text3)" id="ov-updated"></span>
+    </div>
+    <div id="ov-metrics" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px"></div>
+    <div class="module-section">
+      <div class="module-section-title">Quick Actions</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="switchModule('files')">&#8594; Files</button>
+        <button class="btn btn-ghost" onclick="switchModule('tasks')">&#8594; Tasks</button>
+        <button class="btn btn-ghost" onclick="switchModule('agents')">&#8594; Agents</button>
+        <button class="btn btn-ghost" onclick="switchModule('audit')">&#8594; Audit</button>
+      </div>
+    </div>
+    <div class="module-section">
+      <div class="module-section-title">Recent Activity</div>
+      <div id="ov-activity"></div>
+    </div>
+  </div>
+
+  <div id="tasks-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Tasks</span>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="clearCompletedTasks()">Clear completed</button>
+    </div>
+    <details class="task-legend" style="margin-bottom:14px;font-size:12px;color:var(--text2)">
+      <summary style="cursor:pointer;font-weight:600;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px;list-style:none">&#9658; Status reference</summary>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="task-badge badge-running">running</span>
+          <span>Heartbeat active &#8212; agent is processing normally</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="task-badge badge-paused">paused</span>
+          <span>Manually paused by an operator &#8212; awaiting resume</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="task-badge badge-stalled">stalled</span>
+          <span>Heartbeat expired &#8212; agent may have crashed or lost connection</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="task-badge badge-complete">complete</span>
+          <span>Task finished successfully and finalized</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="task-badge badge-cancelled">cancelled</span>
+          <span>Manually cancelled &#8212; no further work will be done</span>
+        </div>
+      </div>
+    </details>
+    <div id="tasks-module-list"><div style="color:var(--text2);padding:20px 0">Loading&#8230;</div></div>
+  </div>
+
+  <div id="agents-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Agents</span>
+      <button class="btn btn-primary" onclick="openCreateAgent()">+ Create agent</button>
+    </div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:12px">API clients that connect to Porter. Each agent gets a unique key.</div>
+    <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+      <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="agent-show-all" onchange="window._showAllAgentTypes=this.checked;renderAgents(window._lastAgents||[])">
+        Show all types
+      </label>
+    </div>
+    <div id="agents-module-list"></div>
+    <div id="agents-module-create-form" style="display:none;margin-top:20px;padding:16px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
+      <div class="settings-page-title" style="font-size:14px;margin-bottom:14px">New agent</div>
+      <div class="settings-field">
+        <label>Name</label>
+        <input type="text" class="settings-input" id="af2-name" placeholder="Claude Code">
+      </div>
+      <div class="settings-field">
+        <label>Type</label>
+        <select class="settings-input" id="af2-type" style="cursor:pointer">
+          <option value="claude-code">Claude Code</option>
+          <option value="openclaw">OpenClaw</option>
+          <option value="generic">Generic API client</option>
+        </select>
+      </div>
+      <div class="settings-field">
+        <label>Role</label>
+        <select class="settings-input" id="af2-role" style="cursor:pointer">
+          <option value="viewer">Viewer &#8212; read only</option>
+          <option value="writer" selected>Writer &#8212; read + write + checkpoint</option>
+          <option value="operator">Operator &#8212; writer + finalize</option>
+          <option value="admin">Admin &#8212; full access</option>
+        </select>
+      </div>
+      <div class="settings-fields-row">
+        <div class="settings-field">
+          <label>Runtime location</label>
+          <select class="settings-input" id="af2-runtime" style="cursor:pointer">
+            <option value="local">Local</option>
+            <option value="remote">Remote</option>
+            <option value="edge">Edge</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label>Model source</label>
+          <select class="settings-input" id="af2-model-source" style="cursor:pointer">
+            <option value="cloud">Cloud API</option>
+            <option value="local">Local model</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-field">
+        <label>Model ID <span style="color:var(--text3);font-weight:400">(optional)</span></label>
+        <input type="text" class="settings-input" id="af2-model-id" placeholder="claude-sonnet-4-6">
+      </div>
+      <div class="settings-field">
+        <label>Agent type</label>
+        <select class="settings-input" id="af2-agent-type" style="cursor:pointer">
+          <option value="production">Production</option>
+          <option value="test">Test</option>
+          <option value="ephemeral">Ephemeral</option>
+          <option value="system">System</option>
+        </select>
+      </div>
+      <div class="settings-save-row" style="gap:8px">
+        <button class="btn btn-primary" onclick="createAgent2()">Create &amp; copy key</button>
+        <button class="btn btn-ghost" onclick="cancelAgentForm2()">Cancel</button>
+      </div>
+    </div>
+    <div id="agents-module-key-box" style="display:none;margin-top:20px;padding:14px;background:rgba(247,147,26,.08);border:1px solid rgba(247,147,26,.3);border-radius:8px">
+      <div style="font-size:12px;color:var(--accent);font-weight:600;margin-bottom:8px">&#9888; Copy this key now &#8212; it won't be shown again</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <code style="flex:1;font-size:12px;word-break:break-all;color:var(--text)" id="agents-module-key-val"></code>
+        <button class="btn btn-ghost" style="flex-shrink:0;font-size:12px" onclick="copyAgentKey2()">Copy</button>
+      </div>
+    </div>
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+      <div class="settings-page-title" style="font-size:15px;margin-bottom:10px">Agent Usage</div>
+      <div id="agents-module-usage"><div style="color:var(--text3);font-size:13px">Loading&#8230;</div></div>
+    </div>
+  </div>
+
+  <div id="locations-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Locations</span>
+      <button class="btn btn-primary" onclick="openAddLocation()">+ Add Location</button>
+    </div>
+    <div id="loc-list"></div>
+    <div id="lm-mount-form" style="display:none;margin-top:14px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
+      <div class="settings-field"><label>Path on server</label>
+        <input class="settings-input" id="mf-path" placeholder="/home/user/project">
+      </div>
+      <div class="settings-field"><label>Label</label>
+        <input class="settings-input" id="mf-label" placeholder="My Project">
+      </div>
+      <input type="hidden" id="mf-node-id">
+      <div class="settings-save-row" style="gap:8px">
+        <button class="btn btn-ghost" onclick="cancelMountForm()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveMountForm()">Add Path</button>
+      </div>
+    </div>
+    <div id="lm-loc-form" style="display:none;margin-top:14px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
+      <div class="settings-field"><label>Location name</label>
+        <input class="settings-input" id="lf2-name" placeholder="My VPS">
+      </div>
+      <div class="settings-field"><label>Type</label>
+        <select class="settings-input" id="lf2-type" style="cursor:pointer">
+          <option value="local">Local machine</option>
+          <option value="vps">VPS</option>
+          <option value="tailscale">Tailscale</option>
+        </select>
+      </div>
+      <div class="settings-save-row" style="gap:8px">
+        <button class="btn btn-ghost" onclick="cancelLocationForm2()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveLocationForm2()">Add Location</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="schedules-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Schedules</span>
+      <button class="btn btn-primary" onclick="openAddSchedule()">+ Add Schedule</button>
+    </div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:16px">
+      Recurring jobs and automation. Agents query /api/schedules to self-schedule tasks.
+    </div>
+    <div id="schedules-list"></div>
+    <div id="schedule-form" style="display:none;margin-top:16px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:600;margin-bottom:12px" id="sf-title">New Schedule</div>
+      <input type="hidden" id="sf-id">
+      <div class="settings-field"><label>Name</label><input class="settings-input" id="sf-name"></div>
+      <div class="settings-field"><label>Schedule (cron expression)</label>
+        <input class="settings-input" id="sf-schedule" placeholder="0 2 * * *" oninput="previewCron()">
+        <div id="sf-cron-preview" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
+      </div>
+      <div class="settings-field"><label>Target (agent name or ID)</label><input class="settings-input" id="sf-target" placeholder="claude-code"></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <input type="checkbox" id="sf-enabled" checked>
+        <label for="sf-enabled" style="font-size:13px;color:var(--text2)">Enabled</label>
+      </div>
+      <div class="settings-save-row" style="gap:8px">
+        <button class="btn btn-ghost" onclick="cancelScheduleForm()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveSchedule()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="policies-module" class="module-panel">
+    <div class="module-hdr"><span class="module-title">Policies</span></div>
+    <div class="module-section">
+      <div class="module-section-title">Routing Strategy Preset</div>
+      <div class="policy-grid" id="policy-presets-grid-main"></div>
+    </div>
+    <div class="module-section">
+      <div class="module-section-title">Orchestration Controls</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="settings-field"><label>Context compression</label>
+          <select class="settings-input" id="oc-compress">
+            <option value="off">Off</option><option value="light">Light</option><option value="aggressive">Aggressive</option>
+          </select>
+        </div>
+        <div class="settings-field"><label>Fallback chain</label>
+          <select class="settings-input" id="oc-fallback">
+            <option value="local_first">Local &#8594; Cloud</option>
+            <option value="cloud_first">Cloud &#8594; Local</option>
+            <option value="local_only">Local only</option>
+            <option value="cloud_only">Cloud only</option>
+          </select>
+        </div>
+        <div class="settings-field"><label>Checkpoint interval (s)</label>
+          <input type="number" class="settings-input" id="oc-ckpt" min="10" max="600">
+        </div>
+        <div class="settings-field"><label>Lease TTL (s)</label>
+          <input type="number" class="settings-input" id="oc-ttl" min="30" max="3600">
+        </div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:8px;font-size:12px" onclick="saveOrchestrationPolicy()">Save Controls</button>
+    </div>
+  </div>
+
+  <div id="tools-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Tools</span>
+      <button class="btn btn-primary" onclick="openAddTool()">+ Register Tool</button>
+    </div>
+    <div class="module-section">
+      <div class="module-section-title">Tool Selection Policy</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+        <label style="font-size:13px;color:var(--text2)">Mode:
+          <select class="settings-input" id="tp-mode" style="width:130px">
+            <option value="auto">Auto (policy-driven)</option>
+            <option value="guided">Guided (visible rationale)</option>
+            <option value="manual">Manual (confirm each)</option>
+          </select>
+        </label>
+        <label style="font-size:13px;color:var(--text2)">Strategy:
+          <select class="settings-input" id="tp-strategy" style="width:140px">
+            <option value="balanced">Balanced</option>
+            <option value="cost-first">Cost-First</option>
+            <option value="quality-first">Quality-First</option>
+            <option value="speed-first">Speed-First</option>
+            <option value="local-first">Local-First</option>
+          </select>
+        </label>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:8px">
+        <div class="settings-field" style="flex:1"><label>Max tokens/task</label>
+          <input type="number" class="settings-input" id="tp-max-task" min="0">
+        </div>
+        <div class="settings-field" style="flex:1"><label>Max tokens/day</label>
+          <input type="number" class="settings-input" id="tp-max-day" min="0">
+        </div>
+      </div>
+      <button class="btn btn-primary" style="font-size:12px" onclick="saveToolPolicy()">Save Policy</button>
+    </div>
+    <div class="module-section-title" style="margin-top:4px">Tool Registry</div>
+    <div id="tools-list"></div>
+    <div id="tool-form" style="display:none;margin-top:14px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
+      <input type="hidden" id="tf-id">
+      <div class="settings-fields-row">
+        <div class="settings-field"><label>Name</label><input class="settings-input" id="tf-name"></div>
+        <div class="settings-field"><label>Provider</label><input class="settings-input" id="tf-provider"></div>
+      </div>
+      <div class="settings-field"><label>Capability tags (comma-separated)</label>
+        <input class="settings-input" id="tf-caps" placeholder="code,search,storage">
+      </div>
+      <div style="display:flex;gap:12px">
+        <div class="settings-field" style="flex:1"><label>Cost profile</label>
+          <select class="settings-input" id="tf-cost">
+            <option value="metered">Metered</option>
+            <option value="unmetered">Unmetered</option>
+            <option value="unknown">Unknown</option>
+          </select>
+        </div>
+        <div class="settings-field" style="flex:1"><label>Trust tier</label>
+          <select class="settings-input" id="tf-trust">
+            <option value="trusted">Trusted</option>
+            <option value="restricted">Restricted</option>
+            <option value="experimental">Experimental</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-save-row" style="gap:8px">
+        <button class="btn btn-ghost" onclick="cancelToolForm()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveTool()">Register</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="audit-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Audit</span>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="loadAudit()">&#8635; Refresh</button>
+    </div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:12px">
+      Privileged actions by sessions and agents. Append-only log.
+    </div>
+    <div id="audit-list"></div>
+  </div>
+
+  <!-- settings panel — module panel, shown when settings module active -->
+  <div id="settingsPanel" class="module-panel">
 
     <!-- left nav -->
     <div class="settings-nav">
       <div class="settings-nav-title">Settings</div>
-      <button class="settings-nav-item active" id="snav-account" onclick="switchSettingsTab('account')">
+      <div id="settings-user-hdr" style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);margin-bottom:8px">
+        <div class="user-avatar" id="ucAvatar"></div>
+        <div style="min-width:0;flex:1">
+          <div class="user-name" id="ucName">—</div>
+          <div class="user-sub">Administrator</div>
+        </div>
+      </div>
+      <button class="settings-nav-item active" id="snav-profile" onclick="switchSettingsTab('profile')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        Account
-      </button>
-      <button class="settings-nav-item" id="snav-locations" onclick="switchSettingsTab('locations')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        Nodes &amp; Mounts
-      </button>
-      <button class="settings-nav-item" id="snav-agents" onclick="switchSettingsTab('agents')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
-        Agents
-      </button>
-      <button class="settings-nav-item" id="snav-usage" onclick="switchSettingsTab('usage')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-        Usage
-      </button>
-      <button class="settings-nav-item" id="snav-tasks" onclick="switchSettingsTab('tasks')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/><line x1="3" y1="8" x2="21" y2="8"/></svg>
-        Tasks
-      </button>
-      <button class="settings-nav-item" id="snav-policy" onclick="switchSettingsTab('policy')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/><circle cx="18" cy="14" r="4"/><line x1="21" y1="17" x2="23" y2="19"/></svg>
-        Policy
+        Profile
       </button>
       <button class="settings-nav-item" id="snav-network" onclick="switchSettingsTab('network')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/></svg>
@@ -1447,7 +1920,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.9.0 — What's new
+          v0.11.5 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -1466,9 +1939,9 @@ body.density-compact .file-name { padding: 6px 0; }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
 
-      <!-- Account page -->
-      <div class="settings-page active" id="spage-account">
-        <div class="settings-page-title">Account</div>
+      <!-- Profile page -->
+      <div class="settings-page" id="spage-profile">
+        <div class="settings-page-title">Profile</div>
         <div class="avatar-section">
           <div class="avatar-large" id="saAvatar" onclick="triggerAvatarUpload()" title="Click to change photo"></div>
           <div>
@@ -1508,10 +1981,10 @@ body.density-compact .file-name { padding: 6px 0; }
         </div>
       </div>
 
-      <!-- Nodes & Mounts page -->
-      <div class="settings-page" id="spage-locations">
-        <div class="settings-page-title">Nodes &amp; Mounts</div>
-        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">Machines and mounted paths Porter can browse. Add a node first, then mount paths under it.</div>
+      <!-- Locations page -->
+      <div class="settings-page active" id="spage-locations">
+        <div class="settings-page-title">Locations</div>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">Machines and paths Porter can browse. Add a location first, then add paths under it.</div>
         <div id="loc-list"></div>
 
         <!-- mount add/edit form -->
@@ -1536,15 +2009,19 @@ body.density-compact .file-name { padding: 6px 0; }
           <div id="nm-status" style="font-size:12px;margin-top:6px;color:var(--text3)"></div>
         </div>
 
-        <!-- add node form (Add Node button → node-type picker) -->
+        <!-- add location form (Add Location button → type picker) -->
         <div id="loc-form" style="display:none;margin-top:16px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
-          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">Add Node</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">Add Location</div>
           <input type="hidden" id="lf-edit-id">
           <input type="hidden" id="lf-type">
           <div class="loc-type-grid">
             <button class="loc-type-card" onclick="addLocalNode()">
-              <span class="loc-card-title">🖥 This machine</span>
+              <span class="loc-card-title">🖥 Local machine</span>
               <span class="loc-card-desc">Add another local node instance</span>
+            </button>
+            <button class="loc-type-card" onclick="addVpsNode()">
+              <span class="loc-card-title">☁ VPS / Remote server</span>
+              <span class="loc-card-desc">A cloud or hosted server accessed via SSH or direct mount</span>
             </button>
             <button class="loc-type-card" onclick="addTailscaleNode()">
               <span class="loc-card-title">🔗 Tailscale peer</span>
@@ -1566,14 +2043,14 @@ body.density-compact .file-name { padding: 6px 0; }
             <div id="lf-ts-status" style="font-size:11px;color:var(--text3);margin-bottom:10px"></div>
             <div class="settings-save-row" style="gap:8px">
               <button class="btn btn-ghost" onclick="cancelLocationForm()">Cancel</button>
-              <button class="btn btn-primary" id="lf-ts-add-btn" disabled onclick="addTailscaleNodeFromPeer()">Add Node</button>
+              <button class="btn btn-primary" id="lf-ts-add-btn" disabled onclick="addTailscaleNodeFromPeer()">Add Location</button>
             </div>
           </div>
           <div id="lf-status" style="font-size:12px;margin-top:8px;color:var(--text3)"></div>
         </div>
 
         <div style="margin-top:16px;display:flex;gap:8px">
-          <button class="btn btn-primary" onclick="openAddLocation()">+ Add Node</button>
+          <button class="btn btn-primary" onclick="openAddLocation()">+ Add Location</button>
         </div>
       </div>
 
@@ -1622,30 +2099,16 @@ body.density-compact .file-name { padding: 6px 0; }
             <button class="btn btn-ghost" style="flex-shrink:0;font-size:12px" onclick="copyAgentKey()">Copy</button>
           </div>
         </div>
-      </div>
-
-      <!-- Permissions page -->
-      <!-- Network / Tailscale page -->
-      <div class="settings-page" id="spage-network">
-        <div class="settings-page-title">Tailscale</div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <div style="font-size:13px;color:var(--text3)">Tailscale connectivity and peer devices on your tailnet.</div>
-          <button class="btn btn-ghost" style="font-size:12px;flex-shrink:0" id="ts-refresh-btn" onclick="loadTailscaleStatus(true)">↻ Refresh</button>
-        </div>
-        <div id="ts-panel">
-          <div style="color:var(--text3);font-size:13px">Loading…</div>
-        </div>
-        <div style="font-size:11px;color:var(--text3);margin-top:8px" id="ts-last-updated"></div>
-      </div>
-
-      <!-- What's new / Changelog page -->
-      <!-- Agent Usage page -->
-      <div class="settings-page" id="spage-usage">
-        <div class="settings-page-title">Agent Usage</div>
-        <div style="font-size:13px;color:var(--text3);margin-bottom:16px">Current availability and usage windows for all registered agents.</div>
-        <div id="usage-panel"><div style="color:var(--text3);font-size:13px">Loading…</div></div>
-        <div style="margin-top:16px">
-          <button class="btn btn-ghost" style="font-size:12px" onclick="openUsageSnapshot()">+ Report usage</button>
+        <!-- agent usage section (merged from former Usage tab) -->
+        <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+          <div class="settings-page-title" style="font-size:15px;margin-bottom:10px">Agent Usage</div>
+          <div style="font-size:13px;color:var(--text3);margin-bottom:12px">
+            Current availability and token usage windows for all registered agents.
+          </div>
+          <div id="usage-panel"><div style="color:var(--text3);font-size:13px">Loading…</div></div>
+          <div style="margin-top:12px">
+            <button class="btn btn-ghost" style="font-size:12px" onclick="openUsageSnapshot()">+ Report usage</button>
+          </div>
         </div>
         <!-- manual snapshot form -->
         <div id="usage-snap-form" style="display:none;margin-top:14px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
@@ -1685,6 +2148,19 @@ body.density-compact .file-name { padding: 6px 0; }
         </div>
       </div>
 
+      <!-- Network / Tailscale page -->
+      <div class="settings-page" id="spage-network">
+        <div class="settings-page-title">Tailscale</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div style="font-size:13px;color:var(--text3)">Tailscale connectivity and peer devices on your tailnet.</div>
+          <button class="btn btn-ghost" style="font-size:12px;flex-shrink:0" id="ts-refresh-btn" onclick="loadTailscaleStatus(true)">↻ Refresh</button>
+        </div>
+        <div id="ts-panel">
+          <div style="color:var(--text3);font-size:13px">Loading…</div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:8px" id="ts-last-updated"></div>
+      </div>
+
       <!-- Task Operations page -->
       <div class="settings-page" id="spage-tasks">
         <div class="sp-header">
@@ -1692,6 +2168,31 @@ body.density-compact .file-name { padding: 6px 0; }
           <button class="btn btn-sm btn-ghost" onclick="clearCompletedTasks()"
                   style="margin-left:auto">Clear completed</button>
         </div>
+        <details class="task-legend" style="margin-bottom:14px;font-size:12px;color:var(--text2)">
+          <summary style="cursor:pointer;font-weight:600;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px;list-style:none">&#9658; Status reference</summary>
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="task-badge badge-running">running</span>
+              <span>Heartbeat active — agent is processing normally</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="task-badge badge-paused">paused</span>
+              <span>Manually paused by an operator — awaiting resume</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="task-badge badge-stalled">stalled</span>
+              <span>Heartbeat expired — agent may have crashed or lost connection</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="task-badge badge-complete">complete</span>
+              <span>Task finished successfully and finalized</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="task-badge badge-cancelled">cancelled</span>
+              <span>Manually cancelled — no further work will be done</span>
+            </div>
+          </div>
+        </details>
         <div id="tasks-list"><div style="color:var(--text2);padding:20px 0">Loading…</div></div>
       </div>
 
@@ -1791,6 +2292,41 @@ body.density-compact .file-name { padding: 6px 0; }
 <input type="file" id="avatarInput" style="display:none" accept="image/jpeg,image/png,image/webp,image/gif">
 
 <script>
+// ── helpers ──
+function enc(s) { return encodeURIComponent(s); }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function esc(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+async function api(url, body) {
+  const opt = body ? { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) } : {};
+  try {
+    const r = await fetch(url, opt);
+    if (r.status === 401) { window.location.href = '/login'; return null; }
+    const d = await r.json();
+    if (!r.ok) { toast(d.error || 'API error', 'err'); return null; }
+    return d;
+  } catch(e) { toast('Network error', 'err'); return null; }
+}
+
+const CHANGELOG = [
+  { ver:'v0.11.5', date:'2026-02-25', notes:[
+    'UI: hoisted escHtml and other helpers to fix "What\'s new" visibility',
+    'UI: fixed early population call for changelog in init',
+    'Version: bumped to v0.11.5',
+  ]},
+  { ver:'v0.11.3', date:'2026-02-25', notes:[
+    'UI: added early population call for changelog in init',
+  ]},
+  { ver:'v0.11.2', date:'2026-02-25', notes:[
+    'Bugfix: fixed empty changelog section by hoisting constant in script',
+  ]},
+  { ver:'v0.11.1', date:'2026-02-25', notes:[
+    'Bugfix: cron infinite loop and broken */step syntax resolved',
+    'Bugfix: data loss in switchModule (passwords/preview preserved)',
+    'UI: theme toggle and refresh moved to sidebar for global access',
+    'UI: integrated agent usage and status inline in Agents module',
+    'Agent: Gemini CLI registered as a writer agent',
+  ]},
+];
 // ── state ──
 let curRoot = '', curPath = '', curWritable = true;
 let activeDropdown = null;
@@ -1912,6 +2448,8 @@ function applySettings() {
 function syncSettingsUI() {
   const bh = document.getElementById('btnHidden');
   if (bh) bh.style.opacity = settings.showHidden ? '1' : '.4';
+  const activeTab = document.querySelector('.settings-nav-item.active');
+  if (!activeTab) switchSettingsTab('profile');
 }
 
 // ── theme ──
@@ -1919,13 +2457,11 @@ function applyTheme(t) {
   const light = t === 'light';
   document.documentElement.classList.toggle('light', light);
   const icon = document.getElementById('themeIcon');
-  if (icon) {
-    icon.innerHTML = light
-      // sun
-      ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
-      // moon
-      : '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>';
-  }
+  const sIcon = document.getElementById('sidebarThemeIcon');
+  const sun = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+  const moon = '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>';
+  if (icon) icon.innerHTML = light ? sun : moon;
+  if (sIcon) sIcon.innerHTML = light ? sun : moon;
   try { localStorage.setItem('porter_theme', t); } catch(e) {}
 }
 function toggleTheme() {
@@ -2105,46 +2641,347 @@ function renderConfigSummary(d) {
     ].join(''));
 }
 
-// ── settings panel ──
-function openSettings(tab = 'account') {
-  switchSettingsTab(tab); syncSettingsUI();
-  document.getElementById('settingsPanel').classList.add('open');
-  if (tab === 'locations')  loadLocations();
-  if (tab === 'agents')     { loadAgents(); }
-  if (tab === 'changelog')  populateChangelog();
-  if (tab === 'network')    startTsPolling();
-  if (tab === 'usage')      loadUsage();
-  if (tab === 'tasks')      loadTasks();
-  if (tab === 'policy')     loadPolicy();
-  if (tab === 'config')     loadConfigSummary();
+// ── module system ──
+let _currentModule = 'overview';
+window._showAllAgentTypes = false;
+window._lastAgents = [];
+function switchModule(name) {
+  const leavingFiles = _currentModule === 'files' && name !== 'files';
+  if (leavingFiles && typeof closePreview === 'function') {
+    const pp = document.getElementById('previewPanel');
+    if (pp && pp.classList.contains('open') && !previewDirty) closePreview();
+  }
+  if (name === 'settings') {
+    const pn = document.getElementById('sa-pwNew');
+    const pc = document.getElementById('sa-pwConfirm');
+    if (pn) pn.value = '';
+    if (pc) pc.value = '';
+  }
+  _currentModule = name;
+  document.querySelectorAll('.mnav-item').forEach(el =>
+    el.classList.toggle('active', el.id === 'mnav-' + name));
+  document.querySelectorAll('.module-panel').forEach(el =>
+    el.classList.toggle('active', el.id === name + '-module' || (name === 'settings' && el.id === 'settingsPanel')));
+  const isFiles = name === 'files';
+  document.body.classList.toggle('files-active', isFiles);
+  ['mainToolbar','fileArea','banner','searchCountBar','selectionToolbar'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isFiles ? '' : 'none';
+  });
+  const loaders = {
+    overview: loadOverview, tasks: loadTasks, agents: loadAgents,
+    locations: loadLocations, schedules: loadSchedules, policies: loadPolicy,
+    tools: loadTools, audit: loadAudit, settings: syncSettingsUI,
+  };
+  if (loaders[name]) loaders[name]();
 }
-function closeSettings() {
-  stopTsPolling();
-  document.getElementById('settingsPanel').classList.remove('open');
-  document.getElementById('sa-pwNew').value = '';
-  document.getElementById('sa-pwConfirm').value = '';
+// Backward compat wrappers
+function openSettings(tab = 'profile') {
+  const moduleMap = { tasks:'tasks', agents:'agents', locations:'locations', policy:'policies', usage:'agents' };
+  if (moduleMap[tab]) { switchModule(moduleMap[tab]); return; }
+  switchModule('settings');
+  switchSettingsTab(tab);
 }
+function closeSettings() { switchModule('files'); }
 function switchSettingsTab(tab) {
+  if (tab === 'usage') tab = 'agents';
+  const modules = ['tasks','agents','locations','policy','policies'];
+  if (modules.includes(tab)) { switchModule(tab === 'policy' ? 'policies' : tab); return; }
   if (tab !== 'network') stopTsPolling();
   document.querySelectorAll('.settings-nav-item').forEach(el =>
     el.classList.toggle('active', el.id === 'snav-' + tab));
   document.querySelectorAll('.settings-page').forEach(el =>
     el.classList.toggle('active', el.id === 'spage-' + tab));
-  if (tab === 'network')   startTsPolling();
+  if (tab === 'network') startTsPolling();
   if (tab === 'changelog') populateChangelog();
-  if (tab === 'locations') loadLocations();
-  if (tab === 'agents')    loadAgents();
-  if (tab === 'usage')     loadUsage();
-  if (tab === 'tasks')     loadTasks();
-  if (tab === 'policy')    loadPolicy();
 }
+// ── Overview module ──
+async function loadOverview() {
+  const data = await api('/api/overview');
+  if (!data) return;
+  renderOverview(data);
+}
+function renderOverview(data) {
+  const metrics = [
+    { label: 'Active Tasks', val: data.active_tasks ?? 0 },
+    { label: 'Stalled Tasks', val: data.stalled_tasks ?? 0 },
+    { label: 'Agents', val: data.agent_count ?? 0 },
+    { label: 'Locations', val: data.location_count ?? 0 },
+    { label: 'Schedules', val: data.schedule_count ?? 0 },
+    { label: 'Tools', val: data.tool_count ?? 0 },
+    { label: 'Disk Used %', val: (data.disk_used_pct ?? 0) + '%' },
+  ];
+  const mg = document.getElementById('ov-metrics');
+  if (mg) mg.innerHTML = metrics.map(m =>
+    `<div class="ov-metric"><div class="ov-metric-val">${escHtml(String(m.val))}</div><div class="ov-metric-label">${escHtml(m.label)}</div></div>`
+  ).join('');
+  const upd = document.getElementById('ov-updated');
+  if (upd) upd.textContent = 'Updated ' + new Date().toLocaleTimeString();
+  const act = document.getElementById('ov-activity');
+  if (act) {
+    const recent = data.recent_audit || [];
+    if (!recent.length) { act.innerHTML = '<div style="color:var(--text3);font-size:13px">No recent activity.</div>'; return; }
+    act.innerHTML = recent.map(e => {
+      const ts = e.ts ? new Date(e.ts * 1000).toLocaleTimeString() : '—';
+      return `<div class="audit-row"><span style="color:var(--text3);flex-shrink:0">${ts}</span><span style="color:var(--text2)">${escHtml(e.action||'—')}</span><span style="color:var(--text3)">${escHtml(e.actor||'')}</span></div>`;
+    }).join('');
+  }
+}
+
+// ── Schedules module ──
+async function loadSchedules() {
+  const data = await api('/api/schedules');
+  if (!data) return;
+  renderSchedules(data.schedules || []);
+}
+function renderSchedules(jobs) {
+  const el = document.getElementById('schedules-list');
+  if (!el) return;
+  if (!jobs.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No schedules configured. Add one to get started.</div>';
+    return;
+  }
+  el.innerHTML = jobs.map(j => {
+    const enabled = j.enabled !== false;
+    return `<div class="sched-card">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px;color:var(--text)">${escHtml(j.name)}</div>
+        <div style="font-size:11px;color:var(--text3);font-family:monospace">${escHtml(j.schedule)}</div>
+        ${j.target ? `<div style="font-size:11px;color:var(--text2)">&#8594; ${escHtml(j.target)}</div>` : ''}
+      </div>
+      <div style="font-size:11px;color:var(--text3);flex-shrink:0">${escHtml(j.next_run_display||'—')}</div>
+      <span class="task-badge ${enabled ? 'badge-running' : 'badge-cancelled'}" style="flex-shrink:0">${enabled ? 'on' : 'off'}</span>
+      <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;flex-shrink:0" onclick="toggleSchedule('${escHtml(j.id)}',${!enabled})">${enabled ? 'Disable' : 'Enable'}</button>
+      <button class="btn btn-danger" style="font-size:11px;padding:3px 8px;flex-shrink:0" onclick="deleteSchedule('${escHtml(j.id)}')">Delete</button>
+    </div>`;
+  }).join('');
+}
+function openAddSchedule() {
+  document.getElementById('sf-title').textContent = 'New Schedule';
+  document.getElementById('sf-id').value = '';
+  document.getElementById('sf-name').value = '';
+  document.getElementById('sf-schedule').value = '';
+  document.getElementById('sf-target').value = '';
+  document.getElementById('sf-enabled').checked = true;
+  document.getElementById('sf-cron-preview').textContent = '';
+  document.getElementById('schedule-form').style.display = '';
+}
+function cancelScheduleForm() { document.getElementById('schedule-form').style.display = 'none'; }
+function previewCron() {
+  const expr = document.getElementById('sf-schedule').value.trim();
+  const el = document.getElementById('sf-cron-preview');
+  if (!el) return;
+  if (!expr) { el.textContent = ''; return; }
+  const parts = expr.split(/\s+/);
+  if (parts.length !== 5) { el.textContent = 'Invalid: needs 5 fields (min hour dom month dow)'; return; }
+  el.textContent = 'Valid cron expression';
+}
+async function saveSchedule() {
+  const id = document.getElementById('sf-id').value;
+  const body = {
+    name: document.getElementById('sf-name').value.trim(),
+    schedule: document.getElementById('sf-schedule').value.trim(),
+    target: document.getElementById('sf-target').value.trim(),
+    enabled: document.getElementById('sf-enabled').checked,
+  };
+  if (!body.name || !body.schedule) { toast('Name and schedule are required', 'err'); return; }
+  const action = id ? 'update_schedule' : 'add_schedule';
+  if (id) body.id = id;
+  body.action = action;
+  const r = await api('/api/schedules', { method: 'POST', body: JSON.stringify(body) });
+  if (r && r.ok) { cancelScheduleForm(); loadSchedules(); toast(id ? 'Schedule updated' : 'Schedule added', 'ok'); }
+  else toast((r && r.error) || 'Failed to save schedule', 'err');
+}
+async function deleteSchedule(id) {
+  if (!confirm('Delete this schedule?')) return;
+  const r = await api('/api/schedules', { method: 'POST', body: JSON.stringify({ action: 'delete_schedule', id }) });
+  if (r && r.ok) { loadSchedules(); toast('Schedule deleted', 'ok'); }
+  else toast((r && r.error) || 'Failed', 'err');
+}
+async function toggleSchedule(id, enabled) {
+  const action = enabled ? 'enable_schedule' : 'disable_schedule';
+  const r = await api('/api/schedules', { method: 'POST', body: JSON.stringify({ action, id }) });
+  if (r && r.ok) loadSchedules();
+  else toast((r && r.error) || 'Failed', 'err');
+}
+
+// ── Tools module ──
+async function loadTools() {
+  const data = await api('/api/tools');
+  if (!data) return;
+  renderTools(data.tools || []);
+  const policy = data.policy || {};
+  const mEl = document.getElementById('tp-mode');
+  if (mEl) mEl.value = policy.mode || 'auto';
+  const sEl = document.getElementById('tp-strategy');
+  if (sEl) sEl.value = policy.strategy || 'balanced';
+  const bg = policy.budget_guardrails || {};
+  const mt = document.getElementById('tp-max-task');
+  if (mt) mt.value = bg.max_tokens_per_task || 8000;
+  const md = document.getElementById('tp-max-day');
+  if (md) md.value = bg.max_tokens_per_day || 100000;
+}
+function renderTools(tools) {
+  const el = document.getElementById('tools-list');
+  if (!el) return;
+  if (!tools.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No tools registered. Register one to get started.</div>';
+    return;
+  }
+  el.innerHTML = tools.map(t => {
+    const enabled = t.enabled !== false;
+    const tags = (t.capability_tags || []).map(tag => `<span style="background:var(--raised);padding:1px 6px;border-radius:4px;font-size:10px">${escHtml(tag)}</span>`).join(' ');
+    return `<div class="tool-card">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px;color:var(--text)">${escHtml(t.name)}${t.provider ? ` <span style="color:var(--text3);font-weight:400;font-size:11px">${escHtml(t.provider)}</span>` : ''}</div>
+        <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${tags}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">Cost: ${escHtml(t.cost_profile||'unknown')} &middot; Trust: ${escHtml(t.trust_tier||'restricted')}</div>
+      </div>
+      <span class="task-badge ${enabled ? 'badge-running' : 'badge-cancelled'}" style="flex-shrink:0">${enabled ? 'enabled' : 'disabled'}</span>
+      <button class="btn btn-danger" style="font-size:11px;padding:3px 8px;flex-shrink:0" onclick="deleteTool('${escHtml(t.id)}')">Remove</button>
+    </div>`;
+  }).join('');
+}
+function openAddTool() {
+  document.getElementById('tf-id').value = '';
+  document.getElementById('tf-name').value = '';
+  document.getElementById('tf-provider').value = '';
+  document.getElementById('tf-caps').value = '';
+  document.getElementById('tf-cost').value = 'unknown';
+  document.getElementById('tf-trust').value = 'restricted';
+  document.getElementById('tool-form').style.display = '';
+}
+function cancelToolForm() { document.getElementById('tool-form').style.display = 'none'; }
+async function saveTool() {
+  const id = document.getElementById('tf-id').value;
+  const name = document.getElementById('tf-name').value.trim();
+  if (!name) { toast('Name is required', 'err'); return; }
+  const body = {
+    action: id ? 'update_tool' : 'add_tool',
+    name,
+    provider: document.getElementById('tf-provider').value.trim(),
+    capability_tags: document.getElementById('tf-caps').value.split(',').map(s=>s.trim()).filter(Boolean),
+    cost_profile: document.getElementById('tf-cost').value,
+    trust_tier: document.getElementById('tf-trust').value,
+  };
+  if (id) body.id = id;
+  const r = await api('/api/tools', { method: 'POST', body: JSON.stringify(body) });
+  if (r && r.ok) { cancelToolForm(); loadTools(); toast(id ? 'Tool updated' : 'Tool registered', 'ok'); }
+  else toast((r && r.error) || 'Failed', 'err');
+}
+async function deleteTool(id) {
+  if (!confirm('Remove this tool?')) return;
+  const r = await api('/api/tools', { method: 'POST', body: JSON.stringify({ action: 'delete_tool', id }) });
+  if (r && r.ok) { loadTools(); toast('Tool removed', 'ok'); }
+  else toast((r && r.error) || 'Failed', 'err');
+}
+async function saveToolPolicy() {
+  const body = {
+    action: 'update_policy',
+    mode: document.getElementById('tp-mode').value,
+    strategy: document.getElementById('tp-strategy').value,
+    budget_guardrails: {
+      max_tokens_per_task: parseInt(document.getElementById('tp-max-task').value) || 8000,
+      max_tokens_per_day: parseInt(document.getElementById('tp-max-day').value) || 100000,
+    },
+  };
+  const r = await api('/api/tools', { method: 'POST', body: JSON.stringify(body) });
+  if (r && r.ok) toast('Policy saved', 'ok');
+  else toast((r && r.error) || 'Failed', 'err');
+}
+
+// ── Audit module ──
+async function loadAudit() {
+  const data = await api('/api/audit?limit=100');
+  if (!data) return;
+  renderAudit(data.entries || []);
+}
+function renderAudit(entries) {
+  const el = document.getElementById('audit-list');
+  if (!el) return;
+  if (!entries.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No audit entries yet.</div>';
+    return;
+  }
+  el.innerHTML = entries.map(e => {
+    const ts = e.ts ? new Date(e.ts * 1000).toLocaleString() : '—';
+    return `<div class="audit-row">
+      <span style="color:var(--text3);flex-shrink:0;min-width:140px">${ts}</span>
+      <span style="color:var(--accent);font-weight:500;flex-shrink:0">${escHtml(e.action||'—')}</span>
+      <span style="color:var(--text2);flex:1">${escHtml(e.actor||'')}</span>
+      ${e.detail ? `<span style="color:var(--text3);font-size:11px">${escHtml(JSON.stringify(e.detail))}</span>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ── Agents module (module panel version) ──
+function openCreateAgent() {
+  const f = document.getElementById('agents-module-create-form');
+  if (f) { f.style.display = ''; document.getElementById('agents-module-key-box').style.display = 'none'; }
+  else { const sf = document.getElementById('agent-form'); if(sf) sf.style.display=''; }
+}
+function cancelAgentForm2() {
+  const f = document.getElementById('agents-module-create-form');
+  if (f) f.style.display = 'none';
+}
+async function createAgent2() {
+  const name = document.getElementById('af2-name').value.trim();
+  if (!name) { toast('Name required', 'err'); return; }
+  const body = {
+    action: 'create',
+    name,
+    type: document.getElementById('af2-type').value,
+    role: document.getElementById('af2-role').value,
+    runtime_location: document.getElementById('af2-runtime').value,
+    model_source: document.getElementById('af2-model-source').value,
+    model_id: document.getElementById('af2-model-id').value.trim(),
+    agent_type: document.getElementById('af2-agent-type').value,
+  };
+  const r = await api('/api/agents', { method: 'POST', body: JSON.stringify(body) });
+  if (r && r.ok) {
+    cancelAgentForm2();
+    document.getElementById('agents-module-key-val').textContent = r.key;
+    document.getElementById('agents-module-key-box').style.display = '';
+    loadAgents();
+    toast('Agent created', 'ok');
+  } else toast((r && r.error) || 'Failed to create agent', 'err');
+}
+function copyAgentKey2() {
+  const v = document.getElementById('agents-module-key-val').textContent;
+  navigator.clipboard.writeText(v).then(() => toast('Key copied', 'ok'));
+}
+
+// ── Policies module ──
+function saveOrchestrationPolicy() {
+  const body = {
+    checkpoint_interval: parseInt(document.getElementById('oc-ckpt').value) || 30,
+    lease_ttl: parseInt(document.getElementById('oc-ttl').value) || 300,
+    context_compression: document.getElementById('oc-compress').value,
+    fallback_chain: document.getElementById('oc-fallback').value,
+  };
+  api('/api/preferences', { method: 'POST', body: JSON.stringify(body) })
+    .then(r => { if (r && r.ok) toast('Controls saved', 'ok'); else toast('Failed', 'err'); });
+}
+
 function populateChangelog() {
   const el = document.getElementById('changelog-content');
-  if (!el || el.childElementCount) return;  // already populated
-  el.innerHTML = CHANGELOG.map(v =>
-    `<div class="cl-ver-row"><span class="cl-vtag">${v.ver}</span><span class="cl-vdate">${v.date}</span></div>
-     <ul class="cl-notes">${v.notes.map(n=>`<li>${escHtml(n)}</li>`).join('')}</ul>`
-  ).join('');
+  if (!el) return;
+  try {
+    const entries = (typeof CHANGELOG !== 'undefined' && Array.isArray(CHANGELOG) && CHANGELOG.length)
+      ? CHANGELOG
+      : [{ ver: 'v0.11.5', date: '2026-02-25', notes: ['Release notes are temporarily unavailable in this build.'] }];
+
+    el.innerHTML = entries.map(v => {
+      const notes = Array.isArray(v.notes) ? v.notes : [];
+      const notesHtml = notes.length
+        ? `<ul class="cl-notes">${notes.map(n => `<li>${escHtml(n)}</li>`).join('')}</ul>`
+        : '<div style="color:var(--text3);font-size:12px;margin:8px 0 14px">No notes for this release.</div>';
+      return `<div class="cl-ver-row"><span class="cl-vtag">${escHtml(v.ver||'unknown')}</span><span class="cl-vdate">${escHtml(v.date||'')}</span></div>${notesHtml}`;
+    }).join('');
+  } catch(e) {
+    console.error('Failed to populate changelog:', e);
+    el.innerHTML = '<div style="color:var(--danger);padding:10px">Error loading release notes. Check console for details.</div>';
+  }
 }
 
 // ── nodes & mounts ─────────────────────────────────────────────────────────
@@ -2160,13 +2997,13 @@ async function loadLocations() {
 function renderNodes(nodes) {
   const el = document.getElementById('loc-list');
   if (!nodes.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No nodes configured yet.</div>';
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No locations configured yet.</div>';
     return;
   }
+  const typeLabels = { local: 'Local machine', vps: 'VPS', tailscale: 'Tailscale' };
+  const typeCss    = { local: 'loc-badge--local', vps: 'loc-badge--vps', tailscale: 'loc-badge--remote' };
   el.innerHTML = nodes.map(node => {
-    const typeBadge = node.type === 'local'
-      ? '<span class="loc-badge loc-badge--local">Local</span>'
-      : '<span class="loc-badge loc-badge--remote">' + escHtml(node.type) + '</span>';
+    const typeBadge = `<span class="loc-badge ${typeCss[node.type] || 'loc-badge--remote'}">${typeLabels[node.type] || escHtml(node.type)}</span>`;
     const mountRows = (node.mounts || []).map(m => {
       const rwBadge = m.exists
         ? (m.writable ? '<span class="loc-badge loc-badge--rw">rw</span>' : '<span class="loc-badge loc-badge--ro">ro</span>')
@@ -2186,7 +3023,7 @@ function renderNodes(nodes) {
       </div>`;
     }).join('');
     const emptyMounts = !node.mounts || !node.mounts.length
-      ? '<div style="padding:10px;font-size:12px;color:var(--text3);border-top:1px solid var(--border)">No mounts yet — add a path below.</div>' : '';
+      ? '<div style="padding:10px;font-size:12px;color:var(--text3);border-top:1px solid var(--border)">No paths yet. Use + Path to add a folder or directory to this location.</div>' : '';
     return `
     <div style="background:var(--raised);border-radius:8px;margin-bottom:12px;border:1px solid var(--border);overflow:hidden">
       <div style="display:flex;align-items:center;gap:10px;padding:10px 12px">
@@ -2198,7 +3035,8 @@ function renderNodes(nodes) {
             ${node.hostname ? `<span style="font-size:11px;color:var(--text3)">${escHtml(node.hostname)}</span>` : ''}
           </div>
         </div>
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="openAddMount('${escHtml(node.id)}')">+ Mount</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="openEditNode('${escHtml(node.id)}','${escHtml(node.label)}','${escHtml(node.type)}')">&#9998; Rename</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="openAddMount('${escHtml(node.id)}')">+ Path</button>
         <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;color:var(--danger)" onclick="deleteNode('${escHtml(node.id)}','${escHtml(node.label)}')">✕</button>
       </div>
       ${mountRows}${emptyMounts}
@@ -2208,9 +3046,9 @@ function renderNodes(nodes) {
 
 // node / mount CRUD
 async function deleteNode(nodeId, label) {
-  if (!confirm(`Remove node "${label}" and all its mounts?`)) return;
+  if (!confirm(`Remove location "${label}" and all its paths?`)) return;
   const res = await api('/api/nodes', { action: 'delete_node', id: nodeId });
-  if (res && res.ok) { toast('Node removed', 'ok'); loadLocations(); }
+  if (res && res.ok) { toast('Location removed', 'ok'); loadLocations(); }
   else toast((res && res.error) || 'Remove failed', 'err');
 }
 async function deleteMount(nodeId, mountId, label) {
@@ -2271,7 +3109,17 @@ async function addLocalNode() {
   const hn = (window._serverHostname || 'local');
   const res = await api('/api/nodes', { action: 'add_node', id: hn, label: hn, type: 'local', hostname: hn });
   if (res && res.ok) {
-    toast('Node added — now add mounts', 'ok');
+    toast('Location added — now add paths', 'ok');
+    cancelLocationForm(); loadLocations();
+  } else toast((res && res.error) || 'Failed', 'err');
+}
+
+async function addVpsNode() {
+  const hn = (window._serverHostname || 'vps');
+  const label = `VPS (${hn})`;
+  const res = await api('/api/nodes', { action: 'add_node', id: hn + '-vps', label, type: 'vps', hostname: hn });
+  if (res && res.ok) {
+    toast('VPS location added — now add paths', 'ok');
     cancelLocationForm(); loadLocations();
   } else toast((res && res.error) || 'Failed', 'err');
 }
@@ -2289,7 +3137,7 @@ async function addTailscaleNodeFromPeer() {
   if (!ip) { toast('Select a peer first', 'err'); return; }
   const res = await api('/api/nodes', { action: 'add_node', id: name, label: name, type: 'tailscale', hostname: name, tailscale_ip: ip });
   if (res && res.ok) {
-    toast('Tailscale node added — now add mounts', 'ok');
+    toast('Tailscale location added — now add paths', 'ok');
     cancelLocationForm(); loadLocations();
   } else toast((res && res.error) || 'Failed', 'err');
 }
@@ -2335,6 +3183,20 @@ function cancelLocationForm() {
   document.getElementById('loc-form').style.display = 'none';
 }
 
+// node rename (inline prompt)
+function openEditNode(nodeId, currentLabel, currentType) {
+  const newLabel = prompt('Rename location:', currentLabel);
+  if (newLabel === null) return;  // cancelled
+  const trimmed = newLabel.trim();
+  if (!trimmed) { toast('Label cannot be empty', 'err'); return; }
+  saveEditNode(nodeId, trimmed, currentType);
+}
+async function saveEditNode(nodeId, label, type) {
+  const res = await api('/api/nodes', { action: 'update_node', node_id: nodeId, label, type });
+  if (res && res.ok) { toast('Location updated', 'ok'); loadLocations(); }
+  else toast((res && res.error) || 'Update failed', 'err');
+}
+
 // expose server hostname for addLocalNode
 fetch('/api/nodes').then(r=>r.json()).then(d=>{
   if (d.nodes && d.nodes[0]) window._serverHostname = d.nodes[0].hostname || d.nodes[0].id;
@@ -2346,17 +3208,28 @@ async function loadAgents() {
   const data = await api('/api/agents');
   if (!data) return;
   window._cachedAgents = data.agents || [];
+  window._lastAgents = data.agents || [];
   renderAgents(data.agents || []);
+  loadUsage();
 }
 
 function renderAgents(agents) {
   const el = document.getElementById('agent-list');
+  const el2 = document.getElementById('agents-module-list');
+  const noAgents = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No agents yet.</div>';
   if (!agents.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No agents yet.</div>';
+    if (el) el.innerHTML = noAgents;
+    if (el2) el2.innerHTML = noAgents;
     return;
   }
+  const usageMap = {};
+  if (window._currentUsage) {
+    window._currentUsage.forEach(u => usageMap[u.agent_id] = u);
+  }
   const roleColor = { viewer:'var(--text3)', writer:'var(--text2)', operator:'var(--accent)', admin:'var(--danger)' };
-  el.innerHTML = agents.map(a => {
+  const agentHtml = agents.map(a => {
+    const u = usageMap[a.id];
+    const uHtml = u ? ` &middot; <span style="color:${STATUS_COLOR[u.status]||'var(--text3)'};font-weight:600">${u.usage_percent}%</span>` : '';
     const keyRow = a.raw_key
       ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px">
            <code style="flex:1;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text2)">${escHtml(a.raw_key)}</code>
@@ -2365,18 +3238,18 @@ function renderAgents(agents) {
       : `<div style="font-size:11px;color:var(--text3);margin-top:5px;font-style:italic">Key hidden — rotate to reveal</div>`;
     const concurrencyRow = `
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-        <span style="font-size:12px;color:var(--text2);flex-shrink:0">Max concurrent tasks:</span>
+        <span style="font-size:12px;color:var(--text2);flex-shrink:0">Max concurrent:</span>
         <input id="conc-${a.id}" type="number" min="0" value="${a.max_concurrent||0}"
-               style="width:70px;background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:3px 7px;font-size:12px;color:var(--text);font-family:inherit">
+               style="width:50px;background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:3px 7px;font-size:12px;color:var(--text);font-family:inherit">
         <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="saveAgentConcurrency('${a.id}')">Save</button>
-        <span style="font-size:11px;color:var(--text3)">(0 = unlimited)</span>
+        <span style="font-size:11px;color:var(--text3)">(0=∞)</span>
       </div>`;
     return `
     <div style="padding:10px 12px;background:var(--raised);border-radius:8px;margin-bottom:8px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:10px">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(a.name)}</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(a.name)}${uHtml}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px">${escHtml(a.type)} · <span style="color:${roleColor[a.role]||'var(--text3)'}">${a.role}</span> · <span style="font-family:monospace">${a.id}</span></div>
         </div>
         <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
@@ -2386,6 +3259,8 @@ function renderAgents(agents) {
       ${concurrencyRow}
     </div>`;
   }).join('');
+  if (el) el.innerHTML = agentHtml;
+  if (el2) el2.innerHTML = agentHtml;
 }
 
 function openCreateAgent() {
@@ -2473,11 +3348,14 @@ async function loadTasks() {
 
 function renderTasks(tasks) {
   const el = document.getElementById('tasks-list');
+  const el2 = document.getElementById('tasks-module-list');
+  const noTasks = '<div style="color:var(--text2);padding:20px 0">No tasks found.</div>';
   if (!tasks.length) {
-    el.innerHTML = '<div style="color:var(--text2);padding:20px 0">No tasks found.</div>';
+    if (el) el.innerHTML = noTasks;
+    if (el2) el2.innerHTML = noTasks;
     return;
   }
-  el.innerHTML = tasks.map(t => {
+  const html = tasks.map(t => {
     const state = t.state || 'unknown';
     const badgeCls = 'task-badge badge-' + state;
     const canPause  = state === 'running' || state === 'stalled';
@@ -2488,20 +3366,29 @@ function renderTasks(tasks) {
       canResume ? `<button class="btn btn-sm btn-ghost" onclick="taskAction('resume','${t.task_id}')">Resume</button>` : '',
       canCancel ? `<button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="taskAction('cancel','${t.task_id}')">Cancel</button>` : '',
     ].filter(Boolean).join('');
+    const ownerDisplay = t.owner
+      ? `<span style="font-weight:500">${escHtml(t.owner_name || t.owner)}</span>${t.owner_name && t.owner_name !== t.owner ? ` <span style="font-family:monospace;color:var(--text3);font-size:11px">(${escHtml(t.owner)})</span>` : ''}`
+      : `<span style="color:var(--text3);font-style:italic">Unassigned</span> <span style="font-size:11px;color:var(--text3)">— started via session or legacy client</span>`;
+    const stallInfo = (state === 'stalled' && t.stall_reason)
+      ? `<div style="margin-top:6px;font-size:11px;color:#b91c1c;background:#fee2e2;border-radius:4px;padding:4px 8px">&#9888; ${escHtml(t.stall_reason)}</div>`
+      : '';
     return `<div class="task-card">
       <div class="task-hdr">
         <span class="task-id">${escHtml(t.task_id)}</span>
         <span class="${badgeCls}">${state}</span>
       </div>
       <div class="task-meta">
-        <span>Owner: ${escHtml(t.owner_name || t.owner || '—')}</span>
+        <span>Owner: ${ownerDisplay}</span>
         <span>Steps: ${t.step_count || 0}</span>
         <span>Heartbeat: ${_tsAgo(t.last_heartbeat)}</span>
         ${t.started_at ? '<span>Started: ' + _tsAgo(t.started_at) + '</span>' : ''}
       </div>
+      ${stallInfo}
       ${actions ? '<div class="task-actions">' + actions + '</div>' : ''}
     </div>`;
   }).join('');
+  if (el) el.innerHTML = html;
+  if (el2) el2.innerHTML = html;
 }
 
 async function taskAction(action, taskId) {
@@ -2536,13 +3423,16 @@ async function loadPolicy() {
 }
 
 function renderPolicy(presets) {
-  const el = document.getElementById('policy-presets-grid');
-  el.innerHTML = presets.map(p => `
+  const html = presets.map(p => `
     <div class="policy-card ${p.active ? 'active' : ''}" onclick="setPolicy('${p.id}')">
       <div class="policy-name">${_policyIcon(p.id)} ${escHtml(p.label)}</div>
       <div class="policy-desc">${escHtml(p.description)}</div>
       ${p.active ? '<span class="policy-active-pill">Active</span>' : ''}
     </div>`).join('');
+  const el = document.getElementById('policy-presets-grid');
+  if (el) el.innerHTML = html;
+  const el2 = document.getElementById('policy-presets-grid-main');
+  if (el2) el2.innerHTML = html;
 }
 
 async function setPolicy(id) {
@@ -2562,16 +3452,21 @@ const STATUS_LABEL = {
 async function loadUsage() {
   const data = await api('/agent-usage/current');
   if (!data) return;
+  window._currentUsage = data.agents || [];
   renderUsage(data.agents || []);
+  if (window._lastAgents) renderAgents(window._lastAgents);
 }
 
 function renderUsage(agents) {
   const el = document.getElementById('usage-panel');
+  const el2 = document.getElementById('agents-module-usage');
+  const noUsage = '<div style="color:var(--text3);font-size:13px">No usage data reported yet.</div>';
   if (!agents.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:13px">No agents registered. Add agents in the Agents tab.</div>';
+    if (el) el.innerHTML = noUsage;
+    if (el2) el2.innerHTML = noUsage;
     return;
   }
-  el.innerHTML = agents.map(a => {
+  const html = agents.map(a => {
     const color  = STATUS_COLOR[a.status] || STATUS_COLOR.unknown;
     const label  = STATUS_LABEL[a.status] || 'Unknown';
     const pct    = a.usage_percent != null ? `${a.usage_percent}%` : '—';
@@ -2592,6 +3487,8 @@ function renderUsage(agents) {
       </div>
     </div>`;
   }).join('');
+  if (el) el.innerHTML = html;
+  if (el2) el2.innerHTML = html;
 }
 
 function _usageCountdown(isoStr) {
@@ -2749,6 +3646,7 @@ function _locIcon(l) {
   if (type === 'tailscale' || type === 'remote') {
     return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/></svg>';
   }
+  // vps falls through to folder icons below (same as local)
   if (lbl.includes('web') || lbl.includes('site') || lbl.includes('www')) {
     return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>';
   }
@@ -2804,14 +3702,12 @@ function _renderSidebarLocs(locs, activeRoot) {
 async function init() {
   loadSettings();
   await loadMe();
+  populateChangelog();
   const nodeData = await api('/api/nodes');
   const nodes = (nodeData && nodeData.nodes) || [];
   _renderSidebarNodes(nodes, null);
-  // navigate to first visible mount
-  for (const node of nodes) {
-    const firstMount = (node.mounts || []).find(m => m.visible !== false);
-    if (firstMount) { navigate(firstMount.id, ''); break; }
-  }
+  // Default to overview unless a hash/route is added later
+  switchModule('overview');
   await maybeShowWizard();
 }
 
@@ -2819,8 +3715,8 @@ async function init() {
 async function navigate(root, path) {
   curRoot = root; curPath = path;
   document.title = path ? `Porter · ${root}/${path}` : `Porter · ${root}`;
-  // close settings if open so the file list is visible
-  closeSettings();
+  // Ensure we are in files module
+  if (_currentModule !== 'files') switchModule('files');
   // close preview if open
   if (previewOpen) {
     previewOpen = false; previewDirty = false; previewName = null;
@@ -3473,149 +4369,13 @@ function toggleShortcuts() {
 }
 
 // ── changelog ──
-const CHANGELOG = [
-  { ver:'v0.9.0', date:'2026-02-24', notes:[
-    'P2: GET /api/tasks — list all tasks with state, owner, step count, heartbeat age',
-    'P2: POST /api/tasks — pause/resume/cancel/clear_completed/update_agent_concurrency',
-    'P2: GET /api/audit — newest-first audit log of all privileged task+concurrency actions',
-    'P2: Task Operations settings tab — task cards with status badges and action buttons',
-    'P2: Concurrency enforcement on /runtime/checkpoint for bearer agents with max_concurrent set',
-    'P2: Audit trail on all task state changes (actor, action, target, iso timestamp)',
-    'P2: Agent cards in Agents tab now show concurrency input (0 = unlimited)',
-    'P3: GET /api/policy/presets — 5 presets with descriptions, active marker, settings dict',
-    'P3: Policy Presets settings tab — Cost-Sensitive/Balanced/Speed-First/Quality-First/Local-First',
-    'P3: policy_preset persisted via POST /api/preferences; default = "balanced"',
-    'P4: Regression tested all core flows; no regressions found',
-    'P4: Dead code absence verified; backward compat preserved',
-    'Version bump: v0.8.0 → v0.9.0',
-  ]},
-  { ver:'v0.8.0', date:'2026-02-24', notes:[
-    'Nodes & Mounts model: locations renamed to a two-layer node→mount hierarchy (machine first, then paths)',
-    'Auto-migration: existing flat locations migrated to local node on first start; node ID = hostname (srv1379868)',
-    'GET /api/nodes: full node tree with per-mount exists/writable stats',
-    'POST /api/nodes: add_node, delete_node, add_mount, update_mount, delete_mount actions',
-    'GET /api/locations: backward-compatible flat view derived from nodes; existing integrations unaffected',
-    'Sidebar: locations grouped under node headers; mount items indented; node headers hidden when collapsed',
-    'Settings: Locations tab renamed to "Nodes & Mounts"; node cards with expandable mount rows',
-    'Settings: add-location flow replaced with node-first form (Local Node / Tailscale Node)',
-    'Tailscale peer discovery populates node form; mount paths configured manually per node',
-    'Agent Usage Tracker: POST /agent-usage/snapshot stores per-agent usage state to runtime/usage/',
-    'Agent Usage Tracker: GET /agent-usage/current returns latest snapshot per registered agent',
-    'Agent Usage Tracker: POST /agent-usage/parse extracts usage % and reset time from raw CLI text',
-    'Usage parser: supports claude_code and openclaw providers; auto-derives status from usage %',
-    'Settings: Usage tab — agent status cards with countdown to reset and threshold indicators',
-    'Usage tab: manual snapshot form with provider selector and raw-text paste parser',
-    'All new endpoints auth-gated (401 JSON for unauthenticated requests)',
-    'Mount path safety: all paths validated via existing safe_resolve on file operations',
-    'USAGE_DIR = runtime/usage/ created at startup alongside existing runtime dirs',
-    'Version bump: v0.7.0 → v0.8.0',
-  ]},
-  { ver:'v0.7.0', date:'2026-02-24', notes:[
-    'Collapsible sidebar — hamburger toggle in logo row; icon-only 52px rail when collapsed; preference saved to localStorage',
-    'Account: owner-mode password change no longer requires current password (single-user local)',
-    'Account: compact 2-column layout; display settings moved to a separate subsection',
-    'Locations: guided type picker (Local folder / VPS path / Tailscale device / GitHub — coming soon)',
-    'Locations: Tailscale peer discovery via tailscale status --json with manual-entry fallback',
-    'Locations: writability badges (rw / ro / not found) on each location row',
-    'Locations: device hostname shown as subtitle under each local location label',
-    'Locations: distinct icons — folder for Documents, globe for web roots, node graph for Tailscale',
-    'Tailscale tab (renamed from Network): live status with 20 s polling, peer list, last-updated timestamp',
-    'Tailscale tab: smart CTAs — "Install Tailscale" command block when not found; start instructions when not running',
-    'Access Model tab (renamed from Permissions): simplified, links role assignment to Agents tab',
-    'Show/hide hidden files moved from Account settings to main toolbar as eye-icon toggle',
-    'Agent keys now stored and visible in the Agents tab — monospace box with one-click copy button',
-    'Agents without a stored key show "Rotate key to reveal" prompt',
-    'Settings tabs (Locations, Agents) now load data when clicked, not only when settings first opens',
-    'Sidebar location click now closes settings panel — no need to close settings manually before navigating',
-    'Version / What\'s new moved from sidebar to Settings footer (above Sign out)',
-    'Sidebar labels now use /api/locations (proper labels) instead of raw root IDs',
-    'Disk usage bar pinned to sidebar bottom via flex layout',
-  ]},
-  { ver:'v0.6.0', date:'2026-02-24', notes:[
-    'Settings: Locations tab — list, add, edit, remove, test-path; replaces hardcoded SERVE_DIRS',
-    'Settings: Agents tab — create agents, rotate key, revoke',
-    'Settings: Access Model tab — role capability overview',
-    'Onboarding wizard: 4-step first-run flow (Welcome → Location → Agent → Complete)',
-    'Agent auth: Bearer token accepted on all runtime/memory endpoints',
-    'Permission enforcement: viewer blocked from write/checkpoint/finalize (403)',
-    'Config: locations/agents/preferences stored in porter_config.json with backward-compat migration',
-  ]},
-  { ver:'v0.5.0', date:'2026-02-24', notes:[
-    'P0: Durable checkpoint runtime — agents survive API-limit interruptions with zero lost work',
-    'P0: /runtime/checkpoint — write-ahead log, one JSON line per step',
-    'P0: /runtime/heartbeat — lease ownership with configurable TTL (30–3600 s)',
-    'P0: /runtime/recover — returns full step history, resumable flag, lease expiry status',
-    'P0: /runtime/finalize — atomic os.replace() promotion from temp to final URI',
-    'P1: Memory connector API — OpenClaw/Claude use Porter as long-term memory store',
-    'P1: /memory/upsert — write any text file via porter:// URI',
-    'P1: /memory/fetch — read back with optional line-range slicing',
-    'P1: /memory/pointer — structured pointer JSON with confidence, tags, created_at preservation',
-    'P1: /memory/search — full-walk scorer over .json/.md/.txt with tag filtering; total/returned counts',
-    'Hardening: resume logic respects lease expiry and lease.state field',
-    'Hardening: heartbeat TTL validated to 30–3600 s range',
-    'Hardening: search response includes total (pre-limit) and returned (post-limit) counts',
-    'Hardening: runtime/ and memory/ paths excluded from git; .gitkeep placeholders added',
-    'docs/runtime.md: documents generated paths, lifecycle, resume semantics, atomic promotion',
-  ]},
-  { ver:'v0.4.2', date:'2026-02-23', notes:[
-    'File row separators made nearly invisible — removes spreadsheet grid feel',
-    'Folder names now bold and bright — primary navigation items stand out',
-    'File name brightens on row hover — hover state feels more responsive',
-    'Search input now shows a magnifying glass icon (turns orange on focus)',
-    'Disk usage bar height increased from 3px to 4px for better readability',
-    'Empty folder state includes a helpful subtitle prompt',
-  ]},
-  { ver:'v0.4.1', date:'2026-02-23', notes:[
-    'Fixed Cancel button not closing modals (closeModal event guard bug)',
-    'Fixed long filenames overflowing delete confirmation dialog',
-    'Text contrast lifted — secondary and muted text now clearly readable',
-    'Favicon updated to geometric P mark — matches sidebar logo',
-    'Browser tab title now reflects current location (Porter · root/path)',
-    'Delete key shortcut triggers bulk delete when items are selected',
-    'Browser theme-color set to match Porter dark background',
-    'Search empty state shows the searched query, not a generic message',
-  ]},
-  { ver:'v0.4', date:'2026-02-23', notes:[
-    'Warm dark theme — improved contrast throughout',
-    'New geometric logo mark',
-    '"File Manager" subtitle restored in sidebar',
-    'Version badge in lower-left footer with release notes link',
-    'Search always visible — no toggle required',
-    'Search results show count, grouped by folder, with match highlighting',
-    'Folder path in search results navigates on click',
-    'Release notes changelog accessible from footer',
-  ]},
-  { ver:'v0.3', date:'2026-02-10', notes:[
-    'Cache-Control: no-store on all responses — prevents stale listings',
-    'Version display added to sidebar',
-  ]},
-  { ver:'v0.2', date:'2026-01-20', notes:[
-    'Copy file/folder operation',
-    'ZIP bulk download of selected items',
-    'Full-root search via /api/search',
-    'Folder picker modal for Move operation',
-    'Selection toolbar with bulk actions (delete, move, zip)',
-  ]},
-  { ver:'v0.1', date:'2026-01-01', notes:[
-    'Multi-root file browser (documents, uploads, websites)',
-    'Directory listing with sort by name, size, modified date',
-    'File upload with progress bar and batch queue',
-    'New folder, rename, delete (files and folders)',
-    'File preview: text, images, PDF',
-    'Inline text editor with save',
-    'Bulk select, delete, move',
-    'Drag-and-drop upload to current folder',
-    'Keyboard shortcuts (/, r, n, u, Backspace, Esc, ?)',
-    'Dark theme with CSS custom properties',
-  ]},
-];
 
 document.addEventListener('keydown', function(e) {
   const tag = (document.activeElement.tagName || '').toLowerCase();
   const inInput = tag === 'input' || tag === 'textarea' || document.activeElement.isContentEditable;
 
   if (e.key === 'Escape') {
-    if (document.getElementById('settingsPanel').classList.contains('open')) { closeSettings(); return; }
+    if (_currentModule !== 'files') { switchModule('files'); return; }
     if (document.getElementById('shortcutsOverlay').style.display !== 'none') { toggleShortcuts(); return; }
     if (document.getElementById('fpOverlay').style.display !== 'none') { closeFolderPicker(); return; }
     if (document.getElementById('overlay').style.display !== 'none') { closeModal(); return; }
@@ -3748,21 +4508,6 @@ function toast(msg, type='') {
 }
 
 // ── api helpers ──
-async function api(url, body) {
-  try {
-    const opts = body
-      ? { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }
-      : { cache: 'no-store' };
-    const res = await fetch(url, opts);
-    if (res.redirected || res.status === 401) { window.location.href = '/login'; return null; }
-    return await res.json();
-  } catch(e) { toast('Network error', 'err'); return null; }
-}
-
-function enc(s) { return encodeURIComponent(s); }
-function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function esc(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
-
 // ── onboarding wizard ──────────────────────────────────────────────────────
 let _wizStep = 1, _wizLocAdded = false, _wizAgentCreated = false;
 let _wizAgentKey = '', _wizAgentRole = 'writer';
@@ -4454,6 +5199,15 @@ class Handler(BaseHTTPRequestHandler):
                     state   = lease.get("state", "running")
                     if state == "running" and lease.get("expires_at", 0) < now:
                         state = "stalled"
+                    stall_reason = None
+                    if state == "stalled":
+                        hb = lease.get("last_heartbeat")
+                        exp = lease.get("expires_at", 0)
+                        if hb is None:
+                            stall_reason = "No heartbeat was ever sent for this task"
+                        else:
+                            overdue_secs = int(now - exp)
+                            stall_reason = f"Heartbeat expired {overdue_secs}s ago — agent may be offline or crashed"
                     # count steps in checkpoint log
                     ckpt_path = ckpts_dir / f"{task_id}.jsonl"
                     steps = []
@@ -4481,6 +5235,7 @@ class Handler(BaseHTTPRequestHandler):
                         "step_count":     len(steps),
                         "last_step":      last_step,
                         "stalled":        state == "stalled",
+                        "stall_reason":   stall_reason,
                     })
             # sort: running→paused→stalled→complete→cancelled
             _order = {"running": 0, "paused": 1, "stalled": 2, "complete": 3, "cancelled": 4}
@@ -4517,6 +5272,70 @@ class Handler(BaseHTTPRequestHandler):
             active = _config.get("preferences", {}).get("policy_preset", "balanced")
             out = [dict(p, active=(p["id"] == active)) for p in POLICY_PRESETS]
             self.reply_json({"presets": out, "active": active})
+
+        # ── P4: overview ───────────────────────────────────────────────────────
+        elif parsed.path == "/api/overview":
+            if not self.auth_check(redirect=False): return
+            now = time.time()
+            leases_dir = RUNTIME_DIR / "leases"
+            active_t = stalled = 0
+            if leases_dir.exists():
+                for lf in leases_dir.glob("*.json"):
+                    try:
+                        lease = json.loads(lf.read_text())
+                        state = lease.get("state", "running")
+                        if state == "running":
+                            if lease.get("expires_at", 0) < now: stalled += 1
+                            else: active_t += 1
+                        elif state == "stalled": stalled += 1
+                    except: pass
+            recent_audit = []
+            if AUDIT_LOG.exists():
+                try:
+                    lines = AUDIT_LOG.read_text().splitlines()
+                    for line in reversed(lines[-20:]):
+                        if line.strip():
+                            try: recent_audit.append(json.loads(line))
+                            except: pass
+                        if len(recent_audit) >= 5: break
+                except: pass
+            disk_used_pct = 0
+            try:
+                usage = shutil.disk_usage("/")
+                disk_used_pct = round(usage.used / usage.total * 100, 1) if usage.total > 0 else 0
+            except: pass
+            self.reply_json({
+                "active_tasks": active_t, "stalled_tasks": stalled,
+                "agent_count": len(_config.get("agents", [])),
+                "location_count": sum(len(n.get("mounts", [])) for n in _config.get("nodes", [])),
+                "schedule_count": len(_config.get("schedules", [])),
+                "tool_count": len(_config.get("tools", [])),
+                "disk_used_pct": disk_used_pct,
+                "recent_audit": recent_audit[:5],
+            })
+
+        # ── P5: schedules ──────────────────────────────────────────────────────
+        elif parsed.path == "/api/schedules":
+            if not self.auth_check(redirect=False): return
+            jobs = _config.get("schedules", [])
+            result = []
+            for job in jobs:
+                j = dict(job)
+                try:
+                    j["next_run_display"] = _cron_next_display(job["schedule"])
+                    nxt = _cron_next(job["schedule"])
+                    j["next_run_ts"] = nxt.timestamp() if nxt else None
+                except: j["next_run_display"] = "─"; j["next_run_ts"] = None
+                result.append(j)
+            self.reply_json({"schedules": result, "count": len(result)})
+
+        # ── P6: tools ────────────────────────────────────────────────────────
+        elif parsed.path == "/api/tools":
+            if not self.auth_check(redirect=False): return
+            self.reply_json({
+                "tools": _config.get("tools", []),
+                "policy": _config.get("tool_selection_policy", DEFAULT_TOOL_POLICY),
+            })
 
         else:
             self.reply_html("<h1>Not found</h1>", 404)
@@ -5109,6 +5928,20 @@ class Handler(BaseHTTPRequestHandler):
                 _load_serve_dirs(_config); save_config(_config)
                 self.reply_json({"ok": True, "node": new_node})
 
+            elif action == "update_node":
+                node_id   = data.get("node_id", "")
+                new_label = data.get("label", "").strip()
+                new_type  = data.get("type", "")
+                node = next((n for n in _config.get("nodes", []) if n["id"] == node_id), None)
+                if not node:
+                    self.reply_json({"error": "node not found"}, 404); return
+                if new_label:
+                    node["label"] = new_label
+                if new_type in ("local", "vps", "tailscale"):
+                    node["type"] = new_type
+                _load_serve_dirs(_config); save_config(_config)
+                self.reply_json({"ok": True, "node": {k: v for k, v in node.items() if k != "key_hash"}})
+
             elif action == "delete_node":
                 nid    = data.get("id", "")
                 before = len(_config.get("nodes", []))
@@ -5305,15 +6138,20 @@ class Handler(BaseHTTPRequestHandler):
                 raw_key  = secrets.token_hex(32)
                 agent_id = secrets.token_hex(8)
                 agent    = {
-                    "id":         agent_id,
-                    "name":       name,
-                    "type":       agent_type,
-                    "key_hash":   _hash_agent_key(raw_key),
-                    "raw_key":    raw_key,
-                    "role":       role,
-                    "namespaces": namespaces,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                    "last_seen":  None,
+                    "id":               agent_id,
+                    "name":             name,
+                    "type":             agent_type,
+                    "key_hash":         _hash_agent_key(raw_key),
+                    "raw_key":          raw_key,
+                    "role":             role,
+                    "namespaces":       namespaces,
+                    "created_at":       datetime.now(timezone.utc).isoformat(),
+                    "last_seen":        None,
+                    "runtime_location": data.get("runtime_location", "local"),
+                    "model_source":     data.get("model_source", "cloud"),
+                    "model_id":         data.get("model_id", ""),
+                    "agent_type":       data.get("agent_type", "production"),
+                    "limit_type":       data.get("limit_type", "none"),
                 }
                 _config.setdefault("agents", []).append(agent)
                 save_config(_config)
@@ -5485,6 +6323,89 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     self.reply_json({"error": f"Unknown action: {action}"}, 400)
 
+        # ── POST: schedules ──────────────────────────────────────────────────────
+        elif parsed.path == "/api/schedules":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            action = data.get("action", "")
+            if action == "add_schedule":
+                job = {
+                    "id":       secrets.token_hex(8),
+                    "name":     data.get("name", "").strip(),
+                    "schedule": data.get("schedule", "").strip(),
+                    "target":   data.get("target", "").strip(),
+                    "enabled":  data.get("enabled", True),
+                }
+                if not job["name"] or not job["schedule"]:
+                    self.reply_json({"error": "name and schedule required"}, 400); return
+                _config.setdefault("schedules", []).append(job)
+                save_config(_config); self.reply_json({"ok": True, "id": job["id"]})
+            elif action == "update_schedule":
+                sid = data.get("id", "")
+                jobs = _config.get("schedules", [])
+                for j in jobs:
+                    if j.get("id") == sid:
+                        j.update({k: data[k] for k in ("name","schedule","target","enabled") if k in data})
+                        break
+                else:
+                    self.reply_json({"error": "schedule not found"}, 404); return
+                save_config(_config); self.reply_json({"ok": True})
+            elif action == "delete_schedule":
+                sid = data.get("id", "")
+                _config["schedules"] = [j for j in _config.get("schedules", []) if j.get("id") != sid]
+                save_config(_config); self.reply_json({"ok": True})
+            elif action in ("enable_schedule", "disable_schedule"):
+                sid = data.get("id", "")
+                enabled = action == "enable_schedule"
+                for j in _config.get("schedules", []):
+                    if j.get("id") == sid: j["enabled"] = enabled; break
+                save_config(_config); self.reply_json({"ok": True})
+            else:
+                self.reply_json({"error": "unknown action"}, 400)
+
+        # ── POST: tools ─────────────────────────────────────────────────────────
+        elif parsed.path == "/api/tools":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            action = data.get("action", "")
+            if action == "add_tool":
+                tool = {
+                    "id":               secrets.token_hex(8),
+                    "name":             data.get("name", "").strip(),
+                    "provider":         data.get("provider", "").strip(),
+                    "capability_tags":  data.get("capability_tags", []),
+                    "cost_profile":     data.get("cost_profile", "unknown"),
+                    "trust_tier":       data.get("trust_tier", "restricted"),
+                    "enabled":          True,
+                }
+                if not tool["name"]: self.reply_json({"error": "name required"}, 400); return
+                _config.setdefault("tools", []).append(tool)
+                save_config(_config); self.reply_json({"ok": True, "id": tool["id"]})
+            elif action == "update_tool":
+                tid = data.get("id", "")
+                for t in _config.get("tools", []):
+                    if t.get("id") == tid:
+                        for k in ("name","provider","capability_tags","cost_profile","trust_tier"):
+                            if k in data: t[k] = data[k]
+                        break
+                else:
+                    self.reply_json({"error": "tool not found"}, 404); return
+                save_config(_config); self.reply_json({"ok": True})
+            elif action == "delete_tool":
+                tid = data.get("id", "")
+                _config["tools"] = [t for t in _config.get("tools", []) if t.get("id") != tid]
+                save_config(_config); self.reply_json({"ok": True})
+            elif action == "update_policy":
+                policy = {
+                    "mode":             data.get("mode", "auto"),
+                    "strategy":         data.get("strategy", "balanced"),
+                    "budget_guardrails": data.get("budget_guardrails", DEFAULT_TOOL_POLICY["budget_guardrails"]),
+                }
+                _config["tool_selection_policy"] = policy
+                save_config(_config); self.reply_json({"ok": True})
+            else:
+                self.reply_json({"error": "unknown action"}, 400)
+
         else:
             self.reply_html("<h1>Not found</h1>", 404)
 
@@ -5496,7 +6417,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.9.0 ready (localhost only)")
+    print(f"\n  Porter v0.11.5 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
