@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.5 — self-hosted file manager"""
+"""Porter v0.12.6 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.5</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.6</div>
   </div>
 </aside>
 
@@ -1963,7 +1963,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.5 — What's new
+          v0.12.6 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2354,6 +2354,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.6', date:'2026-02-25', notes:[
+    'Locations model clarity: VPS/local device is now shown as its own location device, separate from tailnet peer concept',
+    'Locations now shows device-level cards (without path management clutter) to keep topology clear',
+    'Connectivity wording updated: peer count explicitly excludes the current VPS device',
+  ]},
   { ver:'v0.12.5', date:'2026-02-25', notes:[
     'Locations UX cleanup: removed unnecessary "inventory moved to Files" explainer box',
     'Locations now stays strictly minimal (connectivity/setup only)',
@@ -2834,7 +2839,7 @@ function renderTailscaleStatus(data) {
         <span class="ts-stat-val">${escHtml(s.tailnet || '—')}</span>
       </div>
       <div class="ts-status-row">
-        <span class="ts-stat-label">Peers online</span>
+        <span class="ts-stat-label">Tailnet peer devices online (excluding this VPS)</span>
         <span class="ts-stat-val" style="color:${onlinePeers.length ? 'var(--accent)' : 'var(--text3)'}">${onlinePeers.length} of ${data.peers_total}</span>
       </div>
     </div>
@@ -3269,7 +3274,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.5',
+      ver: 'v0.12.6',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3331,8 +3336,32 @@ async function loadLocations() {
 function renderNodes(nodes) {
   const el = document.getElementById('loc-list');
   if (!el) return;
-  // Intentionally minimal: Locations should focus on connectivity/setup only.
-  el.innerHTML = '';
+  const visibleNodes = (nodes || []).filter(node => isTailscaleNodeConnected(node));
+  if (!visibleNodes.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No connected locations available.</div>';
+    return;
+  }
+  const typeLabels = { local: 'VPS device', vps: 'VPS device', tailscale: 'Tailnet peer device' };
+  const typeCss    = { local: 'loc-badge--vps', vps: 'loc-badge--vps', tailscale: 'loc-badge--remote' };
+  el.innerHTML = `
+    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin:4px 0 8px">Location devices</div>
+    ${visibleNodes.map(node => {
+      const mCount = (node.mounts || []).length;
+      const hasPath = mCount > 0;
+      const kind = typeLabels[node.type] || escHtml(node.type || 'device');
+      const badge = `<span class="loc-badge ${typeCss[node.type] || 'loc-badge--remote'}">${kind}</span>`;
+      const status = hasPath ? `${mCount} path${mCount !== 1 ? 's' : ''} configured` : 'No paths configured yet';
+      return `
+      <div style="background:var(--raised);border-radius:8px;margin-bottom:10px;border:1px solid var(--border);padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(node.label || node.id)}</span>
+          ${badge}
+          ${node.hostname ? `<span style="font-size:11px;color:var(--text3)">${escHtml(node.hostname)}</span>` : ''}
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin-top:5px">${status}</div>
+      </div>`;
+    }).join('')}
+  `;
 }
 
 // node / mount CRUD
@@ -6742,7 +6771,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.5 ready (localhost only)")
+    print(f"\n  Porter v0.12.6 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
