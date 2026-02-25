@@ -2208,7 +2208,10 @@ body.density-compact .file-name { padding: 6px 0; }
 
       <div class="settings-page" id="spage-changelog">
         <div class="settings-page-title">What's new</div>
-        <div id="changelog-content"></div>
+        <div id="changelog-content">
+          <div class="cl-ver-row"><span class="cl-vtag">Loading release notes…</span><span class="cl-vdate"></span></div>
+          <ul class="cl-notes"><li>If this persists, refresh once. Porter will repopulate this panel automatically.</li></ul>
+        </div>
       </div>
 
     </div><!-- /settings-content -->
@@ -2693,7 +2696,10 @@ function switchSettingsTab(tab) {
   document.querySelectorAll('.settings-page').forEach(el =>
     el.classList.toggle('active', el.id === 'spage-' + tab));
   if (tab === 'network') startTsPolling();
-  if (tab === 'changelog') populateChangelog();
+  if (tab === 'changelog') {
+    populateChangelog();
+    setTimeout(populateChangelog, 0);
+  }
 }
 // ── Overview module ──
 async function loadOverview() {
