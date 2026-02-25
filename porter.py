@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.54 — self-hosted file manager"""
+"""Porter v0.12.55 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1558,7 +1558,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.54</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.55</div>
   </div>
 </aside>
 
@@ -1719,6 +1719,16 @@ body.density-compact .file-name { padding: 6px 0; }
         <button class="btn btn-primary" style="font-size:11px;padding:5px 10px" onclick="runTaskWizard()">Generate plan</button>
       </div>
       <div id="tw-output" style="font-size:12px;color:var(--text2)"></div>
+    </div>
+    <div id="tasks-decision-rubric" style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">Cancel vs Recover — persistent rulebook</div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.45">
+        <div><strong>Recover</strong> when task just stalled (fresh heartbeat expiry) and work should continue.</div>
+        <div><strong>Cancel</strong> when heartbeat is long stale, task exceeded TTL badly, or Recover already failed once.</div>
+        <div><strong>Keep paused</strong> only if intentionally paused by operator.</div>
+        <div><strong>Clear completed</strong> after verifying outputs, to keep queue actionable.</div>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--text3)">Tip: stale running task + no heartbeat for long period = zombie; cancel safely and relaunch clean.</div>
     </div>
     <div id="tasks-module-list"><div style="color:var(--text2);padding:20px 0">Loading&#8230;</div></div>
   </div>
@@ -2041,7 +2051,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.54 — What's new
+          v0.12.55 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2432,6 +2442,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.55', date:'2026-02-25', notes:[
+    'Added persistent in-UI decision rubric for cancel vs recover behavior in Tasks',
+    'Task cards now flag stale tasks with explicit recommend-cancel guidance',
+    'Operator instructions are now always visible (not hidden in transient wizard context)',
+  ]},
   { ver:'v0.12.54', date:'2026-02-25', notes:[
     'Tasks now includes a guided Task Wizard for operator decision support',
     'Wizard generates step-by-step action plans by intent (unblock/stabilize/cleanup/start)',
@@ -3688,7 +3703,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.54',
+      ver: 'v0.12.55',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4247,9 +4262,13 @@ function renderTasks(tasks) {
       ? `<button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="taskAction('cancel','${t.task_id}')">Cancel</button>`
       : '';
 
-    const nextHint = state === 'stalled'
-      ? 'Next: click Recover'
-      : (state === 'running' ? 'Next: monitor or pause' : (state === 'paused' ? 'Next: resume or cancel' : (state === 'complete' ? 'Next: clear completed' : 'Next: review')));
+    const hbAgoSecs = t.last_heartbeat ? Math.floor(Date.now()/1000 - t.last_heartbeat) : null;
+    const recommendCancel = (state === 'running' || state === 'stalled') && hbAgoSecs !== null && hbAgoSecs > 600;
+    const nextHint = recommendCancel
+      ? 'Next: cancel stale task and relaunch clean'
+      : (state === 'stalled'
+          ? 'Next: click Recover'
+          : (state === 'running' ? 'Next: monitor or pause' : (state === 'paused' ? 'Next: resume or cancel' : (state === 'complete' ? 'Next: clear completed' : 'Next: review'))));
 
     const stallInfo = (state === 'stalled' && t.stall_reason)
       ? `<div style="margin-top:6px;font-size:11px;color:#b91c1c;background:#fee2e2;border-radius:4px;padding:4px 8px">⚠ ${escHtml(t.stall_reason)}</div>`
@@ -4266,7 +4285,7 @@ function renderTasks(tasks) {
         <span>Heartbeat: ${_tsAgo(t.last_heartbeat)}</span>
         ${t.started_at ? '<span>Started: ' + _tsAgo(t.started_at) + '</span>' : ''}
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:6px">${nextHint}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px"><div style="font-size:11px;color:var(--text3)">${nextHint}</div>${recommendCancel ? '<span class="task-badge badge-stalled" title="Stale heartbeat detected">recommend cancel</span>' : ''}</div>
       ${stallInfo}
       ${(primaryAction || secondary) ? `<div class="task-actions">${primaryAction}${secondary}</div>` : ''}
     </div>`;
@@ -7640,7 +7659,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.54 ready (localhost only)")
+    print(f"\n  Porter v0.12.55 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
