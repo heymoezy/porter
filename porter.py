@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.0 — self-hosted file manager"""
+"""Porter v0.12.1 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.0</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.1</div>
   </div>
 </aside>
 
@@ -1755,7 +1755,13 @@ body.density-compact .file-name { padding: 6px 0; }
     </div>
     <div class="module-section">
       <div class="module-section-title">Connectivity (Tailscale)</div>
-      <div style="font-size:13px;color:var(--text3);margin-bottom:12px">Device networking lives with Locations so infrastructure and mounts stay in one place.</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:12px">Connect/disconnect network transport first, then expose mounted paths.</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <button class="btn btn-ghost" style="font-size:12px" onclick="tailscaleControl('test')">Test</button>
+        <button class="btn btn-primary" style="font-size:12px" onclick="tailscaleControl('up')">Connect</button>
+        <button class="btn btn-danger" style="font-size:12px" onclick="tailscaleControl('down')">Disconnect</button>
+      </div>
+      <div id="ts-control-status" style="margin-bottom:10px;font-size:12px;color:var(--text3)"></div>
       <div id="ts-panel-locations"><div style="color:var(--text3);font-size:13px">Loading connectivity&#8230;</div></div>
       <div id="ts-last-updated-locations" style="margin-top:8px;font-size:11px;color:var(--text3)"></div>
     </div>
@@ -1958,7 +1964,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.0 — What's new
+          v0.12.1 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2349,6 +2355,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.1', date:'2026-02-25', notes:[
+    'Locations adds Connect/Disconnect/Test controls for Tailscale transport',
+    'Tailscale nodes are now gated by connectivity state in Locations/Files navigation',
+    'Connection-first flow: transport first, then expose mounted paths',
+  ]},
   { ver:'v0.12.0', date:'2026-02-25', notes:[
     'Information architecture cleanup: Tailscale/Connectivity moved into Locations module',
     'Locations now acts as infrastructure hub (devices, networking context, mounts)',
@@ -2694,6 +2705,34 @@ function toggleSidebar() {
 // ── Tailscale network status ──
 let _tsCache = null;
 let _tsPollTimer = null;
+
+function isTailscaleNodeConnected(node) {
+  if (!node || node.type !== 'tailscale') return true;
+  if (!_tsCache || !_tsCache.data || !_tsCache.data.available) return false;
+  const peers = _tsCache.data.peers || [];
+  const nLabel = String(node.label || '').toLowerCase();
+  const nHost = String(node.hostname || '').toLowerCase();
+  const nIp = String(node.tailscale_ip || '').toLowerCase();
+  return peers.some(p => {
+    const names = [p.name, p.dns_name, p.ip].map(v => String(v || '').toLowerCase());
+    const online = !!p.online;
+    if (!online) return false;
+    return names.includes(nIp) || names.includes(nHost) || names.includes(nLabel);
+  });
+}
+
+async function tailscaleControl(action) {
+  const st = document.getElementById('ts-control-status');
+  if (st) st.textContent = action === 'up' ? 'Connecting…' : action === 'down' ? 'Disconnecting…' : 'Testing…';
+  const res = await api('/api/tailscale/control', { action });
+  if (!res || !res.ok) {
+    if (st) st.textContent = (res && res.error) || 'Control action failed';
+    return;
+  }
+  if (st) st.textContent = res.message || 'Done';
+  await loadTailscaleStatus(true);
+  await loadLocations();
+}
 
 async function loadTailscaleStatus(force = false) {
   const now = Date.now();
@@ -3214,7 +3253,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.0',
+      ver: 'v0.12.1',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3281,7 +3320,12 @@ function renderNodes(nodes) {
   }
   const typeLabels = { local: 'Local machine', vps: 'VPS', tailscale: 'Tailscale' };
   const typeCss    = { local: 'loc-badge--local', vps: 'loc-badge--vps', tailscale: 'loc-badge--remote' };
-  el.innerHTML = nodes.map(node => {
+  const visibleNodes = (nodes || []).filter(node => isTailscaleNodeConnected(node));
+  if (!visibleNodes.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No connected locations available. Connect Tailscale or add a local/VPS location.</div>';
+    return;
+  }
+  el.innerHTML = visibleNodes.map(node => {
     const typeBadge = `<span class="loc-badge ${typeCss[node.type] || 'loc-badge--remote'}">${typeLabels[node.type] || escHtml(node.type)}</span>`;
     const mountRows = (node.mounts || []).map(m => {
       const rwBadge = m.exists
@@ -3940,6 +3984,7 @@ function _renderSidebarNodes(nodes, activeRoot) {
   targets.forEach(el => {
     el.innerHTML = '';
     nodes.forEach(node => {
+      if (!isTailscaleNodeConnected(node)) return;
       const mounts = (node.mounts || []).filter(m => m.visible !== false);
       if (!mounts.length) return;
       const hdr = document.createElement('div');
@@ -3947,7 +3992,7 @@ function _renderSidebarNodes(nodes, activeRoot) {
       hdr.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>${escHtml(node.label)}</span>`;
       el.appendChild(hdr);
       mounts.forEach(m => {
-        rootMeta[m.id] = { path: m.path || '', label: m.label || m.id, node: node.label || node.id };
+        rootMeta[m.id] = { path: m.path || '', label: m.label || m.id, node: node.label || node.id, type: node.type || 'local', hostname: node.hostname || '', tailscale_ip: node.tailscale_ip || '' };
         const div = document.createElement('div');
         div.className = 'loc mount-item' + (m.id === activeRoot ? ' active' : '');
         div.dataset.root = m.id;
@@ -3973,7 +4018,7 @@ function _renderSidebarLocs(locs, activeRoot) {
     targets.forEach(el => {
       el.innerHTML = '';
       locs.forEach(l => {
-        rootMeta[l.id] = { path: l.path || '', label: l.label || l.id, node: l.node_id || '' };
+        rootMeta[l.id] = { path: l.path || '', label: l.label || l.id, node: l.node_id || '', type: l.type || 'local', hostname: l.node || '', tailscale_ip: l.tailscale_ip || '' };
         const div = document.createElement('div');
         div.className = 'loc' + (l.id === activeRoot ? ' active' : '');
         div.dataset.root = l.id;
@@ -4003,6 +4048,10 @@ async function init() {
 
 // ── navigation ──
 async function navigate(root, path) {
+  if (rootMeta[root] && rootMeta[root].type === 'tailscale' && !isTailscaleNodeConnected(rootMeta[root])) {
+    toast('That Tailscale location is disconnected', 'err');
+    return;
+  }
   curRoot = root; curPath = path;
   document.title = path ? `Porter · ${root}/${path}` : `Porter · ${root}`;
   closeSettings();
@@ -5679,6 +5728,33 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
+        elif parsed.path == "/api/tailscale/control":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            action = str(data.get("action", "test")).strip().lower()
+            if action not in {"up", "down", "test"}:
+                self.reply_json({"ok": False, "error": "Invalid action"}, 400); return
+            try:
+                if action == "test":
+                    r = subprocess.run(["tailscale", "status", "--json"], capture_output=True, text=True, timeout=8)
+                    if r.returncode == 0:
+                        self.reply_json({"ok": True, "message": "Tailscale reachable"})
+                    else:
+                        self.reply_json({"ok": False, "error": (r.stderr or r.stdout or "tailscale status failed").strip()}, 400)
+                    return
+                cmd = ["tailscale", "up"] if action == "up" else ["tailscale", "down"]
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
+                if r.returncode != 0:
+                    msg = (r.stderr or r.stdout or f"tailscale {action} failed").strip()
+                    self.reply_json({"ok": False, "error": msg}, 400); return
+                self.reply_json({"ok": True, "message": "Connected" if action == "up" else "Disconnected"})
+            except FileNotFoundError:
+                self.reply_json({"ok": False, "error": "tailscale not installed"}, 400)
+            except subprocess.TimeoutExpired:
+                self.reply_json({"ok": False, "error": f"tailscale {action} timed out"}, 400)
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 400)
+
         elif parsed.path == "/api/profile/update":
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
@@ -6716,7 +6792,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.0 ready (localhost only)")
+    print(f"\n  Porter v0.12.1 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
