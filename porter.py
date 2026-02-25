@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.42 — self-hosted file manager"""
+"""Porter v0.12.43 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1558,7 +1558,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.42</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.43</div>
   </div>
 </aside>
 
@@ -2008,7 +2008,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.42 — What's new
+          v0.12.43 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2399,6 +2399,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.43', date:'2026-02-25', notes:[
+    'Files secondary nav CTA clarified: remote rows now use Connect instead of ambiguous labels',
+    'Connect action now provides target-specific bootstrap command to enable remote browsing',
+    'Empty-state action text updated to Connect remote browser for clearer operator intent',
+  ]},
   { ver:'v0.12.42', date:'2026-02-25', notes:[
     'Files secondary location nav redesigned with cleaner device cards and hierarchy',
     'Improved spacing/typography/chips for online status and path counts',
@@ -3520,7 +3525,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.42',
+      ver: 'v0.12.43',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4410,11 +4415,16 @@ function _renderSidebarNodes(nodes, activeRoot) {
       addBtn.className = 'btn btn-ghost';
       addBtn.style.cssText = 'margin-left:6px;font-size:10px;padding:1px 6px';
       const canAttach = connected && _isSelfNode(node);
-      addBtn.title = canAttach ? 'Attach path' : (!connected ? 'Device offline' : 'Remote browse not enabled yet');
-      addBtn.textContent = canAttach ? '+ Path' : (!connected ? 'Offline' : 'Agent');
-      addBtn.disabled = !canAttach;
-      addBtn.style.opacity = canAttach ? '1' : '.55';
-      addBtn.onclick = (e) => { e.stopPropagation(); if (canAttach) quickExposePath(node); };
+      const canConnect = connected && !_isSelfNode(node);
+      addBtn.title = canAttach ? 'Attach path' : (canConnect ? 'Connect remote browser' : 'Device offline');
+      addBtn.textContent = canAttach ? '+ Path' : (canConnect ? 'Connect' : 'Offline');
+      addBtn.disabled = !canAttach && !canConnect;
+      addBtn.style.opacity = (canAttach || canConnect) ? '1' : '.55';
+      addBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (canAttach) quickExposePath(node);
+        else if (canConnect) connectRemoteBrowser(node);
+      };
       hdr.appendChild(addBtn);
       el.appendChild(hdr);
 
@@ -4422,9 +4432,13 @@ function _renderSidebarNodes(nodes, activeRoot) {
         const empty = document.createElement('div');
         empty.className = 'loc mount-item';
         const canAttach = connected && _isSelfNode(node);
-        empty.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="loc-name">${canAttach ? 'Attach first path…' : (!connected ? 'Device offline' : 'Remote browse coming soon')}</span>`;
-        empty.style.opacity = canAttach ? '1' : '.7';
-        empty.onclick = () => { if (canAttach) quickExposePath(node); };
+        const canConnect = connected && !_isSelfNode(node);
+        empty.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="loc-name">${canAttach ? 'Attach first path…' : (canConnect ? 'Connect remote browser…' : 'Device offline')}</span>`;
+        empty.style.opacity = (canAttach || canConnect) ? '1' : '.7';
+        empty.onclick = () => {
+          if (canAttach) quickExposePath(node);
+          else if (canConnect) connectRemoteBrowser(node);
+        };
         el.appendChild(empty);
         return;
       }
@@ -4448,6 +4462,32 @@ function _isSelfNode(node) {
   const nHost = String(node.hostname || '').toLowerCase();
   const serverHost = String(window._serverHostname || '').toLowerCase();
   return (nType === 'local' || nType === 'vps') && !!serverHost && (nId === serverHost || nHost === serverHost);
+}
+
+async function connectRemoteBrowser(node) {
+  const osRaw = String((node._peer && node._peer.os) || '').toLowerCase();
+  let osName = 'linux';
+  if (osRaw.includes('mac')) osName = 'macos';
+  else if (osRaw.includes('win')) osName = 'windows';
+  else if (osRaw.includes('ios')) {
+    toast('iPhone/iOS uses mobile connector flow (not remote filesystem browser).', 'err');
+    return;
+  } else if (osRaw.includes('android')) {
+    toast('Android connector flow coming next. For now, install Porter mobile connector.', 'err');
+    return;
+  }
+
+  const data = await api(`/api/agent/bootstrap?os=${enc(osName)}&arch=x64`);
+  if (!data || !data.install_command) {
+    toast('Could not fetch bootstrap command', 'err');
+    return;
+  }
+  const target = node.label || node.hostname || node.id;
+  const cmd = data.install_command;
+  const shown = prompt(`Connect remote browser on ${target}\nRun this on the target device:`, cmd);
+  if (shown !== null) {
+    navigator.clipboard.writeText(cmd).then(() => toast('Bootstrap command copied', 'ok')).catch(()=>{});
+  }
 }
 
 async function quickExposePath(node) {
@@ -7364,7 +7404,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.42 ready (localhost only)")
+    print(f"\n  Porter v0.12.43 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
