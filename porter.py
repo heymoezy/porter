@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.58 — self-hosted file manager"""
+"""Porter v0.12.59 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1558,7 +1558,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.58</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.59</div>
   </div>
 </aside>
 
@@ -2050,7 +2050,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.58 — What's new
+          v0.12.59 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2441,6 +2441,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.59', date:'2026-02-25', notes:[
+    'Files secondary nav ordering improved: self first, then online, then offline devices',
+    'Action labels compacted for cleaner scan in narrow sidebar',
+    'Reduced visual jitter by deterministic alphabetical ordering within status groups',
+  ]},
   { ver:'v0.12.58', date:'2026-02-25', notes:[
     'Tasks decomplex pass: removed always-on rule block and made rules collapsible',
     'Primary guidance remains context-triggered via dynamic "Right now" instruction',
@@ -3681,7 +3686,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.58',
+      ver: 'v0.12.59',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4644,9 +4649,21 @@ function _renderSidebarNodes(nodes, activeRoot) {
     byKey.add(key);
   });
 
+  const sortedNodes = [...configured].sort((a,b) => {
+    const aSelf = _isSelfNode(a) ? 0 : 1;
+    const bSelf = _isSelfNode(b) ? 0 : 1;
+    if (aSelf !== bSelf) return aSelf - bSelf;
+    const aOn = (a._virtual ? (a._online !== false) : isTailscaleNodeConnected(a)) ? 0 : 1;
+    const bOn = (b._virtual ? (b._online !== false) : isTailscaleNodeConnected(b)) ? 0 : 1;
+    if (aOn !== bOn) return aOn - bOn;
+    const an = String(a.label || a.hostname || a.id || '').toLowerCase();
+    const bn = String(b.label || b.hostname || b.id || '').toLowerCase();
+    return an.localeCompare(bn);
+  });
+
   targets.forEach(el => {
     el.innerHTML = '';
-    configured.forEach(node => {
+    sortedNodes.forEach(node => {
       const mounts = (node.mounts || []).filter(m => m.visible !== false);
       const nType = String(node.type || '').toLowerCase();
       const nId = String(node.id || '').toLowerCase();
@@ -4670,7 +4687,7 @@ function _renderSidebarNodes(nodes, activeRoot) {
       actionBtn.className = 'btn btn-ghost';
       actionBtn.style.cssText = 'margin-left:6px;font-size:10px;padding:1px 7px';
       actionBtn.title = canAttach ? 'Browse and attach path' : (!connected ? 'Device offline' : 'Remote browse coming next');
-      actionBtn.textContent = canAttach ? 'Browse' : (!connected ? 'Offline' : 'Coming next');
+      actionBtn.textContent = canAttach ? 'Browse' : (!connected ? 'Off' : 'Soon');
       actionBtn.disabled = !canAttach;
       actionBtn.style.opacity = canAttach ? '1' : '.55';
       actionBtn.onclick = (e) => {
@@ -7627,7 +7644,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.58 ready (localhost only)")
+    print(f"\n  Porter v0.12.59 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:

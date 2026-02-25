@@ -33,3 +33,10 @@ Single source of truth for implementation progress so any agent session (Claude/
 ### Why this matters
 Porter is not just file browsing; it is the trusted network fabric for connected agents/devices with memory-aware orchestration.
 
+
+## 2026-02-25 — Release v0.12.59
+- Files secondary nav ordering improved (self first, online next, offline last).
+- Sidebar action labels compacted for narrow layout readability.
+- Deterministic ordering reduces visual jitter between refreshes.
+- Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
+- Risk: low (UI ordering/labels only).
