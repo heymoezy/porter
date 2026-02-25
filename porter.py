@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.17 — self-hosted file manager"""
+"""Porter v0.12.18 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.17</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.18</div>
   </div>
 </aside>
 
@@ -1962,7 +1962,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.17 — What's new
+          v0.12.18 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2353,6 +2353,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.18', date:'2026-02-25', notes:[
+    'Files fix: all locations now render after Tailscale status refresh (not just VPS)',
+    'Added clear +Path action per location and clear Delete action per exposed path in Files nav',
+    'Path exposure/removal now explicit across every discovered/configured location',
+  ]},
   { ver:'v0.12.17', date:'2026-02-25', notes:[
     'Files now includes discovered trusted Tailscale devices even before paths are configured',
     'Added Files-native "Expose first path…" flow per device (creates location if needed, then adds mount)',
@@ -2624,6 +2629,7 @@ const CHANGELOG = [
 // ── state ──
 let curRoot = '', curPath = '', curWritable = true;
 let rootMeta = {}; // mount id -> {path,label,node}
+let _lastNodes = [];
 let activeDropdown = null;
 let sortCol = 'name', sortDir = 'asc';
 let searchActive = false;
@@ -2822,6 +2828,7 @@ async function loadTailscaleStatus(force = false) {
   _tsCache = { data, ts: Date.now() };
   renderTailscaleStatus(data);
   updateTsLastUpdated(_tsCache.ts);
+  if (_lastNodes && _lastNodes.length) _renderSidebarNodes(_lastNodes, curRoot);
 }
 
 function updateTsLastUpdated(ts) {
@@ -3330,7 +3337,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.17',
+      ver: 'v0.12.18',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3384,8 +3391,9 @@ let _editLocId = null;
 async function loadLocations() {
   const data = await api('/api/nodes');
   if (!data) return;
-  renderNodes(data.nodes || []);
-  _renderSidebarNodes(data.nodes || [], curRoot);
+  _lastNodes = data.nodes || [];
+  renderNodes(_lastNodes);
+  _renderSidebarNodes(_lastNodes, curRoot);
   loadTailscaleStatus();
 }
 
@@ -4078,6 +4086,13 @@ function _renderSidebarNodes(nodes, activeRoot) {
       const hdr = document.createElement('div');
       hdr.className = 'node-hdr';
       hdr.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>${escHtml(displayName)}</span>${connected ? '' : '<span style="font-size:10px;color:var(--text3);margin-left:6px">offline</span>'}<span style="margin-left:auto;font-size:10px;color:var(--text3)">${mounts.length}</span>`;
+      const addBtn = document.createElement('button');
+      addBtn.className = 'btn btn-ghost';
+      addBtn.style.cssText = 'margin-left:6px;font-size:10px;padding:1px 6px';
+      addBtn.title = 'Expose path';
+      addBtn.textContent = '+ Path';
+      addBtn.onclick = (e) => { e.stopPropagation(); quickExposePath(node); };
+      hdr.appendChild(addBtn);
       el.appendChild(hdr);
 
       if (!mounts.length) {
@@ -4094,7 +4109,7 @@ function _renderSidebarNodes(nodes, activeRoot) {
         const div = document.createElement('div');
         div.className = 'loc mount-item' + (m.id === activeRoot ? ' active' : '');
         div.dataset.root = m.id;
-        div.innerHTML = `${_locIcon({...m, type: node.type})}<span class="loc-name">${escHtml(m.label)}</span><button class="btn btn-ghost" style="margin-left:auto;font-size:10px;padding:1px 6px" title="Remove path" onclick="event.stopPropagation(); deleteMount('${esc(node.id)}','${esc(m.id)}','${esc(m.label)}')">✕</button>`;
+        div.innerHTML = `${_locIcon({...m, type: node.type})}<span class="loc-name">${escHtml(m.label)}</span><button class="btn btn-ghost" style="margin-left:auto;font-size:10px;padding:1px 6px" title="Remove path" onclick="event.stopPropagation(); deleteMount('${esc(node.id)}','${esc(m.id)}','${esc(m.label)}')">Delete</button>`;
         div.onclick = () => navigate(m.id, '');
         el.appendChild(div);
       });
@@ -6914,7 +6929,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.17 ready (localhost only)")
+    print(f"\n  Porter v0.12.18 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
