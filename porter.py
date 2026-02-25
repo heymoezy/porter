@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.4 — self-hosted file manager"""
+"""Porter v0.12.5 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.4</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.5</div>
   </div>
 </aside>
 
@@ -1963,7 +1963,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.4 — What's new
+          v0.12.5 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2354,6 +2354,10 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.5', date:'2026-02-25', notes:[
+    'Locations UX cleanup: removed unnecessary "inventory moved to Files" explainer box',
+    'Locations now stays strictly minimal (connectivity/setup only)',
+  ]},
   { ver:'v0.12.4', date:'2026-02-25', notes:[
     'Locations UX simplification: removed bottom device/path management cards from Locations',
     'Location inventory is now represented in Files context; Locations stays focused on connectivity + setup',
@@ -3265,7 +3269,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.4',
+      ver: 'v0.12.5',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3327,21 +3331,8 @@ async function loadLocations() {
 function renderNodes(nodes) {
   const el = document.getElementById('loc-list');
   if (!el) return;
-  const visibleNodes = (nodes || []).filter(node => isTailscaleNodeConnected(node));
-  const mountCount = visibleNodes.reduce((n, node) => n + ((node.mounts || []).length), 0);
-  const nodeCount = visibleNodes.length;
-
-  el.innerHTML = `
-    <div style="background:var(--raised);border-radius:8px;margin-bottom:12px;border:1px solid var(--border);padding:12px">
-      <div style="font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Inventory moved to Files</div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.5">
-        Device/path cards now live in <strong>Files</strong> where they are used. This keeps Locations focused on connectivity setup and adding new locations.
-      </div>
-      <div style="font-size:12px;color:var(--text3);margin-top:8px">Connected locations: ${nodeCount} · Paths: ${mountCount}</div>
-      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-ghost" style="font-size:12px" onclick="switchModule('files')">Open Files</button>
-      </div>
-    </div>`;
+  // Intentionally minimal: Locations should focus on connectivity/setup only.
+  el.innerHTML = '';
 }
 
 // node / mount CRUD
@@ -6751,7 +6742,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.4 ready (localhost only)")
+    print(f"\n  Porter v0.12.5 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
