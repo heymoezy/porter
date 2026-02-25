@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.15 — self-hosted file manager"""
+"""Porter v0.12.16 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.15</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.16</div>
   </div>
 </aside>
 
@@ -1962,7 +1962,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.15 — What's new
+          v0.12.16 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2353,6 +2353,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.16', date:'2026-02-25', notes:[
+    'Files location labels: self device now shows server identity (srv1379868 (this device)) instead of Hostinger label',
+    'Files navigation now lists all configured locations (including empty/no-path locations)',
+    'Added per-path remove action directly in Files navigation',
+  ]},
   { ver:'v0.12.15', date:'2026-02-25', notes:[
     'Files visibility fix: locations now appear immediately in Files before first Tailscale status poll',
     'Prevents empty Files nav caused by strict early Tailscale cache gating',
@@ -3320,7 +3325,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.15',
+      ver: 'v0.12.16',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4029,14 +4034,22 @@ function _locIcon(l) {
 function _renderSidebarNodes(nodes, activeRoot) {
   const targets = [document.getElementById('locations'), document.getElementById('locations-secondary')].filter(Boolean);
   if (!targets.length) return;
+  const serverHost = String(window._serverHostname || '').toLowerCase();
+
   targets.forEach(el => {
     el.innerHTML = '';
     nodes.forEach(node => {
-      if (!isTailscaleNodeConnected(node)) return;
       const mounts = (node.mounts || []).filter(m => m.visible !== false);
+      const nType = String(node.type || '').toLowerCase();
+      const nId = String(node.id || '').toLowerCase();
+      const nHost = String(node.hostname || '').toLowerCase();
+      const isSelf = (nType === 'local' || nType === 'vps') && (serverHost && (nId === serverHost || nHost === serverHost));
+      const displayName = isSelf ? `${node.hostname || node.id} (this device)` : (node.label || node.id);
+      const connected = isTailscaleNodeConnected(node);
+
       const hdr = document.createElement('div');
       hdr.className = 'node-hdr';
-      hdr.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>${escHtml(node.label)}</span><span style="margin-left:auto;font-size:10px;color:var(--text3)">${mounts.length}</span>`;
+      hdr.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>${escHtml(displayName)}</span>${connected ? '' : '<span style="font-size:10px;color:var(--text3);margin-left:6px">offline</span>'}<span style="margin-left:auto;font-size:10px;color:var(--text3)">${mounts.length}</span>`;
       el.appendChild(hdr);
 
       if (!mounts.length) {
@@ -4049,11 +4062,11 @@ function _renderSidebarNodes(nodes, activeRoot) {
       }
 
       mounts.forEach(m => {
-        rootMeta[m.id] = { path: m.path || '', label: m.label || m.id, node: node.label || node.id, type: node.type || 'local', hostname: node.hostname || '', tailscale_ip: node.tailscale_ip || '' };
+        rootMeta[m.id] = { path: m.path || '', label: m.label || m.id, node: displayName, type: node.type || 'local', hostname: node.hostname || '', tailscale_ip: node.tailscale_ip || '' };
         const div = document.createElement('div');
         div.className = 'loc mount-item' + (m.id === activeRoot ? ' active' : '');
         div.dataset.root = m.id;
-        div.innerHTML = `${_locIcon({...m, type: node.type})}<span class="loc-name">${escHtml(m.label)}</span>`;
+        div.innerHTML = `${_locIcon({...m, type: node.type})}<span class="loc-name">${escHtml(m.label)}</span><button class="btn btn-ghost" style="margin-left:auto;font-size:10px;padding:1px 6px" title="Remove path" onclick="event.stopPropagation(); deleteMount('${esc(node.id)}','${esc(m.id)}','${esc(m.label)}')">✕</button>`;
         div.onclick = () => navigate(m.id, '');
         el.appendChild(div);
       });
@@ -6837,7 +6850,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.15 ready (localhost only)")
+    print(f"\n  Porter v0.12.16 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
