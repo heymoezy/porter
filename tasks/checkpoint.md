@@ -1,8 +1,8 @@
 # Checkpoint
 project: porter
-task: Porter v0.11.8 — Breadcrumb full-path clarity
+task: Porter v0.11.9 — Navigation order + changelog continuity
 status: completed
-step: 8 of 8
+step: 9 of 9
 completed:
   - [x] Commit 1 — CSS additions (module-nav, module-panel, badge-*, ov-metric, sched-card, tool-card, audit-row)
   - [x] Commit 2 — HTML restructure (sidebar → module-nav with 10 items, 8 module panels, settings as module-panel)
@@ -15,7 +15,9 @@ completed:
   - [x] v0.11.6 polish — profile layout readability, Files/settings navigation coherence, disk footer moved into Files secondary rail.
   - [x] v0.11.7 UX correction — locations moved out of primary nav and into dedicated Files secondary rail.
   - [x] v0.11.8 clarity fix — breadcrumb root now shows full mounted path instead of ~/root-id.
-next_action: n/a — all v0.11.8 requested UX updates complete.
+  - [x] v0.11.9 nav reorder — Locations moved above Files; flow now Locations → Files → Agents → Tasks → Schedules → Policies.
+  - [x] v0.11.9 changelog continuity — restored missing v0.11.2–v0.11.8 release entries.
+next_action: n/a — all v0.11.9 requested UX updates complete.
 modified_files:
   - /home/lobster/documents/porter/porter.py
   - /home/lobster/documents/porter/tasks/checkpoint.md
