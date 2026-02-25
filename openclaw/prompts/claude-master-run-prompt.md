@@ -15,3 +15,10 @@ Output each cycle:
 2) tests and evidence
 3) what is pending
 4) any blockers requiring founder decision
+
+Required handover format (strict):
+- Release: <version>
+- Scope shipped: <bullets>
+- Verification: <commands/tests + result>
+- Risks/rollback: <if any>
+- Next step for Claude: <single actionable instruction>
