@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.38 — self-hosted file manager"""
+"""Porter v0.12.39 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1554,7 +1554,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.38</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.39</div>
   </div>
 </aside>
 
@@ -1692,6 +1692,18 @@ body.density-compact .file-name { padding: 6px 0; }
       <button class="btn btn-primary" onclick="openCreateAgent()">+ Create agent</button>
     </div>
     <div style="font-size:13px;color:var(--text3);margin-bottom:12px">API clients that connect to Porter. Each agent gets a unique key.</div>
+    <div id="agents-fleet-panel" style="margin-bottom:14px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:600;color:var(--text)">Agent Fleet Lifecycle</div>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadAgentFleet()">Refresh</button>
+      </div>
+      <div id="agents-fleet-summary" style="font-size:12px;color:var(--text3)">Loading lifecycle policy…</div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="showBootstrapCmd('macos')">Bootstrap macOS</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="showBootstrapCmd('linux')">Bootstrap Linux</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="showBootstrapCmd('windows')">Bootstrap Windows</button>
+      </div>
+    </div>
     <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
       <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
         <input type="checkbox" id="agent-show-all" onchange="window._showAllAgentTypes=this.checked;renderAgents(window._lastAgents||[])">
@@ -1984,7 +1996,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.38 — What's new
+          v0.12.39 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2375,6 +2387,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.39', date:'2026-02-25', notes:[
+    'Added Agent Fleet Lifecycle panel in Agents module (policy summary + refresh)',
+    'Added bootstrap command helpers for macOS/Linux/Windows first-use installs',
+    'Agents view now auto-loads fleet lifecycle state for operator visibility',
+  ]},
   { ver:'v0.12.38', date:'2026-02-25', notes:[
     'Agent lifecycle foundation: added fleet policy API (channel/version/min-compatible/rollout)',
     'Added bootstrap API to support install-on-first-use commands per target OS/arch',
@@ -3476,7 +3493,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.38',
+      ver: 'v0.12.39',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3826,6 +3843,27 @@ async function loadAgents() {
   window._lastAgents = data.agents || [];
   renderAgents(data.agents || []);
   loadUsage();
+  loadAgentFleet();
+}
+
+
+async function loadAgentFleet() {
+  const data = await api('/api/agent-fleet');
+  const el = document.getElementById('agents-fleet-summary');
+  if (!el) return;
+  if (!data) { el.textContent = 'Lifecycle policy unavailable'; return; }
+  const txt = `channel=${data.channel} · current=${data.current_version} · min=${data.min_compatible} · auto-update=${data.auto_update ? 'on' : 'off'} · rollout=${data.rollout}% · devices=${data.device_count}`;
+  el.textContent = txt;
+}
+
+async function showBootstrapCmd(osName) {
+  const data = await api(`/api/agent/bootstrap?os=${enc(osName)}&arch=x64`);
+  if (!data || !data.install_command) return;
+  const cmd = data.install_command;
+  const res = prompt(`${osName.toUpperCase()} bootstrap command (copy and run on target device):`, cmd);
+  if (res !== null) {
+    navigator.clipboard.writeText(cmd).then(() => toast('Bootstrap command copied', 'ok')).catch(()=>{});
+  }
 }
 
 function renderAgents(agents) {
@@ -7272,7 +7310,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.38 ready (localhost only)")
+    print(f"\n  Porter v0.12.39 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
