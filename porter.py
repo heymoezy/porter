@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.9 — self-hosted file manager"""
+"""Porter v0.12.10 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.9</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.10</div>
   </div>
 </aside>
 
@@ -1963,7 +1963,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.9 — What's new
+          v0.12.10 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2354,6 +2354,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.10', date:'2026-02-25', notes:[
+    'Hostinger/VPS moved into the Tailscale Devices group (single device list)',
+    'Removed duplicate self-device card from Locations list to avoid repeated Hostinger display',
+    'Devices online counter now includes this device + peers',
+  ]},
   { ver:'v0.12.9', date:'2026-02-25', notes:[
     'Removed duplicate Hostinger display from Tailscale Devices list',
     'Tailscale Devices now shows peer devices only (Hostinger remains represented in Locations)',
@@ -2831,7 +2836,14 @@ function renderTailscaleStatus(data) {
   const s = data.self || {};
   const onlinePeers  = (data.peers || []).filter(p => p.online);
   const offlinePeers = (data.peers || []).filter(p => !p.online);
-  const allDevices = [...onlinePeers, ...offlinePeers];
+  const selfDevice = {
+    name: s.name || 'Hostinger',
+    os: s.os || 'linux',
+    ip: s.ip || '—',
+    online: true,
+    isSelf: true,
+  };
+  const allDevices = [selfDevice, ...onlinePeers, ...offlinePeers];
 
   const devicesHtml = allDevices.length
     ? `
@@ -2840,11 +2852,11 @@ function renderTailscaleStatus(data) {
       ${allDevices.map(p => `
       <div class="ts-peer-row">
         <span class="ts-dot ${p.online ? 'ts-dot--on' : 'ts-dot--off'}"></span>
-        <span class="ts-peer-name">${escHtml(p.name)}</span>
+        <span class="ts-peer-name">${escHtml(p.name)}${p.isSelf ? ' (this device)' : ''}</span>
         <span class="ts-peer-os">${escHtml(p.os)}</span>
         <span class="ts-peer-ip">${escHtml(p.ip)}</span>
-        <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;flex-shrink:0"
-          onclick="switchModule('locations'); openAddLocation(); selectLocType('tailscale')" title="Add path from this device">+ Path</button>
+        ${p.isSelf ? '' : `<button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;flex-shrink:0"
+          onclick="switchModule('locations'); openAddLocation(); selectLocType('tailscale')" title="Add path from this device">+ Path</button>`}
       </div>`).join('')}
     </div>`
     : '<div style="font-size:13px;color:var(--text3)">No devices found on your tailnet.</div>';
@@ -2865,7 +2877,7 @@ function renderTailscaleStatus(data) {
       </div>
       <div class="ts-status-row">
         <span class="ts-stat-label">Devices online</span>
-        <span class="ts-stat-val" style="color:${onlinePeers.length ? 'var(--accent)' : 'var(--text3)'}">${onlinePeers.length} of ${data.peers_total}</span>
+        <span class="ts-stat-val" style="color:${(onlinePeers.length + 1) ? 'var(--accent)' : 'var(--text3)'}">${onlinePeers.length + 1} of ${data.peers_total + 1}</span>
       </div>
     </div>
     ${devicesHtml}`;
@@ -3287,7 +3299,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.9',
+      ver: 'v0.12.10',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3350,13 +3362,21 @@ function renderNodes(nodes) {
   const el = document.getElementById('loc-list');
   if (!el) return;
   const visibleNodes = (nodes || []).filter(node => isTailscaleNodeConnected(node));
-  if (!visibleNodes.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No connected locations available.</div>';
+  const serverHost = String(window._serverHostname || '').toLowerCase();
+  const nodesForLocations = visibleNodes.filter(node => {
+    const nType = String(node.type || '').toLowerCase();
+    const id = String(node.id || '').toLowerCase();
+    const hn = String(node.hostname || '').toLowerCase();
+    const isSelf = (nType === 'local' || nType === 'vps') && (serverHost && (id === serverHost || hn === serverHost));
+    return !isSelf;
+  });
+  if (!nodesForLocations.length) {
+    el.innerHTML = '';
     return;
   }
   const typeLabels = { local: 'VPS device', vps: 'VPS device', tailscale: 'Tailnet peer device' };
   const typeCss    = { local: 'loc-badge--vps', vps: 'loc-badge--vps', tailscale: 'loc-badge--remote' };
-  el.innerHTML = visibleNodes.map(node => {
+  el.innerHTML = nodesForLocations.map(node => {
     const mCount = (node.mounts || []).length;
     const hasPath = mCount > 0;
     const kind = typeLabels[node.type] || escHtml(node.type || 'device');
@@ -6781,7 +6801,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.9 ready (localhost only)")
+    print(f"\n  Porter v0.12.10 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
