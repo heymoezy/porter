@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.33 — self-hosted file manager"""
+"""Porter v0.12.34 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -722,11 +722,12 @@ body {
               background: rgba(247,147,26,.06); }
 .loc svg { flex-shrink: 0; opacity: .7; }
 .loc.active svg { opacity: 1; }
-.loc-name { font-size: 13px; font-weight: 500; display:flex; flex-direction:column; gap:1px; }
+.loc-name { font-size: 13px; font-weight: 500; display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .loc-sub  { font-size: 10px; color: var(--text3); font-weight: 400; line-height: 1; }
 /* node grouping in sidebar */
 .node-hdr {
   display: flex; align-items: center; gap: 6px;
+  min-width:0;
   padding: 10px 20px 3px; cursor: default; user-select: none;
   font-size: 10px; font-weight: 600; letter-spacing: .5px;
   color: var(--text3); text-transform: uppercase;
@@ -1532,7 +1533,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.33</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.34</div>
   </div>
 </aside>
 
@@ -1962,7 +1963,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.33 — What's new
+          v0.12.34 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2353,6 +2354,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.34', date:'2026-02-25', notes:[
+    'Files sidebar polish: reduced line wrapping for device/path labels',
+    'Applied truncation with ellipsis for cleaner location list rendering',
+    'Added hover titles on path labels so full names remain accessible',
+  ]},
   { ver:'v0.12.33', date:'2026-02-25', notes:[
     'Added persistent tooltips for network context fields (Transport, Tailnet, Devices online)',
     'Added informative tooltips for Locations table columns (Device, Nickname, OS/IP)',
@@ -3429,7 +3435,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.33',
+      ver: 'v0.12.34',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4293,7 +4299,7 @@ function _renderSidebarNodes(nodes, activeRoot) {
         const div = document.createElement('div');
         div.className = 'loc mount-item' + (m.id === activeRoot ? ' active' : '');
         div.dataset.root = m.id;
-        div.innerHTML = `${_locIcon({...m, type: node.type})}<span class="loc-name">${escHtml(m.label)}</span><button class="btn btn-ghost" style="margin-left:auto;font-size:10px;padding:1px 6px" title="Remove path" onclick="event.stopPropagation(); deleteMount('${esc(node.id)}','${esc(m.id)}','${esc(m.label)}')">Delete</button>`;
+        div.innerHTML = `${_locIcon({...m, type: node.type})}<span class="loc-name" title="${escHtml(m.label)}">${escHtml(m.label)}</span><button class="btn btn-ghost" style="margin-left:auto;font-size:10px;padding:1px 6px" title="Remove path" onclick="event.stopPropagation(); deleteMount('${esc(node.id)}','${esc(m.id)}','${esc(m.label)}')">Delete</button>`;
         div.onclick = () => navigate(m.id, '');
         el.appendChild(div);
       });
@@ -7113,7 +7119,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.33 ready (localhost only)")
+    print(f"\n  Porter v0.12.34 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
