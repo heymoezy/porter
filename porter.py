@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.11.11 — self-hosted file manager"""
+"""Porter v0.12.0 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.11.11</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.0</div>
   </div>
 </aside>
 
@@ -1753,6 +1753,12 @@ body.density-compact .file-name { padding: 6px 0; }
       <span class="module-title">Locations</span>
       <button class="btn btn-primary" onclick="openAddLocation()">+ Add Location</button>
     </div>
+    <div class="module-section">
+      <div class="module-section-title">Connectivity (Tailscale)</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:12px">Device networking lives with Locations so infrastructure and mounts stay in one place.</div>
+      <div id="ts-panel-locations"><div style="color:var(--text3);font-size:13px">Loading connectivity&#8230;</div></div>
+      <div id="ts-last-updated-locations" style="margin-top:8px;font-size:11px;color:var(--text3)"></div>
+    </div>
     <div id="loc-list"></div>
     <div id="lm-mount-form" style="display:none;margin-top:14px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
       <div class="settings-field"><label>Path on server</label>
@@ -1944,15 +1950,15 @@ body.density-compact .file-name { padding: 6px 0; }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         Profile
       </button>
-      <button class="settings-nav-item" id="snav-network" onclick="switchSettingsTab('network')">
+      <button class="settings-nav-item" id="snav-network" onclick="switchModule('locations');loadTailscaleStatus(true)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/></svg>
-        Tailscale
+        Connectivity (moved to Locations)
       </button>
       <div style="flex:1"></div>
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.11.11 — What's new
+          v0.12.0 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2343,6 +2349,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.0', date:'2026-02-25', notes:[
+    'Information architecture cleanup: Tailscale/Connectivity moved into Locations module',
+    'Locations now acts as infrastructure hub (devices, networking context, mounts)',
+    'Settings no longer acts as a network surface; legacy network entry redirects to Locations connectivity',
+  ]},
   { ver:'v0.11.11', date:'2026-02-25', notes:[
     'Settings overlay behavior: clicking any primary nav module now closes Settings and navigates correctly',
     'Fix: non-Files main navigation buttons no longer appear unresponsive while Settings is open',
@@ -2700,18 +2711,21 @@ async function loadTailscaleStatus(force = false) {
 }
 
 function updateTsLastUpdated(ts) {
-  const el = document.getElementById('ts-last-updated');
-  if (!el) return;
   const d = new Date(ts);
-  el.textContent = 'Last checked: ' + d.toLocaleTimeString();
+  const text = 'Last checked: ' + d.toLocaleTimeString();
+  ['ts-last-updated','ts-last-updated-locations'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  });
 }
 
 function renderTailscaleStatus(data) {
-  const el = document.getElementById('ts-panel');
-  if (!el) return;
-  if (!data.available) {
-    const notInstalled = (data.error || '').includes('not found');
-    el.innerHTML = notInstalled ? `
+  const panels = ['ts-panel','ts-panel-locations'].map(id => document.getElementById(id)).filter(Boolean);
+  if (!panels.length) return;
+  const renderInto = (el) => {
+    if (!data.available) {
+      const notInstalled = (data.error || '').includes('not found');
+      el.innerHTML = notInstalled ? `
       <div class="ts-status-card">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
           <span class="ts-dot ts-dot--off"></span>
@@ -2777,9 +2791,11 @@ function renderTailscaleStatus(data) {
         <span class="ts-peer-os">${escHtml(p.os)}</span>
         <span class="ts-peer-ip">${escHtml(p.ip)}</span>
         <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;flex-shrink:0"
-          onclick="openSettings('locations');selectLocType('tailscale')" title="Add path from this device">+ Path</button>
+          onclick="switchModule('locations'); openAddLocation(); selectLocType('tailscale')" title="Add path from this device">+ Path</button>
       </div>`).join('')}
     </div>` : '<div style="font-size:13px;color:var(--text3)">No peer devices found on your tailnet.</div>'}`;
+  };
+  panels.forEach(renderInto);
 }
 
 function startTsPolling() {
@@ -2910,9 +2926,10 @@ function closeSettings() {
 }
 function switchSettingsTab(tab) {
   if (tab === 'usage') tab = 'agents';
+  if (tab === 'network') { switchModule('locations'); loadTailscaleStatus(true); return; }
   const modules = ['tasks','agents','locations','policy','policies'];
   if (modules.includes(tab)) { switchModule(tab === 'policy' ? 'policies' : tab); return; }
-  if (tab !== 'network') stopTsPolling();
+  stopTsPolling();
   document.querySelectorAll('.settings-nav-item').forEach(el =>
     el.classList.toggle('active', el.id === 'snav-' + tab));
   document.querySelectorAll('.settings-page').forEach(el =>
@@ -3197,7 +3214,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.11.11',
+      ver: 'v0.12.0',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3253,6 +3270,7 @@ async function loadLocations() {
   if (!data) return;
   renderNodes(data.nodes || []);
   _renderSidebarNodes(data.nodes || [], curRoot);
+  loadTailscaleStatus();
 }
 
 function renderNodes(nodes) {
@@ -6698,7 +6716,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.11.11 ready (localhost only)")
+    print(f"\n  Porter v0.12.0 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:

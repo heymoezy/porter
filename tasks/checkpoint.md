@@ -1,8 +1,8 @@
 # Checkpoint
 project: porter
-task: Porter v0.11.11 — Settings overlay nav close behavior
+task: Porter v0.12.0 — Locations/Connectivity IA reframe
 status: completed
-step: 11 of 11
+step: 12 of 12
 completed:
   - [x] Commit 1 — CSS additions (module-nav, module-panel, badge-*, ov-metric, sched-card, tool-card, audit-row)
   - [x] Commit 2 — HTML restructure (sidebar → module-nav with 10 items, 8 module panels, settings as module-panel)
@@ -19,7 +19,8 @@ completed:
   - [x] v0.11.9 changelog continuity — restored missing v0.11.2–v0.11.8 release entries.
   - [x] v0.11.10 Tailscale clarity — expose VPS Public IP and Tailscale IP; replace ambiguous "This device" label.
   - [x] v0.11.11 Settings overlay fix — all primary nav modules now close Settings and navigate as expected.
-next_action: n/a — all v0.11.11 requested UX updates complete.
+  - [x] v0.12.0 IA reframe — moved Tailscale/Connectivity from Settings into Locations module and added redirect for legacy entry.
+next_action: n/a — all v0.12.0 requested UX updates complete.
 modified_files:
   - /home/lobster/documents/porter/porter.py
   - /home/lobster/documents/porter/tasks/checkpoint.md
