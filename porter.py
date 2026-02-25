@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.36 — self-hosted file manager"""
+"""Porter v0.12.37 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1536,7 +1536,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.36</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.37</div>
   </div>
 </aside>
 
@@ -1966,7 +1966,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.36 — What's new
+          v0.12.37 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2357,6 +2357,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.37', date:'2026-02-25', notes:[
+    'Files reliability fix: entering Files now always refreshes locations/devices list (timing bug resolved)',
+    'CTA wording upgraded from Expose to Attach for a cleaner, more product-grade tone',
+    'Secondary nav now uses Attach/Attach first path language consistently',
+  ]},
   { ver:'v0.12.36', date:'2026-02-25', notes:[
     'Expose first path now opens local folder picker for this server (no blind path typing)',
     'Added self-device detection so path selection is idiot-proof on local VPS',
@@ -3137,7 +3142,7 @@ function switchModule(name) {
   });
   const loaders = {
     overview: loadOverview, tasks: loadTasks, agents: loadAgents,
-    locations: loadLocations, schedules: loadSchedules, policies: loadPolicy,
+    files: loadLocations, locations: loadLocations, schedules: loadSchedules, policies: loadPolicy,
     tools: loadTools, audit: loadAudit, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
@@ -3448,7 +3453,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.36',
+      ver: 'v0.12.37',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4292,8 +4297,8 @@ function _renderSidebarNodes(nodes, activeRoot) {
       const addBtn = document.createElement('button');
       addBtn.className = 'btn btn-ghost';
       addBtn.style.cssText = 'margin-left:6px;font-size:10px;padding:1px 6px';
-      addBtn.title = 'Expose path';
-      addBtn.textContent = '+ Path';
+      addBtn.title = 'Attach path';
+      addBtn.textContent = 'Attach';
       addBtn.onclick = (e) => { e.stopPropagation(); quickExposePath(node); };
       hdr.appendChild(addBtn);
       el.appendChild(hdr);
@@ -4301,7 +4306,7 @@ function _renderSidebarNodes(nodes, activeRoot) {
       if (!mounts.length) {
         const empty = document.createElement('div');
         empty.className = 'loc mount-item';
-        empty.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="loc-name">Expose first path…</span>`;
+        empty.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="loc-name">Attach first path…</span>`;
         empty.onclick = () => quickExposePath(node);
         el.appendChild(empty);
         return;
@@ -4379,7 +4384,7 @@ async function quickExposePath(node) {
   }
 
   // Remote peers: until remote index/SSH browsing is wired, request path manually with context.
-  const path = prompt(`Path to expose on ${nodeName}
+  const path = prompt(`Path to attach on ${nodeName}
 (Manual for remote device until remote path browse is enabled):`);
   if (path === null || !path.trim()) return;
   await saveMount(path);
@@ -7161,7 +7166,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.36 ready (localhost only)")
+    print(f"\n  Porter v0.12.37 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
