@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.18 — self-hosted file manager"""
+"""Porter v0.12.19 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.18</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.19</div>
   </div>
 </aside>
 
@@ -1962,7 +1962,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.18 — What's new
+          v0.12.19 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2353,6 +2353,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.19', date:'2026-02-25', notes:[
+    'Locations now shows all devices (configured + discovered peers), not just VPS',
+    'Location naming cleaned: self shows server identity; rename action is in Locations',
+    'Files keeps add/delete path controls per device while Locations handles labeling/governance',
+  ]},
   { ver:'v0.12.18', date:'2026-02-25', notes:[
     'Files fix: all locations now render after Tailscale status refresh (not just VPS)',
     'Added clear +Path action per location and clear Delete action per exposed path in Files nav',
@@ -2828,7 +2833,7 @@ async function loadTailscaleStatus(force = false) {
   _tsCache = { data, ts: Date.now() };
   renderTailscaleStatus(data);
   updateTsLastUpdated(_tsCache.ts);
-  if (_lastNodes && _lastNodes.length) _renderSidebarNodes(_lastNodes, curRoot);
+  if (_lastNodes && _lastNodes.length) { _renderSidebarNodes(_lastNodes, curRoot); renderNodes(_lastNodes); }
 }
 
 function updateTsLastUpdated(ts) {
@@ -3337,7 +3342,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.18',
+      ver: 'v0.12.19',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3400,37 +3405,83 @@ async function loadLocations() {
 function renderNodes(nodes) {
   const el = document.getElementById('loc-list');
   if (!el) return;
-  const visibleNodes = (nodes || []).filter(node => isTailscaleNodeConnected(node));
-  const serverHost = String(window._serverHostname || '').toLowerCase();
-  const nodesForLocations = visibleNodes.filter(node => {
-    const nType = String(node.type || '').toLowerCase();
-    const id = String(node.id || '').toLowerCase();
-    const hn = String(node.hostname || '').toLowerCase();
-    const isSelf = (nType === 'local' || nType === 'vps') && (serverHost && (id === serverHost || hn === serverHost));
-    return !isSelf;
+
+  const configured = Array.isArray(nodes) ? [...nodes] : [];
+  const peers = ((_tsCache && _tsCache.data && _tsCache.data.peers) || []);
+  const byKey = new Set(configured.map(n => String((n.hostname || n.id || '')).toLowerCase()));
+  peers.forEach(p => {
+    const host = String(p.name || '').trim();
+    if (!host) return;
+    const key = host.toLowerCase();
+    if (byKey.has(key)) return;
+    configured.push({
+      id: `peer:${key.replace(/[^a-z0-9.-]+/g, '-')}`,
+      label: host,
+      type: 'tailscale',
+      hostname: host,
+      tailscale_ip: p.ip || '',
+      mounts: [],
+      _virtual: true,
+      _online: !!p.online,
+    });
+    byKey.add(key);
   });
-  if (!nodesForLocations.length) {
-    el.innerHTML = '';
+
+  if (!configured.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No locations found yet.</div>';
     return;
   }
+
+  const serverHost = String(window._serverHostname || '').toLowerCase();
   const typeLabels = { local: 'VPS device', vps: 'VPS device', tailscale: 'Tailnet peer device' };
   const typeCss    = { local: 'loc-badge--vps', vps: 'loc-badge--vps', tailscale: 'loc-badge--remote' };
-  el.innerHTML = nodesForLocations.map(node => {
-    const mCount = (node.mounts || []).length;
-    const hasPath = mCount > 0;
-    const kind = typeLabels[node.type] || escHtml(node.type || 'device');
-    const badge = `<span class="loc-badge ${typeCss[node.type] || 'loc-badge--remote'}">${kind}</span>`;
-    const status = hasPath ? `${mCount} path${mCount !== 1 ? 's' : ''} configured` : 'No paths configured yet';
-    return `
-    <div style="background:var(--raised);border-radius:8px;margin-bottom:10px;border:1px solid var(--border);padding:10px 12px">
+
+  el.innerHTML = '';
+  configured.forEach(node => {
+    const nType = String(node.type || '').toLowerCase();
+    const nId = String(node.id || '').toLowerCase();
+    const nHost = String(node.hostname || '').toLowerCase();
+    const isSelf = (nType === 'local' || nType === 'vps') && (serverHost && (nId === serverHost || nHost === serverHost));
+    const displayName = isSelf ? `${node.hostname || node.id} (this device)` : (node.label || node.hostname || node.id);
+    const kind = typeLabels[node.type] || String(node.type || 'device');
+    const mounts = (node.mounts || []);
+    const mCount = mounts.length;
+    const status = node._virtual
+      ? (node._online === false ? 'Discovered (offline)' : 'Discovered (online)')
+      : `${mCount} path${mCount !== 1 ? 's' : ''} configured`;
+
+    const card = document.createElement('div');
+    card.style.cssText = 'background:var(--raised);border-radius:8px;margin-bottom:10px;border:1px solid var(--border);padding:10px 12px';
+    card.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(node.label || node.id)}</span>
-        ${badge}
+        <span style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(displayName)}</span>
+        <span class="loc-badge ${typeCss[node.type] || 'loc-badge--remote'}">${escHtml(kind)}</span>
         ${node.hostname ? `<span style="font-size:11px;color:var(--text3)">${escHtml(node.hostname)}</span>` : ''}
-      </div>
-      <div style="font-size:12px;color:var(--text3);margin-top:5px">${status}</div>
-    </div>`;
-  }).join('');
+        <span style="margin-left:auto;font-size:12px;color:var(--text3)">${escHtml(status)}</span>
+      </div>`;
+
+    const actions = document.createElement('div');
+    actions.style.cssText = 'margin-top:8px;display:flex;gap:8px;justify-content:flex-end';
+
+    if (node._virtual) {
+      const addBtn = document.createElement('button');
+      addBtn.className = 'btn btn-ghost';
+      addBtn.style.cssText = 'font-size:11px;padding:3px 8px';
+      addBtn.textContent = 'Add location';
+      addBtn.onclick = () => quickExposePath(node);
+      actions.appendChild(addBtn);
+    } else {
+      const renBtn = document.createElement('button');
+      renBtn.className = 'btn btn-ghost';
+      renBtn.style.cssText = 'font-size:11px;padding:3px 8px';
+      renBtn.textContent = '✎ Rename';
+      renBtn.onclick = () => openEditNode(node.id, node.label || node.hostname || node.id, node.type || 'tailscale');
+      actions.appendChild(renBtn);
+    }
+
+    card.appendChild(actions);
+    el.appendChild(card);
+  });
 }
 
 // node / mount CRUD
@@ -6929,7 +6980,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.18 ready (localhost only)")
+    print(f"\n  Porter v0.12.19 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
