@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.11 — self-hosted file manager"""
+"""Porter v0.12.12 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.11</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.12</div>
   </div>
 </aside>
 
@@ -1962,7 +1962,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.11 — What's new
+          v0.12.12 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2353,6 +2353,10 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.12', date:'2026-02-25', notes:[
+    'Tailscale peer naming fix: when HostName is "localhost", Porter now uses DNS device label',
+    'iPhone/iOS devices now display by device name instead of localhost',
+  ]},
   { ver:'v0.12.11', date:'2026-02-25', notes:[
     'Locations header cleanup: removed top "+ Add Location" action for a cleaner flow',
     'Kept connectivity controls as the primary action area in Locations',
@@ -3302,7 +3306,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.11',
+      ver: 'v0.12.12',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -5307,13 +5311,19 @@ class Handler(BaseHTTPRequestHandler):
                 ts = json.loads(result.stdout)
                 peers = []
                 for _, v in ts.get("Peer", {}).items():
-                    name = v.get("HostName", "")
+                    host_name = (v.get("HostName", "") or "").strip()
+                    dns_name = (v.get("DNSName", "") or "").rstrip(".")
+                    dns_label = dns_name.split(".", 1)[0] if dns_name else ""
+                    name = host_name
+                    # Some iOS devices report HostName=localhost; prefer DNS label in that case.
+                    if not name or name.lower() == "localhost":
+                        name = dns_label or host_name
                     if "funnel-ingress" in name or not name: continue
                     ips = [ip for ip in v.get("TailscaleIPs", []) if ":" not in ip]
                     if not ips: continue
                     peers.append({
                         "name":     name,
-                        "dns_name": v.get("DNSName", "").rstrip("."),
+                        "dns_name": dns_name,
                         "ip":       ips[0],
                         "online":   v.get("Online", False),
                         "os":       v.get("OS", ""),
@@ -6804,7 +6814,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.11 ready (localhost only)")
+    print(f"\n  Porter v0.12.12 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
