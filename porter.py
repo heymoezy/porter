@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.32 — self-hosted file manager"""
+"""Porter v0.12.33 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.32</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.33</div>
   </div>
 </aside>
 
@@ -1962,7 +1962,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.32 — What's new
+          v0.12.33 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2353,6 +2353,10 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.33', date:'2026-02-25', notes:[
+    'Added persistent tooltips for network context fields (Transport, Tailnet, Devices online)',
+    'Added informative tooltips for Locations table columns (Device, Nickname, OS/IP)',
+  ]},
   { ver:'v0.12.32', date:'2026-02-25', notes:[
     'Locations tab restored device presence status (online/offline)',
     'Added status dot + label next to each device name for quick visibility',
@@ -2994,15 +2998,15 @@ function renderTailscaleStatus(data) {
         <span style="font-weight:600;color:var(--text)">Tailscale connected</span>
       </div>
       <div class="ts-status-row">
-        <span class="ts-stat-label">Transport</span>
+        <span class="ts-stat-label" title="Network layer Porter uses for secure device-to-device connectivity.">Transport</span>
         <span class="ts-stat-val">Tailscale</span>
       </div>
       <div class="ts-status-row">
-        <span class="ts-stat-label">Tailnet</span>
+        <span class="ts-stat-label" title="Your private Tailscale network name; useful for diagnostics and multi-tailnet setups.">Tailnet</span>
         <span class="ts-stat-val">${escHtml(s.tailnet || '—')}</span>
       </div>
       <div class="ts-status-row">
-        <span class="ts-stat-label">Devices online</span>
+        <span class="ts-stat-label" title="Number of currently reachable devices in this trusted network.">Devices online</span>
         <span class="ts-stat-val" style="color:${(onlinePeers.length + 1) ? 'var(--accent)' : 'var(--text3)'}">${onlinePeers.length + 1} of ${data.peers_total + 1}</span>
       </div>
     </div>
@@ -3425,7 +3429,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.32',
+      ver: 'v0.12.33',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3526,7 +3530,7 @@ function renderNodes(nodes) {
   el.innerHTML = `
     <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin:12px 0 8px">Devices</div>
     <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:10px;padding:8px 12px;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.6px">
-      <div>Device</div><div>Nickname</div><div>OS / IP</div><div></div>
+      <div title="Canonical device identity discovered from your trusted network.">Device</div><div title="Human-friendly alias used across Porter views.">Nickname</div><div title="Device operating system and private network IP.">OS / IP</div><div></div>
     </div>
     <div style="background:var(--raised);border:1px solid var(--border);border-radius:8px;overflow:hidden">
       ${configured.map((node) => {
@@ -7109,7 +7113,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.32 ready (localhost only)")
+    print(f"\n  Porter v0.12.33 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
