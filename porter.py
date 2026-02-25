@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.11.6 — self-hosted file manager"""
+"""Porter v0.11.7 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -733,7 +733,24 @@ body.sidebar-collapsed .mnav-label { display:none; }
 body.sidebar-collapsed .mnav-item { justify-content:center; padding:8px; }
 body.sidebar-collapsed .module-nav { padding:8px 4px; }
 #loc-subnav { display:none; }
-body.files-active #loc-subnav { display:block; }
+.files-secondary-nav {
+  display:none; position:absolute; top:54px; left:0; bottom:0; width:230px;
+  background:var(--surface); border-right:1px solid var(--border); overflow-y:auto;
+  padding:10px 0; z-index:5;
+}
+.files-secondary-title {
+  padding:0 14px 10px; font-size:11px; font-weight:600; letter-spacing:.7px;
+  color:var(--text3); text-transform:uppercase;
+}
+#locations-secondary { padding:0 10px; }
+#locations-secondary .node-hdr { padding-left:2px; }
+#locations-secondary .mount-item { margin-left:0; }
+#sfooter-files { padding:12px 14px 0; color:var(--text3); font-size:11px; border-top:1px solid var(--border); margin-top:10px; }
+body.files-active .files-secondary-nav { display:block; }
+body.files-active #banner,
+body.files-active #searchCountBar,
+body.files-active #selectionToolbar,
+body.files-active #fileArea { margin-left:230px; }
 .sidebar-footer {
   padding: 16px 20px 0;
   border-top: 1px solid var(--border);
@@ -1454,11 +1471,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
       <span class="mnav-label">Files</span>
     </button>
-    <div id="loc-subnav">
-      <div class="nav-label" style="padding-left:34px">Locations</div>
-      <div id="locations"></div>
-      <div id="sfooter-files" style="padding:8px 10px 0 34px;color:var(--text3);font-size:11px"></div>
-    </div>
+    <!-- locations moved to Files secondary navigation rail -->
     <button class="mnav-item" id="mnav-tasks" onclick="switchModule('tasks')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/><line x1="3" y1="8" x2="21" y2="8"/></svg>
       <span class="mnav-label">Tasks</span>
@@ -1506,7 +1519,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.11.6</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.11.7</div>
   </div>
 </aside>
 
@@ -1540,6 +1553,12 @@ body.density-compact .file-name { padding: 6px 0; }
       </button>
     </div>
   </div>
+
+  <aside class="files-secondary-nav" id="filesSecondaryNav">
+    <div class="files-secondary-title">Locations</div>
+    <div id="locations-secondary"></div>
+    <div id="sfooter-files"></div>
+  </aside>
 
   <div id="banner" style="display:none" class="banner">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
@@ -1920,7 +1939,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.11.6 — What's new
+          v0.11.7 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2311,12 +2330,13 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.11.6', date:'2026-02-25', notes:[
+  { ver:'v0.11.7', date:'2026-02-25', notes:[
+    'Files UX: locations moved out of primary sidebar into a dedicated secondary Files navigation rail',
+    'Files UX: secondary rail now carries location tree + free space + item count in one contextual panel',
+    'Files UX: selecting Files or navigating to a location force-closes Settings for cleaner transitions',
     'Profile UI: split into Full name, "What should Porter call you?", and Email address (stacked layout)',
     'Profile data: full_name added to config + /api/me + /api/profile/update',
     'Password UI: New password and Confirm password moved to separate rows for small-window readability',
-    'Files UX: selecting Files now closes Settings and keeps location selection in secondary navigation',
-    'Sidebar info: free space + item count moved from primary footer into Files secondary location rail',
     'Fix: removed broken main-nav What\'s new entry (use Settings footer entry)',
   ]},
   { ver:'v0.11.1', date:'2026-02-25', notes:[
@@ -3131,7 +3151,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.11.6',
+      ver: 'v0.11.7',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3851,24 +3871,25 @@ function _locIcon(l) {
   return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>';
 }
 function _renderSidebarNodes(nodes, activeRoot) {
-  const el = document.getElementById('locations');
-  el.innerHTML = '';
-  nodes.forEach(node => {
-    const mounts = (node.mounts || []).filter(m => m.visible !== false);
-    if (!mounts.length) return;
-    // node header (hidden in collapsed state via CSS)
-    const hdr = document.createElement('div');
-    hdr.className = 'node-hdr';
-    hdr.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>${escHtml(node.label)}</span>`;
-    el.appendChild(hdr);
-    // mount items indented under node
-    mounts.forEach(m => {
-      const div = document.createElement('div');
-      div.className = 'loc mount-item' + (m.id === activeRoot ? ' active' : '');
-      div.dataset.root = m.id;
-      div.innerHTML = `${_locIcon({...m, type: node.type})}<span class="loc-name">${escHtml(m.label)}</span>`;
-      div.onclick = () => navigate(m.id, '');
-      el.appendChild(div);
+  const targets = [document.getElementById('locations'), document.getElementById('locations-secondary')].filter(Boolean);
+  if (!targets.length) return;
+  targets.forEach(el => {
+    el.innerHTML = '';
+    nodes.forEach(node => {
+      const mounts = (node.mounts || []).filter(m => m.visible !== false);
+      if (!mounts.length) return;
+      const hdr = document.createElement('div');
+      hdr.className = 'node-hdr';
+      hdr.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>${escHtml(node.label)}</span>`;
+      el.appendChild(hdr);
+      mounts.forEach(m => {
+        const div = document.createElement('div');
+        div.className = 'loc mount-item' + (m.id === activeRoot ? ' active' : '');
+        div.dataset.root = m.id;
+        div.innerHTML = `${_locIcon({...m, type: node.type})}<span class="loc-name">${escHtml(m.label)}</span>`;
+        div.onclick = () => navigate(m.id, '');
+        el.appendChild(div);
+      });
     });
   });
 }
@@ -3880,15 +3901,20 @@ function _renderSidebarLocs(locs, activeRoot) {
     const nid = l.node_id || '__flat__';
     (byNode[nid] = byNode[nid] || []).push(l);
   });
+
   if (Object.keys(byNode).length === 1 && byNode['__flat__']) {
     // flat legacy: no node grouping
-    const el = document.getElementById('locations');
-    el.innerHTML = '';
-    locs.forEach(l => {
-      const div = document.createElement('div');
-      div.className = 'loc' + (l.id === activeRoot ? ' active' : '');
-      div.dataset.root = l.id; div.innerHTML = `${_locIcon(l)}<span class="loc-name">${escHtml(l.label)}</span>`;
-      div.onclick = () => navigate(l.id, ''); el.appendChild(div);
+    const targets = [document.getElementById('locations'), document.getElementById('locations-secondary')].filter(Boolean);
+    targets.forEach(el => {
+      el.innerHTML = '';
+      locs.forEach(l => {
+        const div = document.createElement('div');
+        div.className = 'loc' + (l.id === activeRoot ? ' active' : '');
+        div.dataset.root = l.id;
+        div.innerHTML = `${_locIcon(l)}<span class="loc-name">${escHtml(l.label)}</span>`;
+        div.onclick = () => navigate(l.id, '');
+        el.appendChild(div);
+      });
     });
   } else {
     // has node context: build pseudo-nodes and delegate
@@ -6621,7 +6647,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.11.6 ready (localhost only)")
+    print(f"\n  Porter v0.11.7 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:

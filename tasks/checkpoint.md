@@ -1,8 +1,8 @@
 # Checkpoint
 project: porter
-task: Porter v0.11.6 — Profile + Files UX polish
+task: Porter v0.11.7 — Files secondary navigation rail UX fix
 status: completed
-step: 6 of 6
+step: 7 of 7
 completed:
   - [x] Commit 1 — CSS additions (module-nav, module-panel, badge-*, ov-metric, sched-card, tool-card, audit-row)
   - [x] Commit 2 — HTML restructure (sidebar → module-nav with 10 items, 8 module panels, settings as module-panel)
@@ -13,7 +13,8 @@ completed:
   - [x] Gemini Agent — Add Gemini CLI as a registered 'writer' agent.
   - [x] Version Bump — v0.11.0 → v0.11.5 for patch fixes.
   - [x] v0.11.6 polish — profile layout readability, Files/settings navigation coherence, disk footer moved into Files secondary rail.
-next_action: n/a — all v0.11.6 requested UX updates complete.
+  - [x] v0.11.7 UX correction — locations moved out of primary nav and into dedicated Files secondary rail.
+next_action: n/a — all v0.11.7 requested UX updates complete.
 modified_files:
   - /home/lobster/documents/porter/porter.py
   - /home/lobster/documents/porter/tasks/checkpoint.md
