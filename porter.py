@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.44 — self-hosted file manager"""
+"""Porter v0.12.45 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1558,7 +1558,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.44</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.45</div>
   </div>
 </aside>
 
@@ -2008,7 +2008,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.44 — What's new
+          v0.12.45 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2399,6 +2399,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.45', date:'2026-02-25', notes:[
+    'Files secondary nav cleaned up into clearer device cards with explicit Browse/Connect actions',
+    'Removed ambiguous attach wording and dead-click behavior from remote rows',
+    'Mount empty-state now clearly explains why browsing is unavailable for remote devices',
+  ]},
   { ver:'v0.12.44', date:'2026-02-25', notes:[
     'Connect flow now shows pending state in Files secondary nav (no ambiguous no-op)',
     'After Connect, automatic refresh checks run to surface pass/fail status changes',
@@ -3530,7 +3535,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.44',
+      ver: 'v0.12.45',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4376,7 +4381,6 @@ function _renderSidebarNodes(nodes, activeRoot) {
   if (!targets.length) return;
   const serverHost = String(window._serverHostname || '').toLowerCase();
 
-  // Merge configured nodes with discovered tailscale peers so every trusted device appears in Files.
   const configured = Array.isArray(nodes) ? [...nodes] : [];
   const peers = ((_tsCache && _tsCache.data && _tsCache.data.peers) || []);
   const byKey = new Set(configured.map(n => String((n.hostname || n.id || '')).toLowerCase()));
@@ -4414,36 +4418,34 @@ function _renderSidebarNodes(nodes, activeRoot) {
         ? `${nickname || (node.hostname || node.id)} (this device)`
         : (nickname || node.label || node.id);
       const connected = node._virtual ? (node._online !== false) : isTailscaleNodeConnected(node);
-
-      const hdr = document.createElement('div');
-      hdr.className = 'node-hdr';
-      hdr.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span class="node-title" title="${escHtml(displayName)}">${escHtml(displayName)}</span><span style="font-size:10px;color:${connected ? 'var(--ok,#22c55e)' : 'var(--text3)'};flex-shrink:0">${connected ? 'online' : 'offline'}</span><span style="font-size:10px;color:var(--text3);flex-shrink:0;background:var(--bg);border:1px solid var(--border2);border-radius:99px;padding:1px 6px">${mounts.length}</span>`;
-      const addBtn = document.createElement('button');
-      addBtn.className = 'btn btn-ghost';
-      addBtn.style.cssText = 'margin-left:6px;font-size:10px;padding:1px 6px';
       const canAttach = connected && _isSelfNode(node);
       const canConnect = connected && !_isSelfNode(node);
       const pendingConnect = !!(window._remoteConnectPending && window._remoteConnectPending[node.id]);
-      addBtn.title = canAttach ? 'Attach path' : (canConnect ? (pendingConnect ? 'Connection setup pending' : 'Connect remote browser') : 'Device offline');
-      addBtn.textContent = canAttach ? '+ Path' : (canConnect ? (pendingConnect ? 'Pending…' : 'Connect') : 'Offline');
-      addBtn.disabled = !canAttach && !canConnect;
-      addBtn.style.opacity = (canAttach || canConnect) ? '1' : '.55';
-      addBtn.onclick = (e) => {
+
+      const card = document.createElement('div');
+      card.className = 'node-hdr';
+      card.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span class="node-title" title="${escHtml(displayName)}">${escHtml(displayName)}</span><span style="font-size:10px;color:${connected ? 'var(--ok,#22c55e)' : 'var(--text3)'};flex-shrink:0">${connected ? 'online' : 'offline'}</span>`;
+
+      const actionBtn = document.createElement('button');
+      actionBtn.className = 'btn btn-ghost';
+      actionBtn.style.cssText = 'margin-left:6px;font-size:10px;padding:1px 7px';
+      actionBtn.title = canAttach ? 'Browse and attach path' : (canConnect ? (pendingConnect ? 'Waiting for remote agent' : 'Connect remote agent') : 'Device offline');
+      actionBtn.textContent = canAttach ? 'Browse' : (canConnect ? (pendingConnect ? 'Pending…' : 'Connect') : 'Offline');
+      actionBtn.disabled = !canAttach && !canConnect;
+      actionBtn.style.opacity = (canAttach || canConnect) ? '1' : '.55';
+      actionBtn.onclick = (e) => {
         e.stopPropagation();
         if (canAttach) quickExposePath(node);
         else if (canConnect) connectRemoteBrowser(node);
       };
-      hdr.appendChild(addBtn);
-      el.appendChild(hdr);
+      card.appendChild(actionBtn);
+      el.appendChild(card);
 
       if (!mounts.length) {
         const empty = document.createElement('div');
         empty.className = 'loc mount-item';
-        const canAttach = connected && _isSelfNode(node);
-        const canConnect = connected && !_isSelfNode(node);
-        const pendingConnect = !!(window._remoteConnectPending && window._remoteConnectPending[node.id]);
-        empty.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="loc-name">${canAttach ? 'Attach first path…' : (canConnect ? (pendingConnect ? 'Connection pending…' : 'Connect remote browser…') : 'Device offline')}</span>`;
-        empty.style.opacity = (canAttach || canConnect) ? '1' : '.7';
+        empty.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="loc-name">${canAttach ? 'No paths attached yet' : (canConnect ? (pendingConnect ? 'Agent connection pending' : 'Connect agent to browse paths') : 'Device offline')}</span>`;
+        empty.style.opacity = '.78';
         empty.onclick = () => {
           if (canAttach) quickExposePath(node);
           else if (canConnect) connectRemoteBrowser(node);
@@ -7419,7 +7421,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.44 ready (localhost only)")
+    print(f"\n  Porter v0.12.45 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
