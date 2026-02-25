@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.11.9 — self-hosted file manager"""
+"""Porter v0.11.10 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -22,6 +22,19 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 PORT = 8877
 HOST = "76.13.190.52"
+
+
+def _public_ip_hint() -> str:
+    """Best-effort public IP for UI display.
+    Priority: explicit env override, configured HOST bind (if public-looking), else empty.
+    """
+    env_ip = os.environ.get("PORTER_PUBLIC_IP", "").strip()
+    if env_ip:
+        return env_ip
+    h = (HOST or "").strip()
+    if h and h not in {"0.0.0.0", "127.0.0.1", "localhost", "::1"}:
+        return h
+    return ""
 
 SERVE_DIRS: dict = {}   # populated at startup from nodes; do not hardcode here
 
@@ -1519,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.11.9</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.11.10</div>
   </div>
 </aside>
 
@@ -1939,7 +1952,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.11.9 — What's new
+          v0.11.10 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2330,6 +2343,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.11.10', date:'2026-02-25', notes:[
+    'Tailscale status: renamed "This device" to "VPS device" for clarity',
+    'Tailscale status: now shows both Public IP and Tailscale IP for the VPS',
+    'Public IP source: PORTER_PUBLIC_IP env override first, otherwise configured HOST when public',
+  ]},
   { ver:'v0.11.9', date:'2026-02-25', notes:[
     'Navigation order updated for setup-first flow: Locations, Files, Agents, Tasks, Schedules, Policies',
     'Release notes policy fix: restored missing v0.11.2–v0.11.8 entries (append-only history)',
@@ -2725,8 +2743,12 @@ function renderTailscaleStatus(data) {
         <span style="font-weight:600;color:var(--text)">Tailscale connected</span>
       </div>
       <div class="ts-status-row">
-        <span class="ts-stat-label">This device</span>
+        <span class="ts-stat-label">VPS device</span>
         <span class="ts-stat-val">${escHtml(s.name || '—')}</span>
+      </div>
+      <div class="ts-status-row">
+        <span class="ts-stat-label">Public IP</span>
+        <span class="ts-stat-val" style="font-family:monospace">${escHtml(s.public_ip || '—')}</span>
       </div>
       <div class="ts-status-row">
         <span class="ts-stat-label">Tailscale IP</span>
@@ -3170,7 +3192,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.11.9',
+      ver: 'v0.11.10',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -5199,10 +5221,11 @@ class Handler(BaseHTTPRequestHandler):
                     self.reply_json({
                         "available":    True,
                         "self": {
-                            "name":    self_node.get("HostName", ""),
-                            "ip":      self_ips[0] if self_ips else "",
-                            "tailnet": tailnet,
-                            "os":      self_node.get("OS", ""),
+                            "name":      self_node.get("HostName", "") or socket.gethostname(),
+                            "ip":        self_ips[0] if self_ips else "",
+                            "public_ip": _public_ip_hint(),
+                            "tailnet":   tailnet,
+                            "os":        self_node.get("OS", ""),
                         },
                         "peers_online": sum(1 for p in peers if p["online"]),
                         "peers_total":  len(peers),
@@ -6670,7 +6693,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.11.9 ready (localhost only)")
+    print(f"\n  Porter v0.11.10 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:

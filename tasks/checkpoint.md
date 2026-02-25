@@ -1,8 +1,8 @@
 # Checkpoint
 project: porter
-task: Porter v0.11.9 — Navigation order + changelog continuity
+task: Porter v0.11.10 — Tailscale device/IP clarity
 status: completed
-step: 9 of 9
+step: 10 of 10
 completed:
   - [x] Commit 1 — CSS additions (module-nav, module-panel, badge-*, ov-metric, sched-card, tool-card, audit-row)
   - [x] Commit 2 — HTML restructure (sidebar → module-nav with 10 items, 8 module panels, settings as module-panel)
@@ -17,7 +17,8 @@ completed:
   - [x] v0.11.8 clarity fix — breadcrumb root now shows full mounted path instead of ~/root-id.
   - [x] v0.11.9 nav reorder — Locations moved above Files; flow now Locations → Files → Agents → Tasks → Schedules → Policies.
   - [x] v0.11.9 changelog continuity — restored missing v0.11.2–v0.11.8 release entries.
-next_action: n/a — all v0.11.9 requested UX updates complete.
+  - [x] v0.11.10 Tailscale clarity — expose VPS Public IP and Tailscale IP; replace ambiguous "This device" label.
+next_action: n/a — all v0.11.10 requested UX updates complete.
 modified_files:
   - /home/lobster/documents/porter/porter.py
   - /home/lobster/documents/porter/tasks/checkpoint.md
