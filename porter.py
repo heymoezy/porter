@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.11.10 — self-hosted file manager"""
+"""Porter v0.11.11 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.11.10</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.11.11</div>
   </div>
 </aside>
 
@@ -1952,7 +1952,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.11.10 — What's new
+          v0.11.11 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2343,6 +2343,10 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.11.11', date:'2026-02-25', notes:[
+    'Settings overlay behavior: clicking any primary nav module now closes Settings and navigates correctly',
+    'Fix: non-Files main navigation buttons no longer appear unresponsive while Settings is open',
+  ]},
   { ver:'v0.11.10', date:'2026-02-25', notes:[
     'Tailscale status: renamed "This device" to "VPS device" for clarity',
     'Tailscale status: now shows both Public IP and Tailscale IP for the VPS',
@@ -2855,6 +2859,7 @@ let _currentModule = 'overview';
 window._showAllAgentTypes = false;
 window._lastAgents = [];
 function switchModule(name) {
+  if (name !== 'settings') closeSettings();
   const leavingFiles = _currentModule === 'files' && name !== 'files';
   if (leavingFiles && typeof closePreview === 'function') {
     const pp = document.getElementById('previewPanel');
@@ -3192,7 +3197,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.11.10',
+      ver: 'v0.11.11',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -6693,7 +6698,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.11.10 ready (localhost only)")
+    print(f"\n  Porter v0.11.11 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
