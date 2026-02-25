@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.11.7 — self-hosted file manager"""
+"""Porter v0.11.8 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1519,7 +1519,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.11.7</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.11.8</div>
   </div>
 </aside>
 
@@ -1939,7 +1939,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.11.7 — What's new
+          v0.11.8 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2330,10 +2330,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.11.7', date:'2026-02-25', notes:[
+  { ver:'v0.11.8', date:'2026-02-25', notes:[
     'Files UX: locations moved out of primary sidebar into a dedicated secondary Files navigation rail',
     'Files UX: secondary rail now carries location tree + free space + item count in one contextual panel',
     'Files UX: selecting Files or navigating to a location force-closes Settings for cleaner transitions',
+    'Breadcrumbs: root crumb now shows full mounted VPS path (e.g., /home/lobster/documents) instead of ~/root-id',
     'Profile UI: split into Full name, "What should Porter call you?", and Email address (stacked layout)',
     'Profile data: full_name added to config + /api/me + /api/profile/update',
     'Password UI: New password and Confirm password moved to separate rows for small-window readability',
@@ -2488,6 +2489,7 @@ const CHANGELOG = [
 ];
 // ── state ──
 let curRoot = '', curPath = '', curWritable = true;
+let rootMeta = {}; // mount id -> {path,label,node}
 let activeDropdown = null;
 let sortCol = 'name', sortDir = 'asc';
 let searchActive = false;
@@ -3151,7 +3153,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.11.7',
+      ver: 'v0.11.8',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3883,6 +3885,7 @@ function _renderSidebarNodes(nodes, activeRoot) {
       hdr.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>${escHtml(node.label)}</span>`;
       el.appendChild(hdr);
       mounts.forEach(m => {
+        rootMeta[m.id] = { path: m.path || '', label: m.label || m.id, node: node.label || node.id };
         const div = document.createElement('div');
         div.className = 'loc mount-item' + (m.id === activeRoot ? ' active' : '');
         div.dataset.root = m.id;
@@ -3908,6 +3911,7 @@ function _renderSidebarLocs(locs, activeRoot) {
     targets.forEach(el => {
       el.innerHTML = '';
       locs.forEach(l => {
+        rootMeta[l.id] = { path: l.path || '', label: l.label || l.id, node: l.node_id || '' };
         const div = document.createElement('div');
         div.className = 'loc' + (l.id === activeRoot ? ' active' : '');
         div.dataset.root = l.id;
@@ -3987,7 +3991,9 @@ async function loadDiskInfo(root) {
 function renderBreadcrumb(root, path) {
   const el = document.getElementById('breadcrumb');
   const parts = path ? path.split('/').filter(Boolean) : [];
-  let h = `<button class="crumb" onclick="navigate('${esc(root)}','')">~/${esc(root)}</button>`;
+  const meta = rootMeta[root] || {};
+  const rootPath = meta.path || `~/${root}`;
+  let h = `<button class="crumb" onclick="navigate('${esc(root)}','')">${escHtml(rootPath)}</button>`;
   let so_far = '';
   parts.forEach((p, i) => {
     so_far += (so_far ? '/' : '') + p;
@@ -6647,7 +6653,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.11.7 ready (localhost only)")
+    print(f"\n  Porter v0.11.8 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
