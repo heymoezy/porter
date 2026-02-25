@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.37 — self-hosted file manager"""
+"""Porter v0.12.38 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -53,6 +53,14 @@ DEFAULT_PREFERENCES: dict = {
     "density":             "normal",
     "editor_font_size":    12,
     "policy_preset":       "balanced",
+}
+DEFAULT_AGENT_FLEET: dict = {
+    "channel": "stable",
+    "current_version": "0.1.0",
+    "min_compatible": "0.1.0",
+    "auto_update": True,
+    "rollout": 100,
+    "devices": {},  # agent_id -> {os, arch, version, status, last_seen}
 }
 
 CONFIG_PATH  = Path("/home/lobster/documents/porter/porter_config.json")
@@ -268,6 +276,16 @@ def load_config() -> dict:
         if k not in prefs:
             prefs[k] = v
             changed = True
+
+    # ── fleet lifecycle config ──
+    fleet = cfg.setdefault("agent_fleet", {})
+    for k, v in DEFAULT_AGENT_FLEET.items():
+        if k not in fleet:
+            fleet[k] = ({} if k == "devices" else v)
+            changed = True
+    if not isinstance(fleet.get("devices"), dict):
+        fleet["devices"] = {}
+        changed = True
 
     if changed:
         save_config(cfg)
@@ -1536,7 +1554,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.37</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.38</div>
   </div>
 </aside>
 
@@ -1966,7 +1984,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.37 — What's new
+          v0.12.38 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2357,6 +2375,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.38', date:'2026-02-25', notes:[
+    'Agent lifecycle foundation: added fleet policy API (channel/version/min-compatible/rollout)',
+    'Added bootstrap API to support install-on-first-use commands per target OS/arch',
+    'Added agent heartbeat/update reporting endpoint for auto-update observability',
+  ]},
   { ver:'v0.12.37', date:'2026-02-25', notes:[
     'Files reliability fix: entering Files now always refreshes locations/devices list (timing bug resolved)',
     'CTA wording upgraded from Expose to Attach for a cleaner, more product-grade tone',
@@ -3453,7 +3476,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.37',
+      ver: 'v0.12.38',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -5982,6 +6005,38 @@ class Handler(BaseHTTPRequestHandler):
             tasks.sort(key=lambda t: (_order.get(t["state"], 9), -(t["last_heartbeat"] or 0)))
             self.reply_json({"tasks": tasks, "count": len(tasks)})
 
+        # ── agent fleet lifecycle ─────────────────────────────────────────
+        elif parsed.path == "/api/agent-fleet":
+            if not self.auth_check(redirect=False): return
+            fleet = _config.get("agent_fleet", DEFAULT_AGENT_FLEET)
+            devices = fleet.get("devices", {})
+            self.reply_json({
+                "channel": fleet.get("channel", "stable"),
+                "current_version": fleet.get("current_version", "0.1.0"),
+                "min_compatible": fleet.get("min_compatible", "0.1.0"),
+                "auto_update": bool(fleet.get("auto_update", True)),
+                "rollout": int(fleet.get("rollout", 100)),
+                "device_count": len(devices),
+                "devices": devices,
+            })
+
+        elif parsed.path == "/api/agent/bootstrap":
+            # Installer recipe for first-use bootstrap on target devices
+            if not self.auth_check(redirect=False): return
+            os_name = (qs.get("os", ["linux"])[0] or "linux").lower()
+            arch = (qs.get("arch", ["x64"])[0] or "x64").lower()
+            cmd = (
+                "curl -fsSL https://porter.run/install-agent.sh | "
+                f"bash -s -- --os {os_name} --arch {arch} --channel stable"
+            )
+            self.reply_json({
+                "ok": True,
+                "os": os_name,
+                "arch": arch,
+                "install_command": cmd,
+                "note": "Run on target device. Agent will self-register and auto-update.",
+            })
+
         # ── P2: audit log ──────────────────────────────────────────────────
         elif parsed.path == "/api/audit":
             if not self.auth_check(redirect=False): return
@@ -6128,6 +6183,57 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": False,
                 "error": "Tailscale connect/disconnect is disabled on this server to prevent lockouts"
             }, 403)
+
+        elif parsed.path == "/api/agent-fleet":
+            # Admin controls + agent heartbeat/update reporting
+            data = self.read_json_body()
+            action = str(data.get("action", "")).strip().lower()
+
+            # Agent report path (bearer)
+            if action in {"report_heartbeat", "report_update"}:
+                agent = self.get_agent_from_bearer()
+                if not agent:
+                    self.reply_json({"ok": False, "error": "unauthorized"}, 401); return
+                fleet = _config.setdefault("agent_fleet", dict(DEFAULT_AGENT_FLEET))
+                devices = fleet.setdefault("devices", {})
+                aid = agent.get("id")
+                entry = devices.get(aid, {})
+                entry.update({
+                    "agent_id": aid,
+                    "name": agent.get("name", aid),
+                    "os": data.get("os", entry.get("os", "")),
+                    "arch": data.get("arch", entry.get("arch", "")),
+                    "version": data.get("version", entry.get("version", "")),
+                    "status": data.get("status", "online"),
+                    "last_seen": int(time.time()),
+                })
+                if action == "report_update":
+                    entry["last_update_from"] = data.get("from_version", "")
+                    entry["last_update_to"] = data.get("to_version", entry.get("version", ""))
+                    entry["last_update_ts"] = int(time.time())
+                devices[aid] = entry
+                _config["agent_fleet"] = fleet
+                save_config(_config)
+                _append_audit(action, target=aid, actor=f"agent:{aid}", detail=entry)
+                self.reply_json({"ok": True}); return
+
+            # Admin-only controls
+            if not self.auth_check(redirect=False): return
+            fleet = _config.setdefault("agent_fleet", dict(DEFAULT_AGENT_FLEET))
+            if action == "set_policy":
+                if "channel" in data: fleet["channel"] = str(data.get("channel") or "stable")
+                if "current_version" in data: fleet["current_version"] = str(data.get("current_version") or fleet.get("current_version", "0.1.0"))
+                if "min_compatible" in data: fleet["min_compatible"] = str(data.get("min_compatible") or fleet.get("min_compatible", "0.1.0"))
+                if "auto_update" in data: fleet["auto_update"] = bool(data.get("auto_update"))
+                if "rollout" in data:
+                    try: fleet["rollout"] = max(0, min(100, int(data.get("rollout"))))
+                    except Exception: pass
+                _config["agent_fleet"] = fleet
+                save_config(_config)
+                _append_audit("agent_fleet_set_policy", target="fleet", actor="owner", detail=fleet)
+                self.reply_json({"ok": True, "fleet": fleet}); return
+
+            self.reply_json({"ok": False, "error": "Unsupported action"}, 400)
 
         elif parsed.path == "/api/profile/update":
             if not self.auth_check(redirect=False): return
@@ -7166,7 +7272,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.37 ready (localhost only)")
+    print(f"\n  Porter v0.12.38 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
