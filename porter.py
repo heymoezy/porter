@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.21 — self-hosted file manager"""
+"""Porter v0.12.22 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.21</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.22</div>
   </div>
 </aside>
 
@@ -1962,7 +1962,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.21 — What's new
+          v0.12.22 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2353,6 +2353,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.22', date:'2026-02-25', notes:[
+    'Locations redesigned into a clean 3-column devices table: Device, Nickname, OS/IP',
+    'Added inline nickname save per device (including discovered peers)',
+    'Discovered devices can be promoted and nicknamed in one step',
+  ]},
   { ver:'v0.12.21', date:'2026-02-25', notes:[
     'Locations list cleanup: removed redundant status text (configured/online/offline)',
     'Locations now shows only device nickname + rename action',
@@ -3351,7 +3356,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.21',
+      ver: 'v0.12.22',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3425,53 +3430,98 @@ function renderNodes(nodes) {
     if (byKey.has(key)) return;
     configured.push({
       id: `peer:${key.replace(/[^a-z0-9.-]+/g, '-')}`,
-      label: host,
+      label: '',
       type: 'tailscale',
       hostname: host,
       tailscale_ip: p.ip || '',
       mounts: [],
       _virtual: true,
       _online: !!p.online,
+      _peer: p,
     });
     byKey.add(key);
   });
 
   if (!configured.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No locations found yet.</div>';
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No devices found yet.</div>';
     return;
   }
 
   const serverHost = String(window._serverHostname || '').toLowerCase();
-  el.innerHTML = configured.map(node => {
+  const selfTs = (_tsCache && _tsCache.data && _tsCache.data.self) || null;
+  const peerByHost = new Map();
+  const peerByIp = new Map();
+  peers.forEach(p => {
+    const h = String(p.name || '').toLowerCase();
+    const ip = String(p.ip || '').toLowerCase();
+    if (h) peerByHost.set(h, p);
+    if (ip) peerByIp.set(ip, p);
+  });
+
+  const rows = configured.map((node, idx) => {
     const nType = String(node.type || '').toLowerCase();
     const nId = String(node.id || '').toLowerCase();
     const nHost = String(node.hostname || '').toLowerCase();
     const isSelf = (nType === 'local' || nType === 'vps') && (serverHost && (nId === serverHost || nHost === serverHost));
-    const displayName = isSelf ? `${node.hostname || node.id} (this device)` : (node.label || node.hostname || node.id);
-    return `
-      <div style="background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:8px">
-        <span style="font-size:13px;font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(displayName)}</span>
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="renameLocation('${escHtml(node.id)}', '${escHtml(node.label || node.hostname || node.id)}', '${escHtml(node.type || 'tailscale')}', ${node._virtual ? 'true' : 'false'}, '${escHtml(node.hostname || '')}', '${escHtml(node.tailscale_ip || '')}')">✎ Rename</button>
-      </div>`;
-  }).join('');
+
+    const deviceName = isSelf ? `${node.hostname || node.id} (this device)` : (node.hostname || node.label || node.id);
+    const currentNick = (node.label || '').trim();
+    const inputId = `nick_${idx}_${Math.random().toString(36).slice(2,8)}`;
+
+    const peer = node._peer || peerByHost.get(String(node.hostname || '').toLowerCase()) || peerByIp.get(String(node.tailscale_ip || '').toLowerCase());
+    const os = isSelf ? (selfTs && selfTs.os ? selfTs.os : 'linux') : (peer && peer.os ? peer.os : '—');
+    const ip = isSelf ? (selfTs && selfTs.ip ? selfTs.ip : (node.tailscale_ip || '—')) : ((peer && peer.ip) || node.tailscale_ip || '—');
+
+    return { node, inputId, deviceName, currentNick, os, ip };
+  });
+
+  el.innerHTML = `
+    <div style="background:var(--raised);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px">
+        <div>Device</div><div>Nickname</div><div>OS / IP</div>
+      </div>
+      ${rows.map(r => `
+      <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);align-items:center">
+        <div style="font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.deviceName)}</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="${r.inputId}" class="settings-input" style="height:30px;padding:5px 8px;font-size:12px" placeholder="Add nickname" value="${escHtml(r.currentNick)}">
+          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="saveDeviceNickname('${escHtml(r.node.id)}','${escHtml(r.node.type || 'tailscale')}',${r.node._virtual ? 'true' : 'false'},'${escHtml(r.node.hostname || '')}','${escHtml(r.node.tailscale_ip || '')}','${r.inputId}')">Save</button>
+        </div>
+        <div style="font-size:12px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(String(r.os))} · <span style="font-family:monospace">${escHtml(String(r.ip))}</span></div>
+      </div>`).join('')}
+    </div>`;
 }
 
-async function renameLocation(nodeId, label, type, isVirtual, hostname, tailscaleIp) {
+async function saveDeviceNickname(nodeId, type, isVirtual, hostname, tailscaleIp, inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const nickname = (input.value || '').trim();
+
   if (isVirtual) {
     const created = await api('/api/nodes', {
       action: 'add_node',
       id: nodeId,
-      label: label || hostname || nodeId,
+      label: nickname || hostname || nodeId,
       type: type || 'tailscale',
       hostname: hostname || '',
       tailscale_ip: tailscaleIp || '',
     });
     if (!created || !created.ok) {
-      toast((created && created.error) || 'Failed to create location for rename', 'err');
+      toast((created && created.error) || 'Failed to create location', 'err');
       return;
     }
+    // if nickname provided on creation, we're done.
+    if (nickname) { toast('Nickname saved', 'ok'); loadLocations(); return; }
   }
-  openEditNode(nodeId, label || hostname || nodeId, type || 'tailscale');
+
+  if (!nickname) { toast('Enter a nickname', 'err'); return; }
+  const res = await api('/api/nodes', { action: 'update_node', node_id: nodeId, label: nickname });
+  if (res && res.ok) {
+    toast('Nickname saved', 'ok');
+    loadLocations();
+  } else {
+    toast((res && res.error) || 'Failed to save nickname', 'err');
+  }
 }
 
 // node / mount CRUD
@@ -6970,7 +7020,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.21 ready (localhost only)")
+    print(f"\n  Porter v0.12.22 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
