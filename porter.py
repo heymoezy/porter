@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.26 — self-hosted file manager"""
+"""Porter v0.12.27 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1532,7 +1532,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.26</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.27</div>
   </div>
 </aside>
 
@@ -1962,7 +1962,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.26 — What's new
+          v0.12.27 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2353,6 +2353,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.27', date:'2026-02-25', notes:[
+    'Moved nickname editing into the primary Locations window (inline input + save per device)',
+    'Replaced clumsy label wording with cleaner action text (Edit name)',
+    'Removed prompt-based nickname flow from primary workflow',
+  ]},
   { ver:'v0.12.26', date:'2026-02-25', notes:[
     'Removed duplicate nickname/device section from Locations entirely',
     'Nickname action moved to Connectivity → Devices rows (single source of truth)',
@@ -2968,7 +2973,6 @@ function renderTailscaleStatus(data) {
         <span class="ts-peer-name">${escHtml(p.name)}${p.isSelf ? ' (this device)' : ''}</span>
         <span class="ts-peer-os">${escHtml(p.os)}</span>
         <span class="ts-peer-ip">${escHtml(p.ip)}</span>
-        <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;flex-shrink:0" onclick="nicknameFromDevice('${escHtml(p.name)}','${escHtml(p.ip)}',${p.isSelf ? 'true' : 'false'})">Nickname</button>
       </div>`).join('')}
     </div>`
     : '<div style="font-size:13px;color:var(--text3)">No devices found on your tailnet.</div>';
@@ -3411,7 +3415,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.26',
+      ver: 'v0.12.27',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -3474,14 +3478,79 @@ async function loadLocations() {
 function renderNodes(nodes) {
   const el = document.getElementById('loc-list');
   if (!el) return;
-  // Intentionally empty: nickname management lives in Connectivity → Devices list.
-  el.innerHTML = '';
+
+  const configured = Array.isArray(nodes) ? [...nodes] : [];
+  const peers = ((_tsCache && _tsCache.data && _tsCache.data.peers) || []);
+  const byKey = new Set(configured.map(n => String((n.hostname || n.id || '')).toLowerCase()));
+  peers.forEach(p => {
+    const host = String(p.name || '').trim();
+    if (!host) return;
+    const key = host.toLowerCase();
+    if (byKey.has(key)) return;
+    configured.push({
+      id: `peer:${key.replace(/[^a-z0-9.-]+/g, '-')}`,
+      label: '',
+      type: 'tailscale',
+      hostname: host,
+      tailscale_ip: p.ip || '',
+      mounts: [],
+      _virtual: true,
+      _peer: p,
+    });
+    byKey.add(key);
+  });
+
+  if (!configured.length) { el.innerHTML = ''; return; }
+
+  const serverHost = String(window._serverHostname || '').toLowerCase();
+  const selfTs = (_tsCache && _tsCache.data && _tsCache.data.self) || null;
+  const peerByHost = new Map();
+  const peerByIp = new Map();
+  peers.forEach(p => {
+    const h = String(p.name || '').toLowerCase();
+    const ip = String(p.ip || '').toLowerCase();
+    if (h) peerByHost.set(h, p);
+    if (ip) peerByIp.set(ip, p);
+  });
+
+  el.innerHTML = `
+    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin:12px 0 8px">Device names</div>
+    <div style="background:var(--raised);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      ${configured.map((node, idx) => {
+        const nType = String(node.type || '').toLowerCase();
+        const nId = String(node.id || '').toLowerCase();
+        const nHost = String(node.hostname || '').toLowerCase();
+        const isSelf = (nType === 'local' || nType === 'vps') && (serverHost && (nId === serverHost || nHost === serverHost));
+        const deviceName = isSelf ? `${node.hostname || node.id} (this device)` : (node.hostname || node.id || node.label || 'device');
+        const rawLabel = (node.label || '').trim();
+        const hostRef = String(node.hostname || node.id || '').trim();
+        const nickname = (rawLabel && rawLabel !== hostRef) ? rawLabel : '';
+        const peer = node._peer || peerByHost.get(String(node.hostname || '').toLowerCase()) || peerByIp.get(String(node.tailscale_ip || '').toLowerCase());
+        const os = isSelf ? (selfTs && selfTs.os ? selfTs.os : 'linux') : (peer && peer.os ? peer.os : '—');
+        const ip = isSelf ? (selfTs && selfTs.ip ? selfTs.ip : (node.tailscale_ip || '—')) : ((peer && peer.ip) || node.tailscale_ip || '—');
+        return `
+          <div style="display:grid;grid-template-columns:1.3fr 1fr auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)">
+            <div style="min-width:0">
+              <div style="font-size:13px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(deviceName)}</div>
+              <div style="font-size:11px;color:var(--text3)">${escHtml(String(os))} · <span style="font-family:monospace">${escHtml(String(ip))}</span></div>
+            </div>
+            <input id="nick_primary_${idx}" class="settings-input" style="height:32px;padding:6px 9px;font-size:12px" placeholder="Nickname" value="${escHtml(nickname)}" />
+            <button class="btn btn-ghost" style="font-size:11px;padding:4px 9px" onclick="saveNicknameInline('${escHtml(node.id)}','${escHtml(node.type || 'tailscale')}',${node._virtual ? 'true' : 'false'},'${escHtml(node.hostname || '')}','${escHtml(node.tailscale_ip || '')}','${escHtml(deviceName)}','nick_primary_${idx}')">Save</button>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+async function saveNicknameInline(nodeId, type, isVirtual, hostname, tailscaleIp, canonicalName, inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const nickname = (input.value || '').trim();
+  if (!nickname) { toast('Enter a nickname', 'err'); return; }
+  await setDeviceNickname(nodeId, type, isVirtual, hostname, tailscaleIp, canonicalName, nickname);
 }
 
 async function setDeviceNickname(nodeId, type, isVirtual, hostname, tailscaleIp, canonicalName, currentNickname) {
-  const proposed = prompt(`Nickname for ${canonicalName}:`, currentNickname || '');
-  if (proposed === null) return;
-  const nickname = proposed.trim();
+  const nickname = (currentNickname || '').trim();
 
   if (isVirtual) {
     const created = await api('/api/nodes', {
@@ -7008,7 +7077,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.26 ready (localhost only)")
+    print(f"\n  Porter v0.12.27 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
