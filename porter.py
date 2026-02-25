@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.49 — self-hosted file manager"""
+"""Porter v0.12.50 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1504,7 +1504,7 @@ body.density-compact .file-name { padding: 6px 0; }
   <nav class="module-nav">
     <button class="mnav-item active" id="mnav-overview" onclick="switchModule('overview')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      <span class="mnav-label">Overview</span>
+      <span class="mnav-label">Command Center</span>
     </button>
     <button class="mnav-item" id="mnav-locations" onclick="switchModule('locations')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
@@ -1537,7 +1537,7 @@ body.density-compact .file-name { padding: 6px 0; }
     </button>
     <button class="mnav-item" id="mnav-audit" onclick="switchModule('audit')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-      <span class="mnav-label">Audit</span>
+      <span class="mnav-label">Activity</span>
     </button>
     <div class="mnav-sep"></div>
     <button class="mnav-item" id="mnav-settings" onclick="openSettings('profile')">
@@ -1558,7 +1558,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.49</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.50</div>
   </div>
 </aside>
 
@@ -1638,21 +1638,20 @@ body.density-compact .file-name { padding: 6px 0; }
   <!-- module panels -->
   <div id="overview-module" class="module-panel">
     <div class="module-hdr">
-      <span class="module-title">Overview</span>
+      <span class="module-title">Command Center</span>
       <span style="font-size:12px;color:var(--text3)" id="ov-updated"></span>
     </div>
     <div id="ov-metrics" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px"></div>
     <div class="module-section">
-      <div class="module-section-title">Quick Actions</div>
+      <div class="module-section-title">Immediate Actions</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-ghost" onclick="switchModule('files')">&#8594; Files</button>
         <button class="btn btn-ghost" onclick="switchModule('tasks')">&#8594; Tasks</button>
         <button class="btn btn-ghost" onclick="switchModule('agents')">&#8594; Agents</button>
-        <button class="btn btn-ghost" onclick="switchModule('audit')">&#8594; Audit</button>
       </div>
     </div>
     <div class="module-section">
-      <div class="module-section-title">Recent Activity</div>
+      <div class="module-section-title">Live Activity</div>
       <div id="ov-activity"></div>
     </div>
   </div>
@@ -1970,11 +1969,11 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div id="audit-module" class="module-panel">
     <div class="module-hdr">
-      <span class="module-title">Audit</span>
+      <span class="module-title">Activity Feed</span>
       <button class="btn btn-ghost" style="font-size:12px" onclick="loadAudit()">&#8635; Refresh</button>
     </div>
     <div style="font-size:13px;color:var(--text3);margin-bottom:12px">
-      Privileged actions by sessions and agents. Append-only log.
+      Operational timeline of significant system and agent events.
     </div>
     <div id="audit-list"></div>
   </div>
@@ -2008,7 +2007,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.49 — What's new
+          v0.12.50 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2399,6 +2398,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.50', date:'2026-02-25', notes:[
+    'Overview upgraded into Command Center with actionable incident cards',
+    'Audit relabeled to Activity Feed for operational context',
+    'Command Center now surfaces immediate actions instead of passive metrics-only view',
+  ]},
   { ver:'v0.12.49', date:'2026-02-25', notes:[
     'Fix: restored remote device rendering in Files secondary nav after connect-state variable regression',
     'Stabilized action-state evaluation to prevent sidebar breakage when loading mixed device states',
@@ -3288,29 +3292,94 @@ async function loadOverview() {
 }
 function renderOverview(data) {
   const metrics = [
-    { label: 'Active Tasks', val: data.active_tasks ?? 0 },
-    { label: 'Stalled Tasks', val: data.stalled_tasks ?? 0 },
+    { label: 'Active tasks', val: data.active_tasks ?? 0 },
+    { label: 'Stalled tasks', val: data.stalled_tasks ?? 0 },
     { label: 'Agents', val: data.agent_count ?? 0 },
     { label: 'Locations', val: data.location_count ?? 0 },
-    { label: 'Schedules', val: data.schedule_count ?? 0 },
-    { label: 'Tools', val: data.tool_count ?? 0 },
-    { label: 'Disk Used %', val: (data.disk_used_pct ?? 0) + '%' },
+    { label: 'Disk used', val: (data.disk_used_pct ?? 0) + '%' },
   ];
   const mg = document.getElementById('ov-metrics');
   if (mg) mg.innerHTML = metrics.map(m =>
     `<div class="ov-metric"><div class="ov-metric-val">${escHtml(String(m.val))}</div><div class="ov-metric-label">${escHtml(m.label)}</div></div>`
   ).join('');
+
   const upd = document.getElementById('ov-updated');
   if (upd) upd.textContent = 'Updated ' + new Date().toLocaleTimeString();
-  const act = document.getElementById('ov-activity');
-  if (act) {
-    const recent = data.recent_audit || [];
-    if (!recent.length) { act.innerHTML = '<div style="color:var(--text3);font-size:13px">No recent activity.</div>'; return; }
-    act.innerHTML = recent.map(e => {
-      const ts = e.ts ? new Date(e.ts * 1000).toLocaleTimeString() : '—';
-      return `<div class="audit-row"><span style="color:var(--text3);flex-shrink:0">${ts}</span><span style="color:var(--text2)">${escHtml(e.action||'—')}</span><span style="color:var(--text3)">${escHtml(e.actor||'')}</span></div>`;
-    }).join('');
+
+  const issues = [];
+  const stalled = Number(data.stalled_tasks || 0);
+  const active = Number(data.active_tasks || 0);
+  const locations = Number(data.location_count || 0);
+  const diskPct = Number(data.disk_used_pct || 0);
+
+  if (stalled > 0) {
+    issues.push({
+      sev: 'high',
+      title: `${stalled} stalled task${stalled>1?'s':''}`,
+      detail: 'These jobs likely need intervention.',
+      action: 'Open Tasks',
+      fn: "switchModule('tasks')",
+    });
   }
+  if (active === 0) {
+    issues.push({
+      sev: 'med',
+      title: 'No active tasks',
+      detail: 'Pipeline is idle. Queue or resume work.',
+      action: 'Open Tasks',
+      fn: "switchModule('tasks')",
+    });
+  }
+  if (locations < 2) {
+    issues.push({
+      sev: 'med',
+      title: 'Limited device coverage',
+      detail: 'Add more locations/agents to unlock cross-device flows.',
+      action: 'Open Locations',
+      fn: "switchModule('locations')",
+    });
+  }
+  if (diskPct >= 85) {
+    issues.push({
+      sev: 'high',
+      title: `Disk pressure (${diskPct}%)`,
+      detail: 'Storage may block uploads or operations soon.',
+      action: 'Open Files',
+      fn: "switchModule('files')",
+    });
+  }
+
+  const act = document.getElementById('ov-activity');
+  if (!act) return;
+
+  const statusTone = issues.some(i=>i.sev==='high') ? 'var(--danger)' : (issues.length ? 'var(--accent)' : 'var(--ok,#22c55e)');
+  const statusText = issues.some(i=>i.sev==='high') ? 'Needs attention now' : (issues.length ? 'Action recommended' : 'Healthy');
+
+  const header = `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;padding:10px 12px;background:var(--raised);border:1px solid var(--border);border-radius:8px">
+    <div style="font-size:13px;color:var(--text);font-weight:600">${statusText}</div>
+    <div style="font-size:12px;color:${statusTone};font-weight:600">${issues.length} issue${issues.length===1?'':'s'}</div>
+  </div>`;
+
+  const cards = issues.length ? issues.map(i => {
+    const border = i.sev === 'high' ? 'var(--danger)' : 'var(--border)';
+    return `<div style="padding:10px 12px;background:var(--raised);border:1px solid ${border};border-radius:8px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(i.title)}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">${escHtml(i.detail)}</div>
+        </div>
+        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="${i.fn}">${escHtml(i.action)}</button>
+      </div>
+    </div>`;
+  }).join('') : '<div style="color:var(--text3);font-size:13px;padding:8px 0">No urgent issues. System is stable.</div>';
+
+  const recent = (data.recent_audit || []).slice(0,6);
+  const feed = recent.length ? `<div style="margin-top:12px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Recent events</div>${recent.map(e=>{
+    const ts = e.ts ? new Date(e.ts * 1000).toLocaleTimeString() : '—';
+    return `<div class="audit-row"><span style="color:var(--text3);flex-shrink:0">${ts}</span><span style="color:var(--text2)">${escHtml(e.action||'—')}</span><span style="color:var(--text3)">${escHtml(e.actor||'')}</span></div>`;
+  }).join('')}</div>` : '';
+
+  act.innerHTML = header + cards + feed;
 }
 
 // ── Schedules module ──
@@ -3554,7 +3623,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.49',
+      ver: 'v0.12.50',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -7413,7 +7482,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.49 ready (localhost only)")
+    print(f"\n  Porter v0.12.50 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
