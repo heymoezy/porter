@@ -2972,21 +2972,54 @@ function saveOrchestrationPolicy() {
 function populateChangelog() {
   const el = document.getElementById('changelog-content');
   if (!el) return;
-  try {
-    const entries = (typeof CHANGELOG !== 'undefined' && Array.isArray(CHANGELOG) && CHANGELOG.length)
-      ? CHANGELOG
-      : [{ ver: 'v0.11.5', date: '2026-02-25', notes: ['Release notes are temporarily unavailable in this build.'] }];
 
-    el.innerHTML = entries.map(v => {
-      const notes = Array.isArray(v.notes) ? v.notes : [];
-      const notesHtml = notes.length
-        ? `<ul class="cl-notes">${notes.map(n => `<li>${escHtml(n)}</li>`).join('')}</ul>`
-        : '<div style="color:var(--text3);font-size:12px;margin:8px 0 14px">No notes for this release.</div>';
-      return `<div class="cl-ver-row"><span class="cl-vtag">${escHtml(v.ver||'unknown')}</span><span class="cl-vdate">${escHtml(v.date||'')}</span></div>${notesHtml}`;
-    }).join('');
-  } catch(e) {
-    console.error('Failed to populate changelog:', e);
-    el.innerHTML = '<div style="color:var(--danger);padding:10px">Error loading release notes. Check console for details.</div>';
+  const fallback = [
+    {
+      ver: 'v0.11.5',
+      date: '2026-02-25',
+      notes: [
+        "UI: changelog rendering hardening",
+        "Fix: What's new panel fallback rendering",
+      ],
+    },
+  ];
+
+  const entries = (typeof CHANGELOG !== 'undefined' && Array.isArray(CHANGELOG) && CHANGELOG.length)
+    ? CHANGELOG
+    : fallback;
+
+  el.innerHTML = '';
+  for (const v of entries) {
+    const row = document.createElement('div');
+    row.className = 'cl-ver-row';
+
+    const tag = document.createElement('span');
+    tag.className = 'cl-vtag';
+    tag.textContent = String((v && v.ver) || 'unknown');
+
+    const date = document.createElement('span');
+    date.className = 'cl-vdate';
+    date.textContent = String((v && v.date) || '');
+
+    row.appendChild(tag);
+    row.appendChild(date);
+    el.appendChild(row);
+
+    const ul = document.createElement('ul');
+    ul.className = 'cl-notes';
+    const notes = Array.isArray(v && v.notes) ? v.notes : [];
+    if (notes.length) {
+      for (const n of notes) {
+        const li = document.createElement('li');
+        li.textContent = String(n);
+        ul.appendChild(li);
+      }
+    } else {
+      const li = document.createElement('li');
+      li.textContent = 'No notes for this release.';
+      ul.appendChild(li);
+    }
+    el.appendChild(ul);
   }
 }
 
