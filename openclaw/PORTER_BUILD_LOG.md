@@ -40,3 +40,10 @@ Porter is not just file browsing; it is the trusted network fabric for connected
 - Deterministic ordering reduces visual jitter between refreshes.
 - Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
 - Risk: low (UI ordering/labels only).
+
+## 2026-02-25 — Release v0.12.60
+- Removed Tasks Wizard UI to reduce branching and cognitive load.
+- Kept dynamic "Right now" guidance as primary in-context instruction.
+- Simplified lane copy (Needs action / In progress / Completed) for faster scan.
+- Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
+- Risk: low (UI simplification only).
