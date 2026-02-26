@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.77 (2026-02-26)
+
+- Fixed Configure flow: opening Configure now enters a dedicated Agent Workspace mode instead of appearing to do nothing.
+- Workspace now hides assistant cards while active and restores them on Close.
+- File navigator now auto-opens the first allowlisted file for immediate editing context.
+
+---
+
 ## v0.12.76 (2026-02-26)
 
 - Assistants: moved **Include internal/test assistants** toggle out of expandable card into a simple top-right inline control above cards.

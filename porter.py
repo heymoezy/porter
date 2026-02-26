@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.76 — self-hosted file manager"""
+"""Porter v0.12.77 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1567,7 +1567,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.76</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.77</div>
   </div>
 </aside>
 
@@ -1740,7 +1740,7 @@ body.density-compact .file-name { padding: 6px 0; }
     </div>
     <div id="agents-module-list"></div>
 
-    <div id="agent-workspace" style="display:none;margin-top:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden">
+    <div id="agent-workspace" style="display:none;margin-top:0;border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border)">
         <div style="font-size:13px;font-weight:600;color:var(--text)">Agent Workspace · <span id="aw-agent-name" style="color:var(--accent)"></span></div>
         <div style="display:flex;gap:8px">
@@ -2049,7 +2049,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.76 — What's new
+          v0.12.77 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2454,6 +2454,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.77', date:'2026-02-26', notes:[
+    'Assistants Configure now opens a true Agent Workspace view by hiding card list and focusing on full right-side editor workspace',
+    'Agent Workspace file navigator now auto-loads first allowlisted file and uses safer file-open bindings',
+    'Configure open/close flow now restores assistant list cleanly and avoids no-op behavior',
+  ]},
   { ver:'v0.12.76', date:'2026-02-26', notes:[
     'Assistants: moved internal/test toggle out of expandable card into a simple top-right inline control',
     'Assistants: streamlined top controls for faster scanning above agent cards',
@@ -3804,7 +3809,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.76',
+      ver: 'v0.12.77',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4367,7 +4372,7 @@ function renderAgents(agents) {
           ${usageDetail}
           <details style="margin-top:6px"><summary style="font-size:11px;color:var(--text3);cursor:pointer">Details</summary><div style="font-size:11px;color:var(--text3);margin-top:4px">ID: <span style="font-family:monospace">${a.id}</span></div></details>
         </div>
-        <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="openAgentWorkspace('${a.id}','${escHtml(a.name)}')">Configure</button>
+        <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="openAgentWorkspace('${esc(a.id)}','${esc(a.name)}')">Configure</button>
         <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="doTestAgent('${a.id}','${escHtml(a.name)}')">Test</button>
         <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
         <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Disconnect</button>
@@ -4430,23 +4435,32 @@ let _awCurrentFile = '';
 function openAgentWorkspace(agentId, agentName) {
   _awAgentId = agentId;
   _awCurrentFile = '';
-  const el = document.getElementById('agent-workspace');
+  const ws = document.getElementById('agent-workspace');
+  const list = document.getElementById('agents-module-list');
+  const create = document.getElementById('agents-module-create-form');
+  const keybox = document.getElementById('agents-module-key-box');
   const nm = document.getElementById('aw-agent-name');
   if (nm) nm.textContent = agentName || agentId;
-  if (el) el.style.display = 'block';
-  loadAgentWorkspaceList();
+  if (list) list.style.display = 'none';
+  if (create) create.style.display = 'none';
+  if (keybox) keybox.style.display = 'none';
+  if (ws) ws.style.display = 'block';
+  loadAgentWorkspaceList(true);
 }
 function closeAgentWorkspace() {
-  const el = document.getElementById('agent-workspace');
-  if (el) el.style.display = 'none';
+  const ws = document.getElementById('agent-workspace');
+  const list = document.getElementById('agents-module-list');
+  if (ws) ws.style.display = 'none';
+  if (list) list.style.display = '';
 }
 
-async function loadAgentWorkspaceList() {
+async function loadAgentWorkspaceList(openFirst = false) {
   const res = await api('/api/agent-workspace/read', { agent_id: _awAgentId, action: 'list' });
   const el = document.getElementById('aw-file-list');
   if (!el) return;
   if (!res || !res.files) { el.innerHTML = '<div style="color:var(--text3);font-size:12px">No files</div>'; return; }
-  el.innerHTML = res.files.map(f => `<button class="btn btn-ghost" style="justify-content:flex-start;font-size:11px;padding:4px 6px;max-width:100%;overflow:hidden;text-overflow:ellipsis" onclick="openAgentWorkspaceFile('${f.replace(/'/g, "\'")}')">${f}</button>`).join('');
+  el.innerHTML = res.files.map(f => `<button class="btn btn-ghost" style="justify-content:flex-start;font-size:11px;padding:4px 6px;max-width:100%;overflow:hidden;text-overflow:ellipsis" onclick="openAgentWorkspaceFile(${JSON.stringify(f)})">${escHtml(f)}</button>`).join('');
+  if (openFirst && res.files.length) openAgentWorkspaceFile(res.files[0]);
 }
 
 async function openAgentWorkspaceFile(path) {
@@ -8344,7 +8358,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.76 ready (localhost only)")
+    print(f"\n  Porter v0.12.77 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
