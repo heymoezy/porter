@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.68 — self-hosted file manager"""
+"""Porter v0.12.69 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1565,7 +1565,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.68</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.69</div>
   </div>
 </aside>
 
@@ -2021,7 +2021,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.68 — What's new
+          v0.12.69 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2412,6 +2412,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.69', date:'2026-02-26', notes:[
+    'Connect flow now adapts to iPhone/iOS targets with a dedicated preparation + SSH test wizard',
+    'Added iPhone readiness checklist in-product (Tailscale + SSH server app + active foreground requirement)',
+    'iPhone SSH probes now support custom ports (default 2222) and save verified endpoint metadata',
+  ]},
   { ver:'v0.12.68', date:'2026-02-26', notes:[
     'Connect SSH mode now opens a real SSH test wizard (user/host/port) instead of a dead-end toast',
     'Added backend /api/ssh/probe endpoint for live SSH reachability checks with clear error messages',
@@ -3692,7 +3697,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.68',
+      ver: 'v0.12.69',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4709,6 +4714,12 @@ function _isSelfNode(node) {
   return (nType === 'local' || nType === 'vps') && !!serverHost && (nId === serverHost || nHost === serverHost);
 }
 
+function _isIOSNode(node) {
+  const osRaw = String((node._peer && node._peer.os) || '').toLowerCase();
+  const label = String(node.label || '').toLowerCase();
+  const host = String(node.hostname || '').toLowerCase();
+  return osRaw.includes('ios') || label.includes('iphone') || host.includes('iphone');
+}
 
 async function connectRemoteEndpoint(node) {
   const target = node.label || node.hostname || node.id;
@@ -4734,6 +4745,7 @@ async function connectRemoteEndpoint(node) {
   }
 
   const showActionPlan = () => {
+    const isIOS = _isIOSNode(node);
     showModal({
       title: `Connect ${escHtml(target)}`,
       desc:
@@ -4742,9 +4754,14 @@ async function connectRemoteEndpoint(node) {
           `<div style="padding:10px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--surface)">` +
             `<strong style="display:block;margin-bottom:8px">Porter will run these actions:</strong>` +
             `<div style="display:grid;gap:6px;font-size:13px;color:var(--text2)">` +
-              `<div><strong style="color:var(--text)">1.</strong> Attempt agentless SSH over Tailscale first <span style="color:var(--accent2)">(recommended)</span></div>` +
-              `<div><strong style="color:var(--text)">2.</strong> If SSH is unavailable, offer Porter Agent bootstrap</div>` +
-              `<div><strong style="color:var(--text)">3.</strong> Show exact command and allow copy to clipboard</div>` +
+              (isIOS
+                ? `<div><strong style="color:var(--text)">1.</strong> Validate Tailscale reachability for this iPhone</div>` +
+                  `<div><strong style="color:var(--text)">2.</strong> Walk iPhone SSH preparation (required before SSH works)</div>` +
+                  `<div><strong style="color:var(--text)">3.</strong> Probe SSH and save endpoint if reachable</div>`
+                : `<div><strong style="color:var(--text)">1.</strong> Attempt agentless SSH over Tailscale first <span style="color:var(--accent2)">(recommended)</span></div>` +
+                  `<div><strong style="color:var(--text)">2.</strong> If SSH is unavailable, offer Porter Agent bootstrap</div>` +
+                  `<div><strong style="color:var(--text)">3.</strong> Show exact command and allow copy to clipboard</div>`
+              ) +
             `</div>` +
           `</div>` +
           `<div style="font-size:12px;color:var(--text3)">No hidden actions. You explicitly choose each step.</div>` +
@@ -4752,11 +4769,12 @@ async function connectRemoteEndpoint(node) {
       actions: [
         { label: 'Cancel', action: closeModal },
         {
-          label: 'Try SSH (Recommended)',
+          label: isIOS ? 'Prepare iPhone + Test SSH' : 'Try SSH (Recommended)',
           cls: 'btn-primary',
           action: () => {
             closeModal();
-            openSshConnectWizard(node, target);
+            if (isIOS) openIosPrepWizard(node, target);
+            else openSshConnectWizard(node, target);
           }
         },
         {
@@ -4837,6 +4855,63 @@ async function openSshConnectWizard(node, targetLabel) {
               actions: [
                 { label: 'Close', action: closeModal },
                 { label: 'Install Agent Fallback', cls: 'btn-primary', action: () => connectRemoteEndpoint({ ...node, _forceAgent: true }) }
+              ]
+            });
+          }
+        }
+      }
+    ]
+  });
+}
+
+async function openIosPrepWizard(node, targetLabel) {
+  const hostGuess = (node.tailscale_ip || node.hostname || '').trim();
+  showModal({
+    title: `Prepare iPhone: ${escHtml(targetLabel)}`,
+    desc:
+      `<div style="display:grid;gap:10px">` +
+      `<div style="font-size:13px;color:var(--text2)">Stock iOS does not expose SSH by default. Complete prep on iPhone first, then run probe.</div>` +
+      `<div style="padding:10px;border:1px solid var(--border2);border-radius:10px;background:var(--surface);font-size:12px;color:var(--text2)">` +
+      `<strong style="color:var(--text)">iPhone prep checklist</strong><br>` +
+      `• Tailscale connected and shown online<br>` +
+      `• An SSH/SFTP server app installed and running on iPhone<br>` +
+      `• Keep that app active while testing (some apps stop in background)<br>` +
+      `• Confirm SSH username + port from the app settings` +
+      `</div>` +
+      `<label style="display:grid;gap:4px;font-size:12px;color:var(--text3)">SSH user<input id="iosSshUserInput" class="input" style="margin-top:2px" type="text" value="root" /></label>` +
+      `<label style="display:grid;gap:4px;font-size:12px;color:var(--text3)">iPhone Tailscale IP<input id="iosSshHostInput" class="input" style="margin-top:2px" type="text" value="${escHtml(hostGuess)}" /></label>` +
+      `<label style="display:grid;gap:4px;font-size:12px;color:var(--text3)">SSH port<input id="iosSshPortInput" class="input" style="margin-top:2px" type="number" value="2222" /></label>` +
+      `</div>`,
+    actions: [
+      { label: 'Cancel', action: closeModal },
+      {
+        label: 'Test iPhone SSH',
+        cls: 'btn-primary',
+        action: async () => {
+          const user = (document.getElementById('iosSshUserInput') || {}).value || 'root';
+          const host = (document.getElementById('iosSshHostInput') || {}).value || '';
+          const port = parseInt(((document.getElementById('iosSshPortInput') || {}).value || '2222'), 10) || 2222;
+          if (!host.trim()) { toast('Enter iPhone Tailscale IP', 'err'); return; }
+          const r = await api('/api/ssh/probe', { user: user.trim(), host: host.trim(), port });
+          closeModal();
+          if (r && r.ok) {
+            await api('/api/nodes', { action: 'set_ssh_endpoint', node_id: node.id, user: user.trim(), host: host.trim(), port });
+            showModal({
+              title: `iPhone SSH verified`,
+              desc: `SSH is reachable on this iPhone endpoint and has been saved for this device.`,
+              actions: [
+                { label: 'Close', cls: 'btn-primary', action: closeModal }
+              ]
+            });
+            loadLocations();
+          } else {
+            const why = (r && r.error) ? escHtml(r.error) : 'SSH probe failed';
+            showModal({
+              title: `iPhone SSH not ready`,
+              desc: `Still unable to connect.<br><br><span style="color:var(--danger)">${why}</span><br><br>Keep SSH server app active on iPhone, confirm port/user, then retry.`,
+              actions: [
+                { label: 'Close', action: closeModal },
+                { label: 'Retry Prep', cls: 'btn-primary', action: () => { closeModal(); openIosPrepWizard(node, targetLabel); } }
               ]
             });
           }
@@ -7824,7 +7899,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.68 ready (localhost only)")
+    print(f"\n  Porter v0.12.69 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
