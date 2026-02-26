@@ -791,7 +791,7 @@ body.sidebar-collapsed .module-nav { padding:8px 4px; }
 #locations-secondary { padding:0 10px; }
 #locations-secondary .node-hdr { padding-left:2px; }
 #locations-secondary .mount-item { margin-left:0; }
-#file-results-footer { padding:10px 12px; color:var(--text3); font-size:11px; border-top:1px solid var(--border); margin-top:8px; background:var(--panel); }
+#file-results-footer { padding:10px 16px; color:var(--text3); font-size:11px; border-top:1px solid var(--border); background:var(--panel); flex-shrink:0; }
 body.files-active .files-secondary-nav { display:block; }
 body.files-active #banner,
 body.files-active #searchCountBar,
@@ -1641,8 +1641,8 @@ body.density-compact .file-name { padding: 6px 0; }
       <div></div>
     </div>
     <div id="listing"></div>
-    <div id="file-results-footer"></div>
   </div>
+  <div id="file-results-footer"></div>
 
   <!-- module panels -->
   <div id="overview-module" class="module-panel">
@@ -1710,32 +1710,35 @@ body.density-compact .file-name { padding: 6px 0; }
       <button class="btn btn-primary" onclick="openCreateAgent()">+ Create agent</button>
     </div>
     <div style="font-size:13px;color:var(--text3);margin-bottom:12px">API clients that connect to Porter. Each agent gets a unique key.</div>
-    <div id="agents-fleet-panel" style="margin-bottom:14px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
-        <div style="font-size:12px;font-weight:600;color:var(--text)">Agent Fleet Lifecycle</div>
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadAgentFleet()">Refresh</button>
+    <details id="agents-advanced" style="margin-bottom:14px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+      <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text)">Advanced / Internal</summary>
+      <div id="agents-fleet-panel" style="margin-top:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+          <div style="font-size:12px;font-weight:600;color:var(--text)">Agent Fleet Lifecycle</div>
+          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadAgentFleet()">Refresh</button>
+        </div>
+        <div id="agents-fleet-summary" style="font-size:12px;color:var(--text3);margin-bottom:8px">Loading lifecycle policy…</div>
+        <div style="display:grid;grid-template-columns:120px 1fr 1fr 90px auto;gap:8px;align-items:end">
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Channel</div><select id="fleet-channel" class="settings-input" style="height:30px"><option value="stable">stable</option><option value="beta">beta</option></select></div>
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Current</div><input id="fleet-current" class="settings-input" style="height:30px" placeholder="0.1.0"></div>
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Min compatible</div><input id="fleet-min" class="settings-input" style="height:30px" placeholder="0.1.0"></div>
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Rollout %</div><input id="fleet-rollout" type="number" min="0" max="100" class="settings-input" style="height:30px" placeholder="100"></div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);height:30px"><input id="fleet-auto" type="checkbox">Auto-update</label>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" onclick="saveAgentFleetPolicy()">Save policy</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="showBootstrapCmd('macos')">Bootstrap macOS</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="showBootstrapCmd('linux')">Bootstrap Linux</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="showBootstrapCmd('windows')">Bootstrap Windows</button>
+        </div>
       </div>
-      <div id="agents-fleet-summary" style="font-size:12px;color:var(--text3);margin-bottom:8px">Loading lifecycle policy…</div>
-      <div style="display:grid;grid-template-columns:120px 1fr 1fr 90px auto;gap:8px;align-items:end">
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Channel</div><select id="fleet-channel" class="settings-input" style="height:30px"><option value="stable">stable</option><option value="beta">beta</option></select></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Current</div><input id="fleet-current" class="settings-input" style="height:30px" placeholder="0.1.0"></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Min compatible</div><input id="fleet-min" class="settings-input" style="height:30px" placeholder="0.1.0"></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Rollout %</div><input id="fleet-rollout" type="number" min="0" max="100" class="settings-input" style="height:30px" placeholder="100"></div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);height:30px"><input id="fleet-auto" type="checkbox">Auto-update</label>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+        <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="agent-show-all" onchange="window._showAllAgentTypes=this.checked;renderAgents(window._lastAgents||[])">
+          Show all types (including test/internal)
+        </label>
       </div>
-      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" onclick="saveAgentFleetPolicy()">Save policy</button>
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="showBootstrapCmd('macos')">Bootstrap macOS</button>
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="showBootstrapCmd('linux')">Bootstrap Linux</button>
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="showBootstrapCmd('windows')">Bootstrap Windows</button>
-      </div>
-    </div>
-    <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
-      <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
-        <input type="checkbox" id="agent-show-all" onchange="window._showAllAgentTypes=this.checked;renderAgents(window._lastAgents||[])">
-        Show all types
-      </label>
-    </div>
+    </details>
     <div id="agents-module-list"></div>
     <div id="agents-module-create-form" style="display:none;margin-top:20px;padding:16px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
       <div class="settings-page-title" style="font-size:14px;margin-bottom:14px">New agent</div>
@@ -3839,8 +3842,19 @@ function renderNodes(nodes) {
     if (ip) peerByIp.set(ip, p);
   });
 
+  const meshState = (!_tsCache || !_tsCache.data) ? 'Mesh status pending' : (_tsCache.data.available === false ? 'Mesh unavailable' : 'Mesh connected');
+  const meshColor = (!_tsCache || !_tsCache.data) ? 'var(--text3)' : (_tsCache.data.available === false ? 'var(--danger)' : 'var(--ok,#22c55e)');
+  const lastUpdated = (_tsCache && _tsCache.ts) ? ('Updated ' + new Date(_tsCache.ts).toLocaleTimeString()) : 'Not checked yet';
+
   el.innerHTML = `
-    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin:12px 0 8px">Devices</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0 8px">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px">Devices</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;color:${meshColor}">${meshState}</span>
+        <span style="font-size:11px;color:var(--text3)">${lastUpdated}</span>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadTailscaleStatus(true);loadLocations();">↻ Refresh</button>
+      </div>
+    </div>
     <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:10px;padding:8px 12px;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.6px">
       <div title="Canonical device identity discovered from your trusted network.">Device</div><div title="Human-friendly alias used across Porter views.">Nickname</div><div title="Device operating system and private network IP.">OS / IP</div><div></div>
     </div>
@@ -4152,14 +4166,34 @@ function renderAgents(agents) {
     if (el2) el2.innerHTML = noAgents;
     return;
   }
+  const showAll = !!window._showAllAgentTypes;
+  const isPrimaryAgent = (a) => {
+    const s = `${a.name || ''} ${a.type || ''}`.toLowerCase();
+    return s.includes('openclaw') || s.includes('codex') || s.includes('claude') || s.includes('gemini');
+  };
+  const isTestAgent = (a) => {
+    const s = `${a.name || ''} ${a.type || ''}`.toLowerCase();
+    return s.includes('test') || s.includes('conc test');
+  };
+  const filtered = showAll ? agents : agents.filter(a => isPrimaryAgent(a) && !isTestAgent(a));
+  if (!filtered.length) {
+    const hint = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No active production agents match current filter. Open <strong>Advanced / Internal</strong> to view all agents.</div>';
+    if (el) el.innerHTML = hint;
+    if (el2) el2.innerHTML = hint;
+    return;
+  }
+  const hiddenCount = agents.length - filtered.length;
   const usageMap = {};
   if (window._currentUsage) {
     window._currentUsage.forEach(u => usageMap[u.agent_id] = u);
   }
   const roleColor = { viewer:'var(--text3)', writer:'var(--text2)', operator:'var(--accent)', admin:'var(--danger)' };
-  const agentHtml = agents.map(a => {
+  const agentHtml = filtered.map(a => {
     const u = usageMap[a.id];
     const uHtml = u ? ` &middot; <span style="color:${STATUS_COLOR[u.status]||'var(--text3)'};font-weight:600">${u.usage_percent}%</span>` : '';
+    const usageDetail = u
+      ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">Usage: <strong style="color:${STATUS_COLOR[u.status]||'var(--text2)'}">${u.usage_percent}%</strong>${u.model ? ` · ${escHtml(String(u.model))}` : ''}${u.total_tokens ? ` · ${Number(u.total_tokens).toLocaleString()} tok` : ''}${u.cost_usd ? ` · $${Number(u.cost_usd).toFixed(3)}` : ''}</div>`
+      : `<div style="font-size:11px;color:var(--text3);margin-top:4px">Usage: no live telemetry</div>`;
     const keyRow = a.raw_key
       ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px">
            <code style="flex:1;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text2)">${escHtml(a.raw_key)}</code>
@@ -4181,6 +4215,7 @@ function renderAgents(agents) {
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(a.name)}${uHtml}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px">${escHtml(a.type)} · <span style="color:${roleColor[a.role]||'var(--text3)'}">${a.role}</span> · <span style="font-family:monospace">${a.id}</span></div>
+          ${usageDetail}
         </div>
         <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
         <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Revoke</button>
@@ -4189,8 +4224,11 @@ function renderAgents(agents) {
       ${concurrencyRow}
     </div>`;
   }).join('');
-  if (el) el.innerHTML = agentHtml;
-  if (el2) el2.innerHTML = agentHtml;
+  const hiddenNotice = hiddenCount > 0
+    ? `<div style="font-size:12px;color:var(--text3);margin-bottom:8px">${hiddenCount} internal/test agent(s) hidden. Open <strong>Advanced / Internal</strong> to show all.</div>`
+    : '';
+  if (el) el.innerHTML = hiddenNotice + agentHtml;
+  if (el2) el2.innerHTML = hiddenNotice + agentHtml;
 }
 
 function openCreateAgent() {
