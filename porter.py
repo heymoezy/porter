@@ -4164,20 +4164,28 @@ function renderAgents(agents) {
   const roleColor = { viewer:'var(--text3)', writer:'var(--text2)', operator:'var(--accent)', admin:'var(--danger)' };
   const agentHtml = filtered.map(a => {
     const u = usageMap[a.id];
-    const pctNum = (u && Number.isFinite(Number(u.usage_percent))) ? Number(u.usage_percent) : null;
-    const availablePct = (pctNum == null) ? null : Math.max(0, Math.min(100, pctNum));
+    const hasPct = u && u.usage_percent !== null && u.usage_percent !== undefined && u.usage_percent !== '';
+    const pctNum = hasPct ? Number(u.usage_percent) : null;
+    const availablePct = (pctNum == null || !Number.isFinite(pctNum)) ? null : Math.max(0, Math.min(100, pctNum));
+    const risk = availablePct == null ? 'Unknown' : (availablePct <= 5 ? 'Rate-limited' : (availablePct <= 20 ? 'Near limit' : (availablePct <= 40 ? 'Watch' : 'Healthy')));
+    const riskColor = availablePct == null ? 'var(--text3)' : (availablePct <= 5 ? '#ef4444' : (availablePct <= 20 ? '#f59e0b' : (availablePct <= 40 ? '#fbbf24' : '#22c55e')));
     const uHtml = (u && availablePct != null)
-      ? ` &middot; <span style="color:${STATUS_COLOR[u.status]||'var(--text3)'};font-weight:600">${availablePct}% left</span>`
+      ? ` &middot; <span style="color:${riskColor};font-weight:600">${availablePct}% left</span>`
       : '';
     const usageDetail = u
       ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">` +
-          `Session capacity: <strong style="color:${STATUS_COLOR[u.status]||'var(--text2)'}">${availablePct == null ? 'unknown' : (availablePct + '% left')}</strong>` +
+          `Session capacity: <strong style="color:${riskColor}">${availablePct == null ? 'unknown' : (availablePct + '% left')}</strong>` +
+          ` · <strong style="color:${riskColor}">${risk}</strong>` +
           `${u.window_resets_at ? ` · resets ${_usageCountdown(u.window_resets_at)}` : ''}` +
           `${u.model ? ` · ${escHtml(String(u.model))}` : ''}` +
           `${u.total_tokens ? ` · ${Number(u.total_tokens).toLocaleString()} tok` : ''}` +
           `${u.cost_usd ? ` · $${Number(u.cost_usd).toFixed(3)}` : ''}` +
+        `</div>` +
+        `<div style="margin-top:6px;display:flex;align-items:center;gap:8px">` +
+          `<div style="flex:1;height:6px;border-radius:999px;background:var(--border);overflow:hidden"><div style="height:100%;width:${availablePct == null ? 0 : availablePct}%;background:${riskColor}"></div></div>` +
+          `<button class="btn btn-ghost" style="font-size:10px;padding:2px 6px" onclick="loadUsage()" title="Refresh usage">↻</button>` +
         `</div>`
-      : `<div style="font-size:11px;color:var(--text3);margin-top:4px">Session capacity: unknown (no telemetry)</div>`;
+      : `<div style="font-size:11px;color:var(--text3);margin-top:4px">Session capacity: unknown (no telemetry)</div><div style="margin-top:6px;display:flex;align-items:center;gap:8px"><div style="flex:1;height:6px;border-radius:999px;background:var(--border)"></div><button class="btn btn-ghost" style="font-size:10px;padding:2px 6px" onclick="loadUsage()" title="Refresh usage">↻</button></div>`;
     const keyRow = a.raw_key
       ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px">
            <code style="flex:1;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text2)">${escHtml(a.raw_key)}</code>
