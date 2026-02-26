@@ -73,3 +73,10 @@ Porter is not just file browsing; it is the trusted network fabric for connected
 - Secondary nav width increased from 230px to 260px to reduce truncation.
 - Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
 - Risk: low (layout/CSS only).
+
+## 2026-02-26 — Release v0.12.66
+- Files secondary nav action button moved to top-right of each location card (Browse/Connect).
+- Added clear online/offline card-level shading and border differentiation.
+- TS status text now color-coded for faster scanning.
+- Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
+- Risk: low (UI styling/placement only).
