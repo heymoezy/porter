@@ -2578,6 +2578,11 @@ async function api(url, body, timeout_ms = 15000) {
 
 const CHANGELOG = [
   { ver:'v0.12.91', date:'2026-02-26', notes:[
+    'Agent Workspace file list is now agent-family aware: Claude opens Claude files, Gemini opens Gemini files, OpenClaw/Codex opens OpenClaw workspace/config files',
+    'Removed cross-family config noise so each agent only shows relevant configuration surfaces',
+    'Scoped read/write allowlists updated to match selected agent context and documented auth paths',
+  ]},
+  { ver:'v0.12.91', date:'2026-02-26', notes:[
     'PEP/1 Phase 1: Hub registers remote agents via one-time token (POST /pep/v1/agent/register)',
     'PEP/1 Phase 1: Heartbeat endpoint keeps agent online state current (POST /pep/v1/agent/heartbeat)',
     'PEP/1 Phase 1: Hub proxies fs.list/read/stat/write/mkdir/delete to remote agent over Tailscale',
@@ -2585,12 +2590,12 @@ const CHANGELOG = [
     'Locations: Install PEP/1 Agent button generates one-time token + shows copyable install command',
     'Locations: PEP agent online/offline status badge visible on node cards and sidebar entries',
   ]},
-  { ver:'v0.12.90', date:'2026-02-26', notes:[
+  { ver:'v0.12.91', date:'2026-02-26', notes:[
     'Agent card action buttons redesigned into a clean 2x2 action grid for better visual structure',
     'Reduced action button sizing and improved spacing to remove clutter in card headers',
     'Action area now stays compact and aligned, improving scanability across two-column card layout',
   ]},
-  { ver:'v0.12.90', date:'2026-02-26', notes:[
+  { ver:'v0.12.91', date:'2026-02-26', notes:[
     'Fixed dropdown/input clipping by tightening field typography, padding, and select box sizing',
     'Agents defaults summary now includes explicit active-impact text for user clarity',
     'Improved defaults UX transparency to reduce ambiguity about which settings currently affect behavior',
@@ -7706,30 +7711,11 @@ class Handler(BaseHTTPRequestHandler):
 
             def _allowed_files():
                 files = []
-                # Workspace markdown files
-                base_md = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md", "MEMORY.md", "HEARTBEAT.md"]
-                for f in base_md:
-                    files.append((f"workspace/{f}", AGENT_WORKSPACE_DIR / f))
-                mem_dir = AGENT_WORKSPACE_DIR / "memory"
-                if mem_dir.exists():
-                    for mp in sorted(mem_dir.glob("*.md")):
-                        files.append((f"workspace/memory/{mp.name}", mp))
-
-                # OpenClaw state/config JSON files
-                state_candidates = [
-                    "openclaw.json", "update-check.json",
-                    "devices/paired.json", "devices/pending.json",
-                    "cron/jobs.json",
-                    "identity/device.json", "identity/device-auth.json",
-                    "credentials/oauth.json",
-                ]
-                for rel in state_candidates:
-                    fp = OPENCLAW_STATE_DIR / rel
-                    if fp.exists():
-                        files.append((f"state/{rel}", fp))
+                selected_agent_id = str(data.get("agent_id", "")).strip()
+                agent = _agent_by_id(selected_agent_id) if selected_agent_id else None
+                type_hint = (str((agent or {}).get("type", "")) + " " + str((agent or {}).get("name", ""))).lower()
 
                 # Agent-specific auth/model profile files (selected assistant only)
-                selected_agent_id = str(data.get("agent_id", "")).strip()
                 if selected_agent_id:
                     ap = OPENCLAW_STATE_DIR / "agents" / selected_agent_id / "agent"
                     for rel in ["auth-profiles.json", "models.json"]:
@@ -7737,21 +7723,56 @@ class Handler(BaseHTTPRequestHandler):
                         if fp.exists():
                             files.append((f"state/agents/{selected_agent_id}/agent/{rel}", fp))
 
-                # Provider-specific external auth (only relevant to selected assistant)
-                agent = _agent_by_id(selected_agent_id) if selected_agent_id else None
-                type_hint = (str((agent or {}).get("type", "")) + " " + str((agent or {}).get("name", ""))).lower()
-                if any(k in type_hint for k in ["codex", "openclaw"]):
+                # Agent-family specific config surfaces
+                if "claude" in type_hint:
+                    claude_candidates = [
+                        ("claude/CLAUDE.md", Path.home() / "CLAUDE.md"),
+                        ("claude/.claude.json", Path.home() / ".claude.json"),
+                        ("claude/settings.json", Path.home() / ".claude" / "settings.json"),
+                        ("claude/settings.local.json", Path.home() / ".claude" / "settings.local.json"),
+                        ("claude/.credentials.json", Path.home() / ".claude" / ".credentials.json"),
+                    ]
+                    for k, fp in claude_candidates:
+                        if fp.exists(): files.append((k, fp))
+
+                elif "gemini" in type_hint:
+                    gemini_candidates = [
+                        ("gemini/settings.json", Path.home() / ".gemini" / "settings.json"),
+                        ("gemini/oauth_creds.json", Path.home() / ".gemini" / "oauth_creds.json"),
+                        ("gemini/projects.json", Path.home() / ".gemini" / "projects.json"),
+                        ("gemini/state.json", Path.home() / ".gemini" / "state.json"),
+                        ("gemini/trustedFolders.json", Path.home() / ".gemini" / "trustedFolders.json"),
+                        ("gemini/google_accounts.json", Path.home() / ".gemini" / "google_accounts.json"),
+                    ]
+                    for k, fp in gemini_candidates:
+                        if fp.exists(): files.append((k, fp))
+
+                else:
+                    # OpenClaw/Codex/general local assistant surfaces
+                    base_md = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md", "MEMORY.md", "HEARTBEAT.md"]
+                    for f in base_md:
+                        files.append((f"workspace/{f}", AGENT_WORKSPACE_DIR / f))
+                    mem_dir = AGENT_WORKSPACE_DIR / "memory"
+                    if mem_dir.exists():
+                        for mp in sorted(mem_dir.glob("*.md")):
+                            files.append((f"workspace/memory/{mp.name}", mp))
+
+                    state_candidates = [
+                        "openclaw.json", "update-check.json",
+                        "devices/paired.json", "devices/pending.json",
+                        "cron/jobs.json",
+                        "identity/device.json", "identity/device-auth.json",
+                        "credentials/oauth.json",
+                    ]
+                    for rel in state_candidates:
+                        fp = OPENCLAW_STATE_DIR / rel
+                        if fp.exists():
+                            files.append((f"state/{rel}", fp))
+
                     ext_codex = Path.home() / ".codex" / "auth.json"
                     if ext_codex.exists():
                         files.append(("external/codex/auth.json", ext_codex))
-                if "claude" in type_hint:
-                    ext_claude = Path.home() / ".claude" / ".credentials.json"
-                    if ext_claude.exists():
-                        files.append(("external/claude/.credentials.json", ext_claude))
-                if "qwen" in type_hint:
-                    ext_qwen = Path.home() / ".qwen" / "oauth_creds.json"
-                    if ext_qwen.exists():
-                        files.append(("external/qwen/oauth_creds.json", ext_qwen))
+
                 return files
 
             allow = {k: v.resolve() for k, v in _allowed_files()}
@@ -7762,7 +7783,7 @@ class Handler(BaseHTTPRequestHandler):
             fp = allow.get(rel)
             if not fp:
                 self.reply_json({"error": "path not allowed"}, 403); return
-            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())) and not str(fp).startswith(str((Path.home()/'.codex').resolve())) and not str(fp).startswith(str((Path.home()/'.claude').resolve())) and not str(fp).startswith(str((Path.home()/'.qwen').resolve())):
+            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())) and not str(fp).startswith(str((Path.home()/'.codex').resolve())) and not str(fp).startswith(str((Path.home()/'.claude').resolve())) and not str(fp).startswith(str((Path.home()/'.gemini').resolve())) and not str(fp).startswith(str((Path.home()/'.qwen').resolve())):
                 self.reply_json({"error": "invalid path"}, 400); return
             if not fp.exists():
                 self.reply_json({"ok": True, "content": ""}); return
@@ -7777,43 +7798,70 @@ class Handler(BaseHTTPRequestHandler):
             # reuse allowlist
             def _allowed_files_w():
                 pairs = []
-                base_md = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md", "MEMORY.md", "HEARTBEAT.md"]
-                for f in base_md:
-                    pairs.append((f"workspace/{f}", AGENT_WORKSPACE_DIR / f))
-                mem_dir = AGENT_WORKSPACE_DIR / "memory"
-                if mem_dir.exists():
-                    for mp in sorted(mem_dir.glob("*.md")):
-                        pairs.append((f"workspace/memory/{mp.name}", mp))
-                state_candidates = [
-                    "openclaw.json", "update-check.json",
-                    "devices/paired.json", "devices/pending.json",
-                    "cron/jobs.json",
-                    "identity/device.json", "identity/device-auth.json",
-                    "credentials/oauth.json",
-                ]
-                for relp in state_candidates:
-                    fp = OPENCLAW_STATE_DIR / relp
-                    if fp.exists():
-                        pairs.append((f"state/{relp}", fp))
-                agents_root = OPENCLAW_STATE_DIR / "agents"
-                if agents_root.exists():
-                    for ad in sorted(agents_root.glob("*")):
-                        ap = ad / "agent"
-                        for relp in ["auth-profiles.json", "models.json"]:
-                            fp = ap / relp
-                            if fp.exists():
-                                pairs.append((f"state/agents/{ad.name}/agent/{relp}", fp))
-                                # External model auth files (if present)
-                ext_auth = Path.home() / ".codex" / "auth.json"
-                if ext_auth.exists():
-                    pairs.append(("external/codex/auth.json", ext_auth))
+                selected_agent_id = str(data.get("agent_id", "")).strip()
+                agent = _agent_by_id(selected_agent_id) if selected_agent_id else None
+                type_hint = (str((agent or {}).get("type", "")) + " " + str((agent or {}).get("name", ""))).lower()
+
+                if selected_agent_id:
+                    ap = OPENCLAW_STATE_DIR / "agents" / selected_agent_id / "agent"
+                    for relp in ["auth-profiles.json", "models.json"]:
+                        fp = ap / relp
+                        if fp.exists():
+                            pairs.append((f"state/agents/{selected_agent_id}/agent/{relp}", fp))
+
+                if "claude" in type_hint:
+                    cand = [
+                        ("claude/CLAUDE.md", Path.home() / "CLAUDE.md"),
+                        ("claude/.claude.json", Path.home() / ".claude.json"),
+                        ("claude/settings.json", Path.home() / ".claude" / "settings.json"),
+                        ("claude/settings.local.json", Path.home() / ".claude" / "settings.local.json"),
+                        ("claude/.credentials.json", Path.home() / ".claude" / ".credentials.json"),
+                    ]
+                    for k, fp in cand:
+                        if fp.exists(): pairs.append((k, fp))
+
+                elif "gemini" in type_hint:
+                    cand = [
+                        ("gemini/settings.json", Path.home() / ".gemini" / "settings.json"),
+                        ("gemini/oauth_creds.json", Path.home() / ".gemini" / "oauth_creds.json"),
+                        ("gemini/projects.json", Path.home() / ".gemini" / "projects.json"),
+                        ("gemini/state.json", Path.home() / ".gemini" / "state.json"),
+                        ("gemini/trustedFolders.json", Path.home() / ".gemini" / "trustedFolders.json"),
+                        ("gemini/google_accounts.json", Path.home() / ".gemini" / "google_accounts.json"),
+                    ]
+                    for k, fp in cand:
+                        if fp.exists(): pairs.append((k, fp))
+
+                else:
+                    base_md = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md", "MEMORY.md", "HEARTBEAT.md"]
+                    for f in base_md:
+                        pairs.append((f"workspace/{f}", AGENT_WORKSPACE_DIR / f))
+                    mem_dir = AGENT_WORKSPACE_DIR / "memory"
+                    if mem_dir.exists():
+                        for mp in sorted(mem_dir.glob("*.md")):
+                            pairs.append((f"workspace/memory/{mp.name}", mp))
+                    state_candidates = [
+                        "openclaw.json", "update-check.json",
+                        "devices/paired.json", "devices/pending.json",
+                        "cron/jobs.json",
+                        "identity/device.json", "identity/device-auth.json",
+                        "credentials/oauth.json",
+                    ]
+                    for relp in state_candidates:
+                        fp = OPENCLAW_STATE_DIR / relp
+                        if fp.exists():
+                            pairs.append((f"state/{relp}", fp))
+                    ext_codex = Path.home() / ".codex" / "auth.json"
+                    if ext_codex.exists():
+                        pairs.append(("external/codex/auth.json", ext_codex))
+
                 return pairs
 
             allow = {k: v.resolve() for k, v in _allowed_files_w()}
             fp = allow.get(rel)
             if not fp:
                 self.reply_json({"error": "path not allowed"}, 403); return
-            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())) and not str(fp).startswith(str((Path.home()/'.codex').resolve())) and not str(fp).startswith(str((Path.home()/'.claude').resolve())) and not str(fp).startswith(str((Path.home()/'.qwen').resolve())):
+            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())) and not str(fp).startswith(str((Path.home()/'.codex').resolve())) and not str(fp).startswith(str((Path.home()/'.claude').resolve())) and not str(fp).startswith(str((Path.home()/'.gemini').resolve())) and not str(fp).startswith(str((Path.home()/'.qwen').resolve())):
                 self.reply_json({"error": "invalid path"}, 400); return
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content, encoding="utf-8")

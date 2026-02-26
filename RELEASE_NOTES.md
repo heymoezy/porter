@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.91 (2026-02-26)
+
+- Agent Workspace now shows configuration files by selected agent family: Claude, Gemini, and OpenClaw/Codex each get relevant file sets.
+- Removed cross-family config noise (e.g., Claude no longer shows OpenClaw core files by default).
+- Updated scoped read/write allowlists to enforce agent-context relevance.
+
+---
+
 ## v0.12.90 (2026-02-26)
 
 - Improved Agent card actions layout: Configure/Test/Rotate key/Disconnect now render as a structured 2x2 action grid.
