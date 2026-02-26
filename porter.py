@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.70 — self-hosted file manager"""
+"""Porter v0.12.71 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1566,7 +1566,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.70</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.71</div>
   </div>
 </aside>
 
@@ -2020,7 +2020,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.70 — What's new
+          v0.12.71 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2425,6 +2425,16 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.71', date:'2026-02-26', notes:[
+    'Locations: added Devices header controls with mesh status, last-updated timestamp, and manual refresh action',
+    'Files: free-space/item context moved into a persistent bottom footer outside scrollable file list',
+    'Agents: default view now prioritizes production agents and hides internal/test entries unless explicitly toggled',
+    'Agents: usage telemetry unified directly in each agent card with low-capacity bar, risk state, and per-card refresh',
+    'Agents: fixed usage null/0 handling and corrected remaining-capacity semantics (no misleading null%/0%)',
+    'Agents: added global + per-agent low-capacity warning thresholds that actively drive risk coloring',
+    'Agents: replaced technical copy with user-friendly Operator Configuration controls (setup, routing, memory, risk, approvals)',
+    'Release governance: consolidated post-v0.12.70 changes into explicit changelog entries for traceable operator updates',
+  ]},
   { ver:'v0.12.70', date:'2026-02-26', notes:[
     'PEP/1 Phase 0: iPhone connect flow replaced with client-first browser access instructions (no SSH assumption)',
     'PEP/1 Phase 0: non-iOS connect modal reframed to capability-first language (what you get, not which protocol)',
@@ -3739,7 +3749,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.70',
+      ver: 'v0.12.71',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -8096,7 +8106,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.70 ready (localhost only)")
+    print(f"\n  Porter v0.12.71 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
