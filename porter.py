@@ -1103,7 +1103,7 @@ progress.ubar::-webkit-progress-value { background: var(--accent); }
   box-shadow: 0 20px 60px rgba(0,0,0,.6);
 }
 .modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
-.modal p { font-size: 13px; color: var(--text2); margin-bottom: 20px; line-height: 1.5; overflow-wrap: break-word; word-break: break-all; }
+.modal p { font-size: 13px; color: var(--text2); margin-bottom: 20px; line-height: 1.5; overflow-wrap: anywhere; word-break: normal; }
 .modal input {
   width: 100%; background: var(--surface); border: 1px solid var(--border2);
   border-radius: var(--radius); padding: 9px 12px;
