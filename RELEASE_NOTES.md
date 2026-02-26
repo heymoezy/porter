@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.78 (2026-02-26)
+
+- Configure workspace now enters a cleaner dedicated mode by hiding global Assistants controls while editing.
+- Closing workspace restores normal Assistants controls cleanly.
+- Connectivity check modal text updated for transparency about current signal source vs upcoming true handshake test.
+
+---
+
 ## v0.12.77 (2026-02-26)
 
 - Fixed Configure flow: opening Configure now enters a dedicated Agent Workspace mode instead of appearing to do nothing.

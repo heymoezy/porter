@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.77 — self-hosted file manager"""
+"""Porter v0.12.78 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1567,7 +1567,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.77</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.78</div>
   </div>
 </aside>
 
@@ -1710,7 +1710,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <span class="module-title">Assistants</span>
       <button class="btn btn-primary" onclick="openCreateAgent()">+ Create agent</button>
     </div>
-        <div style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+        <div id="agents-global-config" style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
       <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">How Porter should run</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Set your preferred style once. Porter and agents will follow it by default.</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">
@@ -1732,7 +1732,7 @@ body.density-compact .file-name { padding: 6px 0; }
       </div>
     </div>
 
-    <div style="margin-bottom:12px;display:flex;justify-content:flex-end;align-items:center;gap:10px">
+    <div id="agents-filter-row" style="margin-bottom:12px;display:flex;justify-content:flex-end;align-items:center;gap:10px">
       <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
         <input type="checkbox" id="agent-show-all" onchange="window._showAllAgentTypes=this.checked;renderAgents(window._lastAgents||[])">
         Include internal/test assistants
@@ -2049,7 +2049,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.77 — What's new
+          v0.12.78 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2454,6 +2454,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.78', date:'2026-02-26', notes:[
+    'Configure workspace now hides global Assistants controls while active for a cleaner dedicated editing experience',
+    'Assistants: restored global controls when closing workspace to avoid mixed-context panel clutter',
+    'Connectivity check modal now clarifies current check mechanism and handshake roadmap',
+  ]},
   { ver:'v0.12.77', date:'2026-02-26', notes:[
     'Assistants Configure now opens a true Agent Workspace view by hiding card list and focusing on full right-side editor workspace',
     'Agent Workspace file navigator now auto-loads first allowlisted file and uses safer file-open bindings',
@@ -3809,7 +3814,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.77',
+      ver: 'v0.12.78',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4439,19 +4444,27 @@ function openAgentWorkspace(agentId, agentName) {
   const list = document.getElementById('agents-module-list');
   const create = document.getElementById('agents-module-create-form');
   const keybox = document.getElementById('agents-module-key-box');
+  const cfg = document.getElementById('agents-global-config');
+  const fil = document.getElementById('agents-filter-row');
   const nm = document.getElementById('aw-agent-name');
   if (nm) nm.textContent = agentName || agentId;
   if (list) list.style.display = 'none';
   if (create) create.style.display = 'none';
   if (keybox) keybox.style.display = 'none';
+  if (cfg) cfg.style.display = 'none';
+  if (fil) fil.style.display = 'none';
   if (ws) ws.style.display = 'block';
   loadAgentWorkspaceList(true);
 }
 function closeAgentWorkspace() {
   const ws = document.getElementById('agent-workspace');
   const list = document.getElementById('agents-module-list');
+  const cfg = document.getElementById('agents-global-config');
+  const fil = document.getElementById('agents-filter-row');
   if (ws) ws.style.display = 'none';
   if (list) list.style.display = '';
+  if (cfg) cfg.style.display = '';
+  if (fil) fil.style.display = '';
 }
 
 async function loadAgentWorkspaceList(openFirst = false) {
@@ -4499,8 +4512,8 @@ async function doTestAgent(id, name) {
   if (!res) return;
   const connected = !!res.connected;
   showModal({
-    title: `${escHtml(name)} connectivity test`,
-    desc: `${connected ? '<strong style="color:var(--ok,#22c55e)">Connected</strong>' : '<strong style="color:var(--danger,#ef4444)">Not confirmed</strong>'}<br><br>${escHtml(res.message || '')}` + (res.last_seen ? `<br><span style="color:var(--text3)">Last heartbeat: ${escHtml(String(res.last_seen))}</span>` : ''),
+    title: `${escHtml(name)} connectivity check`,
+    desc: `${connected ? '<strong style="color:var(--ok,#22c55e)">Connected</strong>' : '<strong style="color:var(--danger,#ef4444)">Not confirmed</strong>'}<br><br>${escHtml(res.message || '')}<br><span style="color:var(--text3)">This check uses recent heartbeat/telemetry. Full hello↔reply roundtrip will be added with agent protocol handshake.</span>` + (res.last_seen ? `<br><span style="color:var(--text3)">Last heartbeat: ${escHtml(String(res.last_seen))}</span>` : ''),
     actions: [ { label:'Close', cls:'btn-primary', action: closeModal } ]
   });
 }
@@ -8358,7 +8371,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.77 ready (localhost only)")
+    print(f"\n  Porter v0.12.78 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
