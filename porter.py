@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.86 — self-hosted file manager"""
+"""Porter v0.12.87 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1327,6 +1327,7 @@ body.density-compact .file-name { padding: 6px 0; }
   display:flex; gap:10px; align-items:baseline; }
 .agent-clarity { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
 .aw-file-active { border-color: var(--accent) !important; color: var(--accent) !important; background: rgba(247,147,26,.08) !important; }
+@media (max-width: 1100px) { #agents-module-list > div { grid-template-columns: 1fr !important; } }
 .badge-production { background:#dcfce7; color:#15803d; font-size:10px; padding:2px 7px;
   border-radius:20px; font-weight:600; }
 .badge-test { background:#fef9c3; color:#854d0e; font-size:10px; padding:2px 7px;
@@ -1572,7 +1573,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.86</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.87</div>
   </div>
 </aside>
 
@@ -1712,13 +1713,13 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div id="agents-module" class="module-panel">
     <div class="module-hdr">
-      <span class="module-title">Assistants</span>
+      <span class="module-title">Agents</span>
       <button class="btn btn-primary" onclick="openCreateAgent()">+ Create agent</button>
     </div>
         <div id="agents-global-config" style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">How Porter should run</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Set your preferred style once. Porter and agents will follow it by default.</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">Agent defaults</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Set once as defaults for all agents. Use Configure on a card for agent-specific editing.</div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:8px">
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Where you mostly work</div><select id="cfg-setup-profile" class="settings-input" style="height:34px;width:100%"><option value="local-only">This device only</option><option value="vps-tailnet">Server + private network</option><option value="multi-device">Multiple devices</option></select></div>
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">How smart routing should be</div><select id="cfg-skills-routing" class="settings-input" style="height:34px;width:100%"><option value="guided">Recommended defaults</option><option value="auto">Fully automatic</option><option value="manual">I choose every time</option></select></div>
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Memory style</div><select id="cfg-memory-mode" class="settings-input" style="height:34px;width:100%"><option value="manual">I decide what to save</option><option value="assisted">Suggest what to save</option><option value="auto-curated">Auto-organize memory</option></select></div>
@@ -2067,7 +2068,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.86 — What's new
+          v0.12.87 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2472,7 +2473,12 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.12.86', date:'2026-02-26', notes:[
+  { ver:'v0.12.87', date:'2026-02-26', notes:[
+    'Agents module header restored from Assistants to Agents per operator preference',
+    'Agent cards now render in a two-column grid with alphabetical ordering for faster scanning',
+    'Global defaults panel compacted for denser, cleaner layout and reduced visual noise',
+  ]},
+  { ver:'v0.12.87', date:'2026-02-26', notes:[
     'Agent Workspace right-side panel is now dynamic per selected file with purpose and safe-edit guidance',
     'Added markdown-only quality score (0-100) to help improve file quality and structure',
     'File guide now updates live as you switch files and type in the editor',
@@ -3608,7 +3614,7 @@ function renderOverview(data) {
           <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(i.title)}</div>
           <div style="font-size:12px;color:var(--text3);margin-top:3px">${escHtml(i.detail)}</div>
         </div>
-        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="${i.fn}">${escHtml(i.action)}</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="${i.fn}">${escHtml(i.action)}</button>
       </div>
     </div>`;
   }).join('') : '<div style="color:var(--text3);font-size:13px;padding:8px 0">No urgent issues. System is stable.</div>';
@@ -4358,7 +4364,9 @@ function renderAgents(agents) {
     const s = `${a.name || ''} ${a.type || ''}`.toLowerCase();
     return s.includes('test') || s.includes('conc test');
   };
-  const filtered = showAll ? agents : agents.filter(a => isPrimaryAgent(a) && !isTestAgent(a));
+  const filtered = (showAll ? agents : agents.filter(a => isPrimaryAgent(a) && !isTestAgent(a)))
+    .slice()
+    .sort((a,b)=> String(a.name||'').localeCompare(String(b.name||''), undefined, {sensitivity:'base'}));
   if (!filtered.length) {
     const hint = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No active production agents match current filter. Open <strong>Advanced / Internal</strong> to view all agents.</div>';
     if (el) el.innerHTML = hint;
@@ -4431,22 +4439,23 @@ function renderAgents(agents) {
           <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(a.name)}${uHtml}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px">${escHtml(a.type)} · <span style="color:${roleColor[a.role]||'var(--text3)'}">${a.role}</span></div>
           ${usageDetail}
-          <details style="margin-top:6px"><summary style="font-size:11px;color:var(--text3);cursor:pointer">Details</summary><div style="font-size:11px;color:var(--text3);margin-top:4px">ID: <span style="font-family:monospace">${a.id}</span></div></details>
+          
         </div>
-        <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="openAgentWorkspace('${esc(a.id)}','${esc(a.name)}')">Configure</button>
-        <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="doTestAgent('${a.id}','${escHtml(a.name)}')">Test</button>
-        <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
-        <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Disconnect</button>
+        <button class="btn btn-ghost" style="font-size:12px;padding:3px 8px" onclick="openAgentWorkspace('${esc(a.id)}','${esc(a.name)}')">Configure</button>
+        <button class="btn btn-ghost" style="font-size:12px;padding:3px 8px" onclick="doTestAgent('${a.id}','${escHtml(a.name)}')">Test</button>
+        <button class="btn btn-ghost" style="font-size:12px;padding:3px 8px" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
+        <button class="btn btn-ghost" style="font-size:12px;padding:3px 8px;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Disconnect</button>
       </div>
       ${keyRow}
       ${concurrencyRow}
     </div>`;
   }).join('');
   const hiddenNotice = hiddenCount > 0
-    ? `<div style="font-size:12px;color:var(--text3);margin-bottom:8px">${hiddenCount} internal/test agent(s) hidden. Open <strong>Advanced / Internal</strong> to show all.</div>`
+    ? `<div style="font-size:12px;color:var(--text3);margin-bottom:8px">${hiddenCount} internal/test agent(s) hidden. Enable <strong>Include internal/test assistants</strong> to show all.</div>`
     : '';
-  if (el) el.innerHTML = hiddenNotice + agentHtml;
-  if (el2) el2.innerHTML = hiddenNotice + agentHtml;
+  const grid = `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">${agentHtml}</div>`;
+  if (el) el.innerHTML = hiddenNotice + grid;
+  if (el2) el2.innerHTML = hiddenNotice + grid;
 }
 
 function openCreateAgent() {
@@ -8588,7 +8597,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.86 ready (localhost only)")
+    print(f"\n  Porter v0.12.87 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:

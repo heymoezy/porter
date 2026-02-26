@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.87 (2026-02-26)
+
+- Restored module title to **Agents**.
+- Agent cards now display in a two-column layout and are sorted alphabetically by name.
+- Global defaults panel compacted for a cleaner, less wasteful layout.
+
+---
+
 ## v0.12.86 (2026-02-26)
 
 - Agent Workspace controls panel now changes by selected file (purpose + editing guidance).
