@@ -1710,35 +1710,13 @@ body.density-compact .file-name { padding: 6px 0; }
       <button class="btn btn-primary" onclick="openCreateAgent()">+ Create agent</button>
     </div>
     <div style="font-size:13px;color:var(--text3);margin-bottom:12px">API clients that connect to Porter. Each agent gets a unique key.</div>
-    <details id="agents-advanced" style="margin-bottom:14px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-      <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text)">Advanced / Internal</summary>
-      <div id="agents-fleet-panel" style="margin-top:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
-          <div style="font-size:12px;font-weight:600;color:var(--text)">Agent Fleet Lifecycle</div>
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadAgentFleet()">Refresh</button>
-        </div>
-        <div id="agents-fleet-summary" style="font-size:12px;color:var(--text3);margin-bottom:8px">Loading lifecycle policy…</div>
-        <div style="display:grid;grid-template-columns:120px 1fr 1fr 90px auto;gap:8px;align-items:end">
-          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Channel</div><select id="fleet-channel" class="settings-input" style="height:30px"><option value="stable">stable</option><option value="beta">beta</option></select></div>
-          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Current</div><input id="fleet-current" class="settings-input" style="height:30px" placeholder="0.1.0"></div>
-          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Min compatible</div><input id="fleet-min" class="settings-input" style="height:30px" placeholder="0.1.0"></div>
-          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Rollout %</div><input id="fleet-rollout" type="number" min="0" max="100" class="settings-input" style="height:30px" placeholder="100"></div>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);height:30px"><input id="fleet-auto" type="checkbox">Auto-update</label>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-          <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" onclick="saveAgentFleetPolicy()">Save policy</button>
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="showBootstrapCmd('macos')">Bootstrap macOS</button>
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="showBootstrapCmd('linux')">Bootstrap Linux</button>
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="showBootstrapCmd('windows')">Bootstrap Windows</button>
-        </div>
-      </div>
-      <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
-        <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="agent-show-all" onchange="window._showAllAgentTypes=this.checked;renderAgents(window._lastAgents||[])">
-          Show all types (including test/internal)
-        </label>
-      </div>
-    </details>
+    <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;justify-content:space-between;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
+      <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="agent-show-all" onchange="window._showAllAgentTypes=this.checked;renderAgents(window._lastAgents||[])">
+        Show internal/test agents
+      </label>
+      <span style="font-size:11px;color:var(--text3)">Advanced fleet policy moved to Settings.</span>
+    </div>
     <div id="agents-module-list"></div>
     <div id="agents-module-create-form" style="display:none;margin-top:20px;padding:16px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
       <div class="settings-page-title" style="font-size:14px;margin-bottom:14px">New agent</div>
@@ -1805,9 +1783,8 @@ body.density-compact .file-name { padding: 6px 0; }
         <button class="btn btn-ghost" style="flex-shrink:0;font-size:12px" onclick="copyAgentKey2()">Copy</button>
       </div>
     </div>
-    <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
-      <div class="settings-page-title" style="font-size:15px;margin-bottom:10px">Agent Usage</div>
-      <div id="agents-module-usage"><div style="color:var(--text3);font-size:13px">Loading&#8230;</div></div>
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);font-size:12px;color:var(--text3)">
+      Usage is shown directly inside each agent card above.
     </div>
   </div>
 
@@ -4190,10 +4167,20 @@ function renderAgents(agents) {
   const roleColor = { viewer:'var(--text3)', writer:'var(--text2)', operator:'var(--accent)', admin:'var(--danger)' };
   const agentHtml = filtered.map(a => {
     const u = usageMap[a.id];
-    const uHtml = u ? ` &middot; <span style="color:${STATUS_COLOR[u.status]||'var(--text3)'};font-weight:600">${u.usage_percent}%</span>` : '';
+    const pctNum = (u && Number.isFinite(Number(u.usage_percent))) ? Number(u.usage_percent) : null;
+    const capacityLeft = (pctNum == null) ? null : Math.max(0, 100 - pctNum);
+    const uHtml = (u && pctNum != null)
+      ? ` &middot; <span style="color:${STATUS_COLOR[u.status]||'var(--text3)'};font-weight:600">${capacityLeft}% left</span>`
+      : '';
     const usageDetail = u
-      ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">Usage: <strong style="color:${STATUS_COLOR[u.status]||'var(--text2)'}">${u.usage_percent}%</strong>${u.model ? ` · ${escHtml(String(u.model))}` : ''}${u.total_tokens ? ` · ${Number(u.total_tokens).toLocaleString()} tok` : ''}${u.cost_usd ? ` · $${Number(u.cost_usd).toFixed(3)}` : ''}</div>`
-      : `<div style="font-size:11px;color:var(--text3);margin-top:4px">Usage: no live telemetry</div>`;
+      ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">` +
+          `Session capacity: <strong style="color:${STATUS_COLOR[u.status]||'var(--text2)'}">${capacityLeft == null ? 'unknown' : (capacityLeft + '% left')}</strong>` +
+          `${u.window_resets_at ? ` · resets ${_usageCountdown(u.window_resets_at)}` : ''}` +
+          `${u.model ? ` · ${escHtml(String(u.model))}` : ''}` +
+          `${u.total_tokens ? ` · ${Number(u.total_tokens).toLocaleString()} tok` : ''}` +
+          `${u.cost_usd ? ` · $${Number(u.cost_usd).toFixed(3)}` : ''}` +
+        `</div>`
+      : `<div style="font-size:11px;color:var(--text3);margin-top:4px">Session capacity: unknown (no telemetry)</div>`;
     const keyRow = a.raw_key
       ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px">
            <code style="flex:1;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text2)">${escHtml(a.raw_key)}</code>
@@ -4202,11 +4189,11 @@ function renderAgents(agents) {
       : `<div style="font-size:11px;color:var(--text3);margin-top:5px;font-style:italic">Key hidden — rotate to reveal</div>`;
     const concurrencyRow = `
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-        <span style="font-size:12px;color:var(--text2);flex-shrink:0">Max concurrent:</span>
+        <span style="font-size:12px;color:var(--text2);flex-shrink:0">Parallel tasks limit:</span>
         <input id="conc-${a.id}" type="number" min="0" value="${a.max_concurrent||0}"
                style="width:50px;background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:3px 7px;font-size:12px;color:var(--text);font-family:inherit">
         <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="saveAgentConcurrency('${a.id}')">Save</button>
-        <span style="font-size:11px;color:var(--text3)">(0=∞)</span>
+        <span style="font-size:11px;color:var(--text3)">0 = no limit</span>
       </div>`;
     return `
     <div style="padding:10px 12px;background:var(--raised);border-radius:8px;margin-bottom:8px;border:1px solid var(--border)">
