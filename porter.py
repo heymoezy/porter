@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.85 — self-hosted file manager"""
+"""Porter v0.12.86 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1572,7 +1572,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.85</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.86</div>
   </div>
 </aside>
 
@@ -1770,9 +1770,18 @@ body.density-compact .file-name { padding: 6px 0; }
           <textarea id="aw-editor" style="flex:1;height:100%;min-height:0;width:100%;max-width:100%;resize:none;box-sizing:border-box;overflow:auto;background:var(--bg);color:var(--text);border:none;outline:none;padding:12px;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;font-size:12px;line-height:1.45"></textarea>
         </div>
         <div style="border-left:1px solid var(--border);padding:10px;overflow:auto">
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Controls</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.45;margin-bottom:10px">Edit key markdown configuration for this assistant in one place.</div>
-          <div style="font-size:12px;color:var(--text3);line-height:1.45">Sensitive files (SOUL.md, MEMORY.md) require confirmation before saving.</div>
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">File guide</div>
+          <div id="aw-file-purpose" style="font-size:12px;color:var(--text2);line-height:1.45;margin-bottom:8px">Select a file to see guidance.</div>
+          <div id="aw-file-guidance" style="font-size:12px;color:var(--text3);line-height:1.45">You’ll see what the file is for and how to edit it safely.</div>
+          <div id="aw-file-quality-wrap" style="margin-top:10px;display:none">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <span style="font-size:11px;color:var(--text3)">Markdown quality</span>
+              <span id="aw-file-quality-score" style="font-size:11px;color:var(--accent);font-weight:600">0/100</span>
+            </div>
+            <div style="height:6px;background:var(--border);border-radius:999px;overflow:hidden">
+              <div id="aw-file-quality-bar" style="height:100%;width:0%;background:var(--accent)"></div>
+            </div>
+          </div>
           <div id="aw-save-state" style="margin-top:10px;font-size:11px;color:var(--text3)"></div>
         </div>
       </div>
@@ -2058,7 +2067,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.85 — What's new
+          v0.12.86 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2463,6 +2472,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.86', date:'2026-02-26', notes:[
+    'Agent Workspace right-side panel is now dynamic per selected file with purpose and safe-edit guidance',
+    'Added markdown-only quality score (0-100) to help improve file quality and structure',
+    'File guide now updates live as you switch files and type in the editor',
+  ]},
   { ver:'v0.12.85', date:'2026-02-26', notes:[
     'Agent Workspace: fixed invalid-path issue for Claude/Qwen external auth files by extending allowed external path validation',
     'Agent Workspace: active file is now highlighted in left navigation for clear editing context',
@@ -4480,6 +4494,60 @@ let _awAgentId = '';
 let _awCurrentFile = '';
 let _awDirty = false;
 
+function _awDescribeFile(path) {
+  const p = String(path || '');
+  const map = {
+    'workspace/SOUL.md': ['Core assistant identity and tone.', 'Change carefully: keep voice consistent and stable over time.'],
+    'workspace/USER.md': ['Who you are helping and user preferences.', 'Update with concrete preferences, avoid assumptions.'],
+    'workspace/AGENTS.md': ['Operational playbook for assistant behavior.', 'Edit rules intentionally; keep safety and clarity first.'],
+    'workspace/TOOLS.md': ['Local tool notes and environment-specific tips.', 'Keep practical, short, and actionable.'],
+    'workspace/MEMORY.md': ['Long-term curated memory.', 'Only keep durable facts and decisions worth retaining.'],
+    'workspace/HEARTBEAT.md': ['Background check/reminder instructions.', 'Keep concise to reduce noise and token burn.'],
+    'state/openclaw.json': ['Primary OpenClaw runtime configuration.', 'Edit conservatively; validate JSON structure and restart-sensitive fields.'],
+  };
+  if (map[p]) return map[p];
+  if (p.startsWith('workspace/memory/')) return ['Daily memory log.', 'Capture key events and decisions; keep entries factual and dated.'];
+  if (p.endsWith('auth-profiles.json')) return ['Per-agent auth profiles.', 'Handle secrets carefully; do not paste credentials in chat logs.'];
+  if (p.endsWith('models.json')) return ['Per-agent model/provider preferences.', 'Adjust model routing deliberately and test after changes.'];
+  if (p.includes('/devices/')) return ['Paired/pending device state.', 'Avoid manual edits unless you are intentionally repairing state.'];
+  if (p.endsWith('.json')) return ['Configuration JSON file.', 'Use valid JSON and avoid broad edits without backup.'];
+  return ['Configuration file.', 'Make small, reversible edits and verify behavior after saving.'];
+}
+
+function _awMdQualityScore(path, content) {
+  const p = String(path || '');
+  if (!p.endsWith('.md')) return null;
+  const t = String(content || '');
+  let score = 40;
+  if (/^#\s+/m.test(t)) score += 15;
+  if (/^##\s+/m.test(t)) score += 10;
+  if (/^-\s+/m.test(t) || /^\d+\.\s+/m.test(t)) score += 10;
+  if (t.length > 200) score += 10;
+  if (t.length > 800) score += 5;
+  if (!/TODO|TBD|FIXME/i.test(t)) score += 5;
+  if (/\b(decision|policy|preference|context|next step|owner)\b/i.test(t)) score += 5;
+  return Math.max(0, Math.min(100, score));
+}
+
+function _awRenderFileGuide(path, content='') {
+  const [purpose, guidance] = _awDescribeFile(path);
+  const pEl = document.getElementById('aw-file-purpose');
+  const gEl = document.getElementById('aw-file-guidance');
+  if (pEl) pEl.textContent = purpose;
+  if (gEl) gEl.textContent = guidance;
+  const wrap = document.getElementById('aw-file-quality-wrap');
+  const scoreEl = document.getElementById('aw-file-quality-score');
+  const barEl = document.getElementById('aw-file-quality-bar');
+  const score = _awMdQualityScore(path, content);
+  if (score == null) {
+    if (wrap) wrap.style.display = 'none';
+  } else {
+    if (wrap) wrap.style.display = '';
+    if (scoreEl) scoreEl.textContent = `${score}/100`;
+    if (barEl) barEl.style.width = `${score}%`;
+  }
+}
+
 function openAgentWorkspace(agentId, agentName) {
   _awAgentId = agentId;
   _awCurrentFile = '';
@@ -4489,6 +4557,7 @@ function openAgentWorkspace(agentId, agentName) {
   if (nm) nm.textContent = agentName || agentId;
   if (mod) mod.classList.add('configuring');
   if (ws) ws.style.display = 'block';
+  _awRenderFileGuide('', '');
   loadAgentWorkspaceList(true);
 }
 function closeAgentWorkspace() {
@@ -4532,10 +4601,11 @@ async function openAgentWorkspaceFile(path) {
   const cf = document.getElementById('aw-current-file');
   if (ed) {
     ed.value = res.content || '';
-    ed.oninput = () => { _awDirty = true; };
+    ed.oninput = () => { _awDirty = true; _awRenderFileGuide(path, ed.value); };
   }
   if (cf) cf.textContent = path;
   _awDirty = false;
+  _awRenderFileGuide(path, res.content || '');
   loadAgentWorkspaceList(false);
 }
 
@@ -8518,7 +8588,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.85 ready (localhost only)")
+    print(f"\n  Porter v0.12.86 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:

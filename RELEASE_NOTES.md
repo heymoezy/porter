@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.86 (2026-02-26)
+
+- Agent Workspace controls panel now changes by selected file (purpose + editing guidance).
+- Added markdown quality score (0-100) with visual bar for `.md` files only.
+- Guidance panel updates live while switching files and editing markdown.
+
+---
+
 ## v0.12.85 (2026-02-26)
 
 - Fixed invalid-path errors when opening assistant-relevant external auth files (Claude/Qwen path validation).
