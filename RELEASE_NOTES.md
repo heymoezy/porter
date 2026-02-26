@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.88 (2026-02-26)
+
+- Redesigned Agents defaults controls to a compact summary + **Edit defaults** disclosure pattern.
+- Reduced top-panel footprint so Agent cards remain the primary focus.
+- Added live defaults summary indicators (preset, capacity alert, external approval) for fast understanding.
+
+---
+
 ## v0.12.87 (2026-02-26)
 
 - Restored module title to **Agents**.

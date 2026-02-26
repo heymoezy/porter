@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.87 — self-hosted file manager"""
+"""Porter v0.12.88 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1573,7 +1573,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.87</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.88</div>
   </div>
 </aside>
 
@@ -1717,24 +1717,34 @@ body.density-compact .file-name { padding: 6px 0; }
       <button class="btn btn-primary" onclick="openCreateAgent()">+ Create agent</button>
     </div>
         <div id="agents-global-config" style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">Agent defaults</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Set once as defaults for all agents. Use Configure on a card for agent-specific editing.</div>
-      <div style="display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:8px">
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Where you mostly work</div><select id="cfg-setup-profile" class="settings-input" style="height:34px;width:100%"><option value="local-only">This device only</option><option value="vps-tailnet">Server + private network</option><option value="multi-device">Multiple devices</option></select></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">How smart routing should be</div><select id="cfg-skills-routing" class="settings-input" style="height:34px;width:100%"><option value="guided">Recommended defaults</option><option value="auto">Fully automatic</option><option value="manual">I choose every time</option></select></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Memory style</div><select id="cfg-memory-mode" class="settings-input" style="height:34px;width:100%"><option value="manual">I decide what to save</option><option value="assisted">Suggest what to save</option><option value="auto-curated">Auto-organize memory</option></select></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Risk level</div><select id="cfg-behavior-preset" class="settings-input" style="height:34px;width:100%"><option value="safe">Careful (ask more often)</option><option value="balanced">Balanced</option><option value="operator">Fast execution</option></select></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Warn me when capacity gets low</div><input id="cfg-usage-threshold" type="number" min="1" max="99" class="settings-input" style="height:34px;width:100%" value="20"></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Memory sharing</div><select id="cfg-memory-visibility" class="settings-input" style="height:34px;width:100%"><option value="shared">Shared by default</option><option value="scoped">Project-based sharing</option><option value="isolated">Keep agents separate</option></select></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text2)">
+          <span><strong>Preset:</strong> <span id="cfg-summary-preset">Balanced</span></span>
+          <span><strong>Capacity alert:</strong> <span id="cfg-summary-threshold">20%</span></span>
+          <span><strong>External approval:</strong> <span id="cfg-summary-approval">On</span></span>
+        </div>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="toggleAgentDefaultsEditor()">Edit defaults</button>
       </div>
-      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;color:var(--text2);font-size:12px">
-        <label style="display:flex;align-items:center;gap:6px"><input id="cfg-skills-safe-mode" type="checkbox">Extra safety for external actions</label>
-        <label style="display:flex;align-items:center;gap:6px"><input id="cfg-external-approval" type="checkbox" checked>Always ask before sending outside Porter</label>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
-        <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" onclick="saveOperatorConfig()">Save settings</button>
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadOperatorConfig()">Refresh</button>
-        <span id="cfg-save-state" style="font-size:11px;color:var(--text3)"></span>
+      <div id="agents-defaults-editor" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">Agent defaults</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Set global defaults. Per-agent cards can override when needed.</div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:8px">
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Where you mostly work</div><select id="cfg-setup-profile" class="settings-input" style="height:32px;width:100%"><option value="local-only">This device only</option><option value="vps-tailnet">Server + private network</option><option value="multi-device">Multiple devices</option></select></div>
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">How smart routing should be</div><select id="cfg-skills-routing" class="settings-input" style="height:32px;width:100%"><option value="guided">Recommended defaults</option><option value="auto">Fully automatic</option><option value="manual">I choose every time</option></select></div>
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Memory style</div><select id="cfg-memory-mode" class="settings-input" style="height:32px;width:100%"><option value="manual">I decide what to save</option><option value="assisted">Suggest what to save</option><option value="auto-curated">Auto-organize memory</option></select></div>
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Risk level</div><select id="cfg-behavior-preset" class="settings-input" style="height:32px;width:100%"><option value="safe">Careful (ask more often)</option><option value="balanced">Balanced</option><option value="operator">Fast execution</option></select></div>
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Warn me when capacity gets low</div><input id="cfg-usage-threshold" type="number" min="1" max="99" class="settings-input" style="height:32px;width:100%" value="20"></div>
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Memory sharing</div><select id="cfg-memory-visibility" class="settings-input" style="height:32px;width:100%"><option value="shared">Shared by default</option><option value="scoped">Project-based sharing</option><option value="isolated">Keep agents separate</option></select></div>
+        </div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;color:var(--text2);font-size:12px">
+          <label style="display:flex;align-items:center;gap:6px"><input id="cfg-skills-safe-mode" type="checkbox">Extra safety for external actions</label>
+          <label style="display:flex;align-items:center;gap:6px"><input id="cfg-external-approval" type="checkbox" checked>Always ask before sending outside Porter</label>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+          <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" onclick="saveOperatorConfig()">Save defaults</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadOperatorConfig()">Refresh</button>
+          <span id="cfg-save-state" style="font-size:11px;color:var(--text3)"></span>
+        </div>
       </div>
     </div>
 
@@ -2068,7 +2078,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.87 — What's new
+          v0.12.88 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2473,12 +2483,17 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.12.87', date:'2026-02-26', notes:[
+  { ver:'v0.12.88', date:'2026-02-26', notes:[
+    'Agents defaults controls redesigned to progressive-disclosure pattern: compact summary strip + Edit defaults expander',
+    'Default view now prioritizes status/action cards while keeping global defaults accessible but non-intrusive',
+    'Added live defaults summary indicators (preset, capacity alert, external approval) for quick comprehension',
+  ]},
+  { ver:'v0.12.88', date:'2026-02-26', notes:[
     'Agents module header restored from Assistants to Agents per operator preference',
     'Agent cards now render in a two-column grid with alphabetical ordering for faster scanning',
     'Global defaults panel compacted for denser, cleaner layout and reduced visual noise',
   ]},
-  { ver:'v0.12.87', date:'2026-02-26', notes:[
+  { ver:'v0.12.88', date:'2026-02-26', notes:[
     'Agent Workspace right-side panel is now dynamic per selected file with purpose and safe-edit guidance',
     'Added markdown-only quality score (0-100) to help improve file quality and structure',
     'File guide now updates live as you switch files and type in the editor',
@@ -4290,10 +4305,27 @@ async function showBootstrapCmd(osName) {
   }
 }
 
+function toggleAgentDefaultsEditor() {
+  const el = document.getElementById('agents-defaults-editor');
+  if (!el) return;
+  el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
+}
+function renderOperatorConfigSummary(prefs = {}) {
+  const presetMap = { safe:'Careful', balanced:'Balanced', operator:'Fast execution' };
+  const setupMap = { 'local-only':'This device only', 'vps-tailnet':'Server + private network', 'multi-device':'Multiple devices' };
+  const p = document.getElementById('cfg-summary-preset');
+  const t = document.getElementById('cfg-summary-threshold');
+  const a = document.getElementById('cfg-summary-approval');
+  if (p) p.textContent = presetMap[prefs.behavior_preset] || 'Balanced';
+  if (t) t.textContent = `${prefs.usage_warn_threshold ?? 20}%`;
+  if (a) a.textContent = (prefs.external_send_approval ?? true) ? 'On' : 'Off';
+}
+
 async function loadOperatorConfig() {
   const prefs = await api('/api/preferences');
   if (!prefs) return;
   window._operatorPrefs = prefs;
+  renderOperatorConfigSummary(prefs);
   const setVal = (id, val, fallback='') => {
     const el = document.getElementById(id); if (!el) return;
     el.value = (val ?? fallback);
@@ -4329,6 +4361,8 @@ async function saveOperatorConfig() {
   if (res && res.ok) {
     if (state) state.textContent = 'Saved';
     toast('Operator config saved', 'ok');
+    window._operatorPrefs = body;
+    renderOperatorConfigSummary(body);
   } else {
     if (state) state.textContent = 'Save failed';
     toast((res && res.error) || 'Failed to save config', 'err');
@@ -8597,7 +8631,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.87 ready (localhost only)")
+    print(f"\n  Porter v0.12.88 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
