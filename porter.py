@@ -1111,7 +1111,8 @@ progress.ubar::-webkit-progress-value { background: var(--accent); }
   margin-bottom: 20px; outline: none; transition: .15s;
 }
 .modal input:focus { border-color: var(--accent); }
-.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.modal-actions .btn { max-width: 100%; white-space: normal; }
 
 /* preview panel */
 .preview-panel {
