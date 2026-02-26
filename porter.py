@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.74 — self-hosted file manager"""
+"""Porter v0.12.75 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -71,6 +71,7 @@ SESSION_TTL  = 30 * 24 * 3600   # 30 days
 _sessions: dict = {}             # token -> {username, expires}
 
 RUNTIME_DIR       = Path("/home/lobster/documents/porter/runtime")
+AGENT_WORKSPACE_DIR = Path("/home/lobster/.openclaw/workspace")
 MEMORY_DIR        = Path("/home/lobster/documents/porter/memory")
 USAGE_DIR         = RUNTIME_DIR / "usage"
 AUDIT_LOG         = RUNTIME_DIR / "audit.jsonl"
@@ -1566,7 +1567,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.74</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.75</div>
   </div>
 </aside>
 
@@ -1742,6 +1743,35 @@ body.density-compact .file-name { padding: 6px 0; }
       </div>
     </details>
     <div id="agents-module-list"></div>
+
+    <div id="agent-workspace" style="display:none;margin-top:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border)">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">Agent Workspace · <span id="aw-agent-name" style="color:var(--accent)"></span></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadAgentWorkspaceList()">Refresh files</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="closeAgentWorkspace()">Close</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:220px 1fr 260px;min-height:420px">
+        <div style="border-right:1px solid var(--border);padding:10px;overflow:auto">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Config files</div>
+          <div id="aw-file-list" style="display:flex;flex-direction:column;gap:4px"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;min-width:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)">
+            <div id="aw-current-file" style="font-size:12px;color:var(--text2)">Select a file</div>
+            <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" onclick="saveAgentWorkspaceFile()">Save</button>
+          </div>
+          <textarea id="aw-editor" style="flex:1;min-height:320px;background:var(--bg);color:var(--text);border:none;outline:none;padding:12px;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;font-size:12px;line-height:1.45"></textarea>
+        </div>
+        <div style="border-left:1px solid var(--border);padding:10px;overflow:auto">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Controls</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.45;margin-bottom:10px">Edit key markdown configuration for this assistant in one place.</div>
+          <div style="font-size:12px;color:var(--text3);line-height:1.45">Sensitive files (SOUL.md, MEMORY.md) require confirmation before saving.</div>
+          <div id="aw-save-state" style="margin-top:10px;font-size:11px;color:var(--text3)"></div>
+        </div>
+      </div>
+    </div>
     <div id="agents-module-create-form" style="display:none;margin-top:20px;padding:16px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
       <div class="settings-page-title" style="font-size:14px;margin-bottom:14px">New agent</div>
       <div class="settings-field">
@@ -2023,7 +2053,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.74 — What's new
+          v0.12.75 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2428,6 +2458,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.75', date:'2026-02-26', notes:[
+    'Assistants: added Configure button per card opening a full Agent Workspace for direct config maintenance',
+    'Agent Workspace includes allowlisted markdown file navigator, editor, save flow, and safety confirmation for sensitive files',
+    'Added authenticated workspace read/write APIs with path allowlisting and audit logging for configuration saves',
+  ]},
   { ver:'v0.12.74', date:'2026-02-26', notes:[
     'Assistants: renamed Revoke action to Disconnect for clearer, less harsh operator wording',
     'Disconnect confirmation now explains reconnection path (new key) with calmer user-facing language',
@@ -3769,7 +3804,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.74',
+      ver: 'v0.12.75',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4332,6 +4367,7 @@ function renderAgents(agents) {
           ${usageDetail}
           <details style="margin-top:6px"><summary style="font-size:11px;color:var(--text3);cursor:pointer">Details</summary><div style="font-size:11px;color:var(--text3);margin-top:4px">ID: <span style="font-family:monospace">${a.id}</span></div></details>
         </div>
+        <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="openAgentWorkspace('${a.id}','${escHtml(a.name)}')">Configure</button>
         <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="doTestAgent('${a.id}','${escHtml(a.name)}')">Test</button>
         <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
         <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Disconnect</button>
@@ -4386,6 +4422,62 @@ function copyText(text, btn) {
     setTimeout(() => { btn.textContent = orig; }, 1500);
     toast('Key copied', 'ok');
   });
+}
+
+let _awAgentId = '';
+let _awCurrentFile = '';
+
+function openAgentWorkspace(agentId, agentName) {
+  _awAgentId = agentId;
+  _awCurrentFile = '';
+  const el = document.getElementById('agent-workspace');
+  const nm = document.getElementById('aw-agent-name');
+  if (nm) nm.textContent = agentName || agentId;
+  if (el) el.style.display = 'block';
+  loadAgentWorkspaceList();
+}
+function closeAgentWorkspace() {
+  const el = document.getElementById('agent-workspace');
+  if (el) el.style.display = 'none';
+}
+
+async function loadAgentWorkspaceList() {
+  const res = await api('/api/agent-workspace/read', { agent_id: _awAgentId, action: 'list' });
+  const el = document.getElementById('aw-file-list');
+  if (!el) return;
+  if (!res || !res.files) { el.innerHTML = '<div style="color:var(--text3);font-size:12px">No files</div>'; return; }
+  el.innerHTML = res.files.map(f => `<button class="btn btn-ghost" style="justify-content:flex-start;font-size:11px;padding:4px 6px;max-width:100%;overflow:hidden;text-overflow:ellipsis" onclick="openAgentWorkspaceFile('${f.replace(/'/g, "\'")}')">${f}</button>`).join('');
+}
+
+async function openAgentWorkspaceFile(path) {
+  const res = await api('/api/agent-workspace/read', { agent_id: _awAgentId, action: 'read', path });
+  if (!res || res.error) return;
+  _awCurrentFile = path;
+  const ed = document.getElementById('aw-editor');
+  const cf = document.getElementById('aw-current-file');
+  if (ed) ed.value = res.content || '';
+  if (cf) cf.textContent = path;
+}
+
+async function saveAgentWorkspaceFile() {
+  if (!_awCurrentFile) { toast('Pick a file first', 'err'); return; }
+  const ed = document.getElementById('aw-editor');
+  const content = ed ? ed.value : '';
+  const sensitive = (_awCurrentFile === 'SOUL.md' || _awCurrentFile === 'MEMORY.md');
+  if (sensitive) {
+    const ok = confirm(`Save changes to ${_awCurrentFile}?`);
+    if (!ok) return;
+  }
+  const st = document.getElementById('aw-save-state');
+  if (st) st.textContent = 'Saving…';
+  const res = await api('/api/agent-workspace/write', { agent_id: _awAgentId, path: _awCurrentFile, content });
+  if (res && res.ok) {
+    if (st) st.textContent = 'Saved';
+    toast('Config saved', 'ok');
+  } else {
+    if (st) st.textContent = 'Save failed';
+    toast((res && res.error) || 'Save failed', 'err');
+  }
 }
 
 async function doTestAgent(id, name) {
@@ -7091,6 +7183,49 @@ class Handler(BaseHTTPRequestHandler):
 
             self.reply_json({"ok": False, "error": "Unsupported action"}, 400)
 
+        elif parsed.path == "/api/agent-workspace/read":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            action = str(data.get("action", "list"))
+            allow = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md", "MEMORY.md", "HEARTBEAT.md"]
+            mem_dir = AGENT_WORKSPACE_DIR / "memory"
+            mem_files = []
+            if mem_dir.exists():
+                try:
+                    mem_files = [f"memory/{p.name}" for p in sorted(mem_dir.glob("*.md"))]
+                except Exception:
+                    mem_files = []
+            files = allow + mem_files
+            if action == "list":
+                self.reply_json({"ok": True, "files": files}); return
+            rel = str(data.get("path", ""))
+            if rel not in files:
+                self.reply_json({"error": "path not allowed"}, 403); return
+            fp = (AGENT_WORKSPACE_DIR / rel).resolve()
+            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())):
+                self.reply_json({"error": "invalid path"}, 400); return
+            if not fp.exists():
+                self.reply_json({"ok": True, "content": ""}); return
+            self.reply_json({"ok": True, "content": fp.read_text(encoding="utf-8", errors="replace")})
+
+        elif parsed.path == "/api/agent-workspace/write":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            rel = str(data.get("path", ""))
+            content = data.get("content", "")
+            allow = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md", "MEMORY.md", "HEARTBEAT.md"]
+            if rel.startswith("memory/") and rel.endswith(".md"):
+                pass
+            elif rel not in allow:
+                self.reply_json({"error": "path not allowed"}, 403); return
+            fp = (AGENT_WORKSPACE_DIR / rel).resolve()
+            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())):
+                self.reply_json({"error": "invalid path"}, 400); return
+            fp.parent.mkdir(parents=True, exist_ok=True)
+            fp.write_text(content, encoding="utf-8")
+            _append_audit("agent_workspace_save", target=rel, actor="owner", detail={"assistant": data.get("agent_id", "")})
+            self.reply_json({"ok": True, "path": rel})
+
         elif parsed.path == "/api/profile/update":
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
@@ -8209,7 +8344,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.74 ready (localhost only)")
+    print(f"\n  Porter v0.12.75 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:

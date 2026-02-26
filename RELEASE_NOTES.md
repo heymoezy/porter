@@ -1,5 +1,14 @@
 # Porter Release Notes
 
+## v0.12.75 (2026-02-26)
+
+- Assistants: added per-card **Configure** action opening a full Agent Workspace panel.
+- New Agent Workspace allows editing allowlisted config markdown files (`SOUL.md`, `USER.md`, `AGENTS.md`, `TOOLS.md`, `MEMORY.md`, `HEARTBEAT.md`, `memory/*.md`).
+- Added authenticated workspace read/write APIs with path allowlisting.
+- Added save auditing for workspace config writes and sensitive-file save confirmation flow.
+
+---
+
 ## v0.12.74 (2026-02-26)
 
 - Assistants: changed **Revoke** to **Disconnect** for clearer, friendlier UX language.
