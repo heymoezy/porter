@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.70 — self-hosted file manager"""
+"""Porter v0.12.69 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -758,7 +758,6 @@ body {
 .node-hdr .node-meta { font-size:10px; color:var(--text3); }
 .node-hdr .btn { position:absolute; top:6px; right:8px; flex-shrink:0; height:22px; padding:0 7px !important; border-radius:6px; }
 .node-hdr.online { border-color: rgba(34,197,94,.45); background: rgba(34,197,94,.06); }
-.node-hdr.relay { border-color: rgba(251,191,36,.45); background: rgba(251,191,36,.05); }
 .node-hdr.offline { border-color: rgba(148,163,184,.35); background: rgba(148,163,184,.05); opacity:.86; }
 .mount-item { padding-left: 18px; margin:0 12px 2px; border-radius:7px; }
 .mount-item .loc-name { flex:1; min-width:0; }
@@ -2022,7 +2021,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.70 — What's new
+          v0.12.69 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2401,42 +2400,18 @@ body.density-compact .file-name { padding: 6px 0; }
 function enc(s) { return encodeURIComponent(s); }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function esc(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
-async function api(url, body, timeout_ms = 15000) {
-  const ctrl = new AbortController();
-  const tid = setTimeout(() => ctrl.abort(), timeout_ms);
-  const opt = body
-    ? { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), signal:ctrl.signal }
-    : { signal: ctrl.signal };
+async function api(url, body) {
+  const opt = body ? { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) } : {};
   try {
     const r = await fetch(url, opt);
-    clearTimeout(tid);
     if (r.status === 401) { window.location.href = '/login'; return null; }
     const d = await r.json();
-    if (!r.ok) {
-      const errMsg = d.error && typeof d.error === 'object' ? (d.error.message || 'API error') : (d.error || 'API error');
-      toast(errMsg, 'err');
-      return null;
-    }
+    if (!r.ok) { toast(d.error || 'API error', 'err'); return null; }
     return d;
-  } catch(e) {
-    clearTimeout(tid);
-    if (e.name === 'AbortError') { toast('Request timed out — check your connection', 'err'); return null; }
-    toast('Network error', 'err');
-    return null;
-  }
+  } catch(e) { toast('Network error', 'err'); return null; }
 }
 
 const CHANGELOG = [
-  { ver:'v0.12.70', date:'2026-02-26', notes:[
-    'PEP/1 Phase 0: iPhone connect flow replaced with client-first browser access instructions (no SSH assumption)',
-    'PEP/1 Phase 0: non-iOS connect modal reframed to capability-first language (what you get, not which protocol)',
-    'PEP/1 Phase 0: SSH probe error envelope now structured (error.code, error.message, error.retryable)',
-    'PEP/1 Phase 0: SSH failure modal shows error code, human message, and retry action when retryable',
-    'PEP/1 Phase 0: node status upgraded to tri-state — online / relay / offline',
-    'PEP/1 Phase 0: relay state shown in amber on node cards and Locations device rows (DERP relay, not direct)',
-    'PEP/1 Phase 0: Tailscale peer data now includes relay flag from tailscale status --json',
-    'PEP/1 Phase 0: api() function now enforces 15s AbortController timeout — no more hanging spinners',
-  ]},
   { ver:'v0.12.69', date:'2026-02-26', notes:[
     'Connect flow now adapts to iPhone/iOS targets with a dedicated preparation + SSH test wizard',
     'Added iPhone readiness checklist in-product (Tailscale + SSH server app + active foreground requirement)',
@@ -3133,25 +3108,6 @@ function isTailscaleNodeConnected(node) {
     if (!online) return false;
     return names.includes(nIp) || names.includes(nHost) || names.includes(nLabel);
   });
-}
-
-// Returns 'online' | 'relay' | 'offline' for a node.
-// 'relay' = reachable but routing via DERP relay (not direct peer-to-peer).
-function getTailscaleNodeStatus(node) {
-  if (!node || node.type !== 'tailscale') return 'online';
-  if (!_tsCache || !_tsCache.data) return 'online'; // optimistic before first poll
-  if (_tsCache.data.available === false) return 'offline';
-  const peers = _tsCache.data.peers || [];
-  const nIp    = String(node.tailscale_ip || '').toLowerCase();
-  const nHost  = String(node.hostname || '').toLowerCase();
-  const nLabel = String(node.label || '').toLowerCase();
-  const peer = peers.find(p => {
-    const names = [p.name, p.dns_name, p.ip].map(v => String(v || '').toLowerCase());
-    return names.includes(nIp) || names.includes(nHost) || names.includes(nLabel);
-  });
-  if (!peer || !peer.online) return 'offline';
-  if (peer.relay) return 'relay';
-  return 'online';
 }
 
 async function tailscaleControl(action) {
@@ -3856,11 +3812,6 @@ function renderNodes(nodes) {
         const nickname = (rawLabel && rawLabel !== hostRef) ? rawLabel : '';
         const peer = node._peer || peerByHost.get(String(node.hostname || '').toLowerCase()) || peerByIp.get(String(node.tailscale_ip || '').toLowerCase());
         const online = isSelf ? true : (!!(peer && peer.online));
-        const isRelay = !isSelf && online && !!(peer && peer.relay);
-        const nodeStatus = isSelf ? 'online' : (!online ? 'offline' : (isRelay ? 'relay' : 'online'));
-        const statusColor = nodeStatus === 'online' ? 'var(--ok,#22c55e)' : (nodeStatus === 'relay' ? 'var(--warn,#f59e0b)' : 'var(--text3)');
-        const statusLabel = nodeStatus === 'relay' ? 'relay' : nodeStatus;
-        const statusDot   = nodeStatus === 'online' ? 'var(--ok,#22c55e)' : (nodeStatus === 'relay' ? 'var(--warn,#f59e0b)' : 'var(--text3)');
         const os = isSelf ? (selfTs && selfTs.os ? selfTs.os : 'linux') : (peer && peer.os ? peer.os : '—');
         const ip = isSelf ? (selfTs && selfTs.ip ? selfTs.ip : (node.tailscale_ip || '—')) : ((peer && peer.ip) || node.tailscale_ip || '—');
         const action = nickname ? 'Edit nickname' : 'Set nickname';
@@ -3868,9 +3819,9 @@ function renderNodes(nodes) {
           <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)">
             <div style="min-width:0">
               <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${statusDot}" title="${nodeStatus === 'relay' ? 'Via DERP relay — not direct peer-to-peer' : ''}"></span>
+                <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${online ? 'var(--ok,#22c55e)' : 'var(--text3)'}"></span>
                 <span>${escHtml(deviceName)}</span>
-                <span style="font-size:10px;color:${statusColor};font-weight:500">${statusLabel}</span>
+                <span style="font-size:10px;color:${online ? 'var(--ok,#22c55e)' : 'var(--text3)'};font-weight:500">${online ? 'online' : 'offline'}</span>
               </div>
             </div>
             <div style="font-size:12px;color:${nickname ? 'var(--accent)' : 'var(--text3)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nickname || '—'}</div>
@@ -4695,22 +4646,15 @@ function _renderSidebarNodes(nodes, activeRoot) {
       const displayName = isSelf
         ? `${nickname || (node.hostname || node.id)} (this device)`
         : (nickname || node.label || node.id);
-      const tsStatus = node._virtual ? (node._online !== false ? 'online' : 'offline') : getTailscaleNodeStatus(node);
-      const connected = tsStatus !== 'offline';
+      const connected = node._virtual ? (node._online !== false) : isTailscaleNodeConnected(node);
       const isRemote = !_isSelfNode(node);
       const hasPaths = mounts.length > 0;
       const canBrowse = connected && hasPaths;
       const canConnect = connected && !hasPaths;
 
-      const tsStatusColor = tsStatus === 'online' ? 'var(--ok,#22c55e)' : (tsStatus === 'relay' ? 'var(--warn,#f59e0b)' : 'var(--text3)');
-      const tsStatusLabel = tsStatus === 'online' ? 'TS online' : (tsStatus === 'relay' ? 'TS relay' : 'TS offline');
-      const tsStatusTitle = tsStatus === 'relay'
-        ? 'Tailscale connected via relay (DERP) — not direct. Connection works but may be slower.'
-        : (tsStatus === 'online' ? 'Tailscale direct connection' : 'Tailscale offline');
-
       const card = document.createElement('div');
-      card.className = 'node-hdr ' + tsStatus;
-      card.innerHTML = `<div class="node-head"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span class="node-title" title="${escHtml(displayName)}">${escHtml(displayName)}</span></div><div class="node-meta" style="color:${tsStatusColor}" title="${tsStatusTitle}">${tsStatusLabel}</div>`;
+      card.className = 'node-hdr ' + (connected ? 'online' : 'offline');
+      card.innerHTML = `<div class="node-head"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span class="node-title" title="${escHtml(displayName)}">${escHtml(displayName)}</span></div><div class="node-meta" style="color:${connected ? 'var(--ok,#22c55e)' : 'var(--text3)'}" title="Tailscale transport status">${connected ? 'TS online' : 'TS offline'}</div>`;
 
       const actionBtn = document.createElement('button');
       actionBtn.className = 'btn btn-ghost';
@@ -4802,37 +4746,44 @@ async function connectRemoteEndpoint(node) {
 
   const showActionPlan = () => {
     const isIOS = _isIOSNode(node);
-    if (isIOS) {
-      // iPhone is a browser client — it accesses Porter via Safari, not via SSH or agent.
-      showIosBrowserAccess(node, target);
-      return;
-    }
     showModal({
       title: `Connect ${escHtml(target)}`,
       desc:
         `<div style="display:grid;gap:10px">` +
-          `<div style="font-size:12px;color:var(--accent2);font-weight:600;letter-spacing:.02em">WHAT WILL HAPPEN</div>` +
+          `<div style="font-size:12px;color:var(--accent2);font-weight:600;letter-spacing:.02em">TRUST CHECKPOINT</div>` +
           `<div style="padding:10px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--surface)">` +
-            `<strong style="display:block;margin-bottom:8px">Enable remote filesystem browsing:</strong>` +
+            `<strong style="display:block;margin-bottom:8px">Porter will run these actions:</strong>` +
             `<div style="display:grid;gap:6px;font-size:13px;color:var(--text2)">` +
-              `<div><strong style="color:var(--text)">1.</strong> Verify this device is reachable over Tailscale</div>` +
-              `<div><strong style="color:var(--text)">2.</strong> Test SSH connectivity (used to serve remote files)</div>` +
-              `<div><strong style="color:var(--text)">3.</strong> Save endpoint — device becomes browseable from Porter</div>` +
+              (isIOS
+                ? `<div><strong style="color:var(--text)">1.</strong> Validate Tailscale reachability for this iPhone</div>` +
+                  `<div><strong style="color:var(--text)">2.</strong> Walk iPhone SSH preparation (required before SSH works)</div>` +
+                  `<div><strong style="color:var(--text)">3.</strong> Probe SSH and save endpoint if reachable</div>`
+                : `<div><strong style="color:var(--text)">1.</strong> Attempt agentless SSH over Tailscale first <span style="color:var(--accent2)">(recommended)</span></div>` +
+                  `<div><strong style="color:var(--text)">2.</strong> If SSH is unavailable, offer Porter Agent bootstrap</div>` +
+                  `<div><strong style="color:var(--text)">3.</strong> Show exact command and allow copy to clipboard</div>`
+              ) +
             `</div>` +
           `</div>` +
-          `<div style="font-size:12px;color:var(--text3)">No hidden actions. You choose at each step.</div>` +
+          `<div style="font-size:12px;color:var(--text3)">No hidden actions. You explicitly choose each step.</div>` +
         `</div>`,
       actions: [
         { label: 'Cancel', action: closeModal },
         {
-          label: 'Test SSH over Tailscale',
+          label: isIOS ? 'Prepare iPhone + Test SSH' : 'Try SSH (Recommended)',
           cls: 'btn-primary',
-          action: () => { closeModal(); openSshConnectWizard(node, target); }
+          action: () => {
+            closeModal();
+            if (isIOS) openIosPrepWizard(node, target);
+            else openSshConnectWizard(node, target);
+          }
         },
         {
-          label: 'Install Agent (coming soon)',
+          label: 'Install Agent Fallback',
           cls: 'btn-ghost',
-          action: async () => { closeModal(); await showAgentFallback(); }
+          action: async () => {
+            closeModal();
+            await showAgentFallback();
+          }
         }
       ]
     });
@@ -4897,25 +4848,13 @@ async function openSshConnectWizard(node, targetLabel) {
             });
             loadLocations();
           } else {
-            const errObj = r && r.error;
-            const errMsg = errObj && typeof errObj === 'object' ? (errObj.message || 'SSH probe failed') : (errObj || 'SSH probe failed');
-            const errCode = errObj && typeof errObj === 'object' ? errObj.code : 'SSH_UNREACHABLE';
-            const retryable = errObj && typeof errObj === 'object' ? !!errObj.retryable : true;
+            const why = (r && r.error) ? escHtml(r.error) : 'SSH probe failed';
             showModal({
-              title: `SSH unreachable — ${escHtml(targetLabel)}`,
-              desc:
-                `<div style="display:grid;gap:10px">` +
-                `<div style="font-size:13px;color:var(--text2)">SSH probe did not succeed. No changes were made.</div>` +
-                `<div style="padding:10px;border:1px solid var(--border2);border-radius:8px;background:var(--surface);font-size:12px">` +
-                  `<div style="font-weight:600;color:var(--danger);margin-bottom:4px">${escHtml(errCode || 'SSH_UNREACHABLE')}</div>` +
-                  `<div style="color:var(--text2)">${escHtml(errMsg)}</div>` +
-                  (retryable ? `<div style="margin-top:8px;color:var(--text3)">Retryable — confirm Tailscale is connected and SSH is running on ${escHtml(targetLabel)}, then try again.</div>` : '') +
-                `</div>` +
-                `</div>`,
+              title: `SSH failed for ${escHtml(targetLabel)}`,
+              desc: `Could not establish SSH.<br><br><span style="color:var(--danger)">${why}</span><br><br>Use Agent fallback to complete connection now.`,
               actions: [
                 { label: 'Close', action: closeModal },
-                ...(retryable ? [{ label: 'Retry SSH', cls: 'btn-primary', action: () => { closeModal(); openSshConnectWizard(node, targetLabel); } }] : []),
-                { label: 'Install Agent (coming soon)', cls: 'btn-ghost', action: () => connectRemoteEndpoint({ ...node, _forceAgent: true }) }
+                { label: 'Install Agent Fallback', cls: 'btn-primary', action: () => connectRemoteEndpoint({ ...node, _forceAgent: true }) }
               ]
             });
           }
@@ -4925,38 +4864,61 @@ async function openSshConnectWizard(node, targetLabel) {
   });
 }
 
-// iPhone is a browser client — show access instructions, no SSH prep needed.
-function showIosBrowserAccess(node, targetLabel) {
-  const hubIp = (window._tsIp || window._serverHostname || window.location.hostname || '').trim();
-  const hubUrl = hubIp ? `http://${hubIp}:8877` : `http://<porter-hub-ip>:8877`;
+async function openIosPrepWizard(node, targetLabel) {
+  const hostGuess = (node.tailscale_ip || node.hostname || '').trim();
   showModal({
-    title: `iPhone access: ${escHtml(targetLabel)}`,
+    title: `Prepare iPhone: ${escHtml(targetLabel)}`,
     desc:
-      `<div style="display:grid;gap:12px">` +
-      `<div style="font-size:13px;color:var(--text2)">` +
-        `<strong style="color:var(--text)">iPhone is a browser client.</strong> ` +
-        `No SSH server or agent is needed on iPhone — it accesses Porter through Safari over Tailscale.` +
-      `</div>` +
+      `<div style="display:grid;gap:10px">` +
+      `<div style="font-size:13px;color:var(--text2)">Stock iOS does not expose SSH by default. Complete prep on iPhone first, then run probe.</div>` +
       `<div style="padding:10px;border:1px solid var(--border2);border-radius:10px;background:var(--surface);font-size:12px;color:var(--text2)">` +
-        `<strong style="color:var(--text);display:block;margin-bottom:8px">To access Porter from this iPhone:</strong>` +
-        `<div style="display:grid;gap:6px">` +
-          `<div>1. Open <strong>Tailscale</strong> on the iPhone and confirm it's connected</div>` +
-          `<div>2. Open <strong>Safari</strong> and go to:</div>` +
-          `<code style="display:block;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;margin-top:4px">${escHtml(hubUrl)}</code>` +
-          `<div>3. Log in with your Porter credentials</div>` +
-        `</div>` +
+      `<strong style="color:var(--text)">iPhone prep checklist</strong><br>` +
+      `• Tailscale connected and shown online<br>` +
+      `• An SSH/SFTP server app installed and running on iPhone<br>` +
+      `• Keep that app active while testing (some apps stop in background)<br>` +
+      `• Confirm SSH username + port from the app settings` +
       `</div>` +
-      `<div style="font-size:11px;color:var(--text3)">The iPhone appears in this Locations list because it's on your Tailscale network. Porter can see it, but iPhone doesn't host files — it browses them.</div>` +
+      `<label style="display:grid;gap:4px;font-size:12px;color:var(--text3)">SSH user<input id="iosSshUserInput" class="input" style="margin-top:2px" type="text" value="root" /></label>` +
+      `<label style="display:grid;gap:4px;font-size:12px;color:var(--text3)">iPhone Tailscale IP<input id="iosSshHostInput" class="input" style="margin-top:2px" type="text" value="${escHtml(hostGuess)}" /></label>` +
+      `<label style="display:grid;gap:4px;font-size:12px;color:var(--text3)">SSH port<input id="iosSshPortInput" class="input" style="margin-top:2px" type="number" value="2222" /></label>` +
       `</div>`,
     actions: [
-      { label: 'Got it', cls: 'btn-primary', action: closeModal }
+      { label: 'Cancel', action: closeModal },
+      {
+        label: 'Test iPhone SSH',
+        cls: 'btn-primary',
+        action: async () => {
+          const user = (document.getElementById('iosSshUserInput') || {}).value || 'root';
+          const host = (document.getElementById('iosSshHostInput') || {}).value || '';
+          const port = parseInt(((document.getElementById('iosSshPortInput') || {}).value || '2222'), 10) || 2222;
+          if (!host.trim()) { toast('Enter iPhone Tailscale IP', 'err'); return; }
+          const r = await api('/api/ssh/probe', { user: user.trim(), host: host.trim(), port });
+          closeModal();
+          if (r && r.ok) {
+            await api('/api/nodes', { action: 'set_ssh_endpoint', node_id: node.id, user: user.trim(), host: host.trim(), port });
+            showModal({
+              title: `iPhone SSH verified`,
+              desc: `SSH is reachable on this iPhone endpoint and has been saved for this device.`,
+              actions: [
+                { label: 'Close', cls: 'btn-primary', action: closeModal }
+              ]
+            });
+            loadLocations();
+          } else {
+            const why = (r && r.error) ? escHtml(r.error) : 'SSH probe failed';
+            showModal({
+              title: `iPhone SSH not ready`,
+              desc: `Still unable to connect.<br><br><span style="color:var(--danger)">${why}</span><br><br>Keep SSH server app active on iPhone, confirm port/user, then retry.`,
+              actions: [
+                { label: 'Close', action: closeModal },
+                { label: 'Retry Prep', cls: 'btn-primary', action: () => { closeModal(); openIosPrepWizard(node, targetLabel); } }
+              ]
+            });
+          }
+        }
+      }
     ]
   });
-}
-
-// Kept for backward compatibility — now delegates to showIosBrowserAccess.
-async function openIosPrepWizard(node, targetLabel) {
-  showIosBrowserAccess(node, targetLabel);
 }
 
 async function quickExposePath(node) {
@@ -6303,7 +6265,6 @@ class Handler(BaseHTTPRequestHandler):
                         "ip":       ips[0],
                         "online":   v.get("Online", False),
                         "os":       v.get("OS", ""),
-                        "relay":    bool(v.get("Relay", "")),
                     })
                 if want_status:
                     self_node = ts.get("Self", {})
@@ -6821,23 +6782,11 @@ class Handler(BaseHTTPRequestHandler):
                     self.reply_json({"ok": True, "message": "SSH reachable"})
                 else:
                     err = (p.stderr or p.stdout or "ssh connection failed").strip()
-                    self.reply_json({"ok": False, "error": {
-                        "code": "SSH_UNREACHABLE",
-                        "message": err[:300],
-                        "retryable": True,
-                    }})
+                    self.reply_json({"ok": False, "error": err[:300]})
             except subprocess.TimeoutExpired:
-                self.reply_json({"ok": False, "error": {
-                    "code": "SSH_TIMEOUT",
-                    "message": "SSH probe timed out (8s). Check Tailscale is connected and SSH is running on the remote device.",
-                    "retryable": True,
-                }})
+                self.reply_json({"ok": False, "error": "SSH probe timed out"})
             except Exception as e:
-                self.reply_json({"ok": False, "error": {
-                    "code": "SSH_ERROR",
-                    "message": str(e)[:300],
-                    "retryable": False,
-                }})
+                self.reply_json({"ok": False, "error": str(e)[:300]})
 
         elif parsed.path == "/api/agent-fleet":
             # Admin controls + agent heartbeat/update reporting
