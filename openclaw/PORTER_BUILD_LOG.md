@@ -47,3 +47,9 @@ Porter is not just file browsing; it is the trusted network fabric for connected
 - Simplified lane copy (Needs action / In progress / Completed) for faster scan.
 - Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
 - Risk: low (UI simplification only).
+
+## 2026-02-26 — Release v0.12.61
+- Command Center: removed Immediate Actions block (redundant with primary nav/actions).
+- Command Center: removed disk-space metric/card from incident logic (signal deemed non-actionable/noisy in current operator model).
+- Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
+- Risk: low (UI reduction only).
