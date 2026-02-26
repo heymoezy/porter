@@ -4712,11 +4712,18 @@ async function connectRemoteEndpoint(node) {
     showModal({
       title: `Connect ${escHtml(target)}`,
       desc:
-        `<strong>Porter will run these actions:</strong><br><br>` +
-        `1) Attempt agentless SSH over Tailscale first (recommended)<br>` +
-        `2) If SSH is unavailable, offer Porter Agent bootstrap<br>` +
-        `3) Show explicit command and copy to clipboard (no hidden steps)<br><br>` +
-        `<span style="color:var(--text3)">You stay in control at each step.</span>`,
+        `<div style="display:grid;gap:10px">` +
+          `<div style="font-size:12px;color:var(--accent2);font-weight:600;letter-spacing:.02em">TRUST CHECKPOINT</div>` +
+          `<div style="padding:10px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--surface)">` +
+            `<strong style="display:block;margin-bottom:8px">Porter will run these actions:</strong>` +
+            `<div style="display:grid;gap:6px;font-size:13px;color:var(--text2)">` +
+              `<div><strong style="color:var(--text)">1.</strong> Attempt agentless SSH over Tailscale first <span style="color:var(--accent2)">(recommended)</span></div>` +
+              `<div><strong style="color:var(--text)">2.</strong> If SSH is unavailable, offer Porter Agent bootstrap</div>` +
+              `<div><strong style="color:var(--text)">3.</strong> Show exact command and allow copy to clipboard</div>` +
+            `</div>` +
+          `</div>` +
+          `<div style="font-size:12px;color:var(--text3)">No hidden actions. You explicitly choose each step.</div>` +
+        `</div>`,
       actions: [
         { label: 'Cancel', action: closeModal },
         {
