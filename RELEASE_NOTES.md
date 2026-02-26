@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.85 (2026-02-26)
+
+- Fixed invalid-path errors when opening assistant-relevant external auth files (Claude/Qwen path validation).
+- Left file navigation now highlights the currently open file for clear editing context.
+- Added inline Find box in Agent Workspace header for quick text search within the current file.
+
+---
+
 ## v0.12.84 (2026-02-26)
 
 - Agent Workspace file navigator now shows files relevant to the selected assistant only (no cross-agent file spillover).

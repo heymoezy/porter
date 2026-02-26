@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.84 — self-hosted file manager"""
+"""Porter v0.12.85 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1326,6 +1326,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .audit-row { padding:10px 0; border-bottom:1px solid var(--border); font-size:12px;
   display:flex; gap:10px; align-items:baseline; }
 .agent-clarity { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+.aw-file-active { border-color: var(--accent) !important; color: var(--accent) !important; background: rgba(247,147,26,.08) !important; }
 .badge-production { background:#dcfce7; color:#15803d; font-size:10px; padding:2px 7px;
   border-radius:20px; font-weight:600; }
 .badge-test { background:#fef9c3; color:#854d0e; font-size:10px; padding:2px 7px;
@@ -1571,7 +1572,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.84</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.85</div>
   </div>
 </aside>
 
@@ -1758,9 +1759,13 @@ body.density-compact .file-name { padding: 6px 0; }
           <div id="aw-file-list" style="display:flex;flex-direction:column;gap:4px"></div>
         </div>
         <div style="display:flex;flex-direction:column;min-width:0">
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)">
-            <div id="aw-current-file" style="font-size:12px;color:var(--text2)">Select a file</div>
-            <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" onclick="saveAgentWorkspaceFile()">Save</button>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border)">
+            <div id="aw-current-file" style="font-size:12px;color:var(--text2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Select a file</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input id="aw-find" type="text" placeholder="Find in file" class="settings-input" style="height:28px;width:180px" onkeydown="if(event.key==='Enter'){findInWorkspace()}">
+              <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="findInWorkspace()">Find</button>
+              <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" onclick="saveAgentWorkspaceFile()">Save</button>
+            </div>
           </div>
           <textarea id="aw-editor" style="flex:1;height:100%;min-height:0;width:100%;max-width:100%;resize:none;box-sizing:border-box;overflow:auto;background:var(--bg);color:var(--text);border:none;outline:none;padding:12px;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;font-size:12px;line-height:1.45"></textarea>
         </div>
@@ -2053,7 +2058,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.84 — What's new
+          v0.12.85 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2458,25 +2463,30 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.12.84', date:'2026-02-26', notes:[
+  { ver:'v0.12.85', date:'2026-02-26', notes:[
+    'Agent Workspace: fixed invalid-path issue for Claude/Qwen external auth files by extending allowed external path validation',
+    'Agent Workspace: active file is now highlighted in left navigation for clear editing context',
+    'Agent Workspace: added quick Find-in-file input and navigation for faster text search within open config files',
+  ]},
+  { ver:'v0.12.85', date:'2026-02-26', notes:[
     'Agent Workspace file list now scopes to the selected assistant (no cross-agent config leakage in navigator)',
     'Provider-specific external auth files are now included only when relevant to the selected assistant type',
     'Auth/model profile discovery now follows documented OpenClaw paths per selected assistant context',
   ]},
-  { ver:'v0.12.84', date:'2026-02-26', notes:[
+  { ver:'v0.12.85', date:'2026-02-26', notes:[
     'Agent Workspace navigation fixed: selecting files now reliably loads the selected file from the left navigator',
     'Unsaved-change flow improved on file switch (save-first or explicit discard before navigation)',
     'Workspace config coverage extended with additional auth/config artifacts (including credentials/oauth and external codex auth when present)',
   ]},
-  { ver:'v0.12.84', date:'2026-02-26', notes:[
+  { ver:'v0.12.85', date:'2026-02-26', notes:[
     'Escape key behavior fixed in Assistants Configure mode: now exits workspace back to main Assistants view instead of switching to Files',
   ]},
-  { ver:'v0.12.84', date:'2026-02-26', notes:[
+  { ver:'v0.12.85', date:'2026-02-26', notes:[
     'Agent Workspace editor now expands fully to the bottom of the pane for maximum vertical working area',
     'Editor resize-to-right disabled to keep layout stable and prevent horizontal panel breakage',
     'Workspace grid updated with bounded center column (minmax(0,1fr)) to maximize usable editor space',
   ]},
-  { ver:'v0.12.84', date:'2026-02-26', notes:[
+  { ver:'v0.12.85', date:'2026-02-26', notes:[
     'Agent Workspace: fixed file switching behavior and added unsaved-change protection prompt',
     'Agent Workspace: expanded allowlisted config files to include OpenClaw state JSON files and per-agent auth/model profile files',
     'Configure workspace now supports both workspace markdown and key OpenClaw JSON configuration artifacts in one navigator',
@@ -3846,7 +3856,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.84',
+      ver: 'v0.12.85',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4498,7 +4508,7 @@ async function loadAgentWorkspaceList(openFirst = false) {
   const el = document.getElementById('aw-file-list');
   if (!el) return;
   if (!res || !res.files) { el.innerHTML = '<div style="color:var(--text3);font-size:12px">No files</div>'; return; }
-  el.innerHTML = res.files.map(f => `<button class="btn btn-ghost" style="justify-content:flex-start;font-size:11px;padding:4px 6px;max-width:100%;overflow:hidden;text-overflow:ellipsis" onclick="openAgentWorkspaceFile('${esc(f)}')">${escHtml(f)}</button>`).join('');
+  el.innerHTML = res.files.map(f => `<button class="btn btn-ghost ${_awCurrentFile===f?'aw-file-active':''}" style="justify-content:flex-start;font-size:11px;padding:4px 6px;max-width:100%;overflow:hidden;text-overflow:ellipsis" onclick="openAgentWorkspaceFile('${esc(f)}')">${escHtml(f)}</button>`).join('');
   if (openFirst && res.files.length) openAgentWorkspaceFile(res.files[0]);
 }
 
@@ -4526,6 +4536,20 @@ async function openAgentWorkspaceFile(path) {
   }
   if (cf) cf.textContent = path;
   _awDirty = false;
+  loadAgentWorkspaceList(false);
+}
+
+function findInWorkspace() {
+  const q = (document.getElementById('aw-find')?.value || '').trim();
+  const ed = document.getElementById('aw-editor');
+  if (!ed || !q) return;
+  const start = (ed.selectionEnd || 0);
+  const text = ed.value || '';
+  let idx = text.toLowerCase().indexOf(q.toLowerCase(), start);
+  if (idx < 0) idx = text.toLowerCase().indexOf(q.toLowerCase(), 0);
+  if (idx < 0) { toast('Text not found', 'err'); return; }
+  ed.focus();
+  ed.setSelectionRange(idx, idx + q.length);
 }
 
 async function saveAgentWorkspaceFile() {
@@ -7318,7 +7342,7 @@ class Handler(BaseHTTPRequestHandler):
             fp = allow.get(rel)
             if not fp:
                 self.reply_json({"error": "path not allowed"}, 403); return
-            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())) and not str(fp).startswith(str((Path.home()/'.codex').resolve())):
+            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())) and not str(fp).startswith(str((Path.home()/'.codex').resolve())) and not str(fp).startswith(str((Path.home()/'.claude').resolve())) and not str(fp).startswith(str((Path.home()/'.qwen').resolve())):
                 self.reply_json({"error": "invalid path"}, 400); return
             if not fp.exists():
                 self.reply_json({"ok": True, "content": ""}); return
@@ -7369,7 +7393,7 @@ class Handler(BaseHTTPRequestHandler):
             fp = allow.get(rel)
             if not fp:
                 self.reply_json({"error": "path not allowed"}, 403); return
-            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())) and not str(fp).startswith(str((Path.home()/'.codex').resolve())):
+            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())) and not str(fp).startswith(str((Path.home()/'.codex').resolve())) and not str(fp).startswith(str((Path.home()/'.claude').resolve())) and not str(fp).startswith(str((Path.home()/'.qwen').resolve())):
                 self.reply_json({"error": "invalid path"}, 400); return
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content, encoding="utf-8")
@@ -8494,7 +8518,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.84 ready (localhost only)")
+    print(f"\n  Porter v0.12.85 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
