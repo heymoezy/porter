@@ -1,5 +1,11 @@
 # Porter Release Notes
 
+## v0.12.82 (2026-02-26)
+
+- Fixed Escape key in Assistants Configure mode: it now closes workspace and returns to Assistants list (no jump to Files).
+
+---
+
 ## v0.12.81 (2026-02-26)
 
 - Agent Workspace editor now fills vertical pane space to the bottom for full-screen style editing.
