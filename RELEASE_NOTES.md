@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.74 (2026-02-26)
+
+- Assistants: changed **Revoke** to **Disconnect** for clearer, friendlier UX language.
+- Updated disconnect modal copy to reduce fear and explain reconnection path.
+- Fixed rotate/disconnect modal handlers to execute properly.
+
+---
+
 ## v0.12.73 (2026-02-26)
 
 - Assistants: added per-card **Test** button to verify whether an assistant is actively connected.

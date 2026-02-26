@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.73 — self-hosted file manager"""
+"""Porter v0.12.74 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1566,7 +1566,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.73</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.74</div>
   </div>
 </aside>
 
@@ -2023,7 +2023,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.73 — What's new
+          v0.12.74 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2428,6 +2428,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.74', date:'2026-02-26', notes:[
+    'Assistants: renamed Revoke action to Disconnect for clearer, less harsh operator wording',
+    'Disconnect confirmation now explains reconnection path (new key) with calmer user-facing language',
+    'Fixed modal action handlers for Rotate/Disconnect to ensure actions execute correctly',
+  ]},
   { ver:'v0.12.73', date:'2026-02-26', notes:[
     'Assistants: added per-card Test action to verify connection status before use',
     'New /api/agents test_connection action checks recent heartbeat and falls back to recent usage telemetry',
@@ -3764,7 +3769,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.73',
+      ver: 'v0.12.74',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4329,7 +4334,7 @@ function renderAgents(agents) {
         </div>
         <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="doTestAgent('${a.id}','${escHtml(a.name)}')">Test</button>
         <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
-        <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Revoke</button>
+        <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Disconnect</button>
       </div>
       ${keyRow}
       ${concurrencyRow}
@@ -4395,11 +4400,17 @@ async function doTestAgent(id, name) {
 }
 
 async function doRotateKey(id, name) {
-  showModal({ title:`Rotate key for ${escHtml(name)}?`, desc:'The current key will stop working immediately. Any active session using it will disconnect.<br><br>Copy the new key before leaving this page.', actions:[{label:'Cancel',action:closeModal},{label:'Rotate key',cls:'btn-primary',action:async ()=>{closeModal(); await _doRotateKeyNow(id);} }] });
+  showModal({
+    title:`Rotate key for ${escHtml(name)}?`,
+    desc:'The current key will stop working immediately. Any active session using it will disconnect.<br><br>Copy the new key before leaving this page.',
+    actions:[
+      {label:'Cancel',action:closeModal},
+      {label:'Rotate key',cls:'btn-primary',action:async ()=>{closeModal(); await _doRotateKeyNow(id);} }
+    ]
+  });
 }
 
 async function _doRotateKeyNow(id) {
-  showModal({ title:`Rotate key for ${escHtml(name)}?`, desc:'The current key will stop working immediately. Any active session using it will disconnect.<br><br>Copy the new key before leaving this page.', actions:[{label:'Cancel',action:closeModal},{label:'Rotate key',cls:'btn-primary',action:async ()=>{closeModal(); await _doRotateKeyNow(id);} }] }); return;
   const res = await api('/api/agents/rotate-key', { id });
   if (res && res.ok) {
     document.getElementById('agent-key-val').textContent = res.key;
@@ -4409,14 +4420,20 @@ async function _doRotateKeyNow(id) {
 }
 
 async function doRevokeAgent(id, name) {
-  showModal({ title:`Remove ${escHtml(name)}?`, desc:'This assistant will lose access to Porter immediately.<br><br>This cannot be undone.', actions:[{label:'Cancel',action:closeModal},{label:'Remove assistant',cls:'btn-danger',action:async ()=>{closeModal(); await _doRevokeNow(id);} }] });
+  showModal({
+    title:`Disconnect ${escHtml(name)}?`,
+    desc:'This assistant will be disconnected from Porter immediately.<br><br>You can reconnect it later with a new key.',
+    actions:[
+      {label:'Cancel',action:closeModal},
+      {label:'Disconnect assistant',cls:'btn-danger',action:async ()=>{closeModal(); await _doRevokeNow(id);} }
+    ]
+  });
 }
 
 async function _doRevokeNow(id) {
-  showModal({ title:`Remove ${escHtml(name)}?`, desc:'This assistant will lose access to Porter immediately.<br><br>This cannot be undone.', actions:[{label:'Cancel',action:closeModal},{label:'Remove assistant',cls:'btn-danger',action:async ()=>{closeModal(); await _doRevokeNow(id);} }] }); return;
   const res = await api('/api/agents', { action: 'revoke', id });
-  if (res && res.ok) { toast('Agent revoked', 'ok'); loadAgents(); }
-  else toast((res && res.error) || 'Revoke failed', 'err');
+  if (res && res.ok) { toast('Assistant disconnected', 'ok'); loadAgents(); }
+  else toast((res && res.error) || 'Disconnect failed', 'err');
 }
 
 async function saveAgentWarnThreshold(agentId) {
@@ -8192,7 +8209,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.73 ready (localhost only)")
+    print(f"\n  Porter v0.12.74 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
