@@ -4708,47 +4708,72 @@ async function connectRemoteEndpoint(node) {
   const osRaw = String((node._peer && node._peer.os) || '').toLowerCase();
   const osName = osRaw.includes('mac') ? 'macos' : (osRaw.includes('win') ? 'windows' : 'linux');
 
-  const proceed = confirm(
-    `${target} needs a remote filesystem endpoint.
+  const showActionPlan = () => {
+    showModal({
+      title: `Connect ${escHtml(target)}`,
+      desc:
+        `<strong>Porter will run these actions:</strong><br><br>` +
+        `1) Attempt agentless SSH over Tailscale first (recommended)<br>` +
+        `2) If SSH is unavailable, offer Porter Agent bootstrap<br>` +
+        `3) Show explicit command and copy to clipboard (no hidden steps)<br><br>` +
+        `<span style="color:var(--text3)">You stay in control at each step.</span>`,
+      actions: [
+        { label: 'Cancel', action: closeModal },
+        {
+          label: 'Try SSH (Recommended)',
+          cls: 'btn-primary',
+          action: () => {
+            closeModal();
+            toast('SSH mode selected. SSH-based remote browse wiring is next (in progress).', 'ok');
+          }
+        },
+        {
+          label: 'Install Agent Fallback',
+          cls: 'btn-ghost',
+          action: async () => {
+            closeModal();
+            const data = await api(`/api/agent/bootstrap?os=${enc(osName)}&arch=x64`);
+            if (!data || !data.install_command) {
+              toast('Could not fetch agent bootstrap command', 'err');
+              return;
+            }
+            const cmd = data.install_command;
+            showModal({
+              title: `Install Porter Agent on ${escHtml(target)}`,
+              desc: `Run this command on the target device. This is the exact command Porter generated.`,
+              input: true,
+              inputVal: cmd,
+              actions: [
+                { label: 'Close', action: closeModal },
+                {
+                  label: 'Copy Command',
+                  cls: 'btn-primary',
+                  action: async () => {
+                    const val = document.getElementById('modalInput').value;
+                    try {
+                      await navigator.clipboard.writeText(val);
+                      toast('Agent install command copied', 'ok');
+                    } catch (_) {}
+                  }
+                }
+              ]
+            });
+          }
+        }
+      ]
+    });
+  };
 
-` +
-    `Porter will first try agentless SSH over Tailscale.
-` +
-    `If SSH is unavailable, install Porter Agent as fallback.
-
-` +
-    `Proceed?`
-  );
-  if (!proceed) return;
-
-  // Phase 1 UX: capture endpoint preference + provide deterministic next step.
-  const choice = prompt(
-    `Choose connection mode for ${target}:
-` +
-    `1 = Try SSH over Tailscale (agentless)
-` +
-    `2 = Install Porter Agent
-
-Enter 1 or 2:`,
-    '1'
-  );
-  if (choice === null) return;
-
-  if ((choice || '').trim() === '1') {
-    toast('SSH mode selected. SSH-based remote browse wiring is next (in progress).', 'ok');
-    return;
-  }
-
-  const data = await api(`/api/agent/bootstrap?os=${enc(osName)}&arch=x64`);
-  if (!data || !data.install_command) {
-    toast('Could not fetch agent bootstrap command', 'err');
-    return;
-  }
-  const cmd = data.install_command;
-  const shown = prompt(`Install Porter Agent on ${target} and run:`, cmd);
-  if (shown !== null) {
-    navigator.clipboard.writeText(cmd).then(() => toast('Agent install command copied', 'ok')).catch(()=>{});
-  }
+  showModal({
+    title: `Connect ${escHtml(target)}?`,
+    desc:
+      `${escHtml(target)} needs a remote filesystem endpoint.<br><br>` +
+      `Press <strong>Proceed</strong> to review all actions before anything runs.`,
+    actions: [
+      { label: 'Cancel', action: closeModal },
+      { label: 'Proceed', cls: 'btn-primary', action: () => { closeModal(); showActionPlan(); } },
+    ],
+  });
 }
 
 async function quickExposePath(node) {
