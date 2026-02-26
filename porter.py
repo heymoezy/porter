@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.90 — self-hosted file manager"""
+"""Porter v0.12.91 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1666,7 +1666,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.90</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.91</div>
   </div>
 </aside>
 
@@ -2172,7 +2172,7 @@ select.settings-input { padding-right: 26px; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.90 — What's new
+          v0.12.91 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2577,6 +2577,14 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.91', date:'2026-02-26', notes:[
+    'PEP/1 Phase 1: Hub registers remote agents via one-time token (POST /pep/v1/agent/register)',
+    'PEP/1 Phase 1: Heartbeat endpoint keeps agent online state current (POST /pep/v1/agent/heartbeat)',
+    'PEP/1 Phase 1: Hub proxies fs.list/read/stat/write/mkdir/delete to remote agent over Tailscale',
+    'PEP/1 Phase 1: New porter-agent.py (stdlib-only) for remote machines — register, heartbeat, FS serve',
+    'Locations: Install PEP/1 Agent button generates one-time token + shows copyable install command',
+    'Locations: PEP agent online/offline status badge visible on node cards and sidebar entries',
+  ]},
   { ver:'v0.12.90', date:'2026-02-26', notes:[
     'Agent card action buttons redesigned into a clean 2x2 action grid for better visual structure',
     'Reduced action button sizing and improved spacing to remove clutter in card headers',
@@ -3369,6 +3377,7 @@ function toggleSidebar() {
 
 // ── Tailscale network status ──
 let _tsCache = null;
+let _pepCache = null;
 let _tsPollTimer = null;
 let _overviewPollTimer = null;
 
@@ -4053,6 +4062,28 @@ async function loadLocations() {
   renderNodes(_lastNodes);
   _renderSidebarNodes(_lastNodes, curRoot);
   loadTailscaleStatus();
+  loadPepStatus();
+}
+
+async function loadPepStatus() {
+  const data = await api('/api/pep/nodes');
+  if (!data || !data.nodes) return;
+  _pepCache = data;
+  // Re-render only if Locations panel is visible (avoid unnecessary DOM churn)
+  if (_lastNodes && _lastNodes.length) {
+    renderNodes(_lastNodes);
+    _renderSidebarNodes(_lastNodes, curRoot);
+  }
+}
+
+function _pepAgentForNode(node) {
+  if (!_pepCache || !_pepCache.nodes) return null;
+  const id = String(node.id || '').toLowerCase();
+  const host = String(node.hostname || '').toLowerCase();
+  return _pepCache.nodes.find(n =>
+    String(n.id || '').toLowerCase() === id ||
+    String(n.hostname || '').toLowerCase() === host
+  ) || null;
 }
 
 function renderNodes(nodes) {
@@ -4129,6 +4160,15 @@ function renderNodes(nodes) {
         const os = isSelf ? (selfTs && selfTs.os ? selfTs.os : 'linux') : (peer && peer.os ? peer.os : '—');
         const ip = isSelf ? (selfTs && selfTs.ip ? selfTs.ip : (node.tailscale_ip || '—')) : ((peer && peer.ip) || node.tailscale_ip || '—');
         const action = nickname ? 'Edit nickname' : 'Set nickname';
+        const pepEntry = _pepAgentForNode(node);
+        const pepAgent = pepEntry && pepEntry.pep_agent;
+        const pepOnline = pepAgent && pepAgent.online;
+        const pepRegistered = pepAgent && pepAgent.registered;
+        const pepBadge = isSelf ? '' : (pepOnline
+          ? `<span style="font-size:10px;color:var(--ok,#22c55e);border:1px solid var(--ok,#22c55e);border-radius:4px;padding:0 4px;margin-left:4px" title="PEP/1 agent online">pep</span>`
+          : (pepRegistered
+            ? `<span style="font-size:10px;color:var(--warn,#f59e0b);border:1px solid var(--warn,#f59e0b);border-radius:4px;padding:0 4px;margin-left:4px" title="PEP/1 agent registered but offline">pep</span>`
+            : ''));
         return `
           <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)">
             <div style="min-width:0">
@@ -4136,6 +4176,7 @@ function renderNodes(nodes) {
                 <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${statusDot}" title="${nodeStatus === 'relay' ? 'Via DERP relay — not direct peer-to-peer' : ''}"></span>
                 <span>${escHtml(deviceName)}</span>
                 <span style="font-size:10px;color:${statusColor};font-weight:500">${statusLabel}</span>
+                ${pepBadge}
               </div>
             </div>
             <div style="font-size:12px;color:${nickname ? 'var(--accent)' : 'var(--text3)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nickname || '—'}</div>
@@ -5313,10 +5354,19 @@ function _renderSidebarNodes(nodes, activeRoot) {
       const tsStatusTitle = tsStatus === 'relay'
         ? 'Tailscale connected via relay (DERP) — not direct. Connection works but may be slower.'
         : (tsStatus === 'online' ? 'Tailscale direct connection' : 'Tailscale offline');
+      const pepSbEntry = _pepAgentForNode(node);
+      const pepSbAgent = pepSbEntry && pepSbEntry.pep_agent;
+      const pepSbOnline = !isSelf && pepSbAgent && pepSbAgent.online;
+      const pepSbRegistered = !isSelf && pepSbAgent && pepSbAgent.registered;
+      const pepSbMeta = pepSbOnline
+        ? ` · <span style="color:var(--ok,#22c55e)" title="PEP/1 agent online">pep</span>`
+        : (pepSbRegistered
+          ? ` · <span style="color:var(--warn,#f59e0b)" title="PEP/1 agent registered but offline">pep</span>`
+          : '');
 
       const card = document.createElement('div');
       card.className = 'node-hdr ' + tsStatus;
-      card.innerHTML = `<div class="node-head"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span class="node-title" title="${escHtml(displayName)}">${escHtml(displayName)}</span></div><div class="node-meta" style="color:${tsStatusColor}" title="${tsStatusTitle}">${tsStatusLabel}</div>`;
+      card.innerHTML = `<div class="node-head"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span class="node-title" title="${escHtml(displayName)}">${escHtml(displayName)}</span></div><div class="node-meta" style="color:${tsStatusColor}" title="${tsStatusTitle}">${tsStatusLabel}${pepSbMeta}</div>`;
 
       const actionBtn = document.createElement('button');
       actionBtn.className = 'btn btn-ghost';
@@ -5383,26 +5433,75 @@ function _isIOSNode(node) {
   return osRaw.includes('ios') || label.includes('iphone') || host.includes('iphone');
 }
 
+async function showPepAgentSetup(node, target) {
+  const rawHost = (node.hostname || node.id || target || '').trim();
+  const suggestedId = rawHost.replace(/[^a-zA-Z0-9._-]/g, '-').toLowerCase().slice(0, 64) || 'my-node';
+  const hubTsIp = (_tsCache && _tsCache.data && _tsCache.data.self && _tsCache.data.self.ip) || '100.x.x.x';
+
+  showModal({
+    title: `Install PEP/1 Agent on ${escHtml(target)}`,
+    desc:
+      `<div style="display:grid;gap:12px">` +
+        `<div style="font-size:13px;color:var(--text2)">` +
+          `A one-time registration token lets <strong>${escHtml(target)}</strong> connect back to this Hub.<br>` +
+          `Run the agent on the remote machine — it will register itself automatically.` +
+        `</div>` +
+        `<div>` +
+          `<label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Node ID (used in install command)</label>` +
+          `<input id="pep-node-id-input" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border2);border-radius:7px;background:var(--surface);color:var(--text);font-family:monospace;font-size:13px" value="${escHtml(suggestedId)}" placeholder="e.g. mac-mini-1" maxlength="64">` +
+        `</div>` +
+        `<div id="pep-token-area" style="display:none">` +
+          `<label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Install Command (valid 15 min)</label>` +
+          `<pre id="pep-cmd-block" style="background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;color:var(--text);margin:0"></pre>` +
+          `<button class="btn btn-ghost" style="margin-top:8px;font-size:11px" onclick="navigator.clipboard.writeText(document.getElementById('pep-cmd-block').textContent).then(()=>toast('Copied','ok'))">Copy command</button>` +
+          `<div style="margin-top:8px;font-size:12px;color:var(--text3)">After the agent starts, refresh the Locations panel to see its status.</div>` +
+        `</div>` +
+      `</div>`,
+    actions: [
+      { label: 'Cancel', action: closeModal },
+      {
+        label: 'Generate Token',
+        cls: 'btn-primary',
+        action: async () => {
+          const nodeIdInput = document.getElementById('pep-node-id-input');
+          const nodeId = (nodeIdInput ? nodeIdInput.value : suggestedId).trim();
+          if (!nodeId || !/^[\w\-\.]{1,64}$/.test(nodeId)) {
+            toast('Invalid node ID — use letters, numbers, hyphens only', 'err');
+            return;
+          }
+          const res = await api('/api/pep/gen-token', { node_id: nodeId });
+          if (!res || !res.ok) {
+            toast((res && res.error && res.error.message) || 'Failed to generate token', 'err');
+            return;
+          }
+          const cmd = [
+            'python3 porter-agent.py \\',
+            \`  --hub http://${hubTsIp}:8877 \\\`,
+            \`  --token \${res.token} \\\`,
+            \`  --node-id \${nodeId} \\\`,
+            \`  --paths /path/to/share\`,
+          ].join('\n');
+          const cmdBlock = document.getElementById('pep-cmd-block');
+          if (cmdBlock) cmdBlock.textContent = cmd;
+          const tokenArea = document.getElementById('pep-token-area');
+          if (tokenArea) tokenArea.style.display = '';
+          // Disable the Generate Token button after use
+          const btns = document.querySelectorAll('.modal-actions .btn-primary');
+          btns.forEach(b => { if (b.textContent === 'Generate Token') { b.disabled = true; b.textContent = 'Token generated'; } });
+        }
+      },
+    ],
+  });
+}
+
 async function connectRemoteEndpoint(node) {
   const target = node.label || node.hostname || node.id;
   const osRaw = String((node._peer && node._peer.os) || '').toLowerCase();
   const ua = String(navigator.platform || navigator.userAgent || '').toLowerCase();
   const osName = osRaw.includes('mac') ? 'macos' : (osRaw.includes('win') ? 'windows' : (ua.includes('mac') ? 'macos' : 'linux'));
 
-  const showAgentFallback = async () => {
-    showModal({
-      title: `Agent fallback not enabled yet`,
-      desc:
-        `This Porter instance is running self-hosted on VPS and does not have a published agent installer endpoint yet.<br><br>` +
-        `Use SSH mode for now. Agent fallback will be enabled only after installer hosting is configured.`,
-      actions: [
-        { label: 'Close', cls: 'btn-primary', action: closeModal }
-      ]
-    });
-  };
-
   if (node && node._forceAgent) {
-    await showAgentFallback();
+    showPepAgentSetup(node, target);
     return;
   }
 
@@ -5436,9 +5535,9 @@ async function connectRemoteEndpoint(node) {
           action: () => { closeModal(); openSshConnectWizard(node, target); }
         },
         {
-          label: 'Install Agent (coming soon)',
+          label: 'Install PEP/1 Agent',
           cls: 'btn-ghost',
-          action: async () => { closeModal(); await showAgentFallback(); }
+          action: () => { closeModal(); showPepAgentSetup(node, target); }
         }
       ]
     });
@@ -7451,203 +7550,6 @@ class Handler(BaseHTTPRequestHandler):
                 "policy": _config.get("tool_selection_policy", DEFAULT_TOOL_POLICY),
             })
 
-        # ── PEP/1 Phase 1 — POST endpoints ────────────────────────────────
-
-        elif parsed.path == "/api/pep/gen-token":
-            # Generate a one-time registration token for a node
-            if not self.auth_check(redirect=False): return
-            data = self.read_json_body()
-            node_id = str(data.get("node_id", "")).strip()
-            if not node_id or not re.match(r'^[\w\-\.]{1,64}$', node_id):
-                self.reply_json({"error": {"code": "BAD_REQUEST", "message": "Invalid node_id", "retryable": False}}, 400)
-                return
-            # Clean expired tokens first
-            _pep_cleanup_expired_tokens()
-            # Invalidate any existing unused token for this node
-            _config["pep_reg_tokens"] = [
-                t for t in _config.get("pep_reg_tokens", [])
-                if t.get("node_id") != node_id
-            ]
-            raw_token = secrets.token_urlsafe(24)
-            now = time.time()
-            _config.setdefault("pep_reg_tokens", []).append({
-                "token":      raw_token,
-                "node_id":    node_id,
-                "created_at": now,
-                "expires_at": now + PEP_REG_TOKEN_TTL,
-                "used":       False,
-            })
-            save_config(_config)
-            self.reply_json({"ok": True, "token": raw_token,
-                             "expires_in_s": PEP_REG_TOKEN_TTL,
-                             "node_id": node_id})
-
-        elif parsed.path == "/pep/v1/agent/register":
-            # Agent self-registration using one-time token
-            data = self.read_json_body()
-            raw_token = str(data.get("registration_token", "")).strip()
-            node_id   = str(data.get("node_id", "")).strip()
-            if not raw_token or not node_id:
-                self.reply_json({"error": {"code": "BAD_REQUEST", "message": "registration_token and node_id required", "retryable": False}}, 400)
-                return
-            _pep_cleanup_expired_tokens()
-            token_rec = next(
-                (t for t in _config.get("pep_reg_tokens", [])
-                 if t.get("token") == raw_token and t.get("node_id") == node_id
-                    and not t.get("used") and t.get("expires_at", 0) > time.time()),
-                None
-            )
-            if not token_rec:
-                self.reply_json({"error": {"code": "TOKEN_INVALID", "message": "Registration token is invalid, expired, or already used", "retryable": False}}, 401)
-                return
-            # Mark token used
-            token_rec["used"] = True
-            # Create or update PEP agent record
-            agent_token = secrets.token_urlsafe(32)
-            token_hash  = _hash_pep_token(agent_token)
-            platform    = data.get("platform", {})
-            caps        = data.get("capabilities", ["fs.read", "fs.write", "fs.mkdir", "fs.delete"])
-            tailscale_ip = str(data.get("tailscale_ip", "")).strip()
-            agent_port   = int(data.get("agent_port", PEP_AGENT_PORT))
-            now = time.time()
-            # Remove any previous agent for this node
-            _config["pep_agents"] = [a for a in _config.get("pep_agents", []) if a.get("node_id") != node_id]
-            _config.setdefault("pep_agents", []).append({
-                "node_id":      node_id,
-                "token_hash":   token_hash,
-                "token_hint":   agent_token,   # stored for Hub→Agent proxy auth
-                "registered_at": now,
-                "last_seen":    now,
-                "tailscale_ip": tailscale_ip,
-                "agent_port":   agent_port,
-                "platform":     platform,
-                "capabilities": caps,
-                "pep_version":  str(data.get("pep_version", "1.0")),
-                "agent_version":str(data.get("agent_version", "0.1.0")),
-                "policy": {
-                    "allowed_paths": data.get("allowed_paths", []),
-                    "write_enabled": True,
-                    "delete_enabled": True,
-                },
-            })
-            save_config(_config)
-            _append_audit("pep.register", node_id, "pep-agent", "pep_agent",
-                          {"tailscale_ip": tailscale_ip, "platform": platform})
-            self.reply_json({
-                "ok":                True,
-                "agent_token":       agent_token,
-                "node_id":           node_id,
-                "hub_version":       "0.12.91",
-                "heartbeat_interval_s": 60,
-                "policy": _config["pep_agents"][-1]["policy"],
-            })
-
-        elif parsed.path == "/pep/v1/agent/heartbeat":
-            # Agent heartbeat — must carry valid agent token in Bearer header
-            auth_hdr = self.headers.get("Authorization", "")
-            raw_token = auth_hdr[7:].strip() if auth_hdr.startswith("Bearer ") else ""
-            agent = _pep_agent_by_token(raw_token) if raw_token else None
-            if not agent:
-                self.reply_json({"error": {"code": "AUTH_REQUIRED", "message": "Invalid or missing agent token", "retryable": False}}, 401)
-                return
-            agent["last_seen"] = time.time()
-            # Update Tailscale IP if agent reports a change
-            new_ip = str(self.read_json_body().get("tailscale_ip", "") or "").strip()
-            if new_ip:
-                agent["tailscale_ip"] = new_ip
-            save_config(_config)
-            self.reply_json({"ok": True, "policy_version": "1"})
-
-        elif parsed.path.startswith("/pep/v1/fs/"):
-            # ── PEP/1 FS POST operations ──────────────────────────────────
-            if not self.auth_check(redirect=False): return
-            parts = parsed.path[len("/pep/v1/fs/"):].split("/", 1)
-            if len(parts) < 2:
-                self.reply_json({"error": {"code": "BAD_REQUEST", "message": "Missing node_id or operation", "retryable": False}}, 400)
-                return
-            node_id, op = parts[0], parts[1]
-            data = self.read_json_body()
-            req_path = str(data.get("path", "")).strip()
-
-            # Resolve local node
-            is_local = False
-            local_node = None
-            for n in _config.get("nodes", []):
-                if n["id"] == node_id and n.get("type") in ("local", "vps"):
-                    is_local = True
-                    local_node = n
-                    break
-
-            actor = "session"
-            try:
-                tok = self.get_session_token()
-                sess = get_session(tok)
-                actor = sess.get("username", "session") if sess else "session"
-            except Exception:
-                pass
-
-            if is_local:
-                allowed = [m["path"] for m in (local_node or {}).get("mounts", []) if m.get("path")]
-                target = _pep_safe_resolve(allowed, req_path)
-                if target is None:
-                    self.reply_json({"error": {"code": "FORBIDDEN", "message": "Path not allowed by policy", "retryable": False}}, 403)
-                    return
-                if op == "write":
-                    import base64
-                    content_b64 = data.get("content_b64", "")
-                    try:
-                        content = base64.b64decode(content_b64)
-                    except Exception:
-                        self.reply_json({"error": {"code": "BAD_REQUEST", "message": "Invalid base64 content", "retryable": False}}, 400)
-                        return
-                    if not is_writable(target.parent if not target.exists() else target):
-                        self.reply_json({"error": {"code": "FORBIDDEN", "message": "Read-only path", "retryable": False}}, 403)
-                        return
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(content)
-                    _append_audit("pep.fs.write", str(target), actor, "session",
-                                  {"node_id": node_id, "size": len(content)})
-                    self.reply_json({"ok": True, "path": str(target), "size": len(content)})
-                elif op == "mkdir":
-                    if not is_writable(target.parent if not target.exists() else target):
-                        self.reply_json({"error": {"code": "FORBIDDEN", "message": "Read-only path", "retryable": False}}, 403)
-                        return
-                    target.mkdir(parents=True, exist_ok=True)
-                    _append_audit("pep.fs.mkdir", str(target), actor, "session", {"node_id": node_id})
-                    self.reply_json({"ok": True, "path": str(target)})
-                elif op == "delete":
-                    if not target.exists():
-                        self.reply_json({"error": {"code": "PATH_NOT_FOUND", "message": "Path not found", "retryable": False}}, 404)
-                        return
-                    if not is_writable(target):
-                        self.reply_json({"error": {"code": "FORBIDDEN", "message": "Read-only path", "retryable": False}}, 403)
-                        return
-                    _append_audit("pep.fs.delete", str(target), actor, "session", {"node_id": node_id})
-                    if target.is_dir():
-                        shutil.rmtree(str(target))
-                    else:
-                        target.unlink()
-                    self.reply_json({"ok": True, "path": str(target)})
-                else:
-                    self.reply_json({"error": {"code": "BAD_REQUEST", "message": f"Unknown POST op: {op}", "retryable": False}}, 400)
-                return
-
-            # Remote node
-            agent = _pep_agent_by_node(node_id)
-            if not agent:
-                self.reply_json({"error": {"code": "NODE_NO_AGENT", "message": f"No PEP agent for node {node_id}", "retryable": False}}, 404)
-                return
-            if not _pep_node_online(node_id):
-                self.reply_json({"error": {"code": "NODE_OFFLINE", "message": f"Agent for {node_id} is offline", "retryable": True}}, 503)
-                return
-            agent["_raw_token"] = agent.get("token_hint", "")
-            status, resp = _pep_proxy_fs(agent, "POST", f"/{op}", {}, data)
-            # Audit mutating proxy ops
-            if status < 300 and op in ("write", "mkdir", "delete"):
-                _append_audit(f"pep.fs.{op}", req_path, actor, "session",
-                              {"node_id": node_id, "proxied": True})
-            self.reply_json(resp, status)
-
         else:
             self.reply_html("<h1>Not found</h1>", 404)
 
@@ -9025,6 +8927,203 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.reply_json({"error": "unknown action"}, 400)
 
+        # ── PEP/1 Phase 1 — POST endpoints ────────────────────────────────
+
+        elif parsed.path == "/api/pep/gen-token":
+            # Generate a one-time registration token for a node
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            node_id = str(data.get("node_id", "")).strip()
+            if not node_id or not re.match(r'^[\w\-\.]{1,64}$', node_id):
+                self.reply_json({"error": {"code": "BAD_REQUEST", "message": "Invalid node_id", "retryable": False}}, 400)
+                return
+            # Clean expired tokens first
+            _pep_cleanup_expired_tokens()
+            # Invalidate any existing unused token for this node
+            _config["pep_reg_tokens"] = [
+                t for t in _config.get("pep_reg_tokens", [])
+                if t.get("node_id") != node_id
+            ]
+            raw_token = secrets.token_urlsafe(24)
+            now = time.time()
+            _config.setdefault("pep_reg_tokens", []).append({
+                "token":      raw_token,
+                "node_id":    node_id,
+                "created_at": now,
+                "expires_at": now + PEP_REG_TOKEN_TTL,
+                "used":       False,
+            })
+            save_config(_config)
+            self.reply_json({"ok": True, "token": raw_token,
+                             "expires_in_s": PEP_REG_TOKEN_TTL,
+                             "node_id": node_id})
+
+        elif parsed.path == "/pep/v1/agent/register":
+            # Agent self-registration using one-time token
+            data = self.read_json_body()
+            raw_token = str(data.get("registration_token", "")).strip()
+            node_id   = str(data.get("node_id", "")).strip()
+            if not raw_token or not node_id:
+                self.reply_json({"error": {"code": "BAD_REQUEST", "message": "registration_token and node_id required", "retryable": False}}, 400)
+                return
+            _pep_cleanup_expired_tokens()
+            token_rec = next(
+                (t for t in _config.get("pep_reg_tokens", [])
+                 if t.get("token") == raw_token and t.get("node_id") == node_id
+                    and not t.get("used") and t.get("expires_at", 0) > time.time()),
+                None
+            )
+            if not token_rec:
+                self.reply_json({"error": {"code": "TOKEN_INVALID", "message": "Registration token is invalid, expired, or already used", "retryable": False}}, 401)
+                return
+            # Mark token used
+            token_rec["used"] = True
+            # Create or update PEP agent record
+            agent_token = secrets.token_urlsafe(32)
+            token_hash  = _hash_pep_token(agent_token)
+            platform    = data.get("platform", {})
+            caps        = data.get("capabilities", ["fs.read", "fs.write", "fs.mkdir", "fs.delete"])
+            tailscale_ip = str(data.get("tailscale_ip", "")).strip()
+            agent_port   = int(data.get("agent_port", PEP_AGENT_PORT))
+            now = time.time()
+            # Remove any previous agent for this node
+            _config["pep_agents"] = [a for a in _config.get("pep_agents", []) if a.get("node_id") != node_id]
+            _config.setdefault("pep_agents", []).append({
+                "node_id":      node_id,
+                "token_hash":   token_hash,
+                "token_hint":   agent_token,   # stored for Hub→Agent proxy auth
+                "registered_at": now,
+                "last_seen":    now,
+                "tailscale_ip": tailscale_ip,
+                "agent_port":   agent_port,
+                "platform":     platform,
+                "capabilities": caps,
+                "pep_version":  str(data.get("pep_version", "1.0")),
+                "agent_version":str(data.get("agent_version", "0.1.0")),
+                "policy": {
+                    "allowed_paths": data.get("allowed_paths", []),
+                    "write_enabled": True,
+                    "delete_enabled": True,
+                },
+            })
+            save_config(_config)
+            _append_audit("pep.register", node_id, "pep-agent", "pep_agent",
+                          {"tailscale_ip": tailscale_ip, "platform": platform})
+            self.reply_json({
+                "ok":                True,
+                "agent_token":       agent_token,
+                "node_id":           node_id,
+                "hub_version":       "0.12.91",
+                "heartbeat_interval_s": 60,
+                "policy": _config["pep_agents"][-1]["policy"],
+            })
+
+        elif parsed.path == "/pep/v1/agent/heartbeat":
+            # Agent heartbeat — must carry valid agent token in Bearer header
+            auth_hdr = self.headers.get("Authorization", "")
+            raw_token = auth_hdr[7:].strip() if auth_hdr.startswith("Bearer ") else ""
+            agent = _pep_agent_by_token(raw_token) if raw_token else None
+            if not agent:
+                self.reply_json({"error": {"code": "AUTH_REQUIRED", "message": "Invalid or missing agent token", "retryable": False}}, 401)
+                return
+            agent["last_seen"] = time.time()
+            # Update Tailscale IP if agent reports a change
+            new_ip = str(self.read_json_body().get("tailscale_ip", "") or "").strip()
+            if new_ip:
+                agent["tailscale_ip"] = new_ip
+            save_config(_config)
+            self.reply_json({"ok": True, "policy_version": "1"})
+
+        elif parsed.path.startswith("/pep/v1/fs/"):
+            # ── PEP/1 FS POST operations ──────────────────────────────────
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path[len("/pep/v1/fs/"):].split("/", 1)
+            if len(parts) < 2:
+                self.reply_json({"error": {"code": "BAD_REQUEST", "message": "Missing node_id or operation", "retryable": False}}, 400)
+                return
+            node_id, op = parts[0], parts[1]
+            data = self.read_json_body()
+            req_path = str(data.get("path", "")).strip()
+
+            # Resolve local node
+            is_local = False
+            local_node = None
+            for n in _config.get("nodes", []):
+                if n["id"] == node_id and n.get("type") in ("local", "vps"):
+                    is_local = True
+                    local_node = n
+                    break
+
+            actor = "session"
+            try:
+                tok = self.get_session_token()
+                sess = get_session(tok)
+                actor = sess.get("username", "session") if sess else "session"
+            except Exception:
+                pass
+
+            if is_local:
+                allowed = [m["path"] for m in (local_node or {}).get("mounts", []) if m.get("path")]
+                target = _pep_safe_resolve(allowed, req_path)
+                if target is None:
+                    self.reply_json({"error": {"code": "FORBIDDEN", "message": "Path not allowed by policy", "retryable": False}}, 403)
+                    return
+                if op == "write":
+                    import base64
+                    content_b64 = data.get("content_b64", "")
+                    try:
+                        content = base64.b64decode(content_b64)
+                    except Exception:
+                        self.reply_json({"error": {"code": "BAD_REQUEST", "message": "Invalid base64 content", "retryable": False}}, 400)
+                        return
+                    if not is_writable(target.parent if not target.exists() else target):
+                        self.reply_json({"error": {"code": "FORBIDDEN", "message": "Read-only path", "retryable": False}}, 403)
+                        return
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(content)
+                    _append_audit("pep.fs.write", str(target), actor, "session",
+                                  {"node_id": node_id, "size": len(content)})
+                    self.reply_json({"ok": True, "path": str(target), "size": len(content)})
+                elif op == "mkdir":
+                    if not is_writable(target.parent if not target.exists() else target):
+                        self.reply_json({"error": {"code": "FORBIDDEN", "message": "Read-only path", "retryable": False}}, 403)
+                        return
+                    target.mkdir(parents=True, exist_ok=True)
+                    _append_audit("pep.fs.mkdir", str(target), actor, "session", {"node_id": node_id})
+                    self.reply_json({"ok": True, "path": str(target)})
+                elif op == "delete":
+                    if not target.exists():
+                        self.reply_json({"error": {"code": "PATH_NOT_FOUND", "message": "Path not found", "retryable": False}}, 404)
+                        return
+                    if not is_writable(target):
+                        self.reply_json({"error": {"code": "FORBIDDEN", "message": "Read-only path", "retryable": False}}, 403)
+                        return
+                    _append_audit("pep.fs.delete", str(target), actor, "session", {"node_id": node_id})
+                    if target.is_dir():
+                        shutil.rmtree(str(target))
+                    else:
+                        target.unlink()
+                    self.reply_json({"ok": True, "path": str(target)})
+                else:
+                    self.reply_json({"error": {"code": "BAD_REQUEST", "message": f"Unknown POST op: {op}", "retryable": False}}, 400)
+                return
+
+            # Remote node
+            agent = _pep_agent_by_node(node_id)
+            if not agent:
+                self.reply_json({"error": {"code": "NODE_NO_AGENT", "message": f"No PEP agent for node {node_id}", "retryable": False}}, 404)
+                return
+            if not _pep_node_online(node_id):
+                self.reply_json({"error": {"code": "NODE_OFFLINE", "message": f"Agent for {node_id} is offline", "retryable": True}}, 503)
+                return
+            agent["_raw_token"] = agent.get("token_hint", "")
+            status, resp = _pep_proxy_fs(agent, "POST", f"/{op}", {}, data)
+            # Audit mutating proxy ops
+            if status < 300 and op in ("write", "mkdir", "delete"):
+                _append_audit(f"pep.fs.{op}", req_path, actor, "session",
+                              {"node_id": node_id, "proxied": True})
+            self.reply_json(resp, status)
+
         else:
             self.reply_html("<h1>Not found</h1>", 404)
 
@@ -9036,7 +9135,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.90 ready (localhost only)")
+    print(f"\n  Porter v0.12.91 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
