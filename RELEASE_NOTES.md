@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.89 (2026-02-26)
+
+- Fixed dropdown/input text clipping in Agents defaults controls by adjusting field sizing and typography.
+- Added explicit "what is active now" impact text so users can see which defaults currently affect behavior.
+- Clarified defaults behavior to reduce confusion while broader integrations are being rolled out.
+
+---
+
 ## v0.12.88 (2026-02-26)
 
 - Redesigned Agents defaults controls to a compact summary + **Edit defaults** disclosure pattern.
