@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.61 — self-hosted file manager"""
+"""Porter v0.12.62 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1558,7 +1558,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.61</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.62</div>
   </div>
 </aside>
 
@@ -1642,10 +1642,6 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:var(--text3)" id="ov-updated"></span><button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadOverview(true)">Refresh</button></div>
     </div>
     <div id="ov-metrics" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px"></div>
-    <div class="module-section">
-      <div class="module-section-title">Live Activity</div>
-      <div id="ov-activity"></div>
-    </div>
   </div>
 
   <div id="tasks-module" class="module-panel">
@@ -2017,7 +2013,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.61 — What's new
+          v0.12.62 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2408,6 +2404,10 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.62', date:'2026-02-26', notes:[
+    'Command Center cleanup: removed Recent events/Live Activity section',
+    'Command Center now focuses only on current actionable state',
+  ]},
   { ver:'v0.12.61', date:'2026-02-26', notes:[
     'Command Center cleanup: removed redundant Immediate Actions block',
     'Removed disk-space metric and pressure card from Command Center to avoid illogical signal noise',
@@ -3371,9 +3371,6 @@ function renderOverview(data) {
       fn: "switchModule('locations')",
     });
   }
-  const act = document.getElementById('ov-activity');
-  if (!act) return;
-
   const statusTone = issues.some(i=>i.sev==='high') ? 'var(--danger)' : (issues.length ? 'var(--accent)' : 'var(--ok,#22c55e)');
   const statusText = issues.some(i=>i.sev==='high') ? 'Needs attention now' : (issues.length ? 'Action recommended' : 'Healthy');
 
@@ -3401,13 +3398,20 @@ function renderOverview(data) {
     </div>`;
   }).join('') : '<div style="color:var(--text3);font-size:13px;padding:8px 0">No urgent issues. System is stable.</div>';
 
-  const recent = (data.recent_audit || []).slice(0,6);
-  const feed = recent.length ? `<div style="margin-top:12px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Recent events</div>${recent.map(e=>{
-    const ts = e.ts ? new Date(e.ts * 1000).toLocaleTimeString() : '—';
-    return `<div class="audit-row"><span style="color:var(--text3);flex-shrink:0">${ts}</span><span style="color:var(--text2)">${escHtml(e.action||'—')}</span><span style="color:var(--text3)">${escHtml(e.actor||'')}</span></div>`;
-  }).join('')}</div>` : '';
-
-  act.innerHTML = header + cards + feed;
+  const cc = document.getElementById('ov-metrics');
+  // keep metrics grid already rendered above; action cards now remain primary command-center content
+  const anchor = document.getElementById('ov-updated');
+  if (anchor) { /* no-op anchor to keep function side-effects explicit */ }
+  const host = document.getElementById('overview-module');
+  if (host) {
+    let body = host.querySelector('.cc-body');
+    if (!body) {
+      body = document.createElement('div');
+      body.className = 'cc-body';
+      host.appendChild(body);
+    }
+    body.innerHTML = header + cards;
+  }
 }
 
 // ── Schedules module ──
@@ -3651,7 +3655,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.61',
+      ver: 'v0.12.62',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -7569,7 +7573,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.61 ready (localhost only)")
+    print(f"\n  Porter v0.12.62 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
