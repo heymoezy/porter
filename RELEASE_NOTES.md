@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.12.90 (2026-02-26)
+
+- Improved Agent card actions layout: Configure/Test/Rotate key/Disconnect now render as a structured 2x2 action grid.
+- Reduced visual clutter with tighter button sizing and cleaner alignment.
+
+---
+
 ## v0.12.89 (2026-02-26)
 
 - Fixed dropdown/input text clipping in Agents defaults controls by adjusting field sizing and typography.
