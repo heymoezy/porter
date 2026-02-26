@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.82 — self-hosted file manager"""
+"""Porter v0.12.83 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1571,7 +1571,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.82</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.83</div>
   </div>
 </aside>
 
@@ -2053,7 +2053,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.82 — What's new
+          v0.12.83 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2458,15 +2458,20 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.12.82', date:'2026-02-26', notes:[
+  { ver:'v0.12.83', date:'2026-02-26', notes:[
+    'Agent Workspace navigation fixed: selecting files now reliably loads the selected file from the left navigator',
+    'Unsaved-change flow improved on file switch (save-first or explicit discard before navigation)',
+    'Workspace config coverage extended with additional auth/config artifacts (including credentials/oauth and external codex auth when present)',
+  ]},
+  { ver:'v0.12.83', date:'2026-02-26', notes:[
     'Escape key behavior fixed in Assistants Configure mode: now exits workspace back to main Assistants view instead of switching to Files',
   ]},
-  { ver:'v0.12.82', date:'2026-02-26', notes:[
+  { ver:'v0.12.83', date:'2026-02-26', notes:[
     'Agent Workspace editor now expands fully to the bottom of the pane for maximum vertical working area',
     'Editor resize-to-right disabled to keep layout stable and prevent horizontal panel breakage',
     'Workspace grid updated with bounded center column (minmax(0,1fr)) to maximize usable editor space',
   ]},
-  { ver:'v0.12.82', date:'2026-02-26', notes:[
+  { ver:'v0.12.83', date:'2026-02-26', notes:[
     'Agent Workspace: fixed file switching behavior and added unsaved-change protection prompt',
     'Agent Workspace: expanded allowlisted config files to include OpenClaw state JSON files and per-agent auth/model profile files',
     'Configure workspace now supports both workspace markdown and key OpenClaw JSON configuration artifacts in one navigator',
@@ -3836,7 +3841,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.82',
+      ver: 'v0.12.83',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4488,20 +4493,28 @@ async function loadAgentWorkspaceList(openFirst = false) {
   const el = document.getElementById('aw-file-list');
   if (!el) return;
   if (!res || !res.files) { el.innerHTML = '<div style="color:var(--text3);font-size:12px">No files</div>'; return; }
-  el.innerHTML = res.files.map(f => `<button class="btn btn-ghost" style="justify-content:flex-start;font-size:11px;padding:4px 6px;max-width:100%;overflow:hidden;text-overflow:ellipsis" onclick="openAgentWorkspaceFile(${JSON.stringify(f)})">${escHtml(f)}</button>`).join('');
+  el.innerHTML = res.files.map(f => `<button class="btn btn-ghost" style="justify-content:flex-start;font-size:11px;padding:4px 6px;max-width:100%;overflow:hidden;text-overflow:ellipsis" onclick="openAgentWorkspaceFile('${esc(f)}')">${escHtml(f)}</button>`).join('');
   if (openFirst && res.files.length) openAgentWorkspaceFile(res.files[0]);
 }
 
 async function openAgentWorkspaceFile(path) {
+  const previous = _awCurrentFile;
+  if (_awDirty && previous && previous !== path) {
+    const saveFirst = confirm('You have unsaved changes. Save before switching files?');
+    if (saveFirst) {
+      await saveAgentWorkspaceFile();
+      if (_awDirty) return;
+    } else {
+      const discard = confirm('Discard unsaved changes and switch file?');
+      if (!discard) return;
+      _awDirty = false;
+    }
+  }
   const res = await api('/api/agent-workspace/read', { agent_id: _awAgentId, action: 'read', path });
   if (!res || res.error) return;
   _awCurrentFile = path;
   const ed = document.getElementById('aw-editor');
   const cf = document.getElementById('aw-current-file');
-  if (_awDirty && _awCurrentFile && _awCurrentFile !== path) {
-    const keep = confirm('You have unsaved changes. Save before switching files? Click Cancel to stay.');
-    if (!keep) return;
-  }
   if (ed) {
     ed.value = res.content || '';
     ed.oninput = () => { _awDirty = true; };
@@ -4514,7 +4527,7 @@ async function saveAgentWorkspaceFile() {
   if (!_awCurrentFile) { toast('Pick a file first', 'err'); return; }
   const ed = document.getElementById('aw-editor');
   const content = ed ? ed.value : '';
-  const sensitive = (_awCurrentFile === 'SOUL.md' || _awCurrentFile === 'MEMORY.md');
+  const sensitive = (_awCurrentFile.endsWith('/SOUL.md') || _awCurrentFile.endsWith('/MEMORY.md') || _awCurrentFile === 'workspace/SOUL.md' || _awCurrentFile === 'workspace/MEMORY.md');
   if (sensitive) {
     const ok = confirm(`Save changes to ${_awCurrentFile}?`);
     if (!ok) return;
@@ -7259,6 +7272,7 @@ class Handler(BaseHTTPRequestHandler):
                     "devices/paired.json", "devices/pending.json",
                     "cron/jobs.json",
                     "identity/device.json", "identity/device-auth.json",
+                    "credentials/oauth.json",
                 ]
                 for rel in state_candidates:
                     fp = OPENCLAW_STATE_DIR / rel
@@ -7274,6 +7288,10 @@ class Handler(BaseHTTPRequestHandler):
                             fp = ap / rel
                             if fp.exists():
                                 files.append((f"state/agents/{ad.name}/agent/{rel}", fp))
+                                # External model auth files (if present)
+                ext_auth = Path.home() / ".codex" / "auth.json"
+                if ext_auth.exists():
+                    files.append(("external/codex/auth.json", ext_auth))
                 return files
 
             allow = {k: v.resolve() for k, v in _allowed_files()}
@@ -7284,7 +7302,7 @@ class Handler(BaseHTTPRequestHandler):
             fp = allow.get(rel)
             if not fp:
                 self.reply_json({"error": "path not allowed"}, 403); return
-            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())):
+            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())) and not str(fp).startswith(str((Path.home()/'.codex').resolve())):
                 self.reply_json({"error": "invalid path"}, 400); return
             if not fp.exists():
                 self.reply_json({"ok": True, "content": ""}); return
@@ -7311,6 +7329,7 @@ class Handler(BaseHTTPRequestHandler):
                     "devices/paired.json", "devices/pending.json",
                     "cron/jobs.json",
                     "identity/device.json", "identity/device-auth.json",
+                    "credentials/oauth.json",
                 ]
                 for relp in state_candidates:
                     fp = OPENCLAW_STATE_DIR / relp
@@ -7324,13 +7343,17 @@ class Handler(BaseHTTPRequestHandler):
                             fp = ap / relp
                             if fp.exists():
                                 pairs.append((f"state/agents/{ad.name}/agent/{relp}", fp))
+                                # External model auth files (if present)
+                ext_auth = Path.home() / ".codex" / "auth.json"
+                if ext_auth.exists():
+                    pairs.append(("external/codex/auth.json", ext_auth))
                 return pairs
 
             allow = {k: v.resolve() for k, v in _allowed_files_w()}
             fp = allow.get(rel)
             if not fp:
                 self.reply_json({"error": "path not allowed"}, 403); return
-            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())):
+            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())) and not str(fp).startswith(str((Path.home()/'.codex').resolve())):
                 self.reply_json({"error": "invalid path"}, 400); return
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content, encoding="utf-8")
@@ -8455,7 +8478,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.82 ready (localhost only)")
+    print(f"\n  Porter v0.12.83 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:

@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.83 (2026-02-26)
+
+- Fixed Agent Workspace file navigation: selecting a file now reliably switches editor content.
+- Added unsaved-change switch flow with explicit save-first/discard prompts.
+- Expanded config coverage to include `credentials/oauth.json` and external `~/.codex/auth.json` when available.
+
+---
+
 ## v0.12.82 (2026-02-26)
 
 - Fixed Escape key in Assistants Configure mode: it now closes workspace and returns to Assistants list (no jump to Files).
