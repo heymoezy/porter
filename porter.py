@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.62 — self-hosted file manager"""
+"""Porter v0.12.63 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1558,7 +1558,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.62</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.63</div>
   </div>
 </aside>
 
@@ -2013,7 +2013,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.62 — What's new
+          v0.12.63 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2404,6 +2404,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.63', date:'2026-02-26', notes:[
+    'Files sidebar behavior corrected: devices with no paths now show Connect (not Browse)',
+    'Offline devices show disabled Off state and cannot be pressed',
+    'Shortened empty-state copy and removed long placeholder messaging',
+  ]},
   { ver:'v0.12.62', date:'2026-02-26', notes:[
     'Command Center cleanup: removed Recent events/Live Activity section',
     'Command Center now focuses only on current actionable state',
@@ -3655,7 +3660,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.62',
+      ver: 'v0.12.63',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4605,8 +4610,10 @@ function _renderSidebarNodes(nodes, activeRoot) {
         ? `${nickname || (node.hostname || node.id)} (this device)`
         : (nickname || node.label || node.id);
       const connected = node._virtual ? (node._online !== false) : isTailscaleNodeConnected(node);
-      const canAttach = connected && _isSelfNode(node);
       const isRemote = !_isSelfNode(node);
+      const hasPaths = mounts.length > 0;
+      const canBrowse = connected && hasPaths;
+      const canConnect = connected && !hasPaths;
 
       const card = document.createElement('div');
       card.className = 'node-hdr';
@@ -4615,13 +4622,21 @@ function _renderSidebarNodes(nodes, activeRoot) {
       const actionBtn = document.createElement('button');
       actionBtn.className = 'btn btn-ghost';
       actionBtn.style.cssText = 'margin-left:6px;font-size:10px;padding:1px 7px';
-      actionBtn.title = canAttach ? 'Browse and attach path' : (!connected ? 'Device offline' : 'Remote browse coming next');
-      actionBtn.textContent = canAttach ? 'Browse' : (!connected ? 'Off' : 'Soon');
-      actionBtn.disabled = !canAttach;
-      actionBtn.style.opacity = canAttach ? '1' : '.55';
+      actionBtn.title = canBrowse ? 'Browse connected paths' : (canConnect ? 'Connect first path' : 'Device offline');
+      actionBtn.textContent = canBrowse ? 'Browse' : (canConnect ? 'Connect' : 'Off');
+      actionBtn.disabled = !canBrowse && !canConnect;
+      actionBtn.style.opacity = (canBrowse || canConnect) ? '1' : '.55';
       actionBtn.onclick = (e) => {
         e.stopPropagation();
-        if (canAttach) quickExposePath(node);
+        if (canBrowse) {
+          const first = mounts[0];
+          if (first) navigate(first.id, '');
+          return;
+        }
+        if (canConnect) {
+          if (_isSelfNode(node)) quickExposePath(node);
+          else toast('Remote connect requires agent rollout. Device is visible but not browse-enabled yet.', 'err');
+        }
       };
       card.appendChild(actionBtn);
       el.appendChild(card);
@@ -4629,10 +4644,10 @@ function _renderSidebarNodes(nodes, activeRoot) {
       if (!mounts.length) {
         const empty = document.createElement('div');
         empty.className = 'loc mount-item';
-        empty.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="loc-name">${canAttach ? 'No paths attached yet' : (!connected ? 'Device offline' : (isRemote ? 'Remote browse coming next' : 'Unavailable'))}</span>`;
+        empty.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="loc-name">${connected ? 'No path connected' : 'Offline'}</span>`;
         empty.style.opacity = '.78';
         empty.onclick = () => {
-          if (canAttach) quickExposePath(node);
+          if (canConnect && _isSelfNode(node)) quickExposePath(node);
         };
         el.appendChild(empty);
         return;
@@ -7573,7 +7588,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.62 ready (localhost only)")
+    print(f"\n  Porter v0.12.63 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:

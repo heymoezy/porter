@@ -53,3 +53,10 @@ Porter is not just file browsing; it is the trusted network fabric for connected
 - Command Center: removed disk-space metric/card from incident logic (signal deemed non-actionable/noisy in current operator model).
 - Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
 - Risk: low (UI reduction only).
+
+## 2026-02-26 — Release v0.12.63
+- Files sidebar action logic corrected: if a device has no paths, action is Connect (not Browse).
+- Offline devices now show disabled Off state and cannot be clicked.
+- Empty-state copy shortened to concise status language.
+- Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
+- Risk: low (UI behavior/copy refinement).
