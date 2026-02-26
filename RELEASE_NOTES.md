@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.84 (2026-02-26)
+
+- Agent Workspace file navigator now shows files relevant to the selected assistant only (no cross-agent file spillover).
+- Selected-assistant scoping applied to `state/agents/<agentId>/agent/auth-profiles.json` and `models.json`.
+- Provider-specific external auth files now appear conditionally by assistant type (Codex/OpenClaw, Claude, Qwen) using documented path conventions.
+
+---
+
 ## v0.12.83 (2026-02-26)
 
 - Fixed Agent Workspace file navigation: selecting a file now reliably switches editor content.
