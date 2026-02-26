@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.81 (2026-02-26)
+
+- Agent Workspace editor now fills vertical pane space to the bottom for full-screen style editing.
+- Disabled right-side textarea resize to prevent layout breakage and horizontal drift.
+- Center editor column constrained with responsive sizing for maximum usable editing area.
+
+---
+
 ## v0.12.80 (2026-02-26)
 
 - Agent Workspace: fixed file switching behavior and added unsaved-change prompt (save vs abandon flow).

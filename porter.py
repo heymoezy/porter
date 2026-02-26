@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.80 — self-hosted file manager"""
+"""Porter v0.12.81 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1571,7 +1571,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.80</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.81</div>
   </div>
 </aside>
 
@@ -1744,7 +1744,7 @@ body.density-compact .file-name { padding: 6px 0; }
     </div>
     <div id="agents-module-list"></div>
 
-    <div id="agent-workspace" style="display:none;margin-top:0;border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden">
+    <div id="agent-workspace" style="display:none;margin-top:0;border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden;height:100%">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border)">
         <div style="font-size:13px;font-weight:600;color:var(--text)">Agent Workspace · <span id="aw-agent-name" style="color:var(--accent)"></span></div>
         <div style="display:flex;gap:8px">
@@ -1752,7 +1752,7 @@ body.density-compact .file-name { padding: 6px 0; }
           <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="closeAgentWorkspace()">Close</button>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:220px 1fr 260px;min-height:420px">
+      <div style="display:grid;grid-template-columns:220px minmax(0,1fr) 260px;height:calc(100% - 49px)">
         <div style="border-right:1px solid var(--border);padding:10px;overflow:auto">
           <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Config files</div>
           <div id="aw-file-list" style="display:flex;flex-direction:column;gap:4px"></div>
@@ -1762,7 +1762,7 @@ body.density-compact .file-name { padding: 6px 0; }
             <div id="aw-current-file" style="font-size:12px;color:var(--text2)">Select a file</div>
             <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" onclick="saveAgentWorkspaceFile()">Save</button>
           </div>
-          <textarea id="aw-editor" style="flex:1;min-height:320px;background:var(--bg);color:var(--text);border:none;outline:none;padding:12px;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;font-size:12px;line-height:1.45"></textarea>
+          <textarea id="aw-editor" style="flex:1;height:100%;min-height:0;width:100%;max-width:100%;resize:none;box-sizing:border-box;overflow:auto;background:var(--bg);color:var(--text);border:none;outline:none;padding:12px;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;font-size:12px;line-height:1.45"></textarea>
         </div>
         <div style="border-left:1px solid var(--border);padding:10px;overflow:auto">
           <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Controls</div>
@@ -2053,7 +2053,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.80 — What's new
+          v0.12.81 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2458,7 +2458,12 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.12.80', date:'2026-02-26', notes:[
+  { ver:'v0.12.81', date:'2026-02-26', notes:[
+    'Agent Workspace editor now expands fully to the bottom of the pane for maximum vertical working area',
+    'Editor resize-to-right disabled to keep layout stable and prevent horizontal panel breakage',
+    'Workspace grid updated with bounded center column (minmax(0,1fr)) to maximize usable editor space',
+  ]},
+  { ver:'v0.12.81', date:'2026-02-26', notes:[
     'Agent Workspace: fixed file switching behavior and added unsaved-change protection prompt',
     'Agent Workspace: expanded allowlisted config files to include OpenClaw state JSON files and per-agent auth/model profile files',
     'Configure workspace now supports both workspace markdown and key OpenClaw JSON configuration artifacts in one navigator',
@@ -3828,7 +3833,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.80',
+      ver: 'v0.12.81',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -8445,7 +8450,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.80 ready (localhost only)")
+    print(f"\n  Porter v0.12.81 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
