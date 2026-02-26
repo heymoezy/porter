@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.79 (2026-02-26)
+
+- Configure now expands to a full-pane Assistants workspace mode (dedicated right-side working area).
+- Non-workspace controls are hidden while configuring to maximize editing focus and usable space.
+- Closing workspace cleanly restores the normal Assistants panel.
+
+---
+
 ## v0.12.78 (2026-02-26)
 
 - Configure workspace now enters a cleaner dedicated mode by hiding global Assistants controls while editing.
