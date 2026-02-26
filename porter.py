@@ -4156,6 +4156,7 @@ async function showBootstrapCmd(osName) {
 async function loadOperatorConfig() {
   const prefs = await api('/api/preferences');
   if (!prefs) return;
+  window._operatorPrefs = prefs;
   const setVal = (id, val, fallback='') => {
     const el = document.getElementById(id); if (!el) return;
     el.value = (val ?? fallback);
@@ -4233,8 +4234,12 @@ function renderAgents(agents) {
     const hasPct = u && u.usage_percent !== null && u.usage_percent !== undefined && u.usage_percent !== '';
     const pctNum = hasPct ? Number(u.usage_percent) : null;
     const availablePct = (pctNum == null || !Number.isFinite(pctNum)) ? null : Math.max(0, Math.min(100, pctNum));
-    const risk = availablePct == null ? 'Unknown' : (availablePct <= 5 ? 'Rate-limited' : (availablePct <= 20 ? 'Near limit' : (availablePct <= 40 ? 'Watch' : 'Healthy')));
-    const riskColor = availablePct == null ? 'var(--text3)' : (availablePct <= 5 ? '#ef4444' : (availablePct <= 20 ? '#f59e0b' : (availablePct <= 40 ? '#fbbf24' : '#22c55e')));
+    const globalWarn = Number((window._operatorPrefs && window._operatorPrefs.usage_warn_threshold) || 20);
+    const warn = Number.isFinite(Number(a.warn_threshold)) ? Number(a.warn_threshold) : globalWarn;
+    const near = Math.max(1, warn);
+    const watch = Math.min(95, near + 20);
+    const risk = availablePct == null ? 'Unknown' : (availablePct <= 5 ? 'Rate-limited' : (availablePct <= near ? 'Near limit' : (availablePct <= watch ? 'Watch' : 'Healthy')));
+    const riskColor = availablePct == null ? 'var(--text3)' : (availablePct <= 5 ? '#ef4444' : (availablePct <= near ? '#f59e0b' : (availablePct <= watch ? '#fbbf24' : '#22c55e')));
     const uHtml = (u && availablePct != null)
       ? ` &middot; <span style="color:${riskColor};font-weight:600">${availablePct}% left</span>`
       : '';
@@ -4265,6 +4270,13 @@ function renderAgents(agents) {
                style="width:50px;background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:3px 7px;font-size:12px;color:var(--text);font-family:inherit">
         <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="saveAgentConcurrency('${a.id}')">Save</button>
         <span style="font-size:11px;color:var(--text3)">0 = no limit</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+        <span style="font-size:12px;color:var(--text2);flex-shrink:0">Low-capacity alert:</span>
+        <input id="warn-${a.id}" type="number" min="1" max="99" value="${Number.isFinite(Number(a.warn_threshold)) ? Number(a.warn_threshold) : ''}" placeholder="global"
+               style="width:68px;background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:3px 7px;font-size:12px;color:var(--text);font-family:inherit">
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="saveAgentWarnThreshold('${a.id}')">Save</button>
+        <span style="font-size:11px;color:var(--text3)">${Number.isFinite(Number(a.warn_threshold)) ? 'Custom' : `Global (${globalWarn}%)`}</span>
       </div>`;
     return `
     <div style="padding:10px 12px;background:var(--raised);border-radius:8px;margin-bottom:8px;border:1px solid var(--border)">
@@ -4345,6 +4357,22 @@ async function doRevokeAgent(id, name) {
   const res = await api('/api/agents', { action: 'revoke', id });
   if (res && res.ok) { toast('Agent revoked', 'ok'); loadAgents(); }
   else toast((res && res.error) || 'Revoke failed', 'err');
+}
+
+async function saveAgentWarnThreshold(agentId) {
+  const raw = (document.getElementById('warn-' + agentId)?.value || '').trim();
+  const warn_threshold = raw === '' ? null : parseInt(raw, 10);
+  if (raw !== '' && (isNaN(warn_threshold) || warn_threshold < 1 || warn_threshold > 99)) {
+    toast('Threshold must be 1-99 or empty for global', 'err');
+    return;
+  }
+  const res = await api('/api/agents', { action: 'set_warn_threshold', id: agentId, warn_threshold });
+  if (res && res.ok) {
+    toast('Alert threshold saved', 'ok');
+    loadAgents();
+  } else {
+    toast((res && res.error) || 'Save failed', 'err');
+  }
 }
 
 async function saveAgentConcurrency(agentId) {
@@ -7781,11 +7809,31 @@ class Handler(BaseHTTPRequestHandler):
                     "model_id":         data.get("model_id", ""),
                     "agent_type":       data.get("agent_type", "production"),
                     "limit_type":       data.get("limit_type", "none"),
+                    "warn_threshold":   data.get("warn_threshold"),
                 }
                 _config.setdefault("agents", []).append(agent)
                 save_config(_config)
                 safe = {k: v for k, v in agent.items() if k != "key_hash"}
                 self.reply_json({"ok": True, "agent": safe, "key": raw_key})
+
+            elif action == "set_warn_threshold":
+                agent_id = data.get("id", "")
+                v = data.get("warn_threshold", None)
+                agent = _agent_by_id(agent_id)
+                if not agent:
+                    self.reply_json({"error": "agent not found"}, 404); return
+                if v is None or v == "":
+                    agent.pop("warn_threshold", None)
+                else:
+                    try:
+                        n = int(v)
+                    except Exception:
+                        self.reply_json({"error": "warn_threshold must be an integer"}, 400); return
+                    if n < 1 or n > 99:
+                        self.reply_json({"error": "warn_threshold must be between 1 and 99"}, 400); return
+                    agent["warn_threshold"] = n
+                save_config(_config)
+                self.reply_json({"ok": True, "agent": {k: val for k, val in agent.items() if k != "key_hash"}})
 
             elif action == "revoke":
                 agent_id = data.get("id", "")
