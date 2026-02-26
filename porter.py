@@ -5475,11 +5475,11 @@ async function showPepAgentSetup(node, target) {
             return;
           }
           const cmd = [
-            'python3 porter-agent.py \\',
-            \`  --hub http://${hubTsIp}:8877 \\\`,
-            \`  --token \${res.token} \\\`,
-            \`  --node-id \${nodeId} \\\`,
-            \`  --paths /path/to/share\`,
+            'python3 porter-agent.py \\\\',
+            '  --hub http://' + hubTsIp + ':8877 \\\\',
+            '  --token ' + res.token + ' \\\\',
+            '  --node-id ' + nodeId + ' \\\\',
+            '  --paths /path/to/share',
           ].join('\n');
           const cmdBlock = document.getElementById('pep-cmd-block');
           if (cmdBlock) cmdBlock.textContent = cmd;
