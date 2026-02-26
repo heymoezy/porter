@@ -4712,30 +4712,13 @@ async function connectRemoteEndpoint(node) {
   const osName = osRaw.includes('mac') ? 'macos' : (osRaw.includes('win') ? 'windows' : (ua.includes('mac') ? 'macos' : 'linux'));
 
   const showAgentFallback = async () => {
-    const data = await api(`/api/agent/bootstrap?os=${enc(osName)}&arch=x64`);
-    if (!data || !data.install_command) {
-      toast((data && data.error) ? data.error : 'Could not fetch agent bootstrap command', 'err');
-      return;
-    }
-    const cmd = data.install_command;
     showModal({
-      title: `Install Porter Agent on ${escHtml(target)}`,
-      desc: `Run this command on the target device. This is the exact command Porter generated.`,
-      input: true,
-      inputVal: cmd,
+      title: `Agent fallback not enabled yet`,
+      desc:
+        `This Porter instance is running self-hosted on VPS and does not have a published agent installer endpoint yet.<br><br>` +
+        `Use SSH mode for now. Agent fallback will be enabled only after installer hosting is configured.`,
       actions: [
-        { label: 'Close', action: closeModal },
-        {
-          label: 'Copy Command',
-          cls: 'btn-primary',
-          action: async () => {
-            const val = document.getElementById('modalInput').value;
-            try {
-              await navigator.clipboard.writeText(val);
-              toast('Agent install command copied', 'ok');
-            } catch (_) {}
-          }
-        }
+        { label: 'Close', cls: 'btn-primary', action: closeModal }
       ]
     });
   };
