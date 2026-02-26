@@ -22,6 +22,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 PORT = 8877
 HOST = "76.13.190.52"
+AGENT_INSTALL_URL = os.environ.get("PORTER_AGENT_INSTALL_URL", "").strip()
 
 
 def _public_ip_hint() -> str:
@@ -4707,12 +4708,13 @@ function _isSelfNode(node) {
 async function connectRemoteEndpoint(node) {
   const target = node.label || node.hostname || node.id;
   const osRaw = String((node._peer && node._peer.os) || '').toLowerCase();
-  const osName = osRaw.includes('mac') ? 'macos' : (osRaw.includes('win') ? 'windows' : 'linux');
+  const ua = String(navigator.platform || navigator.userAgent || '').toLowerCase();
+  const osName = osRaw.includes('mac') ? 'macos' : (osRaw.includes('win') ? 'windows' : (ua.includes('mac') ? 'macos' : 'linux'));
 
   const showAgentFallback = async () => {
     const data = await api(`/api/agent/bootstrap?os=${enc(osName)}&arch=x64`);
     if (!data || !data.install_command) {
-      toast('Could not fetch agent bootstrap command', 'err');
+      toast((data && data.error) ? data.error : 'Could not fetch agent bootstrap command', 'err');
       return;
     }
     const cmd = data.install_command;
@@ -6509,8 +6511,15 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             os_name = (qs.get("os", ["linux"])[0] or "linux").lower()
             arch = (qs.get("arch", ["x64"])[0] or "x64").lower()
+            if not AGENT_INSTALL_URL:
+                self.reply_json({
+                    "ok": False,
+                    "error": "Agent installer URL is not configured on this Porter host",
+                    "hint": "Set PORTER_AGENT_INSTALL_URL and restart Porter",
+                }, 503)
+                return
             cmd = (
-                "curl -fsSL https://porter.run/install-agent.sh | "
+                f"curl -fsSL {AGENT_INSTALL_URL} | "
                 f"bash -s -- --os {os_name} --arch {arch} --channel stable"
             )
             self.reply_json({
