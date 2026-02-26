@@ -1566,7 +1566,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.69</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.70</div>
   </div>
 </aside>
 
@@ -3741,7 +3741,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.69',
+      ver: 'v0.12.70',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -7950,7 +7950,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.69 ready (localhost only)")
+    print(f"\n  Porter v0.12.70 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
