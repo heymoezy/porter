@@ -1709,24 +1709,23 @@ body.density-compact .file-name { padding: 6px 0; }
       <span class="module-title">Agents</span>
       <button class="btn btn-primary" onclick="openCreateAgent()">+ Create agent</button>
     </div>
-    <div style="font-size:13px;color:var(--text3);margin-bottom:12px">API clients that connect to Porter. Each agent gets a unique key.</div>
-
-    <div style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">Operator Configuration (first stab)</div>
-      <div style="display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:8px">
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Setup profile</div><select id="cfg-setup-profile" class="settings-input" style="height:32px"><option value="local-only">Local only</option><option value="vps-tailnet">VPS + Tailnet</option><option value="multi-device">Multi-device</option></select></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Skills routing</div><select id="cfg-skills-routing" class="settings-input" style="height:32px"><option value="guided">Guided</option><option value="auto">Auto</option><option value="manual">Manual</option></select></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Memory mode</div><select id="cfg-memory-mode" class="settings-input" style="height:32px"><option value="manual">Manual notes</option><option value="assisted">Assisted curation</option><option value="auto-curated">Auto curated</option></select></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Behavior preset</div><select id="cfg-behavior-preset" class="settings-input" style="height:32px"><option value="safe">Safe</option><option value="balanced">Balanced</option><option value="operator">Operator</option></select></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Usage warn threshold (%)</div><input id="cfg-usage-threshold" type="number" min="1" max="99" class="settings-input" style="height:32px" value="20"></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Memory visibility</div><select id="cfg-memory-visibility" class="settings-input" style="height:32px"><option value="shared">Shared by default</option><option value="scoped">Scoped by project</option><option value="isolated">Isolated by agent</option></select></div>
+        <div style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">How Porter should run</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Set your preferred style once. Porter and agents will follow it by default.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Where you mostly work</div><select id="cfg-setup-profile" class="settings-input" style="height:34px;width:100%"><option value="local-only">This device only</option><option value="vps-tailnet">Server + private network</option><option value="multi-device">Multiple devices</option></select></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">How smart routing should be</div><select id="cfg-skills-routing" class="settings-input" style="height:34px;width:100%"><option value="guided">Recommended defaults</option><option value="auto">Fully automatic</option><option value="manual">I choose every time</option></select></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Memory style</div><select id="cfg-memory-mode" class="settings-input" style="height:34px;width:100%"><option value="manual">I decide what to save</option><option value="assisted">Suggest what to save</option><option value="auto-curated">Auto-organize memory</option></select></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Risk level</div><select id="cfg-behavior-preset" class="settings-input" style="height:34px;width:100%"><option value="safe">Careful (ask more often)</option><option value="balanced">Balanced</option><option value="operator">Fast execution</option></select></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Warn me when capacity gets low</div><input id="cfg-usage-threshold" type="number" min="1" max="99" class="settings-input" style="height:34px;width:100%" value="20"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Memory sharing</div><select id="cfg-memory-visibility" class="settings-input" style="height:34px;width:100%"><option value="shared">Shared by default</option><option value="scoped">Project-based sharing</option><option value="isolated">Keep agents separate</option></select></div>
       </div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;color:var(--text2);font-size:12px">
-        <label style="display:flex;align-items:center;gap:6px"><input id="cfg-skills-safe-mode" type="checkbox">Skills safe mode (no external actions by default)</label>
-        <label style="display:flex;align-items:center;gap:6px"><input id="cfg-external-approval" type="checkbox" checked>Require approval for external sends</label>
+        <label style="display:flex;align-items:center;gap:6px"><input id="cfg-skills-safe-mode" type="checkbox">Extra safety for external actions</label>
+        <label style="display:flex;align-items:center;gap:6px"><input id="cfg-external-approval" type="checkbox" checked>Always ask before sending outside Porter</label>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
-        <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" onclick="saveOperatorConfig()">Save config</button>
+        <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" onclick="saveOperatorConfig()">Save settings</button>
         <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadOperatorConfig()">Refresh</button>
         <span id="cfg-save-state" style="font-size:11px;color:var(--text3)"></span>
       </div>
