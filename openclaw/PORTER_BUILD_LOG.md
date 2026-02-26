@@ -66,3 +66,10 @@ Porter is not just file browsing; it is the trusted network fabric for connected
 - Removed redundant footer content from Files secondary locations rail.
 - Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
 - Risk: low (layout/context move only).
+
+## 2026-02-26 — Release v0.12.65
+- Improved Files secondary nav readability for long device rows.
+- Device row now split into: name line + TS status line + separate action button line.
+- Secondary nav width increased from 230px to 260px to reduce truncation.
+- Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
+- Risk: low (layout/CSS only).

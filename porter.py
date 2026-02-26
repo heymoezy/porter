@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.64 — self-hosted file manager"""
+"""Porter v0.12.65 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -744,15 +744,17 @@ body {
 .loc-sub  { font-size: 10px; color: var(--text3); font-weight: 400; line-height: 1; }
 /* node grouping in sidebar */
 .node-hdr {
-  display:flex; align-items:center; gap:7px; flex-wrap:nowrap;
+  display:flex; flex-direction:column; align-items:stretch; gap:6px;
   min-width:0; padding:8px 10px; margin:4px 8px 2px;
   border-radius:8px; background:rgba(255,255,255,.02);
   border:1px solid var(--border);
   font-size:11px; font-weight:600; letter-spacing:.2px;
   color:var(--text2); text-transform:none;
 }
+.node-hdr .node-head { display:flex; align-items:center; gap:7px; min-width:0; }
 .node-hdr .node-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
-.node-hdr .btn { flex-shrink:0; height:22px; padding:0 7px !important; border-radius:6px; }
+.node-hdr .node-meta { font-size:10px; color:var(--text3); }
+.node-hdr .btn { align-self:flex-end; flex-shrink:0; height:22px; padding:0 7px !important; border-radius:6px; }
 .mount-item { padding-left: 18px; margin:0 12px 2px; border-radius:7px; }
 .mount-item .loc-name { flex:1; min-width:0; }
 #locations-secondary .node-hdr { margin:4px 4px 2px; padding:8px; }
@@ -773,7 +775,7 @@ body.sidebar-collapsed .mnav-item { justify-content:center; padding:8px; }
 body.sidebar-collapsed .module-nav { padding:8px 4px; }
 #loc-subnav { display:none; }
 .files-secondary-nav {
-  display:none; position:absolute; top:54px; left:0; bottom:0; width:230px;
+  display:none; position:absolute; top:54px; left:0; bottom:0; width:260px;
   background:var(--surface); border-right:1px solid var(--border); overflow-y:auto;
   padding:10px 0; z-index:5;
 }
@@ -789,7 +791,7 @@ body.files-active .files-secondary-nav { display:block; }
 body.files-active #banner,
 body.files-active #searchCountBar,
 body.files-active #selectionToolbar,
-body.files-active #fileArea { margin-left:230px; }
+body.files-active #fileArea { margin-left:260px; }
 .sidebar-footer {
   padding: 16px 20px 0;
   border-top: 1px solid var(--border);
@@ -1558,7 +1560,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.64</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.65</div>
   </div>
 </aside>
 
@@ -2014,7 +2016,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.64 — What's new
+          v0.12.65 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2405,6 +2407,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.65', date:'2026-02-26', notes:[
+    'Files secondary nav layout improved for long device names (less truncation)',
+    'Device cards now use two-line structure (name + TS status) with action on separate line',
+    'Secondary rail widened to 260px for cleaner readability',
+  ]},
   { ver:'v0.12.64', date:'2026-02-26', notes:[
     'Moved free-space footer from secondary location rail into file results area bottom border',
     'Storage/item count context now appears where file results are shown (per user request)',
@@ -3665,7 +3672,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.64',
+      ver: 'v0.12.65',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4622,7 +4629,7 @@ function _renderSidebarNodes(nodes, activeRoot) {
 
       const card = document.createElement('div');
       card.className = 'node-hdr';
-      card.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span class="node-title" title="${escHtml(displayName)}">${escHtml(displayName)}</span><span style="font-size:10px;color:${connected ? 'var(--ok,#22c55e)' : 'var(--text3)'};flex-shrink:0" title="Tailscale transport status">${connected ? 'TS online' : 'TS offline'}</span>`;
+      card.innerHTML = `<div class="node-head"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span class="node-title" title="${escHtml(displayName)}">${escHtml(displayName)}</span></div><div class="node-meta" title="Tailscale transport status">${connected ? 'TS online' : 'TS offline'}</div>`;
 
       const actionBtn = document.createElement('button');
       actionBtn.className = 'btn btn-ghost';
@@ -7593,7 +7600,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.64 ready (localhost only)")
+    print(f"\n  Porter v0.12.65 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
