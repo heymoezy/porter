@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.12.76 (2026-02-26)
+
+- Assistants: moved **Include internal/test assistants** toggle out of expandable card into a simple top-right inline control above cards.
+- Cleanup: removed obsolete test agents from configuration (`Test Concurrency Agent`, `Conc Test Agent`, `Conc Test 2`).
+
+---
+
 ## v0.12.75 (2026-02-26)
 
 - Assistants: added per-card **Configure** action opening a full Agent Workspace panel.
