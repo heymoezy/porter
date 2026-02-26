@@ -4709,6 +4709,40 @@ async function connectRemoteEndpoint(node) {
   const osRaw = String((node._peer && node._peer.os) || '').toLowerCase();
   const osName = osRaw.includes('mac') ? 'macos' : (osRaw.includes('win') ? 'windows' : 'linux');
 
+  const showAgentFallback = async () => {
+    const data = await api(`/api/agent/bootstrap?os=${enc(osName)}&arch=x64`);
+    if (!data || !data.install_command) {
+      toast('Could not fetch agent bootstrap command', 'err');
+      return;
+    }
+    const cmd = data.install_command;
+    showModal({
+      title: `Install Porter Agent on ${escHtml(target)}`,
+      desc: `Run this command on the target device. This is the exact command Porter generated.`,
+      input: true,
+      inputVal: cmd,
+      actions: [
+        { label: 'Close', action: closeModal },
+        {
+          label: 'Copy Command',
+          cls: 'btn-primary',
+          action: async () => {
+            const val = document.getElementById('modalInput').value;
+            try {
+              await navigator.clipboard.writeText(val);
+              toast('Agent install command copied', 'ok');
+            } catch (_) {}
+          }
+        }
+      ]
+    });
+  };
+
+  if (node && node._forceAgent) {
+    await showAgentFallback();
+    return;
+  }
+
   const showActionPlan = () => {
     showModal({
       title: `Connect ${escHtml(target)}`,
@@ -4732,7 +4766,7 @@ async function connectRemoteEndpoint(node) {
           cls: 'btn-primary',
           action: () => {
             closeModal();
-            toast('SSH mode selected. SSH-based remote browse wiring is next (in progress).', 'ok');
+            openSshConnectWizard(node, target);
           }
         },
         {
@@ -4740,32 +4774,7 @@ async function connectRemoteEndpoint(node) {
           cls: 'btn-ghost',
           action: async () => {
             closeModal();
-            const data = await api(`/api/agent/bootstrap?os=${enc(osName)}&arch=x64`);
-            if (!data || !data.install_command) {
-              toast('Could not fetch agent bootstrap command', 'err');
-              return;
-            }
-            const cmd = data.install_command;
-            showModal({
-              title: `Install Porter Agent on ${escHtml(target)}`,
-              desc: `Run this command on the target device. This is the exact command Porter generated.`,
-              input: true,
-              inputVal: cmd,
-              actions: [
-                { label: 'Close', action: closeModal },
-                {
-                  label: 'Copy Command',
-                  cls: 'btn-primary',
-                  action: async () => {
-                    const val = document.getElementById('modalInput').value;
-                    try {
-                      await navigator.clipboard.writeText(val);
-                      toast('Agent install command copied', 'ok');
-                    } catch (_) {}
-                  }
-                }
-              ]
-            });
+            await showAgentFallback();
           }
         }
       ]
@@ -4781,6 +4790,55 @@ async function connectRemoteEndpoint(node) {
       { label: 'Cancel', action: closeModal },
       { label: 'Proceed', cls: 'btn-primary', action: () => { closeModal(); showActionPlan(); } },
     ],
+  });
+}
+
+async function openSshConnectWizard(node, targetLabel) {
+  const hostGuess = (node.tailscale_ip || node.hostname || '').trim();
+  showModal({
+    title: `SSH connect ${escHtml(targetLabel)}`,
+    desc:
+      `<div style="display:grid;gap:10px">` +
+      `<div style="font-size:13px;color:var(--text2)">Validate SSH reachability first. If SSH fails, we immediately offer Agent fallback.</div>` +
+      `<label style="display:grid;gap:4px;font-size:12px;color:var(--text3)">SSH user<input id="sshUserInput" class="input" style="margin-top:2px" type="text" value="root" /></label>` +
+      `<label style="display:grid;gap:4px;font-size:12px;color:var(--text3)">Host or Tailscale IP<input id="sshHostInput" class="input" style="margin-top:2px" type="text" value="${escHtml(hostGuess)}" /></label>` +
+      `<label style="display:grid;gap:4px;font-size:12px;color:var(--text3)">Port<input id="sshPortInput" class="input" style="margin-top:2px" type="number" value="22" /></label>` +
+      `</div>`,
+    actions: [
+      { label: 'Cancel', action: closeModal },
+      {
+        label: 'Test SSH',
+        cls: 'btn-primary',
+        action: async () => {
+          const user = (document.getElementById('sshUserInput') || {}).value || 'root';
+          const host = (document.getElementById('sshHostInput') || {}).value || '';
+          const port = parseInt(((document.getElementById('sshPortInput') || {}).value || '22'), 10) || 22;
+          if (!host.trim()) { toast('Enter host or Tailscale IP', 'err'); return; }
+          const r = await api('/api/ssh/probe', { user: user.trim(), host: host.trim(), port });
+          closeModal();
+          if (r && r.ok) {
+            showModal({
+              title: `SSH reachable: ${escHtml(targetLabel)}`,
+              desc: `SSH connection succeeded.<br><br><strong>Next step:</strong> Remote filesystem browsing over SSH is being finalized in this build. You can continue now with Agent fallback for full browse/edit support.`,
+              actions: [
+                { label: 'Close', action: closeModal },
+                { label: 'Install Agent Fallback', cls: 'btn-primary', action: () => connectRemoteEndpoint({ ...node, _forceAgent: true }) }
+              ]
+            });
+          } else {
+            const why = (r && r.error) ? escHtml(r.error) : 'SSH probe failed';
+            showModal({
+              title: `SSH failed for ${escHtml(targetLabel)}`,
+              desc: `Could not establish SSH.<br><br><span style="color:var(--danger)">${why}</span><br><br>Use Agent fallback to complete connection now.`,
+              actions: [
+                { label: 'Close', action: closeModal },
+                { label: 'Install Agent Fallback', cls: 'btn-primary', action: () => connectRemoteEndpoint({ ...node, _forceAgent: true }) }
+              ]
+            });
+          }
+        }
+      }
+    ]
   });
 }
 
@@ -6609,6 +6667,40 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": False,
                 "error": "Tailscale connect/disconnect is disabled on this server to prevent lockouts"
             }, 403)
+
+        elif parsed.path == "/api/ssh/probe":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            user = str(data.get("user", "root")).strip()
+            host = str(data.get("host", "")).strip()
+            port = int(data.get("port", 22) or 22)
+            if not re.match(r"^[a-zA-Z0-9._-]{1,64}$", user):
+                self.reply_json({"ok": False, "error": "invalid ssh user"}, 400); return
+            if not re.match(r"^[a-zA-Z0-9:._-]{1,255}$", host):
+                self.reply_json({"ok": False, "error": "invalid host"}, 400); return
+            if port < 1 or port > 65535:
+                self.reply_json({"ok": False, "error": "invalid port"}, 400); return
+            cmd = [
+                "ssh",
+                "-o", "BatchMode=yes",
+                "-o", "StrictHostKeyChecking=accept-new",
+                "-o", "ConnectTimeout=5",
+                "-p", str(port),
+                f"{user}@{host}",
+                "echo PORTER_SSH_OK",
+            ]
+            try:
+                p = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
+                out = (p.stdout or "") + "\n" + (p.stderr or "")
+                if p.returncode == 0 and "PORTER_SSH_OK" in out:
+                    self.reply_json({"ok": True, "message": "SSH reachable"})
+                else:
+                    err = (p.stderr or p.stdout or "ssh connection failed").strip()
+                    self.reply_json({"ok": False, "error": err[:300]})
+            except subprocess.TimeoutExpired:
+                self.reply_json({"ok": False, "error": "SSH probe timed out"})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)[:300]})
 
         elif parsed.path == "/api/agent-fleet":
             # Admin controls + agent heartbeat/update reporting
