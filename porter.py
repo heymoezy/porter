@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.66 — self-hosted file manager"""
+"""Porter v0.12.67 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1563,7 +1563,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.66</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.67</div>
   </div>
 </aside>
 
@@ -2019,7 +2019,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.66 — What's new
+          v0.12.67 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2410,6 +2410,11 @@ async function api(url, body) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.67', date:'2026-02-26', notes:[
+    'Connect action now opens a confirmation popup with endpoint strategy (SSH first, Agent fallback)',
+    'Remote connect flow no longer hard-codes agent-only messaging',
+    'Added guided branch: try SSH over Tailscale or bootstrap Porter Agent',
+  ]},
   { ver:'v0.12.66', date:'2026-02-26', notes:[
     'Files secondary nav: moved Browse/Connect action button to top-right of each device card',
     'Added stronger online/offline visual distinction via color/shading at card level',
@@ -3680,7 +3685,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.66',
+      ver: 'v0.12.67',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4655,7 +4660,7 @@ function _renderSidebarNodes(nodes, activeRoot) {
         }
         if (canConnect) {
           if (_isSelfNode(node)) quickExposePath(node);
-          else toast('Remote connect requires agent rollout. Device is visible but not browse-enabled yet.', 'err');
+          else connectRemoteEndpoint(node);
         }
       };
       card.appendChild(actionBtn);
@@ -4667,7 +4672,10 @@ function _renderSidebarNodes(nodes, activeRoot) {
         empty.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="loc-name">${connected ? 'No path connected' : 'Offline'}</span>`;
         empty.style.opacity = '.78';
         empty.onclick = () => {
-          if (canConnect && _isSelfNode(node)) quickExposePath(node);
+          if (canConnect) {
+            if (_isSelfNode(node)) quickExposePath(node);
+            else connectRemoteEndpoint(node);
+          }
         };
         el.appendChild(empty);
         return;
@@ -4692,6 +4700,55 @@ function _isSelfNode(node) {
   const nHost = String(node.hostname || '').toLowerCase();
   const serverHost = String(window._serverHostname || '').toLowerCase();
   return (nType === 'local' || nType === 'vps') && !!serverHost && (nId === serverHost || nHost === serverHost);
+}
+
+
+async function connectRemoteEndpoint(node) {
+  const target = node.label || node.hostname || node.id;
+  const osRaw = String((node._peer && node._peer.os) || '').toLowerCase();
+  const osName = osRaw.includes('mac') ? 'macos' : (osRaw.includes('win') ? 'windows' : 'linux');
+
+  const proceed = confirm(
+    `${target} needs a remote filesystem endpoint.
+
+` +
+    `Porter will first try agentless SSH over Tailscale.
+` +
+    `If SSH is unavailable, install Porter Agent as fallback.
+
+` +
+    `Proceed?`
+  );
+  if (!proceed) return;
+
+  // Phase 1 UX: capture endpoint preference + provide deterministic next step.
+  const choice = prompt(
+    `Choose connection mode for ${target}:
+` +
+    `1 = Try SSH over Tailscale (agentless)
+` +
+    `2 = Install Porter Agent
+
+Enter 1 or 2:`,
+    '1'
+  );
+  if (choice === null) return;
+
+  if ((choice || '').trim() === '1') {
+    toast('SSH mode selected. SSH-based remote browse wiring is next (in progress).', 'ok');
+    return;
+  }
+
+  const data = await api(`/api/agent/bootstrap?os=${enc(osName)}&arch=x64`);
+  if (!data || !data.install_command) {
+    toast('Could not fetch agent bootstrap command', 'err');
+    return;
+  }
+  const cmd = data.install_command;
+  const shown = prompt(`Install Porter Agent on ${target} and run:`, cmd);
+  if (shown !== null) {
+    navigator.clipboard.writeText(cmd).then(() => toast('Agent install command copied', 'ok')).catch(()=>{});
+  }
 }
 
 async function quickExposePath(node) {
@@ -7608,7 +7665,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.66 ready (localhost only)")
+    print(f"\n  Porter v0.12.67 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:

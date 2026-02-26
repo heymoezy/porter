@@ -80,3 +80,10 @@ Porter is not just file browsing; it is the trusted network fabric for connected
 - TS status text now color-coded for faster scanning.
 - Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
 - Risk: low (UI styling/placement only).
+
+## 2026-02-26 — Release v0.12.67
+- Connect button now launches a confirmation popup explaining endpoint requirement.
+- New decision path: SSH over Tailscale first (agentless), Porter Agent install as fallback.
+- Removed agent-only implication from remote connect interaction.
+- Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
+- Risk: low-medium (new UX branching; backend SSH browse still pending implementation).
