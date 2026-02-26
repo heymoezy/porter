@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.79 — self-hosted file manager"""
+"""Porter v0.12.80 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -72,6 +72,7 @@ _sessions: dict = {}             # token -> {username, expires}
 
 RUNTIME_DIR       = Path("/home/lobster/documents/porter/runtime")
 AGENT_WORKSPACE_DIR = Path("/home/lobster/.openclaw/workspace")
+OPENCLAW_STATE_DIR = Path("/home/lobster/.openclaw")
 MEMORY_DIR        = Path("/home/lobster/documents/porter/memory")
 USAGE_DIR         = RUNTIME_DIR / "usage"
 AUDIT_LOG         = RUNTIME_DIR / "audit.jsonl"
@@ -1570,7 +1571,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.79</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.80</div>
   </div>
 </aside>
 
@@ -2052,7 +2053,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.79 — What's new
+          v0.12.80 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2457,6 +2458,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.80', date:'2026-02-26', notes:[
+    'Agent Workspace: fixed file switching behavior and added unsaved-change protection prompt',
+    'Agent Workspace: expanded allowlisted config files to include OpenClaw state JSON files and per-agent auth/model profile files',
+    'Configure workspace now supports both workspace markdown and key OpenClaw JSON configuration artifacts in one navigator',
+  ]},
   { ver:'v0.12.79', date:'2026-02-26', notes:[
     'Configure now expands into a full right-pane Assistants workspace mode for focused editing',
     'Assistants module enters dedicated configuring state (non-workspace controls hidden until close)',
@@ -3822,7 +3828,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.79',
+      ver: 'v0.12.80',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4444,6 +4450,7 @@ function copyText(text, btn) {
 
 let _awAgentId = '';
 let _awCurrentFile = '';
+let _awDirty = false;
 
 function openAgentWorkspace(agentId, agentName) {
   _awAgentId = agentId;
@@ -4457,10 +4464,15 @@ function openAgentWorkspace(agentId, agentName) {
   loadAgentWorkspaceList(true);
 }
 function closeAgentWorkspace() {
+  if (_awDirty) {
+    const leave = confirm('You have unsaved changes. Discard them and close?');
+    if (!leave) return;
+  }
   const ws = document.getElementById('agent-workspace');
   const mod = document.getElementById('agents-module');
   if (ws) ws.style.display = 'none';
   if (mod) mod.classList.remove('configuring');
+  _awDirty = false;
 }
 
 async function loadAgentWorkspaceList(openFirst = false) {
@@ -4478,8 +4490,16 @@ async function openAgentWorkspaceFile(path) {
   _awCurrentFile = path;
   const ed = document.getElementById('aw-editor');
   const cf = document.getElementById('aw-current-file');
-  if (ed) ed.value = res.content || '';
+  if (_awDirty && _awCurrentFile && _awCurrentFile !== path) {
+    const keep = confirm('You have unsaved changes. Save before switching files? Click Cancel to stay.');
+    if (!keep) return;
+  }
+  if (ed) {
+    ed.value = res.content || '';
+    ed.oninput = () => { _awDirty = true; };
+  }
   if (cf) cf.textContent = path;
+  _awDirty = false;
 }
 
 async function saveAgentWorkspaceFile() {
@@ -4496,6 +4516,7 @@ async function saveAgentWorkspaceFile() {
   const res = await api('/api/agent-workspace/write', { agent_id: _awAgentId, path: _awCurrentFile, content });
   if (res && res.ok) {
     if (st) st.textContent = 'Saved';
+    _awDirty = false;
     toast('Config saved', 'ok');
   } else {
     if (st) st.textContent = 'Save failed';
@@ -7210,22 +7231,50 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
             action = str(data.get("action", "list"))
-            allow = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md", "MEMORY.md", "HEARTBEAT.md"]
-            mem_dir = AGENT_WORKSPACE_DIR / "memory"
-            mem_files = []
-            if mem_dir.exists():
-                try:
-                    mem_files = [f"memory/{p.name}" for p in sorted(mem_dir.glob("*.md"))]
-                except Exception:
-                    mem_files = []
-            files = allow + mem_files
+
+            def _allowed_files():
+                files = []
+                # Workspace markdown files
+                base_md = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md", "MEMORY.md", "HEARTBEAT.md"]
+                for f in base_md:
+                    files.append((f"workspace/{f}", AGENT_WORKSPACE_DIR / f))
+                mem_dir = AGENT_WORKSPACE_DIR / "memory"
+                if mem_dir.exists():
+                    for mp in sorted(mem_dir.glob("*.md")):
+                        files.append((f"workspace/memory/{mp.name}", mp))
+
+                # OpenClaw state/config JSON files
+                state_candidates = [
+                    "openclaw.json", "update-check.json",
+                    "devices/paired.json", "devices/pending.json",
+                    "cron/jobs.json",
+                    "identity/device.json", "identity/device-auth.json",
+                ]
+                for rel in state_candidates:
+                    fp = OPENCLAW_STATE_DIR / rel
+                    if fp.exists():
+                        files.append((f"state/{rel}", fp))
+
+                # Agent-specific auth/model profile files
+                agents_root = OPENCLAW_STATE_DIR / "agents"
+                if agents_root.exists():
+                    for ad in sorted(agents_root.glob("*")):
+                        ap = ad / "agent"
+                        for rel in ["auth-profiles.json", "models.json"]:
+                            fp = ap / rel
+                            if fp.exists():
+                                files.append((f"state/agents/{ad.name}/agent/{rel}", fp))
+                return files
+
+            allow = {k: v.resolve() for k, v in _allowed_files()}
             if action == "list":
-                self.reply_json({"ok": True, "files": files}); return
+                self.reply_json({"ok": True, "files": sorted(list(allow.keys()))}); return
+
             rel = str(data.get("path", ""))
-            if rel not in files:
+            fp = allow.get(rel)
+            if not fp:
                 self.reply_json({"error": "path not allowed"}, 403); return
-            fp = (AGENT_WORKSPACE_DIR / rel).resolve()
-            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())):
+            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())):
                 self.reply_json({"error": "invalid path"}, 400); return
             if not fp.exists():
                 self.reply_json({"ok": True, "content": ""}); return
@@ -7236,13 +7285,42 @@ class Handler(BaseHTTPRequestHandler):
             data = self.read_json_body()
             rel = str(data.get("path", ""))
             content = data.get("content", "")
-            allow = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md", "MEMORY.md", "HEARTBEAT.md"]
-            if rel.startswith("memory/") and rel.endswith(".md"):
-                pass
-            elif rel not in allow:
+
+            # reuse allowlist
+            def _allowed_files_w():
+                pairs = []
+                base_md = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md", "MEMORY.md", "HEARTBEAT.md"]
+                for f in base_md:
+                    pairs.append((f"workspace/{f}", AGENT_WORKSPACE_DIR / f))
+                mem_dir = AGENT_WORKSPACE_DIR / "memory"
+                if mem_dir.exists():
+                    for mp in sorted(mem_dir.glob("*.md")):
+                        pairs.append((f"workspace/memory/{mp.name}", mp))
+                state_candidates = [
+                    "openclaw.json", "update-check.json",
+                    "devices/paired.json", "devices/pending.json",
+                    "cron/jobs.json",
+                    "identity/device.json", "identity/device-auth.json",
+                ]
+                for relp in state_candidates:
+                    fp = OPENCLAW_STATE_DIR / relp
+                    if fp.exists():
+                        pairs.append((f"state/{relp}", fp))
+                agents_root = OPENCLAW_STATE_DIR / "agents"
+                if agents_root.exists():
+                    for ad in sorted(agents_root.glob("*")):
+                        ap = ad / "agent"
+                        for relp in ["auth-profiles.json", "models.json"]:
+                            fp = ap / relp
+                            if fp.exists():
+                                pairs.append((f"state/agents/{ad.name}/agent/{relp}", fp))
+                return pairs
+
+            allow = {k: v.resolve() for k, v in _allowed_files_w()}
+            fp = allow.get(rel)
+            if not fp:
                 self.reply_json({"error": "path not allowed"}, 403); return
-            fp = (AGENT_WORKSPACE_DIR / rel).resolve()
-            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())):
+            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())):
                 self.reply_json({"error": "invalid path"}, 400); return
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content, encoding="utf-8")
@@ -8367,7 +8445,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.79 ready (localhost only)")
+    print(f"\n  Porter v0.12.80 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:

@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.80 (2026-02-26)
+
+- Agent Workspace: fixed file switching behavior and added unsaved-change prompt (save vs abandon flow).
+- Agent Workspace: extended file navigator to include key OpenClaw JSON configs (`openclaw.json`, device/cron/identity JSON) and per-agent `auth-profiles.json` + `models.json` when present.
+- Configure workspace now supports both markdown workspace files and major OpenClaw state/config files in one allowlisted editor.
+
+---
+
 ## v0.12.79 (2026-02-26)
 
 - Configure now expands to a full-pane Assistants workspace mode (dedicated right-side working area).
