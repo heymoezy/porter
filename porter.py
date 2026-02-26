@@ -1373,8 +1373,9 @@ body.density-compact .file-name { padding: 6px 0; }
   color: var(--text2); margin-bottom: 5px; }
 .settings-fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .settings-input { width: 100%; background: var(--raised); border: 1px solid var(--border2);
-  border-radius: var(--radius); padding: 9px 12px; font-size: 14px; color: var(--text);
-  font-family: inherit; outline: none; transition: .15s; }
+  border-radius: var(--radius); padding: 6px 10px; font-size: 13px; line-height: 1.2; color: var(--text);
+  font-family: inherit; outline: none; transition: .15s; box-sizing: border-box; min-width: 0; }
+select.settings-input { padding-right: 26px; }
 .settings-input:focus { border-color: var(--accent); }
 .avatar-section { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .avatar-large { width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: #000;
@@ -1725,6 +1726,7 @@ body.density-compact .file-name { padding: 6px 0; }
         </div>
         <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="toggleAgentDefaultsEditor()">Edit defaults</button>
       </div>
+      <div id="cfg-summary-impact" style="margin-top:6px;font-size:11px;color:var(--text3)">Active now: capacity risk colors + per-agent default approval prompts.</div>
       <div id="agents-defaults-editor" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
         <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">Agent defaults</div>
         <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Set global defaults. Per-agent cards can override when needed.</div>
@@ -4312,13 +4314,14 @@ function toggleAgentDefaultsEditor() {
 }
 function renderOperatorConfigSummary(prefs = {}) {
   const presetMap = { safe:'Careful', balanced:'Balanced', operator:'Fast execution' };
-  const setupMap = { 'local-only':'This device only', 'vps-tailnet':'Server + private network', 'multi-device':'Multiple devices' };
   const p = document.getElementById('cfg-summary-preset');
   const t = document.getElementById('cfg-summary-threshold');
   const a = document.getElementById('cfg-summary-approval');
+  const i = document.getElementById('cfg-summary-impact');
   if (p) p.textContent = presetMap[prefs.behavior_preset] || 'Balanced';
   if (t) t.textContent = `${prefs.usage_warn_threshold ?? 20}%`;
   if (a) a.textContent = (prefs.external_send_approval ?? true) ? 'On' : 'Off';
+  if (i) i.textContent = 'Active now: capacity risk colors + per-agent default approval prompts. Other defaults are saved and applied as agent/workflow integrations expand.';
 }
 
 async function loadOperatorConfig() {
