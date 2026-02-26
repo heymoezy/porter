@@ -1710,6 +1710,28 @@ body.density-compact .file-name { padding: 6px 0; }
       <button class="btn btn-primary" onclick="openCreateAgent()">+ Create agent</button>
     </div>
     <div style="font-size:13px;color:var(--text3);margin-bottom:12px">API clients that connect to Porter. Each agent gets a unique key.</div>
+
+    <div style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">Operator Configuration (first stab)</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:8px">
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Setup profile</div><select id="cfg-setup-profile" class="settings-input" style="height:32px"><option value="local-only">Local only</option><option value="vps-tailnet">VPS + Tailnet</option><option value="multi-device">Multi-device</option></select></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Skills routing</div><select id="cfg-skills-routing" class="settings-input" style="height:32px"><option value="guided">Guided</option><option value="auto">Auto</option><option value="manual">Manual</option></select></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Memory mode</div><select id="cfg-memory-mode" class="settings-input" style="height:32px"><option value="manual">Manual notes</option><option value="assisted">Assisted curation</option><option value="auto-curated">Auto curated</option></select></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Behavior preset</div><select id="cfg-behavior-preset" class="settings-input" style="height:32px"><option value="safe">Safe</option><option value="balanced">Balanced</option><option value="operator">Operator</option></select></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Usage warn threshold (%)</div><input id="cfg-usage-threshold" type="number" min="1" max="99" class="settings-input" style="height:32px" value="20"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Memory visibility</div><select id="cfg-memory-visibility" class="settings-input" style="height:32px"><option value="shared">Shared by default</option><option value="scoped">Scoped by project</option><option value="isolated">Isolated by agent</option></select></div>
+      </div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;color:var(--text2);font-size:12px">
+        <label style="display:flex;align-items:center;gap:6px"><input id="cfg-skills-safe-mode" type="checkbox">Skills safe mode (no external actions by default)</label>
+        <label style="display:flex;align-items:center;gap:6px"><input id="cfg-external-approval" type="checkbox" checked>Require approval for external sends</label>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+        <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" onclick="saveOperatorConfig()">Save config</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadOperatorConfig()">Refresh</button>
+        <span id="cfg-save-state" style="font-size:11px;color:var(--text3)"></span>
+      </div>
+    </div>
+
     <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;justify-content:space-between;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
       <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
         <input type="checkbox" id="agent-show-all" onchange="window._showAllAgentTypes=this.checked;renderAgents(window._lastAgents||[])">
@@ -4085,6 +4107,7 @@ async function loadAgents() {
   renderAgents(data.agents || []);
   loadUsage();
   loadAgentFleet();
+  loadOperatorConfig();
 }
 
 
@@ -4128,6 +4151,50 @@ async function showBootstrapCmd(osName) {
   const res = prompt(`${osName.toUpperCase()} bootstrap command (copy and run on target device):`, cmd);
   if (res !== null) {
     navigator.clipboard.writeText(cmd).then(() => toast('Bootstrap command copied', 'ok')).catch(()=>{});
+  }
+}
+
+async function loadOperatorConfig() {
+  const prefs = await api('/api/preferences');
+  if (!prefs) return;
+  const setVal = (id, val, fallback='') => {
+    const el = document.getElementById(id); if (!el) return;
+    el.value = (val ?? fallback);
+  };
+  const setChk = (id, val, fallback=false) => {
+    const el = document.getElementById(id); if (!el) return;
+    el.checked = (val ?? fallback) ? true : false;
+  };
+  setVal('cfg-setup-profile', prefs.setup_profile, 'vps-tailnet');
+  setVal('cfg-skills-routing', prefs.skills_routing, 'guided');
+  setVal('cfg-memory-mode', prefs.memory_mode, 'assisted');
+  setVal('cfg-behavior-preset', prefs.behavior_preset, 'balanced');
+  setVal('cfg-memory-visibility', prefs.memory_visibility, 'shared');
+  setVal('cfg-usage-threshold', prefs.usage_warn_threshold, 20);
+  setChk('cfg-skills-safe-mode', prefs.skills_safe_mode, false);
+  setChk('cfg-external-approval', prefs.external_send_approval, true);
+}
+
+async function saveOperatorConfig() {
+  const body = {
+    setup_profile: document.getElementById('cfg-setup-profile')?.value || 'vps-tailnet',
+    skills_routing: document.getElementById('cfg-skills-routing')?.value || 'guided',
+    memory_mode: document.getElementById('cfg-memory-mode')?.value || 'assisted',
+    behavior_preset: document.getElementById('cfg-behavior-preset')?.value || 'balanced',
+    memory_visibility: document.getElementById('cfg-memory-visibility')?.value || 'shared',
+    usage_warn_threshold: parseInt(document.getElementById('cfg-usage-threshold')?.value || '20', 10),
+    skills_safe_mode: !!document.getElementById('cfg-skills-safe-mode')?.checked,
+    external_send_approval: !!document.getElementById('cfg-external-approval')?.checked,
+  };
+  const state = document.getElementById('cfg-save-state');
+  if (state) state.textContent = 'Saving…';
+  const res = await api('/api/preferences', body);
+  if (res && res.ok) {
+    if (state) state.textContent = 'Saved';
+    toast('Operator config saved', 'ok');
+  } else {
+    if (state) state.textContent = 'Save failed';
+    toast((res && res.error) || 'Failed to save config', 'err');
   }
 }
 
@@ -7754,7 +7821,9 @@ class Handler(BaseHTTPRequestHandler):
             prefs = _config.setdefault("preferences", {})
             allowed = {"onboarding_complete", "default_location", "checkpoint_interval",
                        "lease_ttl", "auto_resume", "show_hidden", "density", "editor_font_size",
-                       "policy_preset"}
+                       "policy_preset", "setup_profile", "skills_routing", "memory_mode",
+                       "behavior_preset", "memory_visibility", "usage_warn_threshold",
+                       "skills_safe_mode", "external_send_approval"}
             for k, v in data.items():
                 if k in allowed:
                     prefs[k] = v
