@@ -1783,9 +1783,6 @@ body.density-compact .file-name { padding: 6px 0; }
         <button class="btn btn-ghost" style="flex-shrink:0;font-size:12px" onclick="copyAgentKey2()">Copy</button>
       </div>
     </div>
-    <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);font-size:12px;color:var(--text3)">
-      Usage is shown directly inside each agent card above.
-    </div>
   </div>
 
   <div id="locations-module" class="module-panel">
@@ -4168,13 +4165,13 @@ function renderAgents(agents) {
   const agentHtml = filtered.map(a => {
     const u = usageMap[a.id];
     const pctNum = (u && Number.isFinite(Number(u.usage_percent))) ? Number(u.usage_percent) : null;
-    const capacityLeft = (pctNum == null) ? null : Math.max(0, 100 - pctNum);
-    const uHtml = (u && pctNum != null)
-      ? ` &middot; <span style="color:${STATUS_COLOR[u.status]||'var(--text3)'};font-weight:600">${capacityLeft}% left</span>`
+    const availablePct = (pctNum == null) ? null : Math.max(0, Math.min(100, pctNum));
+    const uHtml = (u && availablePct != null)
+      ? ` &middot; <span style="color:${STATUS_COLOR[u.status]||'var(--text3)'};font-weight:600">${availablePct}% left</span>`
       : '';
     const usageDetail = u
       ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">` +
-          `Session capacity: <strong style="color:${STATUS_COLOR[u.status]||'var(--text2)'}">${capacityLeft == null ? 'unknown' : (capacityLeft + '% left')}</strong>` +
+          `Session capacity: <strong style="color:${STATUS_COLOR[u.status]||'var(--text2)'}">${availablePct == null ? 'unknown' : (availablePct + '% left')}</strong>` +
           `${u.window_resets_at ? ` · resets ${_usageCountdown(u.window_resets_at)}` : ''}` +
           `${u.model ? ` · ${escHtml(String(u.model))}` : ''}` +
           `${u.total_tokens ? ` · ${Number(u.total_tokens).toLocaleString()} tok` : ''}` +
