@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.71 — self-hosted file manager"""
+"""Porter v0.12.72 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1566,7 +1566,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.71</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.72</div>
   </div>
 </aside>
 
@@ -1706,7 +1706,7 @@ body.density-compact .file-name { padding: 6px 0; }
 
   <div id="agents-module" class="module-panel">
     <div class="module-hdr">
-      <span class="module-title">Agents</span>
+      <span class="module-title">Assistants</span>
       <button class="btn btn-primary" onclick="openCreateAgent()">+ Create agent</button>
     </div>
         <div style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
@@ -1731,13 +1731,16 @@ body.density-compact .file-name { padding: 6px 0; }
       </div>
     </div>
 
-    <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;justify-content:space-between;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
-      <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
-        <input type="checkbox" id="agent-show-all" onchange="window._showAllAgentTypes=this.checked;renderAgents(window._lastAgents||[])">
-        Show internal/test agents
-      </label>
-      <span style="font-size:11px;color:var(--text3)">Advanced fleet policy moved to Settings.</span>
-    </div>
+    <details style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
+      <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text3)">Show all assistants</summary>
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:8px">
+        <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="agent-show-all" onchange="window._showAllAgentTypes=this.checked;renderAgents(window._lastAgents||[])">
+          Include internal/test assistants
+        </label>
+        <span style="font-size:11px;color:var(--text3)">Advanced update policy lives in Settings.</span>
+      </div>
+    </details>
     <div id="agents-module-list"></div>
     <div id="agents-module-create-form" style="display:none;margin-top:20px;padding:16px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
       <div class="settings-page-title" style="font-size:14px;margin-bottom:14px">New agent</div>
@@ -2020,7 +2023,7 @@ body.density-compact .file-name { padding: 6px 0; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.71 — What's new
+          v0.12.72 — What's new
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2425,6 +2428,13 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.12.72', date:'2026-02-26', notes:[
+    'Agents redesign: renamed primary module to Assistants with calmer, less technical information architecture',
+    'Assistants list now uses disclosure-based "Show all assistants" instead of exposing internal/test controls by default',
+    'API keys now support eye-toggle show/hide per card and remain masked by default with copy available',
+    'Destructive actions now use in-product modals (Rotate key / Remove assistant) instead of browser confirm dialogs',
+    'Usage cards refined: clearer remaining-capacity language, bar visualization, and reduced technical noise in default view',
+  ]},
   { ver:'v0.12.71', date:'2026-02-26', notes:[
     'Locations: added Devices header controls with mesh status, last-updated timestamp, and manual refresh action',
     'Files: free-space/item context moved into a persistent bottom footer outside scrollable file list',
@@ -3749,7 +3759,7 @@ function populateChangelog() {
 
   const fallback = [
     {
-      ver: 'v0.12.71',
+      ver: 'v0.12.72',
       date: '2026-02-25',
       notes: [
         "UI: changelog rendering hardening",
@@ -4208,6 +4218,17 @@ async function saveOperatorConfig() {
   }
 }
 
+function _maskKey(k) {
+  const v = String(k || '');
+  if (!v) return '';
+  const keep = Math.min(6, v.length);
+  return '•'.repeat(Math.max(0, v.length - keep)) + v.slice(-keep);
+}
+function _toggleKey(agentId) {
+  window._revealedKeys = window._revealedKeys || {};
+  window._revealedKeys[agentId] = !window._revealedKeys[agentId];
+  if (window._lastAgents) renderAgents(window._lastAgents);
+}
 function renderAgents(agents) {
   const el = document.getElementById('agent-list');
   const el2 = document.getElementById('agents-module-list');
@@ -4267,12 +4288,15 @@ function renderAgents(agents) {
           `<button class="btn btn-ghost" style="font-size:10px;padding:2px 6px" onclick="loadUsage()" title="Refresh usage">↻</button>` +
         `</div>`
       : `<div style="font-size:11px;color:var(--text3);margin-top:4px">Session capacity: unknown (no telemetry)</div><div style="margin-top:6px;display:flex;align-items:center;gap:8px"><div style="flex:1;height:6px;border-radius:999px;background:var(--border)"></div><button class="btn btn-ghost" style="font-size:10px;padding:2px 6px" onclick="loadUsage()" title="Refresh usage">↻</button></div>`;
+    const revealed = !!(window._revealedKeys && window._revealedKeys[a.id]);
+    const keyDisplay = a.raw_key ? (revealed ? a.raw_key : _maskKey(a.raw_key)) : '';
     const keyRow = a.raw_key
       ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px">
-           <code style="flex:1;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text2)">${escHtml(a.raw_key)}</code>
+           <code style="flex:1;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:6px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text2)">${escHtml(keyDisplay)}</code>
+           <button class="btn btn-ghost" style="font-size:11px;padding:3px 7px;flex-shrink:0" onclick="_toggleKey('${a.id}')" title="${revealed ? 'Hide key' : 'Show key'}">${revealed ? '🙈' : '👁'}</button>
            <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;flex-shrink:0" onclick="copyText('${escHtml(a.raw_key)}',this)">Copy</button>
          </div>`
-      : `<div style="font-size:11px;color:var(--text3);margin-top:5px;font-style:italic">Key hidden — rotate to reveal</div>`;
+      : `<div style="font-size:11px;color:var(--text3);margin-top:5px;font-style:italic">No key yet — rotate key to generate one.</div>`;
     const concurrencyRow = `
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
         <span style="font-size:12px;color:var(--text2);flex-shrink:0">Parallel tasks limit:</span>
@@ -4294,8 +4318,9 @@ function renderAgents(agents) {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(a.name)}${uHtml}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:2px">${escHtml(a.type)} · <span style="color:${roleColor[a.role]||'var(--text3)'}">${a.role}</span> · <span style="font-family:monospace">${a.id}</span></div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${escHtml(a.type)} · <span style="color:${roleColor[a.role]||'var(--text3)'}">${a.role}</span></div>
           ${usageDetail}
+          <details style="margin-top:6px"><summary style="font-size:11px;color:var(--text3);cursor:pointer">Details</summary><div style="font-size:11px;color:var(--text3);margin-top:4px">ID: <span style="font-family:monospace">${a.id}</span></div></details>
         </div>
         <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
         <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Revoke</button>
@@ -4353,7 +4378,11 @@ function copyText(text, btn) {
 }
 
 async function doRotateKey(id, name) {
-  if (!confirm(`Rotate key for "${name}"? The old key will stop working immediately.`)) return;
+  showModal({ title:`Rotate key for ${escHtml(name)}?`, desc:'The current key will stop working immediately. Any active session using it will disconnect.<br><br>Copy the new key before leaving this page.', actions:[{label:'Cancel',action:closeModal},{label:'Rotate key',cls:'btn-primary',action:async ()=>{closeModal(); await _doRotateKeyNow(id);} }] });
+}
+
+async function _doRotateKeyNow(id) {
+  showModal({ title:`Rotate key for ${escHtml(name)}?`, desc:'The current key will stop working immediately. Any active session using it will disconnect.<br><br>Copy the new key before leaving this page.', actions:[{label:'Cancel',action:closeModal},{label:'Rotate key',cls:'btn-primary',action:async ()=>{closeModal(); await _doRotateKeyNow(id);} }] }); return;
   const res = await api('/api/agents/rotate-key', { id });
   if (res && res.ok) {
     document.getElementById('agent-key-val').textContent = res.key;
@@ -4363,7 +4392,11 @@ async function doRotateKey(id, name) {
 }
 
 async function doRevokeAgent(id, name) {
-  if (!confirm(`Revoke agent "${name}"? This cannot be undone.`)) return;
+  showModal({ title:`Remove ${escHtml(name)}?`, desc:'This assistant will lose access to Porter immediately.<br><br>This cannot be undone.', actions:[{label:'Cancel',action:closeModal},{label:'Remove assistant',cls:'btn-danger',action:async ()=>{closeModal(); await _doRevokeNow(id);} }] });
+}
+
+async function _doRevokeNow(id) {
+  showModal({ title:`Remove ${escHtml(name)}?`, desc:'This assistant will lose access to Porter immediately.<br><br>This cannot be undone.', actions:[{label:'Cancel',action:closeModal},{label:'Remove assistant',cls:'btn-danger',action:async ()=>{closeModal(); await _doRevokeNow(id);} }] }); return;
   const res = await api('/api/agents', { action: 'revoke', id });
   if (res && res.ok) { toast('Agent revoked', 'ok'); loadAgents(); }
   else toast((res && res.error) || 'Revoke failed', 'err');
@@ -8106,7 +8139,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_memory_dirs()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.71 ready (localhost only)")
+    print(f"\n  Porter v0.12.72 ready (localhost only)")
     print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:

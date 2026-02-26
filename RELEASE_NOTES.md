@@ -1,5 +1,20 @@
 # Porter Release Notes
 
+## v0.12.72 (2026-02-26)
+
+### Assistants Redesign
+- Renamed Agents module to Assistants with a calmer, less technical presentation.
+- Replaced default internal/test toggle row with disclosure-style "Show all assistants" control.
+- Added masked-by-default API key rows with per-assistant eye toggle (show/hide) and copy action.
+- Moved destructive actions to in-product modals for clearer, safer confirmations.
+- Reduced technical clutter in default cards (advanced IDs/details now tucked behind disclosure).
+
+### Trust + UX Improvements
+- Maintained usage bars/risk states while simplifying on-card language for non-technical operators.
+- Continued release governance discipline: version bump + changelog + release notes synced in one release.
+
+---
+
 ## v0.12.71 (2026-02-26)
 
 ### UX + Operations
