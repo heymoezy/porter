@@ -60,3 +60,9 @@ Porter is not just file browsing; it is the trusted network fabric for connected
 - Empty-state copy shortened to concise status language.
 - Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
 - Risk: low (UI behavior/copy refinement).
+
+## 2026-02-26 — Release v0.12.64
+- Moved free-space/item-count footer into file results bottom border.
+- Removed redundant footer content from Files secondary locations rail.
+- Verification: py_compile OK, service restarted, listening on 127.0.0.1:8877.
+- Risk: low (layout/context move only).
