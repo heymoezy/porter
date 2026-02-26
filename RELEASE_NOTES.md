@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.12.73 (2026-02-26)
+
+- Assistants: added per-card **Test** button to verify whether an assistant is actively connected.
+- Added backend test action (`/api/agents` with `action=test_connection`) using recent heartbeat with usage-telemetry fallback.
+- Test results are shown in a clear modal with connection state and last heartbeat timestamp when available.
+
+---
+
 ## v0.12.72 (2026-02-26)
 
 ### Assistants Redesign
