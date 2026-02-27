@@ -1,0 +1,105 @@
+vars: {
+  d2-config: {
+    layout-engine: elk
+    theme-id: 200
+    dark-theme-id: 200
+    pad: 8
+    sketch: false
+  }
+}
+
+classes: {
+  lane: { style: { fill: "#020617"; stroke: "#1E293B"; border-radius: 10 } }
+  node: { style: { fill: "#0B1220"; stroke: "#334155"; border-radius: 10 } }
+  hub: { style: { fill: "#111827"; stroke: "#2563EB"; stroke-width: 2; border-radius: 10; shadow: true } }
+  data: { style: { fill: "#0F172A"; stroke: "#0F766E"; border-radius: 10 } }
+  guard: { style: { fill: "#1F2937"; stroke: "#F59E0B"; border-radius: 10 } }
+  planned: { style: { fill: "#111827"; stroke: "#94A3B8"; stroke-dash: 6; border-radius: 10 } }
+}
+
+title: Porter v2.1 (Portrait) — Corrected Current vs Planned
+direction: down
+
+L1: {
+  label: "1) Secure Access Entry (Current)"
+  class: lane
+  User: "User / Operator"
+  Tunnel: "SSH Tunnel + Tailscale\naccess localhost-only Porter"
+  PorterHub: "Porter Hub (localhost)\nactual entry point"
+}
+
+L2: {
+  label: "2) Porter Control Plane"
+  class: lane
+  Core: "Porter Core\npolicy · audit · lifecycle"
+  PEP: "PEP/1 Agent Protocol\nregister · heartbeat · fs-proxy\ncorrelation IDs · idempotency"
+  GuardsPlanned: "Loop limits / breakers\n(Planned)"
+}
+
+L3: {
+  label: "3) Agent + Model Runtime"
+  class: lane
+  OpenClawAgent: "OpenClaw Agent\nconnects via PEP/1"
+  ClaudeAgent: "Claude Code Agent\nconnects via PEP/1"
+  CodexAgent: "Codex Agent\nconnects via PEP/1"
+  QwenLocal: "Qwen (local via Ollama)\nclassification/compression"
+  GeminiCLI: "Gemini CLI (standalone)\nresearch tool, NOT PEP/1"
+  CascadePlanned: "Cascade Router (Planned)\nmulti-LLM routing"
+}
+
+L4: {
+  label: "4) Data Layer"
+  class: lane
+  GlobalMemory: "Global memory files (.md)\nCURRENT"
+  Artifacts: "Artifacts / Logs / Outputs\nCURRENT"
+  ProjectScopePlanned: "Project/session scope\n(Planned Sprint 5+)"
+}
+
+L1.User.class: node
+L1.Tunnel.class: guard
+L1.PorterHub.class: hub
+
+L2.Core.class: hub
+L2.PEP.class: data
+L2.GuardsPlanned.class: planned
+
+L3.OpenClawAgent.class: node
+L3.ClaudeAgent.class: node
+L3.CodexAgent.class: node
+L3.QwenLocal.class: data
+L3.GeminiCLI.class: node
+L3.CascadePlanned.class: planned
+
+L4.GlobalMemory.class: data
+L4.Artifacts.class: data
+L4.ProjectScopePlanned.class: planned
+
+# Actual ingress flow
+L1.User -> L1.Tunnel: "secure access"
+L1.Tunnel -> L1.PorterHub: "forward to localhost"
+L1.PorterHub -> L2.Core: "request enters Porter"
+
+# Porter orchestration direction
+L2.Core -> L2.PEP: "orchestrate via protocol"
+L2.PEP -> L3.OpenClawAgent: "dispatch"
+L2.PEP -> L3.ClaudeAgent: "dispatch"
+L2.PEP -> L3.CodexAgent: "dispatch"
+
+# Local model/tool usage
+L3.OpenClawAgent -> L3.QwenLocal: "local inference tasks"
+L3.OpenClawAgent -> L3.GeminiCLI: "external research call"
+
+# Data interactions
+L2.Core -> L4.GlobalMemory: "read/write context"
+L2.Core -> L4.Artifacts: "write outcomes"
+L2.PEP -> L4.Artifacts: "agent file ops"
+
+# Planned links (explicit)
+L2.Core -> L2.GuardsPlanned: "planned safety control"
+L2.Core -> L3.CascadePlanned: "planned routing"
+L2.Core -> L4.ProjectScopePlanned: "planned scoped memory"
+
+LegendCurrent: "Solid nodes/links = Current"
+LegendPlanned: "Dashed nodes = Planned"
+LegendCurrent.class: data
+LegendPlanned.class: planned
