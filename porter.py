@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.17.0 — self-hosted file manager"""
+"""Porter v0.17.1 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1400,6 +1400,151 @@ def _is_allowed_memory_path(path_str: str) -> bool:
             continue
     return False
 
+
+
+def _flush_preview(session_id: str, source: str) -> dict:
+    """Extract session data for preview WITHOUT writing anything."""
+    if source == "claude":
+        claude_dir = Path.home() / ".claude" / "projects" / "-home-lobster"
+        jsonl_file = claude_dir / f"{session_id}.jsonl"
+        if not jsonl_file.exists():
+            return {"ok": False, "error": f"Session {session_id} not found"}
+
+        first_user_msg = ""
+        user_msgs = 0
+        assistant_msgs = 0
+        tool_call_count = 0
+        tools_used = set()
+        first_ts = ""
+        last_ts = ""
+
+        with open(jsonl_file, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    continue
+                etype = entry.get("type", "")
+                ts = entry.get("timestamp", "")
+                if ts and isinstance(ts, str):
+                    if not first_ts: first_ts = ts
+                    last_ts = ts
+                if etype == "user":
+                    user_msgs += 1
+                    if not first_user_msg:
+                        msg = entry.get("message", {})
+                        content = msg.get("content", "")
+                        if isinstance(content, list):
+                            for block in content:
+                                if isinstance(block, dict) and block.get("type") == "text":
+                                    first_user_msg = block.get("text", "")[:300].replace("\n", " ").strip()
+                                    break
+                                elif isinstance(block, str):
+                                    first_user_msg = block[:300].replace("\n", " ").strip()
+                                    break
+                        elif isinstance(content, str):
+                            first_user_msg = content[:300].replace("\n", " ").strip()
+                elif etype == "assistant":
+                    assistant_msgs += 1
+                elif etype in ("tool_use", "tool_result"):
+                    tool_call_count += 1
+                    tool_name = entry.get("name", entry.get("tool", ""))
+                    if tool_name: tools_used.add(tool_name)
+
+        msg_count = user_msgs + assistant_msgs
+        size_mb = round(jsonl_file.stat().st_size / 1048576, 1)
+        date_str = first_ts[:10] if first_ts else ""
+
+        summary = f"## Session Flush: {date_str}\n"
+        summary += f"- **Source:** Claude Code\n"
+        summary += f"- **Session:** `{session_id[:12]}...`\n"
+        summary += f"- **Messages:** {msg_count} ({tool_call_count} tool uses)\n"
+        summary += f"- **Size:** {size_mb} MB\n"
+        summary += f"- **Tools:** {', '.join(sorted(tools_used)) if tools_used else 'none'}\n"
+        summary += f"- **Task:** {first_user_msg if first_user_msg else '(no user message found)'}\n"
+
+        default_dest = str(MEMORY_DIR / "session_flushes.md")
+
+    elif source == "openclaw":
+        oc_dir = OPENCLAW_STATE_DIR
+        sessions_dir = oc_dir / "agents" / "main" / "sessions"
+        jsonl_file = sessions_dir / f"{session_id}.jsonl"
+        if not jsonl_file.exists():
+            return {"ok": False, "error": f"Session {session_id} not found"}
+
+        lines = jsonl_file.read_text(encoding="utf-8").strip().split("\n")
+        first_user_msg = ""
+        model = ""
+        provider = ""
+        total_input = 0
+        total_output = 0
+        tool_calls = 0
+        tools_used = set()
+        first_ts = ""
+        last_ts = ""
+        msg_count = 0
+
+        for raw_line in lines:
+            try:
+                entry = json.loads(raw_line)
+            except Exception:
+                continue
+            etype = entry.get("type", "")
+            ts = entry.get("timestamp", "")
+            if ts and not first_ts: first_ts = ts
+            if ts: last_ts = ts
+            if etype == "message":
+                msg_obj = entry.get("message", {})
+                role = msg_obj.get("role", "")
+                if role == "user" and not first_user_msg:
+                    content = msg_obj.get("content", [])
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            first_user_msg = block.get("text", "")[:300].replace("\n", " ").strip()
+                            break
+                        elif isinstance(block, str):
+                            first_user_msg = block[:300].replace("\n", " ").strip()
+                            break
+                usage = entry.get("usage", {})
+                total_input += usage.get("input", 0)
+                total_output += usage.get("output", 0)
+                msg_count += 1
+                if entry.get("model"): model = entry["model"]
+                if entry.get("provider"): provider = entry["provider"]
+            elif etype == "toolCall":
+                tool_calls += 1
+                tools_used.add(entry.get("tool", "unknown"))
+
+        date_str = first_ts[:10] if first_ts else ""
+        summary = f"## Session Flush: {date_str}\n"
+        summary += f"- **Session:** `{session_id[:12]}...`\n"
+        summary += f"- **Model:** {provider}/{model if model else 'unknown'}\n"
+        summary += f"- **Messages:** {msg_count} ({tool_calls} tool calls)\n"
+        summary += f"- **Tokens:** {total_input:,} in / {total_output:,} out\n"
+        summary += f"- **Tools:** {', '.join(sorted(tools_used)) if tools_used else 'none'}\n"
+        summary += f"- **Task:** {first_user_msg if first_user_msg else '(no user message found)'}\n"
+
+        default_dest = str(MEMORY_DIR / "session_flushes.md")
+    else:
+        return {"ok": False, "error": f"Preview not supported for source: {source}"}
+
+    # Get current target file size
+    dest_path = Path(default_dest)
+    dest_exists = dest_path.exists()
+    dest_size = dest_path.stat().st_size if dest_exists else 0
+    summary_bytes = len(summary.encode("utf-8"))
+
+    return {
+        "ok": True,
+        "summary": summary,
+        "destination": default_dest,
+        "dest_exists": dest_exists,
+        "dest_size_bytes": dest_size,
+        "summary_bytes": summary_bytes,
+        "first_user_msg": first_user_msg,
+        "source": source,
+        "session_id": session_id,
+    }
 
 def _flush_session_to_memory(session_id: str, project_id: str = None) -> dict:
     """Extract key learnings from a session and append to project MEMORY.md.
@@ -2939,6 +3084,34 @@ async function doLogin() {
     </div>
   </div>
 </div>
+
+    <!-- Flush wizard modal -->
+    <div id="flush-wizard-overlay" class="flush-wizard-overlay" style="display:none" onclick="if(event.target===this)closeFlushWizard()">
+      <div class="flush-wizard">
+        <h3>Flush to Long-Term Memory</h3>
+        <div class="flush-wizard-section">
+          <div class="flush-wizard-label">What will be saved</div>
+          <div id="flush-wiz-preview" class="flush-wizard-preview"></div>
+        </div>
+        <div class="flush-wizard-section">
+          <div class="flush-wizard-label">Edit summary (optional)</div>
+          <textarea id="flush-wiz-editor" class="flush-wizard-editor"></textarea>
+        </div>
+        <div class="flush-wizard-section">
+          <div class="flush-wizard-label">Destination</div>
+          <input id="flush-wiz-dest" type="text" style="width:100%;padding:8px 12px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);box-sizing:border-box;font-family:monospace" readonly>
+        </div>
+        <div class="flush-wizard-section">
+          <div class="flush-wizard-label">Impact</div>
+          <div id="flush-wiz-impact" class="flush-wizard-impact"></div>
+        </div>
+        <div class="flush-wizard-actions">
+          <button class="btn btn-ghost" onclick="closeFlushWizard()">Cancel</button>
+          <button class="btn btn-primary" id="flush-wiz-commit" onclick="commitFlush()">Commit to memory</button>
+        </div>
+      </div>
+    </div>
+
 </body>
 </html>
 """
@@ -3320,6 +3493,39 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   animation: shimmer 1.4s ease infinite;
 }
 
+
+
+/* Flush wizard modal */
+.flush-wizard-overlay {
+  position:fixed; top:0; left:0; right:0; bottom:0;
+  background:rgba(0,0,0,.5); z-index:200; display:flex;
+  align-items:center; justify-content:center;
+}
+.flush-wizard {
+  background:var(--bg); border:1px solid var(--border); border-radius:12px;
+  width:90%; max-width:560px; max-height:85vh; overflow-y:auto;
+  padding:24px; box-shadow:0 8px 32px rgba(0,0,0,.3);
+}
+.flush-wizard h3 { font-size:16px; font-weight:700; margin:0 0 16px; color:var(--text); }
+.flush-wizard-section { margin-bottom:16px; }
+.flush-wizard-label { font-size:11px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+.flush-wizard-preview {
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:12px; font-size:12px; line-height:1.6; color:var(--text);
+  white-space:pre-wrap; word-break:break-word; max-height:200px; overflow-y:auto;
+}
+.flush-wizard-editor {
+  width:100%; min-height:150px; padding:12px; font-size:12px; line-height:1.6;
+  font-family:inherit; color:var(--text); background:var(--bg2);
+  border:1px solid var(--border); border-radius:8px; resize:vertical; box-sizing:border-box;
+}
+.flush-wizard-impact {
+  display:flex; gap:16px; font-size:12px; color:var(--text3);
+  padding:8px 12px; background:var(--surface2); border-radius:6px;
+}
+.flush-wizard-impact span { display:flex; flex-direction:column; gap:2px; }
+.flush-wizard-impact strong { font-size:11px; color:var(--text); }
+.flush-wizard-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
 
 /* Chat engine */
 .chat-container { display:flex; flex-direction:column; height:calc(100vh - 160px); min-height:400px; }
@@ -4167,7 +4373,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.17.0</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.17.1</div>
   </div>
 </aside>
 
@@ -5122,6 +5328,12 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.17.1', date:'2026-02-28', notes:[
+    'New: Flush Wizard — preview extracted data before writing to memory',
+    'New: Editable flush summary — modify what gets saved before committing',
+    'New: Destination picker — choose where flushed data goes',
+    'New: Impact display — shows target file size and bytes to be added',
+  ]},
   { ver:'v0.17.0', date:'2026-02-28', notes:[
     'New: Chat Engine — talk to AI models directly from Porter',
     'New: SSE streaming — tokens appear in real-time as models generate',
@@ -7632,7 +7844,7 @@ function renderMemorySessions(sessions) {
       + (s.model ? '<span>\u2022</span><span>' + escHtml(s.model) + '</span>' : '')
       + (s.tool_calls ? '<span>\u2022</span><span>' + s.tool_calls + ' tool calls</span>' : '')
       + '</div>'
-      + (canFlush ? '<div style="margin-top:6px"><button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="flushSession(\'' + escHtml(s.id) + '\',\'' + escHtml(s.name || s.id.substring(0,12)) + '\',\'' + escHtml(s.source) + '\')">Flush to long-term memory</button></div>' : '')
+      + (canFlush ? '<div style="margin-top:6px"><button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="openFlushWizard(\'' + escHtml(s.id) + '\',\'' + escHtml(s.name || s.id.substring(0,12)) + '\',\'' + escHtml(s.source) + '\')">Flush &#9654;</button></div>' : '')
       + '</div>';
   }).join('') + '</div>'
   + (filtered.length > 30 ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">Showing 30 of ' + filtered.length + ' sessions</div>' : '');
@@ -7729,16 +7941,81 @@ function closeMemFileViewer() {
   _memViewerEditing = false;
 }
 
-async function flushSession(sessionId, name, source) {
-  if (!confirm('Flush "' + name + '" to long-term memory?\nExtracts key learnings and appends to session_flushes.md.')) return;
-  const res = await api('/api/memory/flush', { session_id: sessionId, source: source || 'openclaw' });
+
+// ── Flush Wizard ──
+let _flushWizData = null;
+
+async function openFlushWizard(sessionId, name, source) {
+  const overlay = document.getElementById('flush-wizard-overlay');
+  const preview = document.getElementById('flush-wiz-preview');
+  const editor = document.getElementById('flush-wiz-editor');
+  const dest = document.getElementById('flush-wiz-dest');
+  const impact = document.getElementById('flush-wiz-impact');
+  const commitBtn = document.getElementById('flush-wiz-commit');
+  if (!overlay) return;
+
+  overlay.style.display = 'flex';
+  preview.textContent = 'Loading preview…';
+  editor.value = '';
+  commitBtn.disabled = true;
+
+  const resp = await api('/api/memory/flush-preview', { session_id: sessionId, source: source });
+  if (!resp || !resp.ok) {
+    preview.textContent = (resp && resp.error) || 'Failed to load preview';
+    return;
+  }
+
+  _flushWizData = resp;
+  preview.textContent = resp.summary;
+  editor.value = resp.summary;
+  dest.value = resp.destination;
+
+  // Impact stats
+  const destSize = resp.dest_exists ? _memSize(resp.dest_size_bytes) : '(new file)';
+  const addBytes = _memSize(resp.summary_bytes);
+  const newSize = resp.dest_exists ? _memSize(resp.dest_size_bytes + resp.summary_bytes) : addBytes;
+  impact.innerHTML = '<span><strong>Current file</strong>' + destSize + '</span>'
+    + '<span><strong>Adding</strong>' + addBytes + '</span>'
+    + '<span><strong>After flush</strong>' + newSize + '</span>';
+
+  commitBtn.disabled = false;
+}
+
+async function commitFlush() {
+  if (!_flushWizData) return;
+  const editor = document.getElementById('flush-wiz-editor');
+  const dest = document.getElementById('flush-wiz-dest');
+  const commitBtn = document.getElementById('flush-wiz-commit');
+
+  commitBtn.disabled = true;
+  commitBtn.textContent = 'Flushing…';
+
+  const res = await api('/api/memory/flush', {
+    session_id: _flushWizData.session_id,
+    source: _flushWizData.source,
+    summary: editor.value.trim(),
+    destination: dest.value.trim(),
+  });
+
   if (res && res.ok) {
-    toast('Flushed: ' + (res.message || 'done'));
+    toast('Flushed to memory');
+    closeFlushWizard();
     loadMemory();
   } else {
     toast((res && res.error) || 'Flush failed', 'err');
+    commitBtn.disabled = false;
+    commitBtn.textContent = 'Commit to memory';
   }
 }
+
+function closeFlushWizard() {
+  const overlay = document.getElementById('flush-wizard-overlay');
+  if (overlay) overlay.style.display = 'none';
+  _flushWizData = null;
+  const commitBtn = document.getElementById('flush-wiz-commit');
+  if (commitBtn) { commitBtn.textContent = 'Commit to memory'; commitBtn.disabled = false; }
+}
+
 
 // Backward compat wrappers
 function openSettings(tab = 'profile') {
@@ -12080,6 +12357,34 @@ init();
     </div>
   </div>
 </div>
+
+    <!-- Flush wizard modal -->
+    <div id="flush-wizard-overlay" class="flush-wizard-overlay" style="display:none" onclick="if(event.target===this)closeFlushWizard()">
+      <div class="flush-wizard">
+        <h3>Flush to Long-Term Memory</h3>
+        <div class="flush-wizard-section">
+          <div class="flush-wizard-label">What will be saved</div>
+          <div id="flush-wiz-preview" class="flush-wizard-preview"></div>
+        </div>
+        <div class="flush-wizard-section">
+          <div class="flush-wizard-label">Edit summary (optional)</div>
+          <textarea id="flush-wiz-editor" class="flush-wizard-editor"></textarea>
+        </div>
+        <div class="flush-wizard-section">
+          <div class="flush-wizard-label">Destination</div>
+          <input id="flush-wiz-dest" type="text" style="width:100%;padding:8px 12px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);box-sizing:border-box;font-family:monospace" readonly>
+        </div>
+        <div class="flush-wizard-section">
+          <div class="flush-wizard-label">Impact</div>
+          <div id="flush-wiz-impact" class="flush-wizard-impact"></div>
+        </div>
+        <div class="flush-wizard-actions">
+          <button class="btn btn-ghost" onclick="closeFlushWizard()">Cancel</button>
+          <button class="btn btn-primary" id="flush-wiz-commit" onclick="commitFlush()">Commit to memory</button>
+        </div>
+      </div>
+    </div>
+
 </body>
 </html>
 """
@@ -14582,18 +14887,47 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             self.reply_json(result, status)
 
         # ── Generic session flush (any source) ───────────────────────────────
+
+        elif parsed.path == "/api/memory/flush-preview":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            session_id = str(data.get("session_id", "")).strip()
+            source = str(data.get("source", "")).strip()
+            if not session_id:
+                self.reply_json({"ok": False, "error": "Missing session_id"}, 400); return
+
+            preview = _flush_preview(session_id, source)
+            self.reply_json(preview)
+
         elif parsed.path == "/api/memory/flush":
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
             session_id = str(data.get("session_id", "")).strip()
             source = str(data.get("source", "")).strip()
-            project_id = data.get("project_id")
+            custom_summary = data.get("summary", "").strip()
+            destination = data.get("destination", "").strip()
             if not session_id:
                 self.reply_json({"ok": False, "error": "Missing session_id"}, 400); return
-            if source == "claude":
+
+            # If custom summary provided (from wizard), write it directly
+            if custom_summary and destination:
+                try:
+                    dest_path = Path(destination)
+                    dest_path.parent.mkdir(parents=True, exist_ok=True)
+                    mode = "a" if dest_path.exists() else "w"
+                    header = ""
+                    if mode == "w":
+                        header = "# Session Memory Flushes\n\nAuto-generated summaries from AI session logs.\n"
+                    with open(dest_path, mode, encoding="utf-8") as f:
+                        if header: f.write(header)
+                        f.write("\n" + custom_summary + "\n")
+                    result = {"ok": True, "message": f"Flushed to {dest_path}", "path": str(dest_path)}
+                except Exception as e:
+                    result = {"ok": False, "error": str(e)}
+            elif source == "claude":
                 result = _flush_claude_session(session_id)
             elif source == "openclaw":
-                result = _flush_session_to_memory(session_id, project_id)
+                result = _flush_session_to_memory(session_id, data.get("project_id"))
             else:
                 result = {"ok": False, "error": f"Flush not supported for source: {source}"}
             status = 200 if result.get("ok") else 400
@@ -15540,7 +15874,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.17.0 ready (localhost only)")
+    print(f"\n  Porter v0.17.1 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
