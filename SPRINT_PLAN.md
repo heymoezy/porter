@@ -123,162 +123,183 @@ Also fixed: Escape key scope, Agents nav slot, Command Center placeholder, versi
 
 ---
 
-## Sprint 6 — NEXT: Tranche G1: Porter task registry (backend + task board UI)
+## Sprint 5.5 — COMPLETE: Orchestration tab redesign (v0.14.16, 2026-02-28)
 
-**Goal:** Porter becomes the durable, cross-session, cross-agent source of truth for all task state. No task exists only inside one agent's session memory.
+**Goal:** Replace the flat Agents tab with a flow visualization showing how work moves through Porter.
 
-**Why this is before D2 (project UI):** Without a persistent task system, every agent session is stateless and isolated. The project UI (D2) will be built on top of the task registry — tasks belong to projects, projects surface tasks. Build the foundation first.
+**What was done:**
+- Agents tab renamed to Orchestration — visual pipeline: Connected Agents → Porter Hub → Models
+- Full-width SVG connectors with per-column arrow alignment (preserveAspectRatio="none")
+- Config slide-out panel on gear click — role, connection, API key, usage, concurrency, config files
+- Model inference from agent type when model_id is empty
+- Live data on agent cards — usage bars, status, last seen, provider service badges
+- Porter hub with feature pills (active: Prompt cleanup, Model routing, Task dispatch; future: Shared memory, Task registry, Scheduler)
+- Locations: converted from table to card layout, pencil-edit nicknames, removed Tailscale accordion
+- Files: delete restored on home view with smooth animation, rounded corners throughout
+- Config files: CLAUDE.md path validation fixed
+- Ollama moved to Extensions; all tabs get intro sentences
 
-**Plan:**
+---
 
-*Part A — Persistent task registry:*
-1. Task model: `{ id, title, description, status, priority, project_id, tags[], assigned_agent_id, created_by, created_at, updated_at, result, session_id }`.
+## Sprint 6 — NEXT: Usage data pipeline for orchestration
+
+**Goal:** Show real usage availability for each model/agent on the Orchestration screen. Currently the usage bars exist but have no data — usage snapshots must be captured automatically.
+
+**Scope (small + focused):**
+
+1. Auto-capture usage on agent load: when Porter loads agents on startup or refresh, query each agent's usage endpoint and store a snapshot.
+2. For Claude: parse the usage data from the API dashboard format (% consumed, reset window).
+3. For OpenClaw/Codex: parse usage from the openclaw gateway status endpoint.
+4. For Gemini CLI: parse from gemini CLI status if available, otherwise badge "no data".
+5. Store snapshots to `runtime/usage/<agent_id>.json` with timestamp.
+6. Orchestration cards: usage bars populate from latest snapshot on render. Show "No usage data" gracefully when unavailable.
+7. Model preference configuration: add a "Preferred model for coding" dropdown in Settings → Orchestration. Default empty (no preference). This is the first step toward user-configurable model routing.
+
+**Version:** v0.14.17
+
+**Acceptance:** Orchestration tab shows real usage percentages for at least one agent. Model preference setting exists in config.
+
+---
+
+## Sprint 7 — Projects: memory visualization + task/skill distinction
+
+**Goal:** Make the project knowledge system visible and distinguish between manual projects and autonomous tasks.
+
+**Scope:**
+
+1. **Memory file viewer:** In each project card, show the .md file chain that captures project state: `SPRINT_PLAN.md`, `checkpoint.md`, `MEMORY.md`, `lessons.md`. Visual indicator showing which files exist, last modified, size.
+2. **Projects vs autonomous tasks:** Add a `type` field to projects: `manual` (user-driven, sprint-based) or `autonomous` (agent-driven, runs by itself). Different visual treatment — manual projects show sprint progress, autonomous tasks show run history.
+3. **Task ↔ skill correlation:** Surface the relationship between registered tasks and agent skills/capabilities. When a task maps to a known skill, badge it.
+4. **Config exposure:** Any project config currently hardcoded in .md files should be editable through the Projects UI — no more "edit the markdown file manually."
+
+**Version:** v0.14.18
+
+**Acceptance:** Projects tab visually shows the .md file chain per project. Manual vs autonomous projects are visually distinct.
+
+---
+
+## Sprint 8 — Integrations: email + external service connectors
+
+**Goal:** Expose external service connections (like email read access) in the Porter UI and make them configurable per user.
+
+**Scope:**
+
+1. **Integrations section** in Settings or as a sub-panel: list connected external services (email, calendar, etc.).
+2. **Email connector config:** Store email access credentials/tokens in porter_config.json under `integrations.email`. Show connection status.
+3. **OpenClaw email bridge:** Surface the existing read-only email access that OpenClaw has. Show it as a connected integration with scope (read-only) and account identifier.
+4. **Integration cards on Orchestration:** Optional — show connected integrations as a fourth section below Models, or as badges on the agent that has access.
+
+**Version:** v0.14.19
+
+**Acceptance:** Email integration visible in Settings with connection status. User can see what external access each agent has.
+
+---
+
+## Sprint 9 — Hardcoding elimination pass
+
+**Goal:** Systematic removal of all remaining hardcoded paths, hosts, ports, and machine-specific assumptions. Porter must work from zero on any machine.
+
+**Scope:**
+
+1. Audit every `/home/lobster/` reference in porter.py — replace with config-derived or env-derived paths.
+2. `DEFAULT_MOUNTS` → empty on first run, populated via first-run wizard.
+3. `CONFIG_PATH`, `RUNTIME_DIR`, `AVATAR_DIR`, `MEMORY_DIR` → derive from `PORTER_DATA_DIR` or XDG defaults.
+4. `HOST` → auto-detect or configure, never hardcode a specific IP.
+5. All agent workspace paths → optional/detected, not assumed.
+6. Test: fresh install simulation — rename config, start Porter, verify first-run wizard works.
+
+**Version:** v0.14.20
+
+**Acceptance:** `grep -r 'lobster' porter.py` returns zero hits. Porter starts cleanly with no pre-existing config.
+
+---
+
+## Sprint 10 — Task registry backend
+
+**Goal:** Persistent cross-session task state. Porter is the source of truth, not agent memory.
+
+**Scope:**
+
+1. Task model: `{ id, title, description, status, priority, project_id, tags[], assigned_agent_id, created_by, created_at, updated_at, result }`.
 2. Status lifecycle: `pending → assigned → in_progress → complete | failed | cancelled`.
-3. Persist to `runtime/tasks/<id>.json` (one file per task). On startup: load all into `_tasks` dict.
-4. `save_task(task)` helper — writes to disk atomically (write to `.tmp`, rename).
-5. `_tasks` dict in memory; protected by `_threading.Lock()`.
+3. Persist to `runtime/tasks/<id>.json`. Load on startup.
+4. `GET /api/tasks` with filters. `POST /api/tasks` with CRUD actions.
+5. Wire into Projects UI — tasks appear under their project.
 
-*Part B — /api/tasks endpoint:*
-6. `GET /api/tasks` — list with optional filters: `?status=`, `?project_id=`, `?assigned_to=`, `?tag=`.
-7. `POST /api/tasks` — actions: `create`, `update_status`, `assign`, `complete`, `cancel`, `add_result`.
-8. `GET /api/tasks/<id>` — single task detail.
-9. Auth: all task endpoints require session auth (same as other /api/* endpoints).
+**Version:** v0.15.0
 
-*Part C — Task board UI (Porter sidebar):*
-10. New "Tasks" nav item in sidebar.
-11. Kanban-style board: columns for `pending`, `in_progress`, `complete`.
-12. Each card: title, project badge, assigned agent badge, priority indicator, age.
-13. Click to expand: full description, result, history.
-14. Create task form: title, description, project selector, priority, tags.
-15. Filter bar: by project, by agent, by status.
-
-**Version:** v0.14.1 (backend) → v0.14.2 (UI)
-
-**Acceptance:** Any agent can POST to /api/tasks to create a task; task persists across Porter restarts; task board shows live state.
+**Acceptance:** Tasks persist across Porter restarts. API is functional.
 
 ---
 
-## Sprint 7 — Tranche G2: Task routing engine + cross-agent dispatch
+## Sprint 11 — Task routing + dispatch
 
-**Goal:** Porter actively routes tasks to the best available agent. Any client — Claude Code, openclaw, Gemini — submits a task to Porter; Porter decides who handles it.
+**Goal:** Porter routes tasks to the best available agent automatically.
 
-**Plan:**
+**Scope:**
 
-*Part A — Routing logic:*
-1. Task `tags[]` matched against agent `capabilities[]` from /api/pep/nodes.
-2. Priority order: prefer online agents → prefer agents with most specific capability match → prefer least loaded (fewest in_progress tasks).
-3. `route_task(task_id)` function: returns best agent_id or None if no match.
-4. Auto-routing: on `create`, if `assigned_agent_id` is omitted, call `route_task()` and assign automatically.
-5. Manual override: `assign` action in /api/tasks sets assigned_agent_id explicitly.
+1. Routing logic: match task tags to agent capabilities, prefer online + least loaded.
+2. Agent work queue: agents poll for assigned tasks, claim atomically.
+3. Cross-client intake: PEP/1 agents can submit tasks without browser session.
+4. Dispatch: push tasks to online agents, fallback to queue if no ack.
 
-*Part B — Agent work queue:*
-6. `GET /api/tasks?assigned_to=<agent_id>&status=pending` — agents poll this to find their queue.
-7. `POST /api/tasks` action `claim`: agent atomically claims a pending task (status → in_progress, locked to that agent).
-8. `POST /api/tasks` action `add_result`: agent writes outcome; status → complete or failed.
+**Version:** v0.15.1
 
-*Part C — Cross-client intake:*
-9. Agents authenticated via PEP/1 session token can POST to /api/tasks without a browser session.
-10. Porter UI: "Submit task" form accessible to logged-in operator with agent selection dropdown or auto-route.
-11. Webhook stub: POST /api/tasks/intake — unauthenticated endpoint protected by a static intake token (set in config). Allows external clients (openclaw, Gemini) to submit tasks without a full session.
-
-*Part D — Dispatch via PEP/1:*
-12. When a task is assigned to an online PEP/1 agent, Porter can actively push it: POST /pep/v1/agent/<id>/task with task payload.
-13. Agent acknowledges; Porter marks status → in_progress.
-14. Fallback: if agent doesn't ack within 30s, revert to pending and re-route.
-
-**Version:** v0.14.3 (routing) → v0.14.4 (dispatch)
-
-**Acceptance:** Submit a task from Claude Code via /api/tasks; Porter routes to a registered PEP/1 agent; agent claims it; result is visible in task board.
+**Acceptance:** Submit task → Porter routes → agent claims → result visible.
 
 ---
 
-## Sprint 8 — Tranche D2: Project scoping UI
+## Sprint 12 — Real agent connectivity test
 
-**Goal:** Make scope impact visible in Configure workspace. Built on top of the project registry (D1) and task registry (G1/G2).
+**Goal:** Replace heartbeat inference with true roundtrip ping.
 
-**Plan:**
-1. Configure navigator grouping:
-   - "Global Shared" section (global workspace files)
-   - "Project: <name>" section (project-scoped files)
-   - "Agent-Specific" section (agent overrides for current project)
-2. Source badge per file row: colored chip showing Global / Project / Agent.
-3. Sticky scope legend in workspace header: "You are editing: [scope]".
-4. Save confirmation includes scope: "Save to Project file?" etc.
-5. Actions: Promote to global / Reset to inherited / Copy to agent override.
-6. Projects panel: show task count per project (pending / in_progress) sourced from task registry.
+**Scope:**
 
-**Version:** v0.15.x
+1. Challenge-response: hub sends token, agent reflects, hub measures latency.
+2. Modal shows: latency ms, success/failure, agent version.
+3. Remove "preview" qualifier from connectivity check.
 
-**Acceptance:** User can always tell what scope they're editing; save confirms scope; project panel shows live task counts.
+**Version:** v0.15.2
+
+**Acceptance:** Connectivity check reflects real agent response.
 
 ---
 
-## Sprint 9 — Tranche E1: Real agent connectivity test
+## Sprint 13 — Working scheduler
 
-**Goal:** Replace heartbeat inference with a true hello↔ack roundtrip.
+**Goal:** Scheduled jobs actually execute and create tasks in the registry.
 
-**Plan:**
-1. Hub generates a short-lived challenge token (16 bytes, 30s TTL, stored in runtime/).
-2. Hub sends challenge via POST /pep/v1/agent/<id>/ping with token.
-3. Agent reflects token in response within timeout.
-4. Modal shows: latency in ms, success/failure reason, agent version.
-5. Remove (preview) qualifier from "Connectivity check" once live.
+**Scope:**
 
-**Version:** v0.16.x
+1. Cron expression parser (stdlib only).
+2. Job execution: create task or call agent directly.
+3. Run history persisted. UI: last run, next run, history log.
+4. Remove PREVIEW badge.
 
-**Acceptance:** Connectivity check reflects real agent response, not heartbeat age.
+**Version:** v0.16.0
 
----
-
-## Sprint 10 — Tranche F: Working scheduler
-
-**Goal:** Schedules actually execute jobs. Integrates with task registry — scheduled jobs create tasks.
-
-**Plan:**
-1. Background daemon thread starts with server, checks schedules every 60s.
-2. Cron expression parser (stdlib only): support @daily, @hourly, HH:MM daily, and basic "every Nm" intervals.
-3. Job execution: POST to agent's configured endpoint, or create a task in the task registry for agent pickup.
-4. Job state persisted: runtime/schedules/<schedule_id>/runs/<timestamp>.json.
-5. UI: last-run status, next-run time, run history log (last 10 runs) per schedule card.
-6. Remove PREVIEW badge from Schedules module.
-
-**Version:** v0.17.x
-
-**Acceptance:** A scheduled job fires at the correct time, creates a task (or calls an agent directly), and its result is visible in UI.
+**Acceptance:** Scheduled job fires, creates task, result visible.
 
 ---
 
 ## Phase B (Monolith split) — DEFERRED
 
-Splitting porter.py into modules is the right long-term move but is the highest-risk operation we can do. It will happen after all features in Sprints 1–10 are stable and the task registry is proven in production.
-
-Deferral conditions:
-- All Sprints 1–10 done and verified stable.
-- The split will be one module at a time (one sprint per module).
+Splitting porter.py into modules after all features are stable. One module per sprint.
 
 ---
 
 ## Gaps identified (flagged, not yet scheduled)
 
-1. **OpenTelemetry/Prometheus**: Full OTel requires pip packages we can't install without
-   approval. Sprint 4 uses stdlib approximation. Will need explicit pip approval to go further.
+1. **OpenTelemetry/Prometheus**: Needs pip approval for full OTel.
 
-2. **ymc.capital/ inside porter/**: This directory appears to be in the wrong place —
-   CLAUDE.md says it should be at /home/lobster/documents/ymc.capital/ (sibling to porter/).
-   Not moving without user confirmation.
+2. **ymc.capital/ inside porter/**: Should be sibling directory. Not moving without user confirmation.
 
-3. **Session memory flush**: No deterministic session flush pipeline. Now that Sprint 5 D1
-   (project registry) and Sprint 6 G1 (task registry) are scoped, the flush pipeline can be
-   designed: on session end, agent updates task status in Porter + flushes context to
-   project MEMORY.md. Schedule after G2 is shipped.
+3. **Session memory flush**: Agent updates task status + flushes context to MEMORY.md on session end. Design after task registry ships.
 
-4. **v0.12.85 changelog dedup**: porter.py still has 6 changelog entries all labeled v0.12.85
-   (from early sessions). Minor cosmetic issue, can fix opportunistically.
+4. **v0.12.85 changelog dedup**: 6 entries all labeled v0.12.85. Cosmetic fix.
 
-5. **CLAUDE.md references rollout-plan.md**: The file is now in .trash/. CLAUDE.md should
-   be updated to reference MASTER_EXECUTION_PLAN.md instead.
+5. **Local model detection**: Ollama models should appear in Orchestration as callable models (not just as an Extension). Requires model registry that combines agent-linked models + locally detected models.
 
-6. **checkpoint.md deprecation path**: Once the task registry (G1) is live, checkpoint.md
-   becomes redundant. Tasks replace checkpoints as the durable record. Migrate gracefully —
-   import any in_progress checkpoint.md files into the task registry on first boot after G1
-   ships. Then deprecate checkpoint.md format.
+6. **Direct model calling**: Models not linked to an agent should be callable directly from Porter. Requires a lightweight inference proxy or CLI wrapper.
+
+7. **checkpoint.md deprecation**: Once task registry is live, migrate in_progress checkpoints to tasks on first boot.

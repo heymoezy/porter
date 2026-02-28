@@ -1,27 +1,33 @@
 # Checkpoint
-project: porter
-task: Sprint 6 — Tranche G1d: Fold tasks into Projects accordion
+project: Porter
+task: Orchestration tab redesign v0.14.16 + sprint plan revision
 status: complete
-step: 6 of 6
+step: done
 completed:
-  - [x] TASKS_REGISTRY_DIR + _treg globals + _treg_load()/_treg_save() — persistent JSON storage
-  - [x] GET /api/task-registry (list with filters + single by path)
-  - [x] POST /api/task-registry (create, update_status, assign, complete, fail, cancel, add_result, claim, delete)
-  - [x] Tasks nav item added to sidebar (G1b)
-  - [x] Full UX redesign (G1c): row layout, no tabs, no instruction text, Done collapsed, pill priority selector
-  - [x] G1d: Tasks folded into Projects accordion — no separate Tasks nav, project = directory row, task = file row inside
-next_action: Begin Sprint 7 — Tranche G2: Task routing engine + cross-agent dispatch (v0.14.5+)
+  - [x] Orchestration flow diagram (agents → Porter → models)
+  - [x] SVG full-width arrow alignment
+  - [x] Config slide-out panel
+  - [x] Live data on agent cards
+  - [x] Porter hub feature pills
+  - [x] Location cards + pencil edit
+  - [x] Files delete restored with animation
+  - [x] CLAUDE.md path validation fix
+  - [x] Show Internal checkbox removed
+  - [x] Tailscale accordion removed
+  - [x] Changelog + release notes updated
+  - [x] Sprint plan revised (Sprints 6-13)
+next_action: Sprint 6 — Usage data pipeline for orchestration
 modified_files:
   - /home/lobster/documents/porter/porter.py
+  - /home/lobster/documents/porter/tests/ui-regression.spec.js
+  - /home/lobster/documents/porter/SPRINT_PLAN.md
   - /home/lobster/documents/porter/RELEASE_NOTES.md
-  - /home/lobster/documents/porter/tasks/checkpoint.md
 notes: |
-  Porter now at v0.14.4.
-  Key design decisions locked in:
-  - Tasks are project-scoped (project_name denormalized for self-contained records)
-  - Tasks live inside Projects panel accordion — no separate Tasks tab
-  - Legacy projects.md projects shown with "Add to registry" migration button
-  - Inbox section for unassigned tasks
-  - Done tasks collapsed per project row
-  Sprint 7 (G2) adds: routing engine (capability matching), agent work queue polling,
-  cross-client intake token, active dispatch via PEP/1.
+  v0.14.16 complete. 32/32 Playwright tests pass.
+  Sprint plan revised with user feedback:
+  - Sprint 6: Usage data pipeline (show real usage on orchestration)
+  - Sprint 7: Projects memory visualization + task/skill distinction
+  - Sprint 8: Integrations (email, external services)
+  - Sprint 9: Hardcoding elimination pass
+  - Sprint 10-13: Task registry, routing, connectivity, scheduler
+  All sprints are small and focused. One per session.

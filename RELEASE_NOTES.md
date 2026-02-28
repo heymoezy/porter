@@ -1,5 +1,33 @@
 # Porter Release Notes
 
+## v0.14.16 (2026-02-28)
+
+**Orchestration tab + Locations cards + Files polish**
+
+- **Orchestration tab:** Agents tab renamed and rebuilt as a visual flow diagram — Connected Agents → Porter Hub → Models. Full-width SVG connectors with arrows aligned to each card column.
+- **Agent cards:** Green status dots, model inference from agent type, live data (usage bars, status, last seen, provider service badges). Config slide-out panel with role, connection info, API key, concurrency, config files.
+- **Porter hub:** Feature pills showing active capabilities (Prompt cleanup, Model routing, Task dispatch) and upcoming sprint features (Shared memory, Task registry, Scheduler).
+- **Locations tab:** Converted from table grid to card-based layout. Pencil icon for nickname editing, removed delete buttons (devices come/go with Tailscale). Removed redundant Tailscale connectivity accordion.
+- **Files tab:** Delete button restored on home view entries with smooth fade-out animation. Rounded corners on device headers, mount entries, and file entries.
+- **Config files fix:** CLAUDE.md path validation fixed — files in the explicit allow-list no longer rejected.
+- **Extensions:** Ollama moved back (runtime tool). All tabs get standardized intro sentences.
+
+---
+
+## v0.14.15 (2026-02-28)
+
+**Agents tab redesign + Extensions cleanup**
+
+- **Single scrollable Agents view:** Removed Fleet/Jobs/Models sub-tabs. Agents tab is now a single page with two sections: AI Infrastructure and Registered Agents.
+- **AI Infrastructure section:** Compact 2-col grid showing Ollama, OpenClaw, and Gemini CLI with live status dots, version/endpoint info, feature list, and reverse-mapping ("Used by: agent_name").
+- **Model attribution block:** Each agent card now shows a structured MODEL / via / infrastructure badge block linking agent → model → provider.
+- **Dead UI removed:** Create Agent form, Fleet Lifecycle Policy UI, Jobs placeholder, and Models sub-tab all removed. Backend agent CRUD, fleet endpoint, and workspace overlay untouched.
+- **Extensions cleanup:** AI providers (Ollama, OpenClaw, Gemini CLI) moved to Agents tab. wkhtmltopdf and FFmpeg removed (not installed). Playwright added (v1.58.2 — browser automation, E2E testing). Final list: Node.js, Puppeteer, Playwright, D2, Git.
+- **New `/api/ai-providers` endpoint:** Returns AI provider check results. `/api/capabilities` now returns non-AI tools only.
+- **Dead JS removed:** `switchAgentTab`, `loadAgentJobs`, `loadAgentModels`, `openCreateAgent` (module), `createAgent2`, `copyAgentKey2`, `loadAgentFleet`, `saveAgentFleetPolicy`, `renderOperatorConfigSummary`, `loadOperatorConfig`.
+
+---
+
 ## v0.14.14 (2026-02-28)
 
 **Files home view + header alignment**

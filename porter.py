@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.14.14 — self-hosted file manager"""
+"""Porter v0.14.16 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -172,11 +172,7 @@ def _cap_check_openclaw() -> dict:
     return {"ok": False, "version": None}
 
 
-CAPABILITIES: list = [
-    {"id": "ollama",      "label": "Ollama",
-     "install": "https://ollama.com",
-     "features": ["Local LLM routing", "Context compression"],
-     "check": lambda: _cap_check_http("http://127.0.0.1:11434/")},
+AI_PROVIDERS: list = [
     {"id": "openclaw",    "label": "OpenClaw",
      "install": "https://github.com/openclaw/openclaw",
      "features": ["Agent orchestration", "Cloud model gateway"],
@@ -185,6 +181,9 @@ CAPABILITIES: list = [
      "install": "https://github.com/google-gemini/gemini-cli",
      "features": ["Research tasks", "Extended context queries"],
      "check": lambda: _cap_check_bin("gemini")},
+]
+
+CAPABILITIES: list = [
     {"id": "node",        "label": "Node.js",
      "install": "https://nodejs.org",
      "features": ["PDF export", "Puppeteer", "D2 diagrams"],
@@ -193,29 +192,29 @@ CAPABILITIES: list = [
      "install": "npm install -g puppeteer",
      "features": ["PDF / screenshot export"],
      "check": lambda: _cap_check_npx_pkg("puppeteer")},
+    {"id": "playwright",  "label": "Playwright",
+     "install": "npm install -g playwright",
+     "features": ["Browser automation", "E2E testing"],
+     "check": lambda: _cap_check_npx_pkg("playwright")},
     {"id": "d2",          "label": "D2 (diagrams)",
      "install": "https://d2lang.com",
      "features": ["Architecture diagram rendering"],
      "check": lambda: _cap_check_bin("d2")},
-    {"id": "wkhtmltopdf", "label": "wkhtmltopdf",
-     "install": "https://wkhtmltopdf.org",
-     "features": ["PDF export (fallback)"],
-     "check": lambda: _cap_check_bin("wkhtmltopdf")},
-    {"id": "ffmpeg",      "label": "FFmpeg",
-     "install": "https://ffmpeg.org",
-     "features": ["Media transcoding"],
-     "check": lambda: _cap_check_bin("ffmpeg")},
     {"id": "git",         "label": "Git",
      "install": "https://git-scm.com",
      "features": ["Version control", "Porter self-update"],
      "check": lambda: _cap_check_bin("git")},
+    {"id": "ollama",      "label": "Ollama",
+     "install": "https://ollama.com",
+     "features": ["Local LLM inference", "Model management"],
+     "check": lambda: _cap_check_http("http://127.0.0.1:11434/")},
 ]
 
 
 def _run_cap_checks():
     """Run all capability checks in a background thread; cache and persist results."""
     checked = {}
-    for cap in CAPABILITIES:
+    for cap in AI_PROVIDERS + CAPABILITIES:
         try:
             result = cap["check"]()
             checked[cap["id"]] = {
@@ -1809,21 +1808,22 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 /* Files home view */
 .fhome-device {
   display:flex; align-items:center; gap:10px;
-  padding:10px 0 8px; cursor:pointer;
-  border-bottom:1px solid var(--border);
+  padding:10px 16px 8px; cursor:pointer;
+  border:1px solid var(--border); border-radius:10px;
   background:var(--raised); user-select:none;
+  margin-bottom:4px;
 }
 .fhome-device:hover { background:var(--border); }
 .fhome-device-label { font-size:13px; font-weight:600; color:var(--text); flex:1; }
-.fhome-chevron { font-size:10px; color:var(--text3); margin-right:2px; }
+.fhome-chevron { font-size:10px; color:var(--text3); margin-right:2px; min-width:12px; }
 @keyframes cb-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 .cb-badge { display:inline-flex;align-items:center;font-size:10px;padding:1px 6px;border-radius:10px;font-weight:500;margin-left:4px;vertical-align:middle;white-space:nowrap; }
 .cb-badge.cb-open { color:#f97316;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);animation:cb-pulse 2s ease-in-out infinite; }
 .fhome-mount {
   display:grid; grid-template-columns:32px 1fr 40px;
-  align-items:center; gap:12px; padding:0 0 0 24px;
-  border-bottom:1px solid rgba(255,255,255,0.04);
-  cursor:pointer; transition:background .1s;
+  align-items:center; gap:12px; padding:0 16px 0 24px;
+  border:1px solid rgba(255,255,255,0.04); border-radius:8px;
+  cursor:pointer; transition:background .1s; margin-bottom:2px;
 }
 .fhome-mount:hover { background:var(--raised); }
 .fhome-mount .file-name { padding:10px 0; }
@@ -1831,12 +1831,17 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .fhome-mount .file-path { font-size:11px; color:var(--text3); }
 .fhome-entry {
   display:grid; grid-template-columns:32px 1fr 90px 110px 40px;
-  align-items:center; gap:12px; padding:0 0 0 40px;
-  border-bottom:1px solid rgba(255,255,255,0.04);
-  cursor:pointer; transition:background .1s;
+  align-items:center; gap:12px; padding:0 16px 0 40px;
+  border:1px solid rgba(255,255,255,0.04); border-radius:8px;
+  cursor:pointer; transition:background .1s; margin-bottom:1px;
 }
 .fhome-entry:hover { background:var(--raised); }
 .fhome-entry .file-name { padding:9px 0; }
+.fhome-entry.removing {
+  opacity:0; max-height:0 !important; padding-top:0 !important; padding-bottom:0 !important;
+  margin:0 !important; border-color:transparent !important; overflow:hidden;
+  transition: opacity .25s ease, max-height .3s ease .1s, padding .3s ease .1s, margin .3s ease .1s, border-color .25s ease;
+}
 
 /* search */
 .search-wrap { position: relative; display: flex; align-items: center; }
@@ -2299,6 +2304,87 @@ body.density-compact .file-name { padding: 6px 0; }
 .agent-clarity { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
 .aw-file-active { border-color: var(--accent) !important; color: var(--accent) !important; background: rgba(247,147,26,.08) !important; }
 @media (max-width: 1100px) { #agents-module-list > div { grid-template-columns: 1fr !important; } }
+
+/* orchestration flow */
+.module-intro { font-size:13px; color:var(--text3); margin-bottom:16px; margin-top:-12px; }
+.orch-section { margin-bottom:4px; }
+.orch-section-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.orch-section-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.6px; margin-bottom:10px; }
+.orch-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+@media (max-width: 900px) { .orch-grid { grid-template-columns:1fr !important; } }
+
+.orch-card {
+  padding:16px 18px; background:var(--raised); border:1px solid var(--border);
+  border-radius:10px; position:relative; transition:border-color .15s;
+}
+.orch-card:hover { border-color:var(--accent); }
+.orch-card-head { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.orch-card-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.orch-card-name { font-size:14px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.orch-card-gear {
+  width:32px; height:32px; display:flex; align-items:center; justify-content:center;
+  border-radius:8px; cursor:pointer; color:var(--text3); transition:background .15s, color .15s;
+  border:1px solid var(--border); background:var(--bg); font-size:16px; flex-shrink:0;
+}
+.orch-card-gear:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
+.orch-card-sub { font-size:12px; color:var(--text3); line-height:1.4; }
+.orch-card-model { font-size:11px; color:var(--text2); margin-top:6px; }
+.orch-card-opt { font-size:11px; color:var(--text2); margin-top:4px; font-style:italic; }
+.orch-card-usage { margin-top:8px; }
+.orch-card-usage-bar { height:4px; border-radius:999px; background:var(--border); overflow:hidden; }
+.orch-card-usage-fill { height:100%; border-radius:999px; transition:width .4s ease; }
+.orch-card-usage-text { font-size:11px; color:var(--text3); margin-top:3px; }
+
+/* flow connectors — SVG based */
+.flow-connector { display:flex; flex-direction:column; align-items:center; padding:2px 0; }
+.flow-connector svg { display:block; }
+
+/* porter hub */
+.orch-hub {
+  display:flex; align-items:center; gap:20px;
+  padding:16px 24px; margin:0;
+  border:2px solid var(--accent); border-radius:12px;
+  background:color-mix(in srgb, var(--accent) 6%, var(--bg));
+}
+.orch-hub-left { flex-shrink:0; }
+.orch-hub-label { font-size:16px; font-weight:700; color:var(--accent); letter-spacing:1.5px; }
+.orch-hub-desc { font-size:11px; color:var(--text3); margin-top:2px; }
+.orch-hub-features { display:flex; flex-wrap:wrap; gap:6px; }
+.orch-hub-feat {
+  font-size:11px; padding:3px 10px; border-radius:20px;
+  border:1px solid var(--border); color:var(--text3);
+  white-space:nowrap;
+}
+.orch-hub-feat.active {
+  border-color:var(--accent); color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* config panel (mirrors preview-panel) */
+.config-panel {
+  position:fixed; top:0; right:-460px; width:460px; height:100vh;
+  background:var(--surface); border-left:1px solid var(--border);
+  display:flex; flex-direction:column; z-index:50; transition:right .2s ease;
+}
+.config-panel.open { right:0; }
+.config-header {
+  display:flex; align-items:center; gap:10px; padding:14px 16px;
+  border-bottom:1px solid var(--border); flex-shrink:0;
+}
+.config-title { flex:1; font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.config-body { flex:1; overflow:auto; padding:16px; }
+.main.config-open { padding-right:460px; transition:padding-right .2s ease; }
+@media (max-width: 900px) { .config-panel { width:100vw; right:-100vw; } .config-panel.open { right:0; } .main.config-open { padding-right:0; } }
+
+/* projects cards */
+.proj-card { padding:16px 18px; background:var(--raised); border:1px solid var(--border); border-radius:10px; margin-bottom:10px; transition:border-color .15s; }
+.proj-card:hover { border-color:var(--accent); }
+.proj-card-head { display:flex; align-items:center; gap:10px; cursor:pointer; user-select:none; }
+.proj-card-chevron { font-size:10px; color:var(--text3); transition:transform .15s; flex-shrink:0; }
+.proj-card-chevron.open { transform:rotate(90deg); }
+.proj-card-name { font-size:14px; font-weight:600; color:var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.proj-card-count { font-size:11px; color:var(--text3); white-space:nowrap; }
+.proj-card-tasks { margin-top:12px; border-top:1px solid var(--border); padding-top:10px; }
 .badge-production { background:#dcfce7; color:#15803d; font-size:10px; padding:2px 7px;
   border-radius:20px; font-weight:600; }
 .badge-test { background:#fef9c3; color:#854d0e; font-size:10px; padding:2px 7px;
@@ -2348,9 +2434,9 @@ body.density-compact .file-name { padding: 6px 0; }
 .proj-row-menu { display:none; }
 /* projects-module uses standard module-panel styling */
 /* Expanded task area */
-.proj-tasks { padding-left:24px; }
-.ptask-list-hdr { display:grid; grid-template-columns:10px 1fr 90px 56px; align-items:center; gap:10px; padding:4px 28px 6px; border-bottom:1px solid var(--border); margin-bottom:2px; }
-.ptask-row { display:grid; grid-template-columns:10px 1fr 90px 56px; align-items:center; gap:10px; padding:0 28px; border-bottom:1px solid rgba(255,255,255,.04); cursor:default; transition:background .1s; }
+.proj-tasks { padding-left:12px; }
+.ptask-list-hdr { display:grid; grid-template-columns:10px 1fr 90px 56px; align-items:center; gap:10px; padding:4px 12px 6px; border-bottom:1px solid var(--border); margin-bottom:2px; }
+.ptask-row { display:grid; grid-template-columns:10px 1fr 90px 56px; align-items:center; gap:10px; padding:0 12px; border-bottom:1px solid rgba(255,255,255,.04); cursor:default; transition:background .1s; }
 .ptask-row:hover { background:var(--raised); }
 .ptask-row-title { font-size:13px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:9px 0; }
 .ptask-row-status { font-size:11px; }
@@ -2449,6 +2535,23 @@ select.settings-input { padding-right: 26px; }
 .loc-type-card:disabled { opacity: .45; cursor: default; }
 .loc-card-title { font-size: 13px; font-weight: 600; color: var(--text); }
 .loc-card-desc  { font-size: 11px; color: var(--text3); }
+/* location card grid */
+.loc-card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:10px; }
+.loc-card {
+  background:var(--raised); border:1px solid var(--border); border-radius:10px;
+  padding:14px 16px; display:flex; flex-direction:column; gap:6px;
+}
+.loc-card:hover { border-color:var(--border2); }
+.loc-card-head { display:flex; align-items:center; gap:8px; }
+.loc-card-name { font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.loc-card-nick-row { display:flex; align-items:center; gap:6px; }
+.loc-edit-btn {
+  background:none; border:none; cursor:pointer; padding:2px; color:var(--text3);
+  opacity:.4; transition:opacity .15s; display:flex; align-items:center;
+}
+.loc-edit-btn:hover { opacity:1; color:var(--accent); }
+.loc-card-info { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text2); flex-wrap:wrap; }
+.loc-card-mounts { font-size:11px; color:var(--text3); }
 .loc-badge {
   display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px;
   border-radius: 4px; font-size: 10px; font-weight: 600; letter-spacing: .3px;
@@ -2545,7 +2648,7 @@ select.settings-input { padding-right: 26px; }
     </button>
     <button class="mnav-item" id="mnav-agents" onclick="switchModule('agents')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
-      <span class="mnav-label">Agents</span>
+      <span class="mnav-label">Orchestration</span>
     </button>
     <button class="mnav-item" id="mnav-projects" onclick="switchModule('projects')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
@@ -2594,7 +2697,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.14.14</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.14.16</div>
   </div>
 </aside>
 
@@ -2660,6 +2763,7 @@ select.settings-input { padding-right: 26px; }
     <div class="module-hdr">
       <span class="module-title">Command Center</span>
     </div>
+    <div class="module-intro">System health and activity overview.</div>
     <div style="padding:48px 24px;text-align:center;color:var(--text3)">
       <div style="font-size:32px;margin-bottom:16px">&#9685;</div>
       <div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:8px">Dashboard coming soon</div>
@@ -2687,35 +2791,59 @@ select.settings-input { padding-right: 26px; }
 
   <div id="agents-module" class="module-panel">
     <div class="module-hdr">
-      <span class="module-title">Agents</span>
-      <div style="display:flex;gap:4px;margin:0 auto 0 16px">
-        <button class="btn btn-ghost" id="agent-tab-btn-fleet"  onclick="switchAgentTab('fleet')"  style="font-size:12px;font-weight:600;border-bottom:2px solid var(--accent)">Fleet</button>
-        <button class="btn btn-ghost" id="agent-tab-btn-jobs"   onclick="switchAgentTab('jobs')"   style="font-size:12px">Jobs</button>
-        <button class="btn btn-ghost" id="agent-tab-btn-models" onclick="switchAgentTab('models')" style="font-size:12px">Models</button>
+      <span class="module-title">Orchestration</span>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="loadAgents()">&#8635; Refresh</button>
+    </div>
+    <div class="module-intro">How AI work flows through Porter.</div>
+
+    <!-- Connected Agents (top) -->
+    <div class="orch-section">
+      <div class="orch-section-label">Connected Agents</div>
+      <div id="orch-agents" class="orch-grid">
+        <div style="color:var(--text3);font-size:13px">Loading&hellip;</div>
       </div>
-      <button class="btn btn-primary" id="agents-create-btn" onclick="openCreateAgent()">+ Create agent</button>
     </div>
-    <div id="agent-tab-fleet">
-    <div id="agents-filter-row" style="margin-bottom:12px;display:flex;justify-content:flex-end;align-items:center;gap:10px">
-      <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
-        <input type="checkbox" id="agent-show-all" onchange="window._showAllAgentTypes=this.checked;renderAgents(window._lastAgents||[])">
-        Include internal/test assistants
-      </label>
-    </div>
-    <div id="agents-module-list"></div>
 
-    </div><!-- /agent-tab-fleet -->
+    <!-- Arrow: Agents → Porter (merge) -->
+    <div class="flow-connector" id="flow-merge-1"></div>
 
-    <div id="agent-tab-jobs" style="display:none;padding-top:4px">
-      <div style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:12px;color:var(--text3)">Active agent task queue — recover stalled, manage running, clear completed.</span>
-        <button class="btn btn-ghost" style="font-size:12px" onclick="clearCompletedTasks()">Clear completed</button>
+    <!-- Porter Hub -->
+    <div class="orch-hub">
+      <div class="orch-hub-left">
+        <div class="orch-hub-label">PORTER</div>
+        <div class="orch-hub-desc">Orchestration layer</div>
       </div>
-      <div id="agents-jobs-list"><div style="color:var(--text2);padding:20px 0">Loading&#8230;</div></div>
+      <div class="orch-hub-features" id="orch-hub-features">
+        <span class="orch-hub-feat active">Prompt cleanup</span>
+        <span class="orch-hub-feat active">Model routing</span>
+        <span class="orch-hub-feat active">Task dispatch</span>
+        <span class="orch-hub-feat">Shared memory</span>
+        <span class="orch-hub-feat">Task registry</span>
+        <span class="orch-hub-feat">Scheduler</span>
+      </div>
     </div>
 
-    <div id="agent-tab-models" style="display:none;padding-top:4px">
-      <div id="agents-models-list"><div style="color:var(--text2);padding:20px 0">Loading&#8230;</div></div>
+    <!-- Arrow: Porter → Models (fan-out) -->
+    <div class="flow-connector" id="flow-fanout-1"></div>
+
+    <!-- Models (bottom) -->
+    <div class="orch-section">
+      <div class="orch-section-label">Models</div>
+      <div id="orch-models" class="orch-grid">
+        <div style="color:var(--text3);font-size:13px">Loading&hellip;</div>
+      </div>
+    </div>
+
+    <!-- Hidden: agent list for settings page -->
+    <div id="agents-module-list" style="display:none"></div>
+
+    <!-- Config slide-out panel -->
+    <div class="config-panel" id="configPanel">
+      <div class="config-header">
+        <span class="config-title" id="configPanelTitle">Configure</span>
+        <button class="btn btn-icon" onclick="closeConfigPanel()" title="Close">&times;</button>
+      </div>
+      <div class="config-body" id="configPanelBody"></div>
     </div>
 
     <div id="agent-workspace" style="display:none;margin-top:0;border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden;height:100%">
@@ -2759,71 +2887,6 @@ select.settings-input { padding-right: 26px; }
         </div>
       </div>
     </div>
-    <div id="agents-module-create-form" style="display:none;margin-top:20px;padding:16px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
-      <div class="settings-page-title" style="font-size:14px;margin-bottom:14px">New agent</div>
-      <div class="settings-field">
-        <label>Name</label>
-        <input type="text" class="settings-input" id="af2-name" placeholder="Claude Code">
-      </div>
-      <div class="settings-field">
-        <label>Type</label>
-        <select class="settings-input" id="af2-type" style="cursor:pointer">
-          <option value="claude-code">Claude Code</option>
-          <option value="openclaw">OpenClaw</option>
-          <option value="generic">Generic API client</option>
-        </select>
-      </div>
-      <div class="settings-field">
-        <label>Role</label>
-        <select class="settings-input" id="af2-role" style="cursor:pointer">
-          <option value="viewer">Observer &#8212; read only</option>
-          <option value="writer" selected>Standard &#8212; read + write + checkpoint</option>
-          <option value="operator">Trusted &#8212; write + finalize</option>
-          <option value="admin">Admin &#8212; full access</option>
-        </select>
-      </div>
-      <div class="settings-fields-row">
-        <div class="settings-field">
-          <label>Runtime location</label>
-          <select class="settings-input" id="af2-runtime" style="cursor:pointer">
-            <option value="local">Local</option>
-            <option value="remote">Remote</option>
-            <option value="edge">Edge</option>
-          </select>
-        </div>
-        <div class="settings-field">
-          <label>Model source</label>
-          <select class="settings-input" id="af2-model-source" style="cursor:pointer">
-            <option value="cloud">Cloud API</option>
-            <option value="local">Local model</option>
-          </select>
-        </div>
-      </div>
-      <div class="settings-field">
-        <label>Model ID <span style="color:var(--text3);font-weight:400">(optional)</span></label>
-        <input type="text" class="settings-input" id="af2-model-id" placeholder="claude-sonnet-4-6">
-      </div>
-      <div class="settings-field">
-        <label>Agent type</label>
-        <select class="settings-input" id="af2-agent-type" style="cursor:pointer">
-          <option value="production">Production</option>
-          <option value="test">Test</option>
-          <option value="ephemeral">Ephemeral</option>
-          <option value="system">System</option>
-        </select>
-      </div>
-      <div class="settings-save-row" style="gap:8px">
-        <button class="btn btn-primary" onclick="createAgent2()">Create &amp; copy key</button>
-        <button class="btn btn-ghost" onclick="cancelAgentForm2()">Cancel</button>
-      </div>
-    </div>
-    <div id="agents-module-key-box" style="display:none;margin-top:20px;padding:14px;background:rgba(247,147,26,.08);border:1px solid rgba(247,147,26,.3);border-radius:8px">
-      <div style="font-size:12px;color:var(--accent);font-weight:600;margin-bottom:8px">&#9888; Copy this key now &#8212; it won't be shown again</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <code style="flex:1;font-size:12px;word-break:break-all;color:var(--text)" id="agents-module-key-val"></code>
-        <button class="btn btn-ghost" style="flex-shrink:0;font-size:12px" onclick="copyAgentKey2()">Copy</button>
-      </div>
-    </div>
   </div>
 
   <div id="locations-module" class="module-panel">
@@ -2831,15 +2894,8 @@ select.settings-input { padding-right: 26px; }
       <span class="module-title">Locations</span>
       <button class="btn btn-ghost" style="font-size:12px" onclick="loadTailscaleStatus(true);loadLocations();">&#8635; Refresh</button>
     </div>
+    <div class="module-intro">Devices and network locations connected to this Porter instance.</div>
     <div id="loc-list"></div>
-    <details style="margin-top:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-      <summary style="padding:10px 12px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text3);list-style:none;display:flex;align-items:center;gap:6px;background:var(--raised)">&#9660; Tailscale connectivity</summary>
-      <div style="padding:12px">
-        <div id="ts-control-status" style="margin-bottom:8px;font-size:12px;color:var(--text3)">Connect/Disconnect is disabled by policy.</div>
-        <div id="ts-panel-locations"><div style="color:var(--text3);font-size:13px">Loading&#8230;</div></div>
-        <div id="ts-last-updated-locations" style="margin-top:6px;font-size:11px;color:var(--text3)"></div>
-      </div>
-    </details>
     <div id="lm-mount-form" style="display:none;margin-top:14px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
       <div class="settings-field"><label>Path on server</label>
         <input class="settings-input" id="mf-path" placeholder="/home/user/project">
@@ -2991,6 +3047,7 @@ select.settings-input { padding-right: 26px; }
     <div class="module-hdr">
       <span class="module-title">Projects</span>
     </div>
+    <div class="module-intro">Active projects and their task backlogs.</div>
     <div id="proj-content-projects"></div>
   </div>
 
@@ -2999,10 +3056,7 @@ select.settings-input { padding-right: 26px; }
       <span class="module-title">Extensions</span>
       <button class="btn btn-ghost" style="font-size:12px" onclick="loadCapabilities()">&#8635; Refresh</button>
     </div>
-    <div style="font-size:13px;color:var(--text3);margin-bottom:16px">
-      Detected capabilities on this machine. Missing tools are shown with install guidance.
-      Features that depend on a missing tool are hidden or marked as unavailable.
-    </div>
+    <div class="module-intro">Tools and services detected on this machine. AI model providers are shown in the Orchestration tab.</div>
     <div id="capabilities-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"></div>
   </div>
 
@@ -3440,6 +3494,31 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.14.16', date:'2026-02-28', notes:[
+    'Agents tab renamed to Orchestration — flow diagram showing agents → Porter hub → models',
+    'Orchestration: full-width SVG connectors with per-column arrow alignment',
+    'Orchestration: config slide-out panel — role, connection, API key, usage, concurrency, config files',
+    'Orchestration: model inference from agent type when model_id is empty',
+    'Orchestration: live data on agent cards — usage bars, status, last seen, provider badges',
+    'Orchestration: Porter hub feature pills (active + future sprint capabilities)',
+    'Orchestration: removed legacy Show Internal checkbox',
+    'Locations: converted from table grid to card layout with pencil-edit nicknames',
+    'Locations: removed Tailscale connectivity accordion (redundant with card status)',
+    'Files: delete button restored on home view entries with smooth fade-out animation',
+    'Files: rounded corners on device headers, mount entries, file entries',
+    'Ollama moved to Extensions; all tabs get intro sentences',
+    'Config files: fixed CLAUDE.md path validation (allow-list check)',
+  ]},
+  { ver:'v0.14.15', date:'2026-02-28', notes:[
+    'Agents: redesigned as single scrollable view — removed Fleet/Jobs/Models sub-tabs',
+    'Agents: AI Infrastructure section shows Ollama, OpenClaw, Gemini CLI with status and reverse agent mapping',
+    'Agents: model attribution block on each agent card (MODEL + via + infrastructure badge)',
+    'Agents: removed Create Agent form, Fleet Lifecycle Policy UI, Models sub-tab',
+    'Extensions: AI providers moved to Agents tab — shows only non-AI tools (Node.js, Puppeteer, Playwright, D2, Git)',
+    'Extensions: added Playwright detection (browser automation, E2E testing)',
+    'Extensions: removed wkhtmltopdf and FFmpeg (not installed)',
+    'Backend: new /api/ai-providers endpoint; /api/capabilities now returns non-AI tools only',
+  ]},
   { ver:'v0.14.14', date:'2026-02-28', notes:[
     'Files: auto-expand first mount (Documents) on initial load — shows contents inline with breadcrumb and toolbar buttons',
     'Files: removed NAME/SIZE/MODIFIED column header from home view — fhome-entry grid handles its own layout',
@@ -4649,7 +4728,6 @@ function renderConfigSummary(d) {
 
 // ── module system ──
 let _currentModule = 'overview';
-window._showAllAgentTypes = false;
 window._lastAgents = [];
 function switchModule(name) {
   if (name !== 'settings') closeSettings();
@@ -4687,58 +4765,7 @@ function switchModule(name) {
   };
   if (loaders[name]) loaders[name]();
 }
-// ── Agent sub-tabs (Fleet / Jobs / Models) ───────────────────────────────────
-function switchAgentTab(tab) {
-  ['fleet','jobs','models'].forEach(t => {
-    const d = document.getElementById('agent-tab-'+t);
-    const b = document.getElementById('agent-tab-btn-'+t);
-    if (d) d.style.display = t === tab ? '' : 'none';
-    if (b) {
-      b.style.fontWeight = t === tab ? '600' : '';
-      b.style.borderBottom = t === tab ? '2px solid var(--accent)' : '';
-    }
-  });
-  const cb = document.getElementById('agents-create-btn');
-  if (cb) cb.style.display = tab === 'fleet' ? '' : 'none';
-  if (tab === 'jobs')   loadAgentJobs();
-  if (tab === 'models') loadAgentModels();
-}
 
-async function loadAgentJobs() {
-  const data = await api('/api/task-registry');
-  if (!data) return;
-  const el = document.getElementById('agents-jobs-list');
-  if (el) el.innerHTML = '<div style="padding:12px 0;font-size:12px;color:var(--text2)">Open <strong>Tasks</strong> in the sidebar for the full task registry.</div>';
-}
-
-async function loadAgentModels() {
-  const el = document.getElementById('agents-models-list');
-  if (!el) return;
-  const data = await api('/api/projects-dashboard');
-  if (!data) return;
-  const models = data.models || [];
-  if (!models.length) { el.innerHTML = '<div style="color:var(--text3);font-size:13px">No models registered in projects.md.</div>'; return; }
-  el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">'
-    + models.map(m => {
-      const health = m.memory_exists
-        ? '<span style="color:#22c55e;font-size:11px">&#9679; ' + escHtml(m.memory_ago||'?') + '</span>'
-        : '<span style="color:var(--text3);font-size:11px">&#9675; no memory file</span>';
-      const sync = m.synced === true
-        ? '<span style="color:#22c55e;font-size:11px">&#10003; synced</span>'
-        : m.synced === false
-        ? '<span style="color:#f59e0b;font-size:11px">&#9651; drift detected</span>'
-        : '';
-      const memPath = m.memory_path ? '<div style="font-size:11px;color:var(--text3);font-family:monospace;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(m.memory_path) + '</div>' : '';
-      return `<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">
-  <div style="font-weight:600;font-size:13px;margin-bottom:4px">${escHtml(m.model)}</div>
-  <div style="font-size:12px;color:var(--text2);margin-bottom:6px">${escHtml(m.role)}</div>
-  <div style="font-size:11px;color:var(--text3);margin-bottom:4px">${escHtml(m.interface)}</div>
-  <div style="display:flex;gap:10px;align-items:center">${health}${sync ? '&nbsp;·&nbsp;'+sync : ''}</div>
-  ${memPath}
-</div>`;
-    }).join('')
-    + '</div>';
-}
 
 // ── Projects / Models / Tasks dashboard ─────────────────────────────────────
 // State
@@ -4858,14 +4885,14 @@ function _renderProjectList() {
       bodyHtml = '<div class="proj-tasks">' + rows + '</div>';
     }
 
-    return '<div>'
-      + `<div class="proj-row" onclick="toggleProject('${pid}')">`
-      + `<span class="proj-row-chevron${open ? ' open' : ''}">&#9658;</span>`
-      + `<span class="proj-row-name">${escHtml(p.name || '')}${activePill}</span>`
-      + `<span class="proj-row-count">${cntLabel}</span>`
-      + '</div>'
-      + bodyHtml
-      + '</div>';
+    return `<div class="proj-card">
+      <div class="proj-card-head" onclick="toggleProject('${pid}')">
+        <span class="proj-card-chevron${open ? ' open' : ''}">&#9658;</span>
+        <span class="proj-card-name">${escHtml(p.name || '')}${activePill}</span>
+        <span class="proj-card-count">${cntLabel}</span>
+      </div>
+      ${bodyHtml ? '<div class="proj-card-tasks">' + bodyHtml + '</div>' : ''}
+    </div>`;
   }).join('');
 
   // Inbox: unassigned tasks
@@ -5391,42 +5418,7 @@ function renderAudit(entries) {
   }).join('');
 }
 
-// ── Agents module (module panel version) ──
-function openCreateAgent() {
-  const f = document.getElementById('agents-module-create-form');
-  if (f) { f.style.display = ''; document.getElementById('agents-module-key-box').style.display = 'none'; }
-  else { const sf = document.getElementById('agent-form'); if(sf) sf.style.display=''; }
-}
-function cancelAgentForm2() {
-  const f = document.getElementById('agents-module-create-form');
-  if (f) f.style.display = 'none';
-}
-async function createAgent2() {
-  const name = document.getElementById('af2-name').value.trim();
-  if (!name) { toast('Name required', 'err'); return; }
-  const body = {
-    action: 'create',
-    name,
-    type: document.getElementById('af2-type').value,
-    role: document.getElementById('af2-role').value,
-    runtime_location: document.getElementById('af2-runtime').value,
-    model_source: document.getElementById('af2-model-source').value,
-    model_id: document.getElementById('af2-model-id').value.trim(),
-    agent_type: document.getElementById('af2-agent-type').value,
-  };
-  const r = await api('/api/agents', { method: 'POST', body: JSON.stringify(body) });
-  if (r && r.ok) {
-    cancelAgentForm2();
-    document.getElementById('agents-module-key-val').textContent = r.key;
-    document.getElementById('agents-module-key-box').style.display = '';
-    loadAgents();
-    toast('Agent created', 'ok');
-  } else toast((r && r.error) || 'Failed to create agent', 'err');
-}
-function copyAgentKey2() {
-  const v = document.getElementById('agents-module-key-val').textContent;
-  navigator.clipboard.writeText(v).then(() => toast('Key copied', 'ok'));
-}
+
 
 // ── Policies module ──
 function saveOrchestrationPolicy() {
@@ -5581,15 +5573,12 @@ function renderNodes(nodes) {
   const lastUpdated = (_tsCache && _tsCache.ts) ? ('Updated ' + new Date(_tsCache.ts).toLocaleTimeString()) : 'Not checked yet';
 
   el.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:12px 0 8px">
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:0 0 12px">
         <span style="font-size:11px;color:${meshColor}">${meshState}</span>
         <span style="font-size:11px;color:var(--text3)">${lastUpdated}</span>
         <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadTailscaleStatus(true);loadLocations();">↻ Refresh</button>
     </div>
-    <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:10px;padding:8px 12px;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.6px">
-      <div title="Canonical device identity discovered from your trusted network.">Device</div><div title="Human-friendly alias used across Porter views.">Nickname</div><div title="Device operating system and private network IP.">OS / IP</div><div></div>
-    </div>
-    <div style="background:var(--raised);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+    <div class="loc-card-grid">
       ${configured.map((node) => {
         const nType = String(node.type || '').toLowerCase();
         const nId = String(node.id || '').toLowerCase();
@@ -5622,22 +5611,26 @@ function renderNodes(nodes) {
         const _locCbBadge = (_locCirc && _locCirc.state === 'open')
           ? `<span class="cb-badge cb-open" title="High error rate \u2014 circuit open${_locCirc.resets_in_s != null ? '. Resets in ~' + _locCirc.resets_in_s + 's' : ''}">&#x26A1; degraded</span>`
           : '';
+        const mountCount = Array.isArray(node.mounts) ? node.mounts.length : 0;
+        const _nickOnclick = `promptDeviceNickname('${escHtml(node.id)}','${escHtml(node.type || 'tailscale')}',${node._virtual ? 'true' : 'false'},'${escHtml(node.hostname || '')}','${escHtml(node.tailscale_ip || '')}','${escHtml(deviceName)}','${escHtml(nickname)}')`;
         return `
-          <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)">
-            <div style="min-width:0">
-              <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${statusDot}" title="${nodeStatus === 'relay' ? 'Via DERP relay — not direct peer-to-peer' : ''}"></span>
-                <span>${escHtml(deviceName)}</span>
-                <span style="font-size:10px;color:${statusColor};font-weight:500">${statusLabel}</span>
-                ${pepBadge}${_locCbBadge}
-              </div>
+          <div class="loc-card">
+            <div class="loc-card-head">
+              <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${statusDot};flex-shrink:0" title="${nodeStatus === 'relay' ? 'Via DERP relay — not direct peer-to-peer' : ''}"></span>
+              <span class="loc-card-name">${escHtml(deviceName)}</span>
+              <span style="font-size:10px;color:${statusColor};font-weight:500;margin-left:auto">${statusLabel}</span>
             </div>
-            <div style="font-size:12px;color:${nickname ? 'var(--accent)' : 'var(--text3)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nickname || '—'}</div>
-            <div style="font-size:12px;color:var(--text2);white-space:nowrap">${escHtml(String(os))} · <span style="font-family:monospace">${escHtml(String(ip))}</span></div>
-            <div style="display:flex;gap:6px;justify-content:flex-end">
-              <button class="btn btn-ghost" style="font-size:11px;padding:4px 9px" onclick="promptDeviceNickname('${escHtml(node.id)}','${escHtml(node.type || 'tailscale')}',${node._virtual ? 'true' : 'false'},'${escHtml(node.hostname || '')}','${escHtml(node.tailscale_ip || '')}','${escHtml(deviceName)}','${escHtml(nickname)}')">${action}</button>
-              ${nickname ? `<button class="btn btn-ghost" style="font-size:11px;padding:4px 9px;color:var(--danger)" onclick="clearDeviceNickname('${escHtml(node.id)}','${escHtml(node.type || 'tailscale')}',${node._virtual ? 'true' : 'false'},'${escHtml(node.hostname || '')}','${escHtml(node.tailscale_ip || '')}','${escHtml(deviceName)}')">Remove</button>` : ''}
+            <div class="loc-card-nick-row">
+              <span style="font-size:12px;color:${nickname ? 'var(--accent)' : 'var(--text3)'}">${nickname || 'No nickname'}</span>
+              <button class="loc-edit-btn" onclick="${_nickOnclick}" title="${nickname ? 'Edit nickname' : 'Set nickname'}">${I.rename}</button>
             </div>
+            <div class="loc-card-info">
+              <span>${escHtml(String(os))}</span>
+              <span style="color:var(--border2)">·</span>
+              <span style="font-family:monospace;font-size:11px">${escHtml(String(ip))}</span>
+              ${pepBadge}${_locCbBadge}
+            </div>
+            ${mountCount ? `<div class="loc-card-mounts">${mountCount} mount${mountCount !== 1 ? 's' : ''}</div>` : ''}
           </div>`;
       }).join('')}
     </div>`;
@@ -5853,45 +5846,14 @@ async function loadAgents() {
   if (!data) return;
   window._cachedAgents = data.agents || [];
   window._lastAgents = data.agents || [];
+  window._lastAiProviders = data.ai_providers || [];
+  renderOrchestration(data.agents || [], data.ai_providers || []);
   renderAgents(data.agents || []);
   loadUsage();
-  loadAgentFleet();
-  loadOperatorConfig();
 }
 
 
-async function loadAgentFleet() {
-  const data = await api('/api/agent-fleet');
-  const el = document.getElementById('agents-fleet-summary');
-  if (!el) return;
-  if (!data) { el.textContent = 'Lifecycle policy unavailable'; return; }
-  window._fleetState = data;
-  const txt = `channel=${data.channel} · current=${data.current_version} · min=${data.min_compatible} · auto-update=${data.auto_update ? 'on' : 'off'} · rollout=${data.rollout}% · devices=${data.device_count}`;
-  el.textContent = txt;
-  const ch=document.getElementById('fleet-channel'); if (ch) ch.value = data.channel || 'stable';
-  const cur=document.getElementById('fleet-current'); if (cur) cur.value = data.current_version || '';
-  const mn=document.getElementById('fleet-min'); if (mn) mn.value = data.min_compatible || '';
-  const ro=document.getElementById('fleet-rollout'); if (ro) ro.value = (data.rollout ?? 100);
-  const au=document.getElementById('fleet-auto'); if (au) au.checked = !!data.auto_update;
-}
 
-async function saveAgentFleetPolicy() {
-  const body = {
-    action: 'set_policy',
-    channel: document.getElementById('fleet-channel')?.value || 'stable',
-    current_version: (document.getElementById('fleet-current')?.value || '').trim(),
-    min_compatible: (document.getElementById('fleet-min')?.value || '').trim(),
-    rollout: parseInt(document.getElementById('fleet-rollout')?.value || '100', 10),
-    auto_update: !!document.getElementById('fleet-auto')?.checked,
-  };
-  const res = await api('/api/agent-fleet', body);
-  if (res && res.ok) {
-    toast('Fleet policy saved', 'ok');
-    loadAgentFleet();
-  } else {
-    toast((res && res.error) || 'Failed to save fleet policy', 'err');
-  }
-}
 
 async function showBootstrapCmd(osName) {
   const data = await api(`/api/agent/bootstrap?os=${enc(osName)}&arch=x64`);
@@ -5908,40 +5870,7 @@ function toggleAgentDefaultsEditor() {
   if (!el) return;
   el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
 }
-function renderOperatorConfigSummary(prefs = {}) {
-  const presetMap = { safe:'Careful', balanced:'Balanced', operator:'Fast execution' };
-  const p = document.getElementById('cfg-summary-preset');
-  const t = document.getElementById('cfg-summary-threshold');
-  const a = document.getElementById('cfg-summary-approval');
-  const i = document.getElementById('cfg-summary-impact');
-  if (p) p.textContent = presetMap[prefs.behavior_preset] || 'Balanced';
-  if (t) t.textContent = `${prefs.usage_warn_threshold ?? 20}%`;
-  if (a) a.textContent = (prefs.external_send_approval ?? true) ? 'On' : 'Off';
-  if (i) i.textContent = 'Active now: capacity risk colors + per-agent default approval prompts. Other defaults are saved and applied as agent/workflow integrations expand.';
-}
 
-async function loadOperatorConfig() {
-  const prefs = await api('/api/preferences');
-  if (!prefs) return;
-  window._operatorPrefs = prefs;
-  renderOperatorConfigSummary(prefs);
-  const setVal = (id, val, fallback='') => {
-    const el = document.getElementById(id); if (!el) return;
-    el.value = (val ?? fallback);
-  };
-  const setChk = (id, val, fallback=false) => {
-    const el = document.getElementById(id); if (!el) return;
-    el.checked = (val ?? fallback) ? true : false;
-  };
-  setVal('cfg-setup-profile', prefs.setup_profile, 'vps-tailnet');
-  setVal('cfg-skills-routing', prefs.skills_routing, 'guided');
-  setVal('cfg-memory-mode', prefs.memory_mode, 'assisted');
-  setVal('cfg-behavior-preset', prefs.behavior_preset, 'balanced');
-  setVal('cfg-memory-visibility', prefs.memory_visibility, 'shared');
-  setVal('cfg-usage-threshold', prefs.usage_warn_threshold, 20);
-  setChk('cfg-skills-safe-mode', prefs.skills_safe_mode, false);
-  setChk('cfg-external-approval', prefs.external_send_approval, true);
-}
 
 async function saveOperatorConfig() {
   const body = {
@@ -5979,6 +5908,365 @@ function _toggleKey(agentId) {
   window._revealedKeys[agentId] = !window._revealedKeys[agentId];
   if (window._lastAgents) renderAgents(window._lastAgents);
 }
+function renderInfraCards(providers, agents) {
+  // Legacy stub — orchestration view replaces this
+}
+
+// ── Orchestration flow rendering ──────────────────────────────────────────
+
+const MODEL_OPTIMIZED = {
+  'gpt-5.3-codex':    'Agentic coding, long-running tasks, tool use',
+  'codex':            'Agentic coding, long-running tasks, tool use',
+  'claude-opus-4-6':  'Deep reasoning, security audits, architecture',
+  'claude-sonnet-4-6':'Implementation, debugging, tool calling',
+  'gemini-2.5-pro':   'Research, extended context (1M tokens), multimodal',
+};
+
+function _modelOptLine(modelId) {
+  if (!modelId) return '';
+  const mid = modelId.toLowerCase();
+  for (const [k,v] of Object.entries(MODEL_OPTIMIZED)) {
+    if (mid.includes(k)) return v;
+  }
+  return '';
+}
+
+function _modelDisplayName(modelId) {
+  if (!modelId) return 'Unknown';
+  const mid = modelId.toLowerCase();
+  if (mid.includes('codex') || mid.includes('gpt-5')) return 'GPT-5.3 Codex';
+  if (mid.includes('opus')) return 'Claude Opus 4.6';
+  if (mid.includes('sonnet')) return 'Claude Sonnet 4.6';
+  if (mid.includes('gemini')) return 'Gemini 2.5 Pro';
+  return modelId;
+}
+
+function _agentConnectionMethod(a) {
+  const t = (a.type || '').toLowerCase();
+  const n = (a.name || '').toLowerCase();
+  if (t.includes('openclaw') || t.includes('codex') || n.includes('openclaw') || n.includes('codex'))
+    return 'OpenClaw Gateway :18789';
+  if (n.includes('gemini') || t.includes('gemini'))
+    return 'Gemini CLI binary';
+  if (n.includes('claude') || t.includes('claude'))
+    return 'Anthropic API (direct)';
+  return 'API';
+}
+
+// Infer model from agent type/name when model_id is empty
+function _inferModelId(a) {
+  if (a.model_id) return a.model_id;
+  const t = (a.type || '').toLowerCase();
+  const n = (a.name || '').toLowerCase();
+  if (t.includes('openclaw') || t.includes('codex') || n.includes('openclaw') || n.includes('codex'))
+    return 'gpt-5.3-codex';
+  if (n.includes('claude') || t.includes('claude'))
+    return 'claude-opus-4-6';
+  if (n.includes('gemini') || t.includes('gemini'))
+    return 'gemini-2.5-pro';
+  return '';
+}
+
+// Custom sort: openclaw first, claude second, gemini third, rest alphabetical
+function _agentSortKey(a) {
+  const s = ((a.type||'')+(a.name||'')).toLowerCase();
+  if (s.includes('openclaw') || s.includes('codex')) return '0';
+  if (s.includes('claude')) return '1';
+  if (s.includes('gemini')) return '2';
+  return '3' + (a.name||'').toLowerCase();
+}
+
+// Build SVG connector aligned to the card grid columns.
+// Uses viewBox 0..1000 and preserveAspectRatio="none" so the line
+// positions at each column center stretch with the container.
+function _buildFlowSVG(count, direction) {
+  const w = 1000, h = 48;
+  const mid = w / 2;
+  const cols = Math.max(1, Math.min(count, 6));
+  const lineColor = 'var(--border2, #555)';
+  const arrowColor = 'var(--accent)';
+  const a = 8; // arrow half-width
+  const sw = 2.5; // stroke width
+
+  // Column centers: for N columns in a grid, center of col i = (i + 0.5) / N * w
+  // The grid has 10px gap but at SVG scale it's negligible; the key is the
+  // column centers map to the card centers.
+  const colX = [];
+  for (let i = 0; i < cols; i++) {
+    colX.push(((i + 0.5) / cols) * w);
+  }
+  const leftX = colX[0], rightX = colX[cols - 1];
+
+  let paths = '';
+  if (direction === 'merge') {
+    // Lines drop from each card center, merge into bar, single arrow into Porter
+    for (const x of colX) {
+      paths += `<line x1="${x}" y1="0" x2="${x}" y2="18" stroke="${lineColor}" stroke-width="${sw}"/>`;
+    }
+    paths += `<line x1="${leftX}" y1="18" x2="${rightX}" y2="18" stroke="${lineColor}" stroke-width="${sw}"/>`;
+    paths += `<line x1="${mid}" y1="18" x2="${mid}" y2="37" stroke="${lineColor}" stroke-width="${sw}"/>`;
+    paths += `<polygon points="${mid-a},37 ${mid+a},37 ${mid},48" fill="${arrowColor}"/>`;
+  } else {
+    // Stem from Porter, bar fans out, each column gets its own arrow
+    paths += `<line x1="${mid}" y1="0" x2="${mid}" y2="14" stroke="${lineColor}" stroke-width="${sw}"/>`;
+    paths += `<line x1="${leftX}" y1="14" x2="${rightX}" y2="14" stroke="${lineColor}" stroke-width="${sw}"/>`;
+    for (const x of colX) {
+      paths += `<line x1="${x}" y1="14" x2="${x}" y2="37" stroke="${lineColor}" stroke-width="${sw}"/>`;
+      paths += `<polygon points="${x-a},37 ${x+a},37 ${x},48" fill="${arrowColor}"/>`;
+    }
+  }
+  // preserveAspectRatio="none" ensures the SVG stretches to fill the grid width,
+  // keeping each arrow aligned to its card column.
+  return `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="display:block">${paths}</svg>`;
+}
+
+function renderOrchestration(agents, providers) {
+  const isPrimaryAgent = (a) => {
+    const s = ((a.name || '') + ' ' + (a.type || '')).toLowerCase();
+    return s.includes('openclaw') || s.includes('codex') || s.includes('claude') || s.includes('gemini');
+  };
+  const filtered = agents.filter(a => isPrimaryAgent(a))
+    .slice().sort((a,b) => _agentSortKey(a).localeCompare(_agentSortKey(b)));
+
+  const usageMap = {};
+  if (window._currentUsage) window._currentUsage.forEach(u => usageMap[u.agent_id] = u);
+
+  // ── Agent cards (top) ──
+  const agentEl = document.getElementById('orch-agents');
+  if (agentEl) {
+    if (!filtered.length) {
+      agentEl.innerHTML = '<div style="color:var(--text3);font-size:13px;grid-column:1/-1">No agents registered.</div>';
+    } else {
+      agentEl.innerHTML = filtered.map(a => {
+        const u = usageMap[a.id];
+        const hasPct = u && u.usage_percent !== null && u.usage_percent !== undefined && u.usage_percent !== '';
+        const consumedPct = hasPct ? Math.max(0, Math.min(100, Number(u.usage_percent))) : null;
+        const availablePct = consumedPct == null ? null : (100 - consumedPct);
+        // Green = registered agent (has key_hash or raw_key), gray = not registered
+        const isConnected = !!(a.raw_key || a.id);
+        const dotColor = isConnected ? '#22c55e' : 'var(--text3)';
+        const connMethod = _agentConnectionMethod(a);
+        const inferredModel = _inferModelId(a);
+        const modelName = inferredModel ? _modelDisplayName(inferredModel) : '';
+        // Usage bar
+        const usageColor = availablePct === null ? '' : availablePct <= 10 ? '#ef4444' : availablePct <= 25 ? '#f59e0b' : '#22c55e';
+        const usageBar = availablePct !== null
+          ? `<div class="orch-card-usage">
+               <div class="orch-card-usage-bar"><div class="orch-card-usage-fill" style="width:${availablePct}%;background:${usageColor}"></div></div>
+               <div class="orch-card-usage-text"><span style="font-weight:600;color:${usageColor}">${availablePct}%</span> remaining${u && u.window_resets_at ? ' · resets ' + _usageCountdown(u.window_resets_at) : ''}</div>
+             </div>` : '';
+        // Last seen / snapshot freshness
+        const lastActivity = u && u.captured_at ? _usageAgo(u.captured_at) : (a.last_seen ? _usageAgo(new Date(a.last_seen * 1000).toISOString()) : '');
+        const statusLabel = u ? (u.status === 'available' ? 'Available' : u.status === 'rate_limited' ? 'Rate limited' : u.status === 'degraded' ? 'Degraded' : u.status || '') : '';
+        // Provider connectivity badge
+        const provOk = (() => {
+          const ps = window._lastAiProviders || [];
+          const t = ((a.type||'')+(a.name||'')).toLowerCase();
+          if (t.includes('openclaw')||t.includes('codex')) { const p=ps.find(p=>p.id==='openclaw'); return p ? p.ok : null; }
+          if (t.includes('gemini')) { const p=ps.find(p=>p.id==='gemini_cli'); return p ? p.ok : null; }
+          return null; // Claude uses API directly — no local service to check
+        })();
+        const provBadge = provOk === true ? '<span style="color:#22c55e;font-size:10px;border:1px solid #22c55e;border-radius:4px;padding:1px 5px;margin-left:6px">service up</span>'
+          : provOk === false ? '<span style="color:var(--text3);font-size:10px;border:1px solid var(--border);border-radius:4px;padding:1px 5px;margin-left:6px">offline</span>'
+          : '';
+        const liveInfo = (statusLabel || lastActivity)
+          ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--text3)">${statusLabel ? `<span style="color:${usageColor || 'var(--text3)'}">${statusLabel}</span>` : ''}${statusLabel && lastActivity ? '<span style="color:var(--border2)">·</span>' : ''}${lastActivity ? `<span>Updated ${lastActivity}</span>` : ''}</div>`
+          : '';
+        return `<div class="orch-card">
+          <div class="orch-card-head">
+            <span class="orch-card-dot" style="background:${dotColor}"></span>
+            <span class="orch-card-name">${escHtml(a.name)}</span>
+            <button class="orch-card-gear" onclick="openConfigPanel('agent','${esc(a.id)}')" title="Configure">&#9881;</button>
+          </div>
+          <div class="orch-card-sub">${escHtml(connMethod)}${provBadge}</div>
+          ${modelName ? `<div class="orch-card-model">Model: ${escHtml(modelName)}</div>` : ''}
+          ${usageBar}
+          ${liveInfo}
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // ── SVG flow connector: merge (agents → porter) ──
+  const mergeEl = document.getElementById('flow-merge-1');
+  if (mergeEl) mergeEl.innerHTML = _buildFlowSVG(filtered.length, 'merge');
+
+  // ── Model cards (bottom) ──
+  // Derive models: use model_id if set, otherwise infer from type
+  const modelMap = {};
+  filtered.forEach(a => {
+    const mid = _inferModelId(a);
+    if (!mid) return;
+    const key = _modelDisplayName(mid);
+    if (!modelMap[key]) modelMap[key] = { model_id: mid, name: key, agents: [], opt: _modelOptLine(mid) };
+    if (!modelMap[key].agents.includes(a.name)) modelMap[key].agents.push(a.name);
+  });
+
+  // Sort models: codex first, claude second, gemini third
+  const modelSortKey = (m) => {
+    const mid = m.model_id.toLowerCase();
+    if (mid.includes('codex') || mid.includes('gpt')) return '0';
+    if (mid.includes('claude') || mid.includes('opus') || mid.includes('sonnet')) return '1';
+    if (mid.includes('gemini')) return '2';
+    return '3' + m.name;
+  };
+
+  const modelEl = document.getElementById('orch-models');
+  if (modelEl) {
+    const modelList = Object.values(modelMap).sort((a,b) => modelSortKey(a).localeCompare(modelSortKey(b)));
+    if (!modelList.length) {
+      modelEl.innerHTML = '<div style="color:var(--text3);font-size:13px;grid-column:1/-1">No models detected from registered agents.</div>';
+    } else {
+      modelEl.innerHTML = modelList.map(m => {
+        return `<div class="orch-card">
+          <div class="orch-card-head">
+            <span class="orch-card-dot" style="background:var(--accent)"></span>
+            <span class="orch-card-name">${escHtml(m.name)}</span>
+            <button class="orch-card-gear" onclick="openConfigPanel('model','${esc(m.model_id)}')" title="Configure">&#9881;</button>
+          </div>
+          ${m.opt ? `<div class="orch-card-opt">Optimized for: ${escHtml(m.opt)}</div>` : ''}
+          <div class="orch-card-sub" style="margin-top:4px">Used by: ${m.agents.map(n=>escHtml(n)).join(', ')}</div>
+        </div>`;
+      }).join('');
+    }
+
+    // SVG flow connector: fanout (porter → models)
+    const fanoutEl = document.getElementById('flow-fanout-1');
+    if (fanoutEl) fanoutEl.innerHTML = _buildFlowSVG(modelList.length, 'fanout');
+  }
+}
+
+// ── Config panel ──────────────────────────────────────────────────────────
+
+function openConfigPanel(type, id) {
+  const panel = document.getElementById('configPanel');
+  const title = document.getElementById('configPanelTitle');
+  const body  = document.getElementById('configPanelBody');
+  const main  = document.getElementById('mainEl');
+  if (!panel || !body) return;
+
+  if (type === 'agent') {
+    const agents = window._lastAgents || [];
+    const a = agents.find(x => x.id === id);
+    if (!a) { body.innerHTML = '<div style="color:var(--text3)">Agent not found.</div>'; }
+    else {
+      const usageMap = {};
+      if (window._currentUsage) window._currentUsage.forEach(u => usageMap[u.agent_id] = u);
+      const u = usageMap[a.id];
+      const hasPct = u && u.usage_percent !== null && u.usage_percent !== undefined;
+      const consumedPct = hasPct ? Math.max(0, Math.min(100, Number(u.usage_percent))) : null;
+      const availablePct = consumedPct == null ? null : (100 - consumedPct);
+      const roleColor = {viewer:'var(--text3)',writer:'var(--text2)',operator:'var(--accent)',admin:'var(--danger)'};
+      const roleC = roleColor[a.role] || 'var(--text3)';
+      const revealed = !!(window._revealedKeys && window._revealedKeys[a.id]);
+      const keyDisplay = a.raw_key ? (revealed ? a.raw_key : _maskKey(a.raw_key)) : '';
+      const inferredModel = _inferModelId(a);
+      const modelName = inferredModel ? _modelDisplayName(inferredModel) : '';
+      const globalWarn = Number((window._operatorPrefs && window._operatorPrefs.usage_warn_threshold) || 20);
+
+      title.textContent = a.name;
+      body.innerHTML = `
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Role</div>
+          <select style="font-size:12px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:${roleC};width:100%;cursor:pointer"
+            onchange="saveAgentRole('${esc(a.id)}',this.value)">
+            <option value="viewer"${a.role==='viewer'?' selected':''}>Observer</option>
+            <option value="writer"${a.role==='writer'?' selected':''}>Standard</option>
+            <option value="operator"${a.role==='operator'?' selected':''}>Trusted</option>
+            <option value="admin"${a.role==='admin'?' selected':''}>Admin</option>
+          </select>
+        </div>
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Connection</div>
+          <div style="font-size:13px;color:var(--text2)">${escHtml(_agentConnectionMethod(a))}</div>
+          ${modelName ? `<div style="font-size:12px;color:var(--text3);margin-top:4px">Model: ${escHtml(modelName)}</div>` : ''}
+        </div>
+        ${a.raw_key ? `
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">API Key</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <code style="flex:1;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2)">${escHtml(keyDisplay)}</code>
+            <button class="btn btn-ghost" style="font-size:11px;padding:3px 7px" onclick="_toggleKey('${a.id}');openConfigPanel('agent','${esc(a.id)}')">${revealed ? 'Hide' : 'Show'}</button>
+            <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="copyText('${escHtml(a.raw_key)}',this)">Copy</button>
+          </div>
+        </div>` : ''}
+        ${availablePct !== null ? `
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Usage</div>
+          <div style="height:6px;border-radius:999px;background:var(--border);overflow:hidden;margin-bottom:4px">
+            <div style="height:100%;width:${availablePct}%;background:${availablePct <= 10 ? '#ef4444' : availablePct <= 25 ? '#f59e0b' : '#22c55e'}"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px">
+            <span style="color:var(--text2)">${availablePct}% remaining</span>
+            <button class="btn btn-ghost" style="font-size:11px;padding:2px 6px" data-refresh-id="${a.id}" onclick="refreshAgentUsage('${a.id}','${escHtml(a.type)}')" title="Refresh usage">&#8635;</button>
+          </div>
+        </div>` : ''}
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Concurrency &amp; Alerts</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="font-size:12px;color:var(--text3)">Max concurrent</label>
+            <input id="conc-${a.id}" type="number" min="0" value="${a.max_concurrent||0}" title="0 = no limit"
+              style="width:50px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;font-size:12px;color:var(--text);font-family:inherit">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+            <label style="font-size:12px;color:var(--text3)">Warn at %</label>
+            <input id="warn-${a.id}" type="number" min="1" max="99" value="${Number.isFinite(Number(a.warn_threshold)) ? Number(a.warn_threshold) : ''}" placeholder="${globalWarn}"
+              style="width:50px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;font-size:12px;color:var(--text);font-family:inherit">
+            <span style="font-size:11px;color:var(--text3)">${Number.isFinite(Number(a.warn_threshold)) ? 'custom' : 'global'}</span>
+          </div>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;margin-top:8px" onclick="saveAgentConcurrency('${a.id}');saveAgentWarnThreshold('${a.id}')">Save settings</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;padding-top:14px;border-top:1px solid var(--border)">
+          <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px;text-align:left" onclick="closeConfigPanel();openAgentWorkspace('${esc(a.id)}','${esc(a.name)}')">Config files</button>
+          <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px;text-align:left" onclick="doTestAgent('${a.id}','${escHtml(a.name)}')">Connectivity check</button>
+          <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px;text-align:left" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
+          <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px;text-align:left;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Disconnect</button>
+        </div>`;
+    }
+  } else if (type === 'model') {
+    const displayName = _modelDisplayName(id);
+    const opt = _modelOptLine(id);
+    // Find which agents use this model
+    const agents = window._lastAgents || [];
+    const usedBy = agents.filter(a => _inferModelId(a).toLowerCase().includes(id.toLowerCase())).map(a => a.name);
+    title.textContent = displayName;
+    body.innerHTML = `
+      <div style="margin-bottom:16px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Model ID</div>
+        <div style="font-size:13px;color:var(--text)">${escHtml(id)}</div>
+      </div>
+      ${opt ? `<div style="margin-bottom:16px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Optimized for</div>
+        <div style="font-size:13px;color:var(--text2)">${escHtml(opt)}</div>
+      </div>` : ''}
+      ${usedBy.length ? `<div style="margin-bottom:16px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Used by</div>
+        <div style="font-size:13px;color:var(--text2)">${usedBy.map(n=>escHtml(n)).join(', ')}</div>
+      </div>` : ''}
+      <div style="padding-top:14px;border-top:1px solid var(--border);font-size:12px;color:var(--text3)">
+        Task routing preferences will be configurable in a future update.
+      </div>`;
+  }
+
+  panel.classList.add('open');
+  if (main) main.classList.add('config-open');
+}
+
+function closeConfigPanel() {
+  const panel = document.getElementById('configPanel');
+  const main  = document.getElementById('mainEl');
+  if (panel) panel.classList.remove('open');
+  if (main) main.classList.remove('config-open');
+}
+
+// Close config panel on Escape
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    const cp = document.getElementById('configPanel');
+    if (cp && cp.classList.contains('open')) { closeConfigPanel(); e.stopPropagation(); }
+  }
+}, true);
+
 function renderAgents(agents) {
   const el = document.getElementById('agent-list');
   const el2 = document.getElementById('agents-module-list');
@@ -5988,7 +6276,6 @@ function renderAgents(agents) {
     if (el2) el2.innerHTML = noAgents;
     return;
   }
-  const showAll = !!window._showAllAgentTypes;
   const isPrimaryAgent = (a) => {
     const s = `${a.name || ''} ${a.type || ''}`.toLowerCase();
     return s.includes('openclaw') || s.includes('codex') || s.includes('claude') || s.includes('gemini');
@@ -6046,11 +6333,24 @@ function renderAgents(agents) {
         <button class="btn btn-ghost" style="font-size:10px;padding:1px 5px" data-refresh-id="${a.id}" onclick="refreshAgentUsage('${a.id}','${escHtml(a.type)}')" title="Refresh live">↻</button>
       </div>`;
     const isGemini = (a.type||'').toLowerCase().includes('gemini');
+    const isOC2 = (a.type||'').toLowerCase().includes('openclaw')||(a.type||'').toLowerCase().includes('codex');
+    const isClaude = (a.type||'').toLowerCase().includes('claude');
+    const viaLabel = isOC2 ? 'OpenClaw Gateway :18789' : isGemini ? 'Gemini CLI' : isClaude ? 'Anthropic API' : '';
+    const viaBadge = (() => {
+      if (!viaLabel) return '';
+      if (isOC2) {
+        const prov = (window._lastAiProviders||[]).find(p=>p.id==='openclaw');
+        return prov && prov.ok ? '<span style="color:#22c55e;font-size:10px;font-weight:500;border:1px solid #22c55e;border-radius:4px;padding:1px 5px;margin-left:6px">Gateway up</span>' : '<span style="color:var(--text3);font-size:10px;border:1px solid var(--border);border-radius:4px;padding:1px 5px;margin-left:6px">offline</span>';
+      }
+      return '<span style="color:var(--text3);font-size:10px;border:1px solid var(--border);border-radius:4px;padding:1px 5px;margin-left:6px">direct</span>';
+    })();
     const modelLine = (a.model_id || isGemini)
-      ? '<div style="font-size:11px;color:var(--text3);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+      ? '<div style="margin-bottom:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px">'
+        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.4px">Model</span><span style="color:var(--text);font-weight:500">'
         + (a.model_id ? escHtml(a.model_id) : '')
-        + (a.model_id && isGemini ? ' <span style="opacity:.65">· 60/min · 1,000/day</span>' : '')
         + (isGemini && !a.model_id ? '<span style="opacity:.65">60/min · 1,000/day</span>' : '')
+        + '</span></div>'
+        + (viaLabel ? '<div style="display:flex;align-items:center;gap:6px"><span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.4px">via</span><span style="color:var(--text2)">' + escHtml(viaLabel) + '</span>' + viaBadge + '</div>' : '')
         + '</div>'
       : '';
     const authLine = (() => {
@@ -6115,11 +6415,7 @@ function renderAgents(agents) {
   if (el2) el2.innerHTML = hiddenNotice + grid;
 }
 
-function openCreateAgent() {
-  document.getElementById('agent-key-box').style.display = 'none';
-  document.getElementById('agent-form').style.display = 'block';
-  document.getElementById('af-name').value = '';
-}
+
 
 function cancelAgentForm() {
   document.getElementById('agent-form').style.display = 'none';
@@ -6764,6 +7060,7 @@ async function loadUsage() {
   window._currentUsage = data.agents || [];
   renderUsage(data.agents || []);
   if (window._lastAgents) renderAgents(window._lastAgents);
+  if (window._lastAgents) renderOrchestration(window._lastAgents, window._lastAiProviders || []);
 }
 
 async function refreshAgentUsage(agentId, agentType) {
@@ -7674,13 +7971,16 @@ function showFilesHome() {
                 const onclick = e.type === "dir"
                   ? `selectMount('${esc(activeMount)}','${esc(ePath)}')`
                   : `_fhomeOpenFile('${esc(activeMount)}','${esc(ePath)}','${esc(e.name)}')`;
+                const parts = ePath.split('/');
+                const eName = parts.pop();
+                const eDir = parts.join('/');
                 html += `<div class="fhome-entry" onclick="${onclick}">`;
                 html += `<div></div>`;
                 html += `<div class="file-name" style="padding-left:24px">${eIcon}`;
                 html += `<span class="file-label">${escHtml(e.name)}</span></div>`;
                 html += `<div class="file-size" style="font-size:12px;color:var(--text3)">${e.type === "dir" ? "" : (e.size || "")}</div>`;
                 html += `<div class="file-date" style="font-size:12px;color:var(--text3)">${e.modified || ""}</div>`;
-                html += `<div></div></div>`;
+                html += `<div style="display:flex;justify-content:center"><button class="row-menu-btn" style="opacity:.4" onclick="event.stopPropagation();_fhomeDelete(event,'${esc(activeMount)}','${esc(eDir)}','${esc(eName)}','${e.type}')" title="Delete">${I.trash}</button></div></div>`;
               });
             }
           }
@@ -7697,6 +7997,43 @@ function _fhomeOpenFile(mountId, filePath, fileName) {
   const name  = parts.pop();
   curRoot = mountId; curPath = parts.join("/");
   openPreview(name);
+}
+
+function _fhomeDelete(evt, mountId, dirPath, name, type) {
+  // Find the row element before the modal opens
+  const rowEl = evt.target.closest('.fhome-entry');
+  curRoot = mountId;
+  curPath = dirPath;
+  showModal({
+    title: 'Delete ' + type,
+    desc: 'Delete <strong>' + escHtml(name) + '</strong>?' + (type === 'dir' ? '<br><br>All contents will be deleted.' : ''),
+    actions: [
+      { label: 'Cancel', action: closeModal },
+      { label: 'Delete', cls: 'btn-danger', action: async () => {
+        closeModal();
+        const res = await api('/api/delete', { root: curRoot, path: curPath, name });
+        if (res && res.ok) {
+          toast('Deleted ' + name, 'ok');
+          // Remove from cached entries so rebuild stays consistent
+          if (_fhomeActive && _fhomeActive.entries) {
+            _fhomeActive.entries = _fhomeActive.entries.filter(e => e.name !== name);
+          }
+          // Animate the row out
+          if (rowEl) {
+            rowEl.style.maxHeight = rowEl.offsetHeight + 'px';
+            // Force reflow before adding class
+            void rowEl.offsetHeight;
+            rowEl.classList.add('removing');
+            rowEl.addEventListener('transitionend', () => rowEl.remove(), { once: true });
+            // Fallback removal if transitionend doesn't fire
+            setTimeout(() => { if (rowEl.parentNode) rowEl.remove(); }, 500);
+          }
+        } else {
+          toast((res && res.error) || 'Delete failed', 'err');
+        }
+      }},
+    ],
+  });
 }
 
 function toggleFhomeNode(nodeId) {
@@ -8951,7 +9288,12 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             safe = [{k: v for k, v in a.items() if k != "key_hash"}
                     for a in _config.get("agents", [])]
-            self.reply_json({"agents": safe})
+            # Include AI provider status for unified Agents tab
+            if not _capabilities_cache:
+                _run_cap_checks()
+            ai_ids = {p["id"] for p in AI_PROVIDERS}
+            providers = [v for v in _capabilities_cache.values() if v["id"] in ai_ids]
+            self.reply_json({"agents": safe, "ai_providers": providers})
 
         # ── config summary / export ───────────────────────────────────────
         elif parsed.path == "/api/config/summary":
@@ -9552,7 +9894,18 @@ class Handler(BaseHTTPRequestHandler):
             # If cache is empty (first request before thread finishes), kick off sync check
             if not _capabilities_cache:
                 _run_cap_checks()
-            self.reply_json({"capabilities": list(_capabilities_cache.values())})
+            # Filter to non-AI tools only (AI providers served via /api/ai-providers)
+            ai_ids = {p["id"] for p in AI_PROVIDERS}
+            caps = [v for v in _capabilities_cache.values() if v["id"] not in ai_ids]
+            self.reply_json({"capabilities": caps})
+
+        elif parsed.path == "/api/ai-providers":
+            if not self.auth_check(redirect=False): return
+            if not _capabilities_cache:
+                _run_cap_checks()
+            ai_ids = {p["id"] for p in AI_PROVIDERS}
+            providers = [v for v in _capabilities_cache.values() if v["id"] in ai_ids]
+            self.reply_json({"providers": providers})
 
         # ── P6: tools ────────────────────────────────────────────────────────
         elif parsed.path == "/api/tools":
@@ -9800,7 +10153,17 @@ class Handler(BaseHTTPRequestHandler):
             fp = allow.get(rel)
             if not fp:
                 self.reply_json({"error": "path not allowed"}, 403); return
-            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())) and not str(fp).startswith(str((Path.home()/'.codex').resolve())) and not str(fp).startswith(str((Path.home()/'.claude').resolve())) and not str(fp).startswith(str((Path.home()/'.gemini').resolve())) and not str(fp).startswith(str((Path.home()/'.qwen').resolve())):
+            _allowed_bases = [
+                str(AGENT_WORKSPACE_DIR.resolve()),
+                str(OPENCLAW_STATE_DIR.resolve()),
+                str((Path.home()/'.codex').resolve()),
+                str((Path.home()/'.claude').resolve()),
+                str((Path.home()/'.gemini').resolve()),
+                str((Path.home()/'.qwen').resolve()),
+            ]
+            # Also allow files explicitly in the allow-list (e.g. ~/CLAUDE.md)
+            fp_s = str(fp)
+            if fp_s not in [str(v.resolve()) for v in allow.values()] and not any(fp_s.startswith(b) for b in _allowed_bases):
                 self.reply_json({"error": "invalid path"}, 400); return
             if not fp.exists():
                 self.reply_json({"ok": True, "content": ""}); return
@@ -9878,7 +10241,16 @@ class Handler(BaseHTTPRequestHandler):
             fp = allow.get(rel)
             if not fp:
                 self.reply_json({"error": "path not allowed"}, 403); return
-            if not str(fp).startswith(str(AGENT_WORKSPACE_DIR.resolve())) and not str(fp).startswith(str(OPENCLAW_STATE_DIR.resolve())) and not str(fp).startswith(str((Path.home()/'.codex').resolve())) and not str(fp).startswith(str((Path.home()/'.claude').resolve())) and not str(fp).startswith(str((Path.home()/'.gemini').resolve())) and not str(fp).startswith(str((Path.home()/'.qwen').resolve())):
+            _allowed_bases_w = [
+                str(AGENT_WORKSPACE_DIR.resolve()),
+                str(OPENCLAW_STATE_DIR.resolve()),
+                str((Path.home()/'.codex').resolve()),
+                str((Path.home()/'.claude').resolve()),
+                str((Path.home()/'.gemini').resolve()),
+                str((Path.home()/'.qwen').resolve()),
+            ]
+            fp_s_w = str(fp)
+            if fp_s_w not in [str(v.resolve()) for v in allow.values()] and not any(fp_s_w.startswith(b) for b in _allowed_bases_w):
                 self.reply_json({"error": "invalid path"}, 400); return
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content, encoding="utf-8")
@@ -11602,7 +11974,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.14.14 ready (localhost only)")
+    print(f"\n  Porter v0.14.16 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

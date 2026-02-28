@@ -66,7 +66,7 @@ test.describe('Tab Headers — every tab must have a title', () => {
 
   const moduleTabs = [
     { id: 'overview', title: 'Command Center', selector: '#overview-module .module-title' },
-    { id: 'agents', title: 'Agents', selector: '#agents-module .module-title' },
+    { id: 'agents', title: 'Orchestration', selector: '#agents-module .module-title' },
     { id: 'projects', title: 'Projects', selector: '#projects-module .module-title' },
     { id: 'locations', title: 'Locations', selector: '#locations-module .module-title' },
     { id: 'capabilities', title: 'Extensions', selector: '#capabilities-module .module-title' },
