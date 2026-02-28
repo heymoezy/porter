@@ -2433,7 +2433,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .treg-act.act-del { color:var(--danger); border-color:rgba(239,68,68,.3); }
 .treg-act.act-del:hover { background:rgba(239,68,68,.08); }
 .treg-sec-hdr { display:flex; align-items:center; gap:10px; margin:18px 0 4px; }
-.treg-sec-label { font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.8px; white-space:nowrap; }
+.treg-sec-label { font-size:11px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; white-space:nowrap; }
 .treg-sec-line  { flex:1; height:1px; background:var(--border); }
 .treg-sec-count { font-size:11px; color:var(--text3); }
 .treg-sec-toggle { font-size:11px; color:var(--accent); background:none; border:none; cursor:pointer; padding:0; }
@@ -2446,7 +2446,7 @@ body.density-compact .file-name { padding: 6px 0; }
 /* Projects panel — inline accordion */
 .proj-row { display:grid; grid-template-columns:14px 1fr auto; align-items:center; gap:10px; padding:2px 28px; border-bottom:1px solid rgba(255,255,255,.04); cursor:pointer; user-select:none; transition:background .1s; }
 .proj-row:hover { background:var(--raised); }
-.proj-row-chevron { font-size:9px; color:var(--text3); transition:transform .15s; flex-shrink:0; }
+.proj-row-chevron { font-size:10px; color:var(--text3); transition:transform .15s; flex-shrink:0; }
 .proj-row-chevron.open { transform:rotate(90deg); }
 .proj-row-name { font-size:13px; font-weight:600; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:10px 0; }
 .proj-row-count { font-size:11px; color:var(--text3); white-space:nowrap; }
@@ -2476,15 +2476,15 @@ body.density-compact .file-name { padding: 6px 0; }
 .proj-stats { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
 .proj-stat { font-size:11px; color:var(--text3); display:flex; align-items:center; gap:4px; }
 .proj-stat-num { font-weight:600; color:var(--text2); }
-.proj-col-lbl { font-size:10px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; color:var(--text3); }
+.proj-col-lbl { font-size:11px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; color:var(--text3); }
 /* Done section per-project */
 .proj-done-hdr { display:flex; align-items:center; gap:8px; padding:8px 12px 4px; cursor:pointer; user-select:none; }
 .proj-done-hdr:hover .proj-done-label { color:var(--text2); }
-.proj-done-label { font-size:10px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; color:var(--text3); flex:1; }
+.proj-done-label { font-size:11px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; color:var(--text3); flex:1; }
 .proj-done-count { font-size:11px; color:var(--text3); }
-.proj-done-chevron { font-size:9px; color:var(--text3); transition:transform .15s; }
+.proj-done-chevron { font-size:10px; color:var(--text3); transition:transform .15s; }
 .proj-done-chevron.open { transform:rotate(90deg); }
-.task-badge { font-size:11px; padding:2px 8px; border-radius:20px; font-weight:600; white-space:nowrap; }
+.task-badge { font-size:10px; padding:2px 8px; border-radius:20px; font-weight:600; white-space:nowrap; }
 .task-badge.badge-running   { background:#dcfce7; color:#15803d; }
 .task-badge.badge-paused    { background:#fef9c3; color:#854d0e; }
 .task-badge.badge-stalled   { background:#fee2e2; color:#b91c1c; }
@@ -2570,7 +2570,7 @@ select.settings-input { padding-right: 26px; }
 }
 .loc-card:hover { border-color:var(--border2); }
 .loc-card-head { display:flex; align-items:center; gap:8px; }
-.loc-card-name { font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.loc-card-name { font-size:14px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .loc-card-nick-row { display:flex; align-items:center; gap:6px; }
 .loc-edit-btn {
   background:none; border:none; cursor:pointer; padding:2px; color:var(--text3);
@@ -2580,7 +2580,7 @@ select.settings-input { padding-right: 26px; }
 .loc-card-info { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text2); flex-wrap:wrap; }
 .loc-card-ips { display:flex; flex-direction:column; gap:3px; margin-top:2px; }
 .loc-ip-row { display:flex; align-items:center; gap:5px; font-size:11px; font-family:monospace; color:var(--text2); }
-.loc-ip-label { font-family:var(--font); font-size:10px; color:var(--text3); min-width:44px; }
+.loc-ip-label { font-family:var(--font); font-size:11px; color:var(--text3); min-width:44px; }
 .loc-ip-copy {
   background:none; border:none; cursor:pointer; padding:1px 3px; color:var(--text3);
   opacity:.3; transition:opacity .15s; display:inline-flex; align-items:center; font-size:11px;
