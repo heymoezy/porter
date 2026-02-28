@@ -2337,7 +2337,8 @@ body.density-compact .file-name { padding: 6px 0; }
 }
 .orch-card:hover { border-color:var(--accent); }
 .orch-card-head { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
-.orch-card-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.status-dot { display:inline-block; width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.orch-card-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
 .orch-card-name { font-size:14px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .orch-card-gear {
   width:32px; height:32px; display:flex; align-items:center; justify-content:center;
@@ -5188,8 +5189,8 @@ function renderCapabilities(caps) {
   el.innerHTML = caps.map(c => {
     const ok = c.ok;
     const dot = ok
-      ? '<span style="color:#22c55e;font-size:16px;line-height:1">&#9679;</span>'
-      : '<span style="color:var(--text3);font-size:16px;line-height:1">&#9675;</span>';
+      ? '<span class="status-dot" style="background:#22c55e"></span>'
+      : '<span class="status-dot" style="background:var(--text3)"></span>';
     const rawVer = ok && c.version ? c.version : '';
     const dispVer = rawVer && /^\d/.test(rawVer.trim()) ? 'v' + rawVer.trim() : rawVer.trim();
     const ver = dispVer ? '<span style="color:var(--text3);font-size:11px;margin-left:6px">' + escHtml(dispVer) + '</span>' : '';
@@ -5645,7 +5646,7 @@ function renderNodes(nodes) {
         return `
           <div class="loc-card">
             <div class="loc-card-head">
-              <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${statusDot};flex-shrink:0" title="${nodeStatus === 'relay' ? 'Via DERP relay — not direct peer-to-peer' : ''}"></span>
+              <span class="status-dot" style="background:${statusDot}" title="${nodeStatus === 'relay' ? 'Via DERP relay — not direct peer-to-peer' : ''}"></span>
               <span class="loc-card-name">${escHtml(deviceName)}</span>
               <span style="font-size:10px;color:${statusColor};font-weight:500;margin-left:auto">${statusLabel}</span>
             </div>
@@ -6423,7 +6424,7 @@ function renderAgents(agents) {
     return `
     <div style="padding:14px 16px;background:var(--raised);border-radius:10px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <span style="width:8px;height:8px;border-radius:50%;background:${riskColor};flex-shrink:0"></span>
+        <span class="status-dot" style="background:${riskColor}"></span>
         <span style="font-size:14px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(a.name)}</span>
         ${roleWidget}
       </div>
@@ -7132,7 +7133,7 @@ function renderUsage(agents) {
     const snapped = a.captured_at ? _usageAgo(a.captured_at) : 'never';
     return `
     <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--raised);border-radius:8px;margin-bottom:8px;border:1px solid var(--border)">
-      <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></div>
+      <span class="status-dot" style="background:${color}"></span>
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:13px;font-weight:600">${escHtml(a.name)}</span>
@@ -7961,7 +7962,7 @@ function showFilesHome() {
       const chevron = mounts.length ? (devOpen ? "&#9660;" : "&#9654;") : "";
       const selfTag = isSelf
         ? `<span style="font-size:11px;font-weight:400;color:var(--text3);margin-left:8px">this device</span>`
-        : `<span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px"><span style="width:7px;height:7px;border-radius:50%;background:${dotColor};display:inline-block"></span><span style="font-size:11px;font-weight:400;color:var(--text3)">${tsStatus}</span></span>`;
+        : `<span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px"><span class="status-dot" style="background:${dotColor}"></span><span style="font-size:11px;font-weight:400;color:var(--text3)">${tsStatus}</span></span>`;
 
       const _cbEntry = _pepAgentForNode(node);
       const _cbCirc  = !isSelf && _cbEntry && _cbEntry.circuit;
