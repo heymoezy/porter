@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.22.2 — self-hosted file manager"""
+"""Porter v0.22.3 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -3567,6 +3567,30 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 
 
 /* Admin tab */
+
+/* Admin quick stats */
+.admin-stats-row {
+  display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;
+}
+.admin-stat-card {
+  flex:1; min-width:120px; padding:12px 16px; background:var(--raised);
+  border:1px solid var(--border); border-radius:8px;
+}
+.admin-stat-val { font-size:20px; font-weight:700; color:var(--text); }
+.admin-stat-label { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; margin-top:2px; }
+/* Delegation log */
+.deleg-entry {
+  display:flex; align-items:center; gap:10px; padding:8px 12px; font-size:12px;
+  border-bottom:1px solid var(--border);
+}
+.deleg-entry:last-child { border-bottom:none; }
+.deleg-backend { font-size:10px; padding:2px 6px; border-radius:4px; font-weight:600; }
+.deleg-backend.openclaw { background:color-mix(in srgb, #059669 15%, transparent); color:#059669; }
+.deleg-backend.gemini { background:color-mix(in srgb, #2563eb 15%, transparent); color:#2563eb; }
+.deleg-backend.ollama { background:color-mix(in srgb, #8b5cf6 15%, transparent); color:#8b5cf6; }
+.deleg-time { color:var(--text3); font-size:11px; margin-left:auto; white-space:nowrap; }
+.deleg-dur { color:var(--text3); font-size:11px; }
+
 .admin-section { margin-bottom:20px; }
 .admin-section-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.6px; margin-bottom:10px; font-weight:600; }
 .admin-grid {
@@ -4603,7 +4627,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.22.2</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.22.3</div>
   </div>
 </aside>
 
@@ -5073,6 +5097,12 @@ select.settings-input { padding-right: 26px; }
     </div>
     <div class="module-intro">System health, logs, and configuration.</div>
 
+    <!-- Quick Stats -->
+    <div id="admin-quick-stats" class="admin-stats-row"></div>
+
+    <!-- Porter Rules -->
+    <div class="admin-section"><div class="admin-section-label">PORTER RULES</div><div id="admin-rules"><div class="loading-indicator">Loading rules</div></div></div>
+
     <!-- Health Dashboard -->
     <div class="admin-section">
       <div class="admin-section-label">SYSTEM HEALTH</div>
@@ -5111,6 +5141,9 @@ select.settings-input { padding-right: 26px; }
       </div>
       <pre id="admin-logs" class="admin-log-output">Loading...</pre>
     </div>
+
+    <!-- Delegation Log -->
+    <div class="admin-section"><div class="admin-section-label">DELEGATION LOG</div><div id="admin-deleg-log"><div style="font-size:12px;color:var(--text3);font-style:italic">No delegations yet</div></div></div>
 
     <!-- Config Summary -->
     <div class="admin-section">
@@ -5644,6 +5677,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.22.3', date:'2026-02-28', notes:[
+    'Fix: Porter Rules section now visible in Admin tab (HTML container was missing)',
+    'New: Quick stats row at top of Admin — version, uptime, active models, total sessions',
+    'New: Delegation log section — tracks recent agent bridge calls across models',
+  ]},
   { ver:'v0.22.2', date:'2026-02-28', notes:[
     'New: Flow arrow labels on Memory tab — describes data direction between layers',
     'New: Session stats summary bar (total sessions, size, model breakdown)',
@@ -9140,8 +9178,48 @@ async function removeRule(id) {
   loadRules();
 }
 
+
+// ── Admin quick stats ─────────────────────────────────────────────────────
+function renderAdminQuickStats(health) {
+  var el = document.getElementById('admin-quick-stats');
+  if (!el) return;
+  var cards = [
+    {val: health.version || '?', label: 'Version'},
+    {val: health.uptime || '?', label: 'Uptime'},
+    {val: (health.services || []).filter(function(s){return s.status==='running'||s.status==='ok'}).length + '/' + (health.services || []).length, label: 'Services Up'},
+    {val: health.cpu_percent ? health.cpu_percent + '%' : '?', label: 'CPU'},
+    {val: health.mem_used_mb ? Math.round(health.mem_used_mb) + ' MB' : '?', label: 'Memory Used'},
+  ];
+  el.innerHTML = cards.map(function(c) {
+    return '<div class="admin-stat-card"><div class="admin-stat-val">' + c.val + '</div><div class="admin-stat-label">' + c.label + '</div></div>';
+  }).join('');
+}
+
+async function loadDelegationLog() {
+  var el = document.getElementById('admin-deleg-log');
+  if (!el) return;
+  var resp = await api('/api/admin/delegations');
+  if (!resp || !resp.delegations || !resp.delegations.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text3);font-style:italic">No delegations this session</div>';
+    return;
+  }
+  var html = '';
+  resp.delegations.slice().reverse().forEach(function(d) {
+    var ago = Math.round((Date.now()/1000 - d.ts) / 60);
+    var timeStr = ago < 1 ? 'just now' : ago + 'm ago';
+    html += '<div class="deleg-entry">';
+    html += '<span class="deleg-backend ' + d.backend + '">' + d.backend + '</span>';
+    html += '<span style="flex:1;color:var(--text)">' + escHtml(d.prompt) + '</span>';
+    html += '<span class="deleg-dur">' + (d.duration_ms/1000).toFixed(1) + 's</span>';
+    html += '<span class="deleg-time">' + timeStr + '</span>';
+    html += '</div>';
+  });
+  el.innerHTML = html;
+}
+
 async function loadAdmin() {
   loadRules();
+  loadDelegationLog();
   await Promise.all([loadAdminHealth(), loadAdminLogs(), loadAdminConfig()]);
 }
 
@@ -13515,13 +13593,39 @@ AGENT_DISPATCHERS = {
     "ollama": _dispatch_ollama,
 }
 
+
+# ── Delegation log ─────────────────────────────────────────────────────────
+_delegation_log = []  # List of recent delegations (max 50)
+_delegation_lock = _threading.Lock()
+
+def _log_delegation(backend, message, result, duration_ms):
+    """Record a delegation to the log."""
+    import time as _t
+    entry = {
+        "ts": _t.time(),
+        "backend": backend,
+        "prompt": message[:100],
+        "ok": result.get("ok", False),
+        "model": result.get("model", ""),
+        "duration_ms": duration_ms,
+        "tokens": result.get("tokens", {}).get("total", 0),
+    }
+    with _delegation_lock:
+        _delegation_log.append(entry)
+        if len(_delegation_log) > 50:
+            _delegation_log.pop(0)
+
 def dispatch_agent(message, backend, model=None, timeout=120):
     """Route a message to the specified backend and return normalized response."""
+    import time as _dt
+    _dt_start = _dt.time()
     fn = AGENT_DISPATCHERS.get(backend)
     if not fn:
         return {"ok": False, "error": f"Unknown backend: {backend}. Available: {', '.join(AGENT_DISPATCHERS.keys())}"}
     try:
-        return fn(message, model=model, timeout=timeout)
+        _result = fn(message, model=model, timeout=timeout)
+        _log_delegation(backend, message, _result, int((_dt.time() - _dt_start) * 1000))
+        return _result
     except Exception as e:
         log.error("Agent bridge [%s] exception: %s", backend, e)
         return {"ok": False, "error": str(e)[:500]}
@@ -13919,9 +14023,14 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             self.reply_json({"ok": True, "rules": _get_rules()})
 
+
+        elif parsed.path == "/api/admin/delegations":
+            if not self.auth_check(redirect=False): return
+            with _delegation_lock:
+                self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.22.2"})
+            self.reply_json({"v": "0.22.3"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17454,7 +17563,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.22.2 ready (localhost only)")
+    print(f"\n  Porter v0.22.3 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
