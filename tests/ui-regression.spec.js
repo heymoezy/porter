@@ -65,7 +65,7 @@ test.describe('Tab Headers — every tab must have a title', () => {
   });
 
   const moduleTabs = [
-    { id: 'overview', title: 'Command Center', selector: '#overview-module .module-title' },
+    { id: 'overview', title: 'Chat', selector: '#overview-module .module-title' },
     { id: 'agents', title: 'Orchestration', selector: '#agents-module .module-title' },
     { id: 'projects', title: 'Projects', selector: '#projects-module .module-title' },
     { id: 'locations', title: 'Locations', selector: '#locations-module .module-title' },
@@ -142,7 +142,7 @@ test.describe('Header alignment — all headers same height', () => {
   });
 
   test('all module-hdr elements have consistent height', async ({ page }) => {
-    const tabs = ['overview', 'agents', 'projects', 'locations', 'capabilities'];
+    const tabs = ['agents', 'projects', 'locations', 'capabilities'];
     const heights = [];
     for (const tab of tabs) {
       await switchTab(page, tab);

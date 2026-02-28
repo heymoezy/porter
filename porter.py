@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.17.2 — self-hosted file manager"""
+"""Porter v0.18.1 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -3562,6 +3562,53 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-file-item:hover { background:var(--raised); }
 .chat-file-item .size { font-size:10px; color:var(--text3); margin-left:auto; }
 
+
+/* Admin tab */
+.admin-section { margin-bottom:20px; }
+.admin-section-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.6px; margin-bottom:10px; font-weight:600; }
+.admin-grid {
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:10px;
+}
+.admin-card {
+  padding:14px 16px; background:var(--raised); border:1px solid var(--border);
+  border-radius:10px; position:relative;
+}
+.admin-card-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.3px; margin-bottom:6px; }
+.admin-card-value { font-size:22px; font-weight:700; color:var(--text); line-height:1.2; }
+.admin-card-sub { font-size:11px; color:var(--text3); margin-top:4px; }
+.admin-card-bar { height:6px; background:var(--border); border-radius:999px; overflow:hidden; margin-top:8px; }
+.admin-card-bar-fill { height:100%; border-radius:999px; transition:width .3s; }
+.admin-svc-row {
+  display:flex; align-items:center; gap:10px; padding:10px 14px;
+  background:var(--raised); border:1px solid var(--border); border-radius:8px;
+  margin-bottom:6px;
+}
+.admin-svc-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.admin-svc-dot.up { background:#22c55e; }
+.admin-svc-dot.down { background:var(--err); }
+.admin-svc-dot.unknown { background:var(--text3); }
+.admin-svc-name { font-size:13px; font-weight:600; color:var(--text); }
+.admin-svc-detail { font-size:11px; color:var(--text3); margin-left:auto; }
+.admin-log-controls { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+.admin-select {
+  padding:4px 10px; font-size:11px; border:1px solid var(--border);
+  border-radius:6px; background:var(--bg2); color:var(--text);
+}
+.admin-log-output {
+  background:var(--bg); border:1px solid var(--border); border-radius:8px;
+  padding:12px; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+  font-size:11px; line-height:1.5; color:var(--text2); overflow:auto;
+  max-height:400px; white-space:pre-wrap; word-break:break-all; margin:0;
+}
+.admin-log-line-error { color:var(--err); font-weight:600; }
+.admin-log-line-warning { color:var(--accent); }
+.admin-log-line-info { color:var(--text2); }
+.admin-log-line-debug { color:var(--text3); }
+.admin-cfg-table { width:100%; border-collapse:collapse; }
+.admin-cfg-table td { padding:6px 10px; font-size:12px; border-bottom:1px solid var(--border); }
+.admin-cfg-table td:first-child { color:var(--text3); font-weight:500; width:180px; }
+.admin-cfg-table td:last-child { color:var(--text); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; }
+
 /* Chat engine */
 .chat-container { display:flex; flex-direction:column; height:calc(100vh - 160px); min-height:400px; }
 .chat-header { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--border); margin-bottom:0; flex-shrink:0; }
@@ -3925,10 +3972,7 @@ body.density-compact .file-name { padding: 6px 0; }
   padding:14px 16px; margin-bottom:10px; display:flex; align-items:center; gap:12px; }
 .tool-card { background:var(--bg2); border:1px solid var(--border); border-radius:8px;
   padding:14px 16px; margin-bottom:10px; display:flex; align-items:center; gap:12px; }
-.ov-metric { background:var(--bg2); border:1px solid var(--border); border-radius:10px;
-  padding:14px 16px; display:flex; flex-direction:column; gap:4px; }
-.ov-metric-val { font-size:28px; font-weight:700; color:var(--text); }
-.ov-metric-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; }
+/* ov-metric classes removed — overview module is now Chat */
 .audit-row { padding:10px 0; border-bottom:1px solid var(--border); font-size:12px;
   display:flex; gap:10px; align-items:baseline; }
 .agent-clarity { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
@@ -3968,6 +4012,23 @@ body.density-compact .file-name { padding: 6px 0; }
 .orch-card-usage-bar { height:4px; border-radius:999px; background:var(--border); overflow:hidden; }
 .orch-card-usage-fill { height:100%; border-radius:999px; transition:width .4s ease; }
 .orch-card-usage-text { font-size:11px; color:var(--text3); margin-top:3px; }
+
+
+/* Flow arrow animation */
+@keyframes flow-pulse {
+  0%, 100% { opacity:.4; }
+  50% { opacity:1; }
+}
+@keyframes flow-dash {
+  to { stroke-dashoffset: -20; }
+}
+.flow-connector .flow-line {
+  stroke-dasharray: 6 4;
+  animation: flow-dash 1.2s linear infinite;
+}
+.flow-connector .flow-arrow {
+  animation: flow-pulse 2s ease-in-out infinite;
+}
 
 /* flow connectors — SVG based */
 .flow-connector { display:flex; flex-direction:column; align-items:center; padding:2px 0; }
@@ -4377,6 +4438,10 @@ select.settings-input { padding-right: 26px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
       <span class="mnav-label">Files</span>
     </button>
+    <button class="mnav-item" id="mnav-admin" onclick="switchModule('admin')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <span class="mnav-label">Admin</span>
+    </button>
     <button class="mnav-item" id="mnav-policies" style="display:none" onclick="switchModule('policies')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/><circle cx="18" cy="14" r="4"/></svg>
       <span class="mnav-label">Policies</span>
@@ -4408,7 +4473,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.17.2</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.18.1</div>
   </div>
 </aside>
 
@@ -4471,16 +4536,41 @@ select.settings-input { padding-right: 26px; }
 
   <!-- module panels -->
   <div id="overview-module" class="module-panel">
-    <div class="module-hdr">
-      <span class="module-title">Command Center</span>
+    <div class="chat-container">
+      <div class="chat-header">
+        <span class="module-title" style="font-size:16px">Chat</span>
+        <select id="chat-model" class="chat-model-sel" onchange="_chatModelChanged()">
+          <option value="">Select model&#8230;</option>
+        </select>
+        <button class="btn btn-ghost" style="font-size:11px;margin-left:auto" onclick="chatNewConversation()">+ New chat</button>
+        <button class="btn btn-ghost" style="font-size:11px" onclick="loadChatSessions()">History</button>
+      </div>
+
+      <div id="chat-history-panel" style="display:none">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);margin-bottom:8px">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">Chat History</span>
+          <button class="btn btn-ghost" style="font-size:11px;margin-left:auto" onclick="closeChatHistory()">Back to chat</button>
+        </div>
+        <div id="chat-sessions-list" class="chat-sidebar"></div>
+      </div>
+
+      <div id="chat-main">
+        <div id="chat-messages" class="chat-messages">
+          <div class="chat-empty">
+            <div class="chat-empty-icon">&#9889;</div>
+            <div class="chat-empty-title">Talk to your AI models</div>
+            <div class="chat-empty-hint">Select a model above, type a message below. Responses stream in real-time. Conversations are saved automatically.</div>
+          </div>
+        </div>
+        <div id="chat-ctx-bar" class="chat-ctx-bar" style="display:none"></div>
+        <div class="chat-input-area" style="position:relative">
+          <div id="chat-file-picker" class="chat-file-picker" style="display:none"></div>
+          <button class="chat-attach-btn" onclick="toggleChatFilePicker()" title="Attach file as context">&#128206;</button>
+          <textarea id="chat-input" class="chat-input" placeholder="Type a message&#8230;" rows="1" onkeydown="chatInputKey(event)" oninput="chatAutoResize(this)"></textarea>
+          <button id="chat-send-btn" class="chat-send" onclick="chatSend()" disabled>Send</button>
+        </div>
+      </div>
     </div>
-    <div class="module-intro">System health and activity overview.</div>
-    <div style="padding:48px 24px;text-align:center;color:var(--text3)">
-      <div style="font-size:32px;margin-bottom:16px">&#9685;</div>
-      <div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:8px">Dashboard coming soon</div>
-      <div style="font-size:13px;max-width:380px;margin:0 auto;line-height:1.6">A live system health view — agent activity, capacity, task throughput — will be built here once the core platform is stable.</div>
-    </div>
-    <div id="ov-metrics" style="display:none"></div>
   </div>
 
   <div id="tasks-module" class="module-panel">
@@ -4841,6 +4931,61 @@ select.settings-input { padding-right: 26px; }
   </div>
 
   <!-- Memory tab v4 — Porter memory control center -->
+  <div id="admin-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Admin</span>
+      <button class="btn btn-ghost" onclick="loadAdmin()">&#8635; Refresh</button>
+    </div>
+    <div class="module-intro">System health, logs, and configuration.</div>
+
+    <!-- Health Dashboard -->
+    <div class="admin-section">
+      <div class="admin-section-label">SYSTEM HEALTH</div>
+      <div id="admin-health" class="admin-grid">
+        <div class="loading-indicator">Loading health data</div>
+      </div>
+    </div>
+
+    <!-- Service Status -->
+    <div class="admin-section">
+      <div class="admin-section-label">SERVICES</div>
+      <div id="admin-services">
+        <div class="loading-indicator">Checking services</div>
+      </div>
+    </div>
+
+    <!-- Log Viewer -->
+    <div class="admin-section">
+      <div class="admin-section-label">LOGS</div>
+      <div class="admin-log-controls">
+        <select id="admin-log-lines" class="admin-select" onchange="loadAdminLogs()">
+          <option value="50">Last 50 lines</option>
+          <option value="100" selected>Last 100 lines</option>
+          <option value="500">Last 500 lines</option>
+        </select>
+        <select id="admin-log-level" class="admin-select" onchange="filterAdminLogs()">
+          <option value="">All levels</option>
+          <option value="ERROR">Errors only</option>
+          <option value="WARNING">Warnings+</option>
+          <option value="INFO">Info+</option>
+        </select>
+        <button class="btn btn-ghost" style="font-size:11px" onclick="loadAdminLogs()">&#8635; Refresh</button>
+        <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px;margin-left:auto">
+          <input type="checkbox" id="admin-log-auto" onchange="toggleAdminLogAuto()"> Auto-refresh
+        </label>
+      </div>
+      <pre id="admin-logs" class="admin-log-output">Loading...</pre>
+    </div>
+
+    <!-- Config Summary -->
+    <div class="admin-section">
+      <div class="admin-section-label">CONFIGURATION</div>
+      <div id="admin-config">
+        <div class="loading-indicator">Loading config</div>
+      </div>
+    </div>
+  </div>
+
   <div id="memory-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Memory</span>
@@ -5363,6 +5508,19 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.18.1', date:'2026-02-28', notes:[
+    'Cleanup: removed 94 lines of dead overview dashboard code (loadOverview, renderOverview, ov-metric CSS)',
+    'Cleanup: removed orphaned poll timer and cc-body dynamic injection',
+    'Changed: Flow arrows now bidirectional — data flows both ways between agents and models',
+    'Changed: Flow arrows animated with flowing pulse effect',
+  ]},
+  { ver:'v0.18.0', date:'2026-02-28', notes:[
+    'Fix: Chat UI was missing — HTML never injected (patch_75 silent failure), now working',
+    'New: Admin tab — system health dashboard with CPU, RAM, disk, uptime',
+    'New: Admin log viewer — tail Porter logs with auto-refresh',
+    'New: Admin service status — Ollama, OpenClaw, Porter service health',
+    'New: Admin config viewer — read-only config summary',
+  ]},
   { ver:'v0.17.2', date:'2026-02-28', notes:[
     'New: Attach files to chat — select files as context for AI conversations',
     'New: File chips in chat input show attached context files',
@@ -6587,7 +6745,6 @@ function toggleSidebar() {
 let _tsCache = null;
 let _pepCache = null;
 let _tsPollTimer = null;
-let _overviewPollTimer = null;
 
 function isTailscaleNodeConnected(node) {
   if (!node || node.type !== 'tailscale') return true;
@@ -6827,16 +6984,12 @@ function switchModule(name) {
   const isFiles = name === 'files';
   if (isFiles) closeSettings();
   document.body.classList.toggle('files-active', isFiles);
-  if (_overviewPollTimer) { clearInterval(_overviewPollTimer); _overviewPollTimer = null; }
-  if (name === 'overview') {
-    _overviewPollTimer = setInterval(() => loadOverview(false), 15000);
-  }
   ['mainToolbar','fileArea','selectionToolbar','file-results-footer'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = isFiles ? '' : 'none';
   });
   const loaders = {
-    overview: function() { loadOverview(); populateChatModels(); }, tasks: () => switchModule('projects'), agents: loadAgents, projects: loadProjects,
+    overview: populateChatModels, tasks: () => switchModule('projects'), agents: loadAgents, projects: loadProjects, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
     tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, workflows: loadWorkflows, memory: loadMemory, settings: syncSettingsUI,
   };
@@ -8395,101 +8548,173 @@ async function attachChatFile(rootPath, name) {
 
 
 
-async function loadOverview(force=true) {
-  const data = await api('/api/overview');
+/* loadOverview/renderOverview removed — overview is now Chat tab */
+
+
+
+// ── Admin Tab ──────────────────────────────────────────────────────────────
+let _adminLogAutoTimer = null;
+let _adminLogData = [];
+
+async function loadAdmin() {
+  await Promise.all([loadAdminHealth(), loadAdminLogs(), loadAdminConfig()]);
+}
+
+async function loadAdminHealth() {
+  const health = await api('/api/admin/health');
+  if (!health) return;
+  const grid = document.getElementById('admin-health');
+  const svcs = document.getElementById('admin-services');
+  if (!grid || !svcs) return;
+
+  // CPU
+  const cpuPct = health.cpu_percent || 0;
+  const cpuColor = cpuPct > 85 ? 'var(--err)' : cpuPct > 60 ? 'var(--accent)' : '#22c55e';
+
+  // Memory
+  const memTotal = health.mem_total_mb || 0;
+  const memUsed = health.mem_used_mb || 0;
+  const memPct = memTotal ? Math.round(memUsed / memTotal * 100) : 0;
+  const memColor = memPct > 85 ? 'var(--err)' : memPct > 60 ? 'var(--accent)' : '#22c55e';
+
+  // Disk
+  const diskTotal = health.disk_total_gb || 0;
+  const diskUsed = health.disk_used_gb || 0;
+  const diskPct = health.disk_percent || 0;
+  const diskColor = diskPct > 85 ? 'var(--err)' : diskPct > 70 ? 'var(--accent)' : '#22c55e';
+
+  // Swap
+  const swapTotal = health.swap_total_mb || 0;
+  const swapUsed = health.swap_used_mb || 0;
+  const swapPct = swapTotal ? Math.round(swapUsed / swapTotal * 100) : 0;
+
+  grid.innerHTML = ''
+    + '<div class="admin-card">'
+    + '  <div class="admin-card-label">CPU</div>'
+    + '  <div class="admin-card-value">' + cpuPct + '%</div>'
+    + '  <div class="admin-card-sub">' + (health.cpu_count || '?') + ' cores &middot; ' + escHtml(health.cpu_model || 'Unknown') + '</div>'
+    + '  <div class="admin-card-bar"><div class="admin-card-bar-fill" style="width:' + cpuPct + '%;background:' + cpuColor + '"></div></div>'
+    + '</div>'
+    + '<div class="admin-card">'
+    + '  <div class="admin-card-label">Memory</div>'
+    + '  <div class="admin-card-value">' + memUsed.toFixed(0) + ' / ' + memTotal.toFixed(0) + ' MB</div>'
+    + '  <div class="admin-card-sub">' + memPct + '% used</div>'
+    + '  <div class="admin-card-bar"><div class="admin-card-bar-fill" style="width:' + memPct + '%;background:' + memColor + '"></div></div>'
+    + '</div>'
+    + '<div class="admin-card">'
+    + '  <div class="admin-card-label">Disk</div>'
+    + '  <div class="admin-card-value">' + diskUsed.toFixed(1) + ' / ' + diskTotal.toFixed(1) + ' GB</div>'
+    + '  <div class="admin-card-sub">' + diskPct + '% used</div>'
+    + '  <div class="admin-card-bar"><div class="admin-card-bar-fill" style="width:' + diskPct + '%;background:' + diskColor + '"></div></div>'
+    + '</div>'
+    + '<div class="admin-card">'
+    + '  <div class="admin-card-label">Swap</div>'
+    + '  <div class="admin-card-value">' + swapUsed.toFixed(0) + ' / ' + swapTotal.toFixed(0) + ' MB</div>'
+    + '  <div class="admin-card-sub">' + swapPct + '% used</div>'
+    + '  <div class="admin-card-bar"><div class="admin-card-bar-fill" style="width:' + swapPct + '%;background:' + (swapPct > 50 ? 'var(--accent)' : '#22c55e') + '"></div></div>'
+    + '</div>'
+    + '<div class="admin-card">'
+    + '  <div class="admin-card-label">Uptime</div>'
+    + '  <div class="admin-card-value">' + escHtml(health.uptime || 'Unknown') + '</div>'
+    + '  <div class="admin-card-sub">Porter PID ' + (health.porter_pid || '?') + ' &middot; Python ' + escHtml(health.python_version || '?') + '</div>'
+    + '</div>'
+    + '<div class="admin-card">'
+    + '  <div class="admin-card-label">Porter</div>'
+    + '  <div class="admin-card-value">v' + escHtml(health.porter_version || '?') + '</div>'
+    + '  <div class="admin-card-sub">File: ' + ((health.porter_size_kb || 0)).toFixed(0) + ' KB &middot; ' + (health.porter_lines || '?') + ' lines</div>'
+    + '</div>';
+
+  // Services
+  const services = health.services || [];
+  svcs.innerHTML = services.map(function(s) {
+    const dotCls = s.status === 'up' ? 'up' : (s.status === 'down' ? 'down' : 'unknown');
+    return '<div class="admin-svc-row">'
+      + '<div class="admin-svc-dot ' + dotCls + '"></div>'
+      + '<div class="admin-svc-name">' + escHtml(s.name) + '</div>'
+      + '<div class="admin-svc-detail">' + escHtml(s.detail || '') + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+async function loadAdminLogs() {
+  const lines = document.getElementById('admin-log-lines');
+  const n = lines ? parseInt(lines.value) : 100;
+  const data = await api('/api/admin/logs?lines=' + n);
   if (!data) return;
-  renderOverview(data);
+  _adminLogData = data.lines || [];
+  filterAdminLogs();
 }
-function renderOverview(data) {
-  const metrics = [
-    { label: 'Active tasks', val: data.active_tasks ?? 0 },
-    { label: 'Stalled tasks', val: data.stalled_tasks ?? 0 },
-    { label: 'Agents', val: data.agent_count ?? 0 },
-    { label: 'Locations', val: data.location_count ?? 0 },
-  ];
-  const mg = document.getElementById('ov-metrics');
-  if (mg) mg.innerHTML = metrics.map(m =>
-    `<div class="ov-metric"><div class="ov-metric-val">${escHtml(String(m.val))}</div><div class="ov-metric-label">${escHtml(m.label)}</div></div>`
-  ).join('');
 
-  const upd = document.getElementById('ov-updated');
-  if (upd) upd.textContent = 'Updated ' + new Date().toLocaleTimeString();
+function filterAdminLogs() {
+  const levelSel = document.getElementById('admin-log-level');
+  const level = levelSel ? levelSel.value : '';
+  const el = document.getElementById('admin-logs');
+  if (!el) return;
 
-  const issues = [];
-  const stalled = Number(data.stalled_tasks || 0);
-  const active = Number(data.active_tasks || 0);
-  const locations = Number(data.location_count || 0);
-
-  if (stalled > 0) {
-    issues.push({
-      sev: 'high',
-      title: `${stalled} stalled task${stalled>1?'s':''}`,
-      detail: 'These jobs likely need intervention.',
-      action: 'Open Jobs',
-      fn: "switchModule('agents');setTimeout(()=>switchAgentTab('jobs'),50)",
+  let lines = _adminLogData;
+  if (level) {
+    const levels = { 'ERROR': ['ERROR'], 'WARNING': ['ERROR','WARNING'], 'INFO': ['ERROR','WARNING','INFO'] };
+    const allowed = levels[level] || [];
+    lines = lines.filter(function(l) {
+      return allowed.some(function(lv) { return l.indexOf(lv) >= 0; });
     });
   }
-  if (active === 0) {
-    issues.push({
-      sev: 'med',
-      title: 'No active tasks',
-      detail: 'Pipeline is idle. Queue or resume work.',
-      action: 'Open Jobs',
-      fn: "switchModule('agents');setTimeout(()=>switchAgentTab('jobs'),50)",
-    });
-  }
-  if (locations < 2) {
-    issues.push({
-      sev: 'med',
-      title: 'Limited device coverage',
-      detail: 'Add more locations/agents to unlock cross-device flows.',
-      action: 'Open Locations',
-      fn: "switchModule('locations')",
-    });
-  }
-  const statusTone = issues.some(i=>i.sev==='high') ? 'var(--danger)' : (issues.length ? 'var(--accent)' : 'var(--ok,#22c55e)');
-  const statusText = issues.some(i=>i.sev==='high') ? 'Needs attention now' : (issues.length ? 'Action recommended' : 'Healthy');
 
-  const header = `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;padding:10px 12px;background:var(--raised);border:1px solid var(--border);border-radius:8px">
-    <div style="font-size:13px;color:var(--text);font-weight:600">${statusText}</div>
-    <div style="font-size:12px;color:${statusTone};font-weight:600">${issues.length} issue${issues.length===1?'':'s'}</div>
-  </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-    <span style="font-size:11px;color:var(--text2);background:var(--raised);border:1px solid var(--border);border-radius:999px;padding:4px 8px">Tasks ${active}</span>
-    <span style="font-size:11px;color:${stalled? 'var(--danger)' : 'var(--text2)'};background:var(--raised);border:1px solid var(--border);border-radius:999px;padding:4px 8px">Stalled ${stalled}</span>
-    <span style="font-size:11px;color:var(--text2);background:var(--raised);border:1px solid var(--border);border-radius:999px;padding:4px 8px">Locations ${locations}</span>
-    <span style="font-size:11px;color:${diskPct>=85?'var(--danger)':'var(--text2)'};background:var(--raised);border:1px solid var(--border);border-radius:999px;padding:4px 8px">Disk ${diskPct}%</span>
-  </div>`;
+  el.innerHTML = lines.map(function(l) {
+    let cls = 'admin-log-line-debug';
+    if (l.indexOf('ERROR') >= 0) cls = 'admin-log-line-error';
+    else if (l.indexOf('WARNING') >= 0) cls = 'admin-log-line-warning';
+    else if (l.indexOf('INFO') >= 0) cls = 'admin-log-line-info';
+    return '<span class="' + cls + '">' + escHtml(l) + '</span>';
+  }).join('\n') || '<span style="color:var(--text3)">No log entries</span>';
 
-  const cards = issues.length ? issues.map(i => {
-    const border = i.sev === 'high' ? 'var(--danger)' : 'var(--border)';
-    return `<div style="padding:10px 12px;background:var(--raised);border:1px solid ${border};border-radius:8px;margin-bottom:8px">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <div>
-          <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(i.title)}</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:3px">${escHtml(i.detail)}</div>
-        </div>
-        <button class="btn btn-ghost"  onclick="${i.fn}">${escHtml(i.action)}</button>
-      </div>
-    </div>`;
-  }).join('') : '<div style="color:var(--text3);font-size:13px;padding:8px 0">No urgent issues. System is stable.</div>';
+  el.scrollTop = el.scrollHeight;
+}
 
-  const cc = document.getElementById('ov-metrics');
-  // keep metrics grid already rendered above; action cards now remain primary command-center content
-  const anchor = document.getElementById('ov-updated');
-  if (anchor) { /* no-op anchor to keep function side-effects explicit */ }
-  const host = document.getElementById('overview-module');
-  if (host) {
-    let body = host.querySelector('.cc-body');
-    if (!body) {
-      body = document.createElement('div');
-      body.className = 'cc-body';
-      host.appendChild(body);
-    }
-    body.innerHTML = header + cards;
+function toggleAdminLogAuto() {
+  const cb = document.getElementById('admin-log-auto');
+  if (_adminLogAutoTimer) { clearInterval(_adminLogAutoTimer); _adminLogAutoTimer = null; }
+  if (cb && cb.checked) {
+    _adminLogAutoTimer = setInterval(loadAdminLogs, 5000);
   }
 }
 
+async function loadAdminConfig() {
+  const data = await api('/api/config/summary');
+  if (!data) return;
+  const el = document.getElementById('admin-config');
+  if (!el) return;
+
+  const rows = [];
+  // Auth
+  rows.push(['Username', data.auth ? data.auth.username : '?']);
+  rows.push(['Auth mode', data.auth ? data.auth.mode : '?']);
+  rows.push(['Session TTL', data.auth ? (data.auth.session_ttl / 3600).toFixed(0) + ' hours' : '?']);
+  rows.push(['Display name', data.auth ? (data.auth.display_name || data.auth.full_name || '-') : '?']);
+  // Runtime
+  if (data.runtime) {
+    rows.push(['Data directory', data.runtime.runtime_dir || '?']);
+    rows.push(['Memory directory', data.runtime.memory_dir || '?']);
+    rows.push(['Namespaces', (data.runtime.namespaces || []).join(', ') || '-']);
+  }
+  // Locations
+  if (data.locations) {
+    data.locations.forEach(function(loc) {
+      const status = loc.exists ? (loc.writable ? 'writable' : 'read-only') : 'missing';
+      rows.push(['Location: ' + (loc.label || loc.id), loc.path + ' (' + status + ')']);
+    });
+  }
+  // Agents
+  if (data.agents) {
+    data.agents.forEach(function(a) {
+      rows.push(['Agent: ' + (a.name || a.id), (a.type || '?') + ' / ' + (a.role || '?') + ' / ' + (a.status || '?')]);
+    });
+  }
+
+  el.innerHTML = '<table class="admin-cfg-table">' + rows.map(function(r) {
+    return '<tr><td>' + escHtml(r[0]) + '</td><td>' + escHtml(r[1]) + '</td></tr>';
+  }).join('') + '</table>';
+}
 
 // ── Tools module ──
 async function loadTools() {
@@ -9208,17 +9433,14 @@ function _agentSortKey(a) {
 // Uses viewBox 0..1000 and preserveAspectRatio="none" so the line
 // positions at each column center stretch with the container.
 function _buildFlowSVG(count, direction) {
-  const w = 1000, h = 48;
+  const w = 1000, h = 56;
   const mid = w / 2;
   const cols = Math.max(1, Math.min(count, 6));
   const lineColor = 'var(--border2, #555)';
   const arrowColor = 'var(--accent)';
-  const a = 8; // arrow half-width
-  const sw = 2.5; // stroke width
+  const a = 7; // arrow half-width
+  const sw = 2;
 
-  // Column centers: for N columns in a grid, center of col i = (i + 0.5) / N * w
-  // The grid has 10px gap but at SVG scale it's negligible; the key is the
-  // column centers map to the card centers.
   const colX = [];
   for (let i = 0; i < cols; i++) {
     colX.push(((i + 0.5) / cols) * w);
@@ -9227,25 +9449,36 @@ function _buildFlowSVG(count, direction) {
 
   let paths = '';
   if (direction === 'merge') {
-    // Lines drop from each card center, merge into bar, single arrow into Porter
+    // Bidirectional: arrows at top (pointing up) AND bottom (pointing down)
+    // Top arrows (data flowing up from hub)
     for (const x of colX) {
-      paths += `<line x1="${x}" y1="0" x2="${x}" y2="18" stroke="${lineColor}" stroke-width="${sw}"/>`;
+      paths += '<polygon class="flow-arrow" points="' + (x-a) + ',8 ' + (x+a) + ',8 ' + x + ',0" fill="' + arrowColor + '"/>';
     }
-    paths += `<line x1="${leftX}" y1="18" x2="${rightX}" y2="18" stroke="${lineColor}" stroke-width="${sw}"/>`;
-    paths += `<line x1="${mid}" y1="18" x2="${mid}" y2="37" stroke="${lineColor}" stroke-width="${sw}"/>`;
-    paths += `<polygon points="${mid-a},37 ${mid+a},37 ${mid},48" fill="${arrowColor}"/>`;
-  } else {
-    // Stem from Porter, bar fans out, each column gets its own arrow
-    paths += `<line x1="${mid}" y1="0" x2="${mid}" y2="14" stroke="${lineColor}" stroke-width="${sw}"/>`;
-    paths += `<line x1="${leftX}" y1="14" x2="${rightX}" y2="14" stroke="${lineColor}" stroke-width="${sw}"/>`;
+    // Animated dashed lines from each card center
     for (const x of colX) {
-      paths += `<line x1="${x}" y1="14" x2="${x}" y2="37" stroke="${lineColor}" stroke-width="${sw}"/>`;
-      paths += `<polygon points="${x-a},37 ${x+a},37 ${x},48" fill="${arrowColor}"/>`;
+      paths += '<line class="flow-line" x1="' + x + '" y1="8" x2="' + x + '" y2="22" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
+    }
+    // Horizontal bar
+    paths += '<line x1="' + leftX + '" y1="22" x2="' + rightX + '" y2="22" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
+    // Center stem down
+    paths += '<line class="flow-line" x1="' + mid + '" y1="22" x2="' + mid + '" y2="46" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
+    // Bottom arrow (data flowing down into hub)
+    paths += '<polygon class="flow-arrow" points="' + (mid-a) + ',46 ' + (mid+a) + ',46 ' + mid + ',56" fill="' + arrowColor + '"/>';
+  } else {
+    // Bidirectional: arrow at top (pointing up to hub) AND arrows at bottom (pointing down to models)
+    // Top arrow pointing up
+    paths += '<polygon class="flow-arrow" points="' + (mid-a) + ',8 ' + (mid+a) + ',8 ' + mid + ',0" fill="' + arrowColor + '"/>';
+    // Center stem
+    paths += '<line class="flow-line" x1="' + mid + '" y1="8" x2="' + mid + '" y2="18" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
+    // Horizontal bar
+    paths += '<line x1="' + leftX + '" y1="18" x2="' + rightX + '" y2="18" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
+    // Fan-out lines + bottom arrows
+    for (const x of colX) {
+      paths += '<line class="flow-line" x1="' + x + '" y1="18" x2="' + x + '" y2="46" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
+      paths += '<polygon class="flow-arrow" points="' + (x-a) + ',46 ' + (x+a) + ',46 ' + x + ',56" fill="' + arrowColor + '"/>';
     }
   }
-  // preserveAspectRatio="none" ensures the SVG stretches to fill the grid width,
-  // keeping each arrow aligned to its card column.
-  return `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="display:block">${paths}</svg>`;
+  return '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" style="display:block">' + paths + '</svg>';
 }
 
 function renderOrchestration(agents, providers) {
@@ -12777,6 +13010,180 @@ class Handler(BaseHTTPRequestHandler):
             providers = [v for v in _capabilities_cache.values() if v["id"] in ai_ids]
             self.reply_json({"agents": safe, "ai_providers": providers})
 
+
+        elif parsed.path == "/api/admin/health":
+            if not self.auth_check(redirect=False): return
+            import platform
+            health = {}
+
+            # CPU
+            try:
+                with open("/proc/stat") as f:
+                    cpu_line = f.readline()
+                vals = [int(x) for x in cpu_line.split()[1:]]
+                idle = vals[3] if len(vals) > 3 else 0
+                total = sum(vals)
+                # Read again after small delay for delta
+                time.sleep(0.1)
+                with open("/proc/stat") as f:
+                    cpu_line2 = f.readline()
+                vals2 = [int(x) for x in cpu_line2.split()[1:]]
+                idle2 = vals2[3] if len(vals2) > 3 else 0
+                total2 = sum(vals2)
+                d_total = total2 - total
+                d_idle = idle2 - idle
+                health["cpu_percent"] = round((1 - d_idle / max(d_total, 1)) * 100, 1)
+            except Exception as e:
+                log.debug("CPU read: %s", e)
+                health["cpu_percent"] = 0
+
+            try:
+                health["cpu_count"] = os.cpu_count() or 0
+                with open("/proc/cpuinfo") as f:
+                    for line in f:
+                        if line.startswith("model name"):
+                            health["cpu_model"] = line.split(":", 1)[1].strip()
+                            break
+            except Exception as e:
+                log.debug("CPU info: %s", e)
+
+            # Memory
+            try:
+                with open("/proc/meminfo") as f:
+                    meminfo = {}
+                    for line in f:
+                        parts = line.split(":")
+                        if len(parts) == 2:
+                            key = parts[0].strip()
+                            val = parts[1].strip().split()[0]
+                            meminfo[key] = int(val)
+                health["mem_total_mb"] = meminfo.get("MemTotal", 0) / 1024
+                health["mem_available_mb"] = meminfo.get("MemAvailable", 0) / 1024
+                health["mem_used_mb"] = health["mem_total_mb"] - health["mem_available_mb"]
+                health["swap_total_mb"] = meminfo.get("SwapTotal", 0) / 1024
+                health["swap_free_mb"] = meminfo.get("SwapFree", 0) / 1024
+                health["swap_used_mb"] = health["swap_total_mb"] - health["swap_free_mb"]
+            except Exception as e:
+                log.debug("Memory read: %s", e)
+
+            # Disk
+            try:
+                st = os.statvfs("/")
+                health["disk_total_gb"] = (st.f_blocks * st.f_frsize) / (1024**3)
+                health["disk_free_gb"] = (st.f_bavail * st.f_frsize) / (1024**3)
+                health["disk_used_gb"] = health["disk_total_gb"] - health["disk_free_gb"]
+                health["disk_percent"] = round(health["disk_used_gb"] / max(health["disk_total_gb"], 0.01) * 100, 1)
+            except Exception as e:
+                log.debug("Disk read: %s", e)
+
+            # Uptime
+            try:
+                with open("/proc/uptime") as f:
+                    secs = float(f.read().split()[0])
+                days = int(secs // 86400)
+                hours = int((secs % 86400) // 3600)
+                mins = int((secs % 3600) // 60)
+                if days > 0:
+                    health["uptime"] = f"{days}d {hours}h {mins}m"
+                elif hours > 0:
+                    health["uptime"] = f"{hours}h {mins}m"
+                else:
+                    health["uptime"] = f"{mins}m"
+            except Exception as e:
+                log.debug("Uptime read: %s", e)
+                health["uptime"] = "Unknown"
+
+            # Porter info
+            health["porter_pid"] = os.getpid()
+            health["python_version"] = platform.python_version()
+            try:
+                porter_path = Path(__file__).resolve()
+                health["porter_version"] = "0.18.1"
+                health["porter_size_kb"] = porter_path.stat().st_size / 1024
+                health["porter_lines"] = sum(1 for _ in open(porter_path))
+            except Exception as e:
+                log.debug("Porter info: %s", e)
+
+            # Service checks
+            services = []
+
+            # Porter service
+            services.append({"name": "Porter", "status": "up", "detail": f"PID {os.getpid()}, port {PORT}"})
+
+            # Ollama
+            try:
+                req = _ur.Request("http://127.0.0.1:11434/api/tags", method="GET")
+                resp = _ur.urlopen(req, timeout=3)
+                data_o = json.loads(resp.read())
+                model_count = len(data_o.get("models", []))
+                services.append({"name": "Ollama", "status": "up", "detail": f"{model_count} model{'s' if model_count != 1 else ''} loaded"})
+            except Exception as e:
+                services.append({"name": "Ollama", "status": "down", "detail": str(e)[:60]})
+
+            # OpenClaw
+            try:
+                oc_port = 18789
+                oc_token = ""
+                oc_cfg_path = Path.home() / ".openclaw" / "openclaw.json"
+                if oc_cfg_path.exists():
+                    oc_cfg = json.loads(oc_cfg_path.read_text())
+                    oc_port = oc_cfg.get("gatewayPort", 18789)
+                    oc_token = oc_cfg.get("authToken", "")
+                req = _ur.Request(f"http://127.0.0.1:{oc_port}/v1/models", headers={"Authorization": f"Bearer {oc_token}"})
+                resp = _ur.urlopen(req, timeout=3)
+                services.append({"name": "OpenClaw Gateway", "status": "up", "detail": f"Port {oc_port}"})
+            except Exception as e:
+                services.append({"name": "OpenClaw Gateway", "status": "down", "detail": str(e)[:60]})
+
+            # SQLite DB
+            try:
+                db_path = _DATA_DIR / "porter.db"
+                if db_path.exists():
+                    size_kb = db_path.stat().st_size / 1024
+                    services.append({"name": "SQLite DB", "status": "up", "detail": f"{size_kb:.1f} KB"})
+                else:
+                    services.append({"name": "SQLite DB", "status": "unknown", "detail": "Not created yet"})
+            except Exception as e:
+                services.append({"name": "SQLite DB", "status": "down", "detail": str(e)[:60]})
+
+            health["services"] = services
+            self.reply_json(health)
+
+        elif parsed.path == "/api/admin/logs":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            n = min(int(qs.get("lines", ["100"])[0]), 1000)
+            lines = []
+
+            # Try to read from journalctl first (systemd)
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ["journalctl", "--user-unit=porter", "-n", str(n), "--no-pager", "-o", "short-iso"],
+                    capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    lines = result.stdout.strip().split("\n")
+            except Exception as e:
+                log.debug("journalctl read: %s", e)
+
+            # Fallback: read from Python logging if no journalctl output
+            if not lines:
+                # Check if there's a log file
+                log_path = _DATA_DIR / "porter.log"
+                if log_path.exists():
+                    try:
+                        with open(log_path) as f:
+                            all_lines = f.readlines()
+                            lines = [l.rstrip() for l in all_lines[-n:]]
+                    except Exception as e:
+                        log.debug("Log file read: %s", e)
+
+            if not lines:
+                lines = ["No log entries found. Porter logs via systemd: journalctl --user-unit=porter"]
+
+            self.reply_json({"ok": True, "lines": lines})
+
         # ── config summary / export ───────────────────────────────────────
         elif parsed.path == "/api/config/summary":
             if not self.auth_check(redirect=False): return
@@ -16018,7 +16425,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.17.2 ready (localhost only)")
+    print(f"\n  Porter v0.18.1 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
