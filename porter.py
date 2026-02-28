@@ -1770,6 +1770,9 @@ def _treg_load() -> None:
         try:
             t = json.loads(fp.read_text(encoding="utf-8"))
             if isinstance(t, dict) and t.get("id"):
+                if isinstance(t.get("created_at"), str):
+                    try: t["created_at"] = float(t["created_at"])
+                    except: t["created_at"] = 0
                 loaded[t["id"]] = t
         except Exception as e:
             log.debug("Ignored: %s", e)
@@ -14691,7 +14694,7 @@ class Handler(BaseHTTPRequestHandler):
             if filt_tag:
                 tasks = [t for t in tasks if filt_tag in (t.get("tags") or [])]
             _ord = {"urgent":0,"high":1,"normal":2,"low":3}
-            tasks.sort(key=lambda t: (_ord.get(t.get("priority","normal"),2), -t.get("created_at",0)))
+            tasks.sort(key=lambda t: (_ord.get(t.get("priority","normal"),2), -(float(t.get("created_at",0)) if t.get("created_at") else 0)))
             self.reply_json({"ok": True, "tasks": tasks, "count": len(tasks)})
 
         # ── P6b: projects dashboard ──────────────────────────────────────────
