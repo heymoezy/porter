@@ -1,33 +1,26 @@
 # Checkpoint
 project: Porter
-task: Orchestration tab redesign v0.14.16 + sprint plan revision
+task: Sprint 6 — Usage Dashboard (auto-refresh from OpenClaw) — v0.14.17
 status: complete
 step: done
 completed:
-  - [x] Orchestration flow diagram (agents → Porter → models)
-  - [x] SVG full-width arrow alignment
-  - [x] Config slide-out panel
-  - [x] Live data on agent cards
-  - [x] Porter hub feature pills
-  - [x] Location cards + pencil edit
-  - [x] Files delete restored with animation
-  - [x] CLAUDE.md path validation fix
-  - [x] Show Internal checkbox removed
-  - [x] Tailscale accordion removed
-  - [x] Changelog + release notes updated
-  - [x] Sprint plan revised (Sprints 6-13)
-next_action: Sprint 6 — Usage data pipeline for orchestration
+  - [x] Patch 19: Backend — _refresh_openclaw_usage() + /agent-usage/auto-refresh endpoint
+  - [x] Patch 20: Frontend — autoRefreshUsage() + improved no-data card states
+  - [x] Patch 21: Settings — preferred model dropdown + save/load
+  - [x] Patch 22: Orchestration — "preferred" badge on model card
+  - [x] Patch 23: Version bump v0.14.17 + changelog + RELEASE_NOTES.md
+  - [x] Fix: openclaw binary path resolution (shutil.which + fallback paths)
+  - [x] Verification: 32/32 Playwright tests pass, auto-refresh works, snapshots saved
+next_action: Sprint 7 — Projects memory visualization + task/skill distinction
 modified_files:
   - /home/lobster/documents/porter/porter.py
-  - /home/lobster/documents/porter/tests/ui-regression.spec.js
-  - /home/lobster/documents/porter/SPRINT_PLAN.md
   - /home/lobster/documents/porter/RELEASE_NOTES.md
 notes: |
-  v0.14.16 complete. 32/32 Playwright tests pass.
-  Sprint plan revised with user feedback:
-  - Sprint 6: Usage data pipeline (show real usage on orchestration)
-  - Sprint 7: Projects memory visualization + task/skill distinction
-  - Sprint 8: Integrations (email, external services)
-  - Sprint 9: Hardcoding elimination pass
-  - Sprint 10-13: Task registry, routing, connectivity, scheduler
-  All sprints are small and focused. One per session.
+  v0.14.17 complete. All features working:
+  - Auto-refresh fires on Orchestration tab load (fire-and-forget from loadAgents)
+  - OpenClaw: reads `openclaw sessions --json --all-agents` for context utilization (55% = 148k/272k)
+  - Claude: probes Anthropic API rate-limit headers (gets 401 with OAuth — needs different auth method)
+  - Gemini: shows "Check provider dashboard" (no API to probe)
+  - Preferred model saved to preferences, badge shows on matching agent/model cards
+  - New endpoint: POST /agent-usage/auto-refresh — batch refresh all agents by type
+  - Added preferred_model, context_compression, fallback_chain to allowed prefs

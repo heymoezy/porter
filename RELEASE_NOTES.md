@@ -1,5 +1,16 @@
 # Porter Release Notes
 
+## v0.14.17 (2026-02-28)
+
+**Usage Dashboard — auto-refresh from OpenClaw + Claude**
+
+- **Auto-refresh on tab load:** Opening the Orchestration tab now triggers a live usage refresh for all registered agents. Claude agents probe the Anthropic API rate-limit headers; OpenClaw agents query session context utilization via the CLI. No manual paste needed.
+- **Improved no-data states:** Agent cards show contextual placeholders: "Checking usage…" during refresh, "No usage data yet" for refreshable agents without data, "Check provider dashboard" for Gemini (no API). Stale data (>24h) shows "updated X ago" note.
+- **Preferred model:** New dropdown in Settings → Policies → Orchestration Controls. Selecting a preferred model adds a subtle "preferred" badge to matching agent and model cards on the Orchestration tab. Informational only — actual routing is handled by your orchestrator.
+- **Backend:** New `/agent-usage/auto-refresh` endpoint for batch refresh. New `_refresh_openclaw_usage()` reads `openclaw sessions --json` for context window utilization.
+
+---
+
 ## v0.14.16 (2026-02-28)
 
 **Orchestration tab + Locations cards + Files polish**

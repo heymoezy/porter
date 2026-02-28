@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.14.16 — self-hosted file manager"""
+"""Porter v0.14.17 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -1099,6 +1099,81 @@ def _refresh_claude_usage(agent_id: str) -> dict:
         return {"error": f"HTTP {e.code}: {body}"}
     except Exception as e:
         return {"error": str(e)}
+
+
+def _refresh_openclaw_usage(agent_id: str) -> dict:
+    """Fetch live OpenClaw session usage via `openclaw sessions --json --all-agents`."""
+    import subprocess
+    from datetime import datetime, timezone
+    # Capability-gated: only attempt if openclaw binary is reachable
+    cap = _capabilities_cache.get("openclaw", {})
+    if not cap.get("ok"):
+        return {"error": "OpenClaw not available"}
+    # Resolve openclaw binary — may be in ~/.npm-global/bin
+    import shutil
+    oc_bin = shutil.which("openclaw")
+    if not oc_bin:
+        for candidate in (
+            str(Path.home() / ".npm-global" / "bin" / "openclaw"),
+            "/usr/local/bin/openclaw",
+        ):
+            if Path(candidate).exists():
+                oc_bin = candidate
+                break
+    if not oc_bin:
+        return {"error": "openclaw binary not found"}
+    try:
+        r = subprocess.run(
+            [oc_bin, "sessions", "--json", "--all-agents"],
+            capture_output=True, text=True, timeout=15
+        )
+        if r.returncode != 0:
+            return {"error": f"openclaw exit {r.returncode}: {(r.stderr or '')[:200]}"}
+        data = __import__("json").loads(r.stdout)
+    except FileNotFoundError:
+        return {"error": "openclaw binary not found"}
+    except Exception as e:
+        return {"error": str(e)}
+    # Aggregate: sum totalTokens / max contextTokens across active sessions
+    sessions = data.get("sessions", [])
+    if not sessions:
+        return {"error": "No active sessions"}
+    total_tokens = sum(s.get("totalTokens", 0) for s in sessions)
+    ctx_window = max((s.get("contextTokens", 0) for s in sessions), default=0)
+    if ctx_window <= 0:
+        return {"error": "No context window data"}
+    # Most recent session activity
+    most_recent = max((s.get("updatedAt", 0) for s in sessions), default=0)
+    # Context utilization across active sessions (biggest session's %)
+    biggest = max(sessions, key=lambda s: s.get("totalTokens", 0))
+    big_total = biggest.get("totalTokens", 0)
+    big_ctx = biggest.get("contextTokens", 1)
+    util_pct = min(100, round(big_total / big_ctx * 100))
+    avail_pct = 100 - util_pct
+    if util_pct >= 100:   status = "exhausted"
+    elif util_pct >= 90:  status = "rate_limited"
+    elif util_pct >= 75:  status = "degraded"
+    else:                 status = "available"
+    model = biggest.get("model", "")
+    provider = biggest.get("modelProvider", "openclaw")
+    snap = {
+        "agent_id":         agent_id,
+        "provider":         provider,
+        "captured_at":      datetime.now(timezone.utc).isoformat(),
+        "status":           status,
+        "usage_percent":    util_pct,
+        "window_started_at": None,
+        "window_resets_at": None,
+        "source_type":      "cli_live",
+        "context_tokens":   big_ctx,
+        "used_tokens":      big_total,
+        "sessions_count":   len(sessions),
+        "model":            model,
+    }
+    USAGE_DIR.mkdir(parents=True, exist_ok=True)
+    (USAGE_DIR / f"{agent_id}.json").write_text(
+        __import__("json").dumps(snap, indent=2))
+    return {"ok": True, "snapshot": snap}
 
 
 def _hash_agent_key(raw_key: str) -> str:
@@ -2335,6 +2410,7 @@ body.density-compact .file-name { padding: 6px 0; }
   padding:16px 18px; background:var(--raised); border:1px solid var(--border);
   border-radius:10px; position:relative; transition:border-color .15s;
 }
+.orch-card-preferred { border-color: var(--accent); }
 .orch-card:hover { border-color:var(--accent); }
 .orch-card-head { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
 .status-dot { display:inline-block; width:8px; height:8px; border-radius:50%; flex-shrink:0; }
@@ -2734,7 +2810,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.14.16</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.14.17</div>
   </div>
 </aside>
 
@@ -2992,6 +3068,12 @@ select.settings-input { padding-right: 26px; }
         </div>
         <div class="settings-field"><label>Lease TTL (s)</label>
           <input type="number" class="settings-input" id="oc-ttl" min="30" max="3600">
+        </div>
+        <div class="settings-field" style="grid-column:1/-1"><label>Preferred model</label>
+          <select class="settings-input" id="oc-preferred-model">
+            <option value="">No preference</option>
+          </select>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">Informational badge only — actual routing is handled by your orchestrator.</div>
         </div>
       </div>
       <button class="btn btn-primary" style="margin-top:8px;font-size:12px" onclick="saveOrchestrationPolicy()">Save Controls</button>
@@ -3531,6 +3613,15 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.14.17', date:'2026-02-28', notes:[
+    'Orchestration: auto-refresh usage on tab load — Claude (API headers) and OpenClaw (CLI sessions) refresh automatically',
+    'Orchestration: improved no-data states — "Checking…", "No usage data yet", "Check provider dashboard" (Gemini)',
+    'Orchestration: stale data indicator (>24h) with "updated X ago" note on usage bars',
+    'Orchestration: preferred model badge on agent and model cards',
+    'Settings: preferred model dropdown in Orchestration Controls — informational badge, routing unchanged',
+    'Backend: /agent-usage/auto-refresh endpoint — batch refresh all agents by type',
+    'Backend: _refresh_openclaw_usage() — reads session context utilization via openclaw CLI',
+  ]},
   { ver:'v0.14.16', date:'2026-02-28', notes:[
     'Agents tab renamed to Orchestration — flow diagram showing agents → Porter hub → models',
     'Orchestration: full-width SVG connectors with per-column arrow alignment',
@@ -5464,9 +5555,16 @@ function saveOrchestrationPolicy() {
     lease_ttl: parseInt(document.getElementById('oc-ttl').value) || 300,
     context_compression: document.getElementById('oc-compress').value,
     fallback_chain: document.getElementById('oc-fallback').value,
+    preferred_model: document.getElementById('oc-preferred-model')?.value || '',
   };
   api('/api/preferences', { method: 'POST', body: JSON.stringify(body) })
     .then(r => { if (r && r.ok) toast('Controls saved', 'ok'); else toast('Failed', 'err'); });
+}
+
+async function loadCurrentPrefs() {
+  // Fetch current preferences to populate UI
+  const data = await api('/api/preferences', {});
+  if (data && data.preferences) window._currentPrefs = data.preferences;
 }
 
 function populateChangelog() {
@@ -5899,6 +5997,29 @@ async function loadAgents() {
   renderOrchestration(data.agents || [], data.ai_providers || []);
   renderAgents(data.agents || []);
   loadUsage();
+  // Fire-and-forget: auto-refresh usage from live APIs
+  autoRefreshUsage();
+}
+
+async function autoRefreshUsage() {
+  if (window._autoRefreshInFlight) return;
+  window._autoRefreshInFlight = true;
+  // Show "Checking..." on cards without data
+  document.querySelectorAll('.orch-card-usage-placeholder').forEach(el => {
+    el.textContent = 'Checking usage…';
+    el.style.color = 'var(--text3)';
+  });
+  try {
+    const agents = window._cachedAgents || [];
+    const ids = agents.map(a => a.id).filter(Boolean);
+    if (!ids.length) return;
+    await api('/agent-usage/auto-refresh', { agent_ids: ids });
+    await loadUsage();
+  } catch (e) {
+    // Silently fail — stale data stays
+  } finally {
+    window._autoRefreshInFlight = false;
+  }
 }
 
 
@@ -6079,6 +6200,7 @@ function renderOrchestration(agents, providers) {
 
   const usageMap = {};
   if (window._currentUsage) window._currentUsage.forEach(u => usageMap[u.agent_id] = u);
+  const preferredModel = (window._currentPrefs || {}).preferred_model || '';
 
   // ── Agent cards (top) ──
   const agentEl = document.getElementById('orch-agents');
@@ -6097,13 +6219,29 @@ function renderOrchestration(agents, providers) {
         const connMethod = _agentConnectionMethod(a);
         const inferredModel = _inferModelId(a);
         const modelName = inferredModel ? _modelDisplayName(inferredModel) : '';
-        // Usage bar
+        // Usage bar — with improved no-data states
         const usageColor = availablePct === null ? '' : availablePct <= 10 ? '#ef4444' : availablePct <= 25 ? '#f59e0b' : '#22c55e';
-        const usageBar = availablePct !== null
-          ? `<div class="orch-card-usage">
+        const agentKind = ((a.type||'')+(a.name||'')).toLowerCase();
+        const isGeminiAgent = agentKind.includes('gemini');
+        const isRefreshable = agentKind.includes('claude') || agentKind.includes('openclaw') || agentKind.includes('codex');
+        // Staleness: >24h old
+        const isStale = u && u.captured_at && (Date.now() - new Date(u.captured_at).getTime() > 86400000);
+        let usageBar;
+        if (availablePct !== null) {
+          const staleNote = isStale ? ' · <span style="color:var(--text3)">updated ' + _usageAgo(u.captured_at) + '</span>' : '';
+          usageBar = `<div class="orch-card-usage">
                <div class="orch-card-usage-bar"><div class="orch-card-usage-fill" style="width:${availablePct}%;background:${usageColor}"></div></div>
-               <div class="orch-card-usage-text"><span style="font-weight:600;color:${usageColor}">${availablePct}%</span> remaining${u && u.window_resets_at ? ' · resets ' + _usageCountdown(u.window_resets_at) : ''}</div>
-             </div>` : '';
+               <div class="orch-card-usage-text"><span style="font-weight:600;color:${usageColor}">${availablePct}%</span> remaining${u && u.window_resets_at ? ' · resets ' + _usageCountdown(u.window_resets_at) : ''}${staleNote}</div>
+             </div>`;
+        } else if (isGeminiAgent) {
+          usageBar = `<div class="orch-card-usage-placeholder" style="font-size:11px;color:var(--text3);margin-top:6px">Check provider dashboard</div>`;
+        } else if (isRefreshable && window._autoRefreshInFlight) {
+          usageBar = `<div class="orch-card-usage-placeholder" style="font-size:11px;color:var(--text3);margin-top:6px">Checking usage…</div>`;
+        } else if (isRefreshable) {
+          usageBar = `<div class="orch-card-usage-placeholder" style="font-size:11px;color:var(--text3);margin-top:6px">No usage data yet</div>`;
+        } else {
+          usageBar = '';
+        }
         // Last seen / snapshot freshness
         const lastActivity = u && u.captured_at ? _usageAgo(u.captured_at) : (a.last_seen ? _usageAgo(new Date(a.last_seen * 1000).toISOString()) : '');
         const statusLabel = u ? (u.status === 'available' ? 'Available' : u.status === 'rate_limited' ? 'Rate limited' : u.status === 'degraded' ? 'Degraded' : u.status || '') : '';
@@ -6128,7 +6266,7 @@ function renderOrchestration(agents, providers) {
             <button class="orch-card-gear" onclick="openConfigPanel('agent','${esc(a.id)}')" title="Configure">&#9881;</button>
           </div>
           <div class="orch-card-sub">${escHtml(connMethod)}${provBadge}</div>
-          ${modelName ? `<div class="orch-card-model">Model: ${escHtml(modelName)}</div>` : ''}
+          ${modelName ? `<div class="orch-card-model">Model: ${escHtml(modelName)}${preferredModel && inferredModel && inferredModel.toLowerCase() === preferredModel.toLowerCase() ? ' <span style="font-size:10px;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:1px 5px;margin-left:4px">preferred</span>' : ''}</div>` : ''}
           ${usageBar}
           ${liveInfo}
         </div>`;
@@ -6167,10 +6305,11 @@ function renderOrchestration(agents, providers) {
       modelEl.innerHTML = '<div style="color:var(--text3);font-size:13px;grid-column:1/-1">No models detected from registered agents.</div>';
     } else {
       modelEl.innerHTML = modelList.map(m => {
-        return `<div class="orch-card">
+        const isPreferred = preferredModel && m.model_id.toLowerCase() === preferredModel.toLowerCase();
+        return `<div class="orch-card${isPreferred ? ' orch-card-preferred' : ''}">
           <div class="orch-card-head">
-            <span class="orch-card-dot" style="background:var(--accent)"></span>
-            <span class="orch-card-name">${escHtml(m.name)}</span>
+            <span class="orch-card-dot" style="background:${isPreferred ? 'var(--accent)' : 'var(--accent)'}"></span>
+            <span class="orch-card-name">${escHtml(m.name)}${isPreferred ? ' <span style="font-size:10px;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:1px 5px;margin-left:4px">preferred</span>' : ''}</span>
             <button class="orch-card-gear" onclick="openConfigPanel('model','${esc(m.model_id)}')" title="Configure">&#9881;</button>
           </div>
           ${m.opt ? `<div class="orch-card-opt">Optimized for: ${escHtml(m.opt)}</div>` : ''}
@@ -7074,6 +7213,27 @@ async function loadPolicy() {
   const data = await api('/api/policy/presets');
   if (!data) return;
   renderPolicy(data.presets || []);
+  await loadCurrentPrefs();
+  populatePreferredModel();
+}
+
+function populatePreferredModel() {
+  const sel = document.getElementById('oc-preferred-model');
+  if (!sel) return;
+  // Collect unique model IDs from registered agents
+  const agents = window._cachedAgents || window._lastAgents || [];
+  const models = new Map();
+  agents.forEach(a => {
+    const mid = a.model_id || _inferModelId(a);
+    if (mid) models.set(mid, _modelDisplayName(mid));
+  });
+  // Preserve current selection
+  const prefs = window._currentPrefs || {};
+  const saved = prefs.preferred_model || '';
+  sel.innerHTML = '<option value="">No preference</option>' +
+    Array.from(models.entries()).map(([id, name]) =>
+      `<option value="${escHtml(id)}"${id === saved ? ' selected' : ''}>${escHtml(name)}</option>`
+    ).join('');
 }
 
 function renderPolicy(presets) {
@@ -11058,6 +11218,34 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.reply_json(result, 502)
 
+        elif parsed.path == "/agent-usage/auto-refresh":
+            if not self.auth_check(redirect=False): return
+            d = self.read_json_body()
+            agent_ids = d.get("agent_ids", [])
+            if not agent_ids:
+                # Default: all registered agents
+                agent_ids = [a.get("id", "") for a in _config.get("agents", []) if a.get("id")]
+            refreshed = 0
+            skipped = 0
+            errors = {}
+            for aid in agent_ids:
+                agent = _agent_by_id(aid)
+                if not agent:
+                    skipped += 1; continue
+                atype = (agent.get("type", "") + " " + agent.get("name", "")).lower()
+                if "claude" in atype:
+                    result = _refresh_claude_usage(aid)
+                    if result.get("ok"): refreshed += 1
+                    else: errors[aid] = result.get("error", "unknown")
+                elif "openclaw" in atype or "codex" in atype:
+                    result = _refresh_openclaw_usage(aid)
+                    if result.get("ok"): refreshed += 1
+                    else: errors[aid] = result.get("error", "unknown")
+                else:
+                    skipped += 1
+            self.reply_json({"ok": True, "refreshed": refreshed, "skipped": skipped,
+                             "errors": errors if errors else None})
+
         elif parsed.path == "/agent-usage/parse":
             if not self.auth_check(redirect=False): return
             d = self.read_json_body()
@@ -11263,7 +11451,8 @@ class Handler(BaseHTTPRequestHandler):
                        "lease_ttl", "auto_resume", "show_hidden", "density", "editor_font_size",
                        "policy_preset", "setup_profile", "skills_routing", "memory_mode",
                        "behavior_preset", "memory_visibility", "usage_warn_threshold",
-                       "skills_safe_mode", "external_send_approval"}
+                       "skills_safe_mode", "external_send_approval", "preferred_model",
+                       "context_compression", "fallback_chain"}
             for k, v in data.items():
                 if k in allowed:
                     prefs[k] = v
@@ -12023,7 +12212,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.14.16 ready (localhost only)")
+    print(f"\n  Porter v0.14.17 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
