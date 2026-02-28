@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.17.1 — self-hosted file manager"""
+"""Porter v0.17.2 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -3527,6 +3527,41 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .flush-wizard-impact strong { font-size:11px; color:var(--text); }
 .flush-wizard-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
 
+
+/* Chat context injection */
+.chat-ctx-bar {
+  display:flex; flex-wrap:wrap; gap:4px; padding:6px 0;
+}
+.chat-ctx-chip {
+  display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
+  font-size:11px; background:var(--surface2); border:1px solid var(--border);
+  border-radius:12px; color:var(--text);
+}
+.chat-ctx-chip button {
+  background:none; border:none; color:var(--text3); cursor:pointer;
+  font-size:12px; padding:0; line-height:1; margin-left:2px;
+}
+.chat-ctx-chip button:hover { color:var(--err); }
+.chat-attach-btn {
+  padding:8px; background:none; border:1px solid var(--border);
+  border-radius:8px; color:var(--text3); cursor:pointer; flex-shrink:0;
+  font-size:14px; line-height:1; transition:.12s;
+}
+.chat-attach-btn:hover { border-color:var(--accent); color:var(--accent); }
+.chat-file-picker {
+  position:absolute; bottom:100%; left:0; right:0; max-height:250px;
+  overflow-y:auto; background:var(--bg); border:1px solid var(--border);
+  border-radius:8px; box-shadow:0 -4px 16px rgba(0,0,0,.15); z-index:50;
+  margin-bottom:6px;
+}
+.chat-file-item {
+  display:flex; align-items:center; gap:8px; padding:8px 12px;
+  font-size:12px; color:var(--text); cursor:pointer; border-bottom:1px solid var(--border);
+}
+.chat-file-item:last-child { border-bottom:none; }
+.chat-file-item:hover { background:var(--raised); }
+.chat-file-item .size { font-size:10px; color:var(--text3); margin-left:auto; }
+
 /* Chat engine */
 .chat-container { display:flex; flex-direction:column; height:calc(100vh - 160px); min-height:400px; }
 .chat-header { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--border); margin-bottom:0; flex-shrink:0; }
@@ -4373,7 +4408,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.17.1</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.17.2</div>
   </div>
 </aside>
 
@@ -5328,6 +5363,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.17.2', date:'2026-02-28', notes:[
+    'New: Attach files to chat — select files as context for AI conversations',
+    'New: File chips in chat input show attached context files',
+    'New: File content injected into prompt, models see full file contents',
+  ]},
   { ver:'v0.17.1', date:'2026-02-28', notes:[
     'New: Flush Wizard — preview extracted data before writing to memory',
     'New: Editable flush summary — modify what gets saved before committing',
@@ -8091,6 +8131,8 @@ async function populateChatModels() {
 }
 
 function chatNewConversation() {
+  _chatContextFiles = [];
+  renderContextBar();
   _chatId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
   _chatMessages = [];
   renderChatMessages();
@@ -8143,7 +8185,17 @@ function chatSend() {
     _chatId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
   }
 
-  // Add user message
+  // Build prompt with context files
+  let fullPrompt = text;
+  if (_chatContextFiles.length) {
+    let ctx = '';
+    _chatContextFiles.forEach(function(f) {
+      ctx += '\n--- File: ' + f.name + ' ---\n' + f.content + '\n--- End ' + f.name + ' ---\n';
+    });
+    fullPrompt = 'Context files:\n' + ctx + '\nUser message:\n' + text;
+  }
+
+  // Add user message (show original text, not the full context-injected prompt)
   _chatMessages.push({ role: 'user', content: text });
   input.value = '';
   input.style.height = 'auto';
@@ -8155,7 +8207,7 @@ function chatSend() {
   renderChatMessages();
 
   const url = '/api/chat/stream?model=' + encodeURIComponent(modelId)
-    + '&prompt=' + encodeURIComponent(text)
+    + '&prompt=' + encodeURIComponent(fullPrompt)
     + '&chat_id=' + encodeURIComponent(_chatId);
 
   const evtSource = new EventSource(url);
@@ -8249,6 +8301,98 @@ async function deleteChatSession(id) {
   if (id === _chatId) chatNewConversation();
   loadChatSessions();
 }
+// ── Chat Context Injection ──
+let _chatContextFiles = []; // [{path, name, content}]
+
+function renderContextBar() {
+  const bar = document.getElementById('chat-ctx-bar');
+  if (!bar) return;
+  if (!_chatContextFiles.length) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = _chatContextFiles.map(function(f, i) {
+    return '<span class="chat-ctx-chip">'
+      + '&#128196; ' + escHtml(f.name)
+      + '<button onclick="removeChatContext(' + i + ')" title="Remove">&times;</button>'
+      + '</span>';
+  }).join('');
+}
+
+function removeChatContext(idx) {
+  _chatContextFiles.splice(idx, 1);
+  renderContextBar();
+}
+
+async function toggleChatFilePicker() {
+  const picker = document.getElementById('chat-file-picker');
+  if (!picker) return;
+  if (picker.style.display !== 'none') { picker.style.display = 'none'; return; }
+
+  picker.innerHTML = '<div class="loading-indicator" style="padding:12px">Loading files</div>';
+  picker.style.display = 'block';
+
+  // Get available roots
+  try {
+    const roots = await api('/api/nodes');
+    if (!roots || !roots.nodes) { picker.innerHTML = '<div style="padding:12px;color:var(--text3);font-size:12px">No file roots available</div>'; return; }
+
+    let html = '';
+    for (const node of roots.nodes) {
+      for (const mount of (node.mounts || [])) {
+        const files = await api('/api/list?root=' + encodeURIComponent(mount.id) + '&path=');
+        if (files && files.entries) {
+          const textFiles = files.entries.filter(function(e) {
+            if (e.is_dir) return false;
+            const ext = (e.name || '').split('.').pop().toLowerCase();
+            return ['md','txt','py','js','ts','json','yaml','yml','toml','cfg','ini','sh','css','html','xml','csv','log','env','sql'].indexOf(ext) >= 0;
+          }).slice(0, 20);
+
+          if (textFiles.length) {
+            html += '<div style="padding:6px 12px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)">' + escHtml(mount.label || mount.id) + '</div>';
+            textFiles.forEach(function(f) {
+              const fullPath = mount.id + '/' + f.name;
+              html += '<div class="chat-file-item" onclick="attachChatFile(\'' + escHtml(fullPath).replace(/'/g, "\\'") + '\',\'' + escHtml(f.name).replace(/'/g, "\\'") + '\')">'
+                + '<span>' + escHtml(f.name) + '</span>'
+                + '<span class="size">' + (f.size > 1024 ? (f.size/1024).toFixed(1) + ' KB' : f.size + ' B') + '</span>'
+                + '</div>';
+            });
+          }
+        }
+      }
+    }
+
+    picker.innerHTML = html || '<div style="padding:12px;color:var(--text3);font-size:12px">No text files found</div>';
+  } catch(e) {
+    picker.innerHTML = '<div style="padding:12px;color:var(--err);font-size:12px">Error: ' + e.message + '</div>';
+  }
+}
+
+async function attachChatFile(rootPath, name) {
+  // Check if already attached
+  if (_chatContextFiles.some(function(f) { return f.path === rootPath; })) {
+    toast('File already attached');
+    document.getElementById('chat-file-picker').style.display = 'none';
+    return;
+  }
+
+  // Read file content
+  const parts = rootPath.split('/');
+  const root = parts[0];
+  const path = parts.slice(1).join('/');
+  try {
+    const resp = await fetch('/api/read?root=' + encodeURIComponent(root) + '&path=' + encodeURIComponent(path), {
+      headers: { 'Accept': 'text/plain' }
+    });
+    if (!resp.ok) { toast('Failed to read file', 'err'); return; }
+    const content = await resp.text();
+    _chatContextFiles.push({ path: rootPath, name: name, content: content.substring(0, 8000) });
+    renderContextBar();
+    toast('Attached: ' + name);
+  } catch(e) {
+    toast('Error reading file', 'err');
+  }
+  document.getElementById('chat-file-picker').style.display = 'none';
+}
+
 
 
 async function loadOverview(force=true) {
@@ -15874,7 +16018,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.17.1 ready (localhost only)")
+    print(f"\n  Porter v0.17.2 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
