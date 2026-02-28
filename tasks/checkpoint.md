@@ -1,36 +1,27 @@
 # Checkpoint
 project: porter
-task: Porter v0.12.1 — Connection-first locations controls + transport gating
-status: completed
-step: 13 of 13
+task: Sprint 6 — Tranche G1d: Fold tasks into Projects accordion
+status: complete
+step: 6 of 6
 completed:
-  - [x] Commit 1 — CSS additions (module-nav, module-panel, badge-*, ov-metric, sched-card, tool-card, audit-row)
-  - [x] Commit 2 — HTML restructure (sidebar → module-nav with 10 items, 8 module panels, settings as module-panel)
-  - [x] Commit 3 — JS module system (switchModule, openSettings/closeSettings/switchSettingsTab backward compat, loadOverview/loadSchedules/loadTools/loadAudit, init updated, ESC handler updated)
-  - [x] Commit 4 — Python backend (GET/POST /api/overview /api/schedules /api/tools, cron helpers, agent clarity fields, DEFAULT_TOOL_POLICY)
-  - [x] Commit 5 — Version bump v0.10.0 → v0.11.0 (docstring, footer, startup print, CHANGELOG entry)
-  - [x] Gemini Fixes — Fix cron loop, broken step syntax, switchModule state loss, global theme toggle, and agent usage loading.
-  - [x] Gemini Agent — Add Gemini CLI as a registered 'writer' agent.
-  - [x] Version Bump — v0.11.0 → v0.11.5 for patch fixes.
-  - [x] v0.11.6 polish — profile layout readability, Files/settings navigation coherence, disk footer moved into Files secondary rail.
-  - [x] v0.11.7 UX correction — locations moved out of primary nav and into dedicated Files secondary rail.
-  - [x] v0.11.8 clarity fix — breadcrumb root now shows full mounted path instead of ~/root-id.
-  - [x] v0.11.9 nav reorder — Locations moved above Files; flow now Locations → Files → Agents → Tasks → Schedules → Policies.
-  - [x] v0.11.9 changelog continuity — restored missing v0.11.2–v0.11.8 release entries.
-  - [x] v0.11.10 Tailscale clarity — expose VPS Public IP and Tailscale IP; replace ambiguous "This device" label.
-  - [x] v0.11.11 Settings overlay fix — all primary nav modules now close Settings and navigate as expected.
-  - [x] v0.12.0 IA reframe — moved Tailscale/Connectivity from Settings into Locations module and added redirect for legacy entry.
-  - [x] v0.12.1 control plane — added Connect/Disconnect/Test actions in Locations and gating of Tailscale locations when disconnected.
-next_action: n/a — all v0.12.1 requested UX updates complete.
+  - [x] TASKS_REGISTRY_DIR + _treg globals + _treg_load()/_treg_save() — persistent JSON storage
+  - [x] GET /api/task-registry (list with filters + single by path)
+  - [x] POST /api/task-registry (create, update_status, assign, complete, fail, cancel, add_result, claim, delete)
+  - [x] Tasks nav item added to sidebar (G1b)
+  - [x] Full UX redesign (G1c): row layout, no tabs, no instruction text, Done collapsed, pill priority selector
+  - [x] G1d: Tasks folded into Projects accordion — no separate Tasks nav, project = directory row, task = file row inside
+next_action: Begin Sprint 7 — Tranche G2: Task routing engine + cross-agent dispatch (v0.14.5+)
 modified_files:
   - /home/lobster/documents/porter/porter.py
+  - /home/lobster/documents/porter/RELEASE_NOTES.md
   - /home/lobster/documents/porter/tasks/checkpoint.md
-  - /home/lobster/documents/porter/CONTRIBUTING.md
 notes: |
-  Porter v0.11.6 implements the latest UX requests:
-  1. Profile fields are stacked as Full name, preferred name, and email address.
-  2. Password + confirmation are stacked on separate lines to avoid cramped UI in small windows.
-  3. Settings now closes when entering Files from primary nav or location navigation.
-  4. Files location choices + disk/item status are presented in the secondary location rail.
-  5. Main-nav "What's new" remains removed; release notes stay in Settings footer entry.
-  6. Changelog restored from earliest versions and extended with v0.11.6 notes.
+  Porter now at v0.14.4.
+  Key design decisions locked in:
+  - Tasks are project-scoped (project_name denormalized for self-contained records)
+  - Tasks live inside Projects panel accordion — no separate Tasks tab
+  - Legacy projects.md projects shown with "Add to registry" migration button
+  - Inbox section for unassigned tasks
+  - Done tasks collapsed per project row
+  Sprint 7 (G2) adds: routing engine (capability matching), agent work queue polling,
+  cross-client intake token, active dispatch via PEP/1.

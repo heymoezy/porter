@@ -1,0 +1,151 @@
+vars: {
+  d2-config: {
+    layout-engine: elk
+    theme-id: 200
+    dark-theme-id: 200
+    pad: 10
+    sketch: false
+  }
+}
+
+classes: {
+  lane:    { style: { fill: "#020617"; stroke: "#1E293B"; border-radius: 10 } }
+  node:    { style: { fill: "#0B1220"; stroke: "#334155"; border-radius: 10 } }
+  hub:     { style: { fill: "#111827"; stroke: "#2563EB"; stroke-width: 2; border-radius: 10; shadow: true } }
+  data:    { style: { fill: "#0F172A"; stroke: "#0F766E"; border-radius: 10 } }
+  guard:   { style: { fill: "#1F2937"; stroke: "#F59E0B"; border-radius: 10 } }
+  planned: { style: { fill: "#12111F"; stroke: "#6366F1"; stroke-dash: 5; border-radius: 10 } }
+  proto:   { style: { fill: "#0C1A2E"; stroke: "#3B82F6"; border-radius: 10 } }
+  agent:   { style: { fill: "#0D1F17"; stroke: "#10B981"; border-radius: 10 } }
+  opt:     { style: { fill: "#1A1A0D"; stroke: "#CA8A04"; stroke-dash: 3; border-radius: 10 } }
+}
+
+title: Porter — System Architecture
+direction: down
+
+# ── Layer 1: Access ───────────────────────────────────────────────────────────
+L1: {
+  label: "1) Access Layer"
+  class: lane
+  User: "User / Operator\nbrowser"
+  Tunnel: "SSH Tunnel  (Tailscale)\nlocalhost-only · no public port"
+}
+L1.User.class: node
+L1.Tunnel.class: guard
+
+# ── Layer 2: Bootstrap ────────────────────────────────────────────────────────
+L2: {
+  label: "2) Bootstrap Layer  (first-run only)"
+  class: lane
+  Wizard: "Setup Wizard  [planned]\nset data dir · add file locations · set password"
+  Detect: "Capability Detection\nscans for optional tools at runtime"
+  Status: "Feature Readiness\nready / not ready + install guidance\nno broken features shown as working"
+}
+L2.Wizard.class: planned
+L2.Detect.class: data
+L2.Status.class: guard
+
+# ── Layer 3: Porter Hub ────────────────────────────────────────────────────────
+L3: {
+  label: "3) Porter Hub  —  Control Plane"
+  class: lane
+  Porter: "Porter Core\nfile manager · policy · agent orchestration"
+  Guards: "Safety Guards\nidempotency [built] · loop limits [Sprint 4]\ncircuit breaker [Sprint 4] · hop counter [Sprint 4]"
+  Locations: "Location Health\nlocal mounts · remote nodes (PEP/1)"
+  CapReg: "Capability Registry\nwhat is available on this machine\nfeatures hidden if dependency missing"
+}
+L3.Porter.class: hub
+L3.Guards.class: guard
+L3.Locations.class: node
+L3.CapReg.class: data
+
+# ── Layer 4: Agent Layer ────────────────────────────────────────────────────────
+L4: {
+  label: "4) Agent Layer  —  PEP/1 Protocol"
+  class: lane
+
+  Protocol: "PEP/1\nregister · heartbeat · fs-proxy\ncorrelation IDs · idempotency keys"
+
+  CodingAgent: "Coding Agent\nany AI assistant with operator role\nfull filesystem access via PEP/1"
+
+  Gateway: "Agent Gateway  (optional)\ne.g. OpenClaw, or any compatible gateway\nprimary model + fallback chain\ncloud-hosted · models are gateway-internal"
+
+  LocalRuntime: "Local Model Runtime  (optional)\nlocal inference server + any model\nrequires capable hardware (Mac Mini, workstation)\nnot viable on low-RAM VPS"
+}
+L4.Protocol.class: proto
+L4.CodingAgent.class: agent
+L4.Gateway.class: opt
+L4.LocalRuntime.class: opt
+
+# ── Cascade (future) ──────────────────────────────────────────────────────────
+Cascade: "Cascade  [planned]\nIntelligent routing layer\nlocal runtime first (free) → cloud gateway fallback (costly)\nmodels are user-configured — not prescribed"
+Cascade.class: planned
+
+# ── Layer 5: Runtime Tools ─────────────────────────────────────────────────────
+L5: {
+  label: "5) Runtime Tools  —  Capability-Gated"
+  class: lane
+  Tools: "Optional Tools\nPDF export · diagram rendering · media · git\nonly surfaced if detected at startup"
+}
+L5.Tools.class: node
+
+# ── Layer 6: Data ─────────────────────────────────────────────────────────────
+L6: {
+  label: "6) Data Layer"
+  class: lane
+  Artifacts: "Artifacts Store\nfiles · logs · outputs\nPORTER_DATA_DIR (user-configured)"
+  Memory: "Memory Store\nglobal context [built]\nproject scope [Sprint 5] · session [planned]\nsession flush [planned] · TTL / bloat control [planned]"
+  Projects: "Project Registry\nflat file [built]\nbackend + isolation [Sprint 5]"
+  Audit: "Audit / Event Log\nfull provenance · correlation IDs [built]\nprovenance chain [Sprint 4]"
+}
+L6.Artifacts.class: data
+L6.Memory.class: data
+L6.Projects.class: planned
+L6.Audit.class: data
+
+# ── Non-negotiables ───────────────────────────────────────────────────────────
+Principles: "Non-negotiables\n• PORTER_DATA_DIR — no hardcoded paths, hosts, or ports\n• Missing dep = honest 'not ready' + install guide, never fake\n• Agents, models, and local runtimes are all user-configured\n• Trust-first UI: hide incomplete features, never present as working"
+Principles.class: guard
+
+# ── Connections ───────────────────────────────────────────────────────────────
+
+# Access → Porter
+L1.User -> L1.Tunnel: "ssh -L port"
+L1.Tunnel -> L3.Porter: "HTTP\nlocalhost only"
+L1.Tunnel -> L2.Wizard: "first-run\nonboarding_complete: false"
+
+# Bootstrap → Control
+L2.Wizard -> L2.Detect: "scan environment"
+L2.Detect -> L2.Status: "readiness map"
+L2.Status -> L3.CapReg: "populate"
+L3.CapReg -> L3.Porter: "gate features"
+
+# Control internals
+L3.Guards -> L3.Porter: "enforce"
+L3.Locations -> L3.Porter: "node health"
+
+# Porter → Agents
+L3.Porter -> L4.Protocol: "agent API"
+L4.Protocol -> L4.CodingAgent: "register\nassign tasks"
+L4.Protocol -> L4.Gateway: "register\nassign tasks"
+L4.Protocol -> L4.LocalRuntime: "register\n(if available)"
+
+# Capability gating
+L3.CapReg -> L5.Tools: "enable if detected"
+L4.CodingAgent -> L5.Tools: "invoke tools"
+
+# Cascade (future routing — model-agnostic)
+L4.Gateway -> Cascade: "future routing"
+Cascade -> L4.LocalRuntime: "prefer local\n(if available)"
+
+# Data writes
+L4.CodingAgent -> L6.Artifacts: "write outputs"
+L4.Gateway -> L6.Artifacts: "write outputs"
+L3.Porter -> L6.Memory: "read/write context"
+L3.Porter -> L6.Audit: "emit events"
+L6.Projects -> L6.Memory: "scope boundary [Sprint 5]"
+L6.Artifacts -> L3.Porter: "execution feedback"
+
+# Governance
+L2.Status -> Principles: "trust UX"
+L3.Porter -> Principles: "policy"

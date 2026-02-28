@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.12.91 — self-hosted file manager"""
+"""Porter v0.14.14 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -12,7 +12,9 @@ import secrets
 import shutil
 import socket
 import subprocess
+import threading
 import time
+import uuid
 import zipfile
 import calendar
 from datetime import datetime, timedelta, timezone
@@ -20,9 +22,20 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-PORT = 8877
-HOST = "76.13.190.52"
+PORT = int(os.environ.get("PORTER_PORT", "8877"))
+HOST = os.environ.get("PORTER_HOST", "").strip()
 AGENT_INSTALL_URL = os.environ.get("PORTER_AGENT_INSTALL_URL", "").strip()
+
+
+def _porter_data_dir() -> "Path":
+    """Resolve Porter's data directory.
+    Priority: PORTER_DATA_DIR env var → ~/.porter/
+    Operators on existing installs should set PORTER_DATA_DIR in their systemd unit or shell rc.
+    """
+    env = os.environ.get("PORTER_DATA_DIR", "").strip()
+    if env:
+        return Path(env).expanduser().resolve()
+    return Path.home() / ".porter"
 
 
 def _public_ip_hint() -> str:
@@ -39,14 +52,12 @@ def _public_ip_hint() -> str:
 
 SERVE_DIRS: dict = {}   # populated at startup from nodes; do not hardcode here
 
-# Default mounts for the initial local node (used only on very first run)
-DEFAULT_MOUNTS = [
-    {"id": "vps-home", "label": "Documents", "path": "/home/lobster/documents", "visible": True},
-    {"id": "websites",  "label": "Websites",  "path": "/home/websites",           "visible": True},
-]
+# Default mounts for the initial local node (used only on very first run).
+# Empty by default — first-run wizard asks the operator to add their locations.
+DEFAULT_MOUNTS: list = []
 DEFAULT_PREFERENCES: dict = {
     "onboarding_complete": False,
-    "default_location":    "vps-home",
+    "default_location":    "",
     "checkpoint_interval": 30,
     "lease_ttl":           300,
     "auto_resume":         True,
@@ -64,18 +75,441 @@ DEFAULT_AGENT_FLEET: dict = {
     "devices": {},  # agent_id -> {os, arch, version, status, last_seen}
 }
 
-CONFIG_PATH  = Path("/home/lobster/documents/porter/porter_config.json")
-AVATAR_DIR   = Path("/home/lobster/documents/porter")
-AVATAR_EXTS  = {"jpg", "jpeg", "png", "webp", "gif"}
-SESSION_TTL  = 30 * 24 * 3600   # 30 days
-_sessions: dict = {}             # token -> {username, expires}
+_DATA_DIR           = _porter_data_dir()
+CONFIG_PATH         = Path(os.environ.get("PORTER_CONFIG", str(_DATA_DIR / "porter_config.json")))
+AVATAR_DIR          = _DATA_DIR
+AVATAR_EXTS         = {"jpg", "jpeg", "png", "webp", "gif"}
+SESSION_TTL         = 30 * 24 * 3600   # 30 days
+_sessions: dict     = {}               # token -> {username, expires}
 
-RUNTIME_DIR       = Path("/home/lobster/documents/porter/runtime")
-AGENT_WORKSPACE_DIR = Path("/home/lobster/.openclaw/workspace")
-OPENCLAW_STATE_DIR = Path("/home/lobster/.openclaw")
-MEMORY_DIR        = Path("/home/lobster/documents/porter/memory")
-USAGE_DIR         = RUNTIME_DIR / "usage"
-AUDIT_LOG         = RUNTIME_DIR / "audit.jsonl"
+RUNTIME_DIR         = _DATA_DIR / "runtime"
+AGENT_WORKSPACE_DIR = Path(os.environ.get("PORTER_AGENT_WORKSPACE",
+                           str(Path.home() / ".openclaw" / "workspace")))
+OPENCLAW_STATE_DIR  = Path(os.environ.get("PORTER_OPENCLAW_STATE",
+                           str(Path.home() / ".openclaw")))
+MEMORY_DIR          = _DATA_DIR / "memory"
+USAGE_DIR           = RUNTIME_DIR / "usage"
+TASKS_REGISTRY_DIR  = RUNTIME_DIR / "task-registry"
+AUDIT_LOG           = RUNTIME_DIR / "audit.jsonl"
+
+# ── Capability Registry ───────────────────────────────────────────────────────
+# Each entry: id, label, install URL, features list, check lambda → {ok, version}
+_capabilities_cache: dict = {}  # id -> result dict, refreshed on startup + /api/capabilities
+
+
+def _cap_check_bin(binary: str) -> dict:
+    """Check if a binary exists in PATH or common user-local install dirs."""
+    path = shutil.which(binary)
+    if not path:
+        for extra in (
+            str(Path.home() / ".local" / "bin"),
+            str(Path.home() / ".npm-global" / "bin"),
+            "/usr/local/bin",
+        ):
+            candidate = Path(extra) / binary
+            if candidate.exists():
+                path = str(candidate)
+                break
+    if not path:
+        return {"ok": False, "version": None}
+    try:
+        r = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5)
+        ver = (r.stdout or r.stderr or "").strip().split("\n")[0][:80]
+    except Exception:
+        ver = ""
+    return {"ok": True, "version": ver or binary}
+
+
+def _cap_check_http(url: str, timeout: int = 3) -> dict:
+    """Check if an HTTP service responds at url."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            body = r.read(256).decode("utf-8", errors="replace").strip()
+            return {"ok": True, "version": body[:80] or "up"}
+    except Exception:
+        return {"ok": False, "version": None}
+
+
+def _cap_check_npx_pkg(pkg: str) -> dict:
+    """Check if an npx package is accessible."""
+    npx = shutil.which("npx")
+    if not npx:
+        return {"ok": False, "version": None}
+    try:
+        r = subprocess.run([npx, pkg, "--version"], capture_output=True, text=True, timeout=10)
+        if r.returncode == 0:
+            return {"ok": True, "version": r.stdout.strip()[:80] or pkg}
+    except Exception:
+        pass
+    return {"ok": False, "version": None}
+
+
+def _cap_check_openclaw() -> dict:
+    """Check OpenClaw: try binary version, then HTTP gateway check."""
+    # Binary may live in ~/.npm-global/bin — try explicit paths if shutil misses it
+    import importlib
+    bin_r = _cap_check_bin("openclaw")
+    if bin_r["ok"]:
+        return bin_r
+    # Fallback: check common npm-global paths
+    for candidate in (
+        str(Path.home() / ".npm-global" / "bin" / "openclaw"),
+        "/usr/local/bin/openclaw",
+    ):
+        if Path(candidate).exists():
+            try:
+                r = subprocess.run([candidate, "--version"],
+                                   capture_output=True, text=True, timeout=5)
+                ver = (r.stdout or r.stderr or "").strip().split("\n")[0][:80]
+                return {"ok": True, "version": ver or "openclaw"}
+            except Exception:
+                pass
+    # Last resort: is the HTTP gateway answering?
+    http_r = _cap_check_http("http://127.0.0.1:18789/")
+    if http_r["ok"]:
+        return {"ok": True, "version": "gateway up"}
+    return {"ok": False, "version": None}
+
+
+CAPABILITIES: list = [
+    {"id": "ollama",      "label": "Ollama",
+     "install": "https://ollama.com",
+     "features": ["Local LLM routing", "Context compression"],
+     "check": lambda: _cap_check_http("http://127.0.0.1:11434/")},
+    {"id": "openclaw",    "label": "OpenClaw",
+     "install": "https://github.com/openclaw/openclaw",
+     "features": ["Agent orchestration", "Cloud model gateway"],
+     "check": lambda: _cap_check_openclaw()},
+    {"id": "gemini_cli",  "label": "Gemini CLI",
+     "install": "https://github.com/google-gemini/gemini-cli",
+     "features": ["Research tasks", "Extended context queries"],
+     "check": lambda: _cap_check_bin("gemini")},
+    {"id": "node",        "label": "Node.js",
+     "install": "https://nodejs.org",
+     "features": ["PDF export", "Puppeteer", "D2 diagrams"],
+     "check": lambda: _cap_check_bin("node")},
+    {"id": "puppeteer",   "label": "Puppeteer",
+     "install": "npm install -g puppeteer",
+     "features": ["PDF / screenshot export"],
+     "check": lambda: _cap_check_npx_pkg("puppeteer")},
+    {"id": "d2",          "label": "D2 (diagrams)",
+     "install": "https://d2lang.com",
+     "features": ["Architecture diagram rendering"],
+     "check": lambda: _cap_check_bin("d2")},
+    {"id": "wkhtmltopdf", "label": "wkhtmltopdf",
+     "install": "https://wkhtmltopdf.org",
+     "features": ["PDF export (fallback)"],
+     "check": lambda: _cap_check_bin("wkhtmltopdf")},
+    {"id": "ffmpeg",      "label": "FFmpeg",
+     "install": "https://ffmpeg.org",
+     "features": ["Media transcoding"],
+     "check": lambda: _cap_check_bin("ffmpeg")},
+    {"id": "git",         "label": "Git",
+     "install": "https://git-scm.com",
+     "features": ["Version control", "Porter self-update"],
+     "check": lambda: _cap_check_bin("git")},
+]
+
+
+def _run_cap_checks():
+    """Run all capability checks in a background thread; cache and persist results."""
+    checked = {}
+    for cap in CAPABILITIES:
+        try:
+            result = cap["check"]()
+            checked[cap["id"]] = {
+                "id": cap["id"], "label": cap["label"],
+                "ok": result.get("ok", False),
+                "version": result.get("version"),
+                "install": cap["install"],
+                "features": cap["features"],
+                "checked_at": time.time(),
+            }
+        except Exception as exc:
+            checked[cap["id"]] = {
+                "id": cap["id"], "label": cap["label"],
+                "ok": False, "version": None,
+                "install": cap["install"],
+                "features": cap["features"],
+                "checked_at": time.time(),
+                "error": str(exc),
+            }
+    _capabilities_cache.update(checked)
+    try:
+        (RUNTIME_DIR / "capabilities.json").write_text(
+            json.dumps(list(checked.values()), indent=2)
+        )
+    except Exception:
+        pass
+
+# ── Projects dashboard helpers ──────────────────────────────────────────────
+
+def _time_ago(ts: float) -> str:
+    """Human-readable relative time from a unix timestamp."""
+    delta = int(time.time() - ts)
+    if delta < 60:    return "just now"
+    if delta < 3600:  return f"{delta // 60}m ago"
+    if delta < 86400: return f"{delta // 3600}h ago"
+    return f"{delta // 86400}d ago"
+
+
+def _find_projects_file():
+    """Locate projects.md: explicit config key then root of each SERVE_DIR."""
+    configured = _config.get("projects_file", "").strip()
+    if configured and Path(configured).exists():
+        return Path(configured)
+    for _label, root in SERVE_DIRS.items():
+        candidate = root / 'projects.md'
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _parse_kv_table(block: str) -> dict:
+    """Parse a | Key | Value | markdown table into a dict."""
+    result = {}
+    for row in re.finditer(r'\|\s*([^|\-][^|]*?)\s*\|\s*([^|]+?)\s*\|', block):
+        k, v = row.group(1).strip(), row.group(2).strip()
+        if k and k.lower() != "field":
+            result[k] = v
+    return result
+
+
+def _parse_projects_md(raw: str) -> list:
+    """Extract project entries from Active Projects section of projects.md."""
+    projects = []
+    m = re.search(r'## Active Projects(.*?)(?=\n## |\Z)', raw, re.DOTALL)
+    if not m:
+        return projects
+    section = m.group(1)
+    for pm in re.finditer(r'### (.+?)\n(.*?)(?=\n### |\Z)', section, re.DOTALL):
+        name  = pm.group(1).strip()
+        block = pm.group(2)
+        fields = _parse_kv_table(block)
+        kf = re.search(r'\*\*Key files:\*\*(.*?)(?=\n\*\*|\Z)', block, re.DOTALL)
+        key_files = []
+        if kf:
+            for line in kf.group(1).splitlines():
+                line = line.strip().lstrip('- ')
+                if line:
+                    key_files.append(line)
+        projects.append({"name": name, "fields": fields, "key_files": key_files})
+    return projects
+
+
+def _parse_model_registry(raw: str) -> list:
+    """Extract rows from the Model Registry table in projects.md."""
+    models = []
+    m = re.search(r'## Model Registry(.*?)(?=\n## |\Z)', raw, re.DOTALL)
+    if not m:
+        return models
+    section = m.group(1)
+    rows = re.findall(r'\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|', section)
+    header_found = False
+    for cells in rows:
+        c = [x.strip() for x in cells]
+        if not header_found:
+            if c[0].lower() in ('model', 'name'):
+                header_found = True
+            continue
+        if not c[0] or c[0].replace('-','').replace(' ','') == '':
+            continue
+        models.append({"model": c[0], "identity": c[1], "interface": c[2], "role": c[3], "memory_files": c[4]})
+    return models
+
+
+def _parse_checkpoint_file(path) -> dict:
+    """Parse a checkpoint.md YAML-ish header into a dict."""
+    raw = Path(path).read_text(encoding='utf-8', errors='replace')
+    fields = {"checkpoint_path": str(path)}
+    for line in raw.splitlines():
+        line = line.strip()
+        for key in ("project", "task", "status", "step", "next_action"):
+            if line.startswith(key + ':'):
+                fields[key] = line[len(key)+1:].strip()
+                break
+    st = Path(path).stat()
+    fields['modified_at']  = st.st_mtime
+    fields['modified_ago'] = _time_ago(st.st_mtime)
+    return fields
+
+
+def _scan_checkpoints() -> list:
+    """Scan SERVE_DIRs two levels deep for tasks/checkpoint.md."""
+    tasks, seen = [], set()
+    for _label, root in SERVE_DIRS.items():
+        for cp in root.glob('*/tasks/checkpoint.md'):
+            if str(cp) in seen:
+                continue
+            seen.add(str(cp))
+            try:
+                parsed = _parse_checkpoint_file(cp)
+                if parsed.get('status'):
+                    tasks.append(parsed)
+            except Exception:
+                pass
+    tasks.sort(key=lambda t: t.get('modified_at', 0), reverse=True)
+    return tasks
+
+
+def _find_sprint_plan():
+    """Locate SPRINT_PLAN.md near projects.md or in any serve dir root."""
+    pf = _find_projects_file()
+    if pf:
+        candidate = pf.parent / 'SPRINT_PLAN.md'
+        if candidate.exists():
+            return candidate
+    for _label, root in SERVE_DIRS.items():
+        for sp in root.rglob('SPRINT_PLAN.md'):
+            return sp
+    return None
+
+
+def _parse_sprint_plan(raw: str) -> list:
+    """Extract sprint entries from SPRINT_PLAN.md."""
+    sprints = []
+    for m in re.finditer(r'^## (Sprint .+?)\n(.*?)(?=^## |\Z)', raw, re.MULTILINE | re.DOTALL):
+        title = m.group(1).strip()
+        body  = m.group(2)
+        complete = (
+            'COMPLETE' in title or
+            '✓ shipped' in body or
+            'COMPLETE' in body[:80]
+        )
+        is_next = '(NEXT)' in title
+        ver_m = re.search(r'\*\*Version:\*\*\s*(.+?)(?:\n|$)', body)
+        version = ver_m.group(1).strip() if ver_m else ''
+        sprints.append({'title': title, 'version': version, 'complete': complete, 'is_next': is_next})
+    return sprints
+
+
+def scaffold_project_dir(project_id: str, project_name: str) -> "Path":
+    """Create project workspace directory with template files. Idempotent."""
+    from datetime import datetime, timezone
+    proj_dir = AGENT_WORKSPACE_DIR / "projects" / project_id
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    pm = proj_dir / "PROJECT.md"
+    if not pm.exists():
+        pm.write_text(
+            f"# Project: {project_name}\n\n"
+            f"ID: {project_id}\n"
+            f"Created: {now_iso}\n\n"
+            "## Overview\n\n## Goals\n\n## Notes\n"
+        )
+    mm = proj_dir / "MEMORY.md"
+    if not mm.exists():
+        mm.write_text(
+            f"# Project Memory: {project_name}\n\n"
+            "*Project-scoped memory for all agents working on this project.*\n\n"
+            "## Context\n\n## Decisions\n\n## Status\n"
+        )
+    sj = proj_dir / "settings.json"
+    if not sj.exists():
+        sj.write_text(json.dumps({
+            "project_id":       project_id,
+            "name":             project_name,
+            "memory_isolation": "project",
+            "agents":           [],
+        }, indent=2))
+    return proj_dir
+
+
+def resolve_project_memory(project_id: "str | None", agent_id: "str | None",
+                           filename: str) -> dict:
+    """
+    Resolve a memory/config file through the 3-layer project scope stack.
+    Priority: agent override > project > global (workspace root).
+    Returns {path, content, source_layer} where source_layer is
+    'agent', 'project', 'global', or None if not found anywhere.
+    """
+    layers: list = []
+    if agent_id:
+        layers.append(("agent",   AGENT_WORKSPACE_DIR / "agents"   / str(agent_id)   / filename))
+    if project_id:
+        layers.append(("project", AGENT_WORKSPACE_DIR / "projects" / str(project_id) / filename))
+    layers.append(    ("global",  AGENT_WORKSPACE_DIR / filename))
+    for layer, path in layers:
+        if path.exists():
+            try:
+                content = path.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                content = ""
+            return {"path": str(path), "content": content, "source_layer": layer}
+    return {"path": None, "content": None, "source_layer": None}
+
+
+def _treg_load() -> None:
+    """Load all persisted task-registry entries into _treg at startup."""
+    global _treg
+    TASKS_REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
+    loaded: dict = {}
+    for fp in TASKS_REGISTRY_DIR.glob("*.json"):
+        try:
+            t = json.loads(fp.read_text(encoding="utf-8"))
+            if isinstance(t, dict) and t.get("id"):
+                loaded[t["id"]] = t
+        except Exception:
+            pass
+    with _treg_lock:
+        _treg.update(loaded)
+
+
+def _treg_save(task: dict) -> None:
+    """Atomically persist a single task to disk."""
+    TASKS_REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
+    path = TASKS_REGISTRY_DIR / f"{task['id']}.json"
+    tmp  = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(task, indent=2, default=str), encoding="utf-8")
+    tmp.replace(path)
+
+
+
+
+def _load_projects_dashboard() -> dict:
+    """Aggregate projects, model registry, and checkpoint tasks."""
+    pf = _find_projects_file()
+    projects, models = [], []
+    if pf:
+        try:
+            raw      = pf.read_text(encoding='utf-8', errors='replace')
+            projects = _parse_projects_md(raw)
+            models   = _parse_model_registry(raw)
+        except Exception:
+            pass
+    # Annotate models with memory-file health + projects.md sync check
+    for m in models:
+        mf_raw = m.get('memory_files', '')
+        paths  = re.findall(r'[`\'`]?([~/.][^\s`\']+\.md)[`\'`]?', mf_raw)
+        m['memory_path']   = paths[0].replace('~', str(Path.home())) if paths else None
+        m['memory_exists'] = False
+        m['memory_ago']    = None
+        m['synced']        = None
+        if m['memory_path']:
+            mp = Path(m['memory_path'])
+            if mp.exists():
+                m['memory_exists'] = True
+                m['memory_ago']    = _time_ago(mp.stat().st_mtime)
+                try:
+                    m['synced'] = 'projects.md' in mp.read_text(encoding='utf-8', errors='replace')
+                except Exception:
+                    pass
+    sp = _find_sprint_plan()
+    sprints = []
+    if sp:
+        try:
+            sprints = _parse_sprint_plan(sp.read_text(encoding='utf-8', errors='replace'))
+        except Exception:
+            pass
+    return {
+        'projects_file': str(pf) if pf else None,
+        'projects':      projects,
+        'models':        models,
+        'tasks':         _scan_checkpoints(),
+        'sprints':       sprints,
+    }
+
 
 POLICY_PRESETS: list = [
     {
@@ -144,7 +578,7 @@ def _cron_expand(field, lo, hi):
         else: result.add(int(part))
     return sorted(v for v in result if lo <= v <= hi)
 
-def _cron_next(expr):
+def _cron_next(expr, from_dt=None):
     try:
         fields = expr.strip().split()
         if len(fields) != 5: return None
@@ -155,7 +589,7 @@ def _cron_next(expr):
         if not minutes or not hours or not months: return None
         
         dom_star = df == '*'; dow_star = wf == '*'
-        now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        now = (from_dt if from_dt else datetime.now(timezone.utc)).replace(second=0, microsecond=0)
         t = now + timedelta(minutes=1)
         limit = now + timedelta(days=366 * 4)
         
@@ -201,6 +635,242 @@ def _cron_next_display(expr):
     if secs < 3600: return f"in {secs//60}m"
     if secs < 86400: h=secs//3600; m=(secs%3600)//60; return f"in {h}h {m}m"
     d=secs//86400; h=(secs%86400)//3600; return f"in {d}d {h}h"
+
+# ── scheduler globals ────────────────────────────────────────────────────────
+_sched_last_tick: datetime | None = None
+_SCHED_INTERVAL = 60  # seconds between tick checks
+
+def _fire_schedule_job(job: dict, due_time: datetime) -> None:
+    """Execute a scheduled job and persist the run record."""
+    import urllib.request, urllib.error
+    job_id  = job.get("id", "unknown")
+    target  = job.get("target", "").strip()
+    run_ts  = datetime.now(timezone.utc)
+    ts_str  = run_ts.strftime("%Y%m%dT%H%M%SZ")
+    ok      = False
+    detail  = ""
+    try:
+        if target.startswith(("http://", "https://")):
+            payload = {
+                "schedule_id":   job_id,
+                "schedule_name": job.get("name", ""),
+                "due_time":      due_time.isoformat(),
+                "fired_at":      run_ts.isoformat(),
+            }
+            body = __import__("json").dumps(payload).encode()
+            req  = urllib.request.Request(
+                target, data=body,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                status = resp.status
+            ok     = (200 <= status < 300)
+            detail = f"HTTP {status}"
+        else:
+            # Non-URL target: record as an internal task (no shell exec)
+            ok     = True
+            detail = f"internal task queued: {target or '(none)'}"
+    except Exception as exc:
+        ok     = False
+        detail = str(exc)[:200]
+
+    # Persist run record
+    run_dir = RUNTIME_DIR / "schedule_runs" / job_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    record = {
+        "schedule_id":   job_id,
+        "schedule_name": job.get("name", ""),
+        "fired_at":      run_ts.isoformat(),
+        "due_time":      due_time.isoformat(),
+        "ok":            ok,
+        "detail":        detail,
+    }
+    (run_dir / f"{ts_str}.json").write_text(
+        __import__("json").dumps(record, indent=2)
+    )
+
+    # Update job's last_run fields in _config
+    jobs = _config.get("schedules", [])
+    for j in jobs:
+        if j.get("id") == job_id:
+            j["last_run_at"] = run_ts.isoformat()
+            j["last_run_ok"] = ok
+            j["run_count"]   = j.get("run_count", 0) + 1
+            break
+    save_config(_config)
+
+
+def _scheduler_tick() -> None:
+    """Check all enabled schedules and fire any that are due."""
+    global _sched_last_tick
+    now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    jobs = _config.get("schedules", [])
+    for job in jobs:
+        if not job.get("enabled", True):
+            continue
+        expr = job.get("schedule", "")
+        try:
+            # Work out the most recent due time (before now+1m)
+            last_run_at = job.get("last_run_at")
+            from_dt = (
+                datetime.fromisoformat(last_run_at)
+                if last_run_at else
+                (now - timedelta(days=1))
+            )
+            due = _cron_next(expr, from_dt=from_dt)
+            if due and due <= now:
+                _fire_schedule_job(job, due)
+        except Exception:
+            pass
+    _sched_last_tick = now
+
+
+def _scheduler_loop() -> None:
+    """Background daemon loop — ticks every _SCHED_INTERVAL seconds."""
+    import time as _time
+    while True:
+        try:
+            _scheduler_tick()
+        except Exception:
+            pass
+        _time.sleep(_SCHED_INTERVAL)
+
+
+# ── PEP/1 helpers ─────────────────────────────────────────────────────────────
+
+def _pep_corr_id() -> str:
+    """Generate a correlation ID for a PEP request."""
+    return str(uuid.uuid4())
+
+def _pep_err(code: str, message: str, retryable: bool, cid: str) -> dict:
+    """Return a flat, stable PEP/1 error envelope."""
+    return {"ok": False, "code": code, "message": message,
+            "retryable": retryable, "correlation_id": cid}
+
+# ── Circuit breaker ──────────────────────────────────────────────────────────
+
+def _cb_record(node_id: str, ok: bool) -> None:
+    """Record a proxy attempt outcome for the circuit breaker."""
+    now = time.time()
+    cutoff = now - PEP_CB_WINDOW_S
+    with _pep_cb_lock:
+        state = _pep_cb.setdefault(node_id, {"reqs": [], "errs": [], "open_at": None})
+        state["reqs"] = [t for t in state["reqs"] if t > cutoff]
+        state["errs"] = [t for t in state["errs"] if t > cutoff]
+        state["reqs"].append(now)
+        if not ok:
+            state["errs"].append(now)
+
+def _cb_is_open(node_id: str) -> bool:
+    """True if the circuit is currently OPEN (caller must reject the request)."""
+    now = time.time()
+    cutoff = now - PEP_CB_WINDOW_S
+    with _pep_cb_lock:
+        state = _pep_cb.get(node_id)
+        if not state:
+            return False
+        # Auto-reset after cooldown
+        if state.get("open_at") and (now - state["open_at"]) > PEP_CB_COOLDOWN_S:
+            state["open_at"] = None
+            state["reqs"] = []
+            state["errs"] = []
+            return False
+        if state.get("open_at"):
+            return True
+        reqs = [t for t in state["reqs"] if t > cutoff]
+        errs = [t for t in state["errs"] if t > cutoff]
+        if len(reqs) >= PEP_CB_MIN_REQS and len(errs) / len(reqs) > PEP_CB_ERROR_RATE:
+            state["open_at"] = now
+            return True
+        return False
+
+# ── Lightweight metrics ──────────────────────────────────────────────────────
+
+def _metrics_inc(op: str, node_id: str, err_code: str = "") -> None:
+    with _metrics_lock:
+        key = (op, node_id)
+        _pep_metrics["requests"][key] = _pep_metrics["requests"].get(key, 0) + 1
+        if err_code:
+            ekey = (op, node_id, err_code)
+            _pep_metrics["errors"][ekey] = _pep_metrics["errors"].get(ekey, 0) + 1
+
+def _metrics_observe(op: str, latency_s: float) -> None:
+    with _metrics_lock:
+        lats = _pep_metrics["latencies"]
+        lats.append((op, latency_s))
+        if len(lats) > 2000:
+            _pep_metrics["latencies"] = lats[-2000:]
+
+def _metrics_text() -> str:
+    """Render collected PEP/1 metrics in Prometheus text format."""
+    lines = [
+        "# HELP porter_pep_requests_total Total PEP/1 proxy requests",
+        "# TYPE porter_pep_requests_total counter",
+    ]
+    with _metrics_lock:
+        for (op, nid), cnt in sorted(_pep_metrics["requests"].items()):
+            lines.append(f'porter_pep_requests_total{{op="{op}",node_id="{nid}"}} {cnt}')
+        lines += [
+            "",
+            "# HELP porter_pep_errors_total Total PEP/1 proxy errors",
+            "# TYPE porter_pep_errors_total counter",
+        ]
+        for (op, nid, code), cnt in sorted(_pep_metrics["errors"].items()):
+            lines.append(f'porter_pep_errors_total{{op="{op}",node_id="{nid}",code="{code}"}} {cnt}')
+        # Latency summary: p50 / p95 / p99 per op
+        op_lats: dict = {}
+        for (op, lat) in _pep_metrics["latencies"]:
+            op_lats.setdefault(op, []).append(lat)
+        lines += [
+            "",
+            "# HELP porter_pep_latency_seconds PEP/1 proxy request latency",
+            "# TYPE porter_pep_latency_seconds summary",
+        ]
+        for op, lats in sorted(op_lats.items()):
+            s = sorted(lats)
+            n = len(s)
+            def pct(q, _s=s, _n=n): return _s[max(0, int(_n * q) - 1)] if _n else 0
+            lines.append(f'porter_pep_latency_seconds{{op="{op}",quantile="0.5"}} {pct(0.5):.6f}')
+            lines.append(f'porter_pep_latency_seconds{{op="{op}",quantile="0.95"}} {pct(0.95):.6f}')
+            lines.append(f'porter_pep_latency_seconds{{op="{op}",quantile="0.99"}} {pct(0.99):.6f}')
+            lines.append(f'porter_pep_latency_seconds_count{{op="{op}"}} {n}')
+        # Circuit state
+        lines += [
+            "",
+            "# HELP porter_pep_circuit_state Circuit breaker state (0=closed, 1=open)",
+            "# TYPE porter_pep_circuit_state gauge",
+        ]
+        for nid, state in sorted(_pep_cb.items()):
+            val = 1 if state.get("open_at") else 0
+            lines.append(f'porter_pep_circuit_state{{node_id="{nid}"}} {val}')
+    lines.append("")
+    return "\n".join(lines)
+
+def _pep_idem_check(ikey: str) -> dict | None:
+    """Return cached result if this idempotency key was used within 24h."""
+    if not ikey:
+        return None
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "_", ikey)[:128]
+    p = RUNTIME_DIR / "idempotency" / f"{safe}.json"
+    if p.exists():
+        try:
+            rec = json.loads(p.read_text())
+            if rec.get("expires_at", 0) > time.time():
+                return rec.get("result")
+        except Exception:
+            pass
+    return None
+
+def _pep_idem_store(ikey: str, result: dict) -> None:
+    """Cache a result for an idempotency key for 24 hours."""
+    if not ikey:
+        return
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "_", ikey)[:128]
+    (RUNTIME_DIR / "idempotency").mkdir(parents=True, exist_ok=True)
+    rec = {"result": result, "expires_at": time.time() + 86400, "key": ikey}
+    (RUNTIME_DIR / "idempotency" / f"{safe}.json").write_text(json.dumps(rec))
+
 
 ROLE_CAPS: dict[str, set] = {
     "viewer":   {"read"},
@@ -273,6 +943,14 @@ def load_config() -> dict:
         cfg["agents"] = []
         changed = True
 
+    # ── project registry ──
+    if "projects" not in cfg:
+        cfg["projects"] = []
+        changed = True
+    if "active_project_id" not in cfg:
+        cfg["active_project_id"] = None
+        changed = True
+
     # ── preferences (merge so new keys are always present) ──
     prefs = cfg.setdefault("preferences", {})
     for k, v in DEFAULT_PREFERENCES.items():
@@ -312,6 +990,100 @@ def _load_serve_dirs(cfg: dict) -> None:
             if loc.get("type") == "local" and loc.get("id") and loc.get("path"):
                 SERVE_DIRS[loc["id"]] = Path(loc["path"])
 
+def _refresh_claude_usage(agent_id: str) -> dict:
+    """Fetch live Claude Code rate-limit utilisation via a count_tokens probe."""
+    import urllib.request, urllib.error
+    from datetime import datetime, timezone
+    cred_path = Path.home() / ".claude" / ".credentials.json"
+    if not cred_path.exists():
+        return {"error": "~/.claude/.credentials.json not found"}
+    try:
+        creds = json.loads(cred_path.read_text())
+        token = creds.get("claudeAiOauth", {}).get("accessToken", "")
+        if not token:
+            return {"error": "No OAuth access token in credentials"}
+    except Exception as e:
+        return {"error": f"Failed to read credentials: {e}"}
+
+    payload = json.dumps({
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "x"}]
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages/count_tokens",
+        data=payload, method="POST"
+    )
+    req.add_header("content-type", "application/json")
+    req.add_header("anthropic-version", "2023-06-01")
+    req.add_header("authorization", f"Bearer {token}")
+
+    def _build_snapshot(util_pct: int, resets_at_raw: str | None) -> dict:
+        window_resets_at = None
+        if resets_at_raw:
+            try:
+                # Header is a Unix timestamp (seconds)
+                window_resets_at = datetime.fromtimestamp(
+                    int(resets_at_raw), tz=timezone.utc).isoformat()
+            except (ValueError, OSError):
+                window_resets_at = resets_at_raw  # store as-is if unparseable
+        if util_pct >= 100:   status = "exhausted"
+        elif util_pct >= 90:  status = "rate_limited"
+        elif util_pct >= 75:  status = "degraded"
+        else:                 status = "available"
+        return {
+            "agent_id":         agent_id,
+            "provider":         "claude_code",
+            "captured_at":      datetime.now(timezone.utc).isoformat(),
+            "status":           status,
+            "usage_percent":    util_pct,
+            "window_started_at": None,
+            "window_resets_at": window_resets_at,
+            "source_type":      "api_live",
+        }
+
+    def _extract_headers(hdrs) -> dict | None:
+        # Prefer the unified 5-hour window header Claude Code uses
+        for abbrev in ("5h", "7d"):
+            u = hdrs.get(f"anthropic-ratelimit-unified-{abbrev}-utilization")
+            r = hdrs.get(f"anthropic-ratelimit-unified-{abbrev}-reset")
+            if u is not None:
+                try:
+                    return _build_snapshot(round(float(u) * 100), r)
+                except ValueError:
+                    pass
+        # Fallback: compute from standard token headers
+        lim = hdrs.get("anthropic-ratelimit-tokens-limit")
+        rem = hdrs.get("anthropic-ratelimit-tokens-remaining")
+        rst = hdrs.get("anthropic-ratelimit-tokens-reset")
+        if lim and rem:
+            try:
+                used_pct = round((1 - int(rem) / int(lim)) * 100)
+                return _build_snapshot(used_pct, rst)
+            except (ValueError, ZeroDivisionError):
+                pass
+        return None
+
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            snap = _extract_headers(resp.headers)
+            if snap is None:
+                return {"error": "No rate-limit headers in API response"}
+            USAGE_DIR.mkdir(parents=True, exist_ok=True)
+            (USAGE_DIR / f"{agent_id}.json").write_text(json.dumps(snap, indent=2))
+            return {"ok": True, "snapshot": snap}
+    except urllib.error.HTTPError as e:
+        # Still try to read headers from error response (e.g. 429)
+        snap = _extract_headers(e.headers)
+        if snap:
+            USAGE_DIR.mkdir(parents=True, exist_ok=True)
+            (USAGE_DIR / f"{agent_id}.json").write_text(json.dumps(snap, indent=2))
+            return {"ok": True, "snapshot": snap}
+        body = e.read().decode(errors="replace")[:300]
+        return {"error": f"HTTP {e.code}: {body}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def _hash_agent_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.encode()).hexdigest()
 
@@ -332,6 +1104,26 @@ def _agent_by_key(raw_key: str) -> "dict | None":
 PEP_REG_TOKEN_TTL = 900   # 15 minutes
 PEP_AGENT_PORT    = 8878  # port agents listen on
 PEP_HEARTBEAT_TTL = 180   # seconds before agent considered offline (3 missed @ 60s)
+PEP_HOP_LIMIT     = 10    # reject PEP requests forwarded more than this many times
+PEP_CB_WINDOW_S   = 60    # circuit-breaker error-rate observation window (seconds)
+PEP_CB_ERROR_RATE = 0.30  # fraction of failures that trips the circuit
+PEP_CB_MIN_REQS   = 3     # minimum requests in window before circuit can trip
+PEP_CB_COOLDOWN_S = 60    # seconds circuit stays open before auto-reset
+
+import threading as _threading
+_pep_cb_lock = _threading.Lock()
+_pep_cb: dict = {}   # node_id -> {"reqs": [ts,...], "errs": [ts,...], "open_at": float|None}
+
+_metrics_lock = _threading.Lock()
+_pep_metrics: dict = {
+    "requests": {},   # (op, node_id) -> int
+    "errors":   {},   # (op, node_id, code) -> int
+    "latencies": [],  # [(op, latency_s), ...] -- capped at 2000
+}
+
+_treg_lock = _threading.Lock()
+_treg: dict = {}   # task_id -> task dict
+_treg_load()  # populate from disk at startup
 
 def _hash_pep_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
@@ -380,8 +1172,28 @@ def _pep_node_online(node_id: str) -> bool:
     last = agent.get("last_seen", 0)
     return (time.time() - last) < PEP_HEARTBEAT_TTL
 
+def _pep_node_circuit(node_id: str) -> dict:
+    """Return circuit breaker snapshot for a node (safe to include in API responses)."""
+    now = time.time()
+    cutoff = now - PEP_CB_WINDOW_S
+    with _pep_cb_lock:
+        state = dict(_pep_cb.get(node_id, {}))
+        reqs = [t for t in state.get("reqs", []) if t > cutoff]
+        errs = [t for t in state.get("errs", []) if t > cutoff]
+        is_open = bool(state.get("open_at"))
+        resets_in_s = None
+        if is_open:
+            elapsed = now - state["open_at"]
+            resets_in_s = max(0, int(PEP_CB_COOLDOWN_S - elapsed))
+    return {
+        "state":       "open" if is_open else "closed",
+        "resets_in_s": resets_in_s,
+        "reqs_1m":     len(reqs),
+        "errs_1m":     len(errs),
+    }
+
 def _pep_proxy_fs(agent: dict, method: str, sub_path: str,
-                  qs: dict, body: dict) -> "tuple[int, dict]":
+                  qs: dict, body: dict, hop_count: int = 0) -> "tuple[int, dict]":
     """Forward a FS request to a remote PEP agent. Returns (http_status, response_dict)."""
     import urllib.request, urllib.error
     raw_token = agent.get("_raw_token")  # set transiently after auth
@@ -396,14 +1208,17 @@ def _pep_proxy_fs(agent: dict, method: str, sub_path: str,
         from urllib.parse import urlencode
         url += "?" + urlencode(qs)
     try:
+        hop_hdr = str(hop_count + 1)
         if method == "GET":
-            req = urllib.request.Request(url, headers={"Authorization": f"Bearer {raw_token}"})
+            req = urllib.request.Request(url, headers={"Authorization": f"Bearer {raw_token}",
+                                                        "X-Hop-Count": hop_hdr})
         else:
             payload = json.dumps(body).encode()
             req = urllib.request.Request(url, data=payload,
                 headers={"Authorization": f"Bearer {raw_token}",
                          "Content-Type": "application/json",
-                         "Content-Length": str(len(payload))},
+                         "Content-Length": str(len(payload)),
+                         "X-Hop-Count": hop_hdr},
                 method=method)
         with urllib.request.urlopen(req, timeout=30) as resp:
             return resp.status, json.loads(resp.read())
@@ -468,11 +1283,13 @@ def porter_uri_to_path(uri: str) -> "Path | None":
         return None
 
 def ensure_runtime_dirs():
-    for d in ("checkpoints", "leases", "drafts", "tmp", "usage"):
+    for d in ("checkpoints", "leases", "drafts", "tmp", "usage", "schedule_runs", "idempotency"):
         (RUNTIME_DIR / d).mkdir(parents=True, exist_ok=True)
 
 def _append_audit(action: str, target: str, actor: str,
-                  actor_type: str = "session", details: dict | None = None) -> None:
+                  actor_type: str = "session", details: dict | None = None,
+                  project_id: str | None = None, session_id: str | None = None,
+                  scope_source: str | None = None, chain_ref: str | None = None) -> None:
     from datetime import datetime, timezone
     entry = {
         "ts":         time.time(),
@@ -483,6 +1300,10 @@ def _append_audit(action: str, target: str, actor: str,
         "target":     target,
         "details":    details or {},
     }
+    if project_id:  entry["project_id"]  = project_id
+    if session_id:  entry["session_id"]  = session_id
+    if scope_source: entry["scope_source"] = scope_source
+    if chain_ref:   entry["chain_ref"]   = chain_ref
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
     try:
         with open(AUDIT_LOG, "a") as f:
@@ -753,6 +1574,41 @@ async function doLogin() {
   }
 }
 </script>
+<div id="create-task-modal" style="display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.55);align-items:center;justify-content:center" onclick="if(event.target===this)closeCreateTaskModal()">
+  <div style="background:var(--bg1);border:1px solid var(--border);border-radius:12px;padding:24px;width:460px;max-width:96vw;box-shadow:0 12px 40px rgba(0,0,0,.4)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <span style="font-size:15px;font-weight:700;color:var(--text)">New task</span>
+      <button onclick="closeCreateTaskModal()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;padding:0 2px">&#x2715;</button>
+    </div>
+    <div style="margin-bottom:14px">
+      <input id="ct-title" type="text" placeholder="Task title" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:14px;font-weight:500" onkeydown="if(event.key==='Enter')submitCreateTask()">
+    </div>
+    <div style="margin-bottom:14px">
+      <select id="ct-project" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:13px">
+        <option value="">No project</option>
+      </select>
+    </div>
+    <div style="margin-bottom:14px">
+      <textarea id="ct-desc" rows="2" placeholder="Description (optional)" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:13px;resize:vertical"></textarea>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Priority</div>
+      <div style="display:flex;gap:6px">
+        <button class="ct-prio-btn treg-stab" data-prio="low"    onclick="ctSetPrio(this)">Low</button>
+        <button class="ct-prio-btn treg-stab active" data-prio="normal"  onclick="ctSetPrio(this)">Normal</button>
+        <button class="ct-prio-btn treg-stab" data-prio="high"   onclick="ctSetPrio(this)">High</button>
+        <button class="ct-prio-btn treg-stab" data-prio="urgent" onclick="ctSetPrio(this)" style="color:#ef4444">Urgent</button>
+      </div>
+    </div>
+    <div style="margin-bottom:20px">
+      <input id="ct-tags" type="text" placeholder="Tags: backend, sprint6  (comma-separated)" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:13px">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeCreateTaskModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitCreateTask()">Create</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
 """
@@ -781,6 +1637,11 @@ PAGE = r"""<!DOCTYPE html>
   --text3:    #909090;
   --danger:   #dc2626;
   --success:  #16a34a;
+  --bg1:      #151515;
+  --bg2:      #1C1C1C;
+  --bg3:      #202020;
+  --panel:    #161616;
+  --surface2: #1E1E1E;
   --radius:   8px;
   --sidebar:  220px;
   --preview:  460px;
@@ -856,8 +1717,6 @@ body {
 .node-hdr.offline { border-color: rgba(148,163,184,.35); background: rgba(148,163,184,.05); opacity:.86; }
 .mount-item { padding-left: 18px; margin:0 12px 2px; border-radius:7px; }
 .mount-item .loc-name { flex:1; min-width:0; }
-#locations-secondary .node-hdr { margin:4px 4px 2px; padding:8px; }
-#locations-secondary .mount-item { margin:0 6px 2px; padding-left:14px; }
 
 body.sidebar-collapsed .node-hdr { display: none; }
 body.sidebar-collapsed .mount-item { padding-left: 0; justify-content: center; }
@@ -873,24 +1732,7 @@ body.sidebar-collapsed .mnav-label { display:none; }
 body.sidebar-collapsed .mnav-item { justify-content:center; padding:8px; }
 body.sidebar-collapsed .module-nav { padding:8px 4px; }
 #loc-subnav { display:none; }
-.files-secondary-nav {
-  display:none; position:absolute; top:54px; left:0; bottom:0; width:260px;
-  background:var(--surface); border-right:1px solid var(--border); overflow-y:auto;
-  padding:10px 0; z-index:5;
-}
-.files-secondary-title {
-  padding:0 14px 10px; font-size:11px; font-weight:600; letter-spacing:.7px;
-  color:var(--text3); text-transform:uppercase;
-}
-#locations-secondary { padding:0 10px; }
-#locations-secondary .node-hdr { padding-left:2px; }
-#locations-secondary .mount-item { margin-left:0; }
 #file-results-footer { padding:10px 16px; color:var(--text3); font-size:11px; border-top:1px solid var(--border); background:var(--panel); flex-shrink:0; }
-body.files-active .files-secondary-nav { display:block; }
-body.files-active #banner,
-body.files-active #searchCountBar,
-body.files-active #selectionToolbar,
-body.files-active #fileArea { margin-left:260px; }
 .sidebar-footer {
   padding: 16px 20px 0;
   border-top: 1px solid var(--border);
@@ -945,9 +1787,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 /* toolbar */
 .toolbar {
   display: flex; align-items: center; gap: 8px;
-  padding: 14px 24px;
+  padding: 24px 28px 14px;
   border-bottom: 1px solid var(--border);
-  background: var(--surface);
   flex-shrink: 0;
 }
 .breadcrumb {
@@ -965,6 +1806,38 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .crumb-sep { color: var(--text3); font-size: 13px; user-select: none; }
 .toolbar-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
 
+/* Files home view */
+.fhome-device {
+  display:flex; align-items:center; gap:10px;
+  padding:10px 0 8px; cursor:pointer;
+  border-bottom:1px solid var(--border);
+  background:var(--raised); user-select:none;
+}
+.fhome-device:hover { background:var(--border); }
+.fhome-device-label { font-size:13px; font-weight:600; color:var(--text); flex:1; }
+.fhome-chevron { font-size:10px; color:var(--text3); margin-right:2px; }
+@keyframes cb-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.cb-badge { display:inline-flex;align-items:center;font-size:10px;padding:1px 6px;border-radius:10px;font-weight:500;margin-left:4px;vertical-align:middle;white-space:nowrap; }
+.cb-badge.cb-open { color:#f97316;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);animation:cb-pulse 2s ease-in-out infinite; }
+.fhome-mount {
+  display:grid; grid-template-columns:32px 1fr 40px;
+  align-items:center; gap:12px; padding:0 0 0 24px;
+  border-bottom:1px solid rgba(255,255,255,0.04);
+  cursor:pointer; transition:background .1s;
+}
+.fhome-mount:hover { background:var(--raised); }
+.fhome-mount .file-name { padding:10px 0; }
+.fhome-mount .file-label { font-size:13px; font-weight:500; color:var(--text); }
+.fhome-mount .file-path { font-size:11px; color:var(--text3); }
+.fhome-entry {
+  display:grid; grid-template-columns:32px 1fr 90px 110px 40px;
+  align-items:center; gap:12px; padding:0 0 0 40px;
+  border-bottom:1px solid rgba(255,255,255,0.04);
+  cursor:pointer; transition:background .1s;
+}
+.fhome-entry:hover { background:var(--raised); }
+.fhome-entry .file-name { padding:9px 0; }
+
 /* search */
 .search-wrap { position: relative; display: flex; align-items: center; }
 .search-icon {
@@ -975,7 +1848,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .search-wrap:focus-within .search-icon { color: var(--accent); }
 #searchInput {
   width: 180px;
-  background: var(--surface); border: 1px solid var(--border2);
+  background: var(--raised); border: 1px solid var(--border2);
   border-radius: var(--radius); padding: 6px 28px 6px 30px;
   font-size: 13px; color: var(--text); font-family: inherit; outline: none;
   transition: border-color .15s, width .2s;
@@ -1018,7 +1891,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 /* selection toolbar */
 .selection-toolbar {
   display: none; align-items: center; gap: 10px;
-  padding: 8px 24px; background: rgba(247,147,26,.06);
+  padding: 8px 28px; background: rgba(247,147,26,.06);
   border-bottom: 1px solid #2a1800; flex-shrink: 0;
   font-size: 13px;
 }
@@ -1027,6 +1900,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 /* file list */
 .file-area {
   flex: 1; overflow-y: auto; position: relative;
+  padding: 16px 28px 0;
 }
 .file-area.drag-over::after {
   content: 'Drop to upload'; position: absolute; inset: 0;
@@ -1040,7 +1914,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .list-header {
   display: grid; grid-template-columns: 32px 1fr 90px 110px 40px;
-  padding: 8px 24px; gap: 12px;
+  padding: 8px 0; gap: 12px;
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; background: var(--bg); z-index: 1;
 }
@@ -1069,7 +1943,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .file-row {
   display: grid; grid-template-columns: 32px 1fr 90px 110px 40px;
   align-items: center; gap: 12px;
-  padding: 0 24px;
+  padding: 0;
   border-bottom: 1px solid rgba(255,255,255,0.04);
   cursor: pointer; position: relative; transition: background .1s;
 }
@@ -1147,7 +2021,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 /* read-only banner */
 .banner {
   display: flex; align-items: center; gap: 8px;
-  padding: 8px 24px; font-size: 12px; color: #c07020;
+  padding: 8px 28px; font-size: 12px; color: #c07020;
   background: rgba(247,147,26,.05); border-bottom: 1px solid #2a1a00;
   flex-shrink: 0;
 }
@@ -1317,6 +2191,11 @@ kbd {
   --text:    #1A1A1A;
   --text2:   #555555;
   --text3:   #999999;
+  --bg1:     #F0F0F0;
+  --bg2:     #E8E8E8;
+  --bg3:     #E0E0E0;
+  --panel:   #F2F2F2;
+  --surface2:#F8F8F8;
 }
 :root.light ::-webkit-scrollbar-thumb { background: #ccc; }
 .cl-ver-row {
@@ -1343,8 +2222,8 @@ kbd {
 
 /* search count bar */
 .search-count-bar {
-  padding:5px 24px; font-size:12px; color:var(--text3);
-  background:var(--surface); border-bottom:1px solid var(--border); flex-shrink:0;
+  padding:5px 28px; font-size:12px; color:var(--text3);
+  border-bottom:1px solid var(--border); flex-shrink:0;
 }
 .search-count-bar span { color:var(--text2); font-weight:600; }
 
@@ -1401,7 +2280,7 @@ body.density-compact .file-name { padding: 6px 0; }
 #agents-module.configuring { padding: 0; overflow: hidden; }
 #agents-module.configuring > *:not(#agent-workspace) { display: none !important; }
 #agents-module.configuring #agent-workspace { display: block !important; height: 100%; margin: 0; border-radius: 0; border-left: none; border-right: none; border-bottom: none; }
-.module-hdr { display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-shrink:0; }
+.module-hdr { display:flex; align-items:center; gap:12px; margin-bottom:20px; padding-bottom:14px; border-bottom:1px solid var(--border); flex-shrink:0; min-height:46px; }
 .module-title { font-size:20px; font-weight:700; color:var(--text); flex:1; }
 .module-section { background:var(--surface); border:1px solid var(--border);
   border-radius:10px; padding:16px; margin-bottom:16px; flex-shrink:0; }
@@ -1433,21 +2312,71 @@ body.density-compact .file-name { padding: 6px 0; }
 .sp-header { display:flex; align-items:center; margin-bottom:14px; padding-bottom:10px;
   border-bottom:1px solid var(--border); }
 .sp-header h2 { font-size:18px; font-weight:700; color:var(--text); margin:0; }
-/* Task operation cards */
-.task-card { background:var(--bg2); border:1px solid var(--border);
-             border-radius:8px; padding:16px; margin-bottom:10px; }
-.task-hdr  { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
-.task-id   { font-family:monospace; font-size:13px; color:var(--text1); flex:1;
-             overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.task-meta { display:flex; gap:14px; flex-wrap:wrap; font-size:12px;
-             color:var(--text2); margin-bottom:10px; }
-.task-actions { display:flex; gap:8px; flex-wrap:wrap; }
+/* Task rows */
+.task-actions { display:flex; gap:6px; flex-wrap:wrap; }
+.treg-row { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
+.treg-row:last-child { border-bottom:none; }
+.treg-row-body { flex:1; min-width:0; }
+.treg-row-title { font-size:13px; font-weight:500; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.treg-row-desc  { font-size:12px; color:var(--text2); margin-top:3px; line-height:1.4; }
+.treg-row-meta  { font-size:11px; color:var(--text3); margin-top:3px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.treg-row-acts  { display:flex; gap:4px; align-items:center; flex-shrink:0; }
+.treg-act { font-size:11px; padding:2px 7px; border-radius:4px; background:none; border:1px solid var(--border); cursor:pointer; color:var(--text2); white-space:nowrap; }
+.treg-act:hover { border-color:var(--text2); color:var(--text); }
+.treg-act.act-ok  { color:#16a34a; border-color:rgba(22,163,74,.3); }
+.treg-act.act-ok:hover  { background:rgba(22,163,74,.08); }
+.treg-act.act-del { color:var(--danger); border-color:rgba(239,68,68,.3); }
+.treg-act.act-del:hover { background:rgba(239,68,68,.08); }
+.treg-sec-hdr { display:flex; align-items:center; gap:10px; margin:18px 0 4px; }
+.treg-sec-label { font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.8px; white-space:nowrap; }
+.treg-sec-line  { flex:1; height:1px; background:var(--border); }
+.treg-sec-count { font-size:11px; color:var(--text3); }
+.treg-sec-toggle { font-size:11px; color:var(--accent); background:none; border:none; cursor:pointer; padding:0; }
+.treg-proj-tag { font-size:10px; padding:1px 6px; border-radius:10px; background:rgba(99,102,241,.1); color:var(--accent); border:1px solid rgba(99,102,241,.2); white-space:nowrap; }
+.treg-tag { font-size:10px; padding:1px 6px; border-radius:10px; background:var(--bg3); color:var(--text3); white-space:nowrap; }
+.treg-stab { font-size:11px; padding:3px 10px; border-radius:20px; background:none; border:1px solid transparent; cursor:pointer; color:var(--text3); font-weight:500; }
+.treg-stab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.treg-stab:not(.active):hover { border-color:var(--border); color:var(--text); }
+.treg-result { margin-top:6px; font-size:12px; color:var(--text2); background:var(--bg3); border-radius:4px; padding:6px 8px; white-space:pre-wrap; }
+/* Projects panel — inline accordion */
+.proj-row { display:grid; grid-template-columns:14px 1fr auto; align-items:center; gap:10px; padding:2px 28px; border-bottom:1px solid rgba(255,255,255,.04); cursor:pointer; user-select:none; transition:background .1s; }
+.proj-row:hover { background:var(--raised); }
+.proj-row-chevron { font-size:9px; color:var(--text3); transition:transform .15s; flex-shrink:0; }
+.proj-row-chevron.open { transform:rotate(90deg); }
+.proj-row-name { font-size:13px; font-weight:600; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:10px 0; }
+.proj-row-count { font-size:11px; color:var(--text3); white-space:nowrap; }
+.proj-row-menu { display:none; }
+/* projects-module uses standard module-panel styling */
+/* Expanded task area */
+.proj-tasks { padding-left:24px; }
+.ptask-list-hdr { display:grid; grid-template-columns:10px 1fr 90px 56px; align-items:center; gap:10px; padding:4px 28px 6px; border-bottom:1px solid var(--border); margin-bottom:2px; }
+.ptask-row { display:grid; grid-template-columns:10px 1fr 90px 56px; align-items:center; gap:10px; padding:0 28px; border-bottom:1px solid rgba(255,255,255,.04); cursor:default; transition:background .1s; }
+.ptask-row:hover { background:var(--raised); }
+.ptask-row-title { font-size:13px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:9px 0; }
+.ptask-row-status { font-size:11px; }
+.ptask-row-age { font-size:11px; color:var(--text3); text-align:right; }
+.ptask-row-acts { display:flex; gap:2px; justify-content:flex-end; opacity:0; transition:opacity .1s; }
+.ptask-row:hover .ptask-row-acts { opacity:1; }
+.proj-col-lbl { font-size:10px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; color:var(--text3); }
+/* Done section per-project */
+.proj-done-hdr { display:flex; align-items:center; gap:8px; padding:8px 0 4px; cursor:pointer; user-select:none; }
+.proj-done-hdr:hover .proj-done-label { color:var(--text2); }
+.proj-done-label { font-size:10px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; color:var(--text3); flex:1; }
+.proj-done-count { font-size:11px; color:var(--text3); }
+.proj-done-chevron { font-size:9px; color:var(--text3); transition:transform .15s; }
+.proj-done-chevron.open { transform:rotate(90deg); }
 .task-badge { font-size:11px; padding:2px 8px; border-radius:20px; font-weight:600; white-space:nowrap; }
 .task-badge.badge-running   { background:#dcfce7; color:#15803d; }
 .task-badge.badge-paused    { background:#fef9c3; color:#854d0e; }
 .task-badge.badge-stalled   { background:#fee2e2; color:#b91c1c; }
 .task-badge.badge-complete  { background:#e0f2fe; color:#0369a1; }
 .task-badge.badge-cancelled { background:var(--bg3); color:var(--text2); }
+/* Priority dots */
+.prio-dot    { width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:3px; }
+.prio-urgent { background:#ef4444; }
+.prio-high   { background:#f97316; }
+.prio-normal { background:#6366f1; }
+.prio-low    { background:#94a3b8; }
 /* Policy preset cards */
 .policy-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; }
 @media(max-width:600px) { .policy-grid { grid-template-columns:1fr; } }
@@ -1614,6 +2543,14 @@ select.settings-input { padding-right: 26px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
       <span class="mnav-label">Command Center</span>
     </button>
+    <button class="mnav-item" id="mnav-agents" onclick="switchModule('agents')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
+      <span class="mnav-label">Agents</span>
+    </button>
+    <button class="mnav-item" id="mnav-projects" onclick="switchModule('projects')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+      <span class="mnav-label">Projects</span>
+    </button>
     <button class="mnav-item" id="mnav-locations" onclick="switchModule('locations')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
       <span class="mnav-label">Locations</span>
@@ -1622,20 +2559,7 @@ select.settings-input { padding-right: 26px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
       <span class="mnav-label">Files</span>
     </button>
-    <!-- locations moved to Files secondary navigation rail -->
-    <button class="mnav-item" id="mnav-agents" onclick="switchModule('agents')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
-      <span class="mnav-label">Agents</span>
-    </button>
-    <button class="mnav-item" id="mnav-tasks" onclick="switchModule('tasks')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/><line x1="3" y1="8" x2="21" y2="8"/></svg>
-      <span class="mnav-label">Tasks</span>
-    </button>
-    <button class="mnav-item" id="mnav-schedules" onclick="switchModule('schedules')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      <span class="mnav-label">Schedules</span>
-    </button>
-    <button class="mnav-item" id="mnav-policies" onclick="switchModule('policies')">
+    <button class="mnav-item" id="mnav-policies" style="display:none" onclick="switchModule('policies')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/><circle cx="18" cy="14" r="4"/></svg>
       <span class="mnav-label">Policies</span>
     </button>
@@ -1646,6 +2570,10 @@ select.settings-input { padding-right: 26px; }
     <button class="mnav-item" id="mnav-audit" style="display:none" onclick="switchModule('audit')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
       <span class="mnav-label">Activity</span>
+    </button>
+    <button class="mnav-item" id="mnav-capabilities" onclick="switchModule('capabilities')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      <span class="mnav-label">Extensions</span>
     </button>
     <div class="mnav-sep"></div>
     <button class="mnav-item" id="mnav-settings" onclick="openSettings('profile')">
@@ -1666,27 +2594,16 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.12.91</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.14.14</div>
   </div>
 </aside>
 
 <!-- main -->
 <main class="main" id="mainEl">
-  <div class="toolbar" id="mainToolbar">
+  <div class="toolbar" id="mainToolbar" style="display:none">
+    <span class="module-title" style="flex:none">Files</span>
     <div class="breadcrumb" id="breadcrumb"></div>
     <div class="toolbar-actions">
-      <!-- search -->
-      <div class="search-wrap">
-        <span class="search-icon">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        </span>
-        <input type="text" id="searchInput" placeholder="Search…"
-               oninput="onSearchInput(this.value)"
-               onkeydown="if(event.key==='Escape'){clearSearch();event.preventDefault()}">
-        <button id="clearSearch" onclick="clearSearch()" title="Clear search">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
       <button class="btn btn-icon" id="btnHidden" onclick="setSetting('showHidden',!settings.showHidden)" title="Show hidden files (. prefixed)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
@@ -1701,12 +2618,6 @@ select.settings-input { padding-right: 26px; }
     </div>
   </div>
 
-  <aside class="files-secondary-nav" id="filesSecondaryNav">
-    <div class="files-secondary-title">Locations</div>
-    <div id="locations-secondary"></div>
-    
-  </aside>
-
   <div id="banner" style="display:none" class="banner">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
     This folder is read-only — you can browse and download but not modify files.
@@ -1717,7 +2628,7 @@ select.settings-input { padding-right: 26px; }
   </div>
 
   <!-- selection toolbar -->
-  <div class="selection-toolbar" id="selectionToolbar">
+  <div class="selection-toolbar" id="selectionToolbar" style="display:none">
     <span class="sel-count" id="selCount"></span>
     <button class="btn btn-ghost" onclick="downloadZip()" style="padding:5px 12px;font-size:12px">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
@@ -1730,7 +2641,7 @@ select.settings-input { padding-right: 26px; }
     <button class="btn btn-ghost" onclick="clearSelection()" style="padding:5px 12px;font-size:12px">Clear</button>
   </div>
 
-  <div class="file-area" id="fileArea">
+  <div class="file-area" id="fileArea" style="display:none">
     <div class="list-header">
       <div class="cb-col">
         <input type="checkbox" class="row-cb" id="selectAll" onchange="toggleSelectAll(this.checked)">
@@ -1742,106 +2653,49 @@ select.settings-input { padding-right: 26px; }
     </div>
     <div id="listing"></div>
   </div>
-  <div id="file-results-footer"></div>
+  <div id="file-results-footer" style="display:none"></div>
 
   <!-- module panels -->
   <div id="overview-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Command Center</span>
-      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:var(--text3)" id="ov-updated"></span><button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadOverview(true)">Refresh</button></div>
     </div>
-    <div id="ov-metrics" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px"></div>
+    <div style="padding:48px 24px;text-align:center;color:var(--text3)">
+      <div style="font-size:32px;margin-bottom:16px">&#9685;</div>
+      <div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:8px">Dashboard coming soon</div>
+      <div style="font-size:13px;max-width:380px;margin:0 auto;line-height:1.6">A live system health view — agent activity, capacity, task throughput — will be built here once the core platform is stable.</div>
+    </div>
+    <div id="ov-metrics" style="display:none"></div>
   </div>
 
   <div id="tasks-module" class="module-panel">
-    <div class="module-hdr">
+    <div class="module-hdr" style="gap:8px">
       <span class="module-title">Tasks</span>
-      <span style="font-size:12px;color:var(--text3);margin-left:auto;margin-right:8px">Act here: recover stalled, manage running, clear completed</span>
-      <button class="btn btn-ghost" style="font-size:12px" onclick="clearCompletedTasks()">Clear completed</button>
+      <select id="treg-f-project" style="font-size:11px;padding:3px 8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);margin-left:12px" onchange="loadTaskRegistry()">
+        <option value="">All projects</option>
+      </select>
+      <div style="display:flex;gap:2px;margin-left:4px">
+        <button class="treg-stab active" id="treg-f-all"        onclick="setTregFilter('')">All</button>
+        <button class="treg-stab"         id="treg-f-pending"    onclick="setTregFilter('pending')">Pending</button>
+        <button class="treg-stab"         id="treg-f-active"     onclick="setTregFilter('in_progress')">Active</button>
+        <button class="treg-stab"         id="treg-f-done"       onclick="setTregFilter('done')">Done</button>
+      </div>
+      <button class="btn btn-primary" onclick="openCreateTaskModal()" style="font-size:12px;margin-left:auto">+ New task</button>
     </div>
-    <details class="task-legend" style="margin-bottom:14px;font-size:12px;color:var(--text2)">
-      <summary style="cursor:pointer;font-weight:600;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px;list-style:none">&#9658; Status reference</summary>
-      <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
-        <div style="display:flex;align-items:center;gap:10px">
-          <span class="task-badge badge-running">running</span>
-          <span>Heartbeat active &#8212; agent is processing normally</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span class="task-badge badge-paused">paused</span>
-          <span>Manually paused by an operator &#8212; awaiting resume</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span class="task-badge badge-stalled">stalled</span>
-          <span>Heartbeat expired &#8212; agent may have crashed or lost connection</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span class="task-badge badge-complete">complete</span>
-          <span>Task finished successfully and finalized</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span class="task-badge badge-cancelled">cancelled</span>
-          <span>Manually cancelled &#8212; no further work will be done</span>
-        </div>
-      </div>
-    </details>
-    <div id="tasks-guidance" style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">How to use Tasks</div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45">
-        1) <strong>Needs action</strong>: resolve these first (Recover/Resume/Cancel).<br>
-        2) <strong>In progress</strong>: monitor active work; pause only if needed.<br>
-        3) <strong>Completed</strong>: clear finished items to keep the queue clean.
-      </div>
-    </div>
-    <details id="tasks-decision-rubric" style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-      <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text)">Decision rules (cancel vs recover)</summary>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-top:8px">
-        <div><strong>Recover</strong> when task just stalled (fresh heartbeat expiry) and work should continue.</div>
-        <div><strong>Cancel</strong> when heartbeat is long stale, task exceeded TTL badly, or Recover already failed once.</div>
-        <div><strong>Keep paused</strong> only if intentionally paused by operator.</div>
-        <div><strong>Clear completed</strong> after verifying outputs, to keep queue actionable.</div>
-      </div>
-    </details>
-    <div id="tasks-module-list"><div style="color:var(--text2);padding:20px 0">Loading&#8230;</div></div>
+    <div id="treg-list"><div style="color:var(--text2);padding:32px 0;text-align:center">Loading&#8230;</div></div>
   </div>
 
   <div id="agents-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Agents</span>
-      <button class="btn btn-primary" onclick="openCreateAgent()">+ Create agent</button>
-    </div>
-        <div id="agents-global-config" style="margin-bottom:12px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text2)">
-          <span><strong>Preset:</strong> <span id="cfg-summary-preset">Balanced</span></span>
-          <span><strong>Capacity alert:</strong> <span id="cfg-summary-threshold">20%</span></span>
-          <span><strong>External approval:</strong> <span id="cfg-summary-approval">On</span></span>
-        </div>
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="toggleAgentDefaultsEditor()">Edit defaults</button>
+      <div style="display:flex;gap:4px;margin:0 auto 0 16px">
+        <button class="btn btn-ghost" id="agent-tab-btn-fleet"  onclick="switchAgentTab('fleet')"  style="font-size:12px;font-weight:600;border-bottom:2px solid var(--accent)">Fleet</button>
+        <button class="btn btn-ghost" id="agent-tab-btn-jobs"   onclick="switchAgentTab('jobs')"   style="font-size:12px">Jobs</button>
+        <button class="btn btn-ghost" id="agent-tab-btn-models" onclick="switchAgentTab('models')" style="font-size:12px">Models</button>
       </div>
-      <div id="cfg-summary-impact" style="margin-top:6px;font-size:11px;color:var(--text3)">Active now: capacity risk colors + per-agent default approval prompts.</div>
-      <div id="agents-defaults-editor" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">Agent defaults</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Set global defaults. Per-agent cards can override when needed.</div>
-        <div style="display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:8px">
-          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Where you mostly work</div><select id="cfg-setup-profile" class="settings-input" style="height:32px;width:100%"><option value="local-only">This device only</option><option value="vps-tailnet">Server + private network</option><option value="multi-device">Multiple devices</option></select></div>
-          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">How smart routing should be</div><select id="cfg-skills-routing" class="settings-input" style="height:32px;width:100%"><option value="guided">Recommended defaults</option><option value="auto">Fully automatic</option><option value="manual">I choose every time</option></select></div>
-          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Memory style</div><select id="cfg-memory-mode" class="settings-input" style="height:32px;width:100%"><option value="manual">I decide what to save</option><option value="assisted">Suggest what to save</option><option value="auto-curated">Auto-organize memory</option></select></div>
-          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Risk level</div><select id="cfg-behavior-preset" class="settings-input" style="height:32px;width:100%"><option value="safe">Careful (ask more often)</option><option value="balanced">Balanced</option><option value="operator">Fast execution</option></select></div>
-          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Warn me when capacity gets low</div><input id="cfg-usage-threshold" type="number" min="1" max="99" class="settings-input" style="height:32px;width:100%" value="20"></div>
-          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Memory sharing</div><select id="cfg-memory-visibility" class="settings-input" style="height:32px;width:100%"><option value="shared">Shared by default</option><option value="scoped">Project-based sharing</option><option value="isolated">Keep agents separate</option></select></div>
-        </div>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;color:var(--text2);font-size:12px">
-          <label style="display:flex;align-items:center;gap:6px"><input id="cfg-skills-safe-mode" type="checkbox">Extra safety for external actions</label>
-          <label style="display:flex;align-items:center;gap:6px"><input id="cfg-external-approval" type="checkbox" checked>Always ask before sending outside Porter</label>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
-          <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" onclick="saveOperatorConfig()">Save defaults</button>
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadOperatorConfig()">Refresh</button>
-          <span id="cfg-save-state" style="font-size:11px;color:var(--text3)"></span>
-        </div>
-      </div>
+      <button class="btn btn-primary" id="agents-create-btn" onclick="openCreateAgent()">+ Create agent</button>
     </div>
-
+    <div id="agent-tab-fleet">
     <div id="agents-filter-row" style="margin-bottom:12px;display:flex;justify-content:flex-end;align-items:center;gap:10px">
       <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
         <input type="checkbox" id="agent-show-all" onchange="window._showAllAgentTypes=this.checked;renderAgents(window._lastAgents||[])">
@@ -1849,6 +2703,20 @@ select.settings-input { padding-right: 26px; }
       </label>
     </div>
     <div id="agents-module-list"></div>
+
+    </div><!-- /agent-tab-fleet -->
+
+    <div id="agent-tab-jobs" style="display:none;padding-top:4px">
+      <div style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12px;color:var(--text3)">Active agent task queue — recover stalled, manage running, clear completed.</span>
+        <button class="btn btn-ghost" style="font-size:12px" onclick="clearCompletedTasks()">Clear completed</button>
+      </div>
+      <div id="agents-jobs-list"><div style="color:var(--text2);padding:20px 0">Loading&#8230;</div></div>
+    </div>
+
+    <div id="agent-tab-models" style="display:none;padding-top:4px">
+      <div id="agents-models-list"><div style="color:var(--text2);padding:20px 0">Loading&#8230;</div></div>
+    </div>
 
     <div id="agent-workspace" style="display:none;margin-top:0;border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden;height:100%">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border)">
@@ -1908,9 +2776,9 @@ select.settings-input { padding-right: 26px; }
       <div class="settings-field">
         <label>Role</label>
         <select class="settings-input" id="af2-role" style="cursor:pointer">
-          <option value="viewer">Viewer &#8212; read only</option>
-          <option value="writer" selected>Writer &#8212; read + write + checkpoint</option>
-          <option value="operator">Operator &#8212; writer + finalize</option>
+          <option value="viewer">Observer &#8212; read only</option>
+          <option value="writer" selected>Standard &#8212; read + write + checkpoint</option>
+          <option value="operator">Trusted &#8212; write + finalize</option>
           <option value="admin">Admin &#8212; full access</option>
         </select>
       </div>
@@ -1961,15 +2829,17 @@ select.settings-input { padding-right: 26px; }
   <div id="locations-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Locations</span>
-    </div>
-    <div class="module-section">
-      <div class="module-section-title">Connectivity (Tailscale)</div>
-      <div style="font-size:13px;color:var(--text3);margin-bottom:12px">Transport controls are disabled on this server to prevent lockouts. Status is still visible below.</div>
-      <div id="ts-control-status" style="margin-bottom:10px;font-size:12px;color:var(--text3)">Connect/Disconnect is disabled by policy.</div>
-      <div id="ts-panel-locations"><div style="color:var(--text3);font-size:13px">Loading connectivity&#8230;</div></div>
-      <div id="ts-last-updated-locations" style="margin-top:8px;font-size:11px;color:var(--text3)"></div>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="loadTailscaleStatus(true);loadLocations();">&#8635; Refresh</button>
     </div>
     <div id="loc-list"></div>
+    <details style="margin-top:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <summary style="padding:10px 12px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text3);list-style:none;display:flex;align-items:center;gap:6px;background:var(--raised)">&#9660; Tailscale connectivity</summary>
+      <div style="padding:12px">
+        <div id="ts-control-status" style="margin-bottom:8px;font-size:12px;color:var(--text3)">Connect/Disconnect is disabled by policy.</div>
+        <div id="ts-panel-locations"><div style="color:var(--text3);font-size:13px">Loading&#8230;</div></div>
+        <div id="ts-last-updated-locations" style="margin-top:6px;font-size:11px;color:var(--text3)"></div>
+      </div>
+    </details>
     <div id="lm-mount-form" style="display:none;margin-top:14px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
       <div class="settings-field"><label>Path on server</label>
         <input class="settings-input" id="mf-path" placeholder="/home/user/project">
@@ -2001,34 +2871,6 @@ select.settings-input { padding-right: 26px; }
     </div>
   </div>
 
-  <div id="schedules-module" class="module-panel">
-    <div class="module-hdr">
-      <span class="module-title">Schedules</span>
-      <button class="btn btn-primary" onclick="openAddSchedule()">+ Add Schedule</button>
-    </div>
-    <div style="font-size:13px;color:var(--text3);margin-bottom:16px">
-      Recurring jobs and automation. Agents query /api/schedules to self-schedule tasks.
-    </div>
-    <div id="schedules-list"></div>
-    <div id="schedule-form" style="display:none;margin-top:16px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
-      <div style="font-size:13px;font-weight:600;margin-bottom:12px" id="sf-title">New Schedule</div>
-      <input type="hidden" id="sf-id">
-      <div class="settings-field"><label>Name</label><input class="settings-input" id="sf-name"></div>
-      <div class="settings-field"><label>Schedule (cron expression)</label>
-        <input class="settings-input" id="sf-schedule" placeholder="0 2 * * *" oninput="previewCron()">
-        <div id="sf-cron-preview" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
-      </div>
-      <div class="settings-field"><label>Target (agent name or ID)</label><input class="settings-input" id="sf-target" placeholder="claude-code"></div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-        <input type="checkbox" id="sf-enabled" checked>
-        <label for="sf-enabled" style="font-size:13px;color:var(--text2)">Enabled</label>
-      </div>
-      <div class="settings-save-row" style="gap:8px">
-        <button class="btn btn-ghost" onclick="cancelScheduleForm()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveSchedule()">Save</button>
-      </div>
-    </div>
-  </div>
 
   <div id="policies-module" class="module-panel">
     <div class="module-hdr"><span class="module-title">Policies</span></div>
@@ -2143,6 +2985,27 @@ select.settings-input { padding-right: 26px; }
     <div id="audit-list"></div>
   </div>
 
+  <!-- capabilities / system panel -->
+  <!-- projects / model registry / tasks dashboard -->
+  <div id="projects-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Projects</span>
+    </div>
+    <div id="proj-content-projects"></div>
+  </div>
+
+  <div id="capabilities-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Extensions</span>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="loadCapabilities()">&#8635; Refresh</button>
+    </div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:16px">
+      Detected capabilities on this machine. Missing tools are shown with install guidance.
+      Features that depend on a missing tool are hidden or marked as unavailable.
+    </div>
+    <div id="capabilities-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"></div>
+  </div>
+
   <!-- settings panel — module panel, shown when settings module active -->
   <div id="settingsPanel">
 
@@ -2172,7 +3035,7 @@ select.settings-input { padding-right: 26px; }
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          v0.12.91 — What's new
+          Release Notes
         </button>
         <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2318,9 +3181,9 @@ select.settings-input { padding-right: 26px; }
           <div class="settings-field">
             <label>Role</label>
             <select class="settings-input" id="af-role" style="cursor:pointer">
-              <option value="viewer">Viewer — read only</option>
-              <option value="writer" selected>Writer — read + write + checkpoint</option>
-              <option value="operator">Operator — writer + finalize</option>
+              <option value="viewer">Observer — read only</option>
+              <option value="writer" selected>Standard — read + write + checkpoint</option>
+              <option value="operator">Trusted — write + finalize</option>
               <option value="admin">Admin — full access</option>
             </select>
           </div>
@@ -2577,12 +3440,196 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.12.91', date:'2026-02-26', notes:[
+  { ver:'v0.14.14', date:'2026-02-28', notes:[
+    'Files: auto-expand first mount (Documents) on initial load — shows contents inline with breadcrumb and toolbar buttons',
+    'Files: removed NAME/SIZE/MODIFIED column header from home view — fhome-entry grid handles its own layout',
+    'Files: search input removed from toolbar — null-safe guards on navigate(), openSearch(), clearSearch()',
+    'Files: file-results-footer hidden when switching away from Files tab',
+    'UI: all module headers aligned with min-height:46px for consistent height across tabs',
+  ]},
+  { ver:'v0.14.13', date:'2026-02-28', notes:[
+    'UI: consistent header underline across all tabs — module-hdr now has border-bottom matching Files toolbar',
+    'Files: restored content buffer below toolbar header line',
+    'Files: merged title into toolbar, removed extra filesHeader div',
+    'Files: search input no longer wiped on every keystroke when no directory loaded',
+    'Files: hidden list-header (NAME/SIZE/MODIFIED) on file home view',
+    'Files: removed searchCountBar from tab toggle — no longer renders as empty bar',
+    'QA: added Playwright regression test suite (32 tests covering auth, headers, CSS, interactions, screenshots)',
+  ]},
+  { ver:'v0.14.12', date:'2026-02-28', notes:[
+    'Files: read-only banner no longer shows when no directory is selected',
+    'Files: search gracefully handles no directory loaded',
+    'Files: hover backgrounds now inset from panel edges — matches all other tabs',
+    'Locations: removed redundant Devices section header',
+    'Projects: active label moved inline with project name, now green',
+  ]},
+  { ver:'v0.14.11', date:'2026-02-28', notes:[
+    'CSS: comprehensive consistency pass — standardized 28px horizontal gutter across all panels',
+    'CSS: removed toolbar gray background — Files header now matches all other module panels',
+    'CSS: search input background uses --raised for visibility',
+    'CSS: search count bar background normalized',
+    'CSS: added missing variables (--bg1, --bg2, --bg3, --panel, --surface2) to dark and light themes',
+  ]},
+  { ver:'v0.14.10', date:'2026-02-28', notes:[
+    'Files: added standard module-hdr title — all tabs now have consistent header formatting',
+  ]},
+  { ver:'v0.14.9', date:'2026-02-28', notes:[
+    'Projects: restored standard module-panel header with title — consistent with all other tabs',
+    'Projects: removed New Project button — projects are created by agents, not manually',
+    'Projects: removed create-project modal — superseded by agent/chat-driven workflow',
+  ]},
+  { ver:'v0.14.8', date:'2026-02-27', notes:[
+    'Projects: removed panel title — matches Files panel aesthetic',
+    'Projects: toolbar is now sticky (like Files list-header)',
+    'Projects: hover highlight now stretches edge-to-edge',
+  ]},
+  { ver:'v0.14.7', date:'2026-02-27', notes:[
+    'Projects: removed task action buttons — read-only task view for now',
+    'Projects: removed project row menu — deferred',
+    'Projects: removed folder emoji from project name',
+    'Projects: tightened grid columns',
+  ]},
+  { ver:'v0.14.6', date:'2026-02-27', notes:[
+    'Projects: inline accordion — tasks visible directly under each project row, no navigate-away',
+    'Projects: tasks derived from task registry data (projects without registry entry now visible)',
+    'Projects: Done section per-project, toggles inline without any API call',
+    'Projects: row menu uses shared #dropdown system — no browser prompt() dialogs',
+    'Projects: removed legacy projects-dashboard call and two-view nav state machine',
+  ]},
+  { ver:'v0.14.5', date:'2026-02-27', notes:[
+    'Projects: two-view navigation — list view + detail view (filesystem-style, no accordion)',
+    'Projects: click a project row to navigate in; breadcrumb header to navigate back',
+    'Projects: flat task rows in detail view with Done section toggle (no API call)',
+    'Projects: no full-page reload on row navigation — state-driven re-render',
+    'Projects: removed nested-box accordion aesthetic — matches Files tab flat design',
+  ]},
+  { ver:'v0.14.4', date:'2026-02-27', notes:[
+    'Projects: accordion UI — project = directory row, task = row inside; Files-inspired layout',
+    'Projects: Tasks nav item removed; tasks are managed from Projects panel',
+    'Projects: registry tasks shown per project; legacy projects.md shown below as migration prompt',
+    'Projects: + New project button; + Task button per project; Set active; Delete project',
+    'Projects: Inbox section for unassigned tasks',
+    'Projects: migrateToRegistry() adds a projects.md project to the registry in one click',
+  ]},
+  { ver:'v0.14.3', date:'2026-02-27', notes:[
+    'Tasks: full UX redesign — row layout, no tabs, no instruction text',
+    'Tasks: project filter + status pills in header; Done section collapsed by default',
+    'Tasks: create modal redesigned — project second, priority as pill selector, Enter to submit',
+    'Tasks: project name denormalized onto task at create time (self-contained)',
+    'Tasks: Start action added for pending tasks; actions always visible',
+    'Tasks: removed legacy execution/lease monitor tab (was empty, never used)',
+  ]},
+  { ver:'v0.14.2', date:'2026-02-27', notes:[
+    'Tasks: persistent Work Queue added — tasks survive Porter restarts',
+    'Tasks: Tasks nav item now visible in sidebar',
+    'Tasks: Work Queue tab with filter bar (All/Pending/In Progress/Done) + project filter',
+    'Tasks: priority indicators — urgent/high/normal/low with colour dots',
+    'Tasks: Execution tab retains existing PEP/1 lease monitor',
+    'Tasks: create task modal — title, description, priority, project, tags',
+  ]},
+  { ver:'v0.14.1', date:'2026-02-27', notes:[
+    'Task Registry: persistent /api/task-registry endpoint backed by runtime/task-registry/*.json',
+    'Task Registry: actions — create, update_status, assign, complete, fail, cancel, add_result, claim, delete',
+    'Task Registry: GET supports filters: status, project_id, assigned_to, tag; sorted by priority then age',
+    'Task Registry: tasks survive Porter restarts; loaded into memory on startup',
+  ]},
+  { ver:'v0.14.0', date:'2026-02-27', notes:[
+    'Projects: structured project registry added to porter_config.json (projects[], active_project_id)',
+    'Projects: scaffold_project_dir() creates PROJECT.md, MEMORY.md, settings.json per project',
+    'Projects: resolve_project_memory() resolves files through agent > project > global layers',
+    'Projects: /api/projects endpoint — create, list, set_active, delete, resolve',
+  ]},
+  { ver:'v0.13.9', date:'2026-02-27', notes:[
+    'Files: device nickname (set in Locations) now shown correctly in Files home view',
+  ]},
+  { ver:'v0.13.8', date:'2026-02-27', notes:[
+    'Files + Locations: pulsing orange circuit-open badge on node rows when PEP/1 circuit breaker trips',
+    '/api/pep/nodes now includes per-node circuit state (state, resets_in_s, reqs_1m, errs_1m)',
+  ]},
+  { ver:'v0.13.7', date:'2026-02-27', notes:[
+    'PEP/1: hop counter -- requests with X-Hop-Count > 10 are rejected (HOP_LIMIT_EXCEEDED)',
+    'PEP/1: circuit breaker -- per-agent error rate >30% in 60s opens circuit (CIRCUIT_OPEN, retryable)',
+    'PEP/1: audit provenance -- session_id, scope_source, chain_ref on all PEP audit entries',
+    'Metrics: /metrics endpoint in Prometheus text format (requests, errors, latency, circuit state)',
+  ]},
+  { ver:'v0.13.6', date:'2026-02-27', notes:[
+    'Files: mount rows no longer show full system path or dead-space column — label only',
+  ]},
+  { ver:'v0.13.5', date:'2026-02-27', notes:[
+    'Files: mounts now expand inline (accordion) — clicking documents/websites shows contents in place without leaving the home view',
+    'Navigating into sub-folders updates the breadcrumb and expands inline; Files breadcrumb link collapses back to home',
+    'Fixed: Porter no longer flashes the Files view on startup before switching to Command Center',
+  ]},
+  { ver:'v0.13.4', date:'2026-02-27', notes:[
+    'Files: unified listing — device tree and file browser share the same content pane',
+    'VPS appears as a collapsible group header; mounts are folder rows beneath it',
+    'Breadcrumb always starts with a Files home link; navigating back shows the device tree',
+    'No secondary panel — all navigation happens inline in the results area',
+  ]},
+  { ver:'v0.13.3', date:'2026-02-27', notes:[
+    'Files: collapsible device/mount tree sidebar replaces location picker grid',
+    'VPS appears as top-level node (auto-expanded); remote locations appear below and are collapsed by default',
+    'Clicking a mount in the tree opens it in the content area; active mount highlighted',
+    'Online/offline status dot per remote node; dimmed when offline',
+  ]},
+  { ver:'v0.13.2', date:'2026-02-27', notes:[
+    'Files: secondary nav replaced with a location picker in the content area — shows device name and mounts as cards',
+    'Breadcrumb simplified — shows root label + path parts, no toolbar pills',
+  ]},
+  { ver:'v0.13.1', date:'2026-02-27', notes:[
+    'Projects dashboard: live view of all projects and in-progress tasks; task lifecycle actions (pause/complete) write back to checkpoint files',
+    'Projects panel: project cards with inline sprint backlog and task count; rename button with live write-back to projects.md',
+    'Agents sub-tabs: Fleet / Jobs / Models; model registry moved into Agents > Models tab',
+    'Command Center: replaced live metrics panel with coming-soon placeholder (dashboard deferred until platform is stable)',
+    'Nav: Agents moved to #2 slot; Tasks nav removed; Policies hidden until backend routing is implemented',
+    'Role labels: viewer → Observer, writer → Standard, operator → Trusted throughout all forms and tooltips',
+    'Extensions: capability cards now 2-column grid; v-prefix on version strings; D2 correctly detected from ~/.local/bin',
+    'Locations: Tailscale section collapsed into <details>; location list promoted to top of panel',
+    'Files: secondary nav panel removed; root switcher (documents/uploads/websites) now inline pills in the breadcrumb toolbar',
+    'Escape key: no longer jumps to Files from other modules — only closes overlays, search, and file preview',
+    'Environment abstraction: all hardcoded paths eliminated; driven by PORTER_DATA_DIR env var (default: ~/.porter/)',
+    'Capability registry: detects Ollama, OpenClaw, Gemini CLI, Node.js, Puppeteer, D2, wkhtmltopdf, FFmpeg, Git at startup',
+    'PEP/1 error envelope: all /pep/v1/* endpoints return { ok, code, message, retryable, correlation_id }',
+    'Idempotency key support on PEP mutating ops (register/write/mkdir/delete), 24h TTL',
+  ]},
+  { ver:'v0.12.100', date:'2026-02-27', notes:[
+    'Schedules UI removed — nav item, module panel, and all schedule forms hidden from the app',
+    'Schedules backend daemon (execution engine) retained — will be surfaced again in Sprint 8 with full end-to-end validation',
+    'Rationale: no UI for unproven features; reintroduce when reliable and tested',
+  ]},
+  { ver:'v0.12.99', date:'2026-02-27', notes:[
+    'Tranche A2 — Schedule execution: background daemon thread now fires enabled schedules at their cron time',
+    'Job state model: last_run_at, last_run_ok, run_count persisted per schedule in porter_config.json',
+    'Run records saved to runtime/schedule_runs/<id>/<timestamp>.json for history',
+    'Schedule cards now show last-run timestamp and success/failure indicator',
+    'New /api/schedule-runs endpoint returns run history for a given schedule',
+    'HTTP-target schedules POST a JSON webhook; non-URL targets queue an internal task record',
+  ]},
+  { ver:'v0.12.98', date:'2026-02-27', notes:[
+    'Tranche A1 — Trust UI: renamed agent Test button to Connectivity check (heartbeat-based, not true roundtrip)',
+    'Schedules module header now shows PREVIEW badge; description updated to reflect execution reliability status',
+    'Memory sharing \'Project-based\' option disabled with v0.13 coming-soon note (project scoping not yet live)',
+  ]},
+  { ver:'v0.12.97', date:'2026-02-26', notes:[
+    'Agent role badge is now an inline dropdown — change roles directly from the card',
+    'Roles clarified: viewer=read · writer=read+write+checkpoint · operator=writer+finalize · admin=full',
+    'Added set_role action to /api/agents backend to persist role changes immediately',
+  ]},
+  { ver:'v0.12.96', date:'2026-02-26', notes:[
+    'openclaw/Codex cards now show auth token profile name and expiry countdown from usage snapshot',
+    'Usage parse fixed for openclaw: "X% left" format now correctly maps to consumed %, fixing inverted bar',
+    'Parse extended: extracts "expires in Xd" (auth_expires_at) and profile name from openclaw models status',
+  ]},
+  { ver:'v0.12.95', date:'2026-02-26', notes:[
+    'Agent cards now display the configured model ID (e.g. openai-codex/gpt-5.3-codex)',
+    'Gemini agent cards show static rate limit summary: 60 req/min · 1,000 req/day',
+  ]},
+  { ver:'v0.12.94', date:'2026-02-26', notes:[
     'Agent Workspace file list is now agent-family aware: Claude opens Claude files, Gemini opens Gemini files, OpenClaw/Codex opens OpenClaw workspace/config files',
     'Removed cross-family config noise so each agent only shows relevant configuration surfaces',
     'Scoped read/write allowlists updated to match selected agent context and documented auth paths',
   ]},
-  { ver:'v0.12.91', date:'2026-02-26', notes:[
+  { ver:'v0.12.93', date:'2026-02-26', notes:[
     'PEP/1 Phase 1: Hub registers remote agents via one-time token (POST /pep/v1/agent/register)',
     'PEP/1 Phase 1: Heartbeat endpoint keeps agent online state current (POST /pep/v1/agent/heartbeat)',
     'PEP/1 Phase 1: Hub proxies fs.list/read/stat/write/mkdir/delete to remote agent over Tailscale',
@@ -2590,7 +3637,7 @@ const CHANGELOG = [
     'Locations: Install PEP/1 Agent button generates one-time token + shows copyable install command',
     'Locations: PEP agent online/offline status badge visible on node cards and sidebar entries',
   ]},
-  { ver:'v0.12.91', date:'2026-02-26', notes:[
+  { ver:'v0.12.92', date:'2026-02-26', notes:[
     'Agent card action buttons redesigned into a clean 2x2 action grid for better visual structure',
     'Reduced action button sizing and improved spacing to remove clutter in card headers',
     'Action area now stays compact and aligned, improving scanability across two-column card layout',
@@ -2600,12 +3647,12 @@ const CHANGELOG = [
     'Agents defaults summary now includes explicit active-impact text for user clarity',
     'Improved defaults UX transparency to reduce ambiguity about which settings currently affect behavior',
   ]},
-  { ver:'v0.12.88', date:'2026-02-26', notes:[
+  { ver:'v0.12.90', date:'2026-02-26', notes:[
     'Agents defaults controls redesigned to progressive-disclosure pattern: compact summary strip + Edit defaults expander',
     'Default view now prioritizes status/action cards while keeping global defaults accessible but non-intrusive',
     'Added live defaults summary indicators (preset, capacity alert, external approval) for quick comprehension',
   ]},
-  { ver:'v0.12.88', date:'2026-02-26', notes:[
+  { ver:'v0.12.89', date:'2026-02-26', notes:[
     'Agents module header restored from Assistants to Agents per operator preference',
     'Agent cards now render in a two-column grid with alphabetical ordering for faster scanning',
     'Global defaults panel compacted for denser, cleaner layout and reduced visual noise',
@@ -3629,17 +4676,483 @@ function switchModule(name) {
   if (name === 'overview') {
     _overviewPollTimer = setInterval(() => loadOverview(false), 15000);
   }
-  ['mainToolbar','fileArea','banner','searchCountBar','selectionToolbar'].forEach(id => {
+  ['mainToolbar','fileArea','selectionToolbar','file-results-footer'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = isFiles ? '' : 'none';
   });
   const loaders = {
-    overview: loadOverview, tasks: loadTasks, agents: loadAgents,
-    files: loadLocations, locations: loadLocations, schedules: loadSchedules, policies: loadPolicy,
-    tools: loadTools, audit: loadAudit, settings: syncSettingsUI,
+    overview: loadOverview, tasks: () => switchModule('projects'), agents: loadAgents, projects: loadProjects,
+    files: loadLocations, locations: loadLocations, policies: loadPolicy,
+    tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
+// ── Agent sub-tabs (Fleet / Jobs / Models) ───────────────────────────────────
+function switchAgentTab(tab) {
+  ['fleet','jobs','models'].forEach(t => {
+    const d = document.getElementById('agent-tab-'+t);
+    const b = document.getElementById('agent-tab-btn-'+t);
+    if (d) d.style.display = t === tab ? '' : 'none';
+    if (b) {
+      b.style.fontWeight = t === tab ? '600' : '';
+      b.style.borderBottom = t === tab ? '2px solid var(--accent)' : '';
+    }
+  });
+  const cb = document.getElementById('agents-create-btn');
+  if (cb) cb.style.display = tab === 'fleet' ? '' : 'none';
+  if (tab === 'jobs')   loadAgentJobs();
+  if (tab === 'models') loadAgentModels();
+}
+
+async function loadAgentJobs() {
+  const data = await api('/api/task-registry');
+  if (!data) return;
+  const el = document.getElementById('agents-jobs-list');
+  if (el) el.innerHTML = '<div style="padding:12px 0;font-size:12px;color:var(--text2)">Open <strong>Tasks</strong> in the sidebar for the full task registry.</div>';
+}
+
+async function loadAgentModels() {
+  const el = document.getElementById('agents-models-list');
+  if (!el) return;
+  const data = await api('/api/projects-dashboard');
+  if (!data) return;
+  const models = data.models || [];
+  if (!models.length) { el.innerHTML = '<div style="color:var(--text3);font-size:13px">No models registered in projects.md.</div>'; return; }
+  el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">'
+    + models.map(m => {
+      const health = m.memory_exists
+        ? '<span style="color:#22c55e;font-size:11px">&#9679; ' + escHtml(m.memory_ago||'?') + '</span>'
+        : '<span style="color:var(--text3);font-size:11px">&#9675; no memory file</span>';
+      const sync = m.synced === true
+        ? '<span style="color:#22c55e;font-size:11px">&#10003; synced</span>'
+        : m.synced === false
+        ? '<span style="color:#f59e0b;font-size:11px">&#9651; drift detected</span>'
+        : '';
+      const memPath = m.memory_path ? '<div style="font-size:11px;color:var(--text3);font-family:monospace;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(m.memory_path) + '</div>' : '';
+      return `<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">
+  <div style="font-weight:600;font-size:13px;margin-bottom:4px">${escHtml(m.model)}</div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:6px">${escHtml(m.role)}</div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:4px">${escHtml(m.interface)}</div>
+  <div style="display:flex;gap:10px;align-items:center">${health}${sync ? '&nbsp;·&nbsp;'+sync : ''}</div>
+  ${memPath}
+</div>`;
+    }).join('')
+    + '</div>';
+}
+
+// ── Projects / Models / Tasks dashboard ─────────────────────────────────────
+// State
+let _projProjects = [];   // unified project list (registry + task-derived)
+let _projActiveId = null;
+let _projAllTasks = [];
+let _projExpanded = new Set();  // project ids that are expanded
+let _projDoneOpen = new Set();  // project ids with Done section open
+let _cpTaskForModal = null;
+
+async function loadProjects() {
+  const el = document.getElementById('proj-content-projects');
+  if (el) el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:16px 28px">Loading\u2026</div>';
+
+  const [regData, taskData] = await Promise.all([
+    api('/api/projects'),
+    api('/api/task-registry'),
+  ]);
+
+  const regProjects = (regData && regData.projects) || [];
+  _projActiveId    = regData && regData.active_project_id;
+  _projAllTasks    = (taskData && taskData.tasks) || [];
+
+  // Build unified project list: start from registry, then add any
+  // project referenced by tasks that isn't already there.
+  const byId   = new Map(regProjects.map(p => [p.id, {...p}]));
+  const byName = new Map(regProjects.map(p => [(p.name || '').toLowerCase(), p.id]));
+
+  _projAllTasks.forEach(t => {
+    if (t.project_id && t.project_name && !byId.has(t.project_id)) {
+      const key = (t.project_name || '').toLowerCase();
+      if (!byName.has(key)) {
+        const ghost = { id: t.project_id, name: t.project_name };
+        byId.set(t.project_id, ghost);
+        byName.set(key, t.project_id);
+      }
+    }
+  });
+
+  _projProjects = [...byId.values()];
+  // Auto-expand all on first load; preserve state after that
+  if (_projExpanded.size === 0) _projProjects.forEach(p => _projExpanded.add(p.id));
+  _renderProjectList();
+}
+
+function switchProjTab(tab) { /* compat no-op */ }
+
+function _renderProjectList() {
+  const el = document.getElementById('proj-content-projects');
+  if (!el) return;
+
+  // Group tasks by project_id
+  const tasksByProject = {};
+  const unassigned = [];
+  _projAllTasks.forEach(t => {
+    if (t.project_id) {
+      (tasksByProject[t.project_id] = tasksByProject[t.project_id] || []).push(t);
+    } else {
+      unassigned.push(t);
+    }
+  });
+
+  if (!_projProjects.length && !unassigned.length) {
+    el.innerHTML = '<div style="text-align:center;padding:48px 28px;color:var(--text3)">'
+      + '<div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:8px">No projects yet</div>'
+      + '<div style="font-size:13px">Projects are created by agents during task execution.</div>'
+      + '</div>';
+    return;
+  }
+
+  let html = _projProjects.map(p => {
+    const pid     = p.id;
+    const tasks   = tasksByProject[pid] || [];
+    const open    = _projExpanded.has(pid);
+    const active  = tasks.filter(t => t.status === 'in_progress');
+    const pending = tasks.filter(t => t.status === 'pending');
+    const done    = tasks.filter(t => ['complete','failed','cancelled'].includes(t.status));
+    const live    = [...active, ...pending];
+    const cnt     = tasks.length;
+    const isAct   = pid === _projActiveId;
+
+    const activePill = isAct
+      ? '<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:rgba(34,197,94,.12);color:#22c55e;margin-left:8px">active</span>'
+      : '';
+    const cntLabel = cnt
+      ? String(cnt) + '\u00a0task' + (cnt !== 1 ? 's' : '')
+      : '\u2014';
+
+    let bodyHtml = '';
+    if (open) {
+      let rows = '';
+      if (!tasks.length) {
+        rows = '<div style="padding:10px 0;font-size:12px;color:var(--text3)">No tasks yet.'
+          + ' <button class="treg-act" style="font-size:11px"'
+          + ` onclick="openCreateTaskInProject('${pid}')">+ Create task</button></div>`;
+      } else {
+        rows = '<div class="ptask-list-hdr">'
+          + '<span></span>'
+          + '<span class="proj-col-lbl">Task</span>'
+          + '<span class="proj-col-lbl">Status</span>'
+          + '<span class="proj-col-lbl" style="text-align:right">Age</span>'
+          + '</div>';
+        rows += live.map(t => _ptaskRow(t)).join('');
+
+        if (done.length) {
+          const doneOpen = _projDoneOpen.has(pid);
+          rows += `<div class="proj-done-hdr" onclick="toggleProjDone('${pid}')">`
+            + `<span class="proj-done-chevron${doneOpen ? ' open' : ''}">&#9658;</span>`
+            + '<span class="proj-done-label">Done</span>'
+            + `<span class="proj-done-count">${done.length}</span>`
+            + '</div>'
+            + `<div id="proj-done-${pid}" style="display:${doneOpen ? 'block' : 'none'}">`
+            + done.map(t => _ptaskRow(t)).join('')
+            + '</div>';
+        }
+      }
+      bodyHtml = '<div class="proj-tasks">' + rows + '</div>';
+    }
+
+    return '<div>'
+      + `<div class="proj-row" onclick="toggleProject('${pid}')">`
+      + `<span class="proj-row-chevron${open ? ' open' : ''}">&#9658;</span>`
+      + `<span class="proj-row-name">${escHtml(p.name || '')}${activePill}</span>`
+      + `<span class="proj-row-count">${cntLabel}</span>`
+      + '</div>'
+      + bodyHtml
+      + '</div>';
+  }).join('');
+
+  // Inbox: unassigned tasks
+  if (unassigned.length) {
+    html += '<div style="display:flex;align-items:center;gap:8px;margin:16px 0 4px">'
+      + '<span style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px">Inbox</span>'
+      + '<span style="flex:1;height:1px;background:var(--border)"></span>'
+      + `<span style="font-size:11px;color:var(--text3)">${unassigned.length}</span>`
+      + '</div>';
+    html += '<div class="ptask-list-hdr">'
+      + '<span></span>'
+      + '<span class="proj-col-lbl">Task</span>'
+      + '<span class="proj-col-lbl">Status</span>'
+      + '<span class="proj-col-lbl" style="text-align:right">Age</span>'
+      + '</div>';
+    html += unassigned.map(t => _ptaskRow(t)).join('');
+  }
+
+  el.innerHTML = html;
+}
+
+function toggleProject(pid) {
+  if (_projExpanded.has(pid)) _projExpanded.delete(pid);
+  else _projExpanded.add(pid);
+  _renderProjectList();
+}
+
+function toggleProjDone(pid) {
+  if (_projDoneOpen.has(pid)) _projDoneOpen.delete(pid);
+  else _projDoneOpen.add(pid);
+  _renderProjectList();
+}
+
+function openProjMenu(evt, projId) {
+  evt.stopPropagation();
+  closeDropdown();
+  const dd = document.getElementById('dropdown');
+  if (!dd) return;
+  const items = [
+    { label: 'Set as active', action: () => setActiveProject(projId) },
+    { sep: true },
+    { label: 'Delete project', cls: 'danger', action: () => deleteProject(projId) },
+  ];
+  dd.innerHTML = items.map((it, i) =>
+    it.sep
+      ? '<div class="dropdown-sep"></div>'
+      : `<div class="dropdown-item ${it.cls || ''}" data-i="${i}"><span>${escHtml(it.label)}</span></div>`
+  ).join('');
+  dd.querySelectorAll('[data-i]').forEach(el => {
+    const i = +el.dataset.i;
+    el.onclick = () => { items[i].action(); closeDropdown(); };
+  });
+  const btn = evt.currentTarget || evt.target;
+  const rect = btn.getBoundingClientRect();
+  dd.style.display = 'block';
+  let left = rect.right - dd.offsetWidth;
+  let top  = rect.bottom + 4;
+  if (left < 8) left = 8;
+  if (top + dd.offsetHeight > window.innerHeight - 8) top = rect.top - dd.offsetHeight - 4;
+  dd.style.left = left + 'px';
+  dd.style.top  = top + 'px';
+  activeDropdown = dd;
+}
+
+function _ptaskRow(t) {
+  const prioClass = { urgent:'prio-urgent', high:'prio-high', normal:'prio-normal', low:'prio-low' };
+  const prio = t.priority || 'normal';
+  const st   = t.status   || 'pending';
+  const ageLbl = _tsAgo(t.created_at);
+  const stColor = { in_progress:'#3b82f6', pending:'#6366f1', complete:'#22c55e', failed:'#ef4444', cancelled:'#6b7280' }[st] || '#6b7280';
+  const stLabel = st.replace('_', ' ');
+  return '<div class="ptask-row">'
+    + `<span class="prio-dot ${prioClass[prio] || 'prio-normal'}" title="${escHtml(prio)}"></span>`
+    + `<span class="ptask-row-title">${escHtml(t.title || '')}</span>`
+    + `<span class="ptask-row-status" style="color:${stColor}">${escHtml(stLabel)}</span>`
+    + `<span class="ptask-row-age">${ageLbl}</span>`
+    + '</div>';
+}
+
+async function setActiveProject(projId) {
+  const res = await api('/api/projects', { action: 'set_active', project_id: projId });
+  if (res && res.ok) { toast('Active project set', 'ok'); loadProjects(); }
+  else toast((res && res.error) || 'Failed', 'err');
+}
+
+async function deleteProject(projId) {
+  if (!confirm('Delete this project? Its tasks in the registry will remain (unassigned).')) return;
+  const res = await api('/api/projects', { action: 'delete', project_id: projId });
+  if (res && res.ok) { toast('Project deleted', 'ok'); loadProjects(); }
+  else toast((res && res.error) || 'Failed', 'err');
+}
+
+function openCreateTaskInProject(projId, projName) {
+  if (!projName) {
+    const _p = _projProjects.find(p => p.id === projId);
+    projName = _p ? _p.name : '';
+  }
+  _cpTaskForModal = { id: projId, name: projName };
+  openCreateTaskModal();
+  // override project dropdown after modal opens
+  setTimeout(() => {
+    const sel = document.getElementById('ct-project');
+    if (sel) {
+      // ensure option exists
+      let found = false;
+      for (let o of sel.options) { if (o.value === projId) { sel.value = projId; found = true; break; } }
+      if (!found) {
+        const o = document.createElement('option');
+        o.value = projId; o.textContent = projName; sel.appendChild(o); sel.value = projId;
+      }
+    }
+  }, 80);
+}
+
+async function migrateToRegistry(name) {
+  const res = await api('/api/projects', { action: 'create', name });
+  if (res && res.ok) { toast('Project added to registry', 'ok'); loadProjects(); }
+  else toast((res && res.error) || 'Failed', 'err');
+}
+
+
+
+async function startRenameProject(name) {
+  const newName = prompt('Rename project:', name);
+  if (!newName || newName.trim() === name) return;
+  const r = await fetch('/api/projects-dashboard', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: 'rename_project', old_name: name, new_name: newName.trim()}),
+  });
+  const d = await r.json();
+  if (d.ok) { toast('Project renamed', 'ok'); loadProjects(); }
+  else toast((d.error || 'Rename failed'), 'err');
+}
+
+function renderModelsTab(data) {
+  // Models moved to Agents > Models tab
+  return;
+  const el = document.getElementById('proj-content-models');
+  if (!el) return;
+  if (!data.models || !data.models.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px">No model registry found in projects.md</div>';
+    return;
+  }
+  // Pull capability data for gateway reachability
+  const caps = {};
+  if (window._lastCapabilities) window._lastCapabilities.forEach(c => caps[c.id] = c);
+
+  el.innerHTML = data.models.map(m => {
+    const memOk  = m.memory_exists;
+    const synced = m.synced;
+    const memDot = memOk
+      ? '<span style="color:#22c55e">✓</span>'
+      : '<span style="color:#ef4444">✗</span>';
+    const syncBadge = synced === true
+      ? '<span style="font-size:10px;padding:1px 5px;border-radius:8px;background:#14532d;color:#86efac;margin-left:4px">synced</span>'
+      : synced === false
+      ? '<span style="font-size:10px;padding:1px 5px;border-radius:8px;background:#7f1d1d;color:#fca5a5;margin-left:4px">drift</span>'
+      : '';
+    // Gateway reachability hint (map common interfaces to capability ids)
+    const iface = (m.interface || '').toLowerCase();
+    let gwBadge = '';
+    if (iface.includes('ollama'))    gwBadge = caps['ollama']?.ok ? '✓ Ollama up' : '○ Ollama offline';
+    if (iface.includes('openclaw'))  gwBadge = caps['openclaw']?.ok ? '✓ Gateway up' : '○ Gateway offline';
+    if (iface.includes('gemini'))    gwBadge = caps['gemini_cli']?.ok ? '✓ CLI found' : '○ CLI missing';
+    return `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);margin-bottom:8px">
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+    <span style="font-weight:600;font-size:13px">${escHtml(m.model)}</span>
+    <span style="font-size:11px;color:var(--text3)">${escHtml(m.identity)}</span>
+  </div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:2px">${escHtml(m.role)}</div>
+  <div style="font-size:11px;color:var(--text3)">${escHtml(m.interface)}${gwBadge ? ' &nbsp;· ' + gwBadge : ''}</div>
+  <div style="font-size:11px;color:var(--text3);margin-top:6px;display:flex;align-items:center;gap:4px">
+    ${memDot} Memory file
+    ${m.memory_ago ? '<span style="color:var(--text3)">(modified ' + escHtml(m.memory_ago) + ')</span>' : ''}
+    ${syncBadge}
+  </div>
+  ${m.memory_path ? '<div style="font-size:10px;color:var(--text3);font-family:monospace;margin-top:2px">' + escHtml(m.memory_path) + '</div>' : ''}
+</div>`;
+  }).join('');
+}
+
+function renderSprintsTab(data) {
+  const el = document.getElementById('proj-content-sprints');
+  if (!el) return;
+  const tasks = (data.tasks || []);
+  if (!tasks.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px">No checkpoint files found.</div>';
+    return;
+  }
+  const statusColor = {in_progress: '#3b82f6', paused: '#f59e0b', complete: '#22c55e'};
+  const sprints = (data.sprints || []).filter(s => !s.complete);
+  const backlogHtml = sprints.length
+    ? '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">'
+      + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);font-weight:600;margin-bottom:8px">Sprint Backlog</div>'
+      + sprints.map(s => {
+          const badge = s.is_next ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--accent);color:#fff;margin-left:8px">NEXT</span>' : '';
+          const ver = s.version ? '<span style="font-size:11px;color:var(--text3);margin-left:auto">' + escHtml(s.version) + '</span>' : '';
+          return '<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);margin-bottom:6px">'
+            + '<span style="font-size:12px;color:var(--text2)">' + escHtml(s.title) + '</span>' + badge + ver + '</div>';
+        }).join('')
+      + '</div>'
+    : '';
+  el.innerHTML = tasks.map(t => {
+    const sc = statusColor[t.status] || '#6b7280';
+    const actionBtns = t.status !== 'complete' ? `
+  <div style="display:flex;gap:6px;margin-top:8px">
+    ${t.status === 'in_progress' ? '<button class="btn btn-ghost" style="font-size:11px" onclick="cpAction(\'' + escHtml(t.checkpoint_path) + '\',\'pause\')">Pause</button>' : ''}
+    <button class="btn btn-ghost" style="font-size:11px" onclick="cpAction(\'${escHtml(t.checkpoint_path)}\',\'complete\')">Mark complete</button>
+  </div>` : '';
+    return `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);margin-bottom:8px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+    <span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${sc}22;color:${sc};font-weight:600">${escHtml(t.status || '?')}</span>
+    <span style="font-weight:600;font-size:13px">${escHtml(t.project || 'unknown')}</span>
+    <span style="font-size:11px;color:var(--text3);margin-left:auto">${escHtml(t.modified_ago || '')}</span>
+  </div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:2px">${escHtml(t.task || '')}</div>
+  ${t.step ? '<div style="font-size:11px;color:var(--text3)">Step: ' + escHtml(t.step) + '</div>' : ''}
+  ${t.next_action ? '<div style="font-size:11px;color:var(--text3)"><b>Next:</b> ' + escHtml(t.next_action) + '</div>' : ''}
+  <div style="font-size:10px;color:var(--text3);font-family:monospace;margin-top:4px">${escHtml(t.checkpoint_path)}</div>
+  ${actionBtns}
+</div>`;
+  }).join('') + backlogHtml;
+}
+
+async function cpAction(path, action) {
+  try {
+    const r = await fetch('/api/checkpoint', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path, action}),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'unknown error');
+    await loadProjects();
+    switchProjTab('sprints');
+  } catch(e) {
+    alert('Action failed: ' + e.message);
+  }
+}
+
+// ── Capabilities / System module ──────────────────────────────────────────
+async function loadCapabilities() {
+  const el = document.getElementById('capabilities-list');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--text3);font-size:13px">Checking capabilities&hellip;</div>';
+  try {
+    const r = await fetch('/api/capabilities');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    window._lastCapabilities = data.capabilities || [];
+    renderCapabilities(data.capabilities || []);
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--err);font-size:13px">Could not load capabilities: ' + e.message + '</div>';
+  }
+}
+
+function renderCapabilities(caps) {
+  const el = document.getElementById('capabilities-list');
+  if (!el) return;
+  if (!caps.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px">No capabilities registered.</div>';
+    return;
+  }
+  el.innerHTML = caps.map(c => {
+    const ok = c.ok;
+    const dot = ok
+      ? '<span style="color:#22c55e;font-size:16px;line-height:1">&#9679;</span>'
+      : '<span style="color:var(--text3);font-size:16px;line-height:1">&#9675;</span>';
+    const rawVer = ok && c.version ? c.version : '';
+    const dispVer = rawVer && /^\d/.test(rawVer.trim()) ? 'v' + rawVer.trim() : rawVer.trim();
+    const ver = dispVer ? '<span style="color:var(--text3);font-size:11px;margin-left:6px">' + escHtml(dispVer) + '</span>' : '';
+    const feats = (c.features||[]).join(', ');
+    const hint = !ok
+      ? `<div style="margin-top:6px;font-size:12px;color:var(--text3)">Install: <a href="${escHtml(c.install)}" target="_blank" style="color:var(--accent)">${escHtml(c.install)}</a></div>`
+      : '';
+    return `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">
+  <div style="display:flex;align-items:center;gap:8px">
+    ${dot}
+    <span style="font-weight:500;font-size:13px">${escHtml(c.label)}</span>${ver}
+  </div>
+  <div style="font-size:12px;color:var(--text3);margin-top:4px">${escHtml(feats)}</div>
+  ${hint}
+</div>`;
+  }).join('');
+}
+
 // Backward compat wrappers
 function openSettings(tab = 'profile') {
   const moduleMap = { tasks:'tasks', agents:'agents', locations:'locations', policy:'policies', usage:'agents' };
@@ -3703,8 +5216,8 @@ function renderOverview(data) {
       sev: 'high',
       title: `${stalled} stalled task${stalled>1?'s':''}`,
       detail: 'These jobs likely need intervention.',
-      action: 'Open Tasks',
-      fn: "switchModule('tasks')",
+      action: 'Open Jobs',
+      fn: "switchModule('agents');setTimeout(()=>switchAgentTab('jobs'),50)",
     });
   }
   if (active === 0) {
@@ -3712,8 +5225,8 @@ function renderOverview(data) {
       sev: 'med',
       title: 'No active tasks',
       detail: 'Pipeline is idle. Queue or resume work.',
-      action: 'Open Tasks',
-      fn: "switchModule('tasks')",
+      action: 'Open Jobs',
+      fn: "switchModule('agents');setTimeout(()=>switchAgentTab('jobs'),50)",
     });
   }
   if (locations < 2) {
@@ -3768,82 +5281,6 @@ function renderOverview(data) {
   }
 }
 
-// ── Schedules module ──
-async function loadSchedules() {
-  const data = await api('/api/schedules');
-  if (!data) return;
-  renderSchedules(data.schedules || []);
-}
-function renderSchedules(jobs) {
-  const el = document.getElementById('schedules-list');
-  if (!el) return;
-  if (!jobs.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No schedules configured. Add one to get started.</div>';
-    return;
-  }
-  el.innerHTML = jobs.map(j => {
-    const enabled = j.enabled !== false;
-    return `<div class="sched-card">
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:13px;color:var(--text)">${escHtml(j.name)}</div>
-        <div style="font-size:11px;color:var(--text3);font-family:monospace">${escHtml(j.schedule)}</div>
-        ${j.target ? `<div style="font-size:11px;color:var(--text2)">&#8594; ${escHtml(j.target)}</div>` : ''}
-      </div>
-      <div style="font-size:11px;color:var(--text3);flex-shrink:0">${escHtml(j.next_run_display||'—')}</div>
-      <span class="task-badge ${enabled ? 'badge-running' : 'badge-cancelled'}" style="flex-shrink:0">${enabled ? 'on' : 'off'}</span>
-      <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;flex-shrink:0" onclick="toggleSchedule('${escHtml(j.id)}',${!enabled})">${enabled ? 'Disable' : 'Enable'}</button>
-      <button class="btn btn-danger" style="font-size:11px;padding:3px 8px;flex-shrink:0" onclick="deleteSchedule('${escHtml(j.id)}')">Delete</button>
-    </div>`;
-  }).join('');
-}
-function openAddSchedule() {
-  document.getElementById('sf-title').textContent = 'New Schedule';
-  document.getElementById('sf-id').value = '';
-  document.getElementById('sf-name').value = '';
-  document.getElementById('sf-schedule').value = '';
-  document.getElementById('sf-target').value = '';
-  document.getElementById('sf-enabled').checked = true;
-  document.getElementById('sf-cron-preview').textContent = '';
-  document.getElementById('schedule-form').style.display = '';
-}
-function cancelScheduleForm() { document.getElementById('schedule-form').style.display = 'none'; }
-function previewCron() {
-  const expr = document.getElementById('sf-schedule').value.trim();
-  const el = document.getElementById('sf-cron-preview');
-  if (!el) return;
-  if (!expr) { el.textContent = ''; return; }
-  const parts = expr.split(/\s+/);
-  if (parts.length !== 5) { el.textContent = 'Invalid: needs 5 fields (min hour dom month dow)'; return; }
-  el.textContent = 'Valid cron expression';
-}
-async function saveSchedule() {
-  const id = document.getElementById('sf-id').value;
-  const body = {
-    name: document.getElementById('sf-name').value.trim(),
-    schedule: document.getElementById('sf-schedule').value.trim(),
-    target: document.getElementById('sf-target').value.trim(),
-    enabled: document.getElementById('sf-enabled').checked,
-  };
-  if (!body.name || !body.schedule) { toast('Name and schedule are required', 'err'); return; }
-  const action = id ? 'update_schedule' : 'add_schedule';
-  if (id) body.id = id;
-  body.action = action;
-  const r = await api('/api/schedules', { method: 'POST', body: JSON.stringify(body) });
-  if (r && r.ok) { cancelScheduleForm(); loadSchedules(); toast(id ? 'Schedule updated' : 'Schedule added', 'ok'); }
-  else toast((r && r.error) || 'Failed to save schedule', 'err');
-}
-async function deleteSchedule(id) {
-  if (!confirm('Delete this schedule?')) return;
-  const r = await api('/api/schedules', { method: 'POST', body: JSON.stringify({ action: 'delete_schedule', id }) });
-  if (r && r.ok) { loadSchedules(); toast('Schedule deleted', 'ok'); }
-  else toast((r && r.error) || 'Failed', 'err');
-}
-async function toggleSchedule(id, enabled) {
-  const action = enabled ? 'enable_schedule' : 'disable_schedule';
-  const r = await api('/api/schedules', { method: 'POST', body: JSON.stringify({ action, id }) });
-  if (r && r.ok) loadSchedules();
-  else toast((r && r.error) || 'Failed', 'err');
-}
 
 // ── Tools module ──
 async function loadTools() {
@@ -4066,6 +5503,16 @@ async function loadLocations() {
   _lastNodes = data.nodes || [];
   renderNodes(_lastNodes);
   _renderSidebarNodes(_lastNodes, curRoot);
+  // Update Files view now that rootMeta is populated
+  if (_currentModule === 'files') {
+    // Auto-select first mount so Files opens with contents visible
+    if (!_fhomeActive) {
+      const selfNode = _lastNodes.find(n => _isSelfNode(n));
+      const fm = selfNode && selfNode.mounts && selfNode.mounts.find(m => m.visible !== false);
+      if (fm) { selectMount(fm.id, ''); return; }
+    }
+    showFilesHome();
+  }
   loadTailscaleStatus();
   loadPepStatus();
 }
@@ -4134,13 +5581,10 @@ function renderNodes(nodes) {
   const lastUpdated = (_tsCache && _tsCache.ts) ? ('Updated ' + new Date(_tsCache.ts).toLocaleTimeString()) : 'Not checked yet';
 
   el.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0 8px">
-      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px">Devices</div>
-      <div style="display:flex;align-items:center;gap:8px">
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:12px 0 8px">
         <span style="font-size:11px;color:${meshColor}">${meshState}</span>
         <span style="font-size:11px;color:var(--text3)">${lastUpdated}</span>
         <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadTailscaleStatus(true);loadLocations();">↻ Refresh</button>
-      </div>
     </div>
     <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:10px;padding:8px 12px;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.6px">
       <div title="Canonical device identity discovered from your trusted network.">Device</div><div title="Human-friendly alias used across Porter views.">Nickname</div><div title="Device operating system and private network IP.">OS / IP</div><div></div>
@@ -4174,6 +5618,10 @@ function renderNodes(nodes) {
           : (pepRegistered
             ? `<span style="font-size:10px;color:var(--warn,#f59e0b);border:1px solid var(--warn,#f59e0b);border-radius:4px;padding:0 4px;margin-left:4px" title="PEP/1 agent registered but offline">pep</span>`
             : ''));
+        const _locCirc  = !isSelf && pepEntry && pepEntry.circuit;
+        const _locCbBadge = (_locCirc && _locCirc.state === 'open')
+          ? `<span class="cb-badge cb-open" title="High error rate \u2014 circuit open${_locCirc.resets_in_s != null ? '. Resets in ~' + _locCirc.resets_in_s + 's' : ''}">&#x26A1; degraded</span>`
+          : '';
         return `
           <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)">
             <div style="min-width:0">
@@ -4181,7 +5629,7 @@ function renderNodes(nodes) {
                 <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${statusDot}" title="${nodeStatus === 'relay' ? 'Via DERP relay — not direct peer-to-peer' : ''}"></span>
                 <span>${escHtml(deviceName)}</span>
                 <span style="font-size:10px;color:${statusColor};font-weight:500">${statusLabel}</span>
-                ${pepBadge}
+                ${pepBadge}${_locCbBadge}
               </div>
             </div>
             <div style="font-size:12px;color:${nickname ? 'var(--accent)' : 'var(--text3)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nickname || '—'}</div>
@@ -4567,73 +6015,96 @@ function renderAgents(agents) {
   const agentHtml = filtered.map(a => {
     const u = usageMap[a.id];
     const hasPct = u && u.usage_percent !== null && u.usage_percent !== undefined && u.usage_percent !== '';
-    const pctNum = hasPct ? Number(u.usage_percent) : null;
-    const availablePct = (pctNum == null || !Number.isFinite(pctNum)) ? null : Math.max(0, Math.min(100, pctNum));
+    // usage_percent = consumed %; availablePct = remaining %
+    const consumedPct = hasPct ? Math.max(0, Math.min(100, Number(u.usage_percent))) : null;
+    const availablePct = consumedPct == null ? null : (100 - consumedPct);
     const globalWarn = Number((window._operatorPrefs && window._operatorPrefs.usage_warn_threshold) || 20);
     const warn = Number.isFinite(Number(a.warn_threshold)) ? Number(a.warn_threshold) : globalWarn;
     const near = Math.max(1, warn);
     const watch = Math.min(95, near + 20);
-    const risk = availablePct == null ? 'Unknown' : (availablePct <= 5 ? 'Rate-limited' : (availablePct <= near ? 'Near limit' : (availablePct <= watch ? 'Watch' : 'Healthy')));
+    const risk = availablePct == null ? null : (availablePct <= 5 ? 'Rate-limited' : (availablePct <= near ? 'Near limit' : (availablePct <= watch ? 'Watch' : 'Healthy')));
     const riskColor = availablePct == null ? 'var(--text3)' : (availablePct <= 5 ? '#ef4444' : (availablePct <= near ? '#f59e0b' : (availablePct <= watch ? '#fbbf24' : '#22c55e')));
-    const uHtml = (u && availablePct != null)
-      ? ` &middot; <span style="color:${riskColor};font-weight:600">${availablePct}% left</span>`
-      : '';
-    const usageDetail = u
-      ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">` +
-          `Session capacity: <strong style="color:${riskColor}">${availablePct == null ? 'unknown' : (availablePct + '% left')}</strong>` +
-          ` · <strong style="color:${riskColor}">${risk}</strong>` +
-          `${u.window_resets_at ? ` · resets ${_usageCountdown(u.window_resets_at)}` : ''}` +
-          `${u.model ? ` · ${escHtml(String(u.model))}` : ''}` +
-          `${u.total_tokens ? ` · ${Number(u.total_tokens).toLocaleString()} tok` : ''}` +
-          `${u.cost_usd ? ` · $${Number(u.cost_usd).toFixed(3)}` : ''}` +
-        `</div>` +
-        `<div style="margin-top:6px;display:flex;align-items:center;gap:8px">` +
-          `<div style="flex:1;height:6px;border-radius:999px;background:var(--border);overflow:hidden"><div style="height:100%;width:${availablePct == null ? 0 : availablePct}%;background:${riskColor}"></div></div>` +
-          `<button class="btn btn-ghost" style="font-size:10px;padding:2px 6px" onclick="loadUsage()" title="Refresh usage">↻</button>` +
-        `</div>`
-      : `<div style="font-size:11px;color:var(--text3);margin-top:4px">Session capacity: unknown (no telemetry)</div><div style="margin-top:6px;display:flex;align-items:center;gap:8px"><div style="flex:1;height:6px;border-radius:999px;background:var(--border)"></div><button class="btn btn-ghost" style="font-size:10px;padding:2px 6px" onclick="loadUsage()" title="Refresh usage">↻</button></div>`;
+    const roleC = roleColor[a.role] || 'var(--text3)';
     const revealed = !!(window._revealedKeys && window._revealedKeys[a.id]);
     const keyDisplay = a.raw_key ? (revealed ? a.raw_key : _maskKey(a.raw_key)) : '';
     const keyRow = a.raw_key
-      ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px">
-           <code style="flex:1;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:6px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text2)">${escHtml(keyDisplay)}</code>
-           <button class="btn btn-ghost" style="font-size:11px;padding:3px 7px;flex-shrink:0" onclick="_toggleKey('${a.id}')" title="${revealed ? 'Hide key' : 'Show key'}">${revealed ? '🙈' : '👁'}</button>
+      ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px">
+           <code style="flex:1;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:5px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text2)">${escHtml(keyDisplay)}</code>
+           <button class="btn btn-ghost" style="font-size:11px;padding:3px 7px;flex-shrink:0" onclick="_toggleKey('${a.id}')" title="${revealed ? 'Hide' : 'Show'}">${revealed ? '🙈' : '👁'}</button>
            <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;flex-shrink:0" onclick="copyText('${escHtml(a.raw_key)}',this)">Copy</button>
          </div>`
-      : `<div style="font-size:11px;color:var(--text3);margin-top:5px;font-style:italic">No key yet — rotate key to generate one.</div>`;
-    const concurrencyRow = `
-      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-        <span style="font-size:12px;color:var(--text2);flex-shrink:0">Parallel tasks limit:</span>
-        <input id="conc-${a.id}" type="number" min="0" value="${a.max_concurrent||0}"
-               style="width:50px;background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:3px 7px;font-size:12px;color:var(--text);font-family:inherit">
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="saveAgentConcurrency('${a.id}')">Save</button>
-        <span style="font-size:11px;color:var(--text3)">0 = no limit</span>
+      : '';
+    const usageSection = `<div style="height:3px;border-radius:999px;background:var(--border);overflow:hidden;margin-bottom:6px">
+        <div style="height:100%;width:${availablePct == null ? 0 : availablePct}%;background:${riskColor};transition:width .4s ease"></div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
-        <span style="font-size:12px;color:var(--text2);flex-shrink:0">Low-capacity alert:</span>
-        <input id="warn-${a.id}" type="number" min="1" max="99" value="${Number.isFinite(Number(a.warn_threshold)) ? Number(a.warn_threshold) : ''}" placeholder="global"
-               style="width:68px;background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:3px 7px;font-size:12px;color:var(--text);font-family:inherit">
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="saveAgentWarnThreshold('${a.id}')">Save</button>
-        <span style="font-size:11px;color:var(--text3)">${Number.isFinite(Number(a.warn_threshold)) ? 'Custom' : `Global (${globalWarn}%)`}</span>
+      <div style="display:flex;align-items:center;gap:4px;font-size:11px">
+        ${availablePct == null
+          ? `<span style="color:var(--text3)">No usage data</span>`
+          : `<span style="font-weight:600;color:${riskColor}">${availablePct}%</span><span style="color:var(--text3)">left</span><span style="color:var(--border2)">·</span><span style="color:${riskColor}">${risk}</span>`
+        }
+        ${u && u.window_resets_at ? `<span style="margin-left:auto;color:var(--text3)">resets ${_usageCountdown(u.window_resets_at)}</span>` : `<span style="margin-left:auto"></span>`}
+        <button class="btn btn-ghost" style="font-size:10px;padding:1px 5px" data-refresh-id="${a.id}" onclick="refreshAgentUsage('${a.id}','${escHtml(a.type)}')" title="Refresh live">↻</button>
       </div>`;
+    const isGemini = (a.type||'').toLowerCase().includes('gemini');
+    const modelLine = (a.model_id || isGemini)
+      ? '<div style="font-size:11px;color:var(--text3);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+        + (a.model_id ? escHtml(a.model_id) : '')
+        + (a.model_id && isGemini ? ' <span style="opacity:.65">· 60/min · 1,000/day</span>' : '')
+        + (isGemini && !a.model_id ? '<span style="opacity:.65">60/min · 1,000/day</span>' : '')
+        + '</div>'
+      : '';
+    const authLine = (() => {
+      const isOC = (a.type||'').toLowerCase().includes('openclaw')||(a.type||'').toLowerCase().includes('codex');
+      if (!isOC || !u) return '';
+      const prof = u.auth_profile||'';
+      const exp = u.auth_expires_at;
+      if (!prof && !exp) return '';
+      let expStr = '';
+      if (exp) {
+        const expMs = new Date(exp)-Date.now();
+        if (expMs > 0) {
+          const d = Math.floor(expMs/86400000);
+          const h = Math.floor((expMs%86400000)/3600000);
+          expStr = ' · expires in '+(d>0 ? d+'d' : h+'h');
+        } else expStr = ' · token expired';
+      }
+      return '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">'
+        + (prof ? escHtml(prof)+' ok' : '') + escHtml(expStr) + '</div>';
+    })();
+    const roleWidget = '<select style="font-size:10px;font-weight:600;padding:2px 6px;border-radius:999px;border:1px solid '
+      +roleC+';color:'+roleC+';background:transparent;cursor:pointer;outline:none;-webkit-appearance:none;appearance:none"'
+      +' title="Observer — read only\nStandard — read + write + checkpoint\nTrusted — write + finalize\nAdmin — full access"'
+      +' onchange="saveAgentRole(\''+esc(a.id)+'\',this.value)">'
+      +'<option value="viewer"'+(a.role==='viewer'?' selected':'')+'>Observer</option>'
+      +'<option value="writer"'+(a.role==='writer'?' selected':'')+'>Standard</option>'
+      +'<option value="operator"'+(a.role==='operator'?' selected':'')+'>Trusted</option>'
+      +'<option value="admin"'+(a.role==='admin'?' selected':'')+'>Admin</option>'
+      +'</select>';
     return `
-    <div style="padding:10px 12px;background:var(--raised);border-radius:8px;margin-bottom:8px;border:1px solid var(--border)">
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2" style="margin-top:2px"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(a.name)}${uHtml}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:2px">${escHtml(a.type)} · <span style="color:${roleColor[a.role]||'var(--text3)'}">${a.role}</span></div>
-          ${usageDetail}
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;min-width:220px;max-width:240px">
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 6px" onclick="openAgentWorkspace('${esc(a.id)}','${esc(a.name)}')">Configure</button>
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 6px" onclick="doTestAgent('${a.id}','${escHtml(a.name)}')">Test</button>
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 6px" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 6px;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Disconnect</button>
-        </div>
+    <div style="padding:14px 16px;background:var(--raised);border-radius:10px;border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="width:8px;height:8px;border-radius:50%;background:${riskColor};flex-shrink:0"></span>
+        <span style="font-size:14px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(a.name)}</span>
+        ${roleWidget}
       </div>
-      ${keyRow}
-      ${concurrencyRow}
+      ${modelLine}${authLine}<div style="margin-bottom:12px">${usageSection}</div>
+      ${keyRow}<div style="display:flex;align-items:center;gap:4px;padding-top:10px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="openAgentWorkspace('${esc(a.id)}','${esc(a.name)}')">Configure</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="doTestAgent('${a.id}','${escHtml(a.name)}')">Connectivity check</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;margin-left:auto;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Disconnect</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--text3)">
+        <span>Concurrency</span>
+        <input id="conc-${a.id}" type="number" min="0" value="${a.max_concurrent||0}" title="0 = no limit"
+               style="width:44px;background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:2px 6px;font-size:11px;color:var(--text);font-family:inherit">
+        <span style="color:var(--border2)">|</span>
+        <span>Alert</span>
+        <input id="warn-${a.id}" type="number" min="1" max="99" value="${Number.isFinite(Number(a.warn_threshold)) ? Number(a.warn_threshold) : ''}" placeholder="${globalWarn}"
+               style="width:44px;background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:2px 6px;font-size:11px;color:var(--text);font-family:inherit">
+        <span style="font-size:10px">${Number.isFinite(Number(a.warn_threshold)) ? 'custom' : 'global'}%</span>
+        <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;margin-left:auto" onclick="saveAgentConcurrency('${a.id}');saveAgentWarnThreshold('${a.id}')">Save</button>
+      </div>
     </div>`;
   }).join('');
   const hiddenNotice = hiddenCount > 0
@@ -4887,6 +6358,12 @@ async function _doRevokeNow(id) {
   else toast((res && res.error) || 'Disconnect failed', 'err');
 }
 
+async function saveAgentRole(agentId, role) {
+  const res = await api('/api/agents', { action: 'set_role', id: agentId, role });
+  if (res && res.ok) { toast('Role updated', 'ok'); loadAgents(); }
+  else toast((res && res.error) || 'Save failed', 'err');
+}
+
 async function saveAgentWarnThreshold(agentId) {
   const raw = (document.getElementById('warn-' + agentId)?.value || '').trim();
   const warn_threshold = raw === '' ? null : parseInt(raw, 10);
@@ -4922,19 +6399,13 @@ function _tsAgo(unixTs) {
   return Math.floor(secs / 86400) + 'd ago';
 }
 
-async function loadTasks() {
-  const data = await api('/api/tasks');
-  if (!data) return;
-  renderTasks(data.tasks || []);
-}
+async function loadTasks() { loadTaskRegistry(); }
 
 function renderTasks(tasks) {
-  const el = document.getElementById('tasks-list');
-  const el2 = document.getElementById('tasks-module-list');
+  const el3 = document.getElementById('agents-jobs-list');
   const noTasks = '<div style="color:var(--text2);padding:20px 0">No tasks found.</div>';
   if (!tasks.length) {
-    if (el) el.innerHTML = noTasks;
-    if (el2) el2.innerHTML = noTasks;
+    if (el3) el3.innerHTML = noTasks;
     return;
   }
 
@@ -5007,26 +6478,8 @@ function renderTasks(tasks) {
     section('In progress', inProgress, 'Active execution lane.') +
     section('Completed', done, 'Archive lane — clear periodically.');
 
-  const g = document.getElementById('tasks-guidance');
-  if (g) {
-    const top = needsAction[0];
-    const immediate = top
-      ? (top.state === 'stalled'
-          ? `Top priority: recover stalled task ${top.task_id}.`
-          : `Top priority: resume or cancel paused task ${top.task_id}.`)
-      : (inProgress.length ? 'No blockers. Monitor in-progress tasks.' : 'Queue is clear. Start new work when ready.');
-    g.innerHTML = `
-      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">How to use Tasks</div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45">
-        <div style="margin-bottom:6px"><strong>Right now:</strong> ${escHtml(immediate)}</div>
-        1) <strong>Needs action</strong>: resolve these first (Recover/Resume/Cancel).<br>
-        2) <strong>In progress</strong>: monitor active work; pause only if needed.<br>
-        3) <strong>Completed</strong>: clear finished items to keep the queue clean.
-      </div>`;
-  }
 
-  if (el) el.innerHTML = html || noTasks;
-  if (el2) el2.innerHTML = html || noTasks;
+  if (el3) el3.innerHTML = html || noTasks;
 }
 
 
@@ -5040,6 +6493,223 @@ async function clearCompletedTasks() {
   const res = await api('/api/tasks', { action: 'clear_completed' });
   if (res && res.ok) { toast(`Cleared ${res.removed} task(s)`, 'ok'); loadTasks(); }
   else toast((res && res.error) || 'Clear failed', 'err');
+}
+
+// ── task registry (G1c redesign) ────────────────────────────────────────────
+
+let _tregFilter   = '';
+let _tregShowDone = false;
+let _tregProjects = {};  // id -> name cache
+
+async function loadTaskRegistry() {
+  const projSel = document.getElementById('treg-f-project');
+  const projId  = projSel ? projSel.value : '';
+  const filter  = _tregFilter;
+
+  // build URL
+  let url = '/api/task-registry';
+  const params = [];
+  // when filter is 'done' we pass multiple statuses
+  if (filter === 'done') {
+    params.push('status=complete,failed,cancelled');
+  } else if (filter) {
+    params.push('status=' + encodeURIComponent(filter));
+  }
+  if (projId) params.push('project_id=' + encodeURIComponent(projId));
+  if (params.length) url += '?' + params.join('&');
+
+  const data = await api(url);
+  if (!data) return;
+
+  // populate project dropdown + cache names (once)
+  if (projSel && projSel.options.length <= 1) {
+    const pd = await api('/api/projects');
+    if (pd && pd.projects) {
+      _tregProjects = {};
+      pd.projects.forEach(p => {
+        _tregProjects[p.id] = p.name;
+        const o = document.createElement('option');
+        o.value = p.id; o.textContent = p.name;
+        projSel.appendChild(o);
+      });
+    }
+  }
+
+  renderTaskRegistry(data.tasks || []);
+}
+
+function setTregFilter(f) {
+  _tregFilter = f;
+  // map filter value -> button id
+  const map = { '': 'all', 'pending': 'pending', 'in_progress': 'active', 'done': 'done' };
+  Object.entries(map).forEach(([val, id]) => {
+    const b = document.getElementById('treg-f-' + id);
+    if (b) b.classList.toggle('active', val === f);
+  });
+  loadTaskRegistry();
+}
+
+function renderTaskRegistry(tasks) {
+  const el = document.getElementById('treg-list');
+  if (!el) return;
+
+  if (!tasks.length) {
+    el.innerHTML = '<div style="color:var(--text2);padding:40px 0;text-align:center">No tasks' +
+      (_tregFilter ? ' matching this filter' : '') + '.</div>';
+    return;
+  }
+
+  const prioClass  = { urgent:'prio-urgent', high:'prio-high', normal:'prio-normal', low:'prio-low' };
+  const prioTitle  = { urgent:'Urgent', high:'High', normal:'Normal', low:'Low' };
+
+  const row = (t) => {
+    const prio    = t.priority || 'normal';
+    const st      = t.status   || 'pending';
+    const projName = t.project_name || (t.project_id ? (_tregProjects[t.project_id] || t.project_id.slice(0,8)) : null);
+    const agentLbl = t.assigned_agent_id ? t.assigned_agent_id.slice(0,16) : null;
+    const ageLbl   = _tsAgo(t.created_at);
+    const updLbl   = t.updated_at && t.updated_at !== t.created_at ? ' · updated ' + _tsAgo(t.updated_at) : '';
+
+    const projTag  = projName ? `<span class="treg-proj-tag">${escHtml(projName)}</span>` : '';
+    const agentTag = agentLbl ? `<span class="treg-tag">${escHtml(agentLbl)}</span>` : '';
+    const tagHtml  = (t.tags||[]).map(tg => `<span class="treg-tag">#${escHtml(tg)}</span>`).join('');
+
+    const canComplete = ['pending','in_progress'].includes(st);
+    const canCancel   = !['complete','failed','cancelled'].includes(st);
+    const canDelete   = ['complete','failed','cancelled'].includes(st);
+    const canStart    = st === 'pending';
+
+    const acts = [
+      canStart    ? `<button class="treg-act act-ok"  onclick="registryTaskAction('update_status','${t.id}','in_progress')">&#9654; Start</button>` : '',
+      canComplete ? `<button class="treg-act act-ok"  onclick="registryTaskAction('complete','${t.id}')">&#10003; Done</button>` : '',
+      canCancel   ? `<button class="treg-act act-del" onclick="registryTaskAction('cancel','${t.id}')">&#10005;</button>` : '',
+      canDelete   ? `<button class="treg-act act-del" onclick="registryTaskAction('delete','${t.id}')">&#128465;</button>` : '',
+    ].filter(Boolean).join('');
+
+    const descHtml   = t.description ? `<div class="treg-row-desc">${escHtml(t.description)}</div>` : '';
+    const resultHtml = t.result      ? `<div class="treg-result">${escHtml(t.result)}</div>` : '';
+
+    return `<div class="treg-row">
+      <span class="prio-dot ${prioClass[prio]}" title="${prioTitle[prio]||prio} priority"></span>
+      <div class="treg-row-body">
+        <div class="treg-row-title">${escHtml(t.title)}</div>
+        <div class="treg-row-meta">
+          <span>${ageLbl}${updLbl}</span>
+          ${projTag}${agentTag}${tagHtml}
+        </div>
+        ${descHtml}${resultHtml}
+      </div>
+      <div class="treg-row-acts">${acts}</div>
+    </div>`;
+  };
+
+  const secHdr = (label, count, extra='') =>
+    `<div class="treg-sec-hdr">
+       <span class="treg-sec-label">${label}</span>
+       <span class="treg-sec-line"></span>
+       <span class="treg-sec-count">${count}${extra}</span>
+     </div>`;
+
+  const pending    = tasks.filter(t => t.status === 'pending');
+  const inProgress = tasks.filter(t => t.status === 'in_progress');
+  const done       = tasks.filter(t => ['complete','failed','cancelled'].includes(t.status));
+
+  let html = '';
+  if (pending.length)    html += secHdr('Pending', pending.length) + pending.map(row).join('');
+  if (inProgress.length) html += secHdr('Active',  inProgress.length) + inProgress.map(row).join('');
+
+  if (done.length) {
+    if (_tregShowDone) {
+      html += secHdr('Done', done.length,
+        ` &nbsp;<button class="treg-sec-toggle" onclick="_toggleDone()">hide</button>`) +
+        done.map(row).join('');
+    } else {
+      html += secHdr('Done', '',
+        `<button class="treg-sec-toggle" onclick="_toggleDone()">${done.length} completed &darr;</button>`);
+    }
+  }
+
+  if (!html) {
+    html = '<div style="color:var(--text2);padding:40px 0;text-align:center">Nothing here.</div>';
+  }
+
+  el.innerHTML = html;
+}
+
+function _toggleDone() {
+  _tregShowDone = !_tregShowDone;
+  loadTaskRegistry();
+}
+
+async function registryTaskAction(action, taskId, statusOverride) {
+  const body = { action, task_id: taskId };
+  if (action === 'update_status' && statusOverride) body.status = statusOverride;
+  const res = await api('/api/task-registry', body);
+  if (res && res.ok) {
+    if (_currentModule === 'projects') loadProjects();
+    else loadTaskRegistry();
+  } else toast((res && res.error) || 'Action failed', 'err');
+}
+
+function openCreateTaskModal() {
+  const m = document.getElementById('create-task-modal');
+  if (!m) return;
+  m.style.display = 'flex';
+  const t = document.getElementById('ct-title'); if (t) { t.value = ''; setTimeout(() => t.focus(), 50); }
+  const d = document.getElementById('ct-desc');     if (d) d.value = '';
+  const g = document.getElementById('ct-tags');     if (g) g.value = '';
+  // reset priority pills
+  document.querySelectorAll('.ct-prio-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.prio === 'normal'));
+  // populate project dropdown + preselect active project
+  api('/api/projects').then(pd => {
+    const sel = document.getElementById('ct-project');
+    if (!sel || !pd) return;
+    while (sel.options.length > 1) sel.remove(1);
+    const active = pd.active_project_id;
+    (pd.projects || []).forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.id; o.textContent = p.name;
+      if (p.id === active) o.selected = true;
+      sel.appendChild(o);
+    });
+  });
+}
+
+function closeCreateTaskModal() {
+  const m = document.getElementById('create-task-modal');
+  if (m) m.style.display = 'none';
+}
+
+function ctSetPrio(btn) {
+  document.querySelectorAll('.ct-prio-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+async function submitCreateTask() {
+  const titleEl = document.getElementById('ct-title');
+  const title   = (titleEl ? titleEl.value : '').trim();
+  if (!title) { toast('Title is required', 'err'); if (titleEl) titleEl.focus(); return; }
+  const descEl  = document.getElementById('ct-desc');
+  const projEl  = document.getElementById('ct-project');
+  const tagsEl  = document.getElementById('ct-tags');
+  const prioBtn = document.querySelector('.ct-prio-btn.active');
+  const desc    = descEl  ? descEl.value.trim() : '';
+  const projId  = projEl  ? projEl.value        : '';
+  const prio    = prioBtn ? prioBtn.dataset.prio : 'normal';
+  const tags    = tagsEl  ? tagsEl.value.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const body    = { action: 'create', title, description: desc, priority: prio, tags };
+  if (projId) body.project_id = projId;
+  const res = await api('/api/task-registry', body);
+  if (res && res.ok) {
+    toast('Task created', 'ok');
+    closeCreateTaskModal();
+    _cpTaskForModal = null;
+    if (_currentModule === 'projects') loadProjects();
+    else loadTaskRegistry();
+  } else {
+    toast((res && res.error) || 'Failed to create task', 'err');
+  }
 }
 
 // ── policy presets ────────────────────────────────────────────────────────
@@ -5094,6 +6764,18 @@ async function loadUsage() {
   window._currentUsage = data.agents || [];
   renderUsage(data.agents || []);
   if (window._lastAgents) renderAgents(window._lastAgents);
+}
+
+async function refreshAgentUsage(agentId, agentType) {
+  const isClause = (agentType || '').toLowerCase().includes('claude');
+  if (isClause) {
+    const btn = document.querySelector(`[data-refresh-id="${agentId}"]`);
+    if (btn) { btn.textContent = '…'; btn.disabled = true; }
+    const res = await api('/agent-usage/refresh', { agent_id: agentId });
+    if (btn) { btn.textContent = '↻'; btn.disabled = false; }
+    if (res && res.error) { toast(res.error, 'err'); }
+  }
+  await loadUsage();
 }
 
 function renderUsage(agents) {
@@ -5295,8 +6977,6 @@ function _locIcon(l) {
   return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>';
 }
 function _renderSidebarNodes(nodes, activeRoot) {
-  const targets = [document.getElementById('locations'), document.getElementById('locations-secondary')].filter(Boolean);
-  if (!targets.length) return;
   const serverHost = String(window._serverHostname || '').toLowerCase();
 
   const configured = Array.isArray(nodes) ? [...nodes] : [];
@@ -5332,6 +7012,30 @@ function _renderSidebarNodes(nodes, activeRoot) {
     const bn = String(b.label || b.hostname || b.id || '').toLowerCase();
     return an.localeCompare(bn);
   });
+
+  // ── Pass 1: always populate rootMeta (needed by Files breadcrumb) ──────────
+  sortedNodes.forEach(node => {
+    const mounts = (node.mounts || []).filter(m => m.visible !== false);
+    const nType = String(node.type || '').toLowerCase();
+    const nId = String(node.id || '').toLowerCase();
+    const nHost = String(node.hostname || '').toLowerCase();
+    const isSelf = (nType === 'local' || nType === 'vps') && (serverHost && (nId === serverHost || nHost === serverHost));
+    const hostRef = String(node.hostname || node.id || '').trim();
+    const rawLabel = String(node.label || '').trim();
+    const nickname = (rawLabel && rawLabel !== hostRef) ? rawLabel : '';
+    const displayName = isSelf
+      ? `${nickname || (node.hostname || node.id)} (this device)`
+      : (nickname || node.label || node.id);
+    mounts.forEach(m => {
+      rootMeta[m.id] = { path: m.path || '', label: m.label || m.id, node: displayName,
+        type: node.type || 'local', hostname: node.hostname || '', tailscale_ip: node.tailscale_ip || '',
+        isSelf: !!(isSelf) };
+    });
+  });
+
+  // ── Pass 2: DOM render (only if sidebar #locations element exists) ──────────
+  const targets = [document.getElementById('locations')].filter(Boolean);
+  if (!targets.length) return;
 
   targets.forEach(el => {
     el.innerHTML = '';
@@ -5411,7 +7115,6 @@ function _renderSidebarNodes(nodes, activeRoot) {
       }
 
       mounts.forEach(m => {
-        rootMeta[m.id] = { path: m.path || '', label: m.label || m.id, node: displayName, type: node.type || 'local', hostname: node.hostname || '', tailscale_ip: node.tailscale_ip || '' };
         const div = document.createElement('div');
         div.className = 'loc mount-item' + (m.id === activeRoot ? ' active' : '');
         div.dataset.root = m.id;
@@ -5734,19 +7437,22 @@ function _renderSidebarLocs(locs, activeRoot) {
 
   if (Object.keys(byNode).length === 1 && byNode['__flat__']) {
     // flat legacy: no node grouping
-    const targets = [document.getElementById('locations'), document.getElementById('locations-secondary')].filter(Boolean);
-    targets.forEach(el => {
-      el.innerHTML = '';
+    // always populate rootMeta first
+    locs.forEach(l => {
+      rootMeta[l.id] = { path: l.path || '', label: l.label || l.id, node: l.node_id || '', type: l.type || 'local', hostname: l.node || '', tailscale_ip: l.tailscale_ip || '', isSelf: true };
+    });
+    const locEl = document.getElementById('locations');
+    if (locEl) {
+      locEl.innerHTML = '';
       locs.forEach(l => {
-        rootMeta[l.id] = { path: l.path || '', label: l.label || l.id, node: l.node_id || '', type: l.type || 'local', hostname: l.node || '', tailscale_ip: l.tailscale_ip || '' };
         const div = document.createElement('div');
         div.className = 'loc' + (l.id === activeRoot ? ' active' : '');
         div.dataset.root = l.id;
         div.innerHTML = `${_locIcon(l)}<span class="loc-name">${escHtml(l.label)}</span>`;
         div.onclick = () => navigate(l.id, '');
-        el.appendChild(div);
+        locEl.appendChild(div);
       });
-    });
+    }
   } else {
     // has node context: build pseudo-nodes and delegate
     const nodes = Object.entries(byNode).map(([nid, ms]) => ({id:nid, label:nid, type:'local', mounts:ms}));
@@ -5788,8 +7494,10 @@ async function navigate(root, path) {
   updateSelectionUI();
   // reset search UI
   searchActive = false;
-  document.getElementById('searchInput').value = '';
-  document.getElementById('clearSearch').classList.remove('visible');
+  const _si = document.getElementById('searchInput');
+  if (_si) { _si.value = ''; _si.blur(); }
+  const _cs = document.getElementById('clearSearch');
+  if (_cs) _cs.classList.remove('visible');
   document.getElementById('searchCountBar').style.display = 'none';
 
   document.querySelectorAll('.loc').forEach(l =>
@@ -5804,6 +7512,8 @@ async function navigate(root, path) {
   document.getElementById('banner').style.display = curWritable ? 'none' : 'flex';
   document.getElementById('btnUpload').disabled = !curWritable;
   document.getElementById('btnMkdir').disabled = !curWritable;
+  const lhdr = document.querySelector('.list-header');
+  if (lhdr) lhdr.style.display = '';
   renderListing(curEntries);
   updateFooter(curEntries.length);
   loadDiskInfo(root);
@@ -5818,13 +7528,200 @@ async function loadDiskInfo(root) {
   updateFooter(curEntries.length);
 }
 
+// ── Files home view (inline location tree in listing) ──
+let _fhomeExpanded = new Set();
+let _fhomeInitDone = false;
+
+// _fhomeActive = {mountId, path, entries} | null
+let _fhomeActive = null;
+function _goFilesHome() { _fhomeActive = null; renderBreadcrumb("",""); showFilesHome(); }
+
+async function selectMount(mountId, path) {
+  // Toggle collapse if clicking the same mount+path
+  if (_fhomeActive && _fhomeActive.mountId === mountId && _fhomeActive.path === (path||"")) {
+    _fhomeActive = null;
+    renderBreadcrumb("", "");
+    showFilesHome();
+    return;
+  }
+  _fhomeActive = { mountId, path: path || "", entries: null };
+  // Set curRoot/curPath so upload/mkdir work correctly
+  curRoot = mountId; curPath = path || "";
+  renderBreadcrumb(mountId, path || "");
+  showFilesHome(); // render immediately with loading state
+  const data = await api(`/api/list?root=${encodeURIComponent(mountId)}&path=${encodeURIComponent(path||"")}`);
+  if (!data) return;
+  _fhomeActive = { mountId, path: path || "", entries: data.entries || [] };
+  curWritable = data.writable !== false;
+  showFilesHome();
+}
+
+function showFilesHome() {
+  const listing = document.getElementById("listing");
+  if (!listing) return;
+
+  // Always hide list-header and footer in home view (fhome-entry has own grid)
+  const lh = document.querySelector(".list-header");
+  if (lh) lh.style.display = "none";
+  const footer = document.getElementById("file-results-footer");
+  if (footer) footer.style.display = "none";
+  const banner = document.getElementById("banner");
+  if (banner) banner.style.display = "none";
+
+  // If no active mount, clear curRoot so toolbar context is right
+  if (!_fhomeActive) {
+    curRoot = ""; curPath = "";
+    const btnMkdir = document.getElementById("btnMkdir");
+    const btnUpload = document.getElementById("btnUpload");
+    const btnHidden = document.getElementById("btnHidden");
+    if (btnMkdir)  btnMkdir.style.display  = "none";
+    if (btnUpload) btnUpload.style.display  = "none";
+    if (btnHidden) btnHidden.style.display  = "none";
+  }
+
+  const nodes = Array.isArray(_lastNodes) ? [..._lastNodes] : [];
+  nodes.sort((a, b) => {
+    const as = _isSelfNode(a) ? 0 : 1, bs = _isSelfNode(b) ? 0 : 1;
+    if (as !== bs) return as - bs;
+    const ao = isTailscaleNodeConnected(a) ? 0 : 1, bo = isTailscaleNodeConnected(b) ? 0 : 1;
+    if (ao !== bo) return ao - bo;
+    return String(a.label||a.hostname||a.id||"").localeCompare(String(b.label||b.hostname||b.id||""));
+  });
+
+  // Auto-expand self node on first open
+  if (!_fhomeInitDone) {
+    nodes.forEach(n => { if (_isSelfNode(n)) _fhomeExpanded.add(n.id); });
+    _fhomeInitDone = true;
+  }
+
+  const devIcon  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
+  const tsIcon   = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/></svg>';
+  const fldIcon  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>';
+  const webIcon  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>';
+
+  let html = "";
+
+  if (!nodes.length) {
+    html = `<div style="padding:48px 24px;color:var(--text3);font-size:13px;text-align:center">No locations configured. Go to <button class="btn btn-ghost" style="font-size:12px;padding:2px 8px" onclick="switchModule('locations')">Locations</button> to add one.</div>`;
+  } else {
+    nodes.forEach(node => {
+      const mounts  = (node.mounts || []).filter(m => m.visible !== false);
+      const isSelf  = _isSelfNode(node);
+      const nId     = String(node.id || "");
+      const devOpen = _fhomeExpanded.has(nId);
+      const rawLabel = String(node.label || "").trim();
+      const hostRef  = String(node.hostname || node.id || "").trim();
+      const nickname = (rawLabel && rawLabel !== hostRef) ? rawLabel : "";
+      const devLabel = isSelf
+        ? (nickname || node.hostname || node.id || "This device")
+        : (nickname || node.label || node.hostname || node.id || "device");
+      const tsStatus = node._virtual
+        ? (node._online !== false ? "online" : "offline")
+        : getTailscaleNodeStatus(node);
+      const dotColor = tsStatus === "online" ? "#22c55e" : tsStatus === "relay" ? "#f59e0b" : "#94a3b8";
+      const icon = isSelf ? devIcon : tsIcon;
+      const dimStyle = (!isSelf && tsStatus === "offline") ? ' style="opacity:.55"' : "";
+      const chevron = mounts.length ? (devOpen ? "&#9660;" : "&#9654;") : "";
+      const selfTag = isSelf
+        ? `<span style="font-size:11px;font-weight:400;color:var(--text3);margin-left:8px">this device</span>`
+        : `<span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px"><span style="width:7px;height:7px;border-radius:50%;background:${dotColor};display:inline-block"></span><span style="font-size:11px;font-weight:400;color:var(--text3)">${tsStatus}</span></span>`;
+
+      const _cbEntry = _pepAgentForNode(node);
+      const _cbCirc  = !isSelf && _cbEntry && _cbEntry.circuit;
+      const _cbBadge = (_cbCirc && _cbCirc.state === 'open')
+        ? `<span class="cb-badge cb-open" title="High error rate \u2014 circuit open${_cbCirc.resets_in_s != null ? '. Resets in ~' + _cbCirc.resets_in_s + 's' : ''}">&#x26A1; degraded</span>`
+        : '';
+      html += `<div class="fhome-device"${dimStyle} onclick="toggleFhomeNode('${esc(nId)}')">`;
+      html += `<span class="fhome-chevron">${chevron}</span>${icon}`;
+      html += `<span class="fhome-device-label">${escHtml(devLabel)}${selfTag}${_cbBadge}</span>`;
+      html += "</div>";
+
+      if (devOpen) {
+        if (!mounts.length) {
+          html += `<div style="padding:8px 24px 8px 48px;font-size:12px;color:var(--text3)">No paths — add one in <button class="btn btn-ghost" style="font-size:11px;padding:1px 6px" onclick="switchModule('locations')">Locations</button></div>`;
+        }
+        mounts.forEach(m => {
+          const lbl = String(m.label || m.id || "");
+          const isActive = _fhomeActive && _fhomeActive.mountId === m.id;
+          const mIcon = (lbl.includes("web")||lbl.includes("site")||lbl.includes("www")) ? webIcon : fldIcon;
+          const activeSty = isActive
+            ? ' style="background:rgba(247,147,26,.08);border-left:2px solid var(--accent)"'
+            : "";
+          html += `<div class="fhome-mount"${activeSty} onclick="selectMount('${esc(m.id)}','')">`;
+          html += `<div></div>`;
+          html += `<div class="file-name">${mIcon}<div><div class="file-label">${escHtml(lbl)}</div></div></div>`;
+          html += `<div></div></div>`;
+
+          // ── inline expanded content ──────────────────────────────────────
+          if (isActive) {
+            if (_fhomeActive.entries === null) {
+              // loading state
+              html += `<div style="padding:10px 24px 10px 64px;font-size:12px;color:var(--text3)">Loading&#8230;</div>`;
+            } else if (!_fhomeActive.entries.length) {
+              html += `<div style="padding:10px 24px 10px 64px;font-size:12px;color:var(--text3)">Empty folder</div>`;
+            } else {
+              // Render entries inline. Dirs expand further; files open preview.
+              const activePath = _fhomeActive.path || "";
+              const activeMount = _fhomeActive.mountId;
+              // Sort: dirs first, then by name
+              const sorted = [..._fhomeActive.entries].sort((a,b) => {
+                if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
+                return a.name.localeCompare(b.name);
+              });
+              sorted.forEach(e => {
+                const eIcon = e.type === "dir" ? fldIcon : fileIcon(e.name);
+                const ePath = activePath ? activePath + "/" + e.name : e.name;
+                const onclick = e.type === "dir"
+                  ? `selectMount('${esc(activeMount)}','${esc(ePath)}')`
+                  : `_fhomeOpenFile('${esc(activeMount)}','${esc(ePath)}','${esc(e.name)}')`;
+                html += `<div class="fhome-entry" onclick="${onclick}">`;
+                html += `<div></div>`;
+                html += `<div class="file-name" style="padding-left:24px">${eIcon}`;
+                html += `<span class="file-label">${escHtml(e.name)}</span></div>`;
+                html += `<div class="file-size" style="font-size:12px;color:var(--text3)">${e.type === "dir" ? "" : (e.size || "")}</div>`;
+                html += `<div class="file-date" style="font-size:12px;color:var(--text3)">${e.modified || ""}</div>`;
+                html += `<div></div></div>`;
+              });
+            }
+          }
+        });
+      }
+    });
+  }
+  listing.innerHTML = html;
+}
+
+function _fhomeOpenFile(mountId, filePath, fileName) {
+  // Temporarily set context so preview/download work
+  const parts = filePath.split("/");
+  const name  = parts.pop();
+  curRoot = mountId; curPath = parts.join("/");
+  openPreview(name);
+}
+
+function toggleFhomeNode(nodeId) {
+  if (_fhomeExpanded.has(nodeId)) _fhomeExpanded.delete(nodeId);
+  else _fhomeExpanded.add(nodeId);
+  showFilesHome();
+}
+
 // ── breadcrumb ──
 function renderBreadcrumb(root, path) {
   const el = document.getElementById('breadcrumb');
+  // always start with a Files home crumb
+  let h = `<button class="crumb" onclick="_goFilesHome()" style="color:var(--text3)">Files</button>`;
+  if (!root) { el.innerHTML = h; return; }
+  // restore toolbar buttons
+  ['btnMkdir','btnUpload','btnHidden'].forEach(id => {
+    const b = document.getElementById(id); if (b) b.style.display = '';
+  });
+  const footer = document.getElementById('file-results-footer');
+  if (footer) footer.style.display = '';
   const parts = path ? path.split('/').filter(Boolean) : [];
   const meta = rootMeta[root] || {};
-  const rootPath = meta.path || `~/${root}`;
-  let h = `<button class="crumb" onclick="navigate('${esc(root)}','')">${escHtml(rootPath)}</button>`;
+  const label = meta.label || root;
+  h += `<span class="crumb-sep">›</span>`;
+  h += `<button class="crumb" onclick="navigate('${esc(root)}','')">${escHtml(label)}</button>`;
   let so_far = '';
   parts.forEach((p, i) => {
     so_far += (so_far ? '/' : '') + p;
@@ -5837,6 +7734,7 @@ function renderBreadcrumb(root, path) {
   });
   el.innerHTML = h;
 }
+
 
 // ── skeleton ──
 function showSkeleton() {
@@ -5957,11 +7855,13 @@ function updateFooter(count) {
 function onSearchInput(val) {
   clearTimeout(searchTimer);
   if (!val.trim()) { clearSearch(); return; }
+  if (!curRoot) return;
   searchTimer = setTimeout(() => runSearch(val.trim()), 300);
 }
 
 function openSearch() {
-  document.getElementById('searchInput').focus();
+  const si = document.getElementById('searchInput');
+  if (si) si.focus();
 }
 
 async function runSearch(q) {
@@ -6038,8 +7938,10 @@ function clearSearch() {
   searchActive = false;
   lastSearchQ = '';
   clearTimeout(searchTimer);
-  document.getElementById('searchInput').value = '';
-  document.getElementById('clearSearch').classList.remove('visible');
+  const _si2 = document.getElementById('searchInput');
+  if (_si2) _si2.value = '';
+  const _cs2 = document.getElementById('clearSearch');
+  if (_cs2) _cs2.classList.remove('visible');
   document.getElementById('searchCountBar').style.display = 'none';
   renderListing(curEntries);
 }
@@ -6445,7 +8347,6 @@ document.addEventListener('keydown', function(e) {
     if (settingsPanel && settingsPanel.classList.contains('open')) { closeSettings(); return; }
     const agentsModule = document.getElementById('agents-module');
     if (_currentModule === 'agents' && agentsModule && agentsModule.classList.contains('configuring')) { closeAgentWorkspace(); return; }
-    if (_currentModule !== 'files') { switchModule('files'); return; }
     if (searchActive) { clearSearch(); return; }
     if (previewOpen) { closePreview(); return; }
     closeDropdown();
@@ -6777,7 +8678,7 @@ init();
       <div class="settings-field">
         <label>Role</label>
         <select class="settings-input" id="wiz-agent-role">
-          <option value="viewer">Viewer — read only</option>
+          <option value="viewer">Observer — read only</option>
           <option value="writer" selected>Writer — read + write files</option>
           <option value="operator">Operator — + checkpoint / finalize</option>
           <option value="admin">Admin — full access</option>
@@ -7246,16 +9147,30 @@ class Handler(BaseHTTPRequestHandler):
                 if snap_file.exists():
                     try: snap = json.loads(snap_file.read_text())
                     except Exception: pass
+                # Expire stale snapshots whose usage window has already reset
+                window_expired = False
+                resets_iso = snap.get("window_resets_at")
+                if resets_iso:
+                    try:
+                        from datetime import datetime, timezone
+                        window_expired = datetime.fromisoformat(
+                            resets_iso.replace("Z", "+00:00")
+                        ) < datetime.now(timezone.utc)
+                    except Exception:
+                        pass
                 results.append({
                     "agent_id":    aid,
                     "name":        agent.get("name", aid),
                     "type":        agent.get("type", ""),
                     "role":        agent.get("role", ""),
-                    "status":      snap.get("status", "unknown"),
-                    "usage_percent": snap.get("usage_percent"),
-                    "window_resets_at": snap.get("window_resets_at"),
+                    "status":      "available" if window_expired else snap.get("status", "unknown"),
+                    "usage_percent": None if window_expired else snap.get("usage_percent"),
+                    "window_resets_at": None if window_expired else snap.get("window_resets_at"),
+                    "auth_expires_at": snap.get("auth_expires_at"),
+                    "auth_profile":    snap.get("auth_profile"),
                     "captured_at": snap.get("captured_at"),
                     "provider":    snap.get("provider", agent.get("type", "")),
+                    "snapshot_expired": window_expired,
                 })
             self.reply_json({"agents": results, "count": len(results)})
 
@@ -7405,16 +9320,24 @@ class Handler(BaseHTTPRequestHandler):
                         "capabilities": agent.get("capabilities", []) if agent else [],
                         "platform":   agent.get("platform", {}) if agent else {},
                     },
+                    "circuit":     _pep_node_circuit(node["id"]),
                 })
             self.reply_json({"nodes": result})
 
         elif parsed.path.startswith("/pep/v1/fs/"):
             # ── PEP/1 FS GET operations ──────────────────────────────────
             if not self.auth_check(redirect=False): return
+            corr_id = _pep_corr_id()
+            hop = int(self.headers.get("X-Hop-Count", "0") or "0")
+            if hop > PEP_HOP_LIMIT:
+                self.reply_json(_pep_err("HOP_LIMIT_EXCEEDED",
+                    f"Request hop count {hop} exceeds limit {PEP_HOP_LIMIT}", False, corr_id), 400)
+                return
+            _pep_t0 = time.time()
             # path format: /pep/v1/fs/{node_id}/{op}
             parts = parsed.path[len("/pep/v1/fs/"):].split("/", 1)
             if len(parts) < 2:
-                self.reply_json({"error": {"code": "BAD_REQUEST", "message": "Missing node_id or operation", "retryable": False}}, 400)
+                self.reply_json(_pep_err("BAD_REQUEST", "Missing node_id or operation", False, corr_id), 400)
                 return
             node_id, op = parts[0], parts[1]
             req_path = qs.get("path", [""])[0]
@@ -7433,11 +9356,11 @@ class Handler(BaseHTTPRequestHandler):
                 allowed = [m["path"] for m in (local_node or {}).get("mounts", []) if m.get("path")]
                 target = _pep_safe_resolve(allowed, req_path)
                 if target is None:
-                    self.reply_json({"error": {"code": "FORBIDDEN", "message": "Path not allowed by policy", "retryable": False}}, 403)
+                    self.reply_json(_pep_err("FORBIDDEN", "Path not allowed by policy", False, corr_id), 403)
                     return
                 if op == "list":
                     if not target.is_dir():
-                        self.reply_json({"error": {"code": "PATH_NOT_FOUND", "message": "Not a directory", "retryable": False}}, 404)
+                        self.reply_json(_pep_err("PATH_NOT_FOUND", "Not a directory", False, corr_id), 404)
                         return
                     entries = []
                     for child in sorted(target.iterdir(), key=lambda p: (p.is_file(), p.name.lower())):
@@ -7451,38 +9374,51 @@ class Handler(BaseHTTPRequestHandler):
                             })
                         except Exception:
                             pass
-                    self.reply_json({"node_id": node_id, "path": str(target), "entries": entries})
+                    self.reply_json({"ok": True, "node_id": node_id, "path": str(target),
+                                     "entries": entries, "correlation_id": corr_id})
                 elif op == "read":
                     if not target.is_file():
-                        self.reply_json({"error": {"code": "PATH_NOT_FOUND", "message": "File not found", "retryable": False}}, 404)
+                        self.reply_json(_pep_err("PATH_NOT_FOUND", "File not found", False, corr_id), 404)
                         return
                     import base64
                     data_b64 = base64.b64encode(target.read_bytes()).decode()
-                    self.reply_json({"node_id": node_id, "path": str(target),
-                                     "content_b64": data_b64, "size": target.stat().st_size})
+                    self.reply_json({"ok": True, "node_id": node_id, "path": str(target),
+                                     "content_b64": data_b64, "size": target.stat().st_size,
+                                     "correlation_id": corr_id})
                 elif op == "stat":
                     if not target.exists():
-                        self.reply_json({"error": {"code": "PATH_NOT_FOUND", "message": "Path not found", "retryable": False}}, 404)
+                        self.reply_json(_pep_err("PATH_NOT_FOUND", "Path not found", False, corr_id), 404)
                         return
                     st = target.stat()
-                    self.reply_json({"node_id": node_id, "path": str(target),
+                    self.reply_json({"ok": True, "node_id": node_id, "path": str(target),
                                      "type": "file" if target.is_file() else "dir",
-                                     "size": st.st_size, "mtime": st.st_mtime})
+                                     "size": st.st_size, "mtime": st.st_mtime,
+                                     "correlation_id": corr_id})
                 else:
-                    self.reply_json({"error": {"code": "BAD_REQUEST", "message": f"Unknown GET op: {op}", "retryable": False}}, 400)
+                    self.reply_json(_pep_err("BAD_REQUEST", f"Unknown GET op: {op}", False, corr_id), 400)
                 return
 
             # Remote node — check PEP agent
             agent = _pep_agent_by_node(node_id)
             if not agent:
-                self.reply_json({"error": {"code": "NODE_NO_AGENT", "message": f"No PEP agent registered for node {node_id}", "retryable": False}}, 404)
+                self.reply_json(_pep_err("NODE_NO_AGENT", f"No PEP agent registered for node {node_id}", False, corr_id), 404)
                 return
             if not _pep_node_online(node_id):
-                self.reply_json({"error": {"code": "NODE_OFFLINE", "message": f"Agent for {node_id} is offline (no recent heartbeat)", "retryable": True}}, 503)
+                self.reply_json(_pep_err("NODE_OFFLINE", f"Agent for {node_id} is offline (no recent heartbeat)", True, corr_id), 503)
                 return
             # Attach raw token for proxy call (not stored in agent dict normally)
             agent["_raw_token"] = agent.get("token_hint", "")
-            status, resp = _pep_proxy_fs(agent, "GET", f"/{op}", {"path": req_path} if req_path else {}, {})
+            if _cb_is_open(node_id):
+                _metrics_inc(op, node_id, "CIRCUIT_OPEN")
+                self.reply_json(_pep_err("CIRCUIT_OPEN",
+                    "Too many recent errors for this agent -- circuit open", True, corr_id), 503)
+                return
+            status, resp = _pep_proxy_fs(agent, "GET", f"/{op}", {"path": req_path} if req_path else {}, {}, hop)
+            _cb_record(node_id, status < 500)
+            _metrics_inc(op, node_id, "" if status < 400 else resp.get("code", "ERR"))
+            _metrics_observe(op, time.time() - _pep_t0)
+            if isinstance(resp, dict):
+                resp["correlation_id"] = corr_id
             self.reply_json(resp, status)
 
         elif parsed.path == "/api/policy/presets":
@@ -7547,6 +9483,77 @@ class Handler(BaseHTTPRequestHandler):
                 result.append(j)
             self.reply_json({"schedules": result, "count": len(result)})
 
+        elif parsed.path == "/api/schedule-runs":
+            if not self.auth_check(redirect=False): return
+            sid     = params.get("schedule_id", [""])[0]
+            limit   = int(params.get("limit", ["20"])[0])
+            run_dir = RUNTIME_DIR / "schedule_runs" / sid if sid else None
+            runs    = []
+            if run_dir and run_dir.is_dir():
+                files = sorted(run_dir.glob("*.json"), reverse=True)[:limit]
+                for f in files:
+                    try: runs.append(__import__("json").loads(f.read_text()))
+                    except Exception: pass
+            self.reply_json({"runs": runs, "schedule_id": sid})
+
+        # ── D1: project registry ─────────────────────────────────────────────
+        elif parsed.path == "/api/projects":
+            if not self.auth_check(redirect=False): return
+            projects = _config.get("projects", [])
+            result = []
+            for p in projects:
+                wp = AGENT_WORKSPACE_DIR / "projects" / str(p.get("id", ""))
+                result.append({**p, "workspace_path": str(wp), "workspace_exists": wp.exists()})
+            self.reply_json({
+                "projects":         result,
+                "active_project_id": _config.get("active_project_id"),
+            })
+
+        # ── G1: task registry (GET list + GET single) ──────────────────────────
+        elif parsed.path == "/api/task-registry" or parsed.path.startswith("/api/task-registry/"):
+            if not self.auth_check(redirect=False): return
+            # single task?
+            if parsed.path.startswith("/api/task-registry/"):
+                tid = parsed.path[len("/api/task-registry/"):].strip("/")
+                with _treg_lock:
+                    task = dict(_treg.get(tid, {}))
+                if not task:
+                    self.reply_json({"ok": False, "error": "not found"}, 404); return
+                self.reply_json({"ok": True, "task": task})
+                return
+            # list with optional filters
+            filt_status  = qs.get("status",     [""])[0].strip()
+            filt_project = qs.get("project_id", [""])[0].strip()
+            filt_agent   = qs.get("assigned_to",[""])[0].strip()
+            filt_tag     = qs.get("tag",         [""])[0].strip()
+            with _treg_lock:
+                tasks = list(_treg.values())
+            statuses = [s.strip() for s in filt_status.split(",") if s.strip()] if filt_status else []
+            if statuses:
+                tasks = [t for t in tasks if t.get("status") in statuses]
+            if filt_project:
+                tasks = [t for t in tasks if t.get("project_id") == filt_project]
+            if filt_agent:
+                tasks = [t for t in tasks if t.get("assigned_agent_id") == filt_agent]
+            if filt_tag:
+                tasks = [t for t in tasks if filt_tag in (t.get("tags") or [])]
+            _ord = {"urgent":0,"high":1,"normal":2,"low":3}
+            tasks.sort(key=lambda t: (_ord.get(t.get("priority","normal"),2), -t.get("created_at",0)))
+            self.reply_json({"ok": True, "tasks": tasks, "count": len(tasks)})
+
+        # ── P6b: projects dashboard ──────────────────────────────────────────
+        elif parsed.path == "/api/projects-dashboard":
+            if not self.auth_check(redirect=False): return
+            self.reply_json(_load_projects_dashboard())
+
+        # ── P6a: capabilities ─────────────────────────────────────────────────
+        elif parsed.path == "/api/capabilities":
+            if not self.auth_check(redirect=False): return
+            # If cache is empty (first request before thread finishes), kick off sync check
+            if not _capabilities_cache:
+                _run_cap_checks()
+            self.reply_json({"capabilities": list(_capabilities_cache.values())})
+
         # ── P6: tools ────────────────────────────────────────────────────────
         elif parsed.path == "/api/tools":
             if not self.auth_check(redirect=False): return
@@ -7554,6 +9561,16 @@ class Handler(BaseHTTPRequestHandler):
                 "tools": _config.get("tools", []),
                 "policy": _config.get("tool_selection_policy", DEFAULT_TOOL_POLICY),
             })
+
+        # ── C2: metrics ───────────────────────────────────────────────────────
+        elif parsed.path == "/metrics":
+            if not self.auth_check(redirect=False): return
+            body = _metrics_text().encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
         else:
             self.reply_html("<h1>Not found</h1>", 404)
@@ -8591,11 +10608,34 @@ class Handler(BaseHTTPRequestHandler):
                 "usage_percent":    d.get("usage_percent"),
                 "window_started_at":d.get("window_started_at"),
                 "window_resets_at": d.get("window_resets_at"),
+                "auth_expires_at":  d.get("auth_expires_at"),
+                "auth_profile":     d.get("auth_profile"),
                 "source_type":      d.get("source_type", "api"),
             }
             USAGE_DIR.mkdir(parents=True, exist_ok=True)
             (USAGE_DIR / f"{agent_id}.json").write_text(json.dumps(snapshot, indent=2))
             self.reply_json({"ok": True, "captured_at": snapshot["captured_at"]})
+
+        elif parsed.path == "/agent-usage/refresh":
+            if not self.auth_check(redirect=False): return
+            d = self.read_json_body()
+            agent_id = d.get("agent_id", "").strip()
+            if not agent_id:
+                self.reply_json({"error": "agent_id required"}, 400); return
+            # Find agent type
+            agent_type = ""
+            for a in _config.get("agents", []):
+                if a.get("id") == agent_id:
+                    agent_type = a.get("type", "")
+                    break
+            if "claude" not in agent_type.lower():
+                self.reply_json({"error": f"Live refresh not supported for type '{agent_type}'"}, 400)
+                return
+            result = _refresh_claude_usage(agent_id)
+            if result.get("ok"):
+                self.reply_json(result)
+            else:
+                self.reply_json(result, 502)
 
         elif parsed.path == "/agent-usage/parse":
             if not self.auth_check(redirect=False): return
@@ -8603,7 +10643,8 @@ class Handler(BaseHTTPRequestHandler):
             raw    = d.get("raw", "")
             provider = d.get("provider", "claude_code")
             result = {"status": "unknown", "usage_percent": None,
-                      "window_resets_at": None, "source_type": "cli_parse"}
+                      "window_resets_at": None, "auth_expires_at": None,
+                      "auth_profile": None, "source_type": "cli_parse"}
             if provider == "claude_code":
                 # match "X%" usage patterns
                 m = re.search(r'(\d+)\s*%', raw)
@@ -8618,16 +10659,45 @@ class Handler(BaseHTTPRequestHandler):
                 if m2:
                     result["window_resets_at"] = m2.group(1).replace(" ", "T") + ":00Z"
             elif provider == "openclaw":
-                m = re.search(r'(\d+)\s*%', raw)
-                if m:
-                    pct = int(m.group(1))
+                from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+                _now = _dt.now(_tz.utc)
+                # Prefer 'Day X% left' (daily window) for usage_percent
+                m_day = re.search(r'Day\s+(\d+(?:\.\d+)?)\s*%\s+left\s+⏱\s*(\d+)d\s+(\d+)h', raw)
+                if m_day:
+                    remaining = int(float(m_day.group(1)))
+                    pct = 100 - remaining
                     result["usage_percent"] = pct
-                    result["status"] = "exhausted" if pct >= 100 else \
-                                       "rate_limited" if pct >= 90 else \
-                                       "degraded"    if pct >= 75 else "available"
-                m2 = re.search(r'[Rr]eset[s]?\D{0,10}(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2})', raw)
-                if m2:
-                    result["window_resets_at"] = m2.group(1).replace(" ", "T") + ":00Z"
+                    result["status"] = "exhausted" if pct >= 100 else "rate_limited" if pct >= 90 else "degraded" if pct >= 75 else "available"
+                    result["window_resets_at"] = (_now + _td(days=int(m_day.group(2)), hours=int(m_day.group(3)))).isoformat()
+                else:
+                    # Fallback: first 'X% left' pattern
+                    m_left = re.search(r'(\d+(?:\.\d+)?)\s*%\s+left', raw)
+                    if m_left:
+                        remaining = int(float(m_left.group(1)))
+                        pct = 100 - remaining
+                        result["usage_percent"] = pct
+                        result["status"] = "exhausted" if pct >= 100 else "rate_limited" if pct >= 90 else "degraded" if pct >= 75 else "available"
+                    # Fallback: bare X% (consumed)
+                    elif re.search(r'\d+\s*%', raw):
+                        m_pct = re.search(r'(\d+)\s*%', raw)
+                        pct = int(m_pct.group(1))
+                        result["usage_percent"] = pct
+                        result["status"] = "exhausted" if pct >= 100 else "rate_limited" if pct >= 90 else "degraded" if pct >= 75 else "available"
+                    # Countdown from 5h window for resets
+                    m_5h = re.search(r'⏱\s*(\d+)h\s+(\d+)m', raw)
+                    if m_5h:
+                        result["window_resets_at"] = (_now + _td(hours=int(m_5h.group(1)), minutes=int(m_5h.group(2)))).isoformat()
+                # Auth profile: 'profile:name ok'
+                m_prof = re.search(r'([\w.-]+:[\w.-]+)\s+ok\b', raw)
+                if m_prof:
+                    result["auth_profile"] = m_prof.group(1)
+                # Auth expiry: 'expires in Xd' or 'expires in Xh'
+                m_exp = re.search(r'expires\s+in\s+(\d+)([dh])', raw, re.IGNORECASE)
+                if m_exp:
+                    val = int(m_exp.group(1))
+                    unit = m_exp.group(2).lower()
+                    delta = _td(days=val) if unit == "d" else _td(hours=val)
+                    result["auth_expires_at"] = (_now + delta).isoformat()
             self.reply_json(result)
 
         # ── agents CRUD ────────────────────────────────────────────────────
@@ -8724,6 +10794,18 @@ class Handler(BaseHTTPRequestHandler):
                     from datetime import datetime, timezone
                     last_seen_iso = datetime.fromtimestamp(last_seen_ts, tz=timezone.utc).isoformat()
                 self.reply_json({"ok": True, "connected": connected, "message": message, "last_seen": last_seen_iso})
+
+            elif action == "set_role":
+                agent_id = data.get("id", "")
+                new_role = data.get("role", "")
+                if new_role not in ("viewer", "writer", "operator", "admin"):
+                    self.reply_json({"error": "role must be viewer/writer/operator/admin"}, 400); return
+                agent = _agent_by_id(agent_id)
+                if not agent:
+                    self.reply_json({"error": "agent not found"}, 404); return
+                agent["role"] = new_role
+                save_config(_config)
+                self.reply_json({"ok": True, "role": new_role})
 
             elif action == "revoke":
                 agent_id = data.get("id", "")
@@ -8932,6 +11014,277 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.reply_json({"error": "unknown action"}, 400)
 
+        # ── D1: project registry mutations ───────────────────────────────────────
+        elif parsed.path == "/api/projects":
+            if not self.auth_check(redirect=False): return
+            data   = self.read_json_body()
+            action = str(data.get("action", "")).strip()
+
+            if action == "create":
+                name = str(data.get("name", "")).strip()
+                if not name:
+                    self.reply_json({"ok": False, "error": "name required"}); return
+                pid  = str(uuid.uuid4())
+                proj = {"id": pid, "name": name, "created_at": time.time()}
+                _config.setdefault("projects", []).append(proj)
+                save_config(_config)
+                wp = scaffold_project_dir(pid, name)
+                self.reply_json({"ok": True, "project": {
+                    **proj, "workspace_path": str(wp), "workspace_exists": True,
+                }})
+
+            elif action == "set_active":
+                pid = str(data.get("project_id", "") or "").strip()
+                if pid and not any(p["id"] == pid for p in _config.get("projects", [])):
+                    self.reply_json({"ok": False, "error": "project_id not found"}); return
+                _config["active_project_id"] = pid or None
+                save_config(_config)
+                self.reply_json({"ok": True, "active_project_id": _config["active_project_id"]})
+
+            elif action == "delete":
+                pid    = str(data.get("project_id", "")).strip()
+                before = len(_config.get("projects", []))
+                _config["projects"] = [p for p in _config.get("projects", []) if p["id"] != pid]
+                if len(_config["projects"]) == before:
+                    self.reply_json({"ok": False, "error": "project_id not found"}); return
+                if _config.get("active_project_id") == pid:
+                    _config["active_project_id"] = None
+                save_config(_config)
+                self.reply_json({"ok": True})
+
+            elif action == "resolve":
+                filename   = str(data.get("filename", "")).strip()
+                agent_id   = str(data.get("agent_id",   "") or "").strip() or None
+                project_id = str(data.get("project_id", "") or
+                                 _config.get("active_project_id") or "").strip() or None
+                if not filename:
+                    self.reply_json({"ok": False, "error": "filename required"}); return
+                resolution = resolve_project_memory(project_id, agent_id, filename)
+                self.reply_json({"ok": True, **resolution})
+
+            else:
+                self.reply_json({"ok": False, "error": f"Unknown action: {action}"})
+
+        # ── G1: task registry mutations ──────────────────────────────────────────
+        elif parsed.path == "/api/task-registry":
+            if not self.auth_check(redirect=False): return
+            data   = self.read_json_body()
+            action = str(data.get("action", "")).strip()
+            now    = time.time()
+            actor  = _config.get("username", "admin")
+
+            if action == "create":
+                title = str(data.get("title", "")).strip()
+                if not title:
+                    self.reply_json({"ok": False, "error": "title required"}); return
+                tid     = str(uuid.uuid4())
+                proj_id = data.get("project_id") or None
+                # resolve project name for display (denormalized for self-contained tasks)
+                proj_name = None
+                if proj_id:
+                    for _p in _config.get("projects", []):
+                        if _p.get("id") == proj_id:
+                            proj_name = _p.get("name")
+                            break
+                task = {
+                    "id":                tid,
+                    "title":             title,
+                    "description":       str(data.get("description", "") or "").strip(),
+                    "status":            "pending",
+                    "priority":          str(data.get("priority", "normal") or "normal"),
+                    "project_id":        proj_id,
+                    "project_name":      proj_name,
+                    "tags":              [str(t).strip() for t in (data.get("tags") or []) if str(t).strip()],
+                    "assigned_agent_id": data.get("assigned_agent_id") or None,
+                    "created_by":        actor,
+                    "created_at":        now,
+                    "updated_at":        now,
+                    "result":            None,
+                }
+                with _treg_lock:
+                    _treg[tid] = task
+                _treg_save(task)
+                _append_audit("task_registry.create", tid, actor,
+                              details={"title": title, "priority": task["priority"]})
+                self.reply_json({"ok": True, "task": task})
+
+            elif action == "update_status":
+                tid    = str(data.get("task_id", "")).strip()
+                status = str(data.get("status",  "")).strip()
+                valid  = {"pending","in_progress","complete","failed","cancelled"}
+                if status not in valid:
+                    self.reply_json({"ok": False, "error": f"status must be one of {sorted(valid)}"}); return
+                with _treg_lock:
+                    task = _treg.get(tid)
+                    if not task:
+                        self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    task["status"]     = status
+                    task["updated_at"] = now
+                _treg_save(task)
+                _append_audit("task_registry.update_status", tid, actor, details={"status": status})
+                self.reply_json({"ok": True, "task": task})
+
+            elif action == "assign":
+                tid      = str(data.get("task_id",  "")).strip()
+                agent_id = str(data.get("agent_id", "") or "").strip() or None
+                with _treg_lock:
+                    task = _treg.get(tid)
+                    if not task:
+                        self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    task["assigned_agent_id"] = agent_id
+                    task["updated_at"]        = now
+                    if agent_id and task["status"] == "pending":
+                        task["status"] = "in_progress"
+                _treg_save(task)
+                _append_audit("task_registry.assign", tid, actor,
+                              details={"assigned_agent_id": agent_id})
+                self.reply_json({"ok": True, "task": task})
+
+            elif action == "complete":
+                tid    = str(data.get("task_id", "")).strip()
+                result = str(data.get("result",  "") or "").strip() or None
+                with _treg_lock:
+                    task = _treg.get(tid)
+                    if not task:
+                        self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    task["status"]     = "complete"
+                    task["result"]     = result
+                    task["updated_at"] = now
+                _treg_save(task)
+                _append_audit("task_registry.complete", tid, actor)
+                self.reply_json({"ok": True, "task": task})
+
+            elif action == "fail":
+                tid    = str(data.get("task_id", "")).strip()
+                result = str(data.get("result",  "") or "").strip() or None
+                with _treg_lock:
+                    task = _treg.get(tid)
+                    if not task:
+                        self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    task["status"]     = "failed"
+                    task["result"]     = result
+                    task["updated_at"] = now
+                _treg_save(task)
+                _append_audit("task_registry.fail", tid, actor, details={"result": result})
+                self.reply_json({"ok": True, "task": task})
+
+            elif action == "cancel":
+                tid = str(data.get("task_id", "")).strip()
+                with _treg_lock:
+                    task = _treg.get(tid)
+                    if not task:
+                        self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    task["status"]     = "cancelled"
+                    task["updated_at"] = now
+                _treg_save(task)
+                _append_audit("task_registry.cancel", tid, actor)
+                self.reply_json({"ok": True, "task": task})
+
+            elif action == "add_result":
+                tid    = str(data.get("task_id", "")).strip()
+                result = str(data.get("result",  "") or "").strip()
+                with _treg_lock:
+                    task = _treg.get(tid)
+                    if not task:
+                        self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    task["result"]     = result
+                    task["updated_at"] = now
+                _treg_save(task)
+                self.reply_json({"ok": True, "task": task})
+
+            elif action == "claim":
+                tid = str(data.get("task_id", "")).strip()
+                with _treg_lock:
+                    task = _treg.get(tid)
+                    if not task:
+                        self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    if task["status"] != "pending":
+                        self.reply_json({"ok": False, "error": f"task is not pending (status: {task['status']})"}); return
+                    task["assigned_agent_id"] = actor
+                    task["status"]            = "in_progress"
+                    task["updated_at"]        = now
+                _treg_save(task)
+                _append_audit("task_registry.claim", tid, actor)
+                self.reply_json({"ok": True, "task": task})
+
+            elif action == "delete":
+                tid = str(data.get("task_id", "")).strip()
+                with _treg_lock:
+                    task = _treg.pop(tid, None)
+                if not task:
+                    self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                fp = TASKS_REGISTRY_DIR / f"{tid}.json"
+                try:
+                    fp.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                _append_audit("task_registry.delete", tid, actor)
+                self.reply_json({"ok": True})
+
+            else:
+                self.reply_json({"ok": False, "error": f"Unknown action: {action}"})
+
+        # ── POST: projects dashboard actions (rename project) ────────────────────
+        elif parsed.path == "/api/projects-dashboard":
+            if not self.auth_check(redirect=False): return
+            data    = self.read_json_body()
+            action  = data.get("action", "").strip()
+            if action == "rename_project":
+                old_name = data.get("old_name", "").strip()
+                new_name = data.get("new_name", "").strip()
+                if not old_name or not new_name:
+                    self.reply_json({"ok": False, "error": "old_name and new_name required"}); return
+                pf = _find_projects_file()
+                if not pf:
+                    self.reply_json({"ok": False, "error": "projects.md not found"}); return
+                try:
+                    raw = pf.read_text(encoding="utf-8")
+                    # Replace ### ProjectName heading (exact match)
+                    import re as _re
+                    pattern = r"^(### )" + _re.escape(old_name) + r"(\s*$)"
+                    new_raw = _re.sub(pattern, r"\g<1>" + new_name + r"\g<2>", raw, flags=_re.MULTILINE)
+                    if new_raw == raw:
+                        self.reply_json({"ok": False, "error": f"Project '{old_name}' not found in projects.md"}); return
+                    pf.write_text(new_raw, encoding="utf-8")
+                    self.reply_json({"ok": True})
+                except Exception as exc:
+                    self.reply_json({"ok": False, "error": str(exc)})
+            else:
+                self.reply_json({"ok": False, "error": f"Unknown action: {action}"})
+
+        # ── POST: checkpoint lifecycle ───────────────────────────────────────────
+        elif parsed.path == "/api/checkpoint":
+            if not self.auth_check(redirect=False): return
+            data    = self.read_json_body()
+            cp_path = data.get('path', '').strip()
+            action  = data.get('action', '').strip()
+            try:
+                cp = Path(cp_path).resolve()
+                allowed = any(
+                    str(cp).startswith(str(root.resolve()))
+                    for root in SERVE_DIRS.values()
+                )
+                if not allowed:
+                    self.reply_json({'ok': False, 'error': 'Path not in a permitted location'})
+                    return
+                if not cp.exists():
+                    self.reply_json({'ok': False, 'error': 'Checkpoint file not found'})
+                    return
+                lines = cp.read_text(encoding='utf-8').splitlines(keepends=True)
+                if action in ('pause', 'complete'):
+                    new_status = 'paused' if action == 'pause' else 'complete'
+                    lines = [f'status: {new_status}\n' if l.startswith('status:') else l for l in lines]
+                elif action == 'set_next_action':
+                    new_na = data.get('next_action', '').strip()
+                    lines = [f'next_action: {new_na}\n' if l.startswith('next_action:') else l for l in lines]
+                else:
+                    self.reply_json({'ok': False, 'error': f'Unknown action: {action}'})
+                    return
+                cp.write_text(''.join(lines), encoding='utf-8')
+                self.reply_json({'ok': True})
+            except Exception as exc:
+                self.reply_json({'ok': False, 'error': str(exc)})
+
         # ── POST: tools ─────────────────────────────────────────────────────────
         elif parsed.path == "/api/tools":
             if not self.auth_check(redirect=False): return
@@ -9008,11 +11361,18 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/pep/v1/agent/register":
             # Agent self-registration using one-time token
-            data = self.read_json_body()
+            corr_id  = _pep_corr_id()
+            data     = self.read_json_body()
+            ikey     = self.headers.get("X-Idempotency-Key", "").strip()
+            if ikey:
+                cached = _pep_idem_check(ikey)
+                if cached is not None:
+                    cached["correlation_id"] = corr_id
+                    self.reply_json(cached); return
             raw_token = str(data.get("registration_token", "")).strip()
             node_id   = str(data.get("node_id", "")).strip()
             if not raw_token or not node_id:
-                self.reply_json({"error": {"code": "BAD_REQUEST", "message": "registration_token and node_id required", "retryable": False}}, 400)
+                self.reply_json(_pep_err("BAD_REQUEST", "registration_token and node_id required", False, corr_id), 400)
                 return
             _pep_cleanup_expired_tokens()
             token_rec = next(
@@ -9022,7 +11382,7 @@ class Handler(BaseHTTPRequestHandler):
                 None
             )
             if not token_rec:
-                self.reply_json({"error": {"code": "TOKEN_INVALID", "message": "Registration token is invalid, expired, or already used", "retryable": False}}, 401)
+                self.reply_json(_pep_err("TOKEN_INVALID", "Registration token is invalid, expired, or already used", False, corr_id), 401)
                 return
             # Mark token used
             token_rec["used"] = True
@@ -9056,23 +11416,30 @@ class Handler(BaseHTTPRequestHandler):
             })
             save_config(_config)
             _append_audit("pep.register", node_id, "pep-agent", "pep_agent",
-                          {"tailscale_ip": tailscale_ip, "platform": platform})
-            self.reply_json({
-                "ok":                True,
-                "agent_token":       agent_token,
-                "node_id":           node_id,
-                "hub_version":       "0.12.91",
+                          {"tailscale_ip": tailscale_ip, "platform": platform,
+                           "correlation_id": corr_id},
+                          scope_source="pep_agent", chain_ref=corr_id)
+            result = {
+                "ok":                   True,
+                "agent_token":          agent_token,
+                "node_id":              node_id,
+                "hub_version":          "0.13.0-alpha.3",
                 "heartbeat_interval_s": 60,
-                "policy": _config["pep_agents"][-1]["policy"],
-            })
+                "policy":               _config["pep_agents"][-1]["policy"],
+                "correlation_id":       corr_id,
+            }
+            if ikey:
+                _pep_idem_store(ikey, result)
+            self.reply_json(result)
 
         elif parsed.path == "/pep/v1/agent/heartbeat":
             # Agent heartbeat — must carry valid agent token in Bearer header
-            auth_hdr = self.headers.get("Authorization", "")
+            corr_id   = _pep_corr_id()
+            auth_hdr  = self.headers.get("Authorization", "")
             raw_token = auth_hdr[7:].strip() if auth_hdr.startswith("Bearer ") else ""
-            agent = _pep_agent_by_token(raw_token) if raw_token else None
+            agent     = _pep_agent_by_token(raw_token) if raw_token else None
             if not agent:
-                self.reply_json({"error": {"code": "AUTH_REQUIRED", "message": "Invalid or missing agent token", "retryable": False}}, 401)
+                self.reply_json(_pep_err("AUTH_REQUIRED", "Invalid or missing agent token", False, corr_id), 401)
                 return
             agent["last_seen"] = time.time()
             # Update Tailscale IP if agent reports a change
@@ -9080,18 +11447,33 @@ class Handler(BaseHTTPRequestHandler):
             if new_ip:
                 agent["tailscale_ip"] = new_ip
             save_config(_config)
-            self.reply_json({"ok": True, "policy_version": "1"})
+            self.reply_json({"ok": True, "policy_version": "1", "correlation_id": corr_id})
 
         elif parsed.path.startswith("/pep/v1/fs/"):
             # ── PEP/1 FS POST operations ──────────────────────────────────
             if not self.auth_check(redirect=False): return
-            parts = parsed.path[len("/pep/v1/fs/"):].split("/", 1)
+            corr_id = _pep_corr_id()
+            hop     = int(self.headers.get("X-Hop-Count", "0") or "0")
+            if hop > PEP_HOP_LIMIT:
+                self.reply_json(_pep_err("HOP_LIMIT_EXCEEDED",
+                    f"Request hop count {hop} exceeds limit {PEP_HOP_LIMIT}", False, corr_id), 400)
+                return
+            _pep_t0 = time.time()
+            ikey    = self.headers.get("X-Idempotency-Key", "").strip()
+            parts   = parsed.path[len("/pep/v1/fs/"):].split("/", 1)
             if len(parts) < 2:
-                self.reply_json({"error": {"code": "BAD_REQUEST", "message": "Missing node_id or operation", "retryable": False}}, 400)
+                self.reply_json(_pep_err("BAD_REQUEST", "Missing node_id or operation", False, corr_id), 400)
                 return
             node_id, op = parts[0], parts[1]
-            data = self.read_json_body()
+            data     = self.read_json_body()
             req_path = str(data.get("path", "")).strip()
+
+            # Check idempotency for mutating ops
+            if ikey and op in ("write", "mkdir", "delete"):
+                cached = _pep_idem_check(ikey)
+                if cached is not None:
+                    cached["correlation_id"] = corr_id
+                    self.reply_json(cached); return
 
             # Resolve local node
             is_local = False
@@ -9103,73 +11485,103 @@ class Handler(BaseHTTPRequestHandler):
                     break
 
             actor = "session"
+            tok = ""
             try:
-                tok = self.get_session_token()
+                tok = self.get_session_token() or ""
                 sess = get_session(tok)
                 actor = sess.get("username", "session") if sess else "session"
             except Exception:
                 pass
+            _sess_hash = hashlib.sha256(tok.encode()).hexdigest()[:12] if tok else ""
 
             if is_local:
                 allowed = [m["path"] for m in (local_node or {}).get("mounts", []) if m.get("path")]
                 target = _pep_safe_resolve(allowed, req_path)
                 if target is None:
-                    self.reply_json({"error": {"code": "FORBIDDEN", "message": "Path not allowed by policy", "retryable": False}}, 403)
+                    self.reply_json(_pep_err("FORBIDDEN", "Path not allowed by policy", False, corr_id), 403)
                     return
                 if op == "write":
                     import base64
                     content_b64 = data.get("content_b64", "")
                     try:
-                        content = base64.b64decode(content_b64)
+                        file_bytes = base64.b64decode(content_b64)
                     except Exception:
-                        self.reply_json({"error": {"code": "BAD_REQUEST", "message": "Invalid base64 content", "retryable": False}}, 400)
+                        self.reply_json(_pep_err("BAD_REQUEST", "Invalid base64 content", False, corr_id), 400)
                         return
                     if not is_writable(target.parent if not target.exists() else target):
-                        self.reply_json({"error": {"code": "FORBIDDEN", "message": "Read-only path", "retryable": False}}, 403)
+                        self.reply_json(_pep_err("FORBIDDEN", "Read-only path", False, corr_id), 403)
                         return
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(content)
+                    target.write_bytes(file_bytes)
                     _append_audit("pep.fs.write", str(target), actor, "session",
-                                  {"node_id": node_id, "size": len(content)})
-                    self.reply_json({"ok": True, "path": str(target), "size": len(content)})
+                                  {"node_id": node_id, "size": len(file_bytes),
+                                   "correlation_id": corr_id},
+                                  scope_source="pep_session", chain_ref=corr_id,
+                                  session_id=_sess_hash)
+                    result = {"ok": True, "path": str(target), "size": len(file_bytes),
+                              "correlation_id": corr_id}
+                    if ikey: _pep_idem_store(ikey, result)
+                    self.reply_json(result)
                 elif op == "mkdir":
                     if not is_writable(target.parent if not target.exists() else target):
-                        self.reply_json({"error": {"code": "FORBIDDEN", "message": "Read-only path", "retryable": False}}, 403)
+                        self.reply_json(_pep_err("FORBIDDEN", "Read-only path", False, corr_id), 403)
                         return
                     target.mkdir(parents=True, exist_ok=True)
-                    _append_audit("pep.fs.mkdir", str(target), actor, "session", {"node_id": node_id})
-                    self.reply_json({"ok": True, "path": str(target)})
+                    _append_audit("pep.fs.mkdir", str(target), actor, "session",
+                                  {"node_id": node_id, "correlation_id": corr_id},
+                                  scope_source="pep_session", chain_ref=corr_id,
+                                  session_id=_sess_hash)
+                    result = {"ok": True, "path": str(target), "correlation_id": corr_id}
+                    if ikey: _pep_idem_store(ikey, result)
+                    self.reply_json(result)
                 elif op == "delete":
                     if not target.exists():
-                        self.reply_json({"error": {"code": "PATH_NOT_FOUND", "message": "Path not found", "retryable": False}}, 404)
+                        self.reply_json(_pep_err("PATH_NOT_FOUND", "Path not found", False, corr_id), 404)
                         return
                     if not is_writable(target):
-                        self.reply_json({"error": {"code": "FORBIDDEN", "message": "Read-only path", "retryable": False}}, 403)
+                        self.reply_json(_pep_err("FORBIDDEN", "Read-only path", False, corr_id), 403)
                         return
-                    _append_audit("pep.fs.delete", str(target), actor, "session", {"node_id": node_id})
+                    _append_audit("pep.fs.delete", str(target), actor, "session",
+                                  {"node_id": node_id, "correlation_id": corr_id},
+                                  scope_source="pep_session", chain_ref=corr_id,
+                                  session_id=_sess_hash)
                     if target.is_dir():
                         shutil.rmtree(str(target))
                     else:
                         target.unlink()
-                    self.reply_json({"ok": True, "path": str(target)})
+                    result = {"ok": True, "path": str(target), "correlation_id": corr_id}
+                    if ikey: _pep_idem_store(ikey, result)
+                    self.reply_json(result)
                 else:
-                    self.reply_json({"error": {"code": "BAD_REQUEST", "message": f"Unknown POST op: {op}", "retryable": False}}, 400)
+                    self.reply_json(_pep_err("BAD_REQUEST", f"Unknown POST op: {op}", False, corr_id), 400)
                 return
 
             # Remote node
             agent = _pep_agent_by_node(node_id)
             if not agent:
-                self.reply_json({"error": {"code": "NODE_NO_AGENT", "message": f"No PEP agent for node {node_id}", "retryable": False}}, 404)
+                self.reply_json(_pep_err("NODE_NO_AGENT", f"No PEP agent for node {node_id}", False, corr_id), 404)
                 return
             if not _pep_node_online(node_id):
-                self.reply_json({"error": {"code": "NODE_OFFLINE", "message": f"Agent for {node_id} is offline", "retryable": True}}, 503)
+                self.reply_json(_pep_err("NODE_OFFLINE", f"Agent for {node_id} is offline", True, corr_id), 503)
+                return
+            if _cb_is_open(node_id):
+                _metrics_inc(op, node_id, "CIRCUIT_OPEN")
+                self.reply_json(_pep_err("CIRCUIT_OPEN",
+                    "Too many recent errors for this agent -- circuit open", True, corr_id), 503)
                 return
             agent["_raw_token"] = agent.get("token_hint", "")
-            status, resp = _pep_proxy_fs(agent, "POST", f"/{op}", {}, data)
+            status, resp = _pep_proxy_fs(agent, "POST", f"/{op}", {}, data, hop)
+            _cb_record(node_id, status < 500)
+            _metrics_inc(op, node_id, "" if status < 400 else resp.get("code", "ERR"))
+            _metrics_observe(op, time.time() - _pep_t0)
             # Audit mutating proxy ops
             if status < 300 and op in ("write", "mkdir", "delete"):
                 _append_audit(f"pep.fs.{op}", req_path, actor, "session",
-                              {"node_id": node_id, "proxied": True})
+                              {"node_id": node_id, "proxied": True, "correlation_id": corr_id},
+                              scope_source="pep_session", chain_ref=corr_id,
+                              session_id=_sess_hash)
+            if isinstance(resp, dict):
+                resp["correlation_id"] = corr_id
             self.reply_json(resp, status)
 
         else:
@@ -9182,9 +11594,17 @@ if __name__ == "__main__":
     _load_serve_dirs(_config)
     ensure_runtime_dirs()
     ensure_memory_dirs()
+    _sched_thread = threading.Thread(target=_scheduler_loop, name="porter-scheduler", daemon=True)
+    _sched_thread.start()
+    _cap_thread = threading.Thread(target=_run_cap_checks, name="porter-cap-check", daemon=True)
+    _cap_thread.start()
     server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"\n  Porter v0.12.91 ready (localhost only)")
-    print(f"  SSH tunnel:  ssh -L {PORT}:localhost:{PORT} lobster@{HOST}")
+    host_hint = _public_ip_hint()
+    tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
+                   if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
+    print(f"\n  Porter v0.14.14 ready (localhost only)")
+    print(f"  Data dir:    {_DATA_DIR}")
+    print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
     try:
         server.serve_forever()
