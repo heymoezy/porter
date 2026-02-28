@@ -2453,18 +2453,32 @@ body.density-compact .file-name { padding: 6px 0; }
 .proj-row-menu { display:none; }
 /* projects-module uses standard module-panel styling */
 /* Expanded task area */
-.proj-tasks { padding-left:12px; }
-.ptask-list-hdr { display:grid; grid-template-columns:10px 1fr 90px 56px; align-items:center; gap:10px; padding:4px 12px 6px; border-bottom:1px solid var(--border); margin-bottom:2px; }
-.ptask-row { display:grid; grid-template-columns:10px 1fr 90px 56px; align-items:center; gap:10px; padding:0 12px; border-bottom:1px solid rgba(255,255,255,.04); cursor:default; transition:background .1s; }
-.ptask-row:hover { background:var(--raised); }
-.ptask-row-title { font-size:13px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:9px 0; }
-.ptask-row-status { font-size:11px; }
-.ptask-row-age { font-size:11px; color:var(--text3); text-align:right; }
+.proj-tasks { padding:0; }
+.ptask-row { display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid rgba(255,255,255,.04); cursor:default; transition:background .1s; }
+.ptask-row:hover { background:var(--hover); }
+.ptask-row-title { font-size:13px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; }
+.ptask-row-age { font-size:11px; color:var(--text3); white-space:nowrap; flex-shrink:0; }
 .ptask-row-acts { display:flex; gap:2px; justify-content:flex-end; opacity:0; transition:opacity .1s; }
 .ptask-row:hover .ptask-row-acts { opacity:1; }
+/* Status pills — replace colored dots + colored text */
+.st-pill { font-size:10px; font-weight:600; padding:2px 8px; border-radius:10px; white-space:nowrap; flex-shrink:0; }
+.st-pill-progress  { background:rgba(59,130,246,.12); color:#3b82f6; }
+.st-pill-pending   { background:rgba(148,163,184,.12); color:#94a3b8; }
+.st-pill-complete  { background:rgba(34,197,94,.1);  color:#22c55e; }
+.st-pill-failed    { background:rgba(239,68,68,.1);  color:#ef4444; }
+.st-pill-cancelled { background:rgba(107,114,128,.1); color:#6b7280; }
+/* Progress bar */
+.proj-progress { display:flex; align-items:center; gap:10px; margin-top:8px; }
+.proj-progress-bar { flex:1; height:4px; background:var(--border); border-radius:2px; overflow:hidden; }
+.proj-progress-fill { height:100%; border-radius:2px; background:var(--accent); transition:width .3s ease; }
+.proj-progress-label { font-size:11px; color:var(--text3); white-space:nowrap; flex-shrink:0; }
+/* Stat chips in header */
+.proj-stats { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
+.proj-stat { font-size:11px; color:var(--text3); display:flex; align-items:center; gap:4px; }
+.proj-stat-num { font-weight:600; color:var(--text2); }
 .proj-col-lbl { font-size:10px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; color:var(--text3); }
 /* Done section per-project */
-.proj-done-hdr { display:flex; align-items:center; gap:8px; padding:8px 0 4px; cursor:pointer; user-select:none; }
+.proj-done-hdr { display:flex; align-items:center; gap:8px; padding:8px 12px 4px; cursor:pointer; user-select:none; }
 .proj-done-hdr:hover .proj-done-label { color:var(--text2); }
 .proj-done-label { font-size:10px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; color:var(--text3); flex:1; }
 .proj-done-count { font-size:11px; color:var(--text3); }
@@ -2476,12 +2490,6 @@ body.density-compact .file-name { padding: 6px 0; }
 .task-badge.badge-stalled   { background:#fee2e2; color:#b91c1c; }
 .task-badge.badge-complete  { background:#e0f2fe; color:#0369a1; }
 .task-badge.badge-cancelled { background:var(--bg3); color:var(--text2); }
-/* Priority dots */
-.prio-dot    { width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:3px; }
-.prio-urgent { background:#ef4444; }
-.prio-high   { background:#f97316; }
-.prio-normal { background:#6366f1; }
-.prio-low    { background:#94a3b8; }
 /* Policy preset cards */
 .policy-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; }
 @media(max-width:600px) { .policy-grid { grid-template-columns:1fr; } }
@@ -4875,35 +4883,39 @@ function _renderProjectList() {
     const live    = [...active, ...pending];
     const cnt     = tasks.length;
     const isAct   = pid === _projActiveId;
+    const pctDone = cnt ? Math.round((done.length / cnt) * 100) : 0;
 
     const activePill = isAct
       ? '<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:rgba(34,197,94,.12);color:#22c55e;margin-left:8px">active</span>'
       : '';
-    const cntLabel = cnt
-      ? String(cnt) + '\u00a0task' + (cnt !== 1 ? 's' : '')
-      : '\u2014';
+
+    // Stats line
+    const stats = [];
+    if (active.length) stats.push(`<span class="proj-stat"><span class="proj-stat-num">${active.length}</span> active</span>`);
+    if (pending.length) stats.push(`<span class="proj-stat"><span class="proj-stat-num">${pending.length}</span> pending</span>`);
+    if (done.length) stats.push(`<span class="proj-stat"><span class="proj-stat-num">${done.length}</span> done</span>`);
+    const statsHtml = stats.length ? '<div class="proj-stats">' + stats.join('') + '</div>' : '';
+
+    // Progress bar
+    const progressHtml = cnt
+      ? `<div class="proj-progress"><div class="proj-progress-bar"><div class="proj-progress-fill" style="width:${pctDone}%"></div></div><span class="proj-progress-label">${pctDone}%</span></div>`
+      : '';
 
     let bodyHtml = '';
     if (open) {
       let rows = '';
       if (!tasks.length) {
-        rows = '<div style="padding:10px 0;font-size:12px;color:var(--text3)">No tasks yet.'
+        rows = '<div style="padding:10px 12px;font-size:12px;color:var(--text3)">No tasks yet.'
           + ' <button class="treg-act" style="font-size:11px"'
           + ` onclick="openCreateTaskInProject('${pid}')">+ Create task</button></div>`;
       } else {
-        rows = '<div class="ptask-list-hdr">'
-          + '<span></span>'
-          + '<span class="proj-col-lbl">Task</span>'
-          + '<span class="proj-col-lbl">Status</span>'
-          + '<span class="proj-col-lbl" style="text-align:right">Age</span>'
-          + '</div>';
         rows += live.map(t => _ptaskRow(t)).join('');
 
         if (done.length) {
           const doneOpen = _projDoneOpen.has(pid);
           rows += `<div class="proj-done-hdr" onclick="toggleProjDone('${pid}')">`
             + `<span class="proj-done-chevron${doneOpen ? ' open' : ''}">&#9658;</span>`
-            + '<span class="proj-done-label">Done</span>'
+            + '<span class="proj-done-label">Completed</span>'
             + `<span class="proj-done-count">${done.length}</span>`
             + '</div>'
             + `<div id="proj-done-${pid}" style="display:${doneOpen ? 'block' : 'none'}">`
@@ -4918,26 +4930,25 @@ function _renderProjectList() {
       <div class="proj-card-head" onclick="toggleProject('${pid}')">
         <span class="proj-card-chevron${open ? ' open' : ''}">&#9658;</span>
         <span class="proj-card-name">${escHtml(p.name || '')}${activePill}</span>
-        <span class="proj-card-count">${cntLabel}</span>
+        <span class="proj-card-count">${cnt ? cnt + ' task' + (cnt !== 1 ? 's' : '') : ''}</span>
       </div>
+      ${statsHtml}${progressHtml}
       ${bodyHtml ? '<div class="proj-card-tasks">' + bodyHtml + '</div>' : ''}
     </div>`;
   }).join('');
 
   // Inbox: unassigned tasks
   if (unassigned.length) {
-    html += '<div style="display:flex;align-items:center;gap:8px;margin:16px 0 4px">'
-      + '<span style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px">Inbox</span>'
-      + '<span style="flex:1;height:1px;background:var(--border)"></span>'
-      + `<span style="font-size:11px;color:var(--text3)">${unassigned.length}</span>`
-      + '</div>';
-    html += '<div class="ptask-list-hdr">'
-      + '<span></span>'
-      + '<span class="proj-col-lbl">Task</span>'
-      + '<span class="proj-col-lbl">Status</span>'
-      + '<span class="proj-col-lbl" style="text-align:right">Age</span>'
-      + '</div>';
-    html += unassigned.map(t => _ptaskRow(t)).join('');
+    html += `<div class="proj-card">
+      <div class="proj-card-head" onclick="document.getElementById('proj-inbox-body').style.display=document.getElementById('proj-inbox-body').style.display==='none'?'block':'none'">
+        <span class="proj-card-chevron open">&#9658;</span>
+        <span class="proj-card-name">Inbox</span>
+        <span class="proj-card-count">${unassigned.length} unassigned</span>
+      </div>
+      <div id="proj-inbox-body" class="proj-card-tasks"><div class="proj-tasks">
+        ${unassigned.map(t => _ptaskRow(t)).join('')}
+      </div></div>
+    </div>`;
   }
 
   el.innerHTML = html;
@@ -4987,16 +4998,13 @@ function openProjMenu(evt, projId) {
 }
 
 function _ptaskRow(t) {
-  const prioClass = { urgent:'prio-urgent', high:'prio-high', normal:'prio-normal', low:'prio-low' };
-  const prio = t.priority || 'normal';
-  const st   = t.status   || 'pending';
+  const st = t.status || 'pending';
   const ageLbl = _tsAgo(t.created_at);
-  const stColor = { in_progress:'#3b82f6', pending:'#6366f1', complete:'#22c55e', failed:'#ef4444', cancelled:'#6b7280' }[st] || '#6b7280';
-  const stLabel = st.replace('_', ' ');
+  const pillClass = { in_progress:'st-pill-progress', pending:'st-pill-pending', complete:'st-pill-complete', failed:'st-pill-failed', cancelled:'st-pill-cancelled' }[st] || 'st-pill-pending';
+  const stLabel = st === 'in_progress' ? 'active' : st;
   return '<div class="ptask-row">'
-    + `<span class="prio-dot ${prioClass[prio] || 'prio-normal'}" title="${escHtml(prio)}"></span>`
     + `<span class="ptask-row-title">${escHtml(t.title || '')}</span>`
-    + `<span class="ptask-row-status" style="color:${stColor}">${escHtml(stLabel)}</span>`
+    + `<span class="st-pill ${pillClass}">${escHtml(stLabel)}</span>`
     + `<span class="ptask-row-age">${ageLbl}</span>`
     + '</div>';
 }
