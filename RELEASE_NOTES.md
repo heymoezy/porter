@@ -1,5 +1,140 @@
 # Porter Release Notes
 
+## v0.15.2 (2026-02-28)
+
+**Gap: Skills CRUD**
+
+- **Installed/All filter toggle:** Default view shows only installed skills; toggle reveals all 50 available skills.
+- **Remove skill:** Button with confirm dialog removes skill from OpenClaw sandbox or manual skills directory.
+- **Create manual skill:** Form to create a new SKILL.md with name, description, emoji, and requirements.
+- **Backend:** `POST /api/openclaw/skills` with actions: `remove`, `create`.
+- **Install status detection:** Fixed — now reads OpenClaw `resolvedSkills` instead of guessing from binary availability (7 installed, not 17). GET handler crash fixed (duplicate POST handler in `do_GET`). Create form redesigned with elegant layout + cancel button.
+
+**Gap: v0.12.85 changelog dedup**
+
+- Renumbered 6 duplicate v0.12.85 changelog entries to v0.12.85–v0.12.90. Each entry now has a unique version.
+
+**Gap: Session memory flush pipeline**
+
+- **Extensions tab:** New session logs viewer shows OpenClaw sessions (11 detected).
+- **Flush to memory:** Button extracts learnings from session logs and appends to `session_flushes.md`.
+
+**Gap: Local model detection in Orchestration**
+
+- **CLI detection:** Detects Codex CLI, Claude CLI, Gemini CLI, and Ollama models at startup.
+- **Orchestration Models section:** Detected models appear as "detected" cards with dashed borders.
+- **Expanded PATH search:** Covers `~/.local/bin`, `~/.npm-global/bin`, and systemd service paths for reliable detection.
+
+**Gap: Live capability scan on refresh**
+
+- **All Refresh buttons** now re-run capability detection (30s TTL cache).
+- New CLIs and models detected within 30 seconds of installation.
+
+**Gap: checkpoint.md deprecation**
+
+- **Startup migration:** Porter marks `checkpoint.md` as DEPRECATED on first boot.
+- **Task registry** is now the sole source of truth for task state.
+
+**Gap: Direct model calling (Quick Prompt)**
+
+- **Command Center:** Quick Prompt UI — select an Ollama model or OpenClaw Gateway, type a prompt, get a response inline.
+- **Backend:** `POST /api/prompt` sends prompt to selected model and streams response.
+
+---
+
+## v0.15.1 (2026-02-28)
+
+**Sprint 11: Real Agent Connectivity Test**
+
+- **Actual HTTP roundtrip** replaces heartbeat inference for agent connectivity testing.
+- **Connectivity modal redesigned:** Shows latency (ms), agent version, endpoint URL, heartbeat status in a clean grid layout.
+- **OpenClaw agents:** Tested via HTTP ping to gateway (127.0.0.1:18789). Even 401/403 counts as "alive."
+- **CLI agents (Claude, Gemini):** Tested via binary version check (`--version`).
+- **Ollama:** Tested via `/api/tags` endpoint.
+- **Retest button** in modal for quick re-ping without closing.
+- **Button renamed** from "Connectivity check" to "Test connection."
+
+---
+
+## v0.15.0 (2026-02-28)
+
+**Sprint 10: OpenClaw Bridge — Skill & Automation Visibility**
+
+- **New Workflows tab:** Browse 50+ OpenClaw skills in a searchable card grid with emoji, description, and documentation links.
+- **Automations section:** Shows OpenClaw cron jobs and recent run history (currently empty — configurable via OpenClaw).
+- **Backend:** New `/api/openclaw/skills` and `/api/openclaw/cron` endpoints read directly from OpenClaw's sandbox directories.
+- **Nav reorder:** Command Center → Orchestration → Extensions → Projects → Workflows → Locations → Files.
+- **Skills moved out of Extensions:** Skills belong in Workflows, not Extensions. Extensions now shows Integrations + Tools only.
+- **Fix:** Early Sprints task (sort_order=0) correctly appears at bottom of completed list — JS nullish coalescing fix.
+- **Project start date corrected to Feb 18, 2026.**
+
+---
+
+## v0.14.22 (2026-02-28)
+
+**Bug Fix + Extensions Cleanup**
+
+- **Fix:** Early Sprints task (sort_order=0) now correctly appears at bottom of completed list. Root cause: JavaScript `||` operator treats `0` as falsy — changed to `??` (nullish coalescing).
+- **Extensions tab:** Removed Skills section. Skills will be part of a future Workflows/Automations feature — not an extension.
+- **Extensions tab:** Now shows two sections: Integrations + Tools.
+
+---
+
+## v0.14.21 (2026-02-28)
+
+**Sprint 9: Hardcoding Elimination Pass**
+
+- **Final hardcoding audit:** Systematic review of all paths, hosts, ports, and machine-specific assumptions in porter.py.
+- **Fixed:** `is_writable()` was the last hardcoded reference — replaced `/home/lobster` with `os.getuid()` for portable ownership checks.
+- **Audit confirmed:** 12+ path/host/port configurations already properly env-driven from Sprint P0. All critical paths derive from `PORTER_DATA_DIR`. HOST auto-detected. PORT respects env var. `DEFAULT_MOUNTS` empty on first run.
+- **Startup self-check:** `_validate_no_hardcoding()` validates no hardcoded user paths at runtime.
+- Zero functional `/home/lobster` references remain in porter.py.
+
+---
+
+## v0.14.20 (2026-02-28)
+
+**Sprint 8: Integration Visibility**
+
+- **Extensions tab redesigned:** Two-section dashboard — Integrations (OpenClaw services) and Tools (local binaries).
+- **OpenClaw integration cards:** Gateway status, auth profile cards with expiry countdown, model provider display, webhook/hook status, session count.
+- **Backend:** New `/api/integrations` endpoint reads OpenClaw skills, sessions, auth profiles, hooks, and model providers directly from disk.
+- **Project metrics aggregation:** Token usage and time spent now summed from task registry (not project config). Always-visible summary row: Started date, total Tokens, total Time, task completion ratio.
+- **Project start date fixed:** Reflects actual project start (Feb 23, 2026), not config entry creation date.
+
+---
+
+## v0.14.19 (2026-02-28)
+
+**Sprint 7 Hotfix: Projects Tab Quality + Metrics**
+
+- **Completed list reversed:** Most recently completed sprint shows first.
+- **Early Sprints task:** Pre-sprint foundation work (v0.1–v0.12.69, 81 releases) tracked with estimated metrics.
+- **Task ordering:** Sprint P0 = sort_order 1, Sprint 1 = 2, etc. Interim tasks slot between sprints.
+- **"queued" label:** "pending" status renamed to "queued" in UI pills and filter tabs.
+- **Token/time metrics:** Historical estimates populated on all completed tasks based on release notes density.
+- **Rebuild button:** Pending tasks show a Rebuild button to reset task metadata.
+- **Reload button:** Re-reads config and task registry from disk (new `/api/reload` endpoint).
+- **"Updated X ago" indicator:** 5-second tick timer shows refresh freshness in Projects header.
+- **Button sizing overhaul:** `.btn-sm`, `.btn-xs`, `.proj-status-toggle` sizes increased. 38 inline style overrides removed.
+- **Active pill fix:** No longer clipped by `overflow:hidden` on project name.
+- **Timezone setting:** Searchable datalist with UTC offset labels, sorted by offset.
+- **Status pill hidden:** Completed tasks no longer show redundant "complete" pill in Completed accordion.
+
+---
+
+## v0.14.18 (2026-02-28)
+
+**Projects: Memory File Chain + Type System + Config Editor**
+
+- **Memory file chain viewer:** Each project card now shows its 6 canonical files (PROJECT.md, MEMORY.md, SPRINT_PLAN.md, tasks/checkpoint.md, tasks/lessons.md, settings.json) with green check / gray circle status icons, file sizes, and "modified X ago" timestamps. Collapsible section with exists count badge (e.g. "3/6").
+- **Project type system:** Projects are now typed as `manual` (sprint-based, user-driven) or `autonomous` (agent-driven). Manual projects show an indigo badge and sprint progress bar. Autonomous projects show an amber badge with no progress bar.
+- **Config slide-out panel:** Gear icon on each project card opens the config panel with editable name, type dropdown, memory isolation dropdown, status, created date, and save/delete actions.
+- **Context menu:** "Settings" option added to project right-click dropdown.
+- **Backend:** New `GET /api/projects/{id}/files` endpoint returns file chain metadata. New `update` action on `POST /api/projects` edits name, type, and memory_isolation — persists to both porter_config.json and workspace settings.json.
+
+---
+
 ## v0.14.17 (2026-02-28)
 
 **Usage Dashboard — auto-refresh from OpenClaw + Claude**

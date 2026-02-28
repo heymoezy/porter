@@ -1,26 +1,35 @@
+# Checkpoint — DEPRECATED
+# This file is no longer the source of truth for task state.
+# All tasks are now tracked in runtime/task-registry/*.json
+# This file is kept for historical reference only.
+# Last migrated: 2026-02-28 15:08:35 UTC
+#
 # Checkpoint
 project: Porter
-task: Sprint 6 — Usage Dashboard (auto-refresh from OpenClaw) — v0.14.17
-status: complete
-step: done
+task: Gap tasks — Skills CRUD complete, remaining gaps pending
+status: paused
+step: 1 of N
 completed:
-  - [x] Patch 19: Backend — _refresh_openclaw_usage() + /agent-usage/auto-refresh endpoint
-  - [x] Patch 20: Frontend — autoRefreshUsage() + improved no-data card states
-  - [x] Patch 21: Settings — preferred model dropdown + save/load
-  - [x] Patch 22: Orchestration — "preferred" badge on model card
-  - [x] Patch 23: Version bump v0.14.17 + changelog + RELEASE_NOTES.md
-  - [x] Fix: openclaw binary path resolution (shutil.which + fallback paths)
-  - [x] Verification: 32/32 Playwright tests pass, auto-refresh works, snapshots saved
-next_action: Sprint 7 — Projects memory visualization + task/skill distinction
+  - [x] v0.14.22 — Fix Early Sprints sort order (JS falsy bug), remove Skills from Extensions
+  - [x] v0.15.0 — Sprint 10: Workflows tab (50 skills, cron viewer), nav reorder, project start date fix
+  - [x] v0.15.1 — Sprint 11: Real agent connectivity test (HTTP roundtrip, latency modal, multi-protocol)
+  - [x] v0.15.2 — Gap: Skills CRUD (installed/all filter, remove skill, create manual skill, POST /api/openclaw/skills)
+  - [x] All governance docs updated (RELEASE_NOTES, SPRINT_PLAN, projects.md, task registry, MEMORY.md)
+  - [ ] Gap: session memory flush
+  - [ ] Gap: local model detection
+  - [ ] Gap: workflow creation tool
+  - [ ] Sprint 12 — Onboarding wizard (FINAL)
+next_action: Pick next gap task (session memory flush, local model detection, or workflow creation tool)
 modified_files:
   - /home/lobster/documents/porter/porter.py
+  - /home/lobster/documents/porter/runtime/task-registry/eb42638a-88b6-4d25-96b7-4a6680b66596.json
+  - /home/lobster/documents/porter/porter_config.json
+  - /home/lobster/documents/porter/SPRINT_PLAN.md
   - /home/lobster/documents/porter/RELEASE_NOTES.md
+  - /home/lobster/documents/projects.md
 notes: |
-  v0.14.17 complete. All features working:
-  - Auto-refresh fires on Orchestration tab load (fire-and-forget from loadAgents)
-  - OpenClaw: reads `openclaw sessions --json --all-agents` for context utilization (55% = 148k/272k)
-  - Claude: probes Anthropic API rate-limit headers (gets 401 with OAuth — needs different auth method)
-  - Gemini: shows "Check provider dashboard" (no API to probe)
-  - Preferred model saved to preferences, badge shows on matching agent/model cards
-  - New endpoint: POST /agent-usage/auto-refresh — batch refresh all agents by type
-  - Added preferred_model, context_compression, fallback_chain to allowed prefs
+  Skills CRUD shipped as v0.15.2. Features: installed/all filter toggle (default installed only),
+  remove skill with confirm dialog, create manual skill form, POST /api/openclaw/skills backend
+  with remove/create actions, shutil.which() install status detection.
+  Remaining gap tasks: session memory flush, local model detection, workflow creation tool.
+  Sprint 12 (onboarding wizard) is absolute LAST — don't schedule until all gaps filled.

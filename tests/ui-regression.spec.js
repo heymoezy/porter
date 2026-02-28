@@ -222,9 +222,11 @@ test.describe('Projects tab', () => {
     await expect(page.locator('#projects-module .module-title')).toHaveText('Projects');
   });
 
-  test('no "New Project" button in header', async ({ page }) => {
-    const btn = page.locator('#projects-module .module-hdr button');
-    await expect(btn).toHaveCount(0);
+  test('no "New Project" button in header (refresh allowed)', async ({ page }) => {
+    // Refresh button exists, but no "New Project" / "Create" button
+    const allBtns = page.locator('#projects-module .module-hdr button');
+    const createBtn = page.locator('#projects-module .module-hdr button:has-text("New"), #projects-module .module-hdr button:has-text("Create")');
+    await expect(createBtn).toHaveCount(0);
   });
 
   test('proj-row grid has exactly 3 columns', async ({ page }) => {

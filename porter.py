@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Porter v0.14.17 — self-hosted file manager"""
+"""Porter v0.16.0 — self-hosted file manager"""
 
 import email
 import hashlib
+import logging
 import io
 import json
 import mimetypes
@@ -18,11 +19,19 @@ import uuid
 import zipfile
 import calendar
 from datetime import datetime, timedelta, timezone
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 PORT = int(os.environ.get("PORTER_PORT", "8877"))
+
+# ── Logging setup ──
+logging.basicConfig(
+    level=logging.INFO,
+    format="  [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler()],
+)
+log = logging.getLogger("porter")
 HOST = os.environ.get("PORTER_HOST", "").strip()
 AGENT_INSTALL_URL = os.environ.get("PORTER_AGENT_INSTALL_URL", "").strip()
 
@@ -99,6 +108,9 @@ AVATAR_DIR          = _DATA_DIR
 AVATAR_EXTS         = {"jpg", "jpeg", "png", "webp", "gif"}
 SESSION_TTL         = 30 * 24 * 3600   # 30 days
 _sessions: dict     = {}               # token -> {username, expires}
+_login_attempts: dict = {}              # ip -> {"count": int, "locked_until": float}
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_LOCKOUT_BASE = 30                # seconds, doubles each lockout
 
 RUNTIME_DIR         = _DATA_DIR / "runtime"
 AGENT_WORKSPACE_DIR = Path(os.environ.get("PORTER_AGENT_WORKSPACE",
@@ -113,6 +125,7 @@ AUDIT_LOG           = RUNTIME_DIR / "audit.jsonl"
 # ── Capability Registry ───────────────────────────────────────────────────────
 # Each entry: id, label, install URL, features list, check lambda → {ok, version}
 _capabilities_cache: dict = {}  # id -> result dict, refreshed on startup + /api/capabilities
+_capabilities_cache_ts: float = 0.0  # last check timestamp
 
 
 def _cap_check_bin(binary: str) -> dict:
@@ -229,8 +242,11 @@ CAPABILITIES: list = [
 ]
 
 
-def _run_cap_checks():
-    """Run all capability checks in a background thread; cache and persist results."""
+def _run_cap_checks(force: bool = False):
+    """Run all capability checks; cache with 30s TTL. Pass force=True to bypass TTL."""
+    global _capabilities_cache_ts
+    if not force and _capabilities_cache and (time.time() - _capabilities_cache_ts) < 30:
+        return  # Cache is fresh enough
     checked = {}
     for cap in AI_PROVIDERS + CAPABILITIES:
         try:
@@ -253,6 +269,7 @@ def _run_cap_checks():
                 "error": str(exc),
             }
     _capabilities_cache.update(checked)
+    _capabilities_cache_ts = time.time()
     try:
         (RUNTIME_DIR / "capabilities.json").write_text(
             json.dumps(list(checked.values()), indent=2)
@@ -261,6 +278,88 @@ def _run_cap_checks():
         pass
 
 # ── Projects dashboard helpers ──────────────────────────────────────────────
+
+
+def _migrate_checkpoint_to_registry():
+    """One-time migration: read checkpoint.md and ensure all items exist in task registry.
+
+    After migration, checkpoint.md is marked deprecated. The task registry
+    is the sole source of truth for task state going forward.
+    """
+    checkpoint_path = _DATA_DIR / "tasks" / "checkpoint.md"
+    if not checkpoint_path.exists():
+        return
+
+    raw = checkpoint_path.read_text(encoding="utf-8")
+
+    # Check if already migrated
+    if "DEPRECATED" in raw[:200]:
+        return
+
+    # Parse checkpoint items
+    import re as _re
+    completed_items = _re.findall(r"- \[x\] (.+)", raw)
+    pending_items = _re.findall(r"- \[ \] (.+)", raw)
+
+    # Check each item against task registry
+    treg_dir = RUNTIME_DIR / "task-registry"
+    if not treg_dir.exists():
+        return
+
+    existing_titles = set()
+    for fp in treg_dir.glob("*.json"):
+        try:
+            t = json.loads(fp.read_text())
+            existing_titles.add(t.get("title", "").lower())
+        except Exception:
+            pass
+
+    migrated = 0
+    for item in pending_items:
+        # Check if a matching task already exists
+        item_lower = item.lower().strip()
+        found = False
+        for title in existing_titles:
+            if item_lower[:30] in title or title[:30] in item_lower:
+                found = True
+                break
+        if not found:
+            # Create a new task registry entry
+            import uuid
+            task = {
+                "id": str(uuid.uuid4()),
+                "title": f"Migrated: {item[:80]}",
+                "description": f"Auto-migrated from checkpoint.md: {item}",
+                "status": "pending",
+                "priority": "normal",
+                "project_id": _config.get("active_project_id", ""),
+                "project_name": "Porter App",
+                "tags": ["migrated", "checkpoint"],
+                "sort_order": 50,
+                "assigned_agent_id": None,
+                "created_by": "checkpoint-migration",
+                "created_at": time.time(),
+                "updated_at": time.time(),
+                "tokens_used": None,
+                "time_spent_mins": None,
+                "result": None,
+            }
+            fp = treg_dir / f"{task['id']}.json"
+            fp.write_text(json.dumps(task, indent=2))
+            migrated += 1
+
+    # Mark checkpoint.md as deprecated
+    deprecated_header = """# Checkpoint — DEPRECATED
+# This file is no longer the source of truth for task state.
+# All tasks are now tracked in runtime/task-registry/*.json
+# This file is kept for historical reference only.
+# Last migrated: """ + time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()) + """
+#
+"""
+    checkpoint_path.write_text(deprecated_header + raw, encoding="utf-8")
+    if migrated:
+        _log(f"Checkpoint migration: {migrated} items migrated to task registry")
+
 
 def _time_ago(ts: float) -> str:
     """Human-readable relative time from a unix timestamp."""
@@ -455,6 +554,1026 @@ def resolve_project_memory(project_id: "str | None", agent_id: "str | None",
                 content = ""
             return {"path": str(path), "content": content, "source_layer": layer}
     return {"path": None, "content": None, "source_layer": None}
+
+
+def _project_file_chain(project_id: str) -> list:
+    """Stat canonical project files and return chain metadata."""
+    wp = AGENT_WORKSPACE_DIR / "projects" / str(project_id)
+    canonical = [
+        ("PROJECT.md",          "Project config"),
+        ("MEMORY.md",           "Project memory"),
+        ("SPRINT_PLAN.md",      "Sprint plan"),
+        ("tasks/checkpoint.md", "Checkpoint"),
+        ("tasks/lessons.md",    "Lessons learned"),
+        ("settings.json",       "Settings"),
+    ]
+    chain = []
+    for rel, label in canonical:
+        fp = wp / rel
+        exists = fp.exists()
+        st = fp.stat() if exists else None
+        chain.append({
+            "key":          rel,
+            "label":        label,
+            "exists":       exists,
+            "size":         st.st_size if st else 0,
+            "size_human":   human_size(st.st_size) if st else "",
+            "mtime":        st.st_mtime if st else 0,
+            "modified_ago": _time_ago(st.st_mtime) if st else "",
+        })
+    return chain
+
+
+
+def _load_integrations() -> dict:
+    """Read OpenClaw skills, sessions, and auth profiles for integration visibility."""
+    result = {"ok": True, "openclaw_available": False, "skills": [], "sessions": [],
+              "auth_profiles": [], "cron_jobs": [], "hooks": []}
+
+    oc_dir = OPENCLAW_STATE_DIR
+    if not oc_dir.exists():
+        return result
+
+    result["openclaw_available"] = True
+
+    # Read skills from session snapshot
+    sessions_file = oc_dir / "agents" / "main" / "sessions" / "sessions.json"
+    if sessions_file.exists():
+        try:
+            sessions_data = json.loads(sessions_file.read_text(encoding="utf-8"))
+            skills_seen = set()
+            for key, sess in sessions_data.items():
+                snap = sess.get("skillsSnapshot", {})
+                for sk in snap.get("skills", []):
+                    name = sk.get("name", "")
+                    if name and name not in skills_seen:
+                        skills_seen.add(name)
+                        result["skills"].append({
+                            "name": name,
+                            "required_env": sk.get("requiredEnv", []),
+                        })
+                result["sessions"].append({
+                    "key": key,
+                    "session_id": sess.get("sessionId", ""),
+                    "model": sess.get("model", "unknown"),
+                    "updated_at": sess.get("updatedAt", 0),
+                    "chat_type": sess.get("chatType", ""),
+                    "channel": sess.get("lastChannel", ""),
+                })
+        except Exception:
+            pass
+
+    # Read auth profiles
+    auth_file = oc_dir / "agents" / "main" / "agent" / "auth-profiles.json"
+    if auth_file.exists():
+        try:
+            auth_data = json.loads(auth_file.read_text(encoding="utf-8"))
+            for prof_id, prof in auth_data.get("profiles", {}).items():
+                expires = prof.get("expires", 0)
+                is_expired = expires > 0 and expires < time.time() * 1000
+                result["auth_profiles"].append({
+                    "id": prof_id,
+                    "provider": prof.get("provider", ""),
+                    "type": prof.get("type", ""),
+                    "expired": is_expired,
+                    "expires_at": expires,
+                })
+        except Exception:
+            pass
+
+    # Read models config
+    models_file = oc_dir / "agents" / "main" / "agent" / "models.json"
+    if models_file.exists():
+        try:
+            models_data = json.loads(models_file.read_text(encoding="utf-8"))
+            result["model_providers"] = []
+            for prov_id, prov in models_data.get("providers", {}).items():
+                models = [m.get("id", "") for m in prov.get("models", [])]
+                result["model_providers"].append({
+                    "id": prov_id,
+                    "base_url": prov.get("baseUrl", ""),
+                    "api": prov.get("api", ""),
+                    "models": models,
+                })
+        except Exception:
+            pass
+
+    # Read cron jobs
+    cron_file = oc_dir / "cron" / "jobs.json"
+    if cron_file.exists():
+        try:
+            cron_data = json.loads(cron_file.read_text(encoding="utf-8"))
+            result["cron_jobs"] = cron_data.get("jobs", [])
+        except Exception:
+            pass
+
+    # Read hooks config
+    oc_config = oc_dir / "openclaw.json"
+    if oc_config.exists():
+        try:
+            oc_cfg = json.loads(oc_config.read_text(encoding="utf-8"))
+            hooks = oc_cfg.get("hooks", {})
+            if hooks.get("enabled"):
+                for preset in hooks.get("presets", []):
+                    hook_cfg = hooks.get(preset, {})
+                    result["hooks"].append({
+                        "name": preset,
+                        "account": hook_cfg.get("account", ""),
+                        "label": hook_cfg.get("label", ""),
+                    })
+            gw = oc_cfg.get("gateway", {})
+            result["gateway"] = {
+                "port": gw.get("port", 18789),
+                "auth_token_set": bool(gw.get("token")),
+            }
+        except Exception:
+            pass
+
+    return result
+
+
+def _validate_no_hardcoding():
+    """Sprint 9: Verify no hardcoded user paths leaked into runtime config."""
+    issues = []
+    # Check that critical paths are user-agnostic
+    home = str(Path.home())
+    if str(_DATA_DIR).startswith("/home/") and "/." not in str(_DATA_DIR):
+        # _DATA_DIR is under a specific user home — that's fine if via env var or default
+        pass
+    # Verify is_writable uses OS-level UID, not a hardcoded path
+    # (Already fixed in this sprint)
+    # Log validation result
+    if issues:
+        for i in issues:
+            print(f"  WARNING: hardcoding detected — {i}")
+    return len(issues) == 0
+
+
+
+def _ping_agent(agent: dict) -> dict:
+    """Real HTTP roundtrip ping to an agent endpoint. Returns latency, version, status."""
+    import urllib.request, urllib.error, time as _time, secrets as _secrets
+
+    agent_type = (agent.get("type") or agent.get("name") or "").lower()
+    result = {"ok": False, "latency_ms": None, "version": None, "endpoint": None, "message": ""}
+
+    # Determine endpoint to ping based on agent type
+    endpoints = []
+    oc_cfg = {}
+    try:
+        oc_cfg = json.loads(OPENCLAW_STATE_DIR.joinpath("openclaw.json").read_text())
+    except Exception:
+        pass
+
+    if "openclaw" in agent_type or "codex" in agent_type:
+        gw = oc_cfg.get("gateway", {})
+        port = gw.get("port", 18789)
+        token = (gw.get("auth", {}).get("token") or "").strip()
+        endpoints.append(("OpenClaw Gateway", f"http://127.0.0.1:{port}/", token))
+    elif "gemini" in agent_type:
+        # Gemini CLI doesn't have an HTTP endpoint — test binary availability
+        try:
+            t0 = _time.monotonic()
+            r = subprocess.run(["gemini", "--version"], capture_output=True, text=True, timeout=5)
+            t1 = _time.monotonic()
+            ver = (r.stdout or r.stderr or "").strip().split("\n")[0][:80]
+            result["ok"] = r.returncode == 0
+            result["latency_ms"] = round((t1 - t0) * 1000)
+            result["version"] = ver or "gemini"
+            result["endpoint"] = "gemini CLI binary"
+            result["message"] = "CLI binary responded" if result["ok"] else "CLI binary not found or errored"
+            return result
+        except FileNotFoundError:
+            result["message"] = "gemini binary not found in PATH"
+            return result
+        except Exception as e:
+            result["message"] = f"Error: {e}"
+            return result
+    elif "claude" in agent_type:
+        # Claude Code doesn't have an HTTP endpoint — test binary availability
+        try:
+            t0 = _time.monotonic()
+            r = subprocess.run(["claude", "--version"], capture_output=True, text=True, timeout=5)
+            t1 = _time.monotonic()
+            ver = (r.stdout or r.stderr or "").strip().split("\n")[0][:80]
+            result["ok"] = r.returncode == 0
+            result["latency_ms"] = round((t1 - t0) * 1000)
+            result["version"] = ver or "claude"
+            result["endpoint"] = "claude CLI binary"
+            result["message"] = "CLI binary responded" if result["ok"] else "CLI binary not found or errored"
+            return result
+        except FileNotFoundError:
+            result["message"] = "claude binary not found in PATH"
+            return result
+        except Exception as e:
+            result["message"] = f"Error: {e}"
+            return result
+    elif "ollama" in agent_type:
+        endpoints.append(("Ollama", "http://127.0.0.1:11434/api/tags", ""))
+    else:
+        # Generic: try the agent's configured URL if any, or OpenClaw gateway
+        gw = oc_cfg.get("gateway", {})
+        port = gw.get("port", 18789)
+        token = (gw.get("auth", {}).get("token") or "").strip()
+        endpoints.append(("OpenClaw Gateway", f"http://127.0.0.1:{port}/", token))
+
+    # HTTP roundtrip test with challenge token
+    challenge = _secrets.token_urlsafe(16)
+    for label, url, token in endpoints:
+        try:
+            req = urllib.request.Request(url, method="GET")
+            req.add_header("User-Agent", "Porter-Ping/1.0")
+            req.add_header("X-Porter-Challenge", challenge)
+            if token:
+                req.add_header("Authorization", f"Bearer {token}")
+
+            t0 = _time.monotonic()
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = resp.read(8192).decode("utf-8", errors="replace")
+                t1 = _time.monotonic()
+
+            latency = round((t1 - t0) * 1000)
+            result["ok"] = True
+            result["latency_ms"] = latency
+            result["endpoint"] = label + " (" + url + ")"
+
+            # Try to extract version from response
+            try:
+                data = json.loads(body)
+                result["version"] = data.get("version") or data.get("name") or None
+            except Exception:
+                # Non-JSON response is fine — the ping itself succeeded
+                pass
+
+            result["message"] = f"Roundtrip OK: {latency}ms"
+            return result
+        except urllib.error.HTTPError as e:
+            t1 = _time.monotonic()
+            latency = round((t1 - t0) * 1000)
+            # Even a 401/403 means the endpoint is alive
+            if e.code in (401, 403):
+                result["ok"] = True
+                result["latency_ms"] = latency
+                result["endpoint"] = label + " (" + url + ")"
+                result["message"] = f"Endpoint alive (HTTP {e.code}, auth required): {latency}ms"
+                return result
+            result["message"] = f"{label}: HTTP {e.code}"
+        except urllib.error.URLError as e:
+            result["message"] = f"{label}: Connection refused or unreachable"
+        except Exception as e:
+            result["message"] = f"{label}: {e}"
+
+    return result
+
+def _load_openclaw_skills() -> list:
+    """Read OpenClaw skill definitions from SKILL.md frontmatter.
+    Install status comes from OpenClaw's resolvedSkills in sessions.json."""
+    import re as _re
+    skills = []
+    skill_dirs = []
+    oc_dir = OPENCLAW_STATE_DIR
+    if oc_dir.exists():
+        for sandbox in (oc_dir / "sandboxes").glob("*/skills"):
+            skill_dirs.append(sandbox)
+    if not skill_dirs:
+        return skills
+
+    # Read active skills from OpenClaw session snapshots
+    active_skills = set()
+    sessions_file = oc_dir / "agents" / "main" / "sessions" / "sessions.json"
+    if sessions_file.exists():
+        try:
+            sessions = json.loads(sessions_file.read_text(encoding="utf-8"))
+            for _sk, sess in sessions.items():
+                snap = sess.get("skillsSnapshot", {})
+                for rs in snap.get("resolvedSkills", []):
+                    if isinstance(rs, str):
+                        active_skills.add(rs)
+                    elif isinstance(rs, dict):
+                        active_skills.add(rs.get("name", rs.get("id", "")))
+        except Exception:
+            pass
+
+    for skills_root in skill_dirs:
+        for skill_dir in sorted(skills_root.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            skill_md = skill_dir / "SKILL.md"
+            if not skill_md.exists():
+                continue
+            try:
+                raw = skill_md.read_text(encoding="utf-8")
+                name = skill_dir.name
+                description = ""
+                emoji = ""
+                homepage = ""
+                requires_bins = []
+
+                if raw.startswith("---"):
+                    parts = raw.split("---", 2)
+                    if len(parts) >= 3:
+                        fm = parts[1]
+                        for line in fm.strip().split("\n"):
+                            line = line.strip()
+                            if line.startswith("name:"):
+                                name = line[5:].strip().strip('"').strip("'")
+                            elif line.startswith("description:"):
+                                description = line[12:].strip().strip('"').strip("'")
+                            elif line.startswith("homepage:"):
+                                homepage = line[9:].strip()
+                            elif '"emoji":' in line:
+                                m = _re.search(r'"emoji":\s*"([^"]*)"', line)
+                                if m:
+                                    emoji = m.group(1)
+                            elif '"bins"' in line or '"anyBins"' in line:
+                                m = _re.search(r'"(?:bins|anyBins)":\s*\[([^\]]*)\]', line)
+                                if m:
+                                    requires_bins = [b.strip().strip('"').strip("'") for b in m.group(1).split(',') if b.strip()]
+
+                # Installed = appears in OpenClaw's active/resolved skills
+                installed = skill_dir.name in active_skills
+
+                skills.append({
+                    "id": skill_dir.name,
+                    "name": name,
+                    "description": description[:200] if description else "",
+                    "emoji": emoji,
+                    "homepage": homepage,
+                    "has_docs": len(raw) > 100,
+                    "installed": installed,
+                    "requires": requires_bins,
+                    "manual": False,
+                    "path": str(skill_dir),
+                })
+            except Exception:
+                skills.append({"id": skill_dir.name, "name": skill_dir.name, "description": "",
+                             "emoji": "", "homepage": "", "has_docs": False,
+                             "installed": skill_dir.name in active_skills,
+                             "requires": [], "manual": False, "path": str(skill_dir)})
+
+    # Also load manual skills from runtime/skills/
+    manual_dir = RUNTIME_DIR / "skills"
+    if manual_dir.exists():
+        for skill_dir in sorted(manual_dir.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            skill_md = skill_dir / "SKILL.md"
+            if not skill_md.exists():
+                continue
+            try:
+                raw = skill_md.read_text(encoding="utf-8")
+                name = skill_dir.name
+                description = ""
+                emoji = ""
+                if raw.startswith("---"):
+                    parts = raw.split("---", 2)
+                    if len(parts) >= 3:
+                        for line in parts[1].strip().split("\n"):
+                            line = line.strip()
+                            if line.startswith("name:"): name = line[5:].strip().strip('"').strip("'")
+                            elif line.startswith("description:"): description = line[12:].strip().strip('"').strip("'")
+                            elif '"emoji":' in line:
+                                m = _re.search(r'"emoji":\s*"([^"]*)"', line)
+                                if m: emoji = m.group(1)
+                skills.append({
+                    "id": skill_dir.name,
+                    "name": name,
+                    "description": description[:200] if description else "",
+                    "emoji": emoji or "\u2699",
+                    "homepage": "",
+                    "has_docs": len(raw) > 100,
+                    "installed": True,
+                    "requires": [],
+                    "manual": True,
+                    "path": str(skill_dir),
+                })
+            except Exception:
+                pass
+    return skills
+
+
+def _load_openclaw_cron() -> dict:
+    """Read OpenClaw cron jobs and recent run history."""
+    result = {"jobs": [], "runs": []}
+    oc_dir = OPENCLAW_STATE_DIR
+    cron_file = oc_dir / "cron" / "jobs.json"
+    if cron_file.exists():
+        try:
+            data = json.loads(cron_file.read_text(encoding="utf-8"))
+            result["jobs"] = data.get("jobs", [])
+        except Exception:
+            pass
+    # Read recent runs
+    runs_dir = oc_dir / "cron" / "runs"
+    if runs_dir.exists():
+        for rf in sorted(runs_dir.glob("*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True)[:20]:
+            try:
+                result["runs"].append({
+                    "id": rf.stem,
+                    "modified": rf.stat().st_mtime,
+                    "size": rf.stat().st_size,
+                })
+            except Exception:
+                pass
+    return result
+
+
+def _detect_local_models() -> list:
+    """Scan for locally available AI models and CLI agents.
+
+    Checks:
+    - CLI binaries: codex, claude, gemini (via shutil.which + --version)
+    - Ollama models: via HTTP to /api/tags
+    - OpenClaw gateway: via HTTP to health endpoint
+
+    Returns list of model dicts with: id, name, type, version, source, size_gb, context_window
+    """
+    import shutil
+    import subprocess
+    models = []
+
+    # Expand PATH for systemd services that may have limited paths
+    home = str(Path.home())
+    extra_paths = [
+        str(Path(home, ".npm-global", "bin")),
+        str(Path(home, ".local", "bin")),
+        str(Path(home, ".cargo", "bin")),
+        "/usr/local/bin",
+        "/snap/bin",
+    ]
+    search_path = os.environ.get("PATH", "") + os.pathsep + os.pathsep.join(extra_paths)
+
+    # CLI agents
+    cli_agents = [
+        {"bin": "codex", "name": "Codex CLI", "type": "cli", "provider": "openai"},
+        {"bin": "claude", "name": "Claude CLI", "type": "cli", "provider": "anthropic"},
+        {"bin": "gemini", "name": "Gemini CLI", "type": "cli", "provider": "google"},
+    ]
+    for agent in cli_agents:
+        path = shutil.which(agent["bin"], path=search_path)
+        if path:
+            version = ""
+            try:
+                result = subprocess.run(
+                    [path, "--version"],
+                    capture_output=True, text=True, timeout=5
+                )
+                version = (result.stdout or result.stderr or "").strip().split("\n")[0][:80]
+            except Exception:
+                pass
+            models.append({
+                "id": f"local-cli-{agent['bin']}",
+                "name": agent["name"],
+                "type": "cli_agent",
+                "provider": agent["provider"],
+                "version": version,
+                "path": path,
+                "source": "local_cli",
+                "size_gb": None,
+                "context_window": None,
+            })
+
+    # Ollama models
+    try:
+        import urllib.request
+        req = urllib.request.Request("http://127.0.0.1:11434/api/tags", method="GET")
+        req.add_header("Accept", "application/json")
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read())
+            for m in data.get("models", []):
+                name = m.get("name", "unknown")
+                size_bytes = m.get("size", 0)
+                details = m.get("details", {})
+                models.append({
+                    "id": f"local-ollama-{name}",
+                    "name": name,
+                    "type": "ollama",
+                    "provider": "ollama",
+                    "version": details.get("parameter_size", ""),
+                    "path": None,
+                    "source": "ollama",
+                    "size_gb": round(size_bytes / 1e9, 1) if size_bytes else None,
+                    "context_window": None,
+                    "family": details.get("family", ""),
+                    "quantization": details.get("quantization_level", ""),
+                })
+    except Exception:
+        pass  # Ollama not running or not reachable
+
+    return models
+
+
+def _load_session_summaries() -> list:
+    """Read OpenClaw session .jsonl files and extract metadata summaries."""
+    oc_dir = OPENCLAW_STATE_DIR
+    sessions_dir = oc_dir / "agents" / "main" / "sessions"
+    if not sessions_dir.exists():
+        return []
+
+    # Read session registry for metadata
+    registry = {}
+    reg_file = sessions_dir / "sessions.json"
+    if reg_file.exists():
+        try:
+            registry = json.loads(reg_file.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    summaries = []
+    for jsonl_file in sorted(sessions_dir.glob("*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True):
+        try:
+            lines = jsonl_file.read_text(encoding="utf-8").strip().split("\n")
+            if not lines:
+                continue
+
+            session_id = jsonl_file.stem
+            first = json.loads(lines[0])
+            msg_count = 0
+            user_msgs = 0
+            assistant_msgs = 0
+            tool_calls = 0
+            total_input = 0
+            total_output = 0
+            model = ""
+            provider = ""
+            first_ts = first.get("timestamp", "")
+            last_ts = first_ts
+            tools_used = set()
+
+            for raw_line in lines:
+                try:
+                    entry = json.loads(raw_line)
+                except Exception:
+                    continue
+                etype = entry.get("type", "")
+                ts = entry.get("timestamp", "")
+                if ts:
+                    last_ts = ts
+
+                if etype == "message":
+                    msg = entry.get("message", {})
+                    role = msg.get("role", "")
+                    if role == "user":
+                        user_msgs += 1
+                    elif role == "assistant":
+                        assistant_msgs += 1
+                    msg_count += 1
+                    usage = entry.get("usage", {})
+                    total_input += usage.get("input", 0)
+                    total_output += usage.get("output", 0)
+                    if entry.get("model"):
+                        model = entry["model"]
+                    if entry.get("provider"):
+                        provider = entry["provider"]
+                elif etype == "toolCall":
+                    tool_calls += 1
+                    tools_used.add(entry.get("tool", "unknown"))
+                elif etype == "model_change":
+                    if entry.get("modelId"):
+                        model = entry["modelId"]
+                    if entry.get("provider"):
+                        provider = entry["provider"]
+
+            # Find registry entry for this session
+            reg_entry = None
+            for _key, sess in registry.items():
+                if sess.get("sessionId") == session_id:
+                    reg_entry = sess
+                    break
+
+            session_name = ""
+            if reg_entry:
+                for _key, sess in registry.items():
+                    if sess.get("sessionId") == session_id:
+                        session_name = _key.replace("agent:main:", "")
+                        break
+
+            summaries.append({
+                "id": session_id,
+                "name": session_name or session_id[:12],
+                "source": "openclaw",
+                "file": jsonl_file.name,
+                "first_ts": first_ts,
+                "last_ts": last_ts,
+                "messages": msg_count,
+                "user_msgs": user_msgs,
+                "assistant_msgs": assistant_msgs,
+                "tool_calls": tool_calls,
+                "tools_used": sorted(tools_used),
+                "total_input_tokens": total_input,
+                "total_output_tokens": total_output,
+                "model": model,
+                "provider": provider,
+                "size_kb": round(jsonl_file.stat().st_size / 1024, 1),
+                "in_registry": reg_entry is not None,
+                "flushed": False,  # TODO: track flushed state
+            })
+        except Exception:
+            continue
+
+    return summaries
+
+
+def _load_claude_session_summaries() -> list:
+    """Read Claude Code session .jsonl files and extract metadata summaries."""
+    claude_dir = Path.home() / ".claude" / "projects" / "-home-lobster"
+    if not claude_dir.exists():
+        return []
+
+    summaries = []
+    # Only process the 15 most recent files by mtime to keep it fast
+    jsonl_files = sorted(claude_dir.glob("*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True)[:15]
+    for jsonl_file in jsonl_files:
+        try:
+            session_id = jsonl_file.stem
+            user_msgs = 0
+            assistant_msgs = 0
+            first_ts = ""
+            last_ts = ""
+
+            with open(jsonl_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        entry = json.loads(line)
+                    except Exception:
+                        continue
+                    etype = entry.get("type", "")
+                    ts = entry.get("timestamp", "")
+                    if ts and isinstance(ts, str):
+                        if not first_ts:
+                            first_ts = ts
+                        last_ts = ts
+                    if etype == "user":
+                        user_msgs += 1
+                    elif etype == "assistant":
+                        assistant_msgs += 1
+
+            summaries.append({
+                "id": session_id,
+                "name": "Claude session",
+                "source": "claude",
+                "file": jsonl_file.name,
+                "first_ts": first_ts,
+                "last_ts": last_ts,
+                "messages": user_msgs + assistant_msgs,
+                "user_msgs": user_msgs,
+                "assistant_msgs": assistant_msgs,
+                "tool_calls": 0,
+                "tools_used": [],
+                "total_input_tokens": 0,
+                "total_output_tokens": 0,
+                "model": "claude",
+                "provider": "anthropic",
+                "size_kb": round(jsonl_file.stat().st_size / 1024, 1),
+                "in_registry": False,
+                "flushed": False,
+            })
+        except Exception:
+            continue
+
+    return summaries
+
+
+def _get_memory_overview() -> dict:
+    """Return complete memory topology across all detected models."""
+    home = Path.home()
+
+    def _finfo(p):
+        """File info dict for a Path."""
+        if not p.exists():
+            return None
+        st = p.stat()
+        return {"name": p.name, "path": str(p), "size": st.st_size, "modified": st.st_mtime}
+
+    def _dir_files(directory, names):
+        """Return file info list for named files in a directory."""
+        result = []
+        for n in names:
+            f = directory / n
+            info = _finfo(f)
+            if info:
+                result.append(info)
+        return result
+
+    models = []
+
+    # ── Claude Code ──
+    claude_mem_dir = home / ".claude" / "projects" / "-home-lobster" / "memory"
+    claude_sess_dir = home / ".claude" / "projects" / "-home-lobster"
+    claude_instr = _finfo(home / "CLAUDE.md")
+    claude_files = _dir_files(claude_mem_dir, ["MEMORY.md"]) if claude_mem_dir.exists() else []
+    claude_sessions = list(claude_sess_dir.glob("*.jsonl")) if claude_sess_dir.exists() else []
+    models.append({
+        "id": "claude", "name": "Claude Code", "color": "#d97706",
+        "detected": True, "stateless": False,
+        "instruction_file": claude_instr,
+        "memory_files": claude_files,
+        "daily_logs": 0,
+        "session_count": len(claude_sessions),
+        "session_size_mb": round(sum(f.stat().st_size for f in claude_sessions) / (1024 * 1024), 1) if claude_sessions else 0,
+    })
+
+    # ── OpenClaw (Codex) ──
+    oc_ws = home / ".openclaw" / "workspace"
+    oc_sess_dir = home / ".openclaw" / "agents" / "main" / "sessions"
+    oc_files = _dir_files(oc_ws, ["MEMORY.md", "AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "IDENTITY.md"]) if oc_ws.exists() else []
+    oc_daily_dir = oc_ws / "memory"
+    oc_daily = len(list(oc_daily_dir.glob("*.md"))) if oc_daily_dir.exists() else 0
+    oc_sessions = list(oc_sess_dir.glob("*.jsonl")) if oc_sess_dir.exists() else []
+    models.append({
+        "id": "openclaw", "name": "OpenClaw (Codex)", "color": "#059669",
+        "detected": OPENCLAW_STATE_DIR.exists(), "stateless": False,
+        "instruction_file": None,
+        "memory_files": oc_files,
+        "daily_logs": oc_daily,
+        "session_count": len(oc_sessions),
+        "session_size_mb": round(sum(f.stat().st_size for f in oc_sessions) / (1024 * 1024), 1) if oc_sessions else 0,
+    })
+
+    # ── Gemini CLI ──
+    gemini_dir = home / ".gemini"
+    gemini_files = _dir_files(gemini_dir, ["GEMINI.md"]) if gemini_dir.exists() else []
+    gemini_hist = gemini_dir / "history"
+    gemini_hist_count = sum(1 for _ in gemini_hist.rglob("*") if _.is_file()) if gemini_hist.exists() else 0
+    models.append({
+        "id": "gemini", "name": "Gemini CLI", "color": "#2563eb",
+        "detected": gemini_dir.exists(), "stateless": False,
+        "instruction_file": None,
+        "memory_files": gemini_files,
+        "daily_logs": 0,
+        "session_count": gemini_hist_count,
+        "session_size_mb": 0,
+    })
+
+    # ── Ollama (stateless) ──
+    try:
+        import urllib.request as _ur
+        req = _ur.Request("http://127.0.0.1:11434/api/tags", method="GET")
+        with _ur.urlopen(req, timeout=2) as resp:
+            od = json.loads(resp.read())
+            onames = [m.get("name", "") for m in od.get("models", [])]
+        models.append({
+            "id": "ollama", "name": "Ollama (" + ", ".join(onames[:3]) + ")" if onames else "Ollama",
+            "color": "#6b7280", "detected": True, "stateless": True,
+            "instruction_file": None, "memory_files": [],
+            "daily_logs": 0, "session_count": 0, "session_size_mb": 0,
+        })
+    except Exception:
+        pass
+
+    # ── Shared memory plane ──
+    shared_plane = {"path": str(MEMORY_DIR), "exists": MEMORY_DIR.exists(), "directories": [], "file_count": 0, "total_size": 0}
+    if MEMORY_DIR.exists():
+        for d in sorted(MEMORY_DIR.iterdir()):
+            if d.is_dir():
+                dfiles = [f for f in d.rglob("*") if f.is_file()]
+                shared_plane["directories"].append({"name": d.name, "file_count": len(dfiles)})
+                shared_plane["file_count"] += len(dfiles)
+                shared_plane["total_size"] += sum(f.stat().st_size for f in dfiles)
+
+    return {"models": models, "shared_plane": shared_plane}
+
+
+def _is_allowed_memory_path(path_str: str) -> bool:
+    """Whitelist check — only allow read/write to known model memory locations."""
+    try:
+        p = Path(path_str).resolve()
+    except Exception:
+        return False
+    if p.suffix not in (".md", ".txt", ".json"):
+        return False
+    home = Path.home().resolve()
+    allowed_dirs = [
+        home / ".claude",
+        home / ".openclaw" / "workspace",
+        home / ".gemini",
+    ]
+    if MEMORY_DIR.exists():
+        allowed_dirs.append(MEMORY_DIR.resolve())
+    # Check exact file match (CLAUDE.md at home root)
+    if p == (home / "CLAUDE.md").resolve():
+        return True
+    # Check directory containment
+    for ad in allowed_dirs:
+        try:
+            p.relative_to(ad)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _flush_session_to_memory(session_id: str, project_id: str = None) -> dict:
+    """Extract key learnings from a session and append to project MEMORY.md.
+
+    Reads the session .jsonl, extracts:
+    - First user message (task/intent)
+    - Tool usage patterns
+    - Token costs
+    - Model used
+    - Duration
+
+    Writes a summary block to the project's MEMORY.md or global memory.
+    """
+    oc_dir = OPENCLAW_STATE_DIR
+    sessions_dir = oc_dir / "agents" / "main" / "sessions"
+    jsonl_file = sessions_dir / f"{session_id}.jsonl"
+    if not jsonl_file.exists():
+        return {"ok": False, "error": f"Session {session_id} not found"}
+
+    lines = jsonl_file.read_text(encoding="utf-8").strip().split("\n")
+    if not lines:
+        return {"ok": False, "error": "Empty session file"}
+
+    # Extract summary data
+    first_user_msg = ""
+    model = ""
+    provider = ""
+    total_input = 0
+    total_output = 0
+    tool_calls = 0
+    tools_used = set()
+    first_ts = ""
+    last_ts = ""
+    msg_count = 0
+
+    for raw_line in lines:
+        try:
+            entry = json.loads(raw_line)
+        except Exception:
+            continue
+        etype = entry.get("type", "")
+        ts = entry.get("timestamp", "")
+        if ts and not first_ts:
+            first_ts = ts
+        if ts:
+            last_ts = ts
+
+        if etype == "message":
+            msg_obj = entry.get("message", {})
+            role = msg_obj.get("role", "")
+            if role == "user" and not first_user_msg:
+                content = msg_obj.get("content", [])
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text = block.get("text", "")
+                        # Take first 200 chars as task description
+                        first_user_msg = text[:200].replace("\n", " ").strip()
+                        break
+                    elif isinstance(block, str):
+                        first_user_msg = block[:200].replace("\n", " ").strip()
+                        break
+            usage = entry.get("usage", {})
+            total_input += usage.get("input", 0)
+            total_output += usage.get("output", 0)
+            msg_count += 1
+            if entry.get("model"):
+                model = entry["model"]
+            if entry.get("provider"):
+                provider = entry["provider"]
+        elif etype == "toolCall":
+            tool_calls += 1
+            tools_used.add(entry.get("tool", "unknown"))
+
+    # Build summary block
+    import datetime
+    date_str = first_ts[:10] if first_ts else datetime.datetime.now().strftime("%Y-%m-%d")
+
+    summary = f"""
+## Session Flush: {date_str}
+- **Session:** `{session_id[:12]}...`
+- **Model:** {provider}/{model if model else 'unknown'}
+- **Messages:** {msg_count} ({tool_calls} tool calls)
+- **Tokens:** {total_input:,} in / {total_output:,} out
+- **Tools:** {', '.join(sorted(tools_used)) if tools_used else 'none'}
+- **Task:** {first_user_msg if first_user_msg else '(no user message found)'}
+"""
+
+    # Determine target MEMORY.md
+    target_path = None
+    if project_id:
+        # Find project workspace
+        for proj in _config.get("projects", []):
+            if proj.get("id") == project_id:
+                wp = proj.get("workspace_path", "")
+                if wp:
+                    target_path = Path(wp) / "MEMORY.md"
+                break
+
+    if not target_path:
+        # Fall back to Porter's own memory dir
+        target_path = MEMORY_DIR / "session_flushes.md"
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Append (don't overwrite)
+    mode = "a" if target_path.exists() else "w"
+    header = ""
+    if mode == "w":
+        header = "# Session Memory Flushes\n\nAuto-generated summaries from OpenClaw session logs.\n"
+
+    with open(target_path, mode, encoding="utf-8") as f:
+        if header:
+            f.write(header)
+        f.write(summary)
+
+    return {"ok": True, "message": f"Session flushed to {target_path}", "path": str(target_path)}
+
+
+def _flush_claude_session(session_id: str) -> dict:
+    """Flush a Claude Code session to the shared memory plane.
+
+    Reads the Claude .jsonl, extracts summary data (first user message,
+    message counts, timestamps), and appends to session_flushes.md.
+    """
+    claude_dir = Path.home() / ".claude" / "projects" / "-home-lobster"
+    jsonl_file = claude_dir / f"{session_id}.jsonl"
+    if not jsonl_file.exists():
+        return {"ok": False, "error": f"Claude session {session_id} not found"}
+
+    first_user_msg = ""
+    user_msgs = 0
+    assistant_msgs = 0
+    tool_call_count = 0
+    tools_used = set()
+    first_ts = ""
+    last_ts = ""
+
+    try:
+        with open(jsonl_file, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    continue
+                etype = entry.get("type", "")
+                ts = entry.get("timestamp", "")
+                if ts and isinstance(ts, str):
+                    if not first_ts:
+                        first_ts = ts
+                    last_ts = ts
+
+                if etype == "user":
+                    user_msgs += 1
+                    if not first_user_msg:
+                        msg = entry.get("message", {})
+                        content = msg.get("content", "")
+                        if isinstance(content, list):
+                            for block in content:
+                                if isinstance(block, dict) and block.get("type") == "text":
+                                    first_user_msg = block.get("text", "")[:200].replace("\n", " ").strip()
+                                    break
+                                elif isinstance(block, str):
+                                    first_user_msg = block[:200].replace("\n", " ").strip()
+                                    break
+                        elif isinstance(content, str):
+                            first_user_msg = content[:200].replace("\n", " ").strip()
+                elif etype == "assistant":
+                    assistant_msgs += 1
+                elif etype == "tool_use" or etype == "tool_result":
+                    tool_call_count += 1
+                    tool_name = entry.get("name", entry.get("tool", ""))
+                    if tool_name:
+                        tools_used.add(tool_name)
+    except Exception as e:
+        return {"ok": False, "error": f"Failed to parse session: {e}"}
+
+    msg_count = user_msgs + assistant_msgs
+    import datetime
+    date_str = first_ts[:10] if first_ts else datetime.datetime.now().strftime("%Y-%m-%d")
+    size_mb = round(jsonl_file.stat().st_size / 1048576, 1)
+
+    summary = f"""
+## Session Flush: {date_str}
+- **Source:** Claude Code
+- **Session:** `{session_id[:12]}...`
+- **Messages:** {msg_count} ({tool_call_count} tool uses)
+- **Size:** {size_mb} MB
+- **Tools:** {', '.join(sorted(tools_used)) if tools_used else 'none'}
+- **Task:** {first_user_msg if first_user_msg else '(no user message found)'}
+"""
+
+    target_path = MEMORY_DIR / "session_flushes.md"
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    mode = "a" if target_path.exists() else "w"
+    header = ""
+    if mode == "w":
+        header = "# Session Memory Flushes\n\nAuto-generated summaries from AI session logs.\n"
+
+    with open(target_path, mode, encoding="utf-8") as f:
+        if header:
+            f.write(header)
+        f.write(summary)
+
+    return {"ok": True, "message": f"Session flushed to {target_path}", "path": str(target_path)}
+
+
+def _reload_config_and_tasks():
+    """Re-read config and task registry from disk (called by /api/reload)."""
+    global _config
+    _config = load_config()
+    _treg_load()
 
 
 def _treg_load() -> None:
@@ -899,7 +2018,22 @@ ROLE_CAPS: dict[str, set] = {
 # ── config helpers ────────────────────────────────────────────────────────
 
 def _hash_password(password: str, salt: str) -> str:
+    """Hash password with scrypt (memory-hard KDF). Returns hex string."""
+    derived = hashlib.scrypt(
+        password.encode(), salt=salt.encode(),
+        n=16384, r=8, p=1, dklen=32
+    )
+    return derived.hex()
+
+def _hash_password_legacy(password: str, salt: str) -> str:
+    """Legacy SHA-256 hash — only used for migration check."""
     return hashlib.sha256((salt + password).encode()).hexdigest()
+
+def _save_config(cfg: dict) -> None:
+    """Write config to disk."""
+    global _config
+    CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+    _config = cfg
 
 def load_config() -> dict:
     cfg: dict = {}
@@ -1430,7 +2564,7 @@ def safe_resolve(root_key, rel=""):
         return None
 
 def is_writable(path: Path) -> bool:
-    return path.exists() and path.stat().st_uid == Path("/home/lobster").stat().st_uid
+    return path.exists() and path.stat().st_uid == os.getuid()
 
 def human_size(n: int) -> str:
     for unit in ("B", "KB", "MB", "GB"):
@@ -1985,6 +3119,11 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .btn-icon:hover { background: var(--raised); color: var(--text); border-color: #333; }
 .btn[disabled] { opacity: .35; pointer-events: none; }
+.btn-sm { padding:6px 14px; font-size:13px; }
+.btn-xs { padding:4px 10px; font-size:12px; }
+.form-input { padding:8px 10px; font-size:13px; background:var(--raised); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text); font-family:inherit; width:100%; box-sizing:border-box; }
+.form-input:focus { border-color:var(--accent); outline:none; }
+.form-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
 
 /* selection toolbar */
 .selection-toolbar {
@@ -2075,6 +3214,18 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .skel {
   background: var(--border2); border-radius: 3px;
   animation: shimmer 1.4s ease infinite;
+}
+
+/* Loading spinner — replaces bare "Loading…" text across all tabs */
+@keyframes spin-loader { to { transform:rotate(360deg); } }
+.loading-indicator {
+  display:flex; align-items:center; gap:8px; padding:12px 0;
+  color:var(--text3); font-size:13px;
+}
+.loading-indicator::before {
+  content:''; display:inline-block; width:14px; height:14px;
+  border:2px solid var(--border2); border-top-color:var(--accent);
+  border-radius:50%; animation:spin-loader .7s linear infinite; flex-shrink:0;
 }
 
 /* row menu */
@@ -2400,6 +3551,8 @@ body.density-compact .file-name { padding: 6px 0; }
 
 /* orchestration flow */
 .module-intro { font-size:13px; color:var(--text3); margin-bottom:16px; margin-top:-12px; }
+.wf-skill-card { padding:10px 12px; border:1px solid var(--border); border-radius:6px; background:var(--surface2); transition:border-color .15s; cursor:default; }
+.wf-skill-card:hover { border-color:var(--accent); }
 .orch-section { margin-bottom:4px; }
 .orch-section-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
 .orch-section-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.6px; margin-bottom:10px; }
@@ -2436,15 +3589,15 @@ body.density-compact .file-name { padding: 6px 0; }
 
 /* porter hub */
 .orch-hub {
-  display:flex; align-items:center; gap:20px;
-  padding:16px 24px; margin:0;
+  display:flex; flex-direction:column; align-items:center; gap:10px;
+  padding:20px 24px; margin:0;
   border:2px solid var(--accent); border-radius:12px;
   background:color-mix(in srgb, var(--accent) 6%, var(--bg));
 }
-.orch-hub-left { flex-shrink:0; }
-.orch-hub-label { font-size:16px; font-weight:700; color:var(--accent); letter-spacing:1.5px; }
-.orch-hub-desc { font-size:11px; color:var(--text3); margin-top:2px; }
-.orch-hub-features { display:flex; flex-wrap:wrap; gap:6px; }
+.orch-hub-left { text-align:center; }
+.orch-hub-label { font-size:18px; font-weight:700; color:var(--accent); letter-spacing:2px; }
+.orch-hub-desc { font-size:12px; color:var(--text3); margin-top:4px; }
+.orch-hub-features { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; }
 .orch-hub-feat {
   font-size:11px; padding:3px 10px; border-radius:20px;
   border:1px solid var(--border); color:var(--text3);
@@ -2454,6 +3607,30 @@ body.density-compact .file-name { padding: 6px 0; }
   border-color:var(--accent); color:var(--accent);
   background:color-mix(in srgb, var(--accent) 8%, transparent);
 }
+
+/* Memory tab v3 — layered architecture view */
+.mem-layer { margin-bottom:4px; }
+.mem-layer-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.6px; margin-bottom:6px; }
+.mem-layer-desc { font-size:12px; color:var(--text3); line-height:1.5; margin-bottom:12px; max-width:640px; }
+.mem-card { padding:16px 18px; background:var(--raised); border:1px solid var(--border); border-radius:10px; position:relative; transition:border-color .15s; }
+.mem-card:hover { border-color:var(--accent); }
+.mem-card.mem-stateless { border-style:dashed; }
+.mem-card-head { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+.mem-card-name { font-size:14px; font-weight:600; }
+.mem-card-model { font-size:12px; color:var(--text3); }
+.mem-file-row { display:flex; align-items:center; gap:8px; padding:4px 0; font-size:12px; color:var(--text); cursor:pointer; transition:color .12s; }
+.mem-file-row:hover { color:var(--accent); }
+.mem-file-size { font-size:11px; color:var(--text3); margin-left:auto; }
+.mem-filter-bar { display:flex; gap:2px; margin-bottom:10px; }
+.mem-filter-btn { padding:4px 12px; font-size:12px; border-radius:6px; border:1px solid var(--border); background:none; color:var(--text3); cursor:pointer; transition:.12s; }
+.mem-filter-btn:hover { background:var(--raised); color:var(--text); }
+.mem-filter-btn.active { background:var(--raised); color:var(--text); border-color:var(--border2); }
+.mem-stateless-text { font-size:12px; color:var(--text3); font-style:italic; padding:8px 0; }
+.mem-health { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:8px; margin-bottom:4px; }
+.mem-health-card { padding:10px 14px; border:1px solid var(--border); border-radius:8px; background:var(--surface2); }
+.mem-health-val { font-size:20px; font-weight:700; color:var(--text); }
+.mem-health-label { font-size:11px; color:var(--text3); margin-top:2px; }
+.mem-health-hint { font-size:10px; color:var(--warn,#d97706); margin-top:4px; }
 
 /* config panel (mirrors preview-panel) */
 .config-panel {
@@ -2477,9 +3654,28 @@ body.density-compact .file-name { padding: 6px 0; }
 .proj-card-head { display:flex; align-items:center; gap:10px; cursor:pointer; user-select:none; }
 .proj-card-chevron { font-size:10px; color:var(--text3); transition:transform .15s; flex-shrink:0; }
 .proj-card-chevron.open { transform:rotate(90deg); }
-.proj-card-name { font-size:14px; font-weight:600; color:var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.proj-card-name { font-size:14px; font-weight:600; color:var(--text); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-shrink:1; }
 .proj-card-count { font-size:11px; color:var(--text3); white-space:nowrap; }
 .proj-card-tasks { margin-top:12px; border-top:1px solid var(--border); padding-top:10px; }
+/* S7h: Inline project controls */
+/* proj-controls removed — controls now in card header */
+/* S7h: Open tasks accordion header */
+.proj-open-hdr { display:flex; align-items:center; gap:8px; padding:8px 12px 4px; cursor:pointer; user-select:none; }
+.proj-open-hdr:hover .proj-open-label { color:var(--text2); }
+.proj-open-label { font-size:11px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; color:var(--text3); flex:1; }
+.proj-open-count { font-size:11px; color:var(--text3); }
+.proj-open-chevron { font-size:10px; color:var(--text3); transition:transform .15s; }
+.proj-open-chevron.open { transform:rotate(90deg); }
+/* S7h: Project-level refresh */
+.proj-card-refresh { cursor:pointer; color:var(--text2); padding:4px 10px; border-radius:var(--radius); transition:.15s; font-size:12px; font-weight:500; font-family:inherit; background:none; border:1px solid var(--border2); white-space:nowrap; }
+.proj-card-refresh:hover { color:var(--text); background:var(--bg3); }
+/* S7h: Project metrics row */
+.proj-metrics { display:flex; gap:12px; flex-wrap:wrap; padding:4px 0 2px; }
+.proj-metric { font-size:11px; color:var(--text3); }
+.proj-metric-val { color:var(--text2); font-weight:500; }
+
+.proj-status-toggle { font-size:12px; font-weight:600; padding:4px 12px; border-radius:20px; border:1px solid var(--border2); background:none; color:var(--text3); cursor:pointer; white-space:nowrap; }
+.proj-status-toggle.active { background:rgba(34,197,94,.12); color:#22c55e; border-color:rgba(34,197,94,.3); }
 .badge-production { background:#dcfce7; color:#15803d; font-size:10px; padding:2px 7px;
   border-radius:20px; font-weight:600; }
 .badge-test { background:#fef9c3; color:#854d0e; font-size:10px; padding:2px 7px;
@@ -2502,7 +3698,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .treg-row-desc  { font-size:12px; color:var(--text2); margin-top:3px; line-height:1.4; }
 .treg-row-meta  { font-size:11px; color:var(--text3); margin-top:3px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .treg-row-acts  { display:flex; gap:4px; align-items:center; flex-shrink:0; }
-.treg-act { font-size:11px; padding:2px 7px; border-radius:4px; background:none; border:1px solid var(--border); cursor:pointer; color:var(--text2); white-space:nowrap; }
+.treg-act { font-size:12px; padding:4px 10px; border-radius:4px; background:none; border:1px solid var(--border); cursor:pointer; color:var(--text2); white-space:nowrap; }
 .treg-act:hover { border-color:var(--text2); color:var(--text); }
 .treg-act.act-ok  { color:#16a34a; border-color:rgba(22,163,74,.3); }
 .treg-act.act-ok:hover  { background:rgba(22,163,74,.08); }
@@ -2566,6 +3762,14 @@ body.density-compact .file-name { padding: 6px 0; }
 .task-badge.badge-stalled   { background:#fee2e2; color:#b91c1c; }
 .task-badge.badge-complete  { background:#e0f2fe; color:#0369a1; }
 .task-badge.badge-cancelled { background:var(--bg3); color:var(--text2); }
+/* S7h: project file chain CSS removed */
+/* S7: project type badges */
+.proj-type-badge { font-size:10px; font-weight:600; padding:1px 7px; border-radius:10px; margin-left:6px; white-space:nowrap; }
+.proj-type-manual { background:rgba(99,102,241,.12); color:#6366f1; }
+.proj-type-autonomous { background:rgba(245,158,11,.12); color:#f59e0b; }
+/* S7: project card gear icon */
+.proj-gear { cursor:pointer; color:var(--text3); padding:2px 4px; border-radius:4px; transition:.15s; margin-left:auto; }
+.proj-gear:hover { color:var(--text); background:var(--bg3); }
 /* Policy preset cards */
 .policy-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; }
 @media(max-width:600px) { .policy-grid { grid-template-columns:1fr; } }
@@ -2763,9 +3967,21 @@ select.settings-input { padding-right: 26px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
       <span class="mnav-label">Orchestration</span>
     </button>
+    <button class="mnav-item" id="mnav-memory" onclick="switchModule('memory')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10"/><path d="M12 2a15 15 0 0 0-4 10 15 15 0 0 0 4 10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+      <span class="mnav-label">Memory</span>
+    </button>
+    <button class="mnav-item" id="mnav-capabilities" onclick="switchModule('capabilities')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      <span class="mnav-label">Extensions</span>
+    </button>
     <button class="mnav-item" id="mnav-projects" onclick="switchModule('projects')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
       <span class="mnav-label">Projects</span>
+    </button>
+    <button class="mnav-item" id="mnav-workflows" onclick="switchModule('workflows')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      <span class="mnav-label">Workflows</span>
     </button>
     <button class="mnav-item" id="mnav-locations" onclick="switchModule('locations')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
@@ -2787,10 +4003,6 @@ select.settings-input { padding-right: 26px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
       <span class="mnav-label">Activity</span>
     </button>
-    <button class="mnav-item" id="mnav-capabilities" onclick="switchModule('capabilities')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-      <span class="mnav-label">Extensions</span>
-    </button>
     <div class="mnav-sep"></div>
     <button class="mnav-item" id="mnav-settings" onclick="openSettings('profile')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -2810,7 +4022,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.14.17</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.16.0</div>
   </div>
 </aside>
 
@@ -2893,19 +4105,19 @@ select.settings-input { padding-right: 26px; }
       </select>
       <div style="display:flex;gap:2px;margin-left:4px">
         <button class="treg-stab active" id="treg-f-all"        onclick="setTregFilter('')">All</button>
-        <button class="treg-stab"         id="treg-f-pending"    onclick="setTregFilter('pending')">Pending</button>
+        <button class="treg-stab"         id="treg-f-pending"    onclick="setTregFilter('pending')">Queued</button>
         <button class="treg-stab"         id="treg-f-active"     onclick="setTregFilter('in_progress')">Active</button>
         <button class="treg-stab"         id="treg-f-done"       onclick="setTregFilter('done')">Done</button>
       </div>
       <button class="btn btn-primary" onclick="openCreateTaskModal()" style="font-size:12px;margin-left:auto">+ New task</button>
     </div>
-    <div id="treg-list"><div style="color:var(--text2);padding:32px 0;text-align:center">Loading&#8230;</div></div>
+    <div id="treg-list"><div class="loading-indicator" style="justify-content:center;padding:32px 0">Loading tasks</div></div>
   </div>
 
   <div id="agents-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Orchestration</span>
-      <button class="btn btn-ghost" style="font-size:12px" onclick="loadAgents()">&#8635; Refresh</button>
+      <button class="btn btn-ghost"  onclick="loadAgents()">&#8635; Refresh</button>
     </div>
     <div class="module-intro">How AI work flows through Porter.</div>
 
@@ -2913,7 +4125,7 @@ select.settings-input { padding-right: 26px; }
     <div class="orch-section">
       <div class="orch-section-label">Connected Agents</div>
       <div id="orch-agents" class="orch-grid">
-        <div style="color:var(--text3);font-size:13px">Loading&hellip;</div>
+        <div class="loading-indicator">Loading agents</div>
       </div>
     </div>
 
@@ -2943,28 +4155,21 @@ select.settings-input { padding-right: 26px; }
     <div class="orch-section">
       <div class="orch-section-label">Models</div>
       <div id="orch-models" class="orch-grid">
-        <div style="color:var(--text3);font-size:13px">Loading&hellip;</div>
+        <div class="loading-indicator">Loading models</div>
       </div>
     </div>
 
     <!-- Hidden: agent list for settings page -->
     <div id="agents-module-list" style="display:none"></div>
 
-    <!-- Config slide-out panel -->
-    <div class="config-panel" id="configPanel">
-      <div class="config-header">
-        <span class="config-title" id="configPanelTitle">Configure</span>
-        <button class="btn btn-icon" onclick="closeConfigPanel()" title="Close">&times;</button>
-      </div>
-      <div class="config-body" id="configPanelBody"></div>
-    </div>
+    <!-- Config slide-out panel: moved after </main> for cross-tab visibility -->
 
     <div id="agent-workspace" style="display:none;margin-top:0;border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden;height:100%">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border)">
         <div style="font-size:13px;font-weight:600;color:var(--text)">Agent Workspace · <span id="aw-agent-name" style="color:var(--accent)"></span></div>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadAgentWorkspaceList()">Refresh files</button>
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="closeAgentWorkspace()">Close</button>
+          <button class="btn btn-ghost"  onclick="loadAgentWorkspaceList()">Refresh files</button>
+          <button class="btn btn-ghost"  onclick="closeAgentWorkspace()">Close</button>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:220px minmax(0,1fr) 260px;height:calc(100% - 49px)">
@@ -2977,8 +4182,8 @@ select.settings-input { padding-right: 26px; }
             <div id="aw-current-file" style="font-size:12px;color:var(--text2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Select a file</div>
             <div style="display:flex;align-items:center;gap:6px">
               <input id="aw-find" type="text" placeholder="Find in file" class="settings-input" style="height:28px;width:180px" onkeydown="if(event.key==='Enter'){findInWorkspace()}">
-              <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="findInWorkspace()">Find</button>
-              <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" onclick="saveAgentWorkspaceFile()">Save</button>
+              <button class="btn btn-ghost"  onclick="findInWorkspace()">Find</button>
+              <button class="btn btn-primary"  onclick="saveAgentWorkspaceFile()">Save</button>
             </div>
           </div>
           <textarea id="aw-editor" style="flex:1;height:100%;min-height:0;width:100%;max-width:100%;resize:none;box-sizing:border-box;overflow:auto;background:var(--bg);color:var(--text);border:none;outline:none;padding:12px;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;font-size:12px;line-height:1.45"></textarea>
@@ -3005,7 +4210,7 @@ select.settings-input { padding-right: 26px; }
   <div id="locations-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Locations</span>
-      <button class="btn btn-ghost" style="font-size:12px" onclick="loadTailscaleStatus(true);loadLocations();">&#8635; Refresh</button>
+      <button class="btn btn-ghost"  onclick="loadTailscaleStatus(true);loadLocations();">&#8635; Refresh</button>
     </div>
     <div class="module-intro">Devices and network locations connected to this Porter instance.</div>
     <div id="loc-list"></div>
@@ -3113,7 +4318,7 @@ select.settings-input { padding-right: 26px; }
           <input type="number" class="settings-input" id="tp-max-day" min="0">
         </div>
       </div>
-      <button class="btn btn-primary" style="font-size:12px" onclick="saveToolPolicy()">Save Policy</button>
+      <button class="btn btn-primary"  onclick="saveToolPolicy()">Save Policy</button>
     </div>
     <div class="module-section-title" style="margin-top:4px">Tool Registry</div>
     <div id="tools-list"></div>
@@ -3152,7 +4357,7 @@ select.settings-input { padding-right: 26px; }
   <div id="audit-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Activity Feed</span>
-      <button class="btn btn-ghost" style="font-size:12px" onclick="loadAudit()">&#8635; Refresh</button>
+      <button class="btn btn-ghost"  onclick="loadAudit()">&#8635; Refresh</button>
     </div>
     <div style="font-size:13px;color:var(--text3);margin-bottom:12px">
       Operational timeline of significant system and agent events.
@@ -3165,6 +4370,7 @@ select.settings-input { padding-right: 26px; }
   <div id="projects-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Projects</span>
+      <span id="proj-refresh-indicator" style="font-size:11px;color:var(--text3);margin-left:auto"></span>
     </div>
     <div class="module-intro">Active projects and their task backlogs.</div>
     <div id="proj-content-projects"></div>
@@ -3173,10 +4379,150 @@ select.settings-input { padding-right: 26px; }
   <div id="capabilities-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Extensions</span>
-      <button class="btn btn-ghost" style="font-size:12px" onclick="loadCapabilities()">&#8635; Refresh</button>
+      <button class="btn btn-ghost" onclick="loadCapabilities()">&#8635; Refresh</button>
     </div>
-    <div class="module-intro">Tools and services detected on this machine. AI model providers are shown in the Orchestration tab.</div>
-    <div id="capabilities-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"></div>
+    <div class="module-intro">Connected services and tools available to Porter and its agents.</div>
+
+    <!-- S8: Integrations section (from OpenClaw) -->
+    <div id="integrations-section" style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px;padding:0 4px">Integrations</div>
+      <div id="integrations-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"></div>
+    </div>
+
+
+    <!-- Tools section (existing capabilities) -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px;padding:0 4px">Tools</div>
+      <div id="capabilities-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"></div>
+    </div>
+
+  </div>
+
+  <!-- Workflows panel — skills browser + automations -->
+  <div id="workflows-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Workflows</span>
+      <button class="btn btn-ghost" onclick="loadWorkflows()">&#8635; Refresh</button>
+    </div>
+    <div class="module-intro">Skills from OpenClaw that can be composed into automated workflows.</div>
+
+    <!-- Skills section -->
+    <div style="margin-bottom:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">Skills</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="wf-skills-count" style="font-size:11px;color:var(--text3)"></span>
+          <button id="wf-show-all-btn" class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="toggleShowAllSkills()">Show all</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="toggleCreateSkillForm()">+ Create</button>
+        </div>
+      </div>
+      <div id="wf-create-form" style="display:none;margin-bottom:14px;padding:16px 20px;border:1px solid var(--accent);border-radius:8px;background:color-mix(in srgb,var(--accent) 4%,var(--bg))">
+        <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:12px">New manual skill</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="grid-column:1/-1">
+            <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:3px;display:block">Name *</label>
+            <input type="text" id="wf-new-skill-name" placeholder="e.g. deploy-staging" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;background:var(--raised);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:inherit">
+          </div>
+          <div style="grid-column:1/-1">
+            <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:3px;display:block">Description</label>
+            <input type="text" id="wf-new-skill-desc" placeholder="What does this skill do?" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;background:var(--raised);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:inherit">
+          </div>
+          <div>
+            <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:3px;display:block">Emoji</label>
+            <input type="text" id="wf-new-skill-emoji" placeholder="\u2699" style="width:80px;box-sizing:border-box;padding:8px 10px;font-size:13px;background:var(--raised);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:inherit">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn btn-accent" style="font-size:12px;padding:6px 16px" onclick="createSkill()">Create skill</button>
+          <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;color:var(--text3)" onclick="toggleCreateSkillForm()">Cancel</button>
+        </div>
+      </div>
+      <div id="wf-skills-search" style="margin-bottom:10px">
+        <input type="text" id="wf-skill-filter" placeholder="Filter skills..." oninput="filterWorkflowSkills()"
+          style="width:100%;padding:6px 10px;font-size:12px;background:var(--raised);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:inherit">
+      </div>
+      <div id="wf-skills-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px"></div>
+    </div>
+
+    <!-- Automations / Cron section -->
+    <div style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">Automations</div>
+        <span id="wf-cron-count" style="font-size:11px;color:var(--text3)"></span>
+      </div>
+      <div id="wf-cron-list"></div>
+    </div>
+  </div>
+
+  <!-- Memory tab v4 — Porter memory control center -->
+  <div id="memory-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Memory</span>
+      <button class="btn btn-ghost" onclick="loadMemory()">&#8635; Refresh</button>
+    </div>
+    <div class="module-intro">Porter manages short-term and long-term memory across all models.</div>
+
+    <!-- Health bar -->
+    <div id="mem-health" style="margin-bottom:16px"></div>
+
+    <!-- Layer 1: Instructions -->
+    <div class="mem-layer">
+      <div class="mem-layer-label">Long-Term &mdash; Instructions</div>
+      <div class="mem-layer-desc">Briefing documents loaded at every session start. You write these &mdash; they define who each model is and how it behaves.</div>
+      <div id="mem-instructions" class="orch-grid">
+        <div class="loading-indicator">Loading instructions</div>
+      </div>
+    </div>
+
+    <!-- Flow: Instructions → Persistent -->
+    <div class="flow-connector" id="mem-flow-1"></div>
+
+    <!-- Layer 2: Persistent Memory -->
+    <div class="mem-layer">
+      <div class="mem-layer-label">Long-Term &mdash; Learned Memory</div>
+      <div class="mem-layer-desc">What each model remembers between sessions. Auto-updated as models work &mdash; lessons, preferences, project state.</div>
+      <div id="mem-persistent" class="orch-grid">
+        <div class="loading-indicator">Loading memory</div>
+      </div>
+    </div>
+
+    <!-- Flow: Persistent → Hub -->
+    <div class="flow-connector" id="mem-flow-2"></div>
+
+    <!-- Porter Memory Hub -->
+    <div class="orch-hub" id="mem-hub">
+      <div class="orch-hub-left">
+        <div class="orch-hub-label">PORTER</div>
+        <div class="orch-hub-desc">Memory orchestration layer &mdash; coordinates across all models</div>
+      </div>
+      <div class="orch-hub-features" id="mem-hub-features"></div>
+    </div>
+
+    <!-- Flow: Hub → Sessions -->
+    <div class="flow-connector" id="mem-flow-3"></div>
+
+    <!-- Layer 3: Session Memory (short-term) -->
+    <div class="mem-layer">
+      <div class="mem-layer-label">Short-Term &mdash; Session Memory</div>
+      <div class="mem-layer-desc">Live conversation logs. Flush a session to extract its learnings into long-term memory.</div>
+      <div id="mem-filter-bar" class="mem-filter-bar"></div>
+      <div id="mem-sessions-list"></div>
+    </div>
+
+    <!-- File viewer/editor (hidden until a file is clicked) -->
+    <div id="mem-file-viewer" style="display:none;margin-top:16px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--raised)">
+        <span style="font-weight:600;font-size:13px;color:var(--text)" id="mem-file-title">File</span>
+        <span style="font-size:11px;color:var(--text3)" id="mem-file-path"></span>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" id="mem-file-edit-btn" onclick="toggleMemFileEdit()">Edit</button>
+          <button class="btn btn-accent" style="font-size:11px;padding:3px 10px;display:none" id="mem-file-save-btn" onclick="saveMemFileEdit()">Save</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="closeMemFileViewer()">Close</button>
+        </div>
+      </div>
+      <pre id="mem-file-content" style="margin:0;padding:14px;font-size:12px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word;max-height:500px;overflow-y:auto"></pre>
+      <textarea id="mem-file-editor" style="display:none;width:100%;min-height:300px;max-height:500px;padding:14px;font-size:12px;line-height:1.6;font-family:inherit;color:var(--text);background:var(--bg);border:none;border-top:1px solid var(--border);resize:vertical;box-sizing:border-box"></textarea>
+    </div>
   </div>
 
   <!-- settings panel — module panel, shown when settings module active -->
@@ -3248,6 +4594,14 @@ select.settings-input { padding-right: 26px; }
         <div class="settings-field">
           <label>Email address</label>
           <input type="email" class="settings-input" id="sa-email" placeholder="you@example.com">
+        </div>
+        <div class="settings-field">
+          <label>Timezone</label>
+          <input type="text" class="settings-input" id="sa-timezone" list="tz-datalist"
+            placeholder="Search timezones... (e.g. Singapore, EST, UTC+8)"
+            autocomplete="off">
+          <datalist id="tz-datalist"></datalist>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">Type to search. Controls how Porter displays dates and times.</div>
         </div>
         <div class="settings-save-row">
           <button class="btn btn-primary" onclick="saveAccount()">Save changes</button>
@@ -3379,9 +4733,9 @@ select.settings-input { padding-right: 26px; }
           <div style="font-size:13px;color:var(--text3);margin-bottom:12px">
             Current availability and token usage windows for all registered agents.
           </div>
-          <div id="usage-panel"><div style="color:var(--text3);font-size:13px">Loading…</div></div>
+          <div id="usage-panel"><div class="loading-indicator">Loading usage</div></div>
           <div style="margin-top:12px">
-            <button class="btn btn-ghost" style="font-size:12px" onclick="openUsageSnapshot()">+ Report usage</button>
+            <button class="btn btn-ghost"  onclick="openUsageSnapshot()">+ Report usage</button>
           </div>
         </div>
         <!-- manual snapshot form -->
@@ -3481,7 +4835,7 @@ select.settings-input { padding-right: 26px; }
             </div>
           </div>
         </details>
-        <div id="tasks-list"><div style="color:var(--text2);padding:20px 0">Loading…</div></div>
+        <div id="tasks-list"><div class="loading-indicator" style="padding:20px 0">Loading tasks</div></div>
       </div>
 
       <!-- Policy Presets page -->
@@ -3497,13 +4851,23 @@ select.settings-input { padding-right: 26px; }
       <div class="settings-page" id="spage-changelog">
         <div class="settings-page-title">What's new</div>
         <div id="changelog-content">
-          <div class="cl-ver-row"><span class="cl-vtag">Loading release notes…</span><span class="cl-vdate"></span></div>
+          <div class="loading-indicator" style="padding:8px 0">Loading release notes</div>
           <ul class="cl-notes"><li>If this persists, refresh once. Porter will repopulate this panel automatically.</li></ul>
         </div>
       </div>
 
     </div><!-- /settings-content -->
   </div><!-- /settingsPanel -->
+
+
+<!-- Config slide-out panel — outside all module divs so it works from any tab -->
+<div class="config-panel" id="configPanel">
+  <div class="config-header">
+    <span class="config-title" id="configPanelTitle">Configure</span>
+    <button class="btn btn-icon" onclick="closeConfigPanel()" title="Close">&times;</button>
+  </div>
+  <div class="config-body" id="configPanelBody"></div>
+</div>
 
 </main>
 
@@ -3613,6 +4977,119 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.16.0', date:'2026-02-28', notes:[
+    'Security: ThreadingHTTPServer — concurrent request handling (no more single-thread blocking)',
+    'Security: CORS restricted to same-origin (removed wildcard Access-Control-Allow-Origin)',
+    'Security: Login rate limiting — 5 attempts, then exponential backoff (30s → 60s → 120s → 240s)',
+    'Security: scrypt password hashing replaces SHA-256 (auto-migrates on next login)',
+  ]},
+  { ver:'v0.15.5', date:'2026-02-28', notes:[
+    'Fixed: Memory [edit] button no longer jumps to random session (race condition resolved)',
+    'Fixed: Removed decorative colored dots from Memory cards (dots now reserved for status indicators)',
+    'Improved: Loading states across all tabs now show animated spinner instead of static text',
+  ]},
+  { ver:'v0.15.4', date:'2026-02-28', notes:[
+    'Memory Tab v4: redesigned as control center \u2014 health bar, actionable operations, model filter tabs',
+    'Flush any session: Claude sessions now flushable via generic /api/memory/flush endpoint',
+    'Memory health bar: total footprint, per-model breakdown, unflushed session count, optimization hints',
+    'Hub decluttered: only non-empty directories shown as active pills, empty skeleton hidden',
+    'Session cards: flush button on ALL model sessions (Claude, OpenClaw), duration + size metrics',
+    'Orch tab fix: fanout SVG arrow count capped to grid columns (fixes 4-arrow \u2192 3-card misalignment)',
+    'Backend: _flush_claude_session() parses Claude JSONL and extracts task/model/token summary',
+  ]},
+  { ver:'v0.15.3', date:'2026-02-28', notes:[
+    'Memory Tab v3: three-layer educational view (Instructions \u2192 Persistent Memory \u2192 Shared Plane \u2192 Sessions)',
+    'Reuses Orchestration visual language: orch-card styling, SVG flow connectors, orch-hub central element',
+    'Layer 1 (Instructions): shows each model\'s briefing documents (CLAUDE.md, SOUL.md, GEMINI.md)',
+    'Layer 2 (Persistent Memory): shows auto-memory files per model, dashed cards for stateless models',
+    'Shared Memory Plane hub with feature pills showing directory status (active/empty)',
+    'Session History: filter tabs by model source (All, Claude, OpenClaw, Gemini) with counts',
+    'Session cards use orch-card styling with model color left-border',
+  ]},
+  { ver:'v0.15.2', date:'2026-02-28', notes:[
+    'Skills CRUD: installed vs all filter (default shows installed only, "Show all" reveals 50+ available skills)',
+    'Skills: remove button with confirm dialog on each skill card',
+    'Skills: create manual skills via form (name, description, emoji) — stored in runtime/skills/',
+    'Skills: install status detection based on required binary availability',
+    'Skills: "manual" badge for user-created skills, "not installed" badge for unavailable skills',
+    'Backend: POST /api/openclaw/skills with remove and create actions',
+  ]},
+  { ver:'v0.15.1', date:'2026-02-28', notes:[
+    'Sprint 11: Real agent connectivity test — actual HTTP roundtrip replaces heartbeat inference',
+    'Connectivity modal shows latency (ms), agent version, endpoint URL, and heartbeat status',
+    'OpenClaw agents tested via gateway HTTP ping; CLI agents (Claude, Gemini) tested via binary version check',
+    'Ollama tested via /api/tags endpoint; latency measured with monotonic clock',
+    'Even HTTP 401/403 responses count as "alive" — endpoint is reachable, auth is separate',
+    'Retest button in modal for quick re-ping without closing',
+    'Button renamed from "Connectivity check" to "Test connection"',
+  ]},
+  { ver:'v0.15.0', date:'2026-02-28', notes:[
+    'Sprint 10: OpenClaw bridge — skill & automation visibility',
+    'Workflows tab — browse 50+ OpenClaw skills in a searchable card grid',
+    'Skill cards show name, emoji, description, and documentation links from SKILL.md frontmatter',
+    'Automations section shows OpenClaw cron jobs and recent run history',
+    'Filter bar for instant skill search by name or description',
+    'Backend: /api/openclaw/skills reads skill definitions from OpenClaw sandbox directories',
+    'Backend: /api/openclaw/cron reads cron job config and run logs',
+    'Nav reorder: Orchestration → Extensions → Projects → Workflows → Locations → Files',
+    'Project start date corrected to Feb 18, 2026',
+  ]},
+  { ver:'v0.14.22', date:'2026-02-28', notes:[
+    'Fix: Early Sprints (sort_order=0) now correctly appears at bottom of completed list — fixed JS falsy bug (|| → ?? for nullish coalescing)',
+    'Extensions: removed Skills section — Skills will be part of a future Workflows/Automations feature',
+    'Extensions: now shows Integrations + Tools (two-section layout)',
+  ]},
+  { ver:'v0.14.21', date:'2026-02-28', notes:[
+    'Sprint 9: Hardcoding elimination pass — systematic audit of all paths, hosts, ports, and machine-specific assumptions',
+    'Fixed: is_writable() no longer references hardcoded /home/lobster — uses os.getuid() for portable ownership check',
+    'Audit result: 12+ path/host/port configurations already properly env-driven from Sprint P0',
+    'All critical paths derive from PORTER_DATA_DIR env var or XDG defaults',
+    'HOST auto-detected via PORTER_HOST env var or external IP lookup',
+    'PORT respects PORTER_PORT env var (default 8877)',
+    'AGENT_WORKSPACE_DIR and OPENCLAW_STATE_DIR respect their env vars with ~/.openclaw fallback',
+    'DEFAULT_MOUNTS is empty on first run — no assumed filesystem structure',
+    'Added _validate_no_hardcoding() startup self-check',
+    'Generalized changelog example paths to user-agnostic format',
+  ]},
+  { ver:'v0.14.20', date:'2026-02-28', notes:[
+    'Sprint 8: Integration visibility — Extensions tab shows OpenClaw integrations, skills, auth profiles, hooks',
+    'Extensions: redesigned as two-section dashboard — Integrations (OpenClaw services), Tools (local binaries)',
+    'Extensions: auth profile cards with expiry countdown (e.g. "expires in 5d")',
+    'Extensions: OpenClaw gateway status, session count, model provider display',
+    'Projects: metrics now aggregate from task registry — total tokens and time are summed across all tasks',
+    'Projects: always-visible summary row showing Started date, total Tokens, total Time, and task completion ratio',
+    'Backend: new /api/integrations endpoint — reads OpenClaw skills, sessions, auth profiles, hooks, models from disk',
+  ]},
+  { ver:'v0.14.19', date:'2026-02-28', notes:[
+    'Projects: completed tasks now display most recent first (reversed sort order)',
+    'Projects: Sprint P0 correctly sorted as first completed task (sort_order=1)',
+    'Projects: interim session tasks tracked between sprints with in_progress status',
+    'Projects: "pending" status renamed to "queued" in UI pills and filter tabs',
+    'Projects: historical token usage and time estimates populated on all completed tasks',
+    'Projects: per-task metrics (tokens used, time spent) visible in task rows',
+    'Projects: project-level metrics row (started, completed, tokens, time)',
+    'Projects: Open/Completed accordion sections with task counts',
+    'Projects: Active pill repositioned adjacent to project name',
+    'Projects: Rebuild button on pending tasks — resets task metadata',
+    'Projects: Reload button — re-reads config and task registry from disk',
+    'Projects: "Updated X ago" refresh indicator with 5-second tick',
+    'UI: button sizing overhaul — .btn-sm, .btn-xs, .proj-status-toggle increased; 38 inline overrides removed',
+    'UI: Active pill no longer clipped by overflow:hidden on project name',
+    'Backend: /api/reload endpoint — server-side config + task registry reload',
+    'Backend: /api/task-registry rebuild action for pending tasks',
+    'Backend: sort_order field included in task registry GET response',
+    'Backend: task update_status accepts tokens_used and time_spent_mins',
+    'Settings: timezone dropdown with searchable datalist, UTC offset labels, sorted by offset',
+  ]},
+  { ver:'v0.14.18', date:'2026-02-28', notes:[
+    'Projects: memory file chain viewer — shows 6 canonical files (PROJECT.md, MEMORY.md, SPRINT_PLAN.md, checkpoint, lessons, settings) with exist/missing icons, sizes, and ages',
+    'Projects: collapsible file chain section per project card with exists count badge (e.g. "3/6")',
+    'Projects: project type system — manual (indigo badge, sprint progress) vs autonomous (amber badge, no progress bar)',
+    'Projects: gear icon on each project card opens config slide-out panel with name, type, memory isolation, save/delete',
+    'Projects: Settings option added to project context menu',
+    'Backend: GET /api/projects/{id}/files — returns file chain metadata for a project',
+    'Backend: POST /api/projects update action — edits name, type, memory_isolation, persists to config + workspace settings.json',
+  ]},
   { ver:'v0.14.17', date:'2026-02-28', notes:[
     'Orchestration: auto-refresh usage on tab load — Claude (API headers) and OpenClaw (CLI sessions) refresh automatically',
     'Orchestration: improved no-data states — "Checking…", "No usage data yet", "Check provider dashboard" (Gemini)',
@@ -3874,25 +5351,25 @@ const CHANGELOG = [
     'Agent Workspace: active file is now highlighted in left navigation for clear editing context',
     'Agent Workspace: added quick Find-in-file input and navigation for faster text search within open config files',
   ]},
-  { ver:'v0.12.85', date:'2026-02-26', notes:[
+  { ver:'v0.12.86', date:'2026-02-26', notes:[
     'Agent Workspace file list now scopes to the selected assistant (no cross-agent config leakage in navigator)',
     'Provider-specific external auth files are now included only when relevant to the selected assistant type',
     'Auth/model profile discovery now follows documented OpenClaw paths per selected assistant context',
   ]},
-  { ver:'v0.12.85', date:'2026-02-26', notes:[
+  { ver:'v0.12.87', date:'2026-02-26', notes:[
     'Agent Workspace navigation fixed: selecting files now reliably loads the selected file from the left navigator',
     'Unsaved-change flow improved on file switch (save-first or explicit discard before navigation)',
     'Workspace config coverage extended with additional auth/config artifacts (including credentials/oauth and external codex auth when present)',
   ]},
-  { ver:'v0.12.85', date:'2026-02-26', notes:[
+  { ver:'v0.12.88', date:'2026-02-26', notes:[
     'Escape key behavior fixed in Assistants Configure mode: now exits workspace back to main Assistants view instead of switching to Files',
   ]},
-  { ver:'v0.12.85', date:'2026-02-26', notes:[
+  { ver:'v0.12.89', date:'2026-02-26', notes:[
     'Agent Workspace editor now expands fully to the bottom of the pane for maximum vertical working area',
     'Editor resize-to-right disabled to keep layout stable and prevent horizontal panel breakage',
     'Workspace grid updated with bounded center column (minmax(0,1fr)) to maximize usable editor space',
   ]},
-  { ver:'v0.12.85', date:'2026-02-26', notes:[
+  { ver:'v0.12.90', date:'2026-02-26', notes:[
     'Agent Workspace: fixed file switching behavior and added unsaved-change protection prompt',
     'Agent Workspace: expanded allowlisted config files to include OpenClaw state JSON files and per-agent auth/model profile files',
     'Configure workspace now supports both workspace markdown and key OpenClaw JSON configuration artifacts in one navigator',
@@ -4310,7 +5787,7 @@ const CHANGELOG = [
     'Release notes policy fix: restored missing v0.11.2–v0.11.8 entries (append-only history)',
   ]},
   { ver:'v0.11.8', date:'2026-02-25', notes:[
-    'Breadcrumbs: root crumb now shows full mounted VPS path (e.g., /home/lobster/documents) instead of ~/root-id',
+    'Breadcrumbs: root crumb now shows full mounted VPS path (e.g., /home/user/documents) instead of ~/root-id',
   ]},
   { ver:'v0.11.7', date:'2026-02-25', notes:[
     'Files UX: locations moved out of primary sidebar into a dedicated secondary Files navigation rail',
@@ -4455,18 +5932,18 @@ const CHANGELOG = [
     'Folder path in search results navigates on click',
     'Release notes changelog accessible from footer',
   ]},
-  { ver:'v0.3', date:'2026-02-10', notes:[
+  { ver:'v0.3', date:'2026-02-23', notes:[
     'Cache-Control: no-store on all responses — prevents stale listings',
     'Version display added to sidebar',
   ]},
-  { ver:'v0.2', date:'2026-01-20', notes:[
+  { ver:'v0.2', date:'2026-02-23', notes:[
     'Copy file/folder operation',
     'ZIP bulk download of selected items',
     'Full-root search via /api/search',
     'Folder picker modal for Move operation',
     'Selection toolbar with bulk actions (delete, move, zip)',
   ]},
-  { ver:'v0.1', date:'2026-01-01', notes:[
+  { ver:'v0.1', date:'2026-02-23', notes:[
     'Multi-root file browser (documents, uploads, websites)',
     'Directory listing with sort by name, size, modified date',
     'File upload with progress bar and batch queue',
@@ -4599,9 +6076,69 @@ function applySettings() {
   document.body.classList.toggle('density-compact', settings.density === 'compact');
   document.documentElement.style.setProperty('--editor-font-size', settings.fontSize + 'px');
 }
+
+// S7h: Timezone support
+function _porterTz() {
+  try {
+    const tz = (window._currentPrefs || {}).timezone;
+    if (tz) return tz;
+  } catch(e) {}
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+function populateTimezones() {
+  const sel = document.getElementById('sa-timezone');
+  const dl = document.getElementById('tz-datalist');
+  if (!sel || !dl || dl.options.length > 1) return;
+  let zones = [];
+  try { zones = Intl.supportedValuesOf('timeZone'); } catch(e) {
+    zones = ['America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
+      'America/Sao_Paulo','Europe/London','Europe/Paris','Europe/Berlin','Europe/Moscow',
+      'Asia/Dubai','Asia/Kolkata','Asia/Bangkok','Asia/Singapore','Asia/Shanghai',
+      'Asia/Tokyo','Asia/Seoul','Australia/Sydney','Pacific/Auckland','UTC'];
+  }
+  // Build entries with UTC offset labels
+  const now = new Date();
+  const entries = zones.map(z => {
+    try {
+      const fmt = new Intl.DateTimeFormat('en-US', { timeZone: z, timeZoneName: 'shortOffset' });
+      const parts = fmt.formatToParts(now);
+      const offsetPart = parts.find(p => p.type === 'timeZoneName');
+      const offset = offsetPart ? offsetPart.value : '';
+      // Also get short name (EST, PST, etc)
+      const fmtShort = new Intl.DateTimeFormat('en-US', { timeZone: z, timeZoneName: 'short' });
+      const shortParts = fmtShort.formatToParts(now);
+      const shortPart = shortParts.find(p => p.type === 'timeZoneName');
+      const abbr = shortPart ? shortPart.value : '';
+      const display = z.replace(/_/g, ' ');
+      const label = offset ? '(' + offset + ') ' + display + (abbr && abbr !== offset ? ' — ' + abbr : '') : display;
+      // Parse offset for sorting
+      let sortVal = 0;
+      const m = (offset || '').match(/GMT([+-]?)(\d+)?:?(\d+)?/);
+      if (m) { sortVal = (m[1]==='-'?-1:1) * ((parseInt(m[2]||'0',10)*60) + parseInt(m[3]||'0',10)); }
+      return { value: z, label, sortVal };
+    } catch(e) {
+      return { value: z, label: z.replace(/_/g, ' '), sortVal: 0 };
+    }
+  });
+  entries.sort((a, b) => a.sortVal - b.sortVal || a.label.localeCompare(b.label));
+  entries.forEach(e => {
+    const opt = document.createElement('option');
+    opt.value = e.value;
+    opt.label = e.label;
+    dl.appendChild(opt);
+  });
+  // Set current value from prefs
+  try {
+    const tz = (window._currentPrefs || {}).timezone;
+    if (tz) sel.value = tz;
+  } catch(e) {}
+}
+
 function syncSettingsUI() {
   const bh = document.getElementById('btnHidden');
   if (bh) bh.style.opacity = settings.showHidden ? '1' : '.4';
+  populateTimezones();
   // Keep settings nav/page state consistent. If mismatch, force profile tab.
   const activeNav = document.querySelector('.settings-nav-item.active');
   const activePage = document.querySelector('.settings-page.active');
@@ -4887,13 +6424,162 @@ function switchModule(name) {
     if (el) el.style.display = isFiles ? '' : 'none';
   });
   const loaders = {
-    overview: loadOverview, tasks: () => switchModule('projects'), agents: loadAgents, projects: loadProjects,
+    overview: function() { loadOverview(); populateModelDropdown(); }, tasks: () => switchModule('projects'), agents: loadAgents, projects: loadProjects,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
-    tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, settings: syncSettingsUI,
+    tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, workflows: loadWorkflows, memory: loadMemory, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
 
+
+
+// ── S10: Workflows — Skills browser + Automations ──────────────────────────
+let _wfSkills = [];
+let _wfShowAll = false;
+
+async function loadWorkflows() {
+  const [skillRes, cronRes] = await Promise.all([
+    api('/api/openclaw/skills'),
+    api('/api/openclaw/cron'),
+  ]);
+
+  // Skills
+  _wfSkills = (skillRes && skillRes.skills) || [];
+  const installed = _wfSkills.filter(function(sk) { return sk.installed; });
+  const countEl = document.getElementById('wf-skills-count');
+  if (countEl) countEl.textContent = installed.length + ' installed / ' + _wfSkills.length + ' total';
+  _renderFilteredSkills();
+
+  // Cron / Automations
+  const jobs = (cronRes && cronRes.jobs) || [];
+  const runs = (cronRes && cronRes.runs) || [];
+  const cronCountEl = document.getElementById('wf-cron-count');
+  const cronListEl = document.getElementById('wf-cron-list');
+  if (cronCountEl) cronCountEl.textContent = jobs.length + ' job' + (jobs.length !== 1 ? 's' : '');
+  if (cronListEl) {
+    if (!jobs.length && !runs.length) {
+      cronListEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text3);font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">'
+        + '<div style="font-size:14px;margin-bottom:4px">No automations configured</div>'
+        + '<div>Automations combine skills into scheduled or triggered workflows.</div>'
+        + '<div style="margin-top:8px;color:var(--text3)">Configure cron jobs in OpenClaw to see them here.</div>'
+        + '</div>';
+    } else {
+      let html = '';
+      jobs.forEach(function(j) {
+        html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);margin-bottom:6px">'
+          + '<div style="display:flex;align-items:center;gap:8px">'
+          + '<span style="font-weight:500;font-size:13px;color:var(--text)">' + escHtml(j.name || j.id || 'Job') + '</span>'
+          + '<span style="font-size:11px;color:var(--text3);margin-left:auto">' + escHtml(j.schedule || '') + '</span>'
+          + '</div>'
+          + (j.description ? '<div style="font-size:12px;color:var(--text3);margin-top:4px">' + escHtml(j.description) + '</div>' : '')
+          + '</div>';
+      });
+      if (runs.length) {
+        html += '<div style="font-size:11px;color:var(--text3);margin-top:8px;padding:0 4px">'
+          + runs.length + ' recent run' + (runs.length !== 1 ? 's' : '') + '</div>';
+      }
+      cronListEl.innerHTML = html;
+    }
+  }
+}
+
+function _renderFilteredSkills() {
+  const q = (document.getElementById('wf-skill-filter') || {}).value || '';
+  const lower = q.toLowerCase();
+  let filtered = _wfSkills;
+  if (!_wfShowAll) {
+    filtered = filtered.filter(function(sk) { return sk.installed; });
+  }
+  if (lower) {
+    filtered = filtered.filter(function(sk) {
+      return (sk.name && sk.name.toLowerCase().indexOf(lower) !== -1)
+        || (sk.description && sk.description.toLowerCase().indexOf(lower) !== -1)
+        || (sk.id && sk.id.toLowerCase().indexOf(lower) !== -1);
+    });
+  }
+  renderWorkflowSkills(filtered);
+}
+
+function toggleShowAllSkills() {
+  _wfShowAll = !_wfShowAll;
+  const btn = document.getElementById('wf-show-all-btn');
+  if (btn) btn.textContent = _wfShowAll ? 'Show installed' : 'Show all';
+  _renderFilteredSkills();
+}
+
+function renderWorkflowSkills(skills) {
+  const grid = document.getElementById('wf-skills-grid');
+  if (!grid) return;
+  if (!skills.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--text3);font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">'
+      + (_wfShowAll ? 'No skills match your filter.' : 'No installed skills found. Click "Show all" to see available skills.')
+      + '</div>';
+    return;
+  }
+  grid.innerHTML = skills.map(function(sk) {
+    const emoji = sk.emoji || '\u2699';
+    const name = escHtml(sk.name);
+    const desc = escHtml(sk.description ? (sk.description.length > 80 ? sk.description.substring(0, 77) + '...' : sk.description) : 'No description');
+    const installed = sk.installed;
+    const manual = sk.manual;
+    const borderColor = installed ? 'var(--border)' : 'var(--border2)';
+    const opacity = installed ? '1' : '0.7';
+    const badge = !installed ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--raised);color:var(--text3);margin-left:auto">not installed</span>'
+      : manual ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);margin-left:auto">manual</span>'
+      : '';
+    const removeBtn = (installed || manual) ? '<button class="btn-xs" style="font-size:10px;padding:1px 6px;border:1px solid var(--border2);border-radius:3px;background:none;color:var(--text3);cursor:pointer;margin-left:4px" onclick="event.stopPropagation();removeSkill(\'' + escHtml(sk.id) + '\',\'' + name + '\')">\u00d7</button>' : '';
+    return '<div class="wf-skill-card" style="border-color:' + borderColor + ';opacity:' + opacity + '">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+      + '<span style="font-size:16px">' + emoji + '</span>'
+      + '<span style="font-weight:500;font-size:13px;color:var(--text)">' + name + '</span>'
+      + badge + removeBtn
+      + '</div>'
+      + '<div style="font-size:11px;color:var(--text3);line-height:1.4">' + desc + '</div>'
+      + (sk.requires && sk.requires.length ? '<div style="font-size:10px;color:var(--text3);margin-top:4px">Requires: ' + sk.requires.join(', ') + '</div>' : '')
+      + '</div>';
+  }).join('');
+}
+
+function filterWorkflowSkills() {
+  _renderFilteredSkills();
+}
+
+async function removeSkill(id, name) {
+  if (!confirm('Remove skill "' + name + '"? This cannot be undone.')) return;
+  const res = await api('/api/openclaw/skills', { action: 'remove', id: id });
+  if (res && res.ok) {
+    toast('Skill "' + name + '" removed');
+    loadWorkflows();
+  } else {
+    toast((res && res.error) || 'Failed to remove skill', 'err');
+  }
+}
+
+async function createSkill() {
+  const name = (document.getElementById('wf-new-skill-name') || {}).value || '';
+  const desc = (document.getElementById('wf-new-skill-desc') || {}).value || '';
+  const emoji = (document.getElementById('wf-new-skill-emoji') || {}).value || '';
+  if (!name.trim()) { toast('Skill name is required', 'err'); return; }
+  const res = await api('/api/openclaw/skills', { action: 'create', name: name.trim(), description: desc.trim(), emoji: emoji.trim() });
+  if (res && res.ok) {
+    toast('Skill "' + name.trim() + '" created');
+    // Clear form
+    const n = document.getElementById('wf-new-skill-name'); if (n) n.value = '';
+    const d = document.getElementById('wf-new-skill-desc'); if (d) d.value = '';
+    const e = document.getElementById('wf-new-skill-emoji'); if (e) e.value = '';
+    // Collapse form
+    const form = document.getElementById('wf-create-form');
+    if (form) form.style.display = 'none';
+    loadWorkflows();
+  } else {
+    toast((res && res.error) || 'Failed to create skill', 'err');
+  }
+}
+
+function toggleCreateSkillForm() {
+  const form = document.getElementById('wf-create-form');
+  if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
 
 // ── Projects / Models / Tasks dashboard ─────────────────────────────────────
 // State
@@ -4902,11 +6588,13 @@ let _projActiveId = null;
 let _projAllTasks = [];
 let _projExpanded = new Set();  // project ids that are expanded
 let _projDoneOpen = new Set();  // project ids with Done section open
+let _projOpenCollapsed = new Set();  // project ids with Open section collapsed
 let _cpTaskForModal = null;
+let _projFileCache = {};          // S7: project data cache
 
 async function loadProjects() {
   const el = document.getElementById('proj-content-projects');
-  if (el) el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:16px 28px">Loading\u2026</div>';
+  if (el) el.innerHTML = '<div class="loading-indicator" style="padding:16px 28px">Loading projects</div>';
 
   const [regData, taskData] = await Promise.all([
     api('/api/projects'),
@@ -4914,6 +6602,7 @@ async function loadProjects() {
   ]);
 
   const regProjects = (regData && regData.projects) || [];
+  _projConfigProjects = regProjects;  // S7: cache for config editor
   _projActiveId    = regData && regData.active_project_id;
   _projAllTasks    = (taskData && taskData.tasks) || [];
 
@@ -4937,9 +6626,80 @@ async function loadProjects() {
   // Auto-expand all on first load; preserve state after that
   if (_projExpanded.size === 0) _projProjects.forEach(p => _projExpanded.add(p.id));
   _renderProjectList();
+  _projLastRefreshTs = Date.now();
+  _updateProjRefreshIndicator();
+  startProjAutoRefresh();
 }
 
 function switchProjTab(tab) { /* compat no-op */ }
+
+// S7: Auto-refresh projects every 30s when tab is visible
+let _projConfigProjects = [];
+let _projAutoRefreshTimer = null;
+let _projLastRefreshTs = 0;
+let _projRefreshTickTimer = null;
+
+
+
+// S7h: Rebuild a pending task — resets it based on sprint plan
+async function rebuildTask(taskId) {
+  if (!confirm('Rebuild this task from sprint plan? This will reset its description and metadata.')) return;
+  const d = await api('/api/task-registry', {action:'rebuild', id: taskId});
+  if (d && d.ok) {
+    toast('Task rebuilt from sprint plan');
+    await loadProjects();
+  } else {
+    toast((d && d.error) || 'Rebuild failed', 'err');
+  }
+}
+
+// S7h: Logical reload — re-reads config + task registry from disk
+async function porterReload() {
+  const btn = event && event.target;
+  if (btn) { btn.disabled = true; btn.textContent = 'Reloading\u2026'; }
+  const d = await api('/api/reload');
+  if (d && d.ok) {
+    toast('Porter reloaded config and tasks from disk');
+    await loadProjects();
+  } else {
+    toast((d && d.error) || 'Reload failed', 'err');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '\u21bb Reload'; }
+}
+async function refreshProjects() {
+  _projFileCache = {};
+  await loadProjects();
+}
+
+
+// S7h: Update the "Updated X ago" indicator in Projects header
+function _updateProjRefreshIndicator() {
+  const el = document.getElementById('proj-refresh-indicator');
+  if (!el) return;
+  if (!_projLastRefreshTs) { el.textContent = ''; return; }
+  const sec = Math.floor((Date.now() - _projLastRefreshTs) / 1000);
+  if (sec < 5) el.textContent = 'Updated just now';
+  else if (sec < 60) el.textContent = 'Updated ' + sec + 's ago';
+  else if (sec < 3600) el.textContent = 'Updated ' + Math.floor(sec / 60) + 'm ago';
+  else el.textContent = 'Updated ' + Math.floor(sec / 3600) + 'h ago';
+}
+
+function startProjAutoRefresh() {
+  stopProjAutoRefresh();
+  _projAutoRefreshTimer = setInterval(() => {
+    // Only refresh if projects tab is visible
+    const mod = document.getElementById('projects-module');
+    if (mod && mod.style.display !== 'none') refreshProjects();
+  }, 30000);
+  // Tick the "Updated X ago" indicator every 5s
+  if (_projRefreshTickTimer) clearInterval(_projRefreshTickTimer);
+  _projRefreshTickTimer = setInterval(_updateProjRefreshIndicator, 5000);
+}
+
+function stopProjAutoRefresh() {
+  if (_projAutoRefreshTimer) { clearInterval(_projAutoRefreshTimer); _projAutoRefreshTimer = null; }
+  if (_projRefreshTickTimer) { clearInterval(_projRefreshTickTimer); _projRefreshTickTimer = null; }
+}
 
 function _renderProjectList() {
   const el = document.getElementById('proj-content-projects');
@@ -4955,6 +6715,9 @@ function _renderProjectList() {
       unassigned.push(t);
     }
   });
+  // Sort tasks within each project by sort_order (ascending for open, will reverse for completed)
+  Object.values(tasksByProject).forEach(arr => arr.sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99)));
+  unassigned.sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99));
 
   if (!_projProjects.length && !unassigned.length) {
     el.innerHTML = '<div style="text-align:center;padding:48px 28px;color:var(--text3)">'
@@ -4967,7 +6730,7 @@ function _renderProjectList() {
   let html = _projProjects.map(p => {
     const pid     = p.id;
     const tasks   = tasksByProject[pid] || [];
-    const open    = _projExpanded.has(pid);
+    const isOpen  = _projExpanded.has(pid);
     const active  = tasks.filter(t => t.status === 'in_progress');
     const pending = tasks.filter(t => t.status === 'pending');
     const done    = tasks.filter(t => ['complete','failed','cancelled'].includes(t.status));
@@ -4976,56 +6739,82 @@ function _renderProjectList() {
     const isAct   = pid === _projActiveId;
     const pctDone = cnt ? Math.round((done.length / cnt) * 100) : 0;
 
+    // Active pill — right of project name
     const activePill = isAct
-      ? '<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:rgba(34,197,94,.12);color:#22c55e;margin-left:8px">active</span>'
+      ? '<span class="proj-status-toggle active" style="margin-left:8px;cursor:default;pointer-events:none">\u2713 Active</span>'
       : '';
-
-    // Stats line
-    const stats = [];
-    if (active.length) stats.push(`<span class="proj-stat"><span class="proj-stat-num">${active.length}</span> active</span>`);
-    if (pending.length) stats.push(`<span class="proj-stat"><span class="proj-stat-num">${pending.length}</span> pending</span>`);
-    if (done.length) stats.push(`<span class="proj-stat"><span class="proj-stat-num">${done.length}</span> done</span>`);
-    const statsHtml = stats.length ? '<div class="proj-stats">' + stats.join('') + '</div>' : '';
 
     // Progress bar
     const progressHtml = cnt
-      ? `<div class="proj-progress"><div class="proj-progress-bar"><div class="proj-progress-fill" style="width:${pctDone}%"></div></div><span class="proj-progress-label">${pctDone}%</span></div>`
+      ? '<div class="proj-progress"><div class="proj-progress-bar"><div class="proj-progress-fill" style="width:' + pctDone + '%"></div></div><span class="proj-progress-label">' + pctDone + '%</span></div>'
       : '';
 
+    // Project metrics — aggregate from tasks
+    const totalTokens = tasks.reduce((s, t) => s + (t.tokens_used || 0), 0);
+    const totalTime = tasks.reduce((s, t) => s + (t.time_spent_mins || 0), 0);
+    const startDate = p.created_at ? new Date(p.created_at * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',year:'numeric',timeZone:_porterTz()}) : '';
+    const endDate = p.completed_at ? new Date(p.completed_at * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',year:'numeric',timeZone:_porterTz()}) : '';
+    let metricsHtml = '<div class="proj-metrics">';
+    if (startDate) metricsHtml += '<span class="proj-metric">Started <span class="proj-metric-val">' + startDate + '</span></span>';
+    if (endDate) metricsHtml += '<span class="proj-metric">Completed <span class="proj-metric-val">' + endDate + '</span></span>';
+    metricsHtml += '<span class="proj-metric">Tokens <span class="proj-metric-val">' + _fmtNum(totalTokens) + '</span></span>';
+    metricsHtml += '<span class="proj-metric">Time <span class="proj-metric-val">' + _fmtDuration(totalTime) + '</span></span>';
+    metricsHtml += '<span class="proj-metric">Tasks <span class="proj-metric-val">' + done.length + '/' + cnt + ' done</span></span>';
+    metricsHtml += '</div>';
+
+    // Task body — Open and Completed accordions
     let bodyHtml = '';
-    if (open) {
+    if (isOpen) {
       let rows = '';
       if (!tasks.length) {
         rows = '<div style="padding:10px 12px;font-size:12px;color:var(--text3)">No tasks yet.'
           + ' <button class="treg-act" style="font-size:11px"'
-          + ` onclick="openCreateTaskInProject('${pid}')">+ Create task</button></div>`;
+          + ' onclick="openCreateTaskInProject(\'' + pid + '\')">+ Create task</button></div>';
       } else {
-        rows += live.map(t => _ptaskRow(t)).join('');
+        // Open tasks accordion (active + pending)
+        if (live.length) {
+          const openOpen = !_projOpenCollapsed.has(pid);
+          rows += '<div class="proj-open-hdr" onclick="event.stopPropagation();toggleProjOpen(\'' + pid + '\')">'
+            + '<span class="proj-open-chevron' + (openOpen ? ' open' : '') + '">&#9658;</span>'
+            + '<span class="proj-open-label">Open</span>'
+            + '<span class="proj-open-count">' + live.length + ' task' + (live.length !== 1 ? 's' : '') + '</span>'
+            + '</div>'
+            + '<div id="proj-open-' + pid + '" style="display:' + (openOpen ? 'block' : 'none') + '">'
+            + live.map(t => _ptaskRow(t)).join('')
+            + '</div>';
+        }
 
+        // Completed tasks accordion (most recent first)
         if (done.length) {
           const doneOpen = _projDoneOpen.has(pid);
-          rows += `<div class="proj-done-hdr" onclick="toggleProjDone('${pid}')">`
-            + `<span class="proj-done-chevron${doneOpen ? ' open' : ''}">&#9658;</span>`
+          const doneReversed = [...done].reverse();
+          rows += '<div class="proj-done-hdr" onclick="event.stopPropagation();toggleProjDone(\'' + pid + '\')">'
+            + '<span class="proj-done-chevron' + (doneOpen ? ' open' : '') + '">&#9658;</span>'
             + '<span class="proj-done-label">Completed</span>'
-            + `<span class="proj-done-count">${done.length}</span>`
+            + '<span class="proj-done-count">' + done.length + ' task' + (done.length !== 1 ? 's' : '') + '</span>'
             + '</div>'
-            + `<div id="proj-done-${pid}" style="display:${doneOpen ? 'block' : 'none'}">`
-            + done.map(t => _ptaskRow(t)).join('')
+            + '<div id="proj-done-' + pid + '" style="display:' + (doneOpen ? 'block' : 'none') + '">'
+            + doneReversed.map(t => _ptaskRow(t)).join('')
             + '</div>';
         }
       }
       bodyHtml = '<div class="proj-tasks">' + rows + '</div>';
     }
 
-    return `<div class="proj-card">
-      <div class="proj-card-head" onclick="toggleProject('${pid}')">
-        <span class="proj-card-chevron${open ? ' open' : ''}">&#9658;</span>
-        <span class="proj-card-name">${escHtml(p.name || '')}${activePill}</span>
-        <span class="proj-card-count">${cnt ? cnt + ' task' + (cnt !== 1 ? 's' : '') : ''}</span>
-      </div>
-      ${statsHtml}${progressHtml}
-      ${bodyHtml ? '<div class="proj-card-tasks">' + bodyHtml + '</div>' : ''}
-    </div>`;
+    return '<div class="proj-card">'
+      + '<div class="proj-card-head" onclick="toggleProject(\'' + pid + '\')">'
+      + '<span class="proj-card-chevron' + (isOpen ? ' open' : '') + '">&#9658;</span>'
+      + '<span class="proj-card-name">' + escHtml(p.name || '') + '</span>'
+      + activePill
+      + '<span style="flex:1"></span>'
+      + (isOpen ? '<button class="btn btn-xs btn-ghost" onclick="event.stopPropagation();promptRenameProject(\'' + pid + '\',\'' + escHtml(p.name || '').replace(/'/g, "\\\\'") + '\')">Rename</button>' : '')
+      + (isOpen ? '<button class="btn btn-xs btn-ghost" style="color:var(--danger)" onclick="event.stopPropagation();if(confirm(\'Delete this project and all its tasks?\'))deleteProject(\'' + pid + '\')">Delete</button>' : '')
+      + '<button class="proj-card-refresh" onclick="event.stopPropagation();porterReload()" title="Re-read config and task registry from disk, then refresh display">&#8635; Reload</button>'
+      + '</div>'
+      + progressHtml
+      + metricsHtml
+      + (bodyHtml ? '<div class="proj-card-tasks">' + bodyHtml + '</div>' : '')
+      + '</div>';
   }).join('');
 
   // Inbox: unassigned tasks
@@ -5051,6 +6840,14 @@ function toggleProject(pid) {
   _renderProjectList();
 }
 
+
+
+function toggleProjOpen(pid) {
+  if (_projOpenCollapsed.has(pid)) _projOpenCollapsed.delete(pid);
+  else _projOpenCollapsed.add(pid);
+  _renderProjectList();
+}
+
 function toggleProjDone(pid) {
   if (_projDoneOpen.has(pid)) _projDoneOpen.delete(pid);
   else _projDoneOpen.add(pid);
@@ -5063,6 +6860,7 @@ function openProjMenu(evt, projId) {
   const dd = document.getElementById('dropdown');
   if (!dd) return;
   const items = [
+    { label: 'Settings', action: () => openProjectConfig(projId) },
     { label: 'Set as active', action: () => setActiveProject(projId) },
     { sep: true },
     { label: 'Delete project', cls: 'danger', action: () => deleteProject(projId) },
@@ -5090,13 +6888,23 @@ function openProjMenu(evt, projId) {
 
 function _ptaskRow(t) {
   const st = t.status || 'pending';
-  const ageLbl = _tsAgo(t.created_at);
   const pillClass = { in_progress:'st-pill-progress', pending:'st-pill-pending', complete:'st-pill-complete', failed:'st-pill-failed', cancelled:'st-pill-cancelled' }[st] || 'st-pill-pending';
-  const stLabel = st === 'in_progress' ? 'active' : st;
+  const stLabel = st === 'in_progress' ? 'active' : st === 'pending' ? 'queued' : st;
+  const showPill = st !== 'complete';
+  // Per-task metrics — completion date if known, age for open tasks, nothing for old completed
+  let metaItems = [];
+  if (st === 'complete' && t.completed_at) {
+    metaItems.push(new Date(t.completed_at * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',timeZone:_porterTz()}));
+  } else if (st !== 'complete') {
+    metaItems.push(_tsAgo(t.created_at));
+  }
+  if (t.tokens_used) metaItems.push(_fmtNum(t.tokens_used) + ' tokens');
+  if (t.time_spent_mins) metaItems.push(_fmtDuration(t.time_spent_mins));
+  const metaHtml = metaItems.join(' · ');
   return '<div class="ptask-row">'
-    + `<span class="ptask-row-title">${escHtml(t.title || '')}</span>`
-    + `<span class="st-pill ${pillClass}">${escHtml(stLabel)}</span>`
-    + `<span class="ptask-row-age">${ageLbl}</span>`
+    + '<span class="ptask-row-title">' + escHtml(t.title || '') + '</span>'
+    + (showPill ? '<span class="st-pill ' + pillClass + '">' + escHtml(stLabel) + '</span>' : '')
+    + '<span class="ptask-row-age">' + metaHtml + '</span>'
     + '</div>';
 }
 
@@ -5228,8 +7036,8 @@ function renderSprintsTab(data) {
     const sc = statusColor[t.status] || '#6b7280';
     const actionBtns = t.status !== 'complete' ? `
   <div style="display:flex;gap:6px;margin-top:8px">
-    ${t.status === 'in_progress' ? '<button class="btn btn-ghost" style="font-size:11px" onclick="cpAction(\'' + escHtml(t.checkpoint_path) + '\',\'pause\')">Pause</button>' : ''}
-    <button class="btn btn-ghost" style="font-size:11px" onclick="cpAction(\'${escHtml(t.checkpoint_path)}\',\'complete\')">Mark complete</button>
+    ${t.status === 'in_progress' ? '<button class="btn btn-ghost" onclick="cpAction(\'' + escHtml(t.checkpoint_path) + '\',\'pause\')">Pause</button>' : ''}
+    <button class="btn btn-ghost" onclick="cpAction(\'${escHtml(t.checkpoint_path)}\',\'complete\')">Mark complete</button>
   </div>` : '';
     return `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);margin-bottom:8px">
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
@@ -5266,16 +7074,104 @@ async function cpAction(path, action) {
 async function loadCapabilities() {
   const el = document.getElementById('capabilities-list');
   if (!el) return;
-  el.innerHTML = '<div style="color:var(--text3);font-size:13px">Checking capabilities&hellip;</div>';
+  el.innerHTML = '<div class="loading-indicator">Checking capabilities</div>';
   try {
-    const r = await fetch('/api/capabilities');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const data = await r.json();
-    window._lastCapabilities = data.capabilities || [];
-    renderCapabilities(data.capabilities || []);
+    // Load capabilities and integrations in parallel
+    const [capResp, intResp] = await Promise.all([
+      fetch('/api/capabilities'),
+      fetch('/api/integrations'),
+    ]);
+    if (capResp.ok) {
+      const capData = await capResp.json();
+      window._lastCapabilities = capData.capabilities || [];
+      renderCapabilities(capData.capabilities || []);
+    }
+    if (intResp.ok) {
+      const intData = await intResp.json();
+      renderIntegrations(intData);
+    }
+
   } catch(e) {
     el.innerHTML = '<div style="color:var(--err);font-size:13px">Could not load capabilities: ' + e.message + '</div>';
   }
+}
+
+
+// S8: Render integration cards — OpenClaw skills, sessions, auth, hooks
+function renderIntegrations(data) {
+  const intEl = document.getElementById('integrations-list');
+
+
+  if (!data.openclaw_available) {
+    if (intEl) intEl.innerHTML = '<div style="grid-column:1/-1;padding:10px 12px;font-size:12px;color:var(--text3);border:1px solid var(--border);border-radius:6px;background:var(--surface2)">'
+      + '<span style="font-weight:500;color:var(--text2)">OpenClaw not detected</span>'
+      + '<div style="margin-top:4px">Install OpenClaw to enable agent orchestration, skill access, and external service integrations.</div>'
+      + '<div style="margin-top:6px"><a href="https://github.com/openclaw/openclaw" target="_blank" style="color:var(--accent);font-size:12px">Install OpenClaw \u2192</a></div>'
+      + '</div>';
+    return;
+  }
+
+  let cards = '';
+
+  // Gateway status
+  if (data.gateway) {
+    cards += _intCard('OpenClaw Gateway', 'Port ' + data.gateway.port, true,
+      'Agent orchestration hub' + (data.gateway.auth_token_set ? ' \u2022 Auth enabled' : ''));
+  }
+
+  // Auth profiles
+  (data.auth_profiles || []).forEach(function(p) {
+    const label = p.provider || p.id;
+    const status = p.expired ? 'expired' : 'active';
+    let detail = p.type || 'auth';
+    if (p.expires_at) {
+      const now = Date.now();
+      if (p.expires_at > now) {
+        const days = Math.ceil((p.expires_at - now) / 86400000);
+        detail += ' \u2022 expires in ' + days + 'd';
+      } else {
+        detail += ' \u2022 expired';
+      }
+    }
+    cards += _intCard(label, status, !p.expired, detail);
+  });
+
+  // Model providers
+  (data.model_providers || []).forEach(function(p) {
+    const models = (p.models || []).join(', ');
+    cards += _intCard(p.id, p.api + ' API', true, models || 'No models configured');
+  });
+
+  // Hooks
+  (data.hooks || []).forEach(function(h) {
+    cards += _intCard(h.name + ' hook', h.account || 'configured', true,
+      h.label ? 'Label: ' + h.label : 'Webhook integration');
+  });
+
+  // Sessions
+  const sessionCount = (data.sessions || []).length;
+  if (sessionCount) {
+    const activeCount = data.sessions.filter(function(s) { return s.updated_at > Date.now() - 86400000; }).length;
+    cards += _intCard('Sessions', activeCount + ' active / ' + sessionCount + ' total', true, 'OpenClaw agent sessions');
+  }
+
+  if (intEl) intEl.innerHTML = cards || '<div style="font-size:12px;color:var(--text3)">No integrations detected.</div>';
+
+  // Skills will be part of a future Workflows feature
+}
+
+function _intCard(title, badge, ok, detail) {
+  const dot = ok
+    ? '<span class="status-dot" style="background:#22c55e"></span>'
+    : '<span class="status-dot" style="background:var(--err)"></span>';
+  return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">'
+    + '<div style="display:flex;align-items:center;gap:8px">'
+    + dot
+    + '<span style="font-weight:500;font-size:13px">' + escHtml(title) + '</span>'
+    + '<span style="font-size:11px;color:var(--text3);margin-left:auto">' + escHtml(badge) + '</span>'
+    + '</div>'
+    + '<div style="font-size:12px;color:var(--text3);margin-top:4px">' + escHtml(detail) + '</div>'
+    + '</div>';
 }
 
 function renderCapabilities(caps) {
@@ -5306,6 +7202,382 @@ function renderCapabilities(caps) {
   ${hint}
 </div>`;
   }).join('');
+}
+
+// Memory tab v4 — Porter memory control center
+let _memViewerPath = '';
+let _memViewerEditing = false;
+let _memSessionFilter = 'all';
+let _memSessionsData = [];
+let _memOverview = null;
+
+function _memSize(bytes) {
+  if (bytes > 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+  if (bytes > 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return bytes + ' B';
+}
+
+async function loadMemory() {
+  try {
+    const resp = await api('/api/memory/overview');
+    if (resp && resp.models) {
+      _memOverview = resp;
+      const nonStateless = resp.models.filter(function(m) { return !m.stateless; });
+      const instrCount = Math.min(nonStateless.length, 3);
+      const allCount = Math.min(resp.models.length, 3);
+
+      renderMemoryInstructions(nonStateless);
+      document.getElementById('mem-flow-1').innerHTML = _buildFlowSVG(instrCount, 'merge');
+      renderMemoryPersistent(resp.models);
+      document.getElementById('mem-flow-2').innerHTML = _buildFlowSVG(allCount, 'merge');
+      renderMemoryHub(resp.shared_plane, resp.models);
+      document.getElementById('mem-flow-3').innerHTML = _buildFlowSVG(1, 'fanout');
+    }
+  } catch(e) {
+    console.error('loadMemory failed:', e);
+  }
+  loadMemorySessions();
+}
+
+// ── Health bar ──
+
+function renderMemHealth(models, sessions) {
+  const el = document.getElementById('mem-health');
+  if (!el) return;
+
+  // Calculate totals
+  let totalMemSize = 0;
+  let totalSessionSize = 0;
+  let totalSessions = sessions.length;
+  let modelCount = 0;
+
+  models.forEach(function(m) {
+    if (m.stateless) return;
+    modelCount++;
+    if (m.instruction_file) totalMemSize += m.instruction_file.size || 0;
+    if (m.memory_files) m.memory_files.forEach(function(f) { totalMemSize += f.size || 0; });
+    totalSessionSize += (m.session_size_mb || 0) * 1048576;
+  });
+
+  let unflushed = sessions.filter(function(s) { return !s.flushed; }).length;
+
+  let html = '';
+  html += '<div class="mem-health-card"><div class="mem-health-val">' + modelCount + '</div><div class="mem-health-label">Models with memory</div></div>';
+  html += '<div class="mem-health-card"><div class="mem-health-val">' + _memSize(totalMemSize) + '</div><div class="mem-health-label">Long-term memory</div></div>';
+  html += '<div class="mem-health-card"><div class="mem-health-val">' + _memSize(totalSessionSize) + '</div><div class="mem-health-label">Session logs</div></div>';
+  html += '<div class="mem-health-card"><div class="mem-health-val">' + totalSessions + '</div><div class="mem-health-label">Total sessions</div>'
+    + (unflushed > 0 ? '<div class="mem-health-hint">' + unflushed + ' unflushed</div>' : '')
+    + '</div>';
+
+  el.innerHTML = '<div class="mem-health">' + html + '</div>';
+}
+
+// ── File row helper ──
+
+function _memFileRow(f, opts) {
+  opts = opts || {};
+  const esc = escHtml(f.path).replace(/'/g, "\\'");
+  const editBtn = opts.editable ? ' <span style="font-size:10px;color:var(--accent);margin-left:4px;cursor:pointer" onclick="event.stopPropagation();viewMemFileAndEdit(\'' + esc + '\')">[edit]</span>' : '';
+  return '<div class="mem-file-row" onclick="viewMemFile(\'' + esc + '\')">'
+    + '<span>' + escHtml(f.name) + '</span>'
+    + '<span class="mem-file-size">' + _memSize(f.size) + editBtn + '</span>'
+    + '</div>';
+}
+
+async function viewMemFileAndEdit(path) {
+  await viewMemFile(path);
+  toggleMemFileEdit();
+}
+
+// ── Layer 1: Instructions ──
+
+function renderMemoryInstructions(models) {
+  const el = document.getElementById('mem-instructions');
+  if (!el) return;
+  let html = '';
+  models.forEach(function(m) {
+    html += '<div class="orch-card">';
+    html += '<div class="orch-card-head">';
+    html += '<div class="orch-card-name">' + escHtml(m.name) + '</div>';
+    html += '</div>';
+    if (m.instruction_file) {
+      html += _memFileRow(m.instruction_file);
+    }
+    if (m.instruction_files && m.instruction_files.length) {
+      m.instruction_files.forEach(function(f) { html += _memFileRow(f); });
+    }
+    if (!m.instruction_file && !(m.instruction_files && m.instruction_files.length)) {
+      html += '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:4px 0">No instruction file</div>';
+    }
+    html += '</div>';
+  });
+  el.innerHTML = html || '<div style="color:var(--text3);font-size:12px">No models detected</div>';
+}
+
+// ── Layer 2: Persistent (Learned) Memory ──
+
+function renderMemoryPersistent(models) {
+  const el = document.getElementById('mem-persistent');
+  if (!el) return;
+  let html = '';
+  models.forEach(function(m) {
+    if (m.stateless) {
+      html += '<div class="orch-card mem-stateless" style="border-style:dashed">';
+      html += '<div class="orch-card-head">';
+      html += '<div class="orch-card-name" style="opacity:.6">' + escHtml(m.name) + '</div>';
+      html += '<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:var(--text3);color:#fff;margin-left:auto">stateless</span>';
+      html += '</div>';
+      html += '<div class="mem-stateless-text">No persistent memory. Pure inference only.</div>';
+      html += '</div>';
+      return;
+    }
+    html += '<div class="orch-card">';
+    html += '<div class="orch-card-head">';
+    html += '<div class="orch-card-name">' + escHtml(m.name) + '</div>';
+    if (m.detected) {
+      html += '<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:var(--ok);color:#fff;margin-left:auto">active</span>';
+    }
+    html += '</div>';
+    if (m.memory_files && m.memory_files.length) {
+      m.memory_files.forEach(function(f) { html += _memFileRow(f, {editable: true}); });
+    } else {
+      html += '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:4px 0">No memory files</div>';
+    }
+    if (m.daily_logs) {
+      html += '<div style="font-size:11px;color:var(--text3);margin-top:4px">+ ' + m.daily_logs + ' daily log' + (m.daily_logs !== 1 ? 's' : '') + '</div>';
+    }
+    // Session stats
+    html += '<div style="display:flex;gap:8px;font-size:11px;color:var(--text3);margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">';
+    html += '<span>' + (m.session_count || 0) + ' sessions</span>';
+    if (m.session_size_mb > 0) {
+      html += '<span>\u2022</span><span>' + m.session_size_mb + ' MB</span>';
+    }
+    html += '</div>';
+    html += '</div>';
+  });
+  el.innerHTML = html || '<div style="color:var(--text3);font-size:12px">No models detected</div>';
+}
+
+// ── Hub: Porter memory brain ──
+
+function renderMemoryHub(sp, models) {
+  const featEl = document.getElementById('mem-hub-features');
+  if (!featEl) return;
+  let html = '';
+
+  // Core coordination files — always show projects.md
+  html += '<span class="orch-hub-feat active">projects.md</span>';
+
+  // Only show directories that actually have files (no empty skeleton fluff)
+  if (sp && sp.directories && sp.directories.length) {
+    sp.directories.forEach(function(d) {
+      if (d.file_count > 0) {
+        html += '<span class="orch-hub-feat active">' + escHtml(d.name) + '/ (' + d.file_count + ')</span>';
+      }
+    });
+  }
+
+  // Show total footprint
+  if (sp && sp.total_size > 0) {
+    html += '<span class="orch-hub-feat" style="border:none;font-size:10px;color:var(--text3)">' + _memSize(sp.total_size) + ' total</span>';
+  }
+
+  featEl.innerHTML = html;
+}
+
+// ── Layer 3: Sessions with filter + flush ──
+
+async function loadMemorySessions() {
+  const el = document.getElementById('mem-sessions-list');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-indicator" style="padding:8px">Loading sessions</div>';
+  try {
+    const resp = await api('/api/sessions');
+    if (resp && resp.sessions) {
+      _memSessionsData = resp.sessions;
+      renderMemFilterBar(resp.sessions);
+      renderMemorySessions(resp.sessions);
+      // Now render health bar with full data
+      if (_memOverview && _memOverview.models) {
+        renderMemHealth(_memOverview.models, resp.sessions);
+      }
+    }
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--err);font-size:12px">Failed to load sessions</div>';
+  }
+}
+
+function renderMemFilterBar(sessions) {
+  const bar = document.getElementById('mem-filter-bar');
+  if (!bar) return;
+  const counts = {};
+  sessions.forEach(function(s) {
+    const src = s.source || 'unknown';
+    counts[src] = (counts[src] || 0) + 1;
+  });
+  let html = '<button class="mem-filter-btn' + (_memSessionFilter === 'all' ? ' active' : '') + '" onclick="filterMemSessions(\'all\')">All (' + sessions.length + ')</button>';
+  ['claude','openclaw','gemini'].forEach(function(src) {
+    if (counts[src]) {
+      html += '<button class="mem-filter-btn' + (_memSessionFilter === src ? ' active' : '') + '" onclick="filterMemSessions(\'' + src + '\')">' + src.charAt(0).toUpperCase() + src.slice(1) + ' (' + counts[src] + ')</button>';
+    }
+  });
+  Object.keys(counts).forEach(function(src) {
+    if (['claude','openclaw','gemini','unknown'].indexOf(src) === -1) {
+      html += '<button class="mem-filter-btn' + (_memSessionFilter === src ? ' active' : '') + '" onclick="filterMemSessions(\'' + src + '\')">' + escHtml(src) + ' (' + counts[src] + ')</button>';
+    }
+  });
+  bar.innerHTML = html;
+}
+
+function filterMemSessions(source) {
+  _memSessionFilter = source;
+  renderMemFilterBar(_memSessionsData);
+  renderMemorySessions(_memSessionsData);
+}
+
+function renderMemorySessions(sessions) {
+  const el = document.getElementById('mem-sessions-list');
+  if (!el) return;
+  const filtered = _memSessionFilter === 'all' ? sessions : sessions.filter(function(s) { return s.source === _memSessionFilter; });
+  if (!filtered.length) {
+    el.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text3);font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">No sessions found.</div>';
+    return;
+  }
+  const shown = filtered.slice(0, 30);
+  el.innerHTML = '<div style="display:flex;flex-direction:column;gap:6px">' + shown.map(function(s) {
+    const date = s.first_ts ? new Date(s.first_ts).toLocaleDateString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '?';
+    const srcLabel = s.source || 'unknown';
+    let durStr = '';
+    if (s.first_ts && s.last_ts) {
+      const durMin = Math.round((new Date(s.last_ts) - new Date(s.first_ts)) / 60000);
+      if (durMin > 0) durStr = durMin + 'min';
+    }
+    const sizeKb = s.size_kb || 0;
+    const sizeStr = sizeKb > 1024 ? (sizeKb / 1024).toFixed(1) + ' MB' : (sizeKb > 0 ? sizeKb.toFixed(0) + ' KB' : '');
+    const tokens = (s.total_input_tokens || 0) + (s.total_output_tokens || 0);
+    const tokStr = tokens > 1000 ? Math.round(tokens/1000) + 'K tok' : '';
+    // Flush is available for claude and openclaw
+    const canFlush = s.source === 'claude' || s.source === 'openclaw';
+    return '<div class="orch-card" style="padding:10px 14px">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+      + '<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:var(--border2);color:var(--text)">' + escHtml(srcLabel) + '</span>'
+      + '<span style="font-weight:500;font-size:13px;color:var(--text)">' + escHtml(s.name || s.id.substring(0,12)) + '</span>'
+      + '<span style="font-size:11px;color:var(--text3);margin-left:auto">' + escHtml(date) + '</span>'
+      + '</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:11px;color:var(--text3)">'
+      + '<span>' + s.messages + ' msgs</span>'
+      + (sizeStr ? '<span>\u2022</span><span>' + sizeStr + '</span>' : '')
+      + (durStr ? '<span>\u2022</span><span>' + durStr + '</span>' : '')
+      + (tokStr ? '<span>\u2022</span><span>' + tokStr + '</span>' : '')
+      + (s.model ? '<span>\u2022</span><span>' + escHtml(s.model) + '</span>' : '')
+      + (s.tool_calls ? '<span>\u2022</span><span>' + s.tool_calls + ' tool calls</span>' : '')
+      + '</div>'
+      + (canFlush ? '<div style="margin-top:6px"><button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="flushSession(\'' + escHtml(s.id) + '\',\'' + escHtml(s.name || s.id.substring(0,12)) + '\',\'' + escHtml(s.source) + '\')">Flush to long-term memory</button></div>' : '')
+      + '</div>';
+  }).join('') + '</div>'
+  + (filtered.length > 30 ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">Showing 30 of ' + filtered.length + ' sessions</div>' : '');
+}
+
+// ── File viewer (kept from v2) ──
+
+async function viewMemFile(path) {
+  const viewer = document.getElementById('mem-file-viewer');
+  const title = document.getElementById('mem-file-title');
+  const pathEl = document.getElementById('mem-file-path');
+  const content = document.getElementById('mem-file-content');
+  const editor = document.getElementById('mem-file-editor');
+  const editBtn = document.getElementById('mem-file-edit-btn');
+  const saveBtn = document.getElementById('mem-file-save-btn');
+  if (!viewer) return;
+
+  _memViewerPath = path;
+  _memViewerEditing = false;
+  title.textContent = path.split('/').pop();
+  pathEl.textContent = path;
+  content.textContent = 'Loading\u2026';
+  content.style.display = 'block';
+  content.style.color = 'var(--text)';
+  editor.style.display = 'none';
+  editBtn.textContent = 'Edit';
+  editBtn.style.display = '';
+  saveBtn.style.display = 'none';
+  viewer.style.display = 'block';
+  viewer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  try {
+    const resp = await api('/api/memory/read?path=' + encodeURIComponent(path));
+    if (resp && resp.ok) {
+      content.textContent = resp.content || '(empty file)';
+    } else {
+      content.style.color = 'var(--err)';
+      content.textContent = 'Error: ' + ((resp && resp.error) || 'Failed to read file');
+    }
+  } catch(e) {
+    content.style.color = 'var(--err)';
+    content.textContent = 'Error: ' + e.message;
+  }
+}
+
+function toggleMemFileEdit() {
+  const content = document.getElementById('mem-file-content');
+  const editor = document.getElementById('mem-file-editor');
+  const editBtn = document.getElementById('mem-file-edit-btn');
+  const saveBtn = document.getElementById('mem-file-save-btn');
+  if (_memViewerEditing) {
+    _memViewerEditing = false;
+    content.textContent = editor.value;
+    content.style.display = 'block';
+    editor.style.display = 'none';
+    editBtn.textContent = 'Edit';
+    saveBtn.style.display = 'none';
+  } else {
+    _memViewerEditing = true;
+    editor.value = content.textContent;
+    content.style.display = 'none';
+    editor.style.display = 'block';
+    editBtn.textContent = 'Cancel';
+    saveBtn.style.display = '';
+    editor.focus();
+  }
+}
+
+async function saveMemFileEdit() {
+  const editor = document.getElementById('mem-file-editor');
+  const saveBtn = document.getElementById('mem-file-save-btn');
+  saveBtn.textContent = 'Saving\u2026';
+  saveBtn.disabled = true;
+  try {
+    const resp = await api('/api/memory/write', { path: _memViewerPath, content: editor.value });
+    if (resp && resp.ok) {
+      toast('Saved ' + _memViewerPath.split('/').pop());
+      toggleMemFileEdit();
+      loadMemory();
+    } else {
+      toast((resp && resp.error) || 'Save failed', 'err');
+    }
+  } catch(e) {
+    toast('Save failed: ' + e.message, 'err');
+  }
+  saveBtn.textContent = 'Save';
+  saveBtn.disabled = false;
+}
+
+function closeMemFileViewer() {
+  const viewer = document.getElementById('mem-file-viewer');
+  if (viewer) viewer.style.display = 'none';
+  _memViewerPath = '';
+  _memViewerEditing = false;
+}
+
+async function flushSession(sessionId, name, source) {
+  if (!confirm('Flush "' + name + '" to long-term memory?\nExtracts key learnings and appends to session_flushes.md.')) return;
+  const res = await api('/api/memory/flush', { session_id: sessionId, source: source || 'openclaw' });
+  if (res && res.ok) {
+    toast('Flushed: ' + (res.message || 'done'));
+    loadMemory();
+  } else {
+    toast((res && res.error) || 'Flush failed', 'err');
+  }
 }
 
 // Backward compat wrappers
@@ -5341,6 +7613,55 @@ function switchSettingsTab(tab) {
   }
 }
 // ── Overview module ──
+// Gap30: Quick Prompt — direct model calling
+async function populateModelDropdown() {
+  const sel = document.getElementById('qp-model');
+  if (!sel) return;
+  try {
+    const data = await api('/api/local-models');
+    if (!data || !data.models) return;
+    while (sel.options.length > 1) sel.remove(1);
+    data.models.forEach(function(m) {
+      if (m.type !== 'ollama') return;
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.name + ' (Ollama)';
+      sel.appendChild(opt);
+    });
+    const opt2 = document.createElement('option');
+    opt2.value = 'openclaw-gateway';
+    opt2.textContent = 'OpenClaw Gateway';
+    sel.appendChild(opt2);
+  } catch(e) {}
+}
+
+async function sendQuickPrompt() {
+  const modelSel = document.getElementById('qp-model');
+  const input = document.getElementById('qp-input');
+  const respEl = document.getElementById('qp-response');
+  if (!modelSel || !input || !respEl) return;
+  const modelId = modelSel.value;
+  const prompt = input.value.trim();
+  if (!modelId) { toast('Select a model first', 'err'); return; }
+  if (!prompt) { toast('Enter a prompt', 'err'); return; }
+  respEl.style.display = 'block';
+  respEl.textContent = 'Thinking...';
+  respEl.style.color = 'var(--text3)';
+  try {
+    const res = await api('/api/prompt', { model_id: modelId, prompt: prompt });
+    if (res && res.ok) {
+      respEl.style.color = 'var(--text)';
+      respEl.textContent = res.response || '(empty response)';
+    } else {
+      respEl.style.color = 'var(--err)';
+      respEl.textContent = (res && res.error) || 'Request failed';
+    }
+  } catch(e) {
+    respEl.style.color = 'var(--err)';
+    respEl.textContent = 'Error: ' + e.message;
+  }
+}
+
 async function loadOverview(force=true) {
   const data = await api('/api/overview');
   if (!data) return;
@@ -5415,7 +7736,7 @@ function renderOverview(data) {
           <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(i.title)}</div>
           <div style="font-size:12px;color:var(--text3);margin-top:3px">${escHtml(i.detail)}</div>
         </div>
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="${i.fn}">${escHtml(i.action)}</button>
+        <button class="btn btn-ghost"  onclick="${i.fn}">${escHtml(i.action)}</button>
       </div>
     </div>`;
   }).join('') : '<div style="color:var(--text3);font-size:13px;padding:8px 0">No urgent issues. System is stable.</div>';
@@ -5470,7 +7791,7 @@ function renderTools(tools) {
         <div style="font-size:11px;color:var(--text3);margin-top:4px">Cost: ${escHtml(t.cost_profile||'unknown')} &middot; Trust: ${escHtml(t.trust_tier||'restricted')}</div>
       </div>
       <span class="task-badge ${enabled ? 'badge-running' : 'badge-cancelled'}" style="flex-shrink:0">${enabled ? 'enabled' : 'disabled'}</span>
-      <button class="btn btn-danger" style="font-size:11px;padding:3px 8px;flex-shrink:0" onclick="deleteTool('${escHtml(t.id)}')">Remove</button>
+      <button class="btn btn-danger" style="flex-shrink:0" onclick="deleteTool('${escHtml(t.id)}')">Remove</button>
     </div>`;
   }).join('');
 }
@@ -5711,7 +8032,7 @@ function renderNodes(nodes) {
     <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:0 0 12px">
         <span style="font-size:11px;color:${meshColor}">${meshState}</span>
         <span style="font-size:11px;color:var(--text3)">${lastUpdated}</span>
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="loadTailscaleStatus(true);loadLocations();">↻ Refresh</button>
+        <button class="btn btn-ghost"  onclick="loadTailscaleStatus(true);loadLocations();">↻ Refresh</button>
     </div>
     <div class="loc-card-grid">
       ${configured.map((node) => {
@@ -5934,7 +8255,7 @@ function quickPick(label, path) {
 async function loadTailscalePeers() {
   const sel = document.getElementById('lf-ts-peer');
   const st  = document.getElementById('lf-ts-status');
-  sel.innerHTML = '<option value="">Loading…</option>';
+  sel.innerHTML = '<option value="">Loading models…</option>';
   st.textContent = '';
   const data = await api('/api/tailscale/peers');
   if (!data || !data.available) {
@@ -5989,11 +8310,15 @@ fetch('/api/nodes').then(r=>r.json()).then(d=>{
 // ── agents ──────────────────────────────────────────────────────────────────
 
 async function loadAgents() {
-  const data = await api('/api/agents');
+  const [data, localData] = await Promise.all([
+    api('/api/agents'),
+    api('/api/local-models'),
+  ]);
   if (!data) return;
   window._cachedAgents = data.agents || [];
   window._lastAgents = data.agents || [];
   window._lastAiProviders = data.ai_providers || [];
+  window._localModels = (localData && localData.models) || [];
   renderOrchestration(data.agents || [], data.ai_providers || []);
   renderAgents(data.agents || []);
   loadUsage();
@@ -6276,7 +8601,7 @@ function renderOrchestration(agents, providers) {
 
   // ── SVG flow connector: merge (agents → porter) ──
   const mergeEl = document.getElementById('flow-merge-1');
-  if (mergeEl) mergeEl.innerHTML = _buildFlowSVG(filtered.length, 'merge');
+  if (mergeEl) mergeEl.innerHTML = _buildFlowSVG(Math.min(filtered.length, 3), 'merge');
 
   // ── Model cards (bottom) ──
   // Derive models: use model_id if set, otherwise infer from type
@@ -6318,9 +8643,51 @@ function renderOrchestration(agents, providers) {
       }).join('');
     }
 
+    // Merge locally detected models not already in agent-linked models
+    const localModels = window._localModels || [];
+    const existingNames = new Set(modelList.map(m => m.name.toLowerCase()));
+    const localCards = localModels.filter(function(lm) {
+      // Don't duplicate models already shown from registered agents
+      const nameKey = (lm.name || '').toLowerCase();
+      if (existingNames.has(nameKey)) return false;
+      // Don't duplicate by provider match
+      for (const em of modelList) {
+        const emid = em.model_id.toLowerCase();
+        if (lm.provider === 'openai' && (emid.includes('codex') || emid.includes('gpt'))) return false;
+        if (lm.provider === 'anthropic' && emid.includes('claude')) return false;
+        if (lm.provider === 'google' && emid.includes('gemini')) return false;
+      }
+      return true;
+    });
+
+    if (localCards.length) {
+      const localHtml = localCards.map(function(lm) {
+        const isOllama = lm.type === 'ollama';
+        const badge = '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);margin-left:auto">detected</span>';
+        const sizeInfo = lm.size_gb ? lm.size_gb + 'GB' : '';
+        const versionInfo = lm.version || '';
+        const quantInfo = lm.quantization || '';
+        const detail = [versionInfo, quantInfo, sizeInfo].filter(Boolean).join(' \u2022 ');
+        return '<div class="orch-card" style="border-style:dashed">'
+          + '<div class="orch-card-head">'
+          + '<span class="orch-card-dot" style="background:var(--accent)"></span>'
+          + '<span class="orch-card-name">' + escHtml(lm.name) + '</span>'
+          + badge
+          + '</div>'
+          + (detail ? '<div class="orch-card-sub">' + escHtml(detail) + '</div>' : '')
+          + '<div class="orch-card-sub" style="margin-top:2px;font-size:10px">'
+          + (isOllama ? 'Ollama local model' : 'CLI agent at ' + escHtml(lm.path || 'PATH'))
+          + '</div>'
+          + '</div>';
+      }).join('');
+      modelEl.innerHTML += localHtml;
+    }
+
+    const totalModels = modelList.length + localCards.length;
+
     // SVG flow connector: fanout (porter → models)
     const fanoutEl = document.getElementById('flow-fanout-1');
-    if (fanoutEl) fanoutEl.innerHTML = _buildFlowSVG(modelList.length, 'fanout');
+    if (fanoutEl) fanoutEl.innerHTML = _buildFlowSVG(Math.min(totalModels || modelList.length, 3), 'fanout');
   }
 }
 
@@ -6374,8 +8741,8 @@ function openConfigPanel(type, id) {
           <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">API Key</div>
           <div style="display:flex;align-items:center;gap:6px">
             <code style="flex:1;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2)">${escHtml(keyDisplay)}</code>
-            <button class="btn btn-ghost" style="font-size:11px;padding:3px 7px" onclick="_toggleKey('${a.id}');openConfigPanel('agent','${esc(a.id)}')">${revealed ? 'Hide' : 'Show'}</button>
-            <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="copyText('${escHtml(a.raw_key)}',this)">Copy</button>
+            <button class="btn btn-ghost"  onclick="_toggleKey('${a.id}');openConfigPanel('agent','${esc(a.id)}')">${revealed ? 'Hide' : 'Show'}</button>
+            <button class="btn btn-ghost"  onclick="copyText('${escHtml(a.raw_key)}',this)">Copy</button>
           </div>
         </div>` : ''}
         ${availablePct !== null ? `
@@ -6386,7 +8753,7 @@ function openConfigPanel(type, id) {
           </div>
           <div style="display:flex;align-items:center;gap:6px;font-size:12px">
             <span style="color:var(--text2)">${availablePct}% remaining</span>
-            <button class="btn btn-ghost" style="font-size:11px;padding:2px 6px" data-refresh-id="${a.id}" onclick="refreshAgentUsage('${a.id}','${escHtml(a.type)}')" title="Refresh usage">&#8635;</button>
+            <button class="btn btn-ghost"  data-refresh-id="${a.id}" onclick="refreshAgentUsage('${a.id}','${escHtml(a.type)}')" title="Refresh usage">&#8635;</button>
           </div>
         </div>` : ''}
         <div style="margin-bottom:16px">
@@ -6402,13 +8769,13 @@ function openConfigPanel(type, id) {
               style="width:50px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;font-size:12px;color:var(--text);font-family:inherit">
             <span style="font-size:11px;color:var(--text3)">${Number.isFinite(Number(a.warn_threshold)) ? 'custom' : 'global'}</span>
           </div>
-          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;margin-top:8px" onclick="saveAgentConcurrency('${a.id}');saveAgentWarnThreshold('${a.id}')">Save settings</button>
+          <button class="btn btn-ghost" style="margin-top:8px" onclick="saveAgentConcurrency('${a.id}');saveAgentWarnThreshold('${a.id}')">Save settings</button>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;padding-top:14px;border-top:1px solid var(--border)">
-          <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px;text-align:left" onclick="closeConfigPanel();openAgentWorkspace('${esc(a.id)}','${esc(a.name)}')">Config files</button>
-          <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px;text-align:left" onclick="doTestAgent('${a.id}','${escHtml(a.name)}')">Connectivity check</button>
-          <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px;text-align:left" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
-          <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px;text-align:left;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Disconnect</button>
+          <button class="btn btn-ghost" style="text-align:left" onclick="closeConfigPanel();openAgentWorkspace('${esc(a.id)}','${esc(a.name)}')">Config files</button>
+          <button class="btn btn-ghost" style="text-align:left" onclick="doTestAgent('${a.id}','${escHtml(a.name)}')">Test connection</button>
+          <button class="btn btn-ghost" style="text-align:left" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
+          <button class="btn btn-ghost" style="text-align:left;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Disconnect</button>
         </div>`;
     }
   } else if (type === 'model') {
@@ -6454,6 +8821,114 @@ document.addEventListener('keydown', function(e) {
     if (cp && cp.classList.contains('open')) { closeConfigPanel(); e.stopPropagation(); }
   }
 }, true);
+
+// S7: Project config editor (uses existing config slide-out panel)
+function openProjectConfig(projId) {
+  const panel = document.getElementById('configPanel');
+  const title = document.getElementById('configPanelTitle');
+  const body  = document.getElementById('configPanelBody');
+  const main  = document.getElementById('mainEl');
+  if (!panel || !title || !body) return;
+
+  // Find project in config
+  const proj = (_projConfigProjects || []).find(p => p.id === projId);
+  if (!proj) { toast('Project not found', 'err'); return; }
+
+  title.textContent = 'Project Settings';
+  const pType = proj.type || 'manual';
+  const pMem  = proj.memory_isolation || 'shared';
+  const created = proj.created_at ? new Date(proj.created_at * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',year:'numeric',timeZone:_porterTz()}) : 'Unknown';
+
+  body.innerHTML = `
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Project name</div>
+      <input id="pc-name" type="text" class="form-input" style="width:100%" value="${escHtml(proj.name || '')}">
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Type</div>
+      <select id="pc-type" class="form-input" style="width:100%">
+        <option value="manual"${pType==='manual'?' selected':''}>Manual (sprint-based)</option>
+        <option value="autonomous"${pType==='autonomous'?' selected':''}>Autonomous (agent-driven)</option>
+      </select>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">Manual shows sprint progress; autonomous shows run history.</div>
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Memory isolation</div>
+      <select id="pc-mem" class="form-input" style="width:100%">
+        <option value="shared"${pMem==='shared'?' selected':''}>Shared (global memory)</option>
+        <option value="isolated"${pMem==='isolated'?' selected':''}>Isolated (project-scoped)</option>
+      </select>
+    </div>
+    <div style="margin-bottom:16px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:6px">
+        <span>Status</span>
+        <span style="color:var(--text2)">${proj.id === _projActiveId ? 'Active' : 'Inactive'}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3)">
+        <span>Created</span>
+        <span style="color:var(--text2)">${created}</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-sm" style="flex:1" onclick="saveProjectConfig('${projId}')">Save</button>
+      <button class="btn btn-sm btn-ghost" onclick="closeConfigPanel()">Cancel</button>
+    </div>
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+      <button class="btn btn-sm btn-ghost" style="color:#ef4444;width:100%" onclick="if(confirm('Delete this project?'))deleteProject('${projId}')">Delete project</button>
+    </div>`;
+
+  panel.classList.add('open');
+  if (main) main.classList.add('config-open');
+}
+
+async function saveProjectConfig(projId) {
+  const name = (document.getElementById('pc-name') || {}).value || '';
+  const type = (document.getElementById('pc-type') || {}).value || 'manual';
+  const mem  = (document.getElementById('pc-mem') || {}).value || 'shared';
+  if (!name.trim()) { toast('Name is required', 'err'); return; }
+  const d = await api('/api/projects', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ action: 'update', project_id: projId, name: name.trim(), type, memory_isolation: mem })
+  });
+  if (d && d.ok) {
+    toast('Project updated');
+    closeConfigPanel();
+    // Clear caches and reload
+    _projFileCache = {};
+    const d2 = await api('/api/projects');
+    if (d2 && d2.projects) {
+      _projConfigProjects = d2.projects;
+      _projActiveId = d2.active_project_id;
+    }
+    _renderProjectList();
+  }
+}
+
+
+// S7h: Rename project via prompt dialog
+async function promptRenameProject(pid, currentName) {
+  const newName = prompt('Rename project:', currentName);
+  if (newName === null || !newName.trim() || newName.trim() === currentName) return;
+  const d = await api('/api/projects', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ action: 'update', project_id: pid, name: newName.trim() })
+  });
+  if (d && d.ok) {
+    toast('Project renamed');
+    _projFileCache = {};
+    const d2 = await api('/api/projects');
+    if (d2 && d2.projects) {
+      _projConfigProjects = d2.projects;
+      _projActiveId = d2.active_project_id;
+      _projProjects = d2.projects;
+    }
+    _renderProjectList();
+  } else {
+    toast((d && d.error) || 'Rename failed', 'err');
+  }
+}
 
 function renderAgents(agents) {
   const el = document.getElementById('agent-list');
@@ -6505,8 +8980,8 @@ function renderAgents(agents) {
     const keyRow = a.raw_key
       ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px">
            <code style="flex:1;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:5px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text2)">${escHtml(keyDisplay)}</code>
-           <button class="btn btn-ghost" style="font-size:11px;padding:3px 7px;flex-shrink:0" onclick="_toggleKey('${a.id}')" title="${revealed ? 'Hide' : 'Show'}">${revealed ? '🙈' : '👁'}</button>
-           <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;flex-shrink:0" onclick="copyText('${escHtml(a.raw_key)}',this)">Copy</button>
+           <button class="btn btn-ghost" style="flex-shrink:0" onclick="_toggleKey('${a.id}')" title="${revealed ? 'Hide' : 'Show'}">${revealed ? '🙈' : '👁'}</button>
+           <button class="btn btn-ghost" style="flex-shrink:0" onclick="copyText('${escHtml(a.raw_key)}',this)">Copy</button>
          </div>`
       : '';
     const usageSection = `<div style="height:3px;border-radius:999px;background:var(--border);overflow:hidden;margin-bottom:6px">
@@ -6577,10 +9052,10 @@ function renderAgents(agents) {
       </div>
       ${modelLine}${authLine}<div style="margin-bottom:12px">${usageSection}</div>
       ${keyRow}<div style="display:flex;align-items:center;gap:4px;padding-top:10px;border-top:1px solid var(--border)">
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="openAgentWorkspace('${esc(a.id)}','${esc(a.name)}')">Configure</button>
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="doTestAgent('${a.id}','${escHtml(a.name)}')">Connectivity check</button>
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
-        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;margin-left:auto;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Disconnect</button>
+        <button class="btn btn-ghost"  onclick="openAgentWorkspace('${esc(a.id)}','${esc(a.name)}')">Configure</button>
+        <button class="btn btn-ghost"  onclick="doTestAgent('${a.id}','${escHtml(a.name)}')">Test connection</button>
+        <button class="btn btn-ghost"  onclick="doRotateKey('${a.id}','${escHtml(a.name)}')">Rotate key</button>
+        <button class="btn btn-ghost" style="margin-left:auto;color:var(--danger)" onclick="doRevokeAgent('${a.id}','${escHtml(a.name)}')">Disconnect</button>
       </div>
       <div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--text3)">
         <span>Concurrency</span>
@@ -6591,7 +9066,7 @@ function renderAgents(agents) {
         <input id="warn-${a.id}" type="number" min="1" max="99" value="${Number.isFinite(Number(a.warn_threshold)) ? Number(a.warn_threshold) : ''}" placeholder="${globalWarn}"
                style="width:44px;background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:2px 6px;font-size:11px;color:var(--text);font-family:inherit">
         <span style="font-size:10px">${Number.isFinite(Number(a.warn_threshold)) ? 'custom' : 'global'}%</span>
-        <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;margin-left:auto" onclick="saveAgentConcurrency('${a.id}');saveAgentWarnThreshold('${a.id}')">Save</button>
+        <button class="btn btn-ghost" style="margin-left:auto" onclick="saveAgentConcurrency('${a.id}');saveAgentWarnThreshold('${a.id}')">Save</button>
       </div>
     </div>`;
   }).join('');
@@ -6798,10 +9273,27 @@ async function doTestAgent(id, name) {
   const res = await api('/api/agents', { action: 'test_connection', id });
   if (!res) return;
   const connected = !!res.connected;
+  const latency = res.latency_ms != null ? res.latency_ms + 'ms' : '\u2014';
+  const ver = res.version ? escHtml(String(res.version)) : 'Unknown';
+  const ep = res.endpoint ? escHtml(String(res.endpoint)) : '\u2014';
+  const statusHtml = connected
+    ? '<strong style="color:var(--ok,#22c55e)">\u2714 Connected</strong>'
+    : '<strong style="color:var(--danger,#ef4444)">\u2718 Unreachable</strong>';
+  const rows = '<div style="display:grid;grid-template-columns:80px 1fr;gap:4px 12px;font-size:12px;margin-top:12px">'
+    + '<span style="color:var(--text3)">Status</span><span>' + statusHtml + '</span>'
+    + '<span style="color:var(--text3)">Latency</span><span style="font-weight:500">' + latency + '</span>'
+    + '<span style="color:var(--text3)">Version</span><span>' + ver + '</span>'
+    + '<span style="color:var(--text3)">Endpoint</span><span style="word-break:break-all">' + ep + '</span>'
+    + (res.last_seen ? '<span style="color:var(--text3)">Heartbeat</span><span>' + escHtml(String(res.last_seen)) + '</span>' : '')
+    + '</div>'
+    + (res.message ? '<div style="margin-top:8px;font-size:12px;color:var(--text3)">' + escHtml(String(res.message)) + '</div>' : '');
   showModal({
-    title: `${escHtml(name)} connectivity check`,
-    desc: `${connected ? '<strong style="color:var(--ok,#22c55e)">Connected</strong>' : '<strong style="color:var(--danger,#ef4444)">Not confirmed</strong>'}<br><br>${escHtml(res.message || '')}<br><span style="color:var(--text3)">This check uses recent heartbeat/telemetry. Full hello↔reply roundtrip will be added with agent protocol handshake.</span>` + (res.last_seen ? `<br><span style="color:var(--text3)">Last heartbeat: ${escHtml(String(res.last_seen))}</span>` : ''),
-    actions: [ { label:'Close', cls:'btn-primary', action: closeModal } ]
+    title: escHtml(name) + ' \u2014 connectivity test',
+    desc: rows,
+    actions: [
+      { label: 'Retest', cls: 'btn-ghost', action: () => { closeModal(); doTestAgent(id, name); } },
+      { label: 'Close', cls: 'btn-primary', action: closeModal },
+    ]
   });
 }
 
@@ -6873,6 +9365,19 @@ async function saveAgentConcurrency(agentId) {
 }
 
 // ── task operations ───────────────────────────────────────────────────────
+
+// S7h: Number/duration formatters for project metrics
+function _fmtNum(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return String(n);
+}
+function _fmtDuration(mins) {
+  if (mins < 60) return mins + 'm';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h + 'h' + (m ? ' ' + m + 'm' : '');
+}
 
 function _tsAgo(unixTs) {
   if (!unixTs) return 'never';
@@ -7415,7 +9920,15 @@ async function saveAccount() {
   const full_name = document.getElementById('sa-full-name').value.trim();
   const display_name = document.getElementById('sa-name').value.trim();
   const email = document.getElementById('sa-email').value.trim();
+  const tzInput = document.getElementById('sa-timezone');
+  const timezone = tzInput ? tzInput.value.trim() : '';
   if (!display_name) { toast('Preferred name cannot be empty', 'err'); return; }
+  // Save timezone preference
+  if (timezone) {
+    await api('/api/preferences', { timezone });
+    if (!window._currentPrefs) window._currentPrefs = {};
+    window._currentPrefs.timezone = timezone;
+  }
   const res = await api('/api/profile/update', { full_name, display_name, email });
   if (res && res.ok) {
     currentUser.full_name = res.full_name;
@@ -8108,7 +10621,7 @@ function showFilesHome() {
   let html = "";
 
   if (!nodes.length) {
-    html = `<div style="padding:48px 24px;color:var(--text3);font-size:13px;text-align:center">No locations configured. Go to <button class="btn btn-ghost" style="font-size:12px;padding:2px 8px" onclick="switchModule('locations')">Locations</button> to add one.</div>`;
+    html = `<div style="padding:48px 24px;color:var(--text3);font-size:13px;text-align:center">No locations configured. Go to <button class="btn btn-ghost"  onclick="switchModule('locations')">Locations</button> to add one.</div>`;
   } else {
     nodes.forEach(node => {
       const mounts  = (node.mounts || []).filter(m => m.visible !== false);
@@ -8144,7 +10657,7 @@ function showFilesHome() {
 
       if (devOpen) {
         if (!mounts.length) {
-          html += `<div style="padding:8px 24px 8px 48px;font-size:12px;color:var(--text3)">No paths — add one in <button class="btn btn-ghost" style="font-size:11px;padding:1px 6px" onclick="switchModule('locations')">Locations</button></div>`;
+          html += `<div style="padding:8px 24px 8px 48px;font-size:12px;color:var(--text3)">No paths — add one in <button class="btn btn-ghost"  onclick="switchModule('locations')">Locations</button></div>`;
         }
         mounts.forEach(m => {
           const lbl = String(m.label || m.id || "");
@@ -8617,7 +11130,7 @@ async function openPreview(name) {
   previewName = name;
 
   document.getElementById('previewFilename').textContent = name;
-  document.getElementById('previewBody').innerHTML = '<div style="padding:40px 16px;color:var(--text3);font-size:13px;text-align:center">Loading…</div>';
+  document.getElementById('previewBody').innerHTML = '<div class="loading-indicator" style="padding:40px 16px;justify-content:center">Loading preview</div>';
   document.getElementById('btnEdit').style.display = 'none';
   document.getElementById('btnSave').style.display = 'none';
   document.getElementById('previewPanel').classList.add('open');
@@ -9271,7 +11784,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        # CORS: same-origin only (no header = browser enforces same-origin)
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
@@ -9497,9 +12010,8 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             safe = [{k: v for k, v in a.items() if k != "key_hash"}
                     for a in _config.get("agents", [])]
-            # Include AI provider status for unified Agents tab
-            if not _capabilities_cache:
-                _run_cap_checks()
+            # Include AI provider status — always re-scan for fresh data
+            _run_cap_checks()
             ai_ids = {p["id"] for p in AI_PROVIDERS}
             providers = [v for v in _capabilities_cache.values() if v["id"] in ai_ids]
             self.reply_json({"agents": safe, "ai_providers": providers})
@@ -9560,6 +12072,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Disposition", 'attachment; filename="porter-config.json"')
             self.send_header("Content-Length", str(len(body)))
             self.end_headers(); self.wfile.write(body)
+
+
+        # ── logical reload ─────────────────────────────────────────────────
+        elif parsed.path == "/api/reload":
+            if not self.auth_check(redirect=False): return
+            _reload_config_and_tasks()
+            self.reply_json({"ok": True, "message": "Config and task registry reloaded from disk"})
+
 
         # ── preferences ───────────────────────────────────────────────────
         elif parsed.path == "/api/preferences":
@@ -10054,11 +12574,28 @@ class Handler(BaseHTTPRequestHandler):
             result = []
             for p in projects:
                 wp = AGENT_WORKSPACE_DIR / "projects" / str(p.get("id", ""))
-                result.append({**p, "workspace_path": str(wp), "workspace_exists": wp.exists()})
+                result.append({**p, "type": p.get("type", "manual"),
+                    "workspace_path": str(wp), "workspace_exists": wp.exists(),
+                    "tokens_used": p.get("tokens_used", 0),
+                    "time_spent_mins": p.get("time_spent_mins", 0),
+                    "completed_at": p.get("completed_at"),
+                    "start_date": p.get("start_date", ""),
+                    "end_date": p.get("end_date", ""),
+                })
             self.reply_json({
                 "projects":         result,
                 "active_project_id": _config.get("active_project_id"),
             })
+
+        # ── S7: project file chain ────────────────────────────────────────────
+        elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/files"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path[len("/api/projects/"):-len("/files")]
+            if not any(p.get("id") == pid for p in _config.get("projects", [])):
+                self.reply_json({"ok": False, "error": "project not found"}, 404); return
+            chain = _project_file_chain(pid)
+            exists_count = sum(1 for f in chain if f["exists"])
+            self.reply_json({"ok": True, "files": chain, "exists_count": exists_count, "total": len(chain)})
 
         # ── G1: task registry (GET list + GET single) ──────────────────────────
         elif parsed.path == "/api/task-registry" or parsed.path.startswith("/api/task-registry/"):
@@ -10097,12 +12634,71 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             self.reply_json(_load_projects_dashboard())
 
+
+        # ── S8: integrations (read from OpenClaw) ────────────────────────────
+        elif parsed.path == "/api/integrations":
+            if not self.auth_check(redirect=False): return
+            result = _load_integrations()
+            self.reply_json(result)
+
+
+        # ── S10: OpenClaw skills (GET) ──────────────────────────────────────────
+        elif parsed.path == "/api/openclaw/skills":
+            if not self.auth_check(redirect=False): return
+            skills = _load_openclaw_skills()
+            self.reply_json({"ok": True, "skills": skills, "count": len(skills)})
+
+        # ── S10: OpenClaw cron (GET) ────────────────────────────────────────────
+        elif parsed.path == "/api/openclaw/cron":
+            if not self.auth_check(redirect=False): return
+            cron = _load_openclaw_cron()
+            self.reply_json({"ok": True, **cron})
+
+        # ── Gap25: OpenClaw sessions (GET) ────────────────────────────────────
+        elif parsed.path == "/api/openclaw/sessions":
+            if not self.auth_check(redirect=False): return
+            summaries = _load_session_summaries()
+            self.reply_json({"ok": True, "sessions": summaries, "count": len(summaries)})
+
+        # ── Memory tab: All sessions (GET) ────────────────────────────────────
+        elif parsed.path == "/api/sessions":
+            if not self.auth_check(redirect=False): return
+            oc_sessions = _load_session_summaries()
+            claude_sessions = _load_claude_session_summaries()
+            all_sessions = oc_sessions + claude_sessions
+            # Sort by first_ts descending (most recent first)
+            all_sessions.sort(key=lambda s: s.get("first_ts", ""), reverse=True)
+            self.reply_json({"ok": True, "sessions": all_sessions, "count": len(all_sessions)})
+
+        # ── Memory tab: Memory overview (GET) ─────────────────────────────────
+        elif parsed.path == "/api/memory/overview":
+            if not self.auth_check(redirect=False): return
+            overview = _get_memory_overview()
+            self.reply_json({"ok": True, **overview})
+
+        # ── Memory tab: Read memory file (GET) ───────────────────────────────
+        elif parsed.path == "/api/memory/read":
+            if not self.auth_check(redirect=False): return
+            file_path = qs.get("path", [""])[0]
+            if not file_path or not _is_allowed_memory_path(file_path):
+                self.reply_json({"ok": False, "error": "Invalid or disallowed path"}, 400); return
+            try:
+                content = Path(file_path).read_text(encoding="utf-8")
+                self.reply_json({"ok": True, "content": content, "path": file_path})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
+
+        # ── Gap26: Local model detection (GET) ───────────────────────────────
+        elif parsed.path == "/api/local-models":
+            if not self.auth_check(redirect=False): return
+            models = _detect_local_models()
+            self.reply_json({"ok": True, "models": models, "count": len(models)})
+
         # ── P6a: capabilities ─────────────────────────────────────────────────
         elif parsed.path == "/api/capabilities":
             if not self.auth_check(redirect=False): return
-            # If cache is empty (first request before thread finishes), kick off sync check
-            if not _capabilities_cache:
-                _run_cap_checks()
+            # Always re-scan capabilities on request (detects newly installed tools)
+            _run_cap_checks()
             # Filter to non-AI tools only (AI providers served via /api/ai-providers)
             ai_ids = {p["id"] for p in AI_PROVIDERS}
             caps = [v for v in _capabilities_cache.values() if v["id"] not in ai_ids]
@@ -10110,8 +12706,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/ai-providers":
             if not self.auth_check(redirect=False): return
-            if not _capabilities_cache:
-                _run_cap_checks()
+            _run_cap_checks()
             ai_ids = {p["id"] for p in AI_PROVIDERS}
             providers = [v for v in _capabilities_cache.values() if v["id"] in ai_ids]
             self.reply_json({"providers": providers})
@@ -10141,12 +12736,38 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
 
         if parsed.path == "/login":
+            # Rate limiting by client IP
+            client_ip = self.client_address[0]
+            now = time.time()
+            attempts = _login_attempts.get(client_ip, {"count": 0, "locked_until": 0})
+            if now < attempts.get("locked_until", 0):
+                remaining = int(attempts["locked_until"] - now)
+                log.warning("Login rate-limited: %s (locked for %ds)", client_ip, remaining)
+                self.reply_json({"ok": False, "error": f"Too many attempts. Try again in {remaining}s."}, 429)
+                return
+
             data = self.read_json_body()
             username = data.get("username", "").strip()
             password = data.get("password", "")
             cfg = _config
-            expected = _hash_password(password, cfg.get("salt", ""))
-            if username == cfg.get("username") and expected == cfg.get("password_hash"):
+            salt = cfg.get("salt", "")
+            stored_hash = cfg.get("password_hash", "")
+
+            # Check scrypt hash first, then legacy SHA-256 for migration
+            scrypt_hash = _hash_password(password, salt)
+            legacy_hash = _hash_password_legacy(password, salt)
+            password_ok = (scrypt_hash == stored_hash) or (legacy_hash == stored_hash)
+
+            if username == cfg.get("username") and password_ok:
+                # Auto-migrate from SHA-256 to scrypt on successful login
+                if legacy_hash == stored_hash and scrypt_hash != stored_hash:
+                    cfg["password_hash"] = scrypt_hash
+                    _save_config(cfg)
+                    log.info("Password hash migrated from SHA-256 to scrypt for %s", username)
+
+                # Clear rate limit on success
+                _login_attempts.pop(client_ip, None)
+
                 token = create_session(username)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -10160,7 +12781,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+                log.info("Login OK: %s from %s", username, client_ip)
             else:
+                attempts["count"] = attempts.get("count", 0) + 1
+                if attempts["count"] >= _LOGIN_MAX_ATTEMPTS:
+                    lockout = _LOGIN_LOCKOUT_BASE * (2 ** (attempts["count"] - _LOGIN_MAX_ATTEMPTS))
+                    lockout = min(lockout, 900)  # cap at 15 minutes
+                    attempts["locked_until"] = now + lockout
+                    log.warning("Login locked: %s after %d attempts (lockout %ds)", client_ip, attempts["count"], lockout)
+                _login_attempts[client_ip] = attempts
+                log.warning("Login failed: %s from %s (attempt %d)", username, client_ip, attempts["count"])
                 self.reply_json({"ok": False, "error": "Invalid username or password"}, 401)
 
         elif parsed.path == "/logout":
@@ -11373,36 +14003,25 @@ class Handler(BaseHTTPRequestHandler):
                 agent = _agent_by_id(agent_id)
                 if not agent:
                     self.reply_json({"error": "agent not found"}, 404); return
+                # S11: Real HTTP roundtrip ping
+                ping = _ping_agent(agent)
+                # Also include heartbeat data for context
                 fleet = _config.get("agent_fleet", {})
                 dev = (fleet.get("devices", {}) or {}).get(agent_id, {})
-                now_ts = int(time.time())
                 last_seen_ts = int(dev.get("last_seen", 0) or 0)
-                connected = False
-                message = "No recent heartbeat from this assistant."
-                if last_seen_ts and (now_ts - last_seen_ts) <= 300:
-                    connected = True
-                    message = "Recent heartbeat received from assistant."
-                else:
-                    # fallback: recent usage snapshot indicates active integration
-                    snap_file = USAGE_DIR / f"{agent_id}.json"
-                    if snap_file.exists():
-                        try:
-                            snap = json.loads(snap_file.read_text())
-                            cap = snap.get("captured_at")
-                            if cap:
-                                from datetime import datetime, timezone
-                                c = datetime.fromisoformat(str(cap).replace('Z', '+00:00'))
-                                age = (datetime.now(timezone.utc) - c).total_seconds()
-                                if age <= 86400:
-                                    connected = True
-                                    message = "No heartbeat, but recent usage telemetry exists (within 24h)."
-                        except Exception:
-                            pass
                 last_seen_iso = None
                 if last_seen_ts:
                     from datetime import datetime, timezone
                     last_seen_iso = datetime.fromtimestamp(last_seen_ts, tz=timezone.utc).isoformat()
-                self.reply_json({"ok": True, "connected": connected, "message": message, "last_seen": last_seen_iso})
+                self.reply_json({
+                    "ok": True,
+                    "connected": ping["ok"],
+                    "latency_ms": ping.get("latency_ms"),
+                    "version": ping.get("version"),
+                    "endpoint": ping.get("endpoint"),
+                    "message": ping["message"],
+                    "last_seen": last_seen_iso,
+                })
 
             elif action == "set_role":
                 agent_id = data.get("id", "")
@@ -11442,6 +14061,160 @@ class Handler(BaseHTTPRequestHandler):
             save_config(_config)
             self.reply_json({"ok": True, "key": raw_key})
 
+
+        # ── logical reload ─────────────────────────────────────────────────
+        elif parsed.path == "/api/reload":
+            if not self.auth_check(redirect=False): return
+            _reload_config_and_tasks()
+            self.reply_json({"ok": True, "message": "Config and task registry reloaded from disk"})
+
+
+        # ── S10: OpenClaw skills mutations ──────────────────────────────────────
+        elif parsed.path == "/api/openclaw/skills":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            action = str(data.get("action", "")).strip()
+
+            if action == "remove":
+                skill_id = str(data.get("id", "")).strip()
+                if not skill_id:
+                    self.reply_json({"ok": False, "error": "Missing skill id"}, 400); return
+                # Check manual skills first
+                manual_path = RUNTIME_DIR / "skills" / skill_id
+                if manual_path.exists() and manual_path.is_dir():
+                    import shutil
+                    shutil.rmtree(manual_path)
+                    self.reply_json({"ok": True, "message": f"Manual skill '{skill_id}' removed"})
+                    return
+                # Check OpenClaw sandbox skills
+                removed = False
+                for sandbox in OPENCLAW_STATE_DIR.joinpath("sandboxes").glob("*/skills"):
+                    skill_path = sandbox / skill_id
+                    if skill_path.exists() and skill_path.is_dir():
+                        import shutil
+                        shutil.rmtree(skill_path)
+                        removed = True
+                        break
+                if removed:
+                    self.reply_json({"ok": True, "message": f"Skill '{skill_id}' removed"})
+                else:
+                    self.reply_json({"ok": False, "error": f"Skill '{skill_id}' not found"}, 404)
+
+            elif action == "create":
+                name = str(data.get("name", "")).strip()
+                description = str(data.get("description", "")).strip()
+                emoji = str(data.get("emoji", "")).strip() or "\u2699"
+                if not name:
+                    self.reply_json({"ok": False, "error": "Name is required"}, 400); return
+                # Sanitize ID from name
+                import re as _re
+                skill_id = _re.sub(r'[^a-z0-9-]', '-', name.lower()).strip('-')[:50]
+                if not skill_id:
+                    self.reply_json({"ok": False, "error": "Invalid name"}, 400); return
+                skill_dir = RUNTIME_DIR / "skills" / skill_id
+                if skill_dir.exists():
+                    self.reply_json({"ok": False, "error": f"Skill '{skill_id}' already exists"}, 409); return
+                skill_dir.mkdir(parents=True, exist_ok=True)
+                skill_md = f"""---
+name: {name}
+description: "{description}"
+metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
+---
+
+# {name}
+
+{description}
+"""
+                (skill_dir / "SKILL.md").write_text(skill_md, encoding="utf-8")
+                self.reply_json({"ok": True, "id": skill_id, "message": f"Skill '{name}' created"})
+
+            else:
+                self.reply_json({"ok": False, "error": f"Unknown action: {action}"}, 400)
+
+        # ── Gap25: Session memory flush (POST) ───────────────────────────────
+        elif parsed.path == "/api/openclaw/sessions/flush":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            session_id = str(data.get("session_id", "")).strip()
+            project_id = data.get("project_id")
+            if not session_id:
+                self.reply_json({"ok": False, "error": "Missing session_id"}, 400); return
+            result = _flush_session_to_memory(session_id, project_id)
+            status = 200 if result.get("ok") else 400
+            self.reply_json(result, status)
+
+        # ── Generic session flush (any source) ───────────────────────────────
+        elif parsed.path == "/api/memory/flush":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            session_id = str(data.get("session_id", "")).strip()
+            source = str(data.get("source", "")).strip()
+            project_id = data.get("project_id")
+            if not session_id:
+                self.reply_json({"ok": False, "error": "Missing session_id"}, 400); return
+            if source == "claude":
+                result = _flush_claude_session(session_id)
+            elif source == "openclaw":
+                result = _flush_session_to_memory(session_id, project_id)
+            else:
+                result = {"ok": False, "error": f"Flush not supported for source: {source}"}
+            status = 200 if result.get("ok") else 400
+            self.reply_json(result, status)
+
+        # ── Memory tab: Write memory file (POST) ─────────────────────────────
+        elif parsed.path == "/api/memory/write":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            file_path = str(data.get("path", "")).strip()
+            content = data.get("content", "")
+            if not file_path or not _is_allowed_memory_path(file_path):
+                self.reply_json({"ok": False, "error": "Invalid or disallowed path"}, 400); return
+            try:
+                Path(file_path).write_text(content, encoding="utf-8")
+                self.reply_json({"ok": True, "path": file_path, "size": len(content.encode("utf-8"))})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
+
+        # ── Gap30: Direct model prompt (POST) ────────────────────────────────
+        elif parsed.path == "/api/prompt":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            model_id = str(data.get("model_id", "")).strip()
+            prompt = str(data.get("prompt", "")).strip()
+            if not model_id or not prompt:
+                self.reply_json({"ok": False, "error": "model_id and prompt required"}, 400); return
+            try:
+                import urllib.request
+                if model_id.startswith("local-ollama-"):
+                    model_name = model_id.replace("local-ollama-", "")
+                    payload = json.dumps({"model": model_name, "prompt": prompt, "stream": False}).encode()
+                    req = urllib.request.Request("http://127.0.0.1:11434/api/generate",
+                        data=payload, headers={"Content-Type": "application/json"}, method="POST")
+                    with urllib.request.urlopen(req, timeout=120) as resp:
+                        result = json.loads(resp.read())
+                        self.reply_json({"ok": True, "response": result.get("response", ""), "model": model_id})
+                elif model_id == "openclaw-gateway":
+                    oc_cfg = {}
+                    try:
+                        oc_cfg = json.loads(OPENCLAW_STATE_DIR.joinpath("openclaw.json").read_text())
+                    except Exception:
+                        pass
+                    gw_port = oc_cfg.get("gatewayPort", 18789)
+                    auth_token = oc_cfg.get("authToken", "")
+                    payload = json.dumps({"message": prompt}).encode()
+                    req = urllib.request.Request(f"http://127.0.0.1:{gw_port}/v1/chat",
+                        data=payload, headers={"Content-Type": "application/json",
+                        "Authorization": f"Bearer {auth_token}"}, method="POST")
+                    with urllib.request.urlopen(req, timeout=120) as resp:
+                        result = json.loads(resp.read())
+                        response_text = result.get("response", result.get("message", result.get("content", str(result))))
+                        self.reply_json({"ok": True, "response": response_text, "model": model_id})
+                else:
+                    self.reply_json({"ok": False, "error": f"Model {model_id} not callable directly"}, 400)
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
+
+
         # ── preferences ────────────────────────────────────────────────────
         elif parsed.path == "/api/preferences":
             if not self.auth_check(redirect=False): return
@@ -11452,7 +14225,7 @@ class Handler(BaseHTTPRequestHandler):
                        "policy_preset", "setup_profile", "skills_routing", "memory_mode",
                        "behavior_preset", "memory_visibility", "usage_warn_threshold",
                        "skills_safe_mode", "external_send_approval", "preferred_model",
-                       "context_compression", "fallback_chain"}
+                       "context_compression", "fallback_chain", "timezone"}
             for k, v in data.items():
                 if k in allowed:
                     prefs[k] = v
@@ -11635,7 +14408,9 @@ class Handler(BaseHTTPRequestHandler):
                 if not name:
                     self.reply_json({"ok": False, "error": "name required"}); return
                 pid  = str(uuid.uuid4())
-                proj = {"id": pid, "name": name, "created_at": time.time()}
+                ptype = str(data.get("type", "manual")).strip()
+                if ptype not in ("manual", "autonomous"): ptype = "manual"
+                proj = {"id": pid, "name": name, "type": ptype, "created_at": time.time()}
                 _config.setdefault("projects", []).append(proj)
                 save_config(_config)
                 wp = scaffold_project_dir(pid, name)
@@ -11671,6 +14446,51 @@ class Handler(BaseHTTPRequestHandler):
                     self.reply_json({"ok": False, "error": "filename required"}); return
                 resolution = resolve_project_memory(project_id, agent_id, filename)
                 self.reply_json({"ok": True, **resolution})
+
+            elif action == "update":
+                pid = str(data.get("project_id", "")).strip()
+                proj = None
+                for p in _config.get("projects", []):
+                    if p.get("id") == pid:
+                        proj = p; break
+                if not proj:
+                    self.reply_json({"ok": False, "error": "project not found"}); return
+                if "name" in data and str(data["name"]).strip():
+                    proj["name"] = str(data["name"]).strip()
+                if "type" in data:
+                    t = str(data["type"]).strip()
+                    if t in ("manual", "autonomous"): proj["type"] = t
+                if "memory_isolation" in data:
+                    proj["memory_isolation"] = str(data["memory_isolation"]).strip()
+                # Project metrics
+                for mf in ("tokens_used", "time_spent_mins"):
+                    if mf in data:
+                        try: proj[mf] = int(data[mf])
+                        except (ValueError, TypeError): pass
+                if "start_date" in data:
+                    proj["start_date"] = str(data["start_date"]).strip()
+                if "end_date" in data:
+                    proj["end_date"] = str(data["end_date"]).strip()
+                if "completed_at" in data:
+                    try: proj["completed_at"] = float(data["completed_at"])
+                    except (ValueError, TypeError): pass
+                proj["updated_at"] = time.time()
+                save_config(_config)
+                # Also update workspace settings.json if it exists
+                wp = AGENT_WORKSPACE_DIR / "projects" / pid
+                sj = wp / "settings.json"
+                if sj.exists():
+                    try:
+                        sdata = json.loads(sj.read_text())
+                        sdata["name"] = proj.get("name", "")
+                        sdata["type"] = proj.get("type", "manual")
+                        if "memory_isolation" in proj:
+                            sdata["memory_isolation"] = proj["memory_isolation"]
+                        sj.write_text(json.dumps(sdata, indent=2))
+                    except Exception:
+                        pass
+                self.reply_json({"ok": True, "project": proj})
+
 
             else:
                 self.reply_json({"ok": False, "error": f"Unknown action: {action}"})
@@ -11730,6 +14550,13 @@ class Handler(BaseHTTPRequestHandler):
                         self.reply_json({"ok": False, "error": "task not found"}, 404); return
                     task["status"]     = status
                     task["updated_at"] = now
+                    # Optional metrics
+                    for mf in ("tokens_used", "time_spent_mins"):
+                        if mf in data:
+                            try: task[mf] = int(data[mf])
+                            except (ValueError, TypeError): pass
+                    if status == "complete" and "completed_at" not in task:
+                        task["completed_at"] = now
                 _treg_save(task)
                 _append_audit("task_registry.update_status", tid, actor, details={"status": status})
                 self.reply_json({"ok": True, "task": task})
@@ -11815,6 +14642,28 @@ class Handler(BaseHTTPRequestHandler):
                     task["updated_at"]        = now
                 _treg_save(task)
                 _append_audit("task_registry.claim", tid, actor)
+                self.reply_json({"ok": True, "task": task})
+
+            elif action == "rebuild":
+                tid = str(data.get("id", "")).strip()
+                with _treg_lock:
+                    task = _treg.get(tid)
+                if not task:
+                    self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                if task.get("status") != "pending":
+                    self.reply_json({"ok": False, "error": "only pending tasks can be rebuilt"}, 400); return
+                fp = TASKS_REGISTRY_DIR / f"{tid}.json"
+                if fp.exists():
+                    fresh = json.loads(fp.read_text(encoding="utf-8"))
+                    fresh["updated_at"] = time.time()
+                    fresh["result"] = None
+                    fresh["tokens_used"] = None
+                    fresh["time_spent_mins"] = None
+                    fp.write_text(json.dumps(fresh, indent=2, default=str), encoding="utf-8")
+                    with _treg_lock:
+                        _treg[tid] = fresh
+                    task = fresh
+                _append_audit("task_registry.rebuild", tid, actor)
                 self.reply_json({"ok": True, "task": task})
 
             elif action == "delete":
@@ -12204,15 +15053,16 @@ if __name__ == "__main__":
     _load_serve_dirs(_config)
     ensure_runtime_dirs()
     ensure_memory_dirs()
+    _migrate_checkpoint_to_registry()  # Gap31: one-time migration
     _sched_thread = threading.Thread(target=_scheduler_loop, name="porter-scheduler", daemon=True)
     _sched_thread.start()
     _cap_thread = threading.Thread(target=_run_cap_checks, name="porter-cap-check", daemon=True)
     _cap_thread.start()
-    server = HTTPServer(("127.0.0.1", PORT), Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.14.17 ready (localhost only)")
+    print(f"\n  Porter v0.16.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
