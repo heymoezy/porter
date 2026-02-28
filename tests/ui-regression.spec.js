@@ -12,13 +12,10 @@ const { test, expect } = require('@playwright/test');
 // ── Auth helper ──────────────────────────────────────────────────────────────
 
 async function login(page) {
-  await page.goto('/');
-  // If redirected to login, authenticate
-  if (page.url().includes('/login') || await page.locator('#uname').isVisible().catch(() => false)) {
-    await page.fill('#uname', 'admin');
-    await page.fill('#pw', 'porter');
-    await page.click('.login-btn');
-  }
+  await page.goto('/login');
+  await page.fill('#uname', 'admin');
+  await page.fill('#pw', 'porter');
+  await page.click('.login-btn');
   await page.waitForSelector('.sidebar', { timeout: 5000 });
 }
 

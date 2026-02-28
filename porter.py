@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.21.1 — self-hosted file manager"""
+"""Porter v0.21.2 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -3696,6 +3696,41 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-msg.assistant { white-space:normal; }
 .chat-msg p { margin:2px 0; }
 
+
+/* Rules */
+.rules-list { display:flex; flex-direction:column; gap:6px; }
+.rule-item {
+  display:flex; align-items:flex-start; gap:10px; padding:10px 14px;
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  font-size:12px; line-height:1.5; transition:.12s;
+}
+.rule-item:hover { border-color:var(--accent); }
+.rule-cat {
+  font-size:9px; text-transform:uppercase; letter-spacing:.5px;
+  padding:2px 6px; border-radius:4px; background:var(--bg2);
+  color:var(--text3); white-space:nowrap; flex-shrink:0; margin-top:1px;
+}
+.rule-cat.architecture { color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, transparent); }
+.rule-cat.ux { color:#f59e0b; background:color-mix(in srgb, #f59e0b 10%, transparent); }
+.rule-cat.engineering { color:#10b981; background:color-mix(in srgb, #10b981 10%, transparent); }
+.rule-cat.governance { color:#8b5cf6; background:color-mix(in srgb, #8b5cf6 10%, transparent); }
+.rule-text { flex:1; color:var(--text); }
+.rule-remove {
+  padding:2px 6px; font-size:10px; border-radius:4px; border:1px solid var(--border);
+  background:none; color:var(--text3); cursor:pointer; flex-shrink:0; opacity:0; transition:.12s;
+}
+.rule-item:hover .rule-remove { opacity:1; }
+.rule-remove:hover { border-color:var(--danger,#dc3545); color:var(--danger,#dc3545); }
+.rule-add-row { display:flex; gap:6px; margin-top:8px; }
+.rule-add-input {
+  flex:1; padding:6px 10px; font-size:12px; border-radius:6px;
+  border:1px solid var(--border); background:var(--bg2); color:var(--text);
+}
+.rule-add-btn {
+  padding:6px 14px; font-size:12px; border-radius:6px; border:none;
+  background:var(--accent); color:#fff; cursor:pointer;
+}
+
 .chat-msg.skill-pending {
   align-self:center; color:var(--text3); font-size:12px;
   font-style:italic; padding:8px 0;
@@ -4565,7 +4600,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.21.1</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.21.2</div>
   </div>
 </aside>
 
@@ -4655,7 +4690,7 @@ select.settings-input { padding-right: 26px; }
           <div class="chat-empty">
             <div class="chat-empty-icon">&#9889;</div>
             <div class="chat-empty-title">Talk to your AI models</div>
-            <div class="chat-empty-hint">Select a model above, type a message below. Responses stream in real-time. Conversations are saved automatically.</div>
+            <div class="chat-empty-hint">Ask anything. /commands for skills, @model to target.</div>
           </div>
         </div>
         <div id="chat-ctx-bar" class="chat-ctx-bar" style="display:none"></div>
@@ -5605,6 +5640,12 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.21.2', date:'2026-02-28', notes:[
+    'New: Porter Rules — governance principles visible in Admin tab',
+    'New: Rules are configurable via UI (add, edit, remove)',
+    'New: Default rules loaded on first run — agnostic, brief, no hardcoding',
+    'UI: Shortened verbose placeholder text everywhere',
+  ]},
   { ver:'v0.21.1', date:'2026-02-28', notes:[
     'New: Public landing page — visible to unauthenticated visitors',
     'New: Feature showcase with capabilities auto-detected from health endpoint',
@@ -8708,7 +8749,7 @@ function renderChatMessages(streamUpdate) {
     el.innerHTML = '<div class="chat-empty">'
       + '<div class="chat-empty-icon">&#9889;</div>'
       + '<div class="chat-empty-title">Chat</div>'
-      + '<div class="chat-empty-hint">Ask anything. Use /commands for skills, @gemini or @ollama to target a model.</div>'
+      + '<div class="chat-empty-hint">Ask anything. /commands for skills, @model to target.</div>'
       + '</div>';
     _updateStopBtn(false);
     return;
@@ -9020,7 +9061,47 @@ async function attachChatFile(rootPath, name) {
 let _adminLogAutoTimer = null;
 let _adminLogData = [];
 
+
+// ── Porter Rules ─────────────────────────────────────────────────────────
+async function loadRules() {
+  var el = document.getElementById('admin-rules');
+  if (!el) return;
+  var resp = await api('/api/rules');
+  if (!resp || !resp.rules) return;
+  var rules = resp.rules;
+  var html = '<div class="rules-list">';
+  rules.forEach(function(r) {
+    html += '<div class="rule-item">';
+    html += '<span class="rule-cat ' + (r.category||'') + '">' + escHtml(r.category||'custom') + '</span>';
+    html += '<span class="rule-text">' + escHtml(r.text) + '</span>';
+    html += '<button class="rule-remove" onclick="removeRule(\'' + r.id + '\')">×</button>';
+    html += '</div>';
+  });
+  html += '</div>';
+  html += '<div class="rule-add-row">';
+  html += '<input type="text" class="rule-add-input" id="rule-add-text" placeholder="Add a new rule...">';
+  html += '<select class="rule-add-input" id="rule-add-cat" style="flex:0 0 120px"><option value="custom">custom</option><option value="architecture">architecture</option><option value="ux">ux</option><option value="engineering">engineering</option><option value="governance">governance</option></select>';
+  html += '<button class="rule-add-btn" onclick="addRule()">Add</button>';
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+async function addRule() {
+  var text = document.getElementById('rule-add-text').value.trim();
+  var cat = document.getElementById('rule-add-cat').value;
+  if (!text) return;
+  await api('/api/rules', {action: 'add', text: text, category: cat});
+  document.getElementById('rule-add-text').value = '';
+  loadRules();
+}
+
+async function removeRule(id) {
+  await api('/api/rules', {action: 'remove', id: id});
+  loadRules();
+}
+
 async function loadAdmin() {
+  loadRules();
   await Promise.all([loadAdminHealth(), loadAdminLogs(), loadAdminConfig()]);
 }
 
@@ -13233,6 +13314,32 @@ init();
 # ── HTTP handler ──────────────────────────────────────────────────────────
 
 
+
+# ── Porter Rules — governance principles ───────────────────────────────────
+DEFAULT_RULES = [
+    {"id": "agnostic", "text": "Everything about Porter must be agnostic and configurable. No model-specific bridges.", "category": "architecture"},
+    {"id": "router", "text": "Porter is always the router. All model calls flow through Porter.", "category": "architecture"},
+    {"id": "no-hardcode", "text": "No hardcoded paths, hosts, ports, tokens, or project IDs. Everything from config or runtime detection.", "category": "architecture"},
+    {"id": "brief", "text": "Brief is always better. Short labels, short hints, short copy.", "category": "ux"},
+    {"id": "no-hidden", "text": "No hidden or hardcoded pathways. Everything exposed in the UI.", "category": "ux"},
+    {"id": "trust-ux", "text": "Show real capability state only. Never label incomplete features as active.", "category": "ux"},
+    {"id": "delete-legacy", "text": "Always delete legacy code. No bloat, no dead functions, no stale placeholders.", "category": "engineering"},
+    {"id": "fresh-start", "text": "First-time users have nothing configured. Porter must work from zero.", "category": "engineering"},
+    {"id": "graceful-degrade", "text": "Missing dependencies are hidden or badged unavailable. Never shown as working.", "category": "engineering"},
+    {"id": "single-file", "text": "Porter is a single Python file with no external dependencies.", "category": "engineering"},
+    {"id": "option-1", "text": "Always choose Option 1 by default unless destructive or system-level.", "category": "governance"},
+    {"id": "delegate", "text": "Delegate to other models. Don't be greedy. Use the squad.", "category": "governance"},
+]
+
+def _get_rules():
+    """Get rules from config, falling back to defaults."""
+    rules = _config.get("rules")
+    if rules is None:
+        _config["rules"] = list(DEFAULT_RULES)
+        _save_config(_config)
+        rules = _config["rules"]
+    return rules
+
 # ── Agent Bridge — model-agnostic dispatch ─────────────────────────────────
 def _resolve_cli(name, extra_paths=None):
     """Find a CLI binary by name, checking PATH and common locations."""
@@ -13428,7 +13535,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 <section class="landing-hero">
   <h1>Your <span class="accent">AI infrastructure</span>, in one place</h1>
-  <p>Route conversations to Claude, GPT, Gemini, and local models. Manage files, memory, and workflows. Self-hosted, single file, zero dependencies.</p>
+  <p>One place for Claude, GPT, Gemini, and local models. Self-hosted, zero dependencies.</p>
   <a href="/login" class="landing-cta">Get Started</a>
   <span class="landing-cta-sub">Self-hosted &middot; AGPL-3.0 &middot; No vendor lock-in</span>
 </section>
@@ -13479,7 +13586,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.21.1' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.21.2' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -13739,6 +13846,10 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"agents": safe, "ai_providers": providers})
 
 
+
+        elif parsed.path == "/api/rules":
+            if not self.auth_check(redirect=False): return
+            self.reply_json({"ok": True, "rules": _get_rules()})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -13826,7 +13937,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.21.1"
+                health["porter_version"] = "0.21.2"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -16304,6 +16415,50 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
 
 
 
+
+        elif parsed.path == "/api/rules":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            action = data.get("action", "")
+
+            if action == "add":
+                rule_text = data.get("text", "").strip()
+                category = data.get("category", "custom")
+                if not rule_text:
+                    self.reply_json({"ok": False, "error": "text required"}, 400)
+                    return
+                import secrets
+                rule_id = "custom-" + secrets.token_hex(4)
+                rules = _get_rules()
+                rules.append({"id": rule_id, "text": rule_text, "category": category})
+                _config["rules"] = rules
+                _save_config(_config)
+                self.reply_json({"ok": True, "id": rule_id})
+
+            elif action == "remove":
+                rule_id = data.get("id", "")
+                rules = _get_rules()
+                _config["rules"] = [r for r in rules if r.get("id") != rule_id]
+                _save_config(_config)
+                self.reply_json({"ok": True})
+
+            elif action == "update":
+                rule_id = data.get("id", "")
+                new_text = data.get("text", "").strip()
+                rules = _get_rules()
+                for r in rules:
+                    if r.get("id") == rule_id:
+                        r["text"] = new_text
+                        if data.get("category"):
+                            r["category"] = data["category"]
+                        break
+                _config["rules"] = rules
+                _save_config(_config)
+                self.reply_json({"ok": True})
+
+            else:
+                self.reply_json({"ok": False, "error": "action required (add, remove, update)"}, 400)
+
         elif parsed.path == "/api/agent/invoke":
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
@@ -17227,7 +17382,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.21.1 ready (localhost only)")
+    print(f"\n  Porter v0.21.2 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
