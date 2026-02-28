@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.21.0 — self-hosted file manager"""
+"""Porter v0.21.1 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -4565,7 +4565,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.21.0</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.21.1</div>
   </div>
 </aside>
 
@@ -5605,6 +5605,12 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.21.1', date:'2026-02-28', notes:[
+    'New: Public landing page — visible to unauthenticated visitors',
+    'New: Feature showcase with capabilities auto-detected from health endpoint',
+    'New: Dark, minimal, modern design matching Porter app aesthetic',
+    'Architecture: / shows landing page if not logged in, app if logged in',
+  ]},
   { ver:'v0.21.0', date:'2026-02-28', notes:[
     'New: Markdown rendering in chat — code blocks, bold, italic, headers, lists',
     'New: Copy button on every code block',
@@ -13346,6 +13352,147 @@ def dispatch_agent(message, backend, model=None, timeout=120):
         return {"ok": False, "error": str(e)[:500]}
 
 
+
+LANDING_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Porter — Your AI Infrastructure Hub</title>
+<meta name="description" content="Self-hosted AI hub. Route conversations to Claude, GPT, Gemini, and local models. Manage files, memory, and workflows from one place.">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#111113;--surface:#1a1a1e;--raised:#222226;--border:#2e2e33;--accent:#6366f1;--accent-d:#4f46e5;--text:#e4e4e7;--text2:#a1a1aa;--text3:#71717a}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;min-height:100vh}
+
+/* Nav */
+.landing-nav{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;max-width:1100px;margin:0 auto}
+.landing-logo{display:flex;align-items:center;gap:10px}
+.landing-logo svg{width:28px;height:28px}
+.landing-logo-name{font-size:18px;font-weight:700;letter-spacing:-.4px}
+.landing-login{padding:8px 20px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid var(--border);background:none;color:var(--text);cursor:pointer;text-decoration:none;transition:.15s}
+.landing-login:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* Hero */
+.landing-hero{text-align:center;padding:80px 40px 60px;max-width:720px;margin:0 auto}
+.landing-hero h1{font-size:42px;font-weight:800;letter-spacing:-1px;line-height:1.15;margin-bottom:16px}
+.landing-hero h1 .accent{color:var(--accent)}
+.landing-hero p{font-size:17px;color:var(--text2);max-width:540px;margin:0 auto 32px}
+.landing-cta{display:inline-block;padding:12px 32px;font-size:15px;font-weight:600;border-radius:10px;background:var(--accent);color:#fff;text-decoration:none;transition:.15s;border:none;cursor:pointer}
+.landing-cta:hover{background:var(--accent-d);transform:translateY(-1px)}
+.landing-cta-sub{display:block;margin-top:10px;font-size:12px;color:var(--text3)}
+
+/* Feature grid */
+.landing-features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:900px;margin:40px auto 60px;padding:0 40px}
+@media(max-width:700px){.landing-features{grid-template-columns:1fr}}
+.landing-feat{padding:24px;background:var(--surface);border:1px solid var(--border);border-radius:12px;transition:.15s}
+.landing-feat:hover{border-color:var(--accent);transform:translateY(-2px)}
+.landing-feat-icon{font-size:24px;margin-bottom:10px}
+.landing-feat h3{font-size:14px;font-weight:600;margin-bottom:6px}
+.landing-feat p{font-size:12px;color:var(--text2);line-height:1.5}
+
+/* Architecture */
+.landing-arch{text-align:center;padding:40px;max-width:700px;margin:0 auto}
+.landing-arch h2{font-size:20px;font-weight:700;margin-bottom:8px}
+.landing-arch p{font-size:13px;color:var(--text2);margin-bottom:24px}
+.landing-arch-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px}
+.landing-arch-item{padding:16px 8px;background:var(--raised);border:1px solid var(--border);border-radius:10px;text-align:center}
+.landing-arch-item .icon{font-size:20px;margin-bottom:4px}
+.landing-arch-item .name{font-size:12px;font-weight:600}
+.landing-arch-item .sub{font-size:10px;color:var(--text3)}
+.landing-arch-hub{padding:14px 24px;background:var(--accent);border-radius:10px;display:inline-flex;align-items:center;gap:8px;color:#fff;font-weight:700;font-size:14px;letter-spacing:1px;margin-bottom:24px}
+
+/* Stats */
+.landing-stats{display:flex;justify-content:center;gap:40px;padding:30px 40px;max-width:900px;margin:0 auto}
+.landing-stat{text-align:center}
+.landing-stat .val{font-size:28px;font-weight:800;color:var(--accent)}
+.landing-stat .label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+
+/* Footer */
+.landing-footer{text-align:center;padding:40px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);margin-top:60px}
+.landing-footer a{color:var(--accent);text-decoration:none}
+</style>
+</head>
+<body>
+
+<nav class="landing-nav">
+  <div class="landing-logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <rect x="2" y="3" width="20" height="18" rx="3"/>
+      <path d="M12 8v8m-4-4h8"/>
+    </svg>
+    <span class="landing-logo-name">porter</span>
+  </div>
+  <a href="/login" class="landing-login">Sign in</a>
+</nav>
+
+<section class="landing-hero">
+  <h1>Your <span class="accent">AI infrastructure</span>, in one place</h1>
+  <p>Route conversations to Claude, GPT, Gemini, and local models. Manage files, memory, and workflows. Self-hosted, single file, zero dependencies.</p>
+  <a href="/login" class="landing-cta">Get Started</a>
+  <span class="landing-cta-sub">Self-hosted &middot; AGPL-3.0 &middot; No vendor lock-in</span>
+</section>
+
+<div class="landing-features">
+  <div class="landing-feat">
+    <div class="landing-feat-icon">&#9889;</div>
+    <h3>Multi-Model Chat</h3>
+    <p>Talk to OpenClaw, Gemini, Ollama, and more. Markdown rendering, code blocks with copy, streaming responses. Feels like a CLI.</p>
+  </div>
+  <div class="landing-feat">
+    <div class="landing-feat-icon">&#128268;</div>
+    <h3>Agnostic Agent Bridge</h3>
+    <p>One endpoint, many backends. Route tasks to any model with @backend prefix. Porter decides or you override. Your call.</p>
+  </div>
+  <div class="landing-feat">
+    <div class="landing-feat-icon">&#128464;</div>
+    <h3>File Manager</h3>
+    <p>Browse, upload, search, and manage files across multiple mount points. Batch operations, zip downloads, inline preview.</p>
+  </div>
+  <div class="landing-feat">
+    <div class="landing-feat-icon">&#129504;</div>
+    <h3>Memory Orchestration</h3>
+    <p>How AI agents remember. Instructions, persistent memory, shared plane, session history. Educational three-layer view.</p>
+  </div>
+  <div class="landing-feat">
+    <div class="landing-feat-icon">&#128736;</div>
+    <h3>50+ Skills</h3>
+    <p>OpenClaw skills accessible through chat. /commands invoke agents. Automate workflows with cron jobs. No code required.</p>
+  </div>
+  <div class="landing-feat">
+    <div class="landing-feat-icon">&#128274;</div>
+    <h3>Self-Hosted First</h3>
+    <p>Single Python file, stdlib only, no Docker required. Your data stays on your machine. Run on any VPS, NAS, or laptop.</p>
+  </div>
+</div>
+
+<section class="landing-arch">
+  <h2>Architecture</h2>
+  <p>Porter is the router. All model calls flow through one agnostic bridge.</p>
+  <div class="landing-arch-grid">
+    <div class="landing-arch-item"><div class="icon">&#127760;</div><div class="name">OpenClaw</div><div class="sub">GPT / Codex</div></div>
+    <div class="landing-arch-item"><div class="icon">&#9734;</div><div class="name">Gemini</div><div class="sub">Google AI</div></div>
+    <div class="landing-arch-item"><div class="icon">&#128011;</div><div class="name">Ollama</div><div class="sub">Local models</div></div>
+    <div class="landing-arch-item"><div class="icon">&#128257;</div><div class="name">+ More</div><div class="sub">Any CLI</div></div>
+  </div>
+  <div class="landing-arch-hub">&#9651; PORTER</div>
+</section>
+
+<div class="landing-stats">
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.21.1' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
+  <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
+  <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
+</div>
+
+<footer class="landing-footer">
+  <p>Porter &mdash; self-hosted AI infrastructure hub</p>
+  <p style="margin-top:6px"><a href="https://github.com/lobsterhands/porter">GitHub</a> &middot; AGPL-3.0 &middot; Built with &#10084; and Python stdlib</p>
+</footer>
+
+</body>
+</html>"""
+
 class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
@@ -13436,9 +13583,12 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_html(LOGIN_PAGE)
 
         elif parsed.path == "/":
-            if not self.auth_check(redirect=True):
-                return
-            self.reply_html(PAGE)
+            # Authenticated → app, unauthenticated → landing page
+            token = self.get_session_token()
+            if token and get_session(token):
+                self.reply_html(PAGE)
+            else:
+                self.reply_html(LANDING_PAGE)
 
         elif parsed.path == "/api/me":
             if not self.auth_check(redirect=False):
@@ -13676,7 +13826,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.21.0"
+                health["porter_version"] = "0.21.1"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -17077,7 +17227,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.21.0 ready (localhost only)")
+    print(f"\n  Porter v0.21.1 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
