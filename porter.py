@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.22.1 — self-hosted file manager"""
+"""Porter v0.22.2 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -4603,7 +4603,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.22.1</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.22.2</div>
   </div>
 </aside>
 
@@ -5172,7 +5172,8 @@ select.settings-input { padding-right: 26px; }
       <div class="mem-layer-label">Session History</div>
       <div class="mem-layer-desc">Raw conversation logs. Flushing extracts key learnings into the shared memory plane.</div>
       <div id="mem-filter-bar" class="mem-filter-bar"></div>
-      <div id="mem-sessions-list"></div>
+      <div id="mem-session-stats" style="display:none;gap:16px;font-size:11px;color:var(--text3);padding:4px 0;margin-bottom:6px;flex-wrap:wrap"></div>
+    <div id="mem-sessions-list"></div>
     </div>
 
     <!-- File viewer/editor (hidden until a file is clicked) -->
@@ -5643,6 +5644,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.22.2', date:'2026-02-28', notes:[
+    'New: Flow arrow labels on Memory tab — describes data direction between layers',
+    'New: Session stats summary bar (total sessions, size, model breakdown)',
+    'UX: Memory flow arrows now show context labels like "guides memory" and "supplies context"',
+  ]},
   { ver:'v0.22.1', date:'2026-02-28', notes:[
     'New: Auto-reload — browser detects server restarts and refreshes automatically',
     'New: Lightweight /api/version endpoint for version polling',
@@ -7987,11 +7993,11 @@ async function loadMemory() {
       const allCount = Math.min(resp.models.length, 3);
 
       renderMemoryInstructions(nonStateless);
-      document.getElementById('mem-flow-1').innerHTML = _buildFlowSVG(instrCount, 'merge');
+      document.getElementById('mem-flow-1').innerHTML = _buildFlowSVG(instrCount, 'merge', 'guides memory');
       renderMemoryPersistent(resp.models);
-      document.getElementById('mem-flow-2').innerHTML = _buildFlowSVG(allCount, 'merge');
+      document.getElementById('mem-flow-2').innerHTML = _buildFlowSVG(allCount, 'merge', 'supplies context');
       renderMemoryHub(resp.shared_plane, resp.models);
-      document.getElementById('mem-flow-3').innerHTML = _buildFlowSVG(1, 'fanout');
+      document.getElementById('mem-flow-3').innerHTML = _buildFlowSVG(1, 'fanout', 'logs outcomes');
     }
   } catch(e) {
     console.error('loadMemory failed:', e);
@@ -10011,7 +10017,13 @@ function _agentSortKey(a) {
 // Build SVG connector aligned to the card grid columns.
 // Uses viewBox 0..1000 and preserveAspectRatio="none" so the line
 // positions at each column center stretch with the container.
-function _buildFlowSVG(count, direction) {
+function _fmtBytes(b) {
+  if (!b || b < 1024) return (b||0) + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+function _buildFlowSVG(count, direction, label) {
   const w = 1000, h = 56;
   const mid = w / 2;
   const cols = Math.max(1, Math.min(count, 6));
@@ -10057,7 +10069,11 @@ function _buildFlowSVG(count, direction) {
       paths += '<polygon class="flow-arrow" points="' + (x-a) + ',46 ' + (x+a) + ',46 ' + x + ',56" fill="' + arrowColor + '"/>';
     }
   }
-  return '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" style="display:block">' + paths + '</svg>';
+  var labelSvg = '';
+  if (label) {
+    labelSvg = '<text x="' + mid + '" y="' + (h/2 + 3) + '" text-anchor="middle" fill="var(--text3)" font-size="22" font-family="inherit" letter-spacing="0.5">' + label + '</text>';
+  }
+  return '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" style="display:block">' + paths + labelSvg + '</svg>';
 }
 
 function renderOrchestration(agents, providers) {
@@ -13905,7 +13921,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.22.1"})
+            self.reply_json({"v": "0.22.2"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17438,7 +17454,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.22.1 ready (localhost only)")
+    print(f"\n  Porter v0.22.2 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
