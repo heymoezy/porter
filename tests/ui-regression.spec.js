@@ -287,6 +287,35 @@ test.describe('Tab switching — no stale elements', () => {
   });
 });
 
+test.describe('Nav regression — all tabs render content', () => {
+  test.beforeEach(async ({ page }) => {
+    await login(page);
+  });
+
+  const allTabs = ['overview', 'agents', 'memory', 'capabilities', 'projects', 'workflows', 'locations', 'admin'];
+
+  test('every tab shows content when clicked', async ({ page }) => {
+    for (const tab of allTabs) {
+      await switchTab(page, tab);
+      const panelActive = await page.evaluate((id) => {
+        const panel = document.getElementById(id + '-module');
+        if (!panel) return 'panel-not-found';
+        return panel.classList.contains('active') ? 'active' : 'inactive';
+      }, tab);
+      expect(panelActive, `${tab} module-panel should be active`).toBe('active');
+    }
+  });
+
+  test('no JS errors on tab switch', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', err => errors.push(err.message));
+    for (const tab of allTabs) {
+      await switchTab(page, tab);
+    }
+    expect(errors.length, `JS errors found: ${errors.join('; ')}`).toBe(0);
+  });
+});
+
 test.describe('Screenshot baseline', () => {
   test.beforeEach(async ({ page }) => {
     await login(page);

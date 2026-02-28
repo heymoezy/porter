@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.18.2 — self-hosted file manager"""
+"""Porter v0.19.0 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -3609,6 +3609,25 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .admin-cfg-table td:first-child { color:var(--text3); font-weight:500; width:180px; }
 .admin-cfg-table td:last-child { color:var(--text); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; }
 
+
+/* Chat routing */
+.chat-route-bar {
+  display:flex; align-items:center; gap:6px; padding-bottom:10px;
+  border-bottom:1px solid var(--border); margin-bottom:0; flex-shrink:0;
+}
+.chat-route-sel {
+  padding:5px 10px; font-size:12px; border:1px solid var(--border);
+  border-radius:6px; background:var(--bg2); color:var(--text); flex:1; max-width:240px;
+}
+.chat-route-ctx {
+  font-size:11px; color:var(--text3); padding:3px 8px;
+  background:var(--raised); border-radius:12px; white-space:nowrap;
+}
+.chat-route-ctx .route-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:4px; vertical-align:middle; }
+.chat-route-ctx .route-dot.project { background:var(--accent); }
+.chat-route-ctx .route-dot.auto { background:#22c55e; }
+.chat-route-ctx .route-dot.general { background:var(--text3); }
+
 /* Chat engine */
 .chat-container { display:flex; flex-direction:column; height:calc(100vh - 160px); min-height:400px; }
 .chat-header { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--border); margin-bottom:0; flex-shrink:0; }
@@ -4473,7 +4492,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.18.2</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.19.0</div>
   </div>
 </aside>
 
@@ -4537,12 +4556,17 @@ select.settings-input { padding-right: 26px; }
   <!-- module panels -->
   <div id="overview-module" class="module-panel">
     <div class="chat-container">
-      <div class="chat-header">
+      <div class="chat-route-bar">
         <span class="module-title" style="font-size:16px">Chat</span>
-        <select id="chat-model" class="chat-model-sel" onchange="_chatModelChanged()">
+        <select id="chat-route" class="chat-route-sel" onchange="chatRouteChanged()">
+          <option value="general">General (Porter decides)</option>
         </select>
-        <button class="btn btn-ghost" style="font-size:11px;margin-left:auto" onclick="chatNewConversation()">+ New chat</button>
-        <button class="btn btn-ghost" style="font-size:11px" onclick="loadChatSessions()">History</button>
+        <span id="chat-route-indicator" class="chat-route-ctx">
+          <span class="route-dot general"></span>General
+        </span>
+        <select id="chat-model" class="chat-model-sel" onchange="_chatModelChanged()" title="Override model">
+        </select>
+        <button class="btn btn-ghost" style="font-size:11px;margin-left:auto" onclick="loadChatSessions()">History</button>
       </div>
 
       <div id="chat-history-panel" style="display:none">
@@ -5507,6 +5531,13 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.19.0', date:'2026-02-28', notes:[
+    'New: Chat routing — messages auto-route to projects, automations, or general queue',
+    'New: Project-scoped chats — context automatically injected from project files',
+    'New: Chat context indicator shows current routing target',
+    'Changed: Removed +New chat button — chats create automatically from route',
+    'Changed: Chat history grouped by routing target',
+  ]},
   { ver:'v0.18.2', date:'2026-02-28', notes:[
     'UX: Chat auto-selects best available model — no manual selection needed',
     'UX: OpenClaw Gateway preferred over Ollama for higher quality responses',
@@ -6993,7 +7024,7 @@ function switchModule(name) {
     if (el) el.style.display = isFiles ? '' : 'none';
   });
   const loaders = {
-    overview: populateChatModels, tasks: () => switchModule('projects'), agents: loadAgents, projects: loadProjects, admin: loadAdmin,
+    overview: function() { populateChatModels(); populateChatRoutes(); }, tasks: () => switchModule('projects'), agents: loadAgents, projects: loadProjects, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
     tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, workflows: loadWorkflows, memory: loadMemory, settings: syncSettingsUI,
   };
@@ -8246,7 +8277,97 @@ function switchSettingsTab(tab) {
     setTimeout(populateChangelog, 0);
   }
 }
+
 // ── Chat Engine (replaced Quick Prompt) ──
+
+
+// ── Chat Routing ──────────────────────────────────────────────────────────
+let _chatRoute = 'general'; // 'general', 'project:<id>', 'auto:<id>'
+let _chatRouteContext = ''; // project description/context injected into prompts
+
+async function populateChatRoutes() {
+  const sel = document.getElementById('chat-route');
+  if (!sel) return;
+  const saved = _chatRoute;
+
+  // Keep first option (General)
+  while (sel.options.length > 1) sel.remove(1);
+
+  // Add projects
+  try {
+    const data = await api('/api/projects');
+    if (data && data.projects) {
+      data.projects.forEach(function(p) {
+        const opt = document.createElement('option');
+        opt.value = 'project:' + p.id;
+        opt.textContent = 'Project: ' + (p.name || p.id);
+        sel.appendChild(opt);
+      });
+    }
+  } catch(e) {}
+
+  // Add automations (workflows with cron)
+  try {
+    const data = await api('/api/openclaw/cron');
+    if (data && data.jobs) {
+      data.jobs.forEach(function(j) {
+        const opt = document.createElement('option');
+        opt.value = 'auto:' + (j.id || j.name);
+        opt.textContent = 'Automation: ' + (j.name || j.id);
+        sel.appendChild(opt);
+      });
+    }
+  } catch(e) {}
+
+  // Restore selection
+  if (saved) {
+    for (let i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === saved) { sel.selectedIndex = i; break; }
+    }
+  }
+}
+
+function chatRouteChanged() {
+  const sel = document.getElementById('chat-route');
+  if (!sel) return;
+  _chatRoute = sel.value;
+  _chatRouteContext = '';
+
+  // Update indicator
+  const ind = document.getElementById('chat-route-indicator');
+  if (ind) {
+    if (_chatRoute === 'general') {
+      ind.innerHTML = '<span class="route-dot general"></span>General';
+    } else if (_chatRoute.startsWith('project:')) {
+      const name = sel.options[sel.selectedIndex].textContent.replace('Project: ', '');
+      ind.innerHTML = '<span class="route-dot project"></span>' + escHtml(name);
+      loadProjectContext(_chatRoute.split(':')[1]);
+    } else if (_chatRoute.startsWith('auto:')) {
+      const name = sel.options[sel.selectedIndex].textContent.replace('Automation: ', '');
+      ind.innerHTML = '<span class="route-dot auto"></span>' + escHtml(name);
+    }
+  }
+
+  // Start fresh conversation for new route
+  _chatId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+  _chatMessages = [];
+  _chatContextFiles = [];
+  renderContextBar();
+  renderChatMessages();
+}
+
+async function loadProjectContext(projectId) {
+  try {
+    const data = await api('/api/projects');
+    if (!data || !data.projects) return;
+    const proj = data.projects.find(function(p) { return p.id === projectId; });
+    if (!proj) return;
+    _chatRouteContext = 'Project context: ' + (proj.name || proj.id)
+      + '. Type: ' + (proj.type || 'unknown')
+      + '. Status: ' + (proj.status || 'unknown')
+      + '. Description: ' + (proj.description || 'No description');
+  } catch(e) {}
+}
 
 // ── Chat Engine ──────────────────────────────────────────────────────────
 let _chatId = '';
@@ -8328,6 +8449,7 @@ async function populateChatModels() {
 function chatNewConversation() {
   _chatContextFiles = [];
   renderContextBar();
+  // Keep current route — only route selector changes it
   _chatId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
   _chatMessages = [];
   renderChatMessages();
@@ -8380,8 +8502,11 @@ function chatSend() {
     _chatId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
   }
 
-  // Build prompt with context files
+  // Build prompt with route context + attached files
   let fullPrompt = text;
+  if (_chatRouteContext) {
+    fullPrompt = _chatRouteContext + '\n\n' + fullPrompt;
+  }
   if (_chatContextFiles.length) {
     let ctx = '';
     _chatContextFiles.forEach(function(f) {
@@ -8403,6 +8528,7 @@ function chatSend() {
 
   const url = '/api/chat/stream?model=' + encodeURIComponent(modelId)
     + '&prompt=' + encodeURIComponent(fullPrompt)
+    + '&route=' + encodeURIComponent(_chatRoute)
     + '&chat_id=' + encodeURIComponent(_chatId);
 
   const evtSource = new EventSource(url);
@@ -13140,7 +13266,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.18.2"
+                health["porter_version"] = "0.19.0"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -16467,7 +16593,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.18.2 ready (localhost only)")
+    print(f"\n  Porter v0.19.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
