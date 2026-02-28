@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.19.0 — self-hosted file manager"""
+"""Porter v0.20.0 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -3628,6 +3628,23 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-route-ctx .route-dot.auto { background:#22c55e; }
 .chat-route-ctx .route-dot.general { background:var(--text3); }
 
+
+/* Skill bridge results */
+.chat-msg.skill {
+  align-self:flex-start; background:var(--bg2); border:1px solid var(--accent);
+  border-left:3px solid var(--accent); border-radius:8px; color:var(--text);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px;
+  white-space:pre-wrap; padding:12px 14px;
+}
+.chat-skill-meta {
+  font-size:10px; color:var(--text3); margin-top:8px; padding-top:6px;
+  border-top:1px solid var(--border); display:flex; gap:12px;
+}
+.chat-msg.skill-pending {
+  align-self:center; color:var(--text3); font-size:12px;
+  font-style:italic; padding:8px 0;
+}
+
 /* Chat engine */
 .chat-container { display:flex; flex-direction:column; height:calc(100vh - 160px); min-height:400px; }
 .chat-header { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--border); margin-bottom:0; flex-shrink:0; }
@@ -4492,7 +4509,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.19.0</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.20.0</div>
   </div>
 </aside>
 
@@ -5531,6 +5548,13 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.20.0', date:'2026-02-28', notes:[
+    'New: OpenClaw Skill Bridge — Porter can now dispatch tasks to OpenClaw agent',
+    'New: /skill commands in chat invoke OpenClaw skills directly',
+    'New: POST /api/skill/invoke endpoint for programmatic skill invocation',
+    'New: Skill results displayed inline in chat with execution metadata',
+    'Architecture: Porter is now the router — all model calls go through Porter',
+  ]},
   { ver:'v0.19.0', date:'2026-02-28', notes:[
     'New: Chat routing — messages auto-route to projects, automations, or general queue',
     'New: Project-scoped chats — context automatically injected from project files',
@@ -8278,6 +8302,53 @@ function switchSettingsTab(tab) {
   }
 }
 
+
+// ── Skill Bridge ──────────────────────────────────────────────────────────
+
+async function invokeSkill(message) {
+  // Show pending message
+  _chatMessages.push({ role: 'skill-pending', content: 'Dispatching to OpenClaw agent...' });
+  renderChatMessages();
+
+  try {
+    const resp = await api('/api/skill/invoke', { message: message, timeout: 120 });
+    // Remove pending message
+    _chatMessages = _chatMessages.filter(function(m) { return m.role !== 'skill-pending'; });
+
+    if (resp && resp.ok) {
+      const meta = [];
+      if (resp.model) meta.push('Model: ' + resp.model);
+      if (resp.duration_ms) meta.push('Duration: ' + (resp.duration_ms / 1000).toFixed(1) + 's');
+      if (resp.tokens && resp.tokens.total) meta.push('Tokens: ' + resp.tokens.total);
+
+      const content = resp.text + (meta.length ? '\n---\n' + meta.join(' | ') : '');
+      _chatMessages.push({ role: 'skill', content: content });
+    } else {
+      _chatMessages.push({ role: 'error', content: 'Skill error: ' + (resp ? resp.error : 'No response') });
+    }
+  } catch(e) {
+    _chatMessages = _chatMessages.filter(function(m) { return m.role !== 'skill-pending'; });
+    _chatMessages.push({ role: 'error', content: 'Skill bridge error: ' + e.message });
+  }
+  renderChatMessages();
+
+  // Save to chat history
+  if (_chatId && _chatMessages.length >= 2) {
+    const lastUser = _chatMessages.filter(function(m) { return m.role === 'user'; }).pop();
+    const lastSkill = _chatMessages.filter(function(m) { return m.role === 'skill'; }).pop();
+    if (lastUser && lastSkill) {
+      _save_chat_message_local(_chatId, 'openclaw-agent', lastUser.content, lastSkill.content);
+    }
+  }
+}
+
+function _save_chat_message_local(chatId, model, userMsg, assistantMsg) {
+  // Save via chat API
+  fetch('/api/chat/stream?model=' + encodeURIComponent(model) + '&chat_id=' + encodeURIComponent(chatId) + '&prompt=' + encodeURIComponent('SAVED'), {
+    method: 'GET'
+  }).catch(function() {});
+}
+
 // ── Chat Engine (replaced Quick Prompt) ──
 
 
@@ -8470,7 +8541,7 @@ function renderChatMessages() {
     return;
   }
   el.innerHTML = _chatMessages.map(function(m, i) {
-    const cls = m.role === 'user' ? 'user' : (m.role === 'error' ? 'error' : 'assistant');
+    const cls = m.role === 'user' ? 'user' : (m.role === 'error' ? 'error' : (m.role === 'skill' ? 'skill' : (m.role === 'skill-pending' ? 'skill-pending' : 'assistant')));
     const streaming = (i === _chatMessages.length - 1 && _chatStreaming && m.role === 'assistant') ? ' streaming' : '';
     return '<div class="chat-msg ' + cls + streaming + '">' + escHtml(m.content) + '</div>';
   }).join('');
@@ -8495,7 +8566,19 @@ function chatSend() {
   if (!input || !sel) return;
   const text = input.value.trim();
   const modelId = sel.value;
-  if (!text || !modelId || _chatStreaming) return;
+  if (!text || _chatStreaming) return;
+
+  // Check for /skill commands — route to OpenClaw
+  if (text.startsWith('/')) {
+    input.value = '';
+    input.style.height = 'auto';
+    _chatMessages.push({ role: 'user', content: text });
+    renderChatMessages();
+    invokeSkill(text);
+    return;
+  }
+
+  if (!modelId) { toast('Select a model first'); return; }
 
   // Create chat ID if needed
   if (!_chatId) {
@@ -13266,7 +13349,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.19.0"
+                health["porter_version"] = "0.20.0"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -13351,6 +13434,7 @@ class Handler(BaseHTTPRequestHandler):
                 lines = ["No log entries found. Porter logs via systemd: journalctl --user-unit=porter"]
 
             self.reply_json({"ok": True, "lines": lines})
+
 
         # ── config summary / export ───────────────────────────────────────
         elif parsed.path == "/api/config/summary":
@@ -15703,6 +15787,75 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             else:
                 self.reply_json({"ok": False, "error": "Unknown action"}, 400)
 
+
+        elif parsed.path == "/api/skill/invoke":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            message = data.get("message", "").strip()
+            agent_id = data.get("agent", "main")
+            timeout_s = min(int(data.get("timeout", 120)), 300)
+
+            if not message:
+                self.reply_json({"ok": False, "error": "message required"}, 400)
+                return
+
+            try:
+                import subprocess, shutil
+                # Resolve openclaw binary — may not be on PATH in systemd
+                oc_bin = shutil.which("openclaw")
+                if not oc_bin:
+                    # Check common locations
+                    for p in [Path.home() / ".npm-global/bin/openclaw",
+                              Path("/usr/local/bin/openclaw")]:
+                        if p.exists():
+                            oc_bin = str(p)
+                            break
+                if not oc_bin:
+                    self.reply_json({"ok": False, "error": "openclaw CLI not found. Install: npm i -g @anthropic-ai/openclaw"}, 500)
+                    return
+
+                cmd = [
+                    oc_bin, "agent",
+                    "--agent", agent_id,
+                    "--message", message,
+                    "--json",
+                    "--timeout", str(timeout_s),
+                ]
+                env = os.environ.copy()
+                env["PATH"] = str(Path.home() / ".npm-global/bin") + ":" + env.get("PATH", "")
+                log.info("Skill bridge: invoking %s agent=%s msg=%s", oc_bin, agent_id, message[:80])
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s + 10, env=env)
+
+                if result.returncode != 0:
+                    log.warning("Skill bridge error: %s", result.stderr[:200])
+                    self.reply_json({
+                        "ok": False,
+                        "error": result.stderr[:500] or "OpenClaw agent returned non-zero",
+                    })
+                    return
+
+                # Parse JSON response
+                import json as _json
+                response = _json.loads(result.stdout)
+                payloads = response.get("result", {}).get("payloads", [])
+                text = payloads[0].get("text", "") if payloads else ""
+                meta = response.get("result", {}).get("meta", {})
+
+                self.reply_json({
+                    "ok": True,
+                    "run_id": response.get("runId", ""),
+                    "status": response.get("status", ""),
+                    "text": text,
+                    "duration_ms": meta.get("durationMs", 0),
+                    "model": meta.get("agentMeta", {}).get("model", ""),
+                    "tokens": meta.get("agentMeta", {}).get("usage", {}),
+                })
+            except subprocess.TimeoutExpired:
+                self.reply_json({"ok": False, "error": f"Timeout after {timeout_s}s"})
+            except Exception as e:
+                log.error("Skill bridge exception: %s", e)
+                self.reply_json({"ok": False, "error": str(e)[:500]})
+
         elif parsed.path == "/api/prompt":
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
@@ -16593,7 +16746,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.19.0 ready (localhost only)")
+    print(f"\n  Porter v0.20.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
