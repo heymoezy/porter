@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.16.2 — self-hosted file manager"""
+"""Porter v0.17.0 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -121,6 +121,7 @@ OPENCLAW_STATE_DIR  = Path(os.environ.get("PORTER_OPENCLAW_STATE",
                            str(Path.home() / ".openclaw")))
 MEMORY_DIR          = _DATA_DIR / "memory"
 USAGE_DIR           = RUNTIME_DIR / "usage"
+CHAT_DIR            = _DATA_DIR / "chat"
 DB_PATH             = _DATA_DIR / "porter.db"
 
 # ── SQLite setup ──
@@ -2625,6 +2626,26 @@ def _safe_lease_running(lease_file, agent_id: str, now: float) -> bool:
         log.warning("Error: %s", e)
         return False
 
+
+def _save_chat_message(chat_id, model_id, user_msg, assistant_msg):
+    """Append a message pair to a chat session file."""
+    path = CHAT_DIR / f"{chat_id}.json"
+    try:
+        if path.exists():
+            data = json.loads(path.read_text())
+        else:
+            data = {"title": user_msg[:50], "model": model_id, "messages": [], "created": time.strftime("%Y-%m-%dT%H:%M:%S"), "updated": ""}
+        data["messages"].append({"role": "user", "content": user_msg, "ts": time.time()})
+        data["messages"].append({"role": "assistant", "content": assistant_msg, "ts": time.time()})
+        data["updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        data["model"] = model_id
+        path.write_text(json.dumps(data, indent=2))
+    except Exception as e:
+        log.warning("Chat save failed: %s", e)
+
+def ensure_chat_dirs():
+    CHAT_DIR.mkdir(parents=True, exist_ok=True)
+
 def ensure_memory_dirs():
     for ns in MEMORY_NAMESPACES:
         (MEMORY_DIR / ns).mkdir(parents=True, exist_ok=True)
@@ -3298,6 +3319,47 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   background: var(--border2); border-radius: 3px;
   animation: shimmer 1.4s ease infinite;
 }
+
+
+/* Chat engine */
+.chat-container { display:flex; flex-direction:column; height:calc(100vh - 160px); min-height:400px; }
+.chat-header { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--border); margin-bottom:0; flex-shrink:0; }
+.chat-messages { flex:1; overflow-y:auto; padding:16px 0; display:flex; flex-direction:column; gap:10px; }
+.chat-msg { max-width:85%; padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.6; word-break:break-word; white-space:pre-wrap; }
+.chat-msg.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:2px; }
+.chat-msg.assistant { align-self:flex-start; background:var(--raised); border:1px solid var(--border); border-bottom-left-radius:2px; color:var(--text); }
+.chat-msg.error { align-self:center; background:none; color:var(--err); font-size:12px; font-style:italic; }
+.chat-msg.streaming { opacity:.9; }
+.chat-input-area { display:flex; gap:8px; padding-top:12px; border-top:1px solid var(--border); flex-shrink:0; align-items:flex-end; }
+.chat-input {
+  flex:1; padding:10px 14px; border:1px solid var(--border); border-radius:10px;
+  background:var(--bg2); color:var(--text); font-size:13px; font-family:inherit;
+  resize:none; min-height:20px; max-height:120px; line-height:1.4;
+}
+.chat-input:focus { outline:none; border-color:var(--accent); }
+.chat-send {
+  padding:10px 18px; background:var(--accent); color:#fff; border:none;
+  border-radius:10px; font-size:13px; font-weight:600; cursor:pointer;
+  flex-shrink:0; transition:.12s;
+}
+.chat-send:hover { opacity:.85; }
+.chat-send:disabled { opacity:.4; cursor:not-allowed; }
+.chat-model-sel {
+  padding:4px 10px; font-size:12px; border:1px solid var(--border);
+  border-radius:6px; background:var(--bg2); color:var(--text);
+}
+.chat-sidebar { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
+.chat-sidebar-item {
+  display:flex; align-items:center; gap:8px; padding:6px 10px;
+  border-radius:6px; font-size:12px; color:var(--text3); cursor:pointer;
+  border:1px solid transparent; transition:.12s;
+}
+.chat-sidebar-item:hover { background:var(--raised); color:var(--text); }
+.chat-sidebar-item.active { background:var(--raised); border-color:var(--border); color:var(--text); }
+.chat-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1; color:var(--text3); gap:12px; text-align:center; }
+.chat-empty-icon { font-size:48px; opacity:.3; }
+.chat-empty-title { font-size:16px; font-weight:600; color:var(--text); }
+.chat-empty-hint { font-size:13px; max-width:300px; }
 
 /* Loading spinner — replaces bare "Loading…" text across all tabs */
 @keyframes spin-loader { to { transform:rotate(360deg); } }
@@ -4044,7 +4106,7 @@ select.settings-input { padding-right: 26px; }
   <nav class="module-nav">
     <button class="mnav-item active" id="mnav-overview" onclick="switchModule('overview')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      <span class="mnav-label">Command Center</span>
+      <span class="mnav-label">Chat</span>
     </button>
     <button class="mnav-item" id="mnav-agents" onclick="switchModule('agents')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
@@ -4105,7 +4167,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.16.2</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.17.0</div>
   </div>
 </aside>
 
@@ -5060,6 +5122,13 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.17.0', date:'2026-02-28', notes:[
+    'New: Chat Engine — talk to AI models directly from Porter',
+    'New: SSE streaming — tokens appear in real-time as models generate',
+    'New: Multi-model selector — switch between Ollama, OpenClaw, and Claude API',
+    'New: Chat history — conversations saved to disk, resumable',
+    'Changed: Command Center replaced with Chat interface',
+  ]},
   { ver:'v0.16.2', date:'2026-02-28', notes:[
     'Persistence: Sessions now stored in SQLite — survive restarts',
     'Persistence: Expired sessions auto-purged on startup',
@@ -6515,7 +6584,7 @@ function switchModule(name) {
     if (el) el.style.display = isFiles ? '' : 'none';
   });
   const loaders = {
-    overview: function() { loadOverview(); populateModelDropdown(); }, tasks: () => switchModule('projects'), agents: loadAgents, projects: loadProjects,
+    overview: function() { loadOverview(); populateChatModels(); }, tasks: () => switchModule('projects'), agents: loadAgents, projects: loadProjects,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
     tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, workflows: loadWorkflows, memory: loadMemory, settings: syncSettingsUI,
   };
@@ -7703,55 +7772,207 @@ function switchSettingsTab(tab) {
     setTimeout(populateChangelog, 0);
   }
 }
-// ── Overview module ──
-// Gap30: Quick Prompt — direct model calling
-async function populateModelDropdown() {
-  const sel = document.getElementById('qp-model');
-  if (!sel) return;
-  try {
-    const data = await api('/api/local-models');
-    if (!data || !data.models) return;
-    while (sel.options.length > 1) sel.remove(1);
-    data.models.forEach(function(m) {
-      if (m.type !== 'ollama') return;
-      const opt = document.createElement('option');
-      opt.value = m.id;
-      opt.textContent = m.name + ' (Ollama)';
-      sel.appendChild(opt);
-    });
-    const opt2 = document.createElement('option');
-    opt2.value = 'openclaw-gateway';
-    opt2.textContent = 'OpenClaw Gateway';
-    sel.appendChild(opt2);
-  } catch(e) {}
+// ── Chat Engine (replaced Quick Prompt) ──
+
+// ── Chat Engine ──────────────────────────────────────────────────────────
+let _chatId = '';
+let _chatMessages = [];
+let _chatStreaming = false;
+let _chatEventSource = null;
+
+function _chatModelChanged() {
+  const btn = document.getElementById('chat-send-btn');
+  const sel = document.getElementById('chat-model');
+  if (btn) btn.disabled = !sel.value;
 }
 
-async function sendQuickPrompt() {
-  const modelSel = document.getElementById('qp-model');
-  const input = document.getElementById('qp-input');
-  const respEl = document.getElementById('qp-response');
-  if (!modelSel || !input || !respEl) return;
-  const modelId = modelSel.value;
-  const prompt = input.value.trim();
-  if (!modelId) { toast('Select a model first', 'err'); return; }
-  if (!prompt) { toast('Enter a prompt', 'err'); return; }
-  respEl.style.display = 'block';
-  respEl.textContent = 'Thinking...';
-  respEl.style.color = 'var(--text3)';
+async function populateChatModels() {
+  const sel = document.getElementById('chat-model');
+  if (!sel) return;
+  const saved = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
   try {
-    const res = await api('/api/prompt', { model_id: modelId, prompt: prompt });
-    if (res && res.ok) {
-      respEl.style.color = 'var(--text)';
-      respEl.textContent = res.response || '(empty response)';
-    } else {
-      respEl.style.color = 'var(--err)';
-      respEl.textContent = (res && res.error) || 'Request failed';
+    const data = await api('/api/local-models');
+    if (data && data.models) {
+      data.models.forEach(function(m) {
+        if (m.type !== 'ollama') return;
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name + ' (Ollama)';
+        sel.appendChild(opt);
+      });
     }
-  } catch(e) {
-    respEl.style.color = 'var(--err)';
-    respEl.textContent = 'Error: ' + e.message;
+  } catch(e) {}
+  // Add OpenClaw gateway
+  const opt = document.createElement('option');
+  opt.value = 'openclaw-gateway';
+  opt.textContent = 'OpenClaw Gateway (GPT)';
+  sel.appendChild(opt);
+
+  if (saved) sel.value = saved;
+  _chatModelChanged();
+}
+
+function chatNewConversation() {
+  _chatId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+  _chatMessages = [];
+  renderChatMessages();
+  closeChatHistory();
+  const input = document.getElementById('chat-input');
+  if (input) { input.value = ''; input.focus(); }
+}
+
+function renderChatMessages() {
+  const el = document.getElementById('chat-messages');
+  if (!el) return;
+  if (!_chatMessages.length) {
+    el.innerHTML = '<div class="chat-empty">'
+      + '<div class="chat-empty-icon">&#9889;</div>'
+      + '<div class="chat-empty-title">Talk to your AI models</div>'
+      + '<div class="chat-empty-hint">Select a model above, type a message below. Responses stream in real-time. Conversations are saved automatically.</div>'
+      + '</div>';
+    return;
+  }
+  el.innerHTML = _chatMessages.map(function(m, i) {
+    const cls = m.role === 'user' ? 'user' : (m.role === 'error' ? 'error' : 'assistant');
+    const streaming = (i === _chatMessages.length - 1 && _chatStreaming && m.role === 'assistant') ? ' streaming' : '';
+    return '<div class="chat-msg ' + cls + streaming + '">' + escHtml(m.content) + '</div>';
+  }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function chatAutoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function chatInputKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    chatSend();
   }
 }
+
+function chatSend() {
+  const input = document.getElementById('chat-input');
+  const sel = document.getElementById('chat-model');
+  if (!input || !sel) return;
+  const text = input.value.trim();
+  const modelId = sel.value;
+  if (!text || !modelId || _chatStreaming) return;
+
+  // Create chat ID if needed
+  if (!_chatId) {
+    _chatId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+  }
+
+  // Add user message
+  _chatMessages.push({ role: 'user', content: text });
+  input.value = '';
+  input.style.height = 'auto';
+  renderChatMessages();
+
+  // Start streaming
+  _chatStreaming = true;
+  _chatMessages.push({ role: 'assistant', content: '' });
+  renderChatMessages();
+
+  const url = '/api/chat/stream?model=' + encodeURIComponent(modelId)
+    + '&prompt=' + encodeURIComponent(text)
+    + '&chat_id=' + encodeURIComponent(_chatId);
+
+  const evtSource = new EventSource(url);
+  _chatEventSource = evtSource;
+  const assistantIdx = _chatMessages.length - 1;
+
+  evtSource.onmessage = function(e) {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.error) {
+        _chatMessages[assistantIdx].content = data.error;
+        _chatMessages[assistantIdx].role = 'error';
+        _chatStreaming = false;
+        evtSource.close();
+        renderChatMessages();
+        return;
+      }
+      if (data.done) {
+        _chatStreaming = false;
+        evtSource.close();
+        renderChatMessages();
+        return;
+      }
+      if (data.token) {
+        _chatMessages[assistantIdx].content += data.token;
+        renderChatMessages();
+      }
+    } catch(err) {}
+  };
+
+  evtSource.onerror = function() {
+    _chatStreaming = false;
+    evtSource.close();
+    if (!_chatMessages[assistantIdx].content) {
+      _chatMessages[assistantIdx].content = 'Connection lost — model may be unavailable.';
+      _chatMessages[assistantIdx].role = 'error';
+    }
+    renderChatMessages();
+  };
+}
+
+async function loadChatSessions() {
+  const panel = document.getElementById('chat-history-panel');
+  const main = document.getElementById('chat-main');
+  const list = document.getElementById('chat-sessions-list');
+  if (!panel || !main || !list) return;
+  panel.style.display = 'block';
+  main.style.display = 'none';
+  list.innerHTML = '<div class="loading-indicator">Loading chat history</div>';
+
+  const resp = await api('/api/chat/sessions');
+  if (!resp || !resp.sessions) { list.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px">No saved chats.</div>'; return; }
+
+  if (!resp.sessions.length) {
+    list.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px">No saved chats yet. Start a conversation!</div>';
+    return;
+  }
+
+  list.innerHTML = resp.sessions.map(function(s) {
+    return '<div class="chat-sidebar-item' + (s.id === _chatId ? ' active' : '') + '" onclick="loadChatSession(\'' + escHtml(s.id) + '\')">'
+      + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(s.title) + '</span>'
+      + '<span style="font-size:10px;color:var(--text3)">' + (s.messages || 0) + ' msgs</span>'
+      + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();deleteChatSession(\'' + escHtml(s.id) + '\')">&#10005;</button>'
+      + '</div>';
+  }).join('');
+}
+
+function closeChatHistory() {
+  const panel = document.getElementById('chat-history-panel');
+  const main = document.getElementById('chat-main');
+  if (panel) panel.style.display = 'none';
+  if (main) main.style.display = '';
+}
+
+async function loadChatSession(id) {
+  const resp = await api('/api/chat', { action: 'load', chat_id: id });
+  if (!resp || !resp.ok) { toast('Failed to load chat', 'err'); return; }
+  _chatId = id;
+  _chatMessages = (resp.chat.messages || []).map(function(m) {
+    return { role: m.role, content: m.content };
+  });
+  const sel = document.getElementById('chat-model');
+  if (sel && resp.chat.model) sel.value = resp.chat.model;
+  _chatModelChanged();
+  closeChatHistory();
+  renderChatMessages();
+}
+
+async function deleteChatSession(id) {
+  await api('/api/chat', { action: 'delete', chat_id: id });
+  if (id === _chatId) chatNewConversation();
+  loadChatSessions();
+}
+
 
 async function loadOverview(force=true) {
   const data = await api('/api/overview');
@@ -12825,6 +13046,117 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
+
+        elif parsed.path == "/api/chat/stream":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            model_id = qs.get("model", [""])[0]
+            prompt = unquote(qs.get("prompt", [""])[0])
+            chat_id = qs.get("chat_id", [""])[0]
+            if not model_id or not prompt:
+                self.reply_json({"error": "model and prompt required"}, 400)
+                return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+
+            try:
+                import urllib.request
+                full_response = ""
+
+                if model_id.startswith("local-ollama-"):
+                    # Stream from Ollama
+                    ollama_model = model_id.replace("local-ollama-", "")
+                    payload = json.dumps({"model": ollama_model, "prompt": prompt, "stream": True}).encode()
+                    req = urllib.request.Request(
+                        "http://127.0.0.1:11434/api/generate",
+                        data=payload,
+                        headers={"Content-Type": "application/json"},
+                    )
+                    resp = urllib.request.urlopen(req, timeout=120)
+                    for line in resp:
+                        try:
+                            chunk = json.loads(line)
+                            token = chunk.get("response", "")
+                            if token:
+                                full_response += token
+                                self.wfile.write(f"data: {json.dumps({'token': token})}\n\n".encode())
+                                self.wfile.flush()
+                            if chunk.get("done"):
+                                break
+                        except Exception as e:
+                            log.debug("Stream parse: %s", e)
+
+                elif model_id == "openclaw-gateway":
+                    # OpenClaw gateway (non-streaming, send as single chunk)
+                    oc_cfg_path = OPENCLAW_STATE_DIR / "openclaw.json"
+                    gw_port = 18789
+                    auth_token = ""
+                    if oc_cfg_path.exists():
+                        try:
+                            oc_cfg = json.loads(oc_cfg_path.read_text())
+                            gw_port = oc_cfg.get("gatewayPort", 18789)
+                            auth_token = oc_cfg.get("authToken", "")
+                        except Exception as e:
+                            log.debug("OpenClaw config: %s", e)
+                    payload = json.dumps({"message": prompt}).encode()
+                    req = urllib.request.Request(
+                        f"http://127.0.0.1:{gw_port}/v1/chat",
+                        data=payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {auth_token}",
+                        },
+                    )
+                    resp = urllib.request.urlopen(req, timeout=120)
+                    result = json.loads(resp.read())
+                    text = result.get("response") or result.get("message") or result.get("content") or str(result)
+                    full_response = text
+                    self.wfile.write(f"data: {json.dumps({'token': text})}\n\n".encode())
+                    self.wfile.flush()
+
+                else:
+                    self.wfile.write(f"data: {json.dumps({'error': 'Unknown model: ' + model_id})}\n\n".encode())
+                    self.wfile.flush()
+
+                # Signal done
+                self.wfile.write(f"data: {json.dumps({'done': True, 'full_response': full_response})}\n\n".encode())
+                self.wfile.flush()
+
+                # Auto-save to chat history if chat_id provided
+                if chat_id and full_response:
+                    _save_chat_message(chat_id, model_id, prompt, full_response)
+
+            except Exception as e:
+                log.error("Chat stream error: %s", e)
+                try:
+                    self.wfile.write(f"data: {json.dumps({'error': str(e)})}\n\n".encode())
+                    self.wfile.flush()
+                except Exception:
+                    pass
+
+        elif parsed.path == "/api/chat/sessions":
+            if not self.auth_check(redirect=False): return
+            sessions = []
+            if CHAT_DIR.exists():
+                for f in sorted(CHAT_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+                    try:
+                        meta = json.loads(f.read_text())
+                        sessions.append({
+                            "id": f.stem,
+                            "title": meta.get("title", "Untitled"),
+                            "model": meta.get("model", ""),
+                            "messages": len(meta.get("messages", [])),
+                            "updated": meta.get("updated", ""),
+                        })
+                    except Exception as e:
+                        log.debug("Chat session parse: %s", e)
+            self.reply_json({"ok": True, "sessions": sessions})
+
         else:
             self.reply_html("<h1>Not found</h1>", 404)
 
@@ -14282,6 +14614,42 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
         # ── Gap30: Direct model prompt (POST) ────────────────────────────────
+
+        elif parsed.path == "/api/chat":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            action = data.get("action", "")
+
+            if action == "load":
+                chat_id = data.get("chat_id", "")
+                path = CHAT_DIR / f"{chat_id}.json"
+                if path.exists():
+                    self.reply_json({"ok": True, "chat": json.loads(path.read_text())})
+                else:
+                    self.reply_json({"ok": False, "error": "Chat not found"}, 404)
+
+            elif action == "delete":
+                chat_id = data.get("chat_id", "")
+                path = CHAT_DIR / f"{chat_id}.json"
+                if path.exists():
+                    path.unlink()
+                self.reply_json({"ok": True})
+
+            elif action == "rename":
+                chat_id = data.get("chat_id", "")
+                title = data.get("title", "").strip()
+                path = CHAT_DIR / f"{chat_id}.json"
+                if path.exists() and title:
+                    d = json.loads(path.read_text())
+                    d["title"] = title
+                    path.write_text(json.dumps(d, indent=2))
+                    self.reply_json({"ok": True})
+                else:
+                    self.reply_json({"ok": False, "error": "Not found or empty title"}, 400)
+
+            else:
+                self.reply_json({"ok": False, "error": "Unknown action"}, 400)
+
         elif parsed.path == "/api/prompt":
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
@@ -15160,6 +15528,7 @@ if __name__ == "__main__":
     _config.update(load_config())
     _load_serve_dirs(_config)
     ensure_runtime_dirs()
+    ensure_chat_dirs()
     ensure_memory_dirs()
     _db_init()  # Initialize SQLite DB + purge expired sessions
     _migrate_checkpoint_to_registry()  # Gap31: one-time migration
@@ -15171,7 +15540,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.16.2 ready (localhost only)")
+    print(f"\n  Porter v0.17.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
