@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.18.1 — self-hosted file manager"""
+"""Porter v0.18.2 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -4473,7 +4473,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.18.1</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.18.2</div>
   </div>
 </aside>
 
@@ -4540,7 +4540,6 @@ select.settings-input { padding-right: 26px; }
       <div class="chat-header">
         <span class="module-title" style="font-size:16px">Chat</span>
         <select id="chat-model" class="chat-model-sel" onchange="_chatModelChanged()">
-          <option value="">Select model&#8230;</option>
         </select>
         <button class="btn btn-ghost" style="font-size:11px;margin-left:auto" onclick="chatNewConversation()">+ New chat</button>
         <button class="btn btn-ghost" style="font-size:11px" onclick="loadChatSessions()">History</button>
@@ -5508,6 +5507,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.18.2', date:'2026-02-28', notes:[
+    'UX: Chat auto-selects best available model — no manual selection needed',
+    'UX: OpenClaw Gateway preferred over Ollama for higher quality responses',
+    'UX: Model selector only for override, not required',
+  ]},
   { ver:'v0.18.1', date:'2026-02-28', notes:[
     'Cleanup: removed 94 lines of dead overview dashboard code (loadOverview, renderOverview, ov-metric CSS)',
     'Cleanup: removed orphaned poll timer and cc-body dynamic injection',
@@ -8260,7 +8264,28 @@ async function populateChatModels() {
   const sel = document.getElementById('chat-model');
   if (!sel) return;
   const saved = sel.value;
-  while (sel.options.length > 1) sel.remove(1);
+  while (sel.options.length > 0) sel.remove(0);
+
+  let ollamaModels = [];
+  let openclawUp = false;
+
+  // Check OpenClaw availability
+  try {
+    const resp = await api('/api/admin/health');
+    if (resp && resp.services) {
+      openclawUp = resp.services.some(function(s) { return s.name === 'OpenClaw Gateway' && s.status === 'up'; });
+    }
+  } catch(e) {}
+
+  // Add OpenClaw first (preferred — cloud model, higher quality)
+  if (openclawUp) {
+    const opt = document.createElement('option');
+    opt.value = 'openclaw-gateway';
+    opt.textContent = 'OpenClaw Gateway (GPT)';
+    sel.appendChild(opt);
+  }
+
+  // Add Ollama models
   try {
     const data = await api('/api/local-models');
     if (data && data.models) {
@@ -8270,16 +8295,33 @@ async function populateChatModels() {
         opt.value = m.id;
         opt.textContent = m.name + ' (Ollama)';
         sel.appendChild(opt);
+        ollamaModels.push(m.id);
       });
     }
   } catch(e) {}
-  // Add OpenClaw gateway
-  const opt = document.createElement('option');
-  opt.value = 'openclaw-gateway';
-  opt.textContent = 'OpenClaw Gateway (GPT)';
-  sel.appendChild(opt);
 
-  if (saved) sel.value = saved;
+  // Add OpenClaw as fallback if not already added (show even if down)
+  if (!openclawUp) {
+    const opt = document.createElement('option');
+    opt.value = 'openclaw-gateway';
+    opt.textContent = 'OpenClaw Gateway (GPT)';
+    sel.appendChild(opt);
+  }
+
+  // If no options, add a placeholder
+  if (sel.options.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'No models available';
+    sel.appendChild(opt);
+  }
+
+  // Auto-select: restore saved choice, or pick first available
+  if (saved && Array.from(sel.options).some(function(o) { return o.value === saved; })) {
+    sel.value = saved;
+  } else {
+    sel.selectedIndex = 0;
+  }
   _chatModelChanged();
 }
 
@@ -13098,7 +13140,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.18.1"
+                health["porter_version"] = "0.18.2"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -16425,7 +16467,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.18.1 ready (localhost only)")
+    print(f"\n  Porter v0.18.2 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
