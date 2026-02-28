@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.16.0 — self-hosted file manager"""
+"""Porter v0.16.2 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -11,6 +11,7 @@ import os
 import re
 import secrets
 import shutil
+import sqlite3
 import socket
 import subprocess
 import threading
@@ -72,7 +73,8 @@ def _public_ip_hint() -> str:
                 if ip and ":" not in ip:  # skip IPv6
                     _PUBLIC_IP_CACHE = ip
                     return ip
-        except Exception:
+        except Exception as e:
+            log.debug("Parse skip: %s", e)
             continue
     _PUBLIC_IP_CACHE = ""
     return ""
@@ -119,6 +121,31 @@ OPENCLAW_STATE_DIR  = Path(os.environ.get("PORTER_OPENCLAW_STATE",
                            str(Path.home() / ".openclaw")))
 MEMORY_DIR          = _DATA_DIR / "memory"
 USAGE_DIR           = RUNTIME_DIR / "usage"
+DB_PATH             = _DATA_DIR / "porter.db"
+
+# ── SQLite setup ──
+def _db_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(str(DB_PATH), timeout=5)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def _db_init():
+    conn = _db_conn()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            expires REAL NOT NULL,
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+    # Purge expired sessions on startup
+    purged = conn.execute("DELETE FROM sessions WHERE expires < ?", (time.time(),)).rowcount
+    conn.commit()
+    conn.close()
+    if purged:
+        log.info("Purged %d expired sessions from database", purged)
 TASKS_REGISTRY_DIR  = RUNTIME_DIR / "task-registry"
 AUDIT_LOG           = RUNTIME_DIR / "audit.jsonl"
 
@@ -146,7 +173,8 @@ def _cap_check_bin(binary: str) -> dict:
     try:
         r = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5)
         ver = (r.stdout or r.stderr or "").strip().split("\n")[0][:80]
-    except Exception:
+    except Exception as e:
+        log.debug("Ignored: %s", e)
         ver = ""
     return {"ok": True, "version": ver or binary}
 
@@ -158,7 +186,8 @@ def _cap_check_http(url: str, timeout: int = 3) -> dict:
         with urllib.request.urlopen(url, timeout=timeout) as r:
             body = r.read(256).decode("utf-8", errors="replace").strip()
             return {"ok": True, "version": body[:80] or "up"}
-    except Exception:
+    except Exception as e:
+        log.warning("Error: %s", e)
         return {"ok": False, "version": None}
 
 
@@ -171,8 +200,8 @@ def _cap_check_npx_pkg(pkg: str) -> dict:
         r = subprocess.run([npx, pkg, "--version"], capture_output=True, text=True, timeout=10)
         if r.returncode == 0:
             return {"ok": True, "version": r.stdout.strip()[:80] or pkg}
-    except Exception:
-        pass
+    except Exception as e:
+        log.debug("Ignored: %s", e)
     return {"ok": False, "version": None}
 
 
@@ -194,8 +223,8 @@ def _cap_check_openclaw() -> dict:
                                    capture_output=True, text=True, timeout=5)
                 ver = (r.stdout or r.stderr or "").strip().split("\n")[0][:80]
                 return {"ok": True, "version": ver or "openclaw"}
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug("Ignored: %s", e)
     # Last resort: is the HTTP gateway answering?
     http_r = _cap_check_http("http://127.0.0.1:18789/")
     if http_r["ok"]:
@@ -274,8 +303,8 @@ def _run_cap_checks(force: bool = False):
         (RUNTIME_DIR / "capabilities.json").write_text(
             json.dumps(list(checked.values()), indent=2)
         )
-    except Exception:
-        pass
+    except Exception as e:
+        log.debug("Ignored: %s", e)
 
 # ── Projects dashboard helpers ──────────────────────────────────────────────
 
@@ -311,8 +340,8 @@ def _migrate_checkpoint_to_registry():
         try:
             t = json.loads(fp.read_text())
             existing_titles.add(t.get("title", "").lower())
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
 
     migrated = 0
     for item in pending_items:
@@ -463,8 +492,8 @@ def _scan_checkpoints() -> list:
                 parsed = _parse_checkpoint_file(cp)
                 if parsed.get('status'):
                     tasks.append(parsed)
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug("Ignored: %s", e)
     tasks.sort(key=lambda t: t.get('modified_at', 0), reverse=True)
     return tasks
 
@@ -550,7 +579,8 @@ def resolve_project_memory(project_id: "str | None", agent_id: "str | None",
         if path.exists():
             try:
                 content = path.read_text(encoding="utf-8", errors="replace")
-            except Exception:
+            except Exception as e:
+                log.debug("Ignored: %s", e)
                 content = ""
             return {"path": str(path), "content": content, "source_layer": layer}
     return {"path": None, "content": None, "source_layer": None}
@@ -620,8 +650,8 @@ def _load_integrations() -> dict:
                     "chat_type": sess.get("chatType", ""),
                     "channel": sess.get("lastChannel", ""),
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
 
     # Read auth profiles
     auth_file = oc_dir / "agents" / "main" / "agent" / "auth-profiles.json"
@@ -638,8 +668,8 @@ def _load_integrations() -> dict:
                     "expired": is_expired,
                     "expires_at": expires,
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
 
     # Read models config
     models_file = oc_dir / "agents" / "main" / "agent" / "models.json"
@@ -655,8 +685,8 @@ def _load_integrations() -> dict:
                     "api": prov.get("api", ""),
                     "models": models,
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
 
     # Read cron jobs
     cron_file = oc_dir / "cron" / "jobs.json"
@@ -664,8 +694,8 @@ def _load_integrations() -> dict:
         try:
             cron_data = json.loads(cron_file.read_text(encoding="utf-8"))
             result["cron_jobs"] = cron_data.get("jobs", [])
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
 
     # Read hooks config
     oc_config = oc_dir / "openclaw.json"
@@ -686,8 +716,8 @@ def _load_integrations() -> dict:
                 "port": gw.get("port", 18789),
                 "auth_token_set": bool(gw.get("token")),
             }
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
 
     return result
 
@@ -722,8 +752,8 @@ def _ping_agent(agent: dict) -> dict:
     oc_cfg = {}
     try:
         oc_cfg = json.loads(OPENCLAW_STATE_DIR.joinpath("openclaw.json").read_text())
-    except Exception:
-        pass
+    except Exception as e:
+        log.debug("Ignored: %s", e)
 
     if "openclaw" in agent_type or "codex" in agent_type:
         gw = oc_cfg.get("gateway", {})
@@ -801,7 +831,8 @@ def _ping_agent(agent: dict) -> dict:
             try:
                 data = json.loads(body)
                 result["version"] = data.get("version") or data.get("name") or None
-            except Exception:
+            except Exception as e:
+                log.warning("Error: %s", e)
                 # Non-JSON response is fine — the ping itself succeeded
                 pass
 
@@ -851,8 +882,8 @@ def _load_openclaw_skills() -> list:
                         active_skills.add(rs)
                     elif isinstance(rs, dict):
                         active_skills.add(rs.get("name", rs.get("id", "")))
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
 
     for skills_root in skill_dirs:
         for skill_dir in sorted(skills_root.iterdir()):
@@ -905,7 +936,8 @@ def _load_openclaw_skills() -> list:
                     "manual": False,
                     "path": str(skill_dir),
                 })
-            except Exception:
+            except Exception as e:
+                log.warning("Error: %s", e)
                 skills.append({"id": skill_dir.name, "name": skill_dir.name, "description": "",
                              "emoji": "", "homepage": "", "has_docs": False,
                              "installed": skill_dir.name in active_skills,
@@ -947,8 +979,8 @@ def _load_openclaw_skills() -> list:
                     "manual": True,
                     "path": str(skill_dir),
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug("Ignored: %s", e)
     return skills
 
 
@@ -961,8 +993,8 @@ def _load_openclaw_cron() -> dict:
         try:
             data = json.loads(cron_file.read_text(encoding="utf-8"))
             result["jobs"] = data.get("jobs", [])
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
     # Read recent runs
     runs_dir = oc_dir / "cron" / "runs"
     if runs_dir.exists():
@@ -973,8 +1005,8 @@ def _load_openclaw_cron() -> dict:
                     "modified": rf.stat().st_mtime,
                     "size": rf.stat().st_size,
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug("Ignored: %s", e)
     return result
 
 
@@ -1019,8 +1051,8 @@ def _detect_local_models() -> list:
                     capture_output=True, text=True, timeout=5
                 )
                 version = (result.stdout or result.stderr or "").strip().split("\n")[0][:80]
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug("Ignored: %s", e)
             models.append({
                 "id": f"local-cli-{agent['bin']}",
                 "name": agent["name"],
@@ -1057,8 +1089,8 @@ def _detect_local_models() -> list:
                     "family": details.get("family", ""),
                     "quantization": details.get("quantization_level", ""),
                 })
-    except Exception:
-        pass  # Ollama not running or not reachable
+    except Exception as e:
+        log.debug("Ignored: %s", e)  # Ollama not running or not reachable
 
     return models
 
@@ -1076,8 +1108,8 @@ def _load_session_summaries() -> list:
     if reg_file.exists():
         try:
             registry = json.loads(reg_file.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
 
     summaries = []
     for jsonl_file in sorted(sessions_dir.glob("*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True):
@@ -1103,7 +1135,8 @@ def _load_session_summaries() -> list:
             for raw_line in lines:
                 try:
                     entry = json.loads(raw_line)
-                except Exception:
+                except Exception as e:
+                    log.debug("Parse skip: %s", e)
                     continue
                 etype = entry.get("type", "")
                 ts = entry.get("timestamp", "")
@@ -1168,7 +1201,8 @@ def _load_session_summaries() -> list:
                 "in_registry": reg_entry is not None,
                 "flushed": False,  # TODO: track flushed state
             })
-        except Exception:
+        except Exception as e:
+            log.debug("Parse skip: %s", e)
             continue
 
     return summaries
@@ -1195,7 +1229,8 @@ def _load_claude_session_summaries() -> list:
                 for line in f:
                     try:
                         entry = json.loads(line)
-                    except Exception:
+                    except Exception as e:
+                        log.debug("Parse skip: %s", e)
                         continue
                     etype = entry.get("type", "")
                     ts = entry.get("timestamp", "")
@@ -1228,7 +1263,8 @@ def _load_claude_session_summaries() -> list:
                 "in_registry": False,
                 "flushed": False,
             })
-        except Exception:
+        except Exception as e:
+            log.debug("Parse skip: %s", e)
             continue
 
     return summaries
@@ -1318,8 +1354,8 @@ def _get_memory_overview() -> dict:
             "instruction_file": None, "memory_files": [],
             "daily_logs": 0, "session_count": 0, "session_size_mb": 0,
         })
-    except Exception:
-        pass
+    except Exception as e:
+        log.debug("Ignored: %s", e)
 
     # ── Shared memory plane ──
     shared_plane = {"path": str(MEMORY_DIR), "exists": MEMORY_DIR.exists(), "directories": [], "file_count": 0, "total_size": 0}
@@ -1338,7 +1374,8 @@ def _is_allowed_memory_path(path_str: str) -> bool:
     """Whitelist check — only allow read/write to known model memory locations."""
     try:
         p = Path(path_str).resolve()
-    except Exception:
+    except Exception as e:
+        log.warning("Error: %s", e)
         return False
     if p.suffix not in (".md", ".txt", ".json"):
         return False
@@ -1400,7 +1437,8 @@ def _flush_session_to_memory(session_id: str, project_id: str = None) -> dict:
     for raw_line in lines:
         try:
             entry = json.loads(raw_line)
-        except Exception:
+        except Exception as e:
+            log.debug("Parse skip: %s", e)
             continue
         etype = entry.get("type", "")
         ts = entry.get("timestamp", "")
@@ -1504,7 +1542,8 @@ def _flush_claude_session(session_id: str) -> dict:
             for line in f:
                 try:
                     entry = json.loads(line)
-                except Exception:
+                except Exception as e:
+                    log.debug("Parse skip: %s", e)
                     continue
                 etype = entry.get("type", "")
                 ts = entry.get("timestamp", "")
@@ -1586,8 +1625,8 @@ def _treg_load() -> None:
             t = json.loads(fp.read_text(encoding="utf-8"))
             if isinstance(t, dict) and t.get("id"):
                 loaded[t["id"]] = t
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
     with _treg_lock:
         _treg.update(loaded)
 
@@ -1612,8 +1651,8 @@ def _load_projects_dashboard() -> dict:
             raw      = pf.read_text(encoding='utf-8', errors='replace')
             projects = _parse_projects_md(raw)
             models   = _parse_model_registry(raw)
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
     # Annotate models with memory-file health + projects.md sync check
     for m in models:
         mf_raw = m.get('memory_files', '')
@@ -1629,15 +1668,15 @@ def _load_projects_dashboard() -> dict:
                 m['memory_ago']    = _time_ago(mp.stat().st_mtime)
                 try:
                     m['synced'] = 'projects.md' in mp.read_text(encoding='utf-8', errors='replace')
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.debug("Ignored: %s", e)
     sp = _find_sprint_plan()
     sprints = []
     if sp:
         try:
             sprints = _parse_sprint_plan(sp.read_text(encoding='utf-8', errors='replace'))
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
     return {
         'projects_file': str(pf) if pf else None,
         'projects':      projects,
@@ -1762,7 +1801,9 @@ def _cron_next(expr, from_dt=None):
             
             return t
         return None
-    except Exception: return None
+    except Exception as e:
+        log.debug("Ignored: %s", e)
+        return None
 
 def _cron_next_display(expr):
     nxt = _cron_next(expr)
@@ -1857,8 +1898,8 @@ def _scheduler_tick() -> None:
             due = _cron_next(expr, from_dt=from_dt)
             if due and due <= now:
                 _fire_schedule_job(job, due)
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
     _sched_last_tick = now
 
 
@@ -1868,8 +1909,8 @@ def _scheduler_loop() -> None:
     while True:
         try:
             _scheduler_tick()
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
         _time.sleep(_SCHED_INTERVAL)
 
 
@@ -1994,8 +2035,8 @@ def _pep_idem_check(ikey: str) -> dict | None:
             rec = json.loads(p.read_text())
             if rec.get("expires_at", 0) > time.time():
                 return rec.get("result")
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("Ignored: %s", e)
     return None
 
 def _pep_idem_store(ikey: str, result: dict) -> None:
@@ -2040,7 +2081,8 @@ def load_config() -> dict:
     if CONFIG_PATH.exists():
         try:
             cfg = json.loads(CONFIG_PATH.read_text())
-        except Exception:
+        except Exception as e:
+            log.debug("Ignored: %s", e)
             cfg = {}
 
     changed = False
@@ -2379,7 +2421,8 @@ def _pep_safe_resolve(allowed_paths: list, req_path: str) -> "Path | None":
         return None
     try:
         p = Path(req_path).resolve()
-    except Exception:
+    except Exception as e:
+        log.warning("Error: %s", e)
         return None
     for ap in allowed_paths:
         try:
@@ -2451,7 +2494,8 @@ def _pep_proxy_fs(agent: dict, method: str, sub_path: str,
     except urllib.error.HTTPError as e:
         try:
             body_err = json.loads(e.read())
-        except Exception:
+        except Exception as e:
+            log.warning("Error: %s", e)
             body_err = {"error": {"code": "AGENT_HTTP_ERROR", "message": str(e), "retryable": False}}
         return e.code, body_err
     except Exception as e:
@@ -2467,19 +2511,52 @@ _config: dict = {}   # loaded at startup
 
 def create_session(username: str) -> str:
     token = secrets.token_hex(32)
-    _sessions[token] = {"username": username, "expires": time.time() + SESSION_TTL}
+    expires = time.time() + SESSION_TTL
+    try:
+        conn = _db_conn()
+        conn.execute(
+            "INSERT INTO sessions (token, username, expires) VALUES (?, ?, ?)",
+            (token, username, expires)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.warning("Session DB write failed, using memory fallback: %s", e)
+        _sessions[token] = {"username": username, "expires": expires}
     return token
 
 def get_session(token: str) -> dict | None:
-    s = _sessions.get(token)
-    if not s:
-        return None
-    if time.time() > s["expires"]:
-        del _sessions[token]
-        return None
-    return s
+    try:
+        conn = _db_conn()
+        row = conn.execute(
+            "SELECT username, expires FROM sessions WHERE token = ?", (token,)
+        ).fetchone()
+        conn.close()
+        if not row:
+            return _sessions.get(token)  # fallback to memory
+        if time.time() > row["expires"]:
+            delete_session(token)
+            return None
+        return {"username": row["username"], "expires": row["expires"]}
+    except Exception as e:
+        log.debug("Session DB read failed: %s", e)
+        # Fallback to in-memory
+        s = _sessions.get(token)
+        if not s:
+            return None
+        if time.time() > s["expires"]:
+            del _sessions[token]
+            return None
+        return s
 
 def delete_session(token: str) -> None:
+    try:
+        conn = _db_conn()
+        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.debug("Session DB delete failed: %s", e)
     _sessions.pop(token, None)
 
 # ── runtime / memory helpers ───────────────────────────────────────────────
@@ -2505,7 +2582,8 @@ def porter_uri_to_path(uri: str) -> "Path | None":
             resolved = base.resolve()
         resolved.relative_to(base.resolve())   # raises ValueError on traversal
         return resolved
-    except Exception:
+    except Exception as e:
+        log.warning("Error: %s", e)
         return None
 
 def ensure_runtime_dirs():
@@ -2534,8 +2612,8 @@ def _append_audit(action: str, target: str, actor: str,
     try:
         with open(AUDIT_LOG, "a") as f:
             f.write(json.dumps(entry) + "\n")
-    except Exception:
-        pass  # audit failures must never break callers
+    except Exception as e:
+        log.debug("Ignored: %s", e)  # audit failures must never break callers
 
 def _safe_lease_running(lease_file, agent_id: str, now: float) -> bool:
     try:
@@ -2543,7 +2621,8 @@ def _safe_lease_running(lease_file, agent_id: str, now: float) -> bool:
         return (l.get("owner") == agent_id and
                 l.get("state") == "running" and
                 l.get("expires_at", 0) > now)
-    except Exception:
+    except Exception as e:
+        log.warning("Error: %s", e)
         return False
 
 def ensure_memory_dirs():
@@ -2560,7 +2639,8 @@ def safe_resolve(root_key, rel=""):
         target = (root / unquote(rel)).resolve() if rel else root.resolve()
         target.relative_to(root.resolve())
         return target
-    except Exception:
+    except Exception as e:
+        log.warning("Error: %s", e)
         return None
 
 def is_writable(path: Path) -> bool:
@@ -2626,7 +2706,8 @@ def list_dir(root_key, rel):
                 "mtime":      st.st_mtime,
                 "writable":   is_writable(item),
             })
-        except Exception:
+        except Exception as e:
+            log.debug("Parse skip: %s", e)
             continue
     return {
         "entries":  entries,
@@ -2659,12 +2740,13 @@ def walk_search(root_key, q):
                             "mtime":      st.st_mtime,
                             "writable":   is_writable(fp),
                         })
-                    except Exception:
+                    except Exception as e:
+                        log.debug("Parse skip: %s", e)
                         continue
             if len(results) >= 200:
                 break
-    except Exception:
-        pass
+    except Exception as e:
+        log.debug("Ignored: %s", e)
     return results
 
 def disk_info(root_key):
@@ -2681,7 +2763,8 @@ def disk_info(root_key):
             "used_h":  human_size(usage.used),
             "free_h":  human_size(usage.free),
         }
-    except Exception:
+    except Exception as e:
+        log.warning("Error: %s", e)
         return None
 
 # ── login page ────────────────────────────────────────────────────────────
@@ -4022,7 +4105,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.16.0</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.16.2</div>
   </div>
 </aside>
 
@@ -4977,6 +5060,14 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.16.2', date:'2026-02-28', notes:[
+    'Persistence: Sessions now stored in SQLite — survive restarts',
+    'Persistence: Expired sessions auto-purged on startup',
+  ]},
+  { ver:'v0.16.1', date:'2026-02-28', notes:[
+    'Logging: 73 bare except blocks now log errors instead of silently swallowing them',
+    'Logging: Non-critical paths use debug level, API endpoints use error level',
+  ]},
   { ver:'v0.16.0', date:'2026-02-28', notes:[
     'Security: ThreadingHTTPServer — concurrent request handling (no more single-thread blocking)',
     'Security: CORS restricted to same-origin (removed wildcard Access-Control-Allow-Origin)',
@@ -12152,8 +12243,8 @@ class Handler(BaseHTTPRequestHandler):
                     if line:
                         try:
                             steps.append(json.loads(line))
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            log.debug("Ignored: %s", e)
             chunks = []
             if drafts_dir.exists():
                 chunks = sorted(p.name for p in drafts_dir.iterdir() if p.is_file())
@@ -12217,7 +12308,9 @@ class Handler(BaseHTTPRequestHandler):
                 snap = {}
                 if snap_file.exists():
                     try: snap = json.loads(snap_file.read_text())
-                    except Exception: pass
+                    except Exception as e:
+                        log.debug("Ignored: %s", e)
+                        pass
                 # Expire stale snapshots whose usage window has already reset
                 window_expired = False
                 resets_iso = snap.get("window_resets_at")
@@ -12227,8 +12320,8 @@ class Handler(BaseHTTPRequestHandler):
                         window_expired = datetime.fromisoformat(
                             resets_iso.replace("Z", "+00:00")
                         ) < datetime.now(timezone.utc)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        log.debug("Ignored: %s", e)
                 results.append({
                     "agent_id":    aid,
                     "name":        agent.get("name", aid),
@@ -12256,7 +12349,8 @@ class Handler(BaseHTTPRequestHandler):
                 for lf in leases_dir.glob("*.json"):
                     try:
                         lease = json.loads(lf.read_text())
-                    except Exception:
+                    except Exception as e:
+                        log.debug("Parse skip: %s", e)
                         continue
                     task_id = lease.get("task_id", lf.stem)
                     state   = lease.get("state", "running")
@@ -12277,8 +12371,8 @@ class Handler(BaseHTTPRequestHandler):
                     if ckpt_path.exists():
                         try:
                             steps = [json.loads(l) for l in ckpt_path.read_text().splitlines() if l.strip()]
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            log.debug("Ignored: %s", e)
                     last_step = steps[-1] if steps else None
                     # resolve owner name
                     owner_id   = lease.get("owner", "")
@@ -12360,12 +12454,12 @@ class Handler(BaseHTTPRequestHandler):
                         if line:
                             try:
                                 entries.append(json.loads(line))
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                log.debug("Ignored: %s", e)
                         if len(entries) >= limit:
                             break
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.debug("Ignored: %s", e)
             self.reply_json({"entries": entries, "count": len(entries)})
 
         # ── P3: policy presets ─────────────────────────────────────────────
@@ -12443,8 +12537,8 @@ class Handler(BaseHTTPRequestHandler):
                                 "size":  st.st_size if child.is_file() else None,
                                 "mtime": st.st_mtime,
                             })
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            log.debug("Ignored: %s", e)
                     self.reply_json({"ok": True, "node_id": node_id, "path": str(target),
                                      "entries": entries, "correlation_id": corr_id})
                 elif op == "read":
@@ -12564,7 +12658,9 @@ class Handler(BaseHTTPRequestHandler):
                 files = sorted(run_dir.glob("*.json"), reverse=True)[:limit]
                 for f in files:
                     try: runs.append(__import__("json").loads(f.read_text()))
-                    except Exception: pass
+                    except Exception as e:
+                        log.debug("Ignored: %s", e)
+                        pass
             self.reply_json({"runs": runs, "schedule_id": sid})
 
         # ── D1: project registry ─────────────────────────────────────────────
@@ -12905,7 +13001,9 @@ class Handler(BaseHTTPRequestHandler):
                 if "auto_update" in data: fleet["auto_update"] = bool(data.get("auto_update"))
                 if "rollout" in data:
                     try: fleet["rollout"] = max(0, min(100, int(data.get("rollout"))))
-                    except Exception: pass
+                    except Exception as e:
+                        log.debug("Ignored: %s", e)
+                        pass
                 _config["agent_fleet"] = fleet
                 save_config(_config)
                 _append_audit("agent_fleet_set_policy", target="fleet", actor="owner", detail=fleet)
@@ -13404,7 +13502,8 @@ class Handler(BaseHTTPRequestHandler):
             if lease_path.exists():
                 try:
                     lease = json.loads(lease_path.read_text())
-                except Exception:
+                except Exception as e:
+                    log.debug("Ignored: %s", e)
                     lease = {}
             else:
                 lease = {}
@@ -13458,8 +13557,8 @@ class Handler(BaseHTTPRequestHandler):
                     lease = json.loads(lease_path.read_text())
                     lease["state"] = "complete"
                     lease_path.write_text(json.dumps(lease, indent=2))
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.debug("Ignored: %s", e)
             self.reply_json({"ok": True, "final_uri": final_uri, "timestamp": now})
 
         # ── P1: memory search ──────────────────────────────────────────────
@@ -13525,7 +13624,8 @@ class Handler(BaseHTTPRequestHandler):
                             rel = fp.relative_to(MEMORY_DIR)
                             parts = rel.parts
                             uri = "porter://" + "/".join(parts)
-                        except Exception:
+                        except Exception as e:
+                            log.warning("Error: %s", e)
                             uri = f"porter://artifacts/{fp.name}"
                         results.append({
                             "uri":     uri,
@@ -13534,7 +13634,8 @@ class Handler(BaseHTTPRequestHandler):
                             "tags":    tags,
                             "score":   score,
                         })
-                    except Exception:
+                    except Exception as e:
+                        log.debug("Parse skip: %s", e)
                         continue
             results.sort(key=lambda r: r["score"], reverse=True)
             total_before_limit = len(results)
@@ -13600,8 +13701,8 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     existing = json.loads(ptr_path.read_text())
                     created_at = existing.get("created_at", now_iso)
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.debug("Ignored: %s", e)
             pointer = {
                 "id":      ptr_id,
                 "title":   title,
@@ -13795,9 +13896,13 @@ class Handler(BaseHTTPRequestHandler):
             writable = False
             if exists:
                 try:    readable = os.access(str(tpath), os.R_OK)
-                except Exception: pass
+                except Exception as e:
+                    log.debug("Ignored: %s", e)
+                    pass
                 try:    writable = os.access(str(tpath), os.W_OK)
-                except Exception: pass
+                except Exception as e:
+                    log.debug("Ignored: %s", e)
+                    pass
             self.reply_json({"ok": exists, "exists": exists, "readable": readable, "writable": writable})
 
         # ── agent usage tracker ────────────────────────────────────────────
@@ -13990,7 +14095,8 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     try:
                         n = int(v)
-                    except Exception:
+                    except Exception as e:
+                        log.warning("Error: %s", e)
                         self.reply_json({"error": "warn_threshold must be an integer"}, 400); return
                     if n < 1 or n > 99:
                         self.reply_json({"error": "warn_threshold must be between 1 and 99"}, 400); return
@@ -14197,8 +14303,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     oc_cfg = {}
                     try:
                         oc_cfg = json.loads(OPENCLAW_STATE_DIR.joinpath("openclaw.json").read_text())
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        log.debug("Ignored: %s", e)
                     gw_port = oc_cfg.get("gatewayPort", 18789)
                     auth_token = oc_cfg.get("authToken", "")
                     payload = json.dumps({"message": prompt}).encode()
@@ -14274,8 +14380,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                             if lease.get("state") in ("complete", "cancelled"):
                                 lf.unlink()
                                 removed += 1
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            log.debug("Ignored: %s", e)
                 _append_audit("task.clear_completed", "*", actor, details={"removed": removed})
                 self.reply_json({"ok": True, "removed": removed})
 
@@ -14305,7 +14411,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     self.reply_json({"error": "task not found"}, 404); return
                 try:
                     lease = json.loads(lease_path.read_text())
-                except Exception:
+                except Exception as e:
+                    log.debug("Ignored: %s", e)
                     lease = {}
                 state = lease.get("state", "running")
                 # auto-classify stalled
@@ -14349,8 +14456,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     try:
                         with open(ckpt_path, "a", encoding="utf-8") as f:
                             f.write(cancel_entry + "\n")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        log.debug("Ignored: %s", e)
                     _append_audit("task.cancel", task_id, actor)
                     self.reply_json({"ok": True, "task_id": task_id, "state": "cancelled"})
 
@@ -14487,8 +14594,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                         if "memory_isolation" in proj:
                             sdata["memory_isolation"] = proj["memory_isolation"]
                         sj.write_text(json.dumps(sdata, indent=2))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        log.debug("Ignored: %s", e)
                 self.reply_json({"ok": True, "project": proj})
 
 
@@ -14675,8 +14782,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 fp = TASKS_REGISTRY_DIR / f"{tid}.json"
                 try:
                     fp.unlink(missing_ok=True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.debug("Ignored: %s", e)
                 _append_audit("task_registry.delete", tid, actor)
                 self.reply_json({"ok": True})
 
@@ -14949,8 +15056,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 tok = self.get_session_token() or ""
                 sess = get_session(tok)
                 actor = sess.get("username", "session") if sess else "session"
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug("Ignored: %s", e)
             _sess_hash = hashlib.sha256(tok.encode()).hexdigest()[:12] if tok else ""
 
             if is_local:
@@ -14964,7 +15071,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     content_b64 = data.get("content_b64", "")
                     try:
                         file_bytes = base64.b64decode(content_b64)
-                    except Exception:
+                    except Exception as e:
+                        log.warning("Error: %s", e)
                         self.reply_json(_pep_err("BAD_REQUEST", "Invalid base64 content", False, corr_id), 400)
                         return
                     if not is_writable(target.parent if not target.exists() else target):
@@ -15053,6 +15161,7 @@ if __name__ == "__main__":
     _load_serve_dirs(_config)
     ensure_runtime_dirs()
     ensure_memory_dirs()
+    _db_init()  # Initialize SQLite DB + purge expired sessions
     _migrate_checkpoint_to_registry()  # Gap31: one-time migration
     _sched_thread = threading.Thread(target=_scheduler_loop, name="porter-scheduler", daemon=True)
     _sched_thread.start()
@@ -15062,7 +15171,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.16.0 ready (localhost only)")
+    print(f"\n  Porter v0.16.2 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
