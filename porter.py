@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.20.0 — self-hosted file manager"""
+"""Porter v0.20.1 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -4509,7 +4509,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.20.0</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.20.1</div>
   </div>
 </aside>
 
@@ -5548,6 +5548,13 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.20.1', date:'2026-02-28', notes:[
+    'New: Agnostic Agent Bridge — one endpoint routes to any model backend',
+    'New: POST /api/agent/invoke — unified dispatch to OpenClaw, Gemini, Ollama',
+    'New: Gemini CLI as first-class chat model (auto-detected)',
+    'New: @backend prefix in chat — @gemini, @openclaw routes to specific model',
+    'Architecture: Porter is the router — all models accessed through one bridge',
+  ]},
   { ver:'v0.20.0', date:'2026-02-28', notes:[
     'New: OpenClaw Skill Bridge — Porter can now dispatch tasks to OpenClaw agent',
     'New: /skill commands in chat invoke OpenClaw skills directly',
@@ -8305,18 +8312,20 @@ function switchSettingsTab(tab) {
 
 // ── Skill Bridge ──────────────────────────────────────────────────────────
 
-async function invokeSkill(message) {
-  // Show pending message
-  _chatMessages.push({ role: 'skill-pending', content: 'Dispatching to OpenClaw agent...' });
+async function invokeAgent(message, backend) {
+  // Unified agent dispatch — routes to any backend
+  const labels = { openclaw: 'OpenClaw', gemini: 'Gemini', ollama: 'Ollama' };
+  const label = labels[backend] || backend;
+  _chatMessages.push({ role: 'skill-pending', content: 'Dispatching to ' + label + '...' });
   renderChatMessages();
 
   try {
-    const resp = await api('/api/skill/invoke', { message: message, timeout: 120 });
-    // Remove pending message
+    const resp = await api('/api/agent/invoke', { message: message, backend: backend, timeout: 120 });
     _chatMessages = _chatMessages.filter(function(m) { return m.role !== 'skill-pending'; });
 
     if (resp && resp.ok) {
       const meta = [];
+      if (resp.backend) meta.push('Via: ' + (labels[resp.backend] || resp.backend));
       if (resp.model) meta.push('Model: ' + resp.model);
       if (resp.duration_ms) meta.push('Duration: ' + (resp.duration_ms / 1000).toFixed(1) + 's');
       if (resp.tokens && resp.tokens.total) meta.push('Tokens: ' + resp.tokens.total);
@@ -8324,23 +8333,17 @@ async function invokeSkill(message) {
       const content = resp.text + (meta.length ? '\n---\n' + meta.join(' | ') : '');
       _chatMessages.push({ role: 'skill', content: content });
     } else {
-      _chatMessages.push({ role: 'error', content: 'Skill error: ' + (resp ? resp.error : 'No response') });
+      _chatMessages.push({ role: 'error', content: label + ' error: ' + (resp ? resp.error : 'No response') });
     }
   } catch(e) {
     _chatMessages = _chatMessages.filter(function(m) { return m.role !== 'skill-pending'; });
-    _chatMessages.push({ role: 'error', content: 'Skill bridge error: ' + e.message });
+    _chatMessages.push({ role: 'error', content: label + ' bridge error: ' + e.message });
   }
   renderChatMessages();
-
-  // Save to chat history
-  if (_chatId && _chatMessages.length >= 2) {
-    const lastUser = _chatMessages.filter(function(m) { return m.role === 'user'; }).pop();
-    const lastSkill = _chatMessages.filter(function(m) { return m.role === 'skill'; }).pop();
-    if (lastUser && lastSkill) {
-      _save_chat_message_local(_chatId, 'openclaw-agent', lastUser.content, lastSkill.content);
-    }
-  }
 }
+
+// Backward compat alias
+function invokeSkill(message) { invokeAgent(message, 'openclaw'); }
 
 function _save_chat_message_local(chatId, model, userMsg, assistantMsg) {
   // Save via chat API
@@ -8492,6 +8495,20 @@ async function populateChatModels() {
     }
   } catch(e) {}
 
+  // Add Gemini CLI (auto-detected)
+  const gemBin = await fetch('/api/agent/invoke', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({message: 'hi', backend: 'gemini', timeout: 5})
+  }).then(function(r) { return r.json(); }).catch(function() { return null; });
+  const geminiUp = gemBin && !String(gemBin.error || '').includes('not found');
+  if (geminiUp) {
+    const gopt = document.createElement('option');
+    gopt.value = 'gemini-cli-auto';
+    gopt.textContent = 'Gemini (Google)';
+    sel.appendChild(gopt);
+  }
+
   // Add OpenClaw as fallback if not already added (show even if down)
   if (!openclawUp) {
     const opt = document.createElement('option');
@@ -8574,7 +8591,18 @@ function chatSend() {
     input.style.height = 'auto';
     _chatMessages.push({ role: 'user', content: text });
     renderChatMessages();
-    invokeSkill(text);
+    invokeAgent(text, 'openclaw');
+    return;
+  }
+
+  // Check for @backend prefix — route to specific model
+  const atMatch = text.match(/^@(gemini|openclaw|ollama)\s+(.+)/s);
+  if (atMatch) {
+    input.value = '';
+    input.style.height = 'auto';
+    _chatMessages.push({ role: 'user', content: text });
+    renderChatMessages();
+    invokeAgent(atMatch[2].trim(), atMatch[1]);
     return;
   }
 
@@ -13019,6 +13047,126 @@ init();
 
 # ── HTTP handler ──────────────────────────────────────────────────────────
 
+
+# ── Agent Bridge — model-agnostic dispatch ─────────────────────────────────
+def _resolve_cli(name, extra_paths=None):
+    """Find a CLI binary by name, checking PATH and common locations."""
+    import shutil
+    found = shutil.which(name)
+    if found:
+        return found
+    search = [Path.home() / ".npm-global/bin" / name,
+              Path("/usr/local/bin") / name]
+    if extra_paths:
+        search = [Path(p) / name for p in extra_paths] + search
+    for p in search:
+        if p.exists():
+            return str(p)
+    return None
+
+def _agent_env():
+    """Build environment with extended PATH for npm-global binaries."""
+    env = os.environ.copy()
+    env["PATH"] = str(Path.home() / ".npm-global/bin") + ":" + env.get("PATH", "")
+    return env
+
+def _dispatch_openclaw(message, model=None, timeout=120):
+    """Invoke OpenClaw agent CLI and return normalized response."""
+    import subprocess
+    oc_bin = _resolve_cli("openclaw")
+    if not oc_bin:
+        return {"ok": False, "error": "openclaw CLI not found. Install: npm i -g @anthropic-ai/openclaw"}
+    agent_id = model or "main"
+    cmd = [oc_bin, "agent", "--agent", agent_id, "--message", message, "--json", "--timeout", str(timeout)]
+    log.info("Agent bridge [openclaw]: agent=%s msg=%s", agent_id, message[:80])
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env())
+    if result.returncode != 0:
+        return {"ok": False, "error": result.stderr[:500] or "OpenClaw returned non-zero"}
+    resp = json.loads(result.stdout)
+    payloads = resp.get("result", {}).get("payloads", [])
+    text = payloads[0].get("text", "") if payloads else ""
+    meta = resp.get("result", {}).get("meta", {})
+    return {
+        "ok": True, "backend": "openclaw",
+        "text": text,
+        "run_id": resp.get("runId", ""),
+        "model": meta.get("agentMeta", {}).get("model", "gpt-5.3-codex"),
+        "duration_ms": meta.get("durationMs", 0),
+        "tokens": meta.get("agentMeta", {}).get("usage", {}),
+    }
+
+def _dispatch_gemini(message, model=None, timeout=60):
+    """Invoke Gemini CLI and return normalized response."""
+    import subprocess
+    gem_bin = _resolve_cli("gemini")
+    if not gem_bin:
+        return {"ok": False, "error": "Gemini CLI not found. Install: npm i -g @google/gemini-cli"}
+    cmd = [gem_bin, "-p", message, "-o", "json", "-y"]
+    if model:
+        cmd.extend(["-m", model])
+    log.info("Agent bridge [gemini]: model=%s msg=%s", model or "auto", message[:80])
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env(), cwd="/tmp")
+    if result.returncode != 0:
+        try:
+            err_data = json.loads(result.stdout)
+            err_msg = err_data.get("error", {}).get("message", result.stderr[:300])
+        except Exception:
+            err_msg = result.stderr[:300] or "Gemini returned non-zero"
+        return {"ok": False, "error": err_msg}
+    gem_resp = json.loads(result.stdout)
+    stats = gem_resp.get("stats", {})
+    models_stats = stats.get("models", {})
+    total_latency = sum(m.get("api", {}).get("totalLatencyMs", 0) for m in models_stats.values())
+    total_tokens = sum(m.get("tokens", {}).get("total", 0) for m in models_stats.values())
+    model_used = list(models_stats.keys())[0] if models_stats else model or "gemini-auto"
+    return {
+        "ok": True, "backend": "gemini",
+        "text": gem_resp.get("response", ""),
+        "session_id": gem_resp.get("session_id", ""),
+        "model": model_used,
+        "duration_ms": total_latency,
+        "tokens": {"total": total_tokens},
+    }
+
+def _dispatch_ollama(message, model=None, timeout=120):
+    """Invoke Ollama via HTTP API and return normalized response."""
+    import urllib.request
+    ollama_model = model or "qwen2.5-coder:7b-instruct-q4_K_M"
+    payload = json.dumps({"model": ollama_model, "prompt": message, "stream": False}).encode()
+    req = urllib.request.Request(
+        "http://127.0.0.1:11434/api/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    log.info("Agent bridge [ollama]: model=%s msg=%s", ollama_model, message[:80])
+    resp = urllib.request.urlopen(req, timeout=timeout)
+    data = json.loads(resp.read())
+    return {
+        "ok": True, "backend": "ollama",
+        "text": data.get("response", ""),
+        "model": ollama_model,
+        "duration_ms": int(data.get("total_duration", 0) / 1e6),  # ns → ms
+        "tokens": {"total": data.get("eval_count", 0)},
+    }
+
+AGENT_DISPATCHERS = {
+    "openclaw": _dispatch_openclaw,
+    "gemini": _dispatch_gemini,
+    "ollama": _dispatch_ollama,
+}
+
+def dispatch_agent(message, backend, model=None, timeout=120):
+    """Route a message to the specified backend and return normalized response."""
+    fn = AGENT_DISPATCHERS.get(backend)
+    if not fn:
+        return {"ok": False, "error": f"Unknown backend: {backend}. Available: {', '.join(AGENT_DISPATCHERS.keys())}"}
+    try:
+        return fn(message, model=model, timeout=timeout)
+    except Exception as e:
+        log.error("Agent bridge [%s] exception: %s", backend, e)
+        return {"ok": False, "error": str(e)[:500]}
+
+
 class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
@@ -13349,7 +13497,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.20.0"
+                health["porter_version"] = "0.20.1"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -14226,6 +14374,18 @@ class Handler(BaseHTTPRequestHandler):
                     full_response = text
                     self.wfile.write(f"data: {json.dumps({'token': text})}\n\n".encode())
                     self.wfile.flush()
+
+                elif model_id.startswith("gemini-"):
+                    # Gemini via agent bridge (non-streaming — single response)
+                    gem_model = model_id.replace("gemini-cli-", "") if model_id.startswith("gemini-cli-") else ""
+                    gem_result = dispatch_agent(prompt, "gemini", model=gem_model or None, timeout=120)
+                    if gem_result.get("ok"):
+                        full_response = gem_result.get("text", "")
+                        self.wfile.write(f"data: {json.dumps({'token': full_response})}\n\n".encode())
+                        self.wfile.flush()
+                    else:
+                        self.wfile.write(f"data: {json.dumps({'error': gem_result.get('error', 'Gemini error')})}\n\n".encode())
+                        self.wfile.flush()
 
                 else:
                     self.wfile.write(f"data: {json.dumps({'error': 'Unknown model: ' + model_id})}\n\n".encode())
@@ -15788,7 +15948,27 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": "Unknown action"}, 400)
 
 
+
+        elif parsed.path == "/api/agent/invoke":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            message = data.get("message", "").strip()
+            backend = data.get("backend", "").strip()
+            model = data.get("model", "")
+            timeout_s = min(int(data.get("timeout", 60)), 300)
+
+            if not message:
+                self.reply_json({"ok": False, "error": "message required"}, 400)
+                return
+            if not backend:
+                self.reply_json({"ok": False, "error": "backend required (openclaw, gemini, ollama)"}, 400)
+                return
+
+            result = dispatch_agent(message, backend, model=model, timeout=timeout_s)
+            self.reply_json(result, 200 if result.get("ok") else 500)
+
         elif parsed.path == "/api/skill/invoke":
+            # Legacy endpoint — routes through agnostic dispatcher
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
             message = data.get("message", "").strip()
@@ -15799,62 +15979,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": "message required"}, 400)
                 return
 
-            try:
-                import subprocess, shutil
-                # Resolve openclaw binary — may not be on PATH in systemd
-                oc_bin = shutil.which("openclaw")
-                if not oc_bin:
-                    # Check common locations
-                    for p in [Path.home() / ".npm-global/bin/openclaw",
-                              Path("/usr/local/bin/openclaw")]:
-                        if p.exists():
-                            oc_bin = str(p)
-                            break
-                if not oc_bin:
-                    self.reply_json({"ok": False, "error": "openclaw CLI not found. Install: npm i -g @anthropic-ai/openclaw"}, 500)
-                    return
-
-                cmd = [
-                    oc_bin, "agent",
-                    "--agent", agent_id,
-                    "--message", message,
-                    "--json",
-                    "--timeout", str(timeout_s),
-                ]
-                env = os.environ.copy()
-                env["PATH"] = str(Path.home() / ".npm-global/bin") + ":" + env.get("PATH", "")
-                log.info("Skill bridge: invoking %s agent=%s msg=%s", oc_bin, agent_id, message[:80])
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s + 10, env=env)
-
-                if result.returncode != 0:
-                    log.warning("Skill bridge error: %s", result.stderr[:200])
-                    self.reply_json({
-                        "ok": False,
-                        "error": result.stderr[:500] or "OpenClaw agent returned non-zero",
-                    })
-                    return
-
-                # Parse JSON response
-                import json as _json
-                response = _json.loads(result.stdout)
-                payloads = response.get("result", {}).get("payloads", [])
-                text = payloads[0].get("text", "") if payloads else ""
-                meta = response.get("result", {}).get("meta", {})
-
-                self.reply_json({
-                    "ok": True,
-                    "run_id": response.get("runId", ""),
-                    "status": response.get("status", ""),
-                    "text": text,
-                    "duration_ms": meta.get("durationMs", 0),
-                    "model": meta.get("agentMeta", {}).get("model", ""),
-                    "tokens": meta.get("agentMeta", {}).get("usage", {}),
-                })
-            except subprocess.TimeoutExpired:
-                self.reply_json({"ok": False, "error": f"Timeout after {timeout_s}s"})
-            except Exception as e:
-                log.error("Skill bridge exception: %s", e)
-                self.reply_json({"ok": False, "error": str(e)[:500]})
+            result = dispatch_agent(message, "openclaw", model=agent_id, timeout=timeout_s)
+            self.reply_json(result, 200 if result.get("ok") else 500)
 
         elif parsed.path == "/api/prompt":
             if not self.auth_check(redirect=False): return
@@ -16746,7 +16872,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.20.0 ready (localhost only)")
+    print(f"\n  Porter v0.20.1 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
