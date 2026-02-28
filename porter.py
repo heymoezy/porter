@@ -2551,6 +2551,16 @@ select.settings-input { padding-right: 26px; }
 }
 .loc-edit-btn:hover { opacity:1; color:var(--accent); }
 .loc-card-info { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text2); flex-wrap:wrap; }
+.loc-card-ips { display:flex; flex-direction:column; gap:3px; margin-top:2px; }
+.loc-ip-row { display:flex; align-items:center; gap:5px; font-size:11px; font-family:monospace; color:var(--text2); }
+.loc-ip-label { font-family:var(--font); font-size:10px; color:var(--text3); min-width:44px; }
+.loc-ip-copy {
+  background:none; border:none; cursor:pointer; padding:1px 3px; color:var(--text3);
+  opacity:.3; transition:opacity .15s; display:inline-flex; align-items:center; font-size:11px;
+  border-radius:3px;
+}
+.loc-ip-copy:hover { opacity:1; color:var(--accent); background:var(--hover); }
+.loc-ip-copy.copied { opacity:1; color:var(--ok,#22c55e); }
 .loc-card-mounts { font-size:11px; color:var(--text3); }
 .loc-badge {
   display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px;
@@ -5597,6 +5607,7 @@ function renderNodes(nodes) {
         const statusDot   = nodeStatus === 'online' ? 'var(--ok,#22c55e)' : (nodeStatus === 'relay' ? 'var(--warn,#f59e0b)' : 'var(--text3)');
         const os = isSelf ? (selfTs && selfTs.os ? selfTs.os : 'linux') : (peer && peer.os ? peer.os : '—');
         const ip = isSelf ? (selfTs && selfTs.ip ? selfTs.ip : (node.tailscale_ip || '—')) : ((peer && peer.ip) || node.tailscale_ip || '—');
+        const publicIp = isSelf ? (selfTs && selfTs.public_ip ? selfTs.public_ip : '') : (node.ssh && node.ssh.host ? node.ssh.host : '');
         const action = nickname ? 'Edit nickname' : 'Set nickname';
         const pepEntry = _pepAgentForNode(node);
         const pepAgent = pepEntry && pepEntry.pep_agent;
@@ -5626,14 +5637,25 @@ function renderNodes(nodes) {
             </div>
             <div class="loc-card-info">
               <span>${escHtml(String(os))}</span>
-              <span style="color:var(--border2)">·</span>
-              <span style="font-family:monospace;font-size:11px">${escHtml(String(ip))}</span>
               ${pepBadge}${_locCbBadge}
+            </div>
+            <div class="loc-card-ips">
+              ${ip && ip !== '—' ? `<div class="loc-ip-row"><span class="loc-ip-label">tailscale</span><span>${escHtml(ip)}</span><button class="loc-ip-copy" onclick="copyIp(this,'${escHtml(ip)}')" title="Copy">&#x2398;</button></div>` : ''}
+              ${publicIp ? `<div class="loc-ip-row"><span class="loc-ip-label">public</span><span>${escHtml(publicIp)}</span><button class="loc-ip-copy" onclick="copyIp(this,'${escHtml(publicIp)}')" title="Copy">&#x2398;</button></div>` : ''}
+              ${!ip || ip === '—' && !publicIp ? `<div class="loc-ip-row" style="color:var(--text3)">No IP data</div>` : ''}
             </div>
             ${mountCount ? `<div class="loc-card-mounts">${mountCount} mount${mountCount !== 1 ? 's' : ''}</div>` : ''}
           </div>`;
       }).join('')}
     </div>`;
+}
+
+function copyIp(btn, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    btn.classList.add('copied');
+    btn.textContent = '\u2713';
+    setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = '\u2398'; }, 1500);
+  }).catch(() => {});
 }
 
 async function promptDeviceNickname(nodeId, type, isVirtual, hostname, tailscaleIp, canonicalName, currentNickname) {

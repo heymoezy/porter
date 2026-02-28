@@ -1,7 +1,34 @@
 # Porter Sprint Plan
-Date: 2026-02-27
+Date: 2026-02-28
 Status: Active — single source of truth for implementation sequencing
 Governed by: CLAUDE_SLOW_ROLLOUT_MASTER_INSTRUCTIONS.md + MASTER_EXECUTION_PLAN.md
+
+---
+
+## Architecture — Porter's Role
+
+**Porter is the UI and state layer. OpenClaw is the execution engine.**
+
+Porter does NOT rebuild what OpenClaw already provides:
+- Model routing → OpenClaw
+- Task dispatch → OpenClaw (`gog` orchestrator, `sag` task runner, `coding-agent`)
+- Skill registry → OpenClaw (`clawhub`, 50+ installed skills)
+- Scheduling/cron → OpenClaw (`~/.openclaw/cron/jobs.json`)
+- External integrations → OpenClaw (Gmail hooks, Slack, Discord, Notion skills)
+
+Porter provides what OpenClaw lacks:
+- **Web UI / dashboard** — visual layer over all operations
+- **File management** — browse, upload, delete across devices
+- **Project state visualization** — .md file chain, sprint tracking, memory viewer
+- **Configuration UI** — centralized settings across agents and services
+- **Network/location management** — device discovery (Tailscale, SSH, VPN — transport-agnostic)
+- **Onboarding wizard** — guided first-run setup for new users
+- **Operational visibility** — see what's happening across all agents in one place
+
+### Minimum requirements
+- **OpenClaw** — execution engine (gateway must be reachable)
+- **At least one model** — registered through OpenClaw (Claude, Codex, Gemini, Ollama, etc.)
+- **Tailscale is NOT required** — it's one transport option among many (SSH, WireGuard, ZeroTier, direct)
 
 ---
 
@@ -14,7 +41,7 @@ Governed by: CLAUDE_SLOW_ROLLOUT_MASTER_INSTRUCTIONS.md + MASTER_EXECUTION_PLAN.
 5. porter.py is >512KB — Edit tool silently fails. Always use Python scripts to patch.
 6. **Porter is environment-agnostic.** No hardcoded paths, hosts, ports, or machine assumptions.
 7. **Capability-gated features.** Any feature requiring an external tool must check availability and degrade gracefully.
-8. **Porter is the task broker.** All task state lives in Porter, not in agent session memory. Agents are stateless workers; Porter is the source of truth.
+8. **Don't rebuild OpenClaw.** If OpenClaw already does it, Porter reads from OpenClaw and displays it. Porter is the glass, not the engine.
 
 ---
 
@@ -141,36 +168,33 @@ Also fixed: Escape key scope, Agents nav slot, Command Center placeholder, versi
 
 ---
 
-## Sprint 6 — NEXT: Usage data pipeline for orchestration
+## Sprint 6 — NEXT: Usage dashboard (read from OpenClaw)
 
-**Goal:** Show real usage availability for each model/agent on the Orchestration screen. Currently the usage bars exist but have no data — usage snapshots must be captured automatically.
+**Goal:** Show real usage data on Orchestration cards by reading OpenClaw's existing usage snapshots — not building our own collection pipeline.
 
 **Scope (small + focused):**
 
-1. Auto-capture usage on agent load: when Porter loads agents on startup or refresh, query each agent's usage endpoint and store a snapshot.
-2. For Claude: parse the usage data from the API dashboard format (% consumed, reset window).
-3. For OpenClaw/Codex: parse usage from the openclaw gateway status endpoint.
-4. For Gemini CLI: parse from gemini CLI status if available, otherwise badge "no data".
-5. Store snapshots to `runtime/usage/<agent_id>.json` with timestamp.
-6. Orchestration cards: usage bars populate from latest snapshot on render. Show "No usage data" gracefully when unavailable.
-7. Model preference configuration: add a "Preferred model for coding" dropdown in Settings → Orchestration. Default empty (no preference). This is the first step toward user-configurable model routing.
+1. **Read OpenClaw usage data:** Query OpenClaw gateway status endpoint for each registered agent. Parse usage % and reset window from response.
+2. **Cache locally:** Store latest snapshot to `runtime/usage/<agent_id>.json` with timestamp. Refresh on page load, not continuously.
+3. **Populate Orchestration cards:** Usage bars on agent and model cards render from cached snapshots. Show "No usage data" gracefully when unavailable.
+4. **For non-OpenClaw agents** (Claude direct, Gemini CLI): badge "Manual check" with link to provider dashboard. Don't scrape external dashboards.
+5. **Model preference setting:** Add "Preferred model" dropdown in Settings → Orchestration. Stored in porter_config.json. This is informational for now — actual routing is OpenClaw's job.
 
 **Version:** v0.14.17
 
-**Acceptance:** Orchestration tab shows real usage percentages for at least one agent. Model preference setting exists in config.
+**Acceptance:** Orchestration tab shows real usage percentages for OpenClaw-connected agents. Non-OpenClaw agents show honest "manual check" badge.
 
 ---
 
-## Sprint 7 — Projects: memory visualization + task/skill distinction
+## Sprint 7 — Projects: memory visualization
 
-**Goal:** Make the project knowledge system visible and distinguish between manual projects and autonomous tasks.
+**Goal:** Make the project knowledge system visible. Show users how Porter tracks project state through .md files.
 
 **Scope:**
 
-1. **Memory file viewer:** In each project card, show the .md file chain that captures project state: `SPRINT_PLAN.md`, `checkpoint.md`, `MEMORY.md`, `lessons.md`. Visual indicator showing which files exist, last modified, size.
-2. **Projects vs autonomous tasks:** Add a `type` field to projects: `manual` (user-driven, sprint-based) or `autonomous` (agent-driven, runs by itself). Different visual treatment — manual projects show sprint progress, autonomous tasks show run history.
-3. **Task ↔ skill correlation:** Surface the relationship between registered tasks and agent skills/capabilities. When a task maps to a known skill, badge it.
-4. **Config exposure:** Any project config currently hardcoded in .md files should be editable through the Projects UI — no more "edit the markdown file manually."
+1. **Memory file viewer:** In each project card, show the .md file chain: `SPRINT_PLAN.md`, `checkpoint.md`, `MEMORY.md`, `lessons.md`. Visual indicator: exists/missing, last modified, size.
+2. **Projects vs autonomous tasks:** Add `type` field: `manual` (user-driven, sprint-based) or `autonomous` (agent-driven). Different visual treatment — manual shows sprint progress, autonomous shows run history.
+3. **Config exposure:** Project config currently hardcoded in .md files should be editable through the Projects UI.
 
 **Version:** v0.14.18
 
@@ -178,20 +202,20 @@ Also fixed: Escape key scope, Agents nav slot, Command Center placeholder, versi
 
 ---
 
-## Sprint 8 — Integrations: email + external service connectors
+## Sprint 8 — Integration visibility (read from OpenClaw)
 
-**Goal:** Expose external service connections (like email read access) in the Porter UI and make them configurable per user.
+**Goal:** Surface what external services OpenClaw already connects to. Porter displays — OpenClaw owns the connections.
 
 **Scope:**
 
-1. **Integrations section** in Settings or as a sub-panel: list connected external services (email, calendar, etc.).
-2. **Email connector config:** Store email access credentials/tokens in porter_config.json under `integrations.email`. Show connection status.
-3. **OpenClaw email bridge:** Surface the existing read-only email access that OpenClaw has. Show it as a connected integration with scope (read-only) and account identifier.
-4. **Integration cards on Orchestration:** Optional — show connected integrations as a fourth section below Models, or as badges on the agent that has access.
+1. **Integrations panel** in Settings: list OpenClaw's connected services by reading its skill registry and config.
+2. **Per-agent capabilities:** Show which skills/integrations each agent has access to (email read-only, GitHub, Slack, etc.) with scope labels.
+3. **Connection status:** Green/red indicator per integration, sourced from OpenClaw's capability checks.
+4. **No connector building.** Porter does not create or manage OAuth tokens, webhooks, or API keys for external services. That's OpenClaw's domain.
 
 **Version:** v0.14.19
 
-**Acceptance:** Email integration visible in Settings with connection status. User can see what external access each agent has.
+**Acceptance:** Settings shows OpenClaw's connected integrations with status. User can see what external access each agent has.
 
 ---
 
@@ -206,7 +230,8 @@ Also fixed: Escape key scope, Agents nav slot, Command Center placeholder, versi
 3. `CONFIG_PATH`, `RUNTIME_DIR`, `AVATAR_DIR`, `MEMORY_DIR` → derive from `PORTER_DATA_DIR` or XDG defaults.
 4. `HOST` → auto-detect or configure, never hardcode a specific IP.
 5. All agent workspace paths → optional/detected, not assumed.
-6. Test: fresh install simulation — rename config, start Porter, verify first-run wizard works.
+6. Tailscale references → abstracted to "network transport" with Tailscale as one detected option.
+7. Test: fresh install simulation — rename config, start Porter, verify first-run wizard works.
 
 **Version:** v0.14.20
 
@@ -214,71 +239,62 @@ Also fixed: Escape key scope, Agents nav slot, Command Center placeholder, versi
 
 ---
 
-## Sprint 10 — Task registry backend
+## Sprint 10 — OpenClaw bridge: task & skill visibility
 
-**Goal:** Persistent cross-session task state. Porter is the source of truth, not agent memory.
+**Goal:** Read OpenClaw's task state, cron jobs, and skill registry. Display in Porter UI. Don't duplicate the backend.
 
 **Scope:**
 
-1. Task model: `{ id, title, description, status, priority, project_id, tags[], assigned_agent_id, created_by, created_at, updated_at, result }`.
-2. Status lifecycle: `pending → assigned → in_progress → complete | failed | cancelled`.
-3. Persist to `runtime/tasks/<id>.json`. Load on startup.
-4. `GET /api/tasks` with filters. `POST /api/tasks` with CRUD actions.
-5. Wire into Projects UI — tasks appear under their project.
+1. **Skill browser:** Read OpenClaw's installed skills (from skill directories). Display as browsable list in Porter with name, description, required capabilities.
+2. **Task/cron viewer:** Read `~/.openclaw/cron/jobs.json`. Display scheduled jobs with last run, next run, status.
+3. **Skill ↔ project correlation:** When a project's tasks map to known OpenClaw skills, badge them.
+4. **API bridge:** `GET /api/openclaw/skills`, `GET /api/openclaw/cron` — thin read-only proxies to OpenClaw state.
 
 **Version:** v0.15.0
 
-**Acceptance:** Tasks persist across Porter restarts. API is functional.
+**Acceptance:** Porter shows OpenClaw's skills and cron jobs. No duplicate task engine.
 
 ---
 
-## Sprint 11 — Task routing + dispatch
-
-**Goal:** Porter routes tasks to the best available agent automatically.
-
-**Scope:**
-
-1. Routing logic: match task tags to agent capabilities, prefer online + least loaded.
-2. Agent work queue: agents poll for assigned tasks, claim atomically.
-3. Cross-client intake: PEP/1 agents can submit tasks without browser session.
-4. Dispatch: push tasks to online agents, fallback to queue if no ack.
-
-**Version:** v0.15.1
-
-**Acceptance:** Submit task → Porter routes → agent claims → result visible.
-
----
-
-## Sprint 12 — Real agent connectivity test
+## Sprint 11 — Real agent connectivity test
 
 **Goal:** Replace heartbeat inference with true roundtrip ping.
 
 **Scope:**
 
-1. Challenge-response: hub sends token, agent reflects, hub measures latency.
+1. Challenge-response: Porter sends token to agent endpoint, agent reflects, Porter measures latency.
 2. Modal shows: latency ms, success/failure, agent version.
 3. Remove "preview" qualifier from connectivity check.
 
-**Version:** v0.15.2
+**Version:** v0.15.1
 
 **Acceptance:** Connectivity check reflects real agent response.
 
 ---
 
-## Sprint 13 — Working scheduler
+## Sprint 12 — Onboarding wizard (FINAL)
 
-**Goal:** Scheduled jobs actually execute and create tasks in the registry.
+**Goal:** Full guided setup experience. New users configure Porter completely before entering the app. Includes tutorial.
 
 **Scope:**
 
-1. Cron expression parser (stdlib only).
-2. Job execution: create task or call agent directly.
-3. Run history persisted. UI: last run, next run, history log.
-4. Remove PREVIEW badge.
+1. **Setup tab** — appears above Command Center in nav. Cannot be dismissed until complete.
+2. **Step-by-step flow:**
+   - Welcome / what Porter is
+   - OpenClaw connection (gateway URL + auth token — validate before proceeding)
+   - Model registration (at least one model must be configured)
+   - Data directory selection (where Porter stores files)
+   - First mount (add at least one file location)
+   - Network transport (Tailscale / SSH / none — optional)
+   - Capability scan (show what's detected, install hints for missing)
+   - Operator password
+3. **Tutorial overlay:** Each tab gets a first-visit tooltip explaining what it does. Dismissible, one-time.
+4. **Completion gate:** Setup tab shows green checkmarks per step. All required steps must pass before app unlocks.
+5. **Re-enterable:** Settings → "Re-run setup wizard" for reconfiguration.
 
 **Version:** v0.16.0
 
-**Acceptance:** Scheduled job fires, creates task, result visible.
+**Acceptance:** Fresh Porter install → user completes wizard → app unlocks with working config. No manual JSON editing required.
 
 ---
 
@@ -294,12 +310,10 @@ Splitting porter.py into modules after all features are stable. One module per s
 
 2. **ymc.capital/ inside porter/**: Should be sibling directory. Not moving without user confirmation.
 
-3. **Session memory flush**: Agent updates task status + flushes context to MEMORY.md on session end. Design after task registry ships.
+3. **v0.12.85 changelog dedup**: 6 entries all labeled v0.12.85. Cosmetic fix.
 
-4. **v0.12.85 changelog dedup**: 6 entries all labeled v0.12.85. Cosmetic fix.
+4. **Local model detection**: Ollama models should appear in Orchestration as callable models (not just as an Extension). Requires model registry that combines agent-linked models + locally detected models.
 
-5. **Local model detection**: Ollama models should appear in Orchestration as callable models (not just as an Extension). Requires model registry that combines agent-linked models + locally detected models.
+5. **Direct model calling**: Models not linked to an agent should be callable directly from Porter. Requires a lightweight inference proxy or CLI wrapper. May be handled by OpenClaw bridge.
 
-6. **Direct model calling**: Models not linked to an agent should be callable directly from Porter. Requires a lightweight inference proxy or CLI wrapper.
-
-7. **checkpoint.md deprecation**: Once task registry is live, migrate in_progress checkpoints to tasks on first boot.
+6. **checkpoint.md deprecation**: Once OpenClaw bridge surfaces task state, migrate in_progress checkpoints on first boot.
