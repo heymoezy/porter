@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.20.1 — self-hosted file manager"""
+"""Porter v0.21.0 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -3640,6 +3640,62 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   font-size:10px; color:var(--text3); margin-top:8px; padding-top:6px;
   border-top:1px solid var(--border); display:flex; gap:12px;
 }
+
+/* ── Chat v0.21.0 upgrade ───────────────────────────────────────────────── */
+.chat-msg h1,.chat-msg h2,.chat-msg h3 { margin:8px 0 4px; font-weight:700; }
+.chat-msg h1 { font-size:16px; } .chat-msg h2 { font-size:14px; } .chat-msg h3 { font-size:13px; }
+.chat-msg ul,.chat-msg ol { margin:4px 0 4px 18px; padding:0; }
+.chat-msg li { margin:2px 0; font-size:13px; }
+.chat-msg hr { border:none; border-top:1px solid var(--border); margin:8px 0; }
+.chat-msg a { color:var(--accent); text-decoration:underline; }
+.chat-msg b,.chat-msg strong { font-weight:600; }
+.chat-msg code:not(pre code) {
+  background:var(--bg2); padding:1px 5px; border-radius:4px; font-size:12px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+.chat-msg pre { position:relative; margin:6px 0; }
+.chat-msg pre code {
+  display:block; padding:12px 14px; background:var(--bg1); border:1px solid var(--border);
+  border-radius:8px; font-size:12px; line-height:1.5; overflow-x:auto; white-space:pre;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--text);
+}
+.chat-code-copy {
+  position:absolute; top:6px; right:6px; padding:3px 8px; font-size:10px;
+  background:var(--surface2); border:1px solid var(--border); border-radius:4px;
+  color:var(--text3); cursor:pointer; opacity:0; transition:opacity .15s;
+}
+.chat-msg pre:hover .chat-code-copy { opacity:1; }
+.chat-code-copy:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
+.chat-code-copy.copied { background:var(--accent); color:#fff; }
+.chat-thinking {
+  align-self:flex-start; display:flex; gap:4px; padding:12px 16px; align-items:center;
+}
+.chat-thinking-dot {
+  width:6px; height:6px; border-radius:50%; background:var(--text3);
+  animation: chat-think 1.4s ease-in-out infinite;
+}
+.chat-thinking-dot:nth-child(2) { animation-delay:.2s; }
+.chat-thinking-dot:nth-child(3) { animation-delay:.4s; }
+@keyframes chat-think {
+  0%,80%,100% { opacity:.3; transform:scale(.8); }
+  40% { opacity:1; transform:scale(1.1); }
+}
+.chat-stop-btn {
+  display:none; padding:4px 14px; font-size:11px; border-radius:6px;
+  border:1px solid var(--danger,#dc3545); background:none; color:var(--danger,#dc3545);
+  cursor:pointer; transition:.15s; margin-left:auto;
+}
+.chat-stop-btn.active { display:inline-block; }
+.chat-stop-btn:hover { background:var(--danger,#dc3545); color:#fff; }
+.chat-msg-badge {
+  font-size:10px; color:var(--text3); margin-top:4px; display:flex; align-items:center; gap:6px;
+}
+.chat-msg-badge .badge-dot {
+  width:5px; height:5px; border-radius:50%; display:inline-block;
+}
+.chat-msg.assistant { white-space:normal; }
+.chat-msg p { margin:2px 0; }
+
 .chat-msg.skill-pending {
   align-self:center; color:var(--text3); font-size:12px;
   font-style:italic; padding:8px 0;
@@ -4509,7 +4565,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.20.1</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.21.0</div>
   </div>
 </aside>
 
@@ -4607,6 +4663,7 @@ select.settings-input { padding-right: 26px; }
           <div id="chat-file-picker" class="chat-file-picker" style="display:none"></div>
           <button class="chat-attach-btn" onclick="toggleChatFilePicker()" title="Attach file as context">&#128206;</button>
           <textarea id="chat-input" class="chat-input" placeholder="Type a message&#8230;" rows="1" onkeydown="chatInputKey(event)" oninput="chatAutoResize(this)"></textarea>
+          <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
           <button id="chat-send-btn" class="chat-send" onclick="chatSend()" disabled>Send</button>
         </div>
       </div>
@@ -5548,6 +5605,16 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.21.0', date:'2026-02-28', notes:[
+    'New: Markdown rendering in chat — code blocks, bold, italic, headers, lists',
+    'New: Copy button on every code block',
+    'New: Thinking indicator with animated dots while waiting for response',
+    'New: Stop button to cancel streaming mid-response',
+    'New: Multi-turn context — full conversation history sent to backend',
+    'New: Model badge on each assistant message showing which model responded',
+    'Perf: Only update last message during streaming (no full DOM rebuild)',
+    'UX: Escape key cancels streaming, chat hints updated',
+  ]},
   { ver:'v0.20.1', date:'2026-02-28', notes:[
     'New: Agnostic Agent Bridge — one endpoint routes to any model backend',
     'New: POST /api/agent/invoke — unified dispatch to OpenClaw, Gemini, Ollama',
@@ -8310,6 +8377,89 @@ function switchSettingsTab(tab) {
 }
 
 
+
+// ── Markdown renderer (inline, no deps) ──────────────────────────────────
+function _renderMarkdown(md) {
+  if (!md) return '';
+  var blocks = [];
+  var idx = 0;
+  md = md.replace(/```(\w*)\n([\s\S]*?)\n```/g, function(_, lang, c) {
+    var i = idx++;
+    var esc = c.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    blocks.push('<pre><code class="language-' + (lang||'text') + '">' + esc + '</code>' +
+      '<button class="chat-code-copy" onclick="_copyCodeBlock(this)">Copy</button></pre>');
+    return '%%CB_' + i + '%%';
+  });
+  md = md.replace(/`([^`]+)`/g, function(_, c) {
+    var i = idx++;
+    blocks.push('<code>' + c.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</code>');
+    return '%%CB_' + i + '%%';
+  });
+  var lines = md.split('\n');
+  var html = [], inList = false, lt = '';
+  for (var li = 0; li < lines.length; li++) {
+    var line = lines[li];
+    if (/^### /.test(line)) { if (inList){html.push('</'+lt+'>');inList=false;} html.push('<h3>'+_inlineMd(line.slice(4))+'</h3>'); continue; }
+    if (/^## /.test(line)) { if (inList){html.push('</'+lt+'>');inList=false;} html.push('<h2>'+_inlineMd(line.slice(3))+'</h2>'); continue; }
+    if (/^# /.test(line)) { if (inList){html.push('</'+lt+'>');inList=false;} html.push('<h1>'+_inlineMd(line.slice(2))+'</h1>'); continue; }
+    if (/^---+$/.test(line.trim())) { if (inList){html.push('</'+lt+'>');inList=false;} html.push('<hr>'); continue; }
+    if (/^\s*[-*]\s+/.test(line)) {
+      if (!inList||lt!=='ul'){if(inList)html.push('</'+lt+'>');html.push('<ul>');inList=true;lt='ul';}
+      html.push('<li>'+_inlineMd(line.replace(/^\s*[-*]\s+/,''))+'</li>'); continue;
+    }
+    if (/^\s*\d+\.\s+/.test(line)) {
+      if (!inList||lt!=='ol'){if(inList)html.push('</'+lt+'>');html.push('<ol>');inList=true;lt='ol';}
+      html.push('<li>'+_inlineMd(line.replace(/^\s*\d+\.\s+/,''))+'</li>'); continue;
+    }
+    if (inList && line.trim()===''){html.push('</'+lt+'>');inList=false;continue;}
+    if (inList){html.push('</'+lt+'>');inList=false;}
+    if (line.trim()==='') html.push('<br>'); else html.push('<p>'+_inlineMd(line)+'</p>');
+  }
+  if (inList) html.push('</'+lt+'>');
+  var result = html.join('\n');
+  for (var j = 0; j < blocks.length; j++) result = result.replace('%%CB_'+j+'%%', blocks[j]);
+  return result;
+}
+function _inlineMd(s) {
+  s = s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  s = s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  s = s.replace(/\*(.+?)\*/g, '<i>$1</i>');
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return s;
+}
+function _copyCodeBlock(btn) {
+  var code = btn.parentElement.querySelector('code');
+  if (!code) return;
+  navigator.clipboard.writeText(code.textContent).then(function() {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+function _modelBadge(m) {
+  if (!m.model) return '';
+  var colors = { 'openclaw':'#10b981', 'gemini':'#4285f4', 'ollama':'#f59e0b', 'gpt':'#10b981', 'codex':'#10b981' };
+  var c = '#888', name = m.model;
+  for (var k in colors) { if (name.toLowerCase().indexOf(k) >= 0) { c = colors[k]; break; } }
+  return '<div class="chat-msg-badge"><span class="badge-dot" style="background:'+c+'"></span>'+escHtml(name)+'</div>';
+}
+function _updateStopBtn(active) {
+  var btn = document.getElementById('chat-stop-btn');
+  if (btn) btn.classList.toggle('active', active);
+}
+function chatStop() {
+  if (_chatEventSource) { _chatEventSource.close(); _chatEventSource = null; }
+  _chatStreaming = false;
+  var thinkEl = document.getElementById('chat-thinking');
+  if (thinkEl) thinkEl.remove();
+  if (_chatMessages.length > 0) {
+    var last = _chatMessages[_chatMessages.length - 1];
+    if (last.role === 'assistant' && !last.content.trim()) last.content = '*(stopped)*';
+  }
+  _updateStopBtn(false);
+  renderChatMessages();
+}
+
 // ── Skill Bridge ──────────────────────────────────────────────────────────
 
 async function invokeAgent(message, backend) {
@@ -8495,19 +8645,18 @@ async function populateChatModels() {
     }
   } catch(e) {}
 
-  // Add Gemini CLI (auto-detected)
-  const gemBin = await fetch('/api/agent/invoke', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({message: 'hi', backend: 'gemini', timeout: 5})
-  }).then(function(r) { return r.json(); }).catch(function() { return null; });
-  const geminiUp = gemBin && !String(gemBin.error || '').includes('not found');
-  if (geminiUp) {
-    const gopt = document.createElement('option');
-    gopt.value = 'gemini-cli-auto';
-    gopt.textContent = 'Gemini (Google)';
-    sel.appendChild(gopt);
-  }
+  // Add Gemini CLI (detected via health endpoint — no live prompt)
+  try {
+    var geminiUp = resp && resp.services && resp.services.some(function(s) {
+      return s.name === 'Gemini CLI' && s.status === 'up';
+    });
+    if (geminiUp) {
+      var gopt = document.createElement('option');
+      gopt.value = 'gemini-cli-auto';
+      gopt.textContent = 'Gemini (Google)';
+      sel.appendChild(gopt);
+    }
+  } catch(ge) {}
 
   // Add OpenClaw as fallback if not already added (show even if down)
   if (!openclawUp) {
@@ -8546,23 +8695,37 @@ function chatNewConversation() {
   if (input) { input.value = ''; input.focus(); }
 }
 
-function renderChatMessages() {
-  const el = document.getElementById('chat-messages');
+function renderChatMessages(streamUpdate) {
+  var el = document.getElementById('chat-messages');
   if (!el) return;
   if (!_chatMessages.length) {
     el.innerHTML = '<div class="chat-empty">'
       + '<div class="chat-empty-icon">&#9889;</div>'
-      + '<div class="chat-empty-title">Talk to your AI models</div>'
-      + '<div class="chat-empty-hint">Select a model above, type a message below. Responses stream in real-time. Conversations are saved automatically.</div>'
+      + '<div class="chat-empty-title">Chat</div>'
+      + '<div class="chat-empty-hint">Ask anything. Use /commands for skills, @gemini or @ollama to target a model.</div>'
       + '</div>';
+    _updateStopBtn(false);
     return;
   }
+  // Streaming optimization: only update last message
+  if (streamUpdate && _chatStreaming) {
+    var last = el.lastElementChild;
+    if (last && last.classList.contains('assistant')) {
+      var m = _chatMessages[_chatMessages.length - 1];
+      last.innerHTML = _renderMarkdown(m.content) + _modelBadge(m);
+      el.scrollTop = el.scrollHeight;
+      return;
+    }
+  }
   el.innerHTML = _chatMessages.map(function(m, i) {
-    const cls = m.role === 'user' ? 'user' : (m.role === 'error' ? 'error' : (m.role === 'skill' ? 'skill' : (m.role === 'skill-pending' ? 'skill-pending' : 'assistant')));
-    const streaming = (i === _chatMessages.length - 1 && _chatStreaming && m.role === 'assistant') ? ' streaming' : '';
-    return '<div class="chat-msg ' + cls + streaming + '">' + escHtml(m.content) + '</div>';
+    var cls = m.role === 'user' ? 'user' : (m.role === 'error' ? 'error' : (m.role === 'skill' ? 'skill' : (m.role === 'skill-pending' ? 'skill-pending' : 'assistant')));
+    var streaming = (i === _chatMessages.length - 1 && _chatStreaming && m.role === 'assistant') ? ' streaming' : '';
+    var content = m.role === 'user' ? escHtml(m.content) : _renderMarkdown(m.content);
+    var badge = (m.role === 'assistant' || m.role === 'skill') ? _modelBadge(m) : '';
+    return '<div class="chat-msg ' + cls + streaming + '">' + content + badge + '</div>';
   }).join('');
   el.scrollTop = el.scrollHeight;
+  _updateStopBtn(_chatStreaming);
 }
 
 function chatAutoResize(el) {
@@ -8613,8 +8776,17 @@ function chatSend() {
     _chatId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
   }
 
-  // Build prompt with route context + attached files
-  let fullPrompt = text;
+  // Build prompt with conversation history + route context + attached files
+  let fullPrompt = '';
+  // Multi-turn: include recent conversation history
+  var histMsgs = _chatMessages.filter(function(m) { return m.role === 'user' || m.role === 'assistant'; });
+  if (histMsgs.length > 0) {
+    var recent = histMsgs.slice(-10);
+    fullPrompt = 'Conversation history:\n' + recent.map(function(m) {
+      return (m.role === 'user' ? 'User: ' : 'Assistant: ') + m.content.slice(0, 2000);
+    }).join('\n\n') + '\n\nNew message:\n';
+  }
+  fullPrompt += text;
   if (_chatRouteContext) {
     fullPrompt = _chatRouteContext + '\n\n' + fullPrompt;
   }
@@ -8632,10 +8804,14 @@ function chatSend() {
   input.style.height = 'auto';
   renderChatMessages();
 
-  // Start streaming
+  // Start streaming — show thinking indicator
   _chatStreaming = true;
-  _chatMessages.push({ role: 'assistant', content: '' });
-  renderChatMessages();
+  var thinkHtml = '<div class="chat-thinking" id="chat-thinking">' +
+    '<div class="chat-thinking-dot"></div><div class="chat-thinking-dot"></div><div class="chat-thinking-dot"></div></div>';
+  var msgEl = document.getElementById('chat-messages');
+  if (msgEl) { msgEl.insertAdjacentHTML('beforeend', thinkHtml); msgEl.scrollTop = msgEl.scrollHeight; }
+  _chatMessages.push({ role: 'assistant', content: '', model: modelId });
+  _updateStopBtn(true);
 
   const url = '/api/chat/stream?model=' + encodeURIComponent(modelId)
     + '&prompt=' + encodeURIComponent(fullPrompt)
@@ -8647,6 +8823,8 @@ function chatSend() {
   const assistantIdx = _chatMessages.length - 1;
 
   evtSource.onmessage = function(e) {
+    var thinkEl = document.getElementById('chat-thinking');
+    if (thinkEl) thinkEl.remove();
     try {
       const data = JSON.parse(e.data);
       if (data.error) {
@@ -8658,6 +8836,7 @@ function chatSend() {
         return;
       }
       if (data.done) {
+              if (!_chatMessages[assistantIdx].model) _chatMessages[assistantIdx].model = modelId;
         _chatStreaming = false;
         evtSource.close();
         renderChatMessages();
@@ -13497,13 +13676,14 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.20.1"
+                health["porter_version"] = "0.21.0"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
                 log.debug("Porter info: %s", e)
 
             # Service checks
+            import urllib.request as _ur
             services = []
 
             # Porter service
@@ -13515,7 +13695,8 @@ class Handler(BaseHTTPRequestHandler):
                 resp = _ur.urlopen(req, timeout=3)
                 data_o = json.loads(resp.read())
                 model_count = len(data_o.get("models", []))
-                services.append({"name": "Ollama", "status": "up", "detail": f"{model_count} model{'s' if model_count != 1 else ''} loaded"})
+                model_names = [m.get("name","") for m in data_o.get("models", [])[:3]]
+                services.append({"name": "Ollama", "status": "up", "detail": f"{model_count} model{'s' if model_count != 1 else ''}: {', '.join(model_names)}"})
             except Exception as e:
                 services.append({"name": "Ollama", "status": "down", "detail": str(e)[:60]})
 
@@ -13533,6 +13714,30 @@ class Handler(BaseHTTPRequestHandler):
                 services.append({"name": "OpenClaw Gateway", "status": "up", "detail": f"Port {oc_port}"})
             except Exception as e:
                 services.append({"name": "OpenClaw Gateway", "status": "down", "detail": str(e)[:60]})
+
+            # Auto-sense CLIs — detect any available CLI tools
+            cli_checks = [
+                ("Gemini CLI", "gemini", "npm i -g @google/gemini-cli"),
+                ("OpenClaw CLI", "openclaw", "npm i -g @anthropic-ai/openclaw"),
+                ("Claude CLI", "claude", "npm i -g @anthropic-ai/claude-code"),
+                ("GitHub CLI", "gh", "apt install gh"),
+                ("Docker", "docker", "apt install docker.io"),
+                ("Node.js", "node", "apt install nodejs"),
+                ("Python", "python3", "apt install python3"),
+            ]
+            for name, binary, install_hint in cli_checks:
+                found = _resolve_cli(binary)
+                if found:
+                    # Get version if possible
+                    try:
+                        import subprocess as _sp
+                        ver = _sp.run([found, "--version"], capture_output=True, text=True, timeout=5)
+                        version = ver.stdout.strip().split("\n")[0][:40] if ver.returncode == 0 else ""
+                    except Exception:
+                        version = ""
+                    services.append({"name": name, "status": "up", "detail": version or found})
+                else:
+                    services.append({"name": name, "status": "down", "detail": f"Install: {install_hint}"})
 
             # SQLite DB
             try:
@@ -16872,7 +17077,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.20.1 ready (localhost only)")
+    print(f"\n  Porter v0.21.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
