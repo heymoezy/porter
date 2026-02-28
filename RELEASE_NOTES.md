@@ -1,5 +1,146 @@
 # Porter Release Notes
 
+## v0.21.1 (2026-02-28)
+
+**Public Landing Page**
+
+- Unauthenticated visitors see a consumer-facing marketing page instead of login redirect
+- Modern dark design: hero, feature grid (6 cards), architecture diagram, stats section
+- SEO meta tags for discoverability
+- Authenticated users see the full app as before
+
+---
+
+## v0.21.0 (2026-02-28)
+
+**Chat Experience Upgrade — CLI Feel**
+
+- **Markdown rendering:** Code blocks with syntax-aware styling, bold, italic, headers, lists, links
+- **Copy button** on every code block (hover to reveal, click to clipboard)
+- **Thinking indicator:** Animated dots while waiting for model response
+- **Stop button:** Cancel streaming mid-response (also Escape key)
+- **Multi-turn context:** Conversation history sent to backend (last 5 exchanges)
+- **Model badge:** Each assistant message shows which model responded (color-coded)
+- **Performance:** Only updates last message during streaming (no full DOM rebuild per token)
+- **CLI auto-sensing:** Health endpoint detects Gemini CLI, OpenClaw CLI, Claude CLI, GitHub CLI, Docker, Node.js, Python — with version numbers
+- **Fixed:** `_ur` undefined error in service health checks
+
+---
+
+## v0.20.1 (2026-02-28)
+
+**Agnostic Agent Bridge**
+
+- **`POST /api/agent/invoke`:** One endpoint, many backends. Send `{message, backend: "openclaw|gemini|ollama"}`
+- **Unified dispatcher:** `AGENT_DISPATCHERS` dict maps backend name → Python function. Adding new backends = adding one function
+- **Gemini CLI bridge:** `gemini -p "..." -o json -y` returns structured JSON (response, stats, tokens)
+- **Ollama bridge:** HTTP API to `127.0.0.1:11434/api/generate` with non-streaming mode
+- **@backend prefix:** Type `@gemini`, `@openclaw`, or `@ollama` in chat to target a specific model
+- **Legacy compat:** `/api/skill/invoke` now routes through the same dispatcher
+- **Normalized response:** All backends return `{ok, text, backend, model, duration_ms, tokens}`
+
+---
+
+## v0.20.0 (2026-02-28)
+
+**OpenClaw Skill Bridge**
+
+- **`POST /api/skill/invoke`:** Invokes OpenClaw agent via subprocess (`openclaw agent --agent main --message "..." --json`)
+- **Chat /commands:** Type `/skill-name` in chat to invoke OpenClaw skills directly
+- **Skill results:** Displayed inline with execution metadata (model, duration, tokens)
+- **PATH resolution:** Finds `openclaw` binary via `shutil.which` + fallback to `~/.npm-global/bin`
+
+---
+
+## v0.19.0 (2026-02-28)
+
+**Chat Routing + Nav Regression Tests**
+
+- **Route selector:** General / Project / Automation — messages auto-route to project context
+- **Project context injection:** Selected project's description prepended to prompts
+- **Nav regression tests:** 2 new Playwright tests (all tabs render, no JS errors on switch) — 34 total
+- **Fixed:** Duplicate Chat Routing block from double-matched replacement (2,965 bytes removed)
+
+---
+
+## v0.18.2 (2026-02-28)
+
+**Chat Auto-Select Model**
+
+- Chat auto-selects best available model (OpenClaw preferred over Ollama)
+- No "Select model..." placeholder — model selector is for override only
+- Checks `/api/admin/health` for OpenClaw availability
+
+---
+
+## v0.18.1 (2026-02-28)
+
+**Legacy Cleanup + Animated Arrows**
+
+- Removed 94 lines of dead code: `loadOverview`, `renderOverview`, `.ov-metric` CSS, `_overviewPollTimer`
+- Bidirectional animated flow arrows: `@keyframes flow-pulse` + `@keyframes flow-dash`
+- Net: 3,862 bytes removed
+
+---
+
+## v0.18.0 (2026-02-28)
+
+**Admin Tab + Chat HTML Fix**
+
+- **Chat fix:** Chat HTML was never injected (silent patch failure from v0.17.x). Fixed — all chat elements now render.
+- **Admin tab:** System health dashboard with CPU, memory, disk, uptime from `/proc/*`
+- **Service checks:** Ollama, OpenClaw Gateway, SQLite — status and details
+- **Log viewer:** Reads from `journalctl` with level filter and auto-refresh toggle
+- **Config summary:** Shows all Porter configuration in tabular format
+- **Nav icon:** Shield SVG for Admin tab
+
+---
+
+## v0.17.2 (2026-02-28)
+
+**Context Injection**
+
+- Attach files to chat conversations — content injected into prompts
+- File picker with extension filtering (19 text types)
+- Context bar shows attached files as removable chips
+- Content truncated to 8000 chars per file
+
+---
+
+## v0.17.1 (2026-02-28)
+
+**Flush Wizard**
+
+- Preview before writing session learnings to memory
+- Shows summary, destination file, size impact
+- Custom summary editing before commit
+
+---
+
+## v0.17.0 (2026-02-28)
+
+**Chat Engine**
+
+- SSE streaming for real-time token display
+- Multi-model support: Ollama (streaming) + OpenClaw Gateway (single-shot)
+- Chat history: save, load, delete conversations
+- Auto-resizing textarea with Enter-to-send
+
+---
+
+## v0.16.0–v0.16.2 (2026-02-28)
+
+**Phase 0: Security + Infrastructure**
+
+- `ThreadingHTTPServer` for concurrent request handling
+- CORS headers with configurable origins
+- Rate limiting on login (5 attempts, 5 min lockout)
+- `scrypt` password hashing (migrating from SHA-256)
+- Structured logging across 73 except blocks
+- SQLite session store replacing in-memory dict
+
+---
+
 ## v0.15.2 (2026-02-28)
 
 **Gap: Skills CRUD**
