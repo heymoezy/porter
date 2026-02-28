@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.21.2 — self-hosted file manager"""
+"""Porter v0.22.0 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -4600,7 +4600,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.21.2</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.22.0</div>
   </div>
 </aside>
 
@@ -5123,15 +5123,15 @@ select.settings-input { padding-right: 26px; }
       <span class="module-title">Memory</span>
       <button class="btn btn-ghost" onclick="loadMemory()">&#8635; Refresh</button>
     </div>
-    <div class="module-intro">Porter manages short-term and long-term memory across all models.</div>
+    <div class="module-intro">How AI agents remember across sessions.</div>
 
     <!-- Health bar -->
     <div id="mem-health" style="margin-bottom:16px"></div>
 
     <!-- Layer 1: Instructions -->
     <div class="mem-layer">
-      <div class="mem-layer-label">Long-Term &mdash; Instructions</div>
-      <div class="mem-layer-desc">Briefing documents loaded at every session start. You write these &mdash; they define who each model is and how it behaves.</div>
+      <div class="mem-layer-label">Instructions</div>
+      <div class="mem-layer-desc">Loaded at the start of every session. You write these — they tell each model who it is and how to behave.</div>
       <div id="mem-instructions" class="orch-grid">
         <div class="loading-indicator">Loading instructions</div>
       </div>
@@ -5142,8 +5142,8 @@ select.settings-input { padding-right: 26px; }
 
     <!-- Layer 2: Persistent Memory -->
     <div class="mem-layer">
-      <div class="mem-layer-label">Long-Term &mdash; Learned Memory</div>
-      <div class="mem-layer-desc">What each model remembers between sessions. Auto-updated as models work &mdash; lessons, preferences, project state.</div>
+      <div class="mem-layer-label">Persistent Memory</div>
+      <div class="mem-layer-desc">What each model remembers between sessions. Auto-updated as models work — lessons, preferences, project state. This is what makes continuity possible.</div>
       <div id="mem-persistent" class="orch-grid">
         <div class="loading-indicator">Loading memory</div>
       </div>
@@ -5155,8 +5155,8 @@ select.settings-input { padding-right: 26px; }
     <!-- Porter Memory Hub -->
     <div class="orch-hub" id="mem-hub">
       <div class="orch-hub-left">
-        <div class="orch-hub-label">PORTER</div>
-        <div class="orch-hub-desc">Memory orchestration layer &mdash; coordinates across all models</div>
+        <div class="orch-hub-label">SHARED MEMORY PLANE</div>
+        <div class="orch-hub-desc">Where all models coordinate — the single source of truth</div>
       </div>
       <div class="orch-hub-features" id="mem-hub-features"></div>
     </div>
@@ -5166,8 +5166,8 @@ select.settings-input { padding-right: 26px; }
 
     <!-- Layer 3: Session Memory (short-term) -->
     <div class="mem-layer">
-      <div class="mem-layer-label">Short-Term &mdash; Session Memory</div>
-      <div class="mem-layer-desc">Live conversation logs. Flush a session to extract its learnings into long-term memory.</div>
+      <div class="mem-layer-label">Session History</div>
+      <div class="mem-layer-desc">Raw conversation logs. Flushing extracts key learnings into the shared memory plane.</div>
       <div id="mem-filter-bar" class="mem-filter-bar"></div>
       <div id="mem-sessions-list"></div>
     </div>
@@ -5640,6 +5640,13 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.22.0', date:'2026-02-28', notes:[
+    'New: Memory Tab v3 — educational three-layer view with clear explanations',
+    'New: Shared Memory Plane hub with coordination description',
+    'New: Model color indicators on memory cards',
+    'New: Instruction vs memory file separation for OpenClaw',
+    'UX: Layer descriptions explain WHY each layer matters',
+  ]},
   { ver:'v0.21.2', date:'2026-02-28', notes:[
     'New: Porter Rules — governance principles visible in Admin tab',
     'New: Rules are configurable via UI (add, edit, remove)',
@@ -8041,17 +8048,27 @@ function renderMemoryInstructions(models) {
   if (!el) return;
   let html = '';
   models.forEach(function(m) {
-    html += '<div class="orch-card">';
+    html += '<div class="orch-card" style="border-left:3px solid ' + (m.color || 'var(--border)') + '">';
     html += '<div class="orch-card-head">';
+    html += '<div class="orch-card-dot" style="background:' + (m.color || 'var(--text3)') + '"></div>';
     html += '<div class="orch-card-name">' + escHtml(m.name) + '</div>';
     html += '</div>';
+    // Show instruction files
     if (m.instruction_file) {
       html += _memFileRow(m.instruction_file);
     }
     if (m.instruction_files && m.instruction_files.length) {
       m.instruction_files.forEach(function(f) { html += _memFileRow(f); });
     }
-    if (!m.instruction_file && !(m.instruction_files && m.instruction_files.length)) {
+    // For models with only memory_files, show instruction-like files (SOUL.md, USER.md, AGENTS.md, IDENTITY.md)
+    var instrNames = ['SOUL.md','USER.md','AGENTS.md','IDENTITY.md','TOOLS.md','GEMINI.md'];
+    if (!m.instruction_file && m.memory_files) {
+      var instrFiles = m.memory_files.filter(function(f) { return instrNames.indexOf(f.name) >= 0; });
+      if (instrFiles.length) {
+        instrFiles.forEach(function(f) { html += _memFileRow(f); });
+      }
+    }
+    if (!m.instruction_file && !(m.instruction_files && m.instruction_files.length) && !(m.memory_files && m.memory_files.some(function(f) { return instrNames.indexOf(f.name) >= 0; }))) {
       html += '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:4px 0">No instruction file</div>';
     }
     html += '</div>';
@@ -8076,15 +8093,22 @@ function renderMemoryPersistent(models) {
       html += '</div>';
       return;
     }
-    html += '<div class="orch-card">';
+    html += '<div class="orch-card" style="border-left:3px solid ' + (m.color || 'var(--border)') + '">';
     html += '<div class="orch-card-head">';
+    html += '<div class="orch-card-dot" style="background:' + (m.color || 'var(--text3)') + '"></div>';
     html += '<div class="orch-card-name">' + escHtml(m.name) + '</div>';
     if (m.detected) {
       html += '<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:var(--ok);color:#fff;margin-left:auto">active</span>';
     }
     html += '</div>';
+    var instrNames2 = ['SOUL.md','USER.md','AGENTS.md','IDENTITY.md','TOOLS.md','GEMINI.md'];
     if (m.memory_files && m.memory_files.length) {
-      m.memory_files.forEach(function(f) { html += _memFileRow(f, {editable: true}); });
+      var memOnly = m.memory_files.filter(function(f) { return instrNames2.indexOf(f.name) < 0; });
+      if (memOnly.length) {
+        memOnly.forEach(function(f) { html += _memFileRow(f, {editable: true}); });
+      } else {
+        html += '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:4px 0">No learned memory</div>';
+      }
     } else {
       html += '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:4px 0">No memory files</div>';
     }
@@ -8203,7 +8227,9 @@ function renderMemorySessions(sessions) {
     const tokStr = tokens > 1000 ? Math.round(tokens/1000) + 'K tok' : '';
     // Flush is available for claude and openclaw
     const canFlush = s.source === 'claude' || s.source === 'openclaw';
-    return '<div class="orch-card" style="padding:10px 14px">'
+    var srcColors = {claude:'#d97706',openclaw:'#059669',gemini:'#2563eb'};
+    var srcColor = srcColors[s.source] || 'var(--border)';
+    return '<div class="orch-card" style="padding:10px 14px;border-left:3px solid ' + srcColor + '">'
       + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
       + '<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:var(--border2);color:var(--text)">' + escHtml(srcLabel) + '</span>'
       + '<span style="font-weight:500;font-size:13px;color:var(--text)">' + escHtml(s.name || s.id.substring(0,12)) + '</span>'
@@ -13586,7 +13612,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.21.2' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.22.0' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -13937,7 +13963,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.21.2"
+                health["porter_version"] = "0.22.0"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -17382,7 +17408,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.21.2 ready (localhost only)")
+    print(f"\n  Porter v0.22.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
