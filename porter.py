@@ -38,16 +38,34 @@ def _porter_data_dir() -> "Path":
     return Path.home() / ".porter"
 
 
+_PUBLIC_IP_CACHE: str | None = None  # resolved once at first call
+
 def _public_ip_hint() -> str:
-    """Best-effort public IP for UI display.
-    Priority: explicit env override, configured HOST bind (if public-looking), else empty.
+    """Best-effort public IPv4 for UI display.
+    Priority: PORTER_PUBLIC_IP env > HOST config (if public-looking) > external lookup (cached).
     """
+    global _PUBLIC_IP_CACHE
     env_ip = os.environ.get("PORTER_PUBLIC_IP", "").strip()
     if env_ip:
         return env_ip
     h = (HOST or "").strip()
-    if h and h not in {"0.0.0.0", "127.0.0.1", "localhost", "::1"}:
+    if h and h not in {"0.0.0.0", "127.0.0.1", "localhost", "::1", ""}:
         return h
+    if _PUBLIC_IP_CACHE is not None:
+        return _PUBLIC_IP_CACHE
+    # One-time external lookup — try multiple services, IPv4 only
+    for url in ("https://api.ipify.org", "https://ifconfig.me", "https://checkip.amazonaws.com"):
+        try:
+            import urllib.request
+            req = urllib.request.Request(url, headers={"User-Agent": "Porter"})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                ip = resp.read().decode().strip()
+                if ip and ":" not in ip:  # skip IPv6
+                    _PUBLIC_IP_CACHE = ip
+                    return ip
+        except Exception:
+            continue
+    _PUBLIC_IP_CACHE = ""
     return ""
 
 SERVE_DIRS: dict = {}   # populated at startup from nodes; do not hardcode here
