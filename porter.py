@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.0 — Real-time Orchestrator"""
+"""Porter v0.25.1 — Real-time Orchestrator"""
 
 
 
@@ -163,6 +163,59 @@ def _db_init():
             sort_order INTEGER DEFAULT 0
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            display_name TEXT,
+            full_name TEXT,
+            email TEXT,
+            password_hash TEXT NOT NULL,
+            salt TEXT NOT NULL,
+            role TEXT DEFAULT 'operator',
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chats (
+            id TEXT PRIMARY KEY,
+            title TEXT,
+            project_id TEXT,
+            username TEXT,
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            updated_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            model_id TEXT,
+            metadata TEXT -- JSON
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            timestamp REAL NOT NULL DEFAULT (strftime('%s','now')),
+            model_id TEXT,
+            FOREIGN KEY(chat_id) REFERENCES chats(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat ON chat_messages(chat_id)")
+    
+    # 1. Migrate users from _config if table is empty
+    count = conn.execute("SELECT count(*) FROM users").fetchone()[0]
+    if count == 0:
+        log.info("Users table empty, migrating admin from config...")
+        cfg = _config
+        # We assume the config has the default 'admin' or has been updated
+        username = "admin"
+        conn.execute("""
+            INSERT OR REPLACE INTO users (username, display_name, full_name, email, password_hash, salt, role)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            username, cfg.get("display_name", "Admin"), cfg.get("full_name", ""),
+            cfg.get("email", ""), cfg.get("password_hash", ""), cfg.get("salt", ""), "admin"
+        ))
+        conn.commit()
+
     # Purge expired sessions on startup
     purged = conn.execute("DELETE FROM sessions WHERE expires < ?", (time.time(),)).rowcount
     conn.commit()
@@ -2644,7 +2697,7 @@ _pep_metrics: dict = {
 
 _treg_lock = _threading.Lock()
 _treg: dict = {}   # task_id -> task dict
-_treg_load()  # populate from disk at startup
+# _treg_load() moved to __main__ block — needs _db_init() first
 
 def _hash_pep_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
@@ -4912,7 +4965,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.0</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.1</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5989,11 +6042,14 @@ const CHANGELOG = [
     'New: useEvents React hook for automatic UI invalidation (90% less polling)',
     'Architecture: React migration complete — dist/ is now the primary UI',
   ]},
-  { ver:'v0.24.1', date:'2026-03-01', notes:[
-
+  { ver:'v0.25.1', date:'2026-03-01', notes:[
+    'Fix: Chat model selector no longer shows duplicate Cloud/Local groups',
+    'Perf: Chat model loading parallelized (was 3 sequential API calls)',
+    'Fix: Version strings normalized (were scattered across v0.23-v0.25)',
+  ]},
+  { ver:'v0.24.4', date:'2026-03-01', notes:[
     'UX: Orchestration cards now centered over their flow arrows',
     'UX: GPT-5.1 (Codex CLI) auto-detected as separate model from OpenClaw',
-    'Fix: /api/version endpoint was returning stale v0.23.7',
   ]},
   { ver:'v0.24.3', date:'2026-03-01', notes:[
     'UX: Removed notification bell from sidebar (dead code, broke hamburger)',
@@ -9209,7 +9265,7 @@ function _chatModelChanged() {
 
 
 // ── Chat dashboard ───────────────────────────────────────────────────────
-async function _renderChatDashboard() {
+function _renderChatDashboard(cachedHealth) {
   var el = document.getElementById('chat-dash-models');
   if (!el) return;
   var models = [
@@ -9228,11 +9284,9 @@ async function _renderChatDashboard() {
     html += '</div>';
   });
   el.innerHTML = html;
-  // Check status of each backend
-  try {
-    var health = await api('/api/admin/health');
-    if (health && health.services) {
-      health.services.forEach(function(s) {
+  // Apply health data (shared from populateChatModels, no extra API call)
+  {
+    (cachedHealth || []).forEach(function(s) {
         var backend = null;
         if (s.name.toLowerCase().includes('openclaw')) backend = 'openclaw';
         if (s.name.toLowerCase().includes('gemini')) backend = 'gemini';
@@ -9244,24 +9298,28 @@ async function _renderChatDashboard() {
           if (lat) lat.textContent = s.version ? 'v' + s.version : (s.status || 'unknown');
         }
       });
-    }
-  } catch(e) {}
+  }
 }
 
 async function populateChatModels() {
   _loadChatMessages();
-  _renderChatDashboard();
   const sel = document.getElementById('chat-model');
   if (!sel) return;
   const saved = sel.value;
-  while (sel.options.length > 0) sel.remove(0);
+  sel.innerHTML = '';  // clear ALL children including optgroups
 
-  // Gather all service statuses from health endpoint
+  // Gather health + local models in parallel
   var healthServices = [];
+  var localModelsData = null;
   try {
-    var healthResp = await api('/api/admin/health');
+    var [healthResp, localData] = await Promise.all([
+      api('/api/admin/health').catch(function() { return null; }),
+      api('/api/local-models').catch(function() { return null; }),
+    ]);
     if (healthResp && healthResp.services) healthServices = healthResp.services;
+    localModelsData = localData;
   } catch(e) {}
+  _renderChatDashboard(healthServices);
 
   var addedValues = {};
   function addModel(value, label, groupEl, opts) {
@@ -9297,16 +9355,13 @@ async function populateChatModels() {
   addCloudModel('gemini-cli-auto', 'Gemini (Google)', geminiUp);
   addCloudModel('codex-cli', 'Codex CLI (OpenAI)', codexUp);
 
-  // Ollama models
-  try {
-    var localData = await api('/api/local-models');
-    if (localData && localData.models) {
-      localData.models.forEach(function(m) {
-        if (m.type !== 'ollama') return;
-        addModel(m.id, m.name + ' (Ollama)', localGroup);
-      });
-    }
-  } catch(e) {}
+  // Ollama models (already fetched in parallel above)
+  if (localModelsData && localModelsData.models) {
+    localModelsData.models.forEach(function(m) {
+      if (m.type !== 'ollama') return;
+      addModel(m.id, m.name + ' (Ollama)', localGroup);
+    });
+  }
 
   if (cloudGroup.children.length > 0) sel.appendChild(cloudGroup);
   if (localGroup.children.length > 0) sel.appendChild(localGroup);
@@ -15594,7 +15649,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.24.4"})
+            self.reply_json({"v": "0.25.1"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -19255,6 +19310,7 @@ if __name__ == "__main__":
     ensure_chat_dirs()
     ensure_memory_dirs()
     _db_init()  # Initialize SQLite DB + purge expired sessions
+    _treg_load()  # populate task registry from SQLite (needs _db_init first)
     _migrate_checkpoint_to_registry()  # Gap31: one-time migration
     _sched_thread = threading.Thread(target=_scheduler_loop, name="porter-scheduler", daemon=True)
     _sched_thread.start()
@@ -19264,7 +19320,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.23.7 ready (localhost only)")
+    print(f"\n  Porter v0.25.1 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
