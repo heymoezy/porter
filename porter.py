@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.13 — Files Upload + Home View"""
+"""Porter v0.25.14 — Drag-and-Drop Fix"""
 
 
 
@@ -5113,7 +5113,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.13</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.14</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5126,9 +5126,6 @@ select.settings-input { padding-right: 26px; }
     <span class="module-title" style="flex:none">Files</span>
     <div class="breadcrumb" id="breadcrumb"></div>
     <div class="toolbar-actions">
-      <button class="btn btn-icon" id="btnHidden" onclick="setSetting('showHidden',!settings.showHidden)" title="Show hidden files (. prefixed)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-      </button>
       <button class="btn btn-ghost" id="btnMkdir" onclick="openMkdir()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
         New folder
@@ -6254,6 +6251,7 @@ const CHANGELOG = [
     'New: useEvents React hook for automatic UI invalidation (90% less polling)',
     'Architecture: React migration complete — dist/ is now the primary UI',
   ]},
+  { ver:'v0.25.14', date:'2026-03-01', notes:['Robust drag-and-drop: works in home view, auto-selects active mount as upload target'] },
   { ver:'v0.25.13', date:'2026-03-01', notes:['Removed debug banner, fixed toolbar buttons in home view, drag-and-drop upload works in home view'] },
   { ver:'v0.25.12', date:'2026-03-01', notes:['Files tab fix v3 — fhome vars moved to top of script block'] },
   { ver:'v0.25.11', date:'2026-03-01', notes:['Files tab TDZ fix — var instead of let for fhome state variables'] },
@@ -7689,8 +7687,6 @@ function populateTimezones() {
 }
 
 function syncSettingsUI() {
-  const bh = document.getElementById('btnHidden');
-  if (bh) bh.style.opacity = settings.showHidden ? '1' : '.4';
   populateTimezones();
   // Keep settings nav/page state consistent. If mismatch, force profile tab.
   const activeNav = document.querySelector('.settings-nav-item.active');
@@ -13667,16 +13663,13 @@ function showFilesHome() {
   // Toggle toolbar buttons based on active mount
   var _btnMkdir = document.getElementById("btnMkdir");
   var _btnUpload = document.getElementById("btnUpload");
-  var _btnHidden = document.getElementById("btnHidden");
   if (!_fhomeActive) {
     curRoot = ""; curPath = "";
     if (_btnMkdir)  _btnMkdir.style.display  = "none";
     if (_btnUpload) _btnUpload.style.display  = "none";
-    if (_btnHidden) _btnHidden.style.display  = "none";
   } else {
     if (_btnMkdir)  _btnMkdir.style.display  = "";
     if (_btnUpload) _btnUpload.style.display  = "";
-    if (_btnHidden) _btnHidden.style.display  = "";
   }
 
   const nodes = Array.isArray(_lastNodes) ? [..._lastNodes] : [];
@@ -13852,7 +13845,7 @@ function renderBreadcrumb(root, path) {
   let h = `<button class="crumb" onclick="_goFilesHome()" style="color:var(--text3)">Files</button>`;
   if (!root) { el.innerHTML = h; return; }
   // restore toolbar buttons
-  ['btnMkdir','btnUpload','btnHidden'].forEach(id => {
+  ['btnMkdir','btnUpload'].forEach(id => {
     const b = document.getElementById(id); if (b) b.style.display = '';
   });
   const footer = document.getElementById('file-results-footer');
@@ -14188,17 +14181,39 @@ async function uploadOne(file) {
   });
 }
 
-// drag and drop
+// drag and drop — attached to both fileArea and document for robustness
+var _dragCounter = 0;
 const fa = document.getElementById('fileArea');
-fa.addEventListener('dragover', e => {
-  if (curWritable) { e.preventDefault(); fa.classList.add('drag-over'); }
-});
-fa.addEventListener('dragleave', () => fa.classList.remove('drag-over'));
-fa.addEventListener('drop', e => {
-  e.preventDefault(); fa.classList.remove('drag-over');
-  if (!curWritable) { toast('This folder is read-only', 'err'); return; }
-  enqueueFiles(e.dataTransfer.files);
-});
+if (fa) {
+  fa.addEventListener('dragenter', e => {
+    e.preventDefault();
+    _dragCounter++;
+    if (_currentModule === 'files') {
+      // Auto-select first writable mount if none selected
+      if (!curRoot && _fhomeActive) { curRoot = _fhomeActive.mountId; curPath = _fhomeActive.path || ''; }
+      fa.classList.add('drag-over');
+    }
+  });
+  fa.addEventListener('dragover', e => {
+    if (_currentModule === 'files') e.preventDefault();
+  });
+  fa.addEventListener('dragleave', e => {
+    _dragCounter--;
+    if (_dragCounter <= 0) { _dragCounter = 0; fa.classList.remove('drag-over'); }
+  });
+  fa.addEventListener('drop', e => {
+    e.preventDefault();
+    _dragCounter = 0;
+    fa.classList.remove('drag-over');
+    if (_currentModule !== 'files') return;
+    if (!curRoot) {
+      toast('Select a location first', 'err');
+      return;
+    }
+    if (!curWritable) { toast('This folder is read-only', 'err'); return; }
+    enqueueFiles(e.dataTransfer.files);
+  });
+}
 
 // ── preview panel ──
 async function openPreview(name) {
@@ -16150,7 +16165,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.13"})
+            self.reply_json({"v": "0.25.14"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17154,7 +17169,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.13'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.14'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20206,7 +20221,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.13 ready (localhost only)")
+    print(f"\n  Porter v0.25.14 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
