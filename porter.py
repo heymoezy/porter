@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Porter v0.24.0 — self-hosted file manager"""
+"""Porter v0.24.1 — self-hosted file manager"""
+
 
 
 import email
@@ -2516,6 +2517,13 @@ def _refresh_openclaw_usage(agent_id: str) -> dict:
 
 
 def _hash_agent_key(raw_key: str) -> str:
+    # Use scrypt for agent keys (same strength as password hashing)
+    salt = hashlib.sha256(b"porter-agent-key-salt").digest()
+    h = hashlib.scrypt(raw_key.encode(), salt=salt, n=16384, r=8, p=1, dklen=32)
+    return h.hex()
+
+def _hash_agent_key_legacy(raw_key: str) -> str:
+    """SHA-256 fallback for pre-v0.24.1 agent keys."""
     return hashlib.sha256(raw_key.encode()).hexdigest()
 
 def _agent_by_id(agent_id: str) -> "dict | None":
@@ -2526,8 +2534,15 @@ def _agent_by_id(agent_id: str) -> "dict | None":
 
 def _agent_by_key(raw_key: str) -> "dict | None":
     h = _hash_agent_key(raw_key)
+    h_legacy = _hash_agent_key_legacy(raw_key)
     for a in _config.get("agents", []):
         if a.get("key_hash") == h:
+            return a
+        if a.get("key_hash") == h_legacy:
+            # Auto-upgrade legacy SHA-256 hash to scrypt
+            a["key_hash"] = h
+            try: save_config(_config)
+            except Exception: pass
             return a
     return None
 # ── PEP/1 Phase 1 — Hub config helpers ────────────────────────────────────
@@ -4852,7 +4867,8 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.24.0</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.24.1</div>
+
     <button onclick="startTour()" style="font-size:10px;color:var(--text3);background:none;border:none;cursor:pointer;padding:2px 0" title="Start guided tour">&#10067; Tour</button>
   </div>
 </aside>
@@ -5920,6 +5936,20 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.24.1', date:'2026-03-01', notes:[
+    'Architecture: React + Tailwind v4 frontend scaffold complete',
+    'Theme: Porter color variables and fonts integrated into React stack',
+    'Core: lucide-react, zustand, and react-query dependencies installed',
+  ]},
+  { ver:'v0.24.0', date:'2026-03-01', notes:[
+
+    'Security: CSP, X-Frame-Options, X-Content-Type-Options headers on all responses',
+    'Security: MAX_BODY_SIZE (10MB) prevents Content-Length DoS',
+    'Security: Secure cookie flag when behind HTTPS proxy',
+    'Security: Agent key hashing upgraded from SHA-256 to scrypt',
+    'Fix: Bare except blocks in admin health replaced with proper logging',
+    'Fix: JSON parse errors return 400 instead of 500',
+  ]},
   { ver:'v0.24.0', date:'2026-03-01', notes:[
     'New: Brave Search API integrated as system-wide OpenClaw skill',
     'Limit: 1,000 searches/month quota enforced via local tracker',
@@ -5927,7 +5957,7 @@ const CHANGELOG = [
     'UX: Fixed Orchestration flow wrapping and Memory [edit] race condition',
   ]},
   { ver:'v0.23.9', date:'2026-03-01', notes:[
-    'Quality: Systematically replacing bare except: pass blocks with logging',
+    'Quality: Systematically replacing bare except Exception as e: log.debug("Health skip: %s", e) blocks with logging',
     'Architecture: Frontend extraction scaffold initiated',
     'Logging: Improved visibility for task parsing and config detection errors',
   ]},
@@ -5938,17 +5968,11 @@ const CHANGELOG = [
     'Architecture: Phase 4 Extraction Plan drafted',
   ]},
   { ver:'v0.23.7', date:'2026-03-01', notes:[
-    'New: Onboarding Wizard (6 steps) — full guided setup experience',
-    'New: Capability scan step with "Connect Gemini" nudge for research',
-    'New: Operator password setup step in wizard',
-    'New: "Re-run setup wizard" button in Profile settings',
-    'New: 4 new Gemini-powered workflow skills added to registry',
-  ]},
-  { ver:'v0.23.7', date:'2026-03-01', notes:[
     'Fix: Resolved Orchestration/Memory visual overlap (P0 task)',
     'UX: Memory cards restyled as file-focused (distinct from agent cards)',
     'UX: Memory hub restyled as mem-hub (distinct from orch-hub)',
-    'Clean: Each tab now has distinct visual identity and purpose',
+    'New: Onboarding Wizard (6 steps) with Capability Scan + Password setup',
+    'New: 4 Gemini-powered workflow skills added to registry',
   ]},
   { ver:'v0.23.6', date:'2026-03-01', notes:[
     'UX: Orchestration flow arrows — smaller arrowheads, better spacing',
@@ -8350,16 +8374,17 @@ function renderCapabilities(caps) {
     const dispVer = rawVer && /^\d/.test(rawVer.trim()) ? 'v' + rawVer.trim() : rawVer.trim();
     const ver = dispVer ? '<span style="color:var(--text3);font-size:11px;margin-left:6px">' + escHtml(dispVer) + '</span>' : '';
     const feats = (c.features||[]).join(', ');
-    const hint = !ok
-      ? `<div style="margin-top:6px;font-size:12px;color:var(--text3)">Install: <a href="${escHtml(c.install)}" target="_blank" style="color:var(--accent)">${escHtml(c.install)}</a></div>`
-      : '';
+    const siteUrl = c.install || '';
+    const siteLabel = siteUrl.replace('https://','').replace('http://','');
+    const site = siteUrl ? '<div style="margin-top:4px;font-size:11px"><a href="' + escHtml(siteUrl) + '" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">' + escHtml(siteLabel) + '</a></div>' : '';
+    const installHint = !ok && siteUrl ? `<div style="margin-top:2px;font-size:11px;color:var(--text3)">Not installed</div>` : '';
     return `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">
   <div style="display:flex;align-items:center;gap:8px">
     ${dot}
     <span style="font-weight:500;font-size:13px">${escHtml(c.label)}</span>${ver}
   </div>
   <div style="font-size:12px;color:var(--text3);margin-top:4px">${escHtml(feats)}</div>
-  ${hint}
+  ${site}${installHint}
 </div>`;
   }).join('');
 }
@@ -15091,13 +15116,19 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"  [{self.address_string()}] {fmt % args}")
 
+    def _add_security_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; frame-ancestors 'none'")
+
     def reply_json(self, data, code=200):
         body = json.dumps(data).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        # CORS: same-origin only (no header = browser enforces same-origin)
         self.send_header("Cache-Control", "no-store")
+        self._add_security_headers()
         self.end_headers()
         try:
             self.wfile.write(body)
@@ -15110,12 +15141,25 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self._add_security_headers()
         self.end_headers()
         self.wfile.write(body)
 
+    _MAX_BODY_SIZE = 10 * 1024 * 1024  # 10 MB
+
     def read_json_body(self):
         length = int(self.headers.get("Content-Length", 0))
-        return json.loads(self.rfile.read(length))
+        if length > self._MAX_BODY_SIZE:
+            self.reply_json({"error": "Request body too large"}, 413)
+            return None
+        if length <= 0:
+            return {}
+        try:
+            return json.loads(self.rfile.read(length))
+        except (json.JSONDecodeError, ValueError) as e:
+            log.warning("Invalid JSON body: %s", e)
+            self.reply_json({"error": "Invalid JSON"}, 400)
+            return None
 
     def get_session_token(self) -> str:
         cookie_hdr = self.headers.get("Cookie", "")
@@ -15147,8 +15191,17 @@ class Handler(BaseHTTPRequestHandler):
         if not raw_key:
             return None
         key_hash = _hash_agent_key(raw_key)
+        key_hash_legacy = _hash_agent_key_legacy(raw_key)
         for agent in _config.get("agents", []):
-            if agent.get("key_hash") == key_hash and agent.get("status") != "revoked":
+            if agent.get("status") == "revoked":
+                continue
+            if agent.get("key_hash") == key_hash:
+                return agent
+            if agent.get("key_hash") == key_hash_legacy:
+                # Auto-upgrade to scrypt
+                agent["key_hash"] = key_hash
+                try: save_config(_config)
+                except Exception: pass
                 return agent
         return None
 
@@ -16062,7 +16115,7 @@ class Handler(BaseHTTPRequestHandler):
                             if lease.get("expires_at", 0) < now: stalled += 1
                             else: active_t += 1
                         elif state == "stalled": stalled += 1
-                    except: pass
+                    except Exception as e: log.debug("Health check skip: %s", e)
             recent_audit = []
             if AUDIT_LOG.exists():
                 try:
@@ -16070,14 +16123,14 @@ class Handler(BaseHTTPRequestHandler):
                     for line in reversed(lines[-20:]):
                         if line.strip():
                             try: recent_audit.append(json.loads(line))
-                            except: pass
+                            except Exception as e: log.debug("Health skip: %s", e)
                         if len(recent_audit) >= 5: break
-                except: pass
+                except Exception as e: log.debug("Health skip: %s", e)
             disk_used_pct = 0
             try:
                 usage = shutil.disk_usage("/")
                 disk_used_pct = round(usage.used / usage.total * 100, 1) if usage.total > 0 else 0
-            except: pass
+            except Exception as e: log.debug("Health skip: %s", e)
             self.reply_json({
                 "active_tasks": active_t, "stalled_tasks": stalled,
                 "agent_count": len(_config.get("agents", [])),
@@ -16498,7 +16551,7 @@ class Handler(BaseHTTPRequestHandler):
                 ttl = SESSION_TTL
                 self.send_header(
                     "Set-Cookie",
-                    f"porter_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={ttl}"
+                    f"porter_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={ttl}" + ("; Secure" if self.headers.get("X-Forwarded-Proto") == "https" else "")
                 )
                 self.send_header("Cache-Control", "no-store")
                 body = json.dumps({"ok": True}).encode()
@@ -16907,7 +16960,7 @@ class Handler(BaseHTTPRequestHandler):
             dest = target_dir / safe_name(fname)
             try:
                 dest.write_bytes(fdata)
-                print(f"  Saved: {dest}  ({len(fdata)/1024:.1f} KB)")
+                log.info("Saved: %s (%.1f KB)", dest, len(fdata)/1024)
                 self.reply_json({"ok": True})
             except PermissionError:
                 self.reply_json({"ok": False, "error": "Permission denied"}, 403)
