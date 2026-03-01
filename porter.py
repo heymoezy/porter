@@ -3981,14 +3981,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   padding:5px 10px; font-size:12px; border:1px solid var(--border);
   border-radius:6px; background:var(--bg2); color:var(--text); flex:1; max-width:240px;
 }
-.chat-route-ctx {
-  font-size:11px; color:var(--text3); padding:3px 8px;
-  background:var(--raised); border-radius:12px; white-space:nowrap;
-}
-.chat-route-ctx .route-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:4px; vertical-align:middle; }
-.chat-route-ctx .route-dot.project { background:var(--accent); }
-.chat-route-ctx .route-dot.auto { background:#22c55e; }
-.chat-route-ctx .route-dot.general { background:var(--text3); }
+
 
 
 /* Skill bridge results */
@@ -4099,7 +4092,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 
 /* Chat engine */
-.chat-container { display:flex; flex-direction:column; height:calc(100vh - 64px); min-height:400px; position:relative; }
+.chat-container { display:flex; flex-direction:column; height:calc(100vh - 64px); min-height:400px; }
 .chat-header { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--border); margin-bottom:0; flex-shrink:0; }
 .chat-messages { flex:1; overflow-y:auto; padding:16px 0 80px; display:flex; flex-direction:column; gap:10px; }
 .chat-msg { max-width:85%; padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.6; word-break:break-word; white-space:pre-wrap; }
@@ -4248,10 +4241,16 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .mem-hub-pill.active { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent); }
 
-.chat-input-area { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--border); flex-shrink:0; align-items:flex-end; background:var(--bg); position:sticky; bottom:0; z-index:10; }
+.chat-input-area { padding:8px 16px 12px; border-top:1px solid var(--border); flex-shrink:0; background:var(--bg); position:sticky; bottom:0; z-index:10; }
+.chat-input-row { display:flex; gap:8px; align-items:flex-end; }
+.chat-input-meta { display:flex; align-items:center; gap:8px; padding-top:6px; }
+.chat-backend-sel { padding:2px 8px; font-size:11px; border:1px solid var(--border); border-radius:5px; background:var(--bg2); color:var(--text3); }
+.chat-backend-sel:hover { border-color:var(--accent); color:var(--text); }
+.chat-backend-hint { font-size:10px; color:var(--text3); }
 .chat-input {
   flex:1; padding:10px 14px; border:1px solid var(--border); border-radius:10px;
   background:var(--bg2); color:var(--text); font-size:13px; font-family:inherit;
+  min-height:48px;
   resize:none; min-height:20px; max-height:120px; line-height:1.4;
 }
 .chat-input:focus { outline:none; border-color:var(--accent); }
@@ -5183,17 +5182,10 @@ select.settings-input { padding-right: 26px; }
     <div class="chat-container">
       <div class="chat-route-bar">
         <span class="module-title" style="font-size:16px">Chat</span>
-        <select id="chat-route" class="chat-route-sel" onchange="chatRouteChanged()">
-          <option value="general">General (Porter decides)</option>
-          <option value="squad">Agent Squad (all agents)</option>
-        </select>
-        <span id="chat-route-indicator" class="chat-route-ctx">
-          <span class="route-dot general"></span>General
-        </span>
-        <select id="chat-model" class="chat-model-sel" onchange="_chatModelChanged()" title="Override model">
-        </select>
         <button class="btn btn-ghost" style="font-size:11px;margin-left:auto" onclick="loadChatSessions()">History</button>
       </div>
+      <select id="chat-route" style="display:none"><option value="general">General</option></select>
+      <select id="chat-model" class="chat-model-sel" style="display:none" onchange="_chatModelChanged()"></select>
 
       <div id="chat-history-panel" style="display:none">
         <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);margin-bottom:8px">
@@ -5220,13 +5212,26 @@ select.settings-input { padding-right: 26px; }
           </div>
         </div>
         <div id="chat-ctx-bar" class="chat-ctx-bar" style="display:none"></div>
-        <div class="chat-input-area" style="position:relative">
+        <div class="chat-input-area">
           <div id="chat-autocomplete" class="chat-autocomplete"></div>
           <div id="chat-file-picker" class="chat-file-picker" style="display:none"></div>
-          <button class="chat-attach-btn" onclick="toggleChatFilePicker()" title="Attach file as context">&#128206;</button>
-          <textarea id="chat-input" class="chat-input" placeholder="Type a message&#8230;" rows="1" onkeydown="chatInputKey(event)" oninput="chatAutoResize(this); _acCheck()"></textarea>
-          <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
-          <button id="chat-send-btn" class="chat-send" onclick="chatSend()" disabled>Send</button>
+          <div class="chat-input-row">
+            <button class="chat-attach-btn" onclick="toggleChatFilePicker()" title="Attach file as context">&#128206;</button>
+            <textarea id="chat-input" class="chat-input" placeholder="Type a message&#8230;" rows="2" onkeydown="chatInputKey(event)" oninput="chatAutoResize(this); _acCheck()"></textarea>
+            <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
+            <button id="chat-send-btn" class="chat-send" onclick="chatSend()" disabled>Send</button>
+          </div>
+          <div class="chat-input-meta">
+            <select id="chat-backend-sel" class="chat-backend-sel" title="Select backend">
+              <option value="">Auto-route</option>
+              <option value="openclaw">OpenClaw</option>
+              <option value="gemini">Gemini</option>
+              <option value="codex">Codex</option>
+              <option value="claude">Claude</option>
+              <option value="ollama">Ollama</option>
+            </select>
+            <span id="chat-backend-hint" class="chat-backend-hint">auto-route</span>
+          </div>
         </div>
       </div>
 
@@ -9990,6 +9995,19 @@ function chatInputKey(e) {
 }
 
 function chatSend() {
+  // Apply backend selector override
+  var _bsel = document.getElementById('chat-backend-sel');
+  if (_bsel && _bsel.value) {
+    var _modelSel = document.getElementById('chat-model');
+    var _backendMap = {openclaw:'openclaw-gateway',gemini:'gemini-cli',codex:'codex-cli',claude:'claude-cli',ollama:'ollama-local'};
+    if (_modelSel) {
+      // Try to select the matching option, fallback to setting value directly
+      var _target = _backendMap[_bsel.value] || _bsel.value;
+      for (var i = 0; i < _modelSel.options.length; i++) {
+        if (_modelSel.options[i].value.toLowerCase().includes(_bsel.value)) { _modelSel.selectedIndex = i; break; }
+      }
+    }
+  }
   const input = document.getElementById('chat-input');
   const sel = document.getElementById('chat-model');
   if (!input || !sel) return;
@@ -10202,9 +10220,11 @@ async function loadChatSessions() {
   }
 
   list.innerHTML = resp.sessions.map(function(s) {
+    var safeTitle = escHtml(s.title).replace(/'/g, "\\'");
     return '<div class="chat-sidebar-item' + (s.id === _chatId ? ' active' : '') + '" onclick="loadChatSession(\'' + escHtml(s.id) + '\')">'
       + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(s.title) + '</span>'
       + '<span style="font-size:10px;color:var(--text3)">' + (s.messages || 0) + ' msgs</span>'
+      + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();renameChatSession(\'' + escHtml(s.id) + '\',\'' + safeTitle + '\')" title="Rename">&#9998;</button>'
       + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();deleteChatSession(\'' + escHtml(s.id) + '\')">&#10005;</button>'
       + '</div>';
   }).join('');
@@ -10229,6 +10249,16 @@ async function loadChatSession(id) {
   _chatModelChanged();
   closeChatHistory();
   renderChatMessages();
+}
+
+async function renameChatSession(id, currentTitle) {
+  var newTitle = prompt('Rename chat:', currentTitle || '');
+  if (newTitle === null || !newTitle.trim()) return;
+  var resp = await api('/api/chat', { action: 'rename', chat_id: id, title: newTitle.trim() });
+  if (resp && resp.ok) {
+    toast('Chat renamed', 'ok');
+    loadChatSessions();
+  } else { toast('Failed to rename', 'err'); }
 }
 
 async function deleteChatSession(id) {
