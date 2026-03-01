@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.25 — Static Welcome"""
+"""Porter v0.25.26 — Welcome + Center"""
 
 
 
@@ -4100,6 +4100,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 
 /* Chat engine */
 .chat-container { display:flex; flex-direction:column; height:calc(100vh - 64px); min-height:400px; }
+#chat-main { display:flex; flex-direction:column; flex:1; min-height:0; }
 .chat-header { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--border); margin-bottom:0; flex-shrink:0; }
 .chat-route-bar { display:flex; align-items:center; gap:8px; padding:8px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
 .chat-messages { flex:1; overflow-y:auto; padding:16px 20px 16px; display:flex; flex-direction:column; gap:10px; }
@@ -5119,7 +5120,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.25</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.26</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5202,7 +5203,7 @@ select.settings-input { padding-right: 26px; }
       <div id="chat-main">
         <div id="chat-messages" class="chat-messages welcome-state">
           <div class="chat-welcome">
-            <div class="chat-welcome-title">Hi, Moe &#x1F44B;</div>
+            <div class="chat-welcome-title">Hi there &#x1F44B;</div>
             <div class="chat-welcome-input-wrap">
               <textarea id="chat-input-welcome" placeholder="How can I help you today?" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
               <div class="chat-welcome-meta">
@@ -6223,6 +6224,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.26', date:'2026-03-01', notes:['Fix: welcome perfectly centered (chat-main flex chain)','UX: greeting uses preferred name from settings','UX: Files auto-expands first directory on load'] },
   { ver:'v0.25.25', date:'2026-03-01', notes:['Fix: chat loads instantly on refresh (static welcome HTML)','UX: softer greeting color'] },
   { ver:'v0.25.24', date:'2026-03-01', notes:['UX: model dropdown text right-aligned (close to chevron)'] },
   { ver:'v0.25.23', date:'2026-03-01', notes:['Fix: Chat module visible on page load (active class in static HTML)'] },
@@ -9690,8 +9692,9 @@ function renderChatMessages(streamUpdate) {
   if (!_chatMessages.length) {
     // Centered welcome state
     el.classList.add('welcome-state');
+    var _wn = (currentUser && currentUser.display_name) ? ', ' + currentUser.display_name : ' there';
     el.innerHTML = '<div class="chat-welcome">'
-      + '<div class="chat-welcome-title">Hi, Moe \ud83d\udc4b</div>'
+      + '<div class="chat-welcome-title">Hi' + _wn + ' \ud83d\udc4b</div>'
       + '<div class="chat-welcome-input-wrap">'
       + '<textarea id="chat-input-welcome" placeholder="How can I help you today?" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>'
       + '<div class="chat-welcome-meta">'
@@ -12896,6 +12899,9 @@ async function loadMe() {
   if (!data) return;
   currentUser = data;
   document.getElementById('ucName').textContent = data.display_name || data.username;
+  // Update welcome greeting with real name
+  var _wt = document.querySelector('.chat-welcome-title');
+  if (_wt && data.display_name) _wt.textContent = 'Hi, ' + data.display_name + ' \ud83d\udc4b';
   renderAvatar(document.getElementById('ucAvatar'), data);
   renderAvatar(document.getElementById('saAvatar'), data);
   document.getElementById('sa-full-name').value = data.full_name || '';
@@ -13598,6 +13604,14 @@ function showFilesHome() {
   if (!_fhomeInitDone) {
     nodes.forEach(n => { if (_isSelfNode(n)) _fhomeExpanded.add(n.id); });
     _fhomeInitDone = true;
+    // Auto-expand first mount of self node
+    var _autoNode = nodes.find(n => _isSelfNode(n));
+    if (_autoNode) {
+      var _autoMounts = (_autoNode.mounts || []).filter(m => m.visible !== false);
+      if (_autoMounts[0]) {
+        setTimeout(function() { selectMount(_autoMounts[0].id, ''); }, 0);
+      }
+    }
   }
 
   const devIcon  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
@@ -16097,7 +16111,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.25"})
+            self.reply_json({"v": "0.25.26"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17101,7 +17115,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.25'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.26'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20153,7 +20167,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.25 ready (localhost only)")
+    print(f"\n  Porter v0.25.26 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
