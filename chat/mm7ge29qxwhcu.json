@@ -1,0 +1,38 @@
+{
+  "title": "hello",
+  "model": "local-ollama-qwen2.5-coder:7b-instruct-q4_K_M",
+  "messages": [
+    {
+      "role": "user",
+      "content": "hello",
+      "ts": 1772351640.7486472
+    },
+    {
+      "role": "assistant",
+      "content": "Hello! How can I assist you today?",
+      "ts": 1772351640.7492933
+    },
+    {
+      "role": "user",
+      "content": "Conversation history:\nUser: hello\n\nAssistant: Hello! How can I assist you today?\n\nNew message:\nwow, you are working?",
+      "ts": 1772351663.6136603
+    },
+    {
+      "role": "assistant",
+      "content": "Yes, I'm here and ready to help! What would you like assistance with today?",
+      "ts": 1772351663.6136758
+    },
+    {
+      "role": "user",
+      "content": "Conversation history:\nUser: hello\n\nAssistant: Hello! How can I assist you today?\n\nUser: wow, you are working?\n\nAssistant: Yes, I'm here and ready to help! What would you like assistance with today?\n\nNew message:\ncan you see the porter project i am working on?",
+      "ts": 1772351797.8824527
+    },
+    {
+      "role": "assistant",
+      "content": "I'm sorry, but as an AI language model, I don't have access to external projects or files unless they are shared with me in our conversation. Can you provide more details about the Porter project and what specific information you're looking for? I'll do my best to assist you!",
+      "ts": 1772351797.8824723
+    }
+  ],
+  "created": "2026-03-01T07:54:00",
+  "updated": "2026-03-01T07:56:37"
+}
