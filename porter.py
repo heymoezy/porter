@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.22.3 — self-hosted file manager"""
+"""Porter v0.22.5 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -3115,6 +3115,23 @@ async function doLogin() {
       </div>
     </div>
 
+
+<!-- Keyboard shortcuts overlay -->
+<div class="kb-overlay" id="kbOverlay" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="kb-dialog">
+    <div class="kb-title">Keyboard Shortcuts</div>
+    <div class="kb-row"><span class="kb-key">Ctrl+K</span><span class="kb-desc">Focus chat input</span></div>
+    <div class="kb-row"><span class="kb-key">1</span>-<span class="kb-key">9</span><span class="kb-desc">Switch tabs</span></div>
+    <div class="kb-row"><span class="kb-key">Esc</span><span class="kb-desc">Close panel / cancel</span></div>
+    <div class="kb-row"><span class="kb-key">?</span><span class="kb-desc">Show this help</span></div>
+    <div class="kb-row"><span class="kb-key">Enter</span><span class="kb-desc">Send message</span></div>
+    <div class="kb-row"><span class="kb-key">Shift+Enter</span><span class="kb-desc">New line in chat</span></div>
+    <div class="kb-row"><span class="kb-key">/</span><span class="kb-desc">Slash commands (in chat)</span></div>
+    <div class="kb-row"><span class="kb-key">@</span><span class="kb-desc">Target model (in chat)</span></div>
+    <div style="margin-top:12px;text-align:center;font-size:11px;color:var(--text3)">Press Esc or click outside to close</div>
+  </div>
+</div>
+
 </body>
 </html>
 """
@@ -3772,6 +3789,44 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-msg.assistant { align-self:flex-start; background:var(--raised); border:1px solid var(--border); border-bottom-left-radius:2px; color:var(--text); }
 .chat-msg.error { align-self:center; background:none; color:var(--err); font-size:12px; font-style:italic; }
 .chat-msg.streaming { opacity:.9; }
+
+/* Chat autocomplete */
+.chat-autocomplete {
+  position:absolute; bottom:100%; left:0; right:0; max-height:240px; overflow-y:auto;
+  background:var(--raised); border:1px solid var(--border); border-radius:8px;
+  box-shadow:0 -4px 16px rgba(0,0,0,.3); display:none; z-index:100;
+  margin-bottom:4px;
+}
+.chat-ac-item {
+  display:flex; align-items:center; gap:10px; padding:8px 14px; cursor:pointer;
+  font-size:12px; color:var(--text); transition:.08s;
+}
+.chat-ac-item:hover, .chat-ac-item.selected { background:var(--surface2); }
+.chat-ac-item .ac-cmd { font-weight:600; color:var(--accent); min-width:80px; }
+.chat-ac-item .ac-desc { color:var(--text3); flex:1; }
+.chat-ac-item .ac-emoji { font-size:14px; width:20px; text-align:center; }
+.chat-ac-header { padding:6px 14px; font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; border-bottom:1px solid var(--border); }
+
+
+/* Keyboard shortcut overlay */
+.kb-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9999;
+  display:none; align-items:center; justify-content:center;
+}
+.kb-overlay.open { display:flex; }
+.kb-dialog {
+  background:var(--raised); border:1px solid var(--border); border-radius:12px;
+  padding:24px 32px; max-width:420px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,.4);
+}
+.kb-title { font-size:16px; font-weight:700; margin-bottom:16px; color:var(--text); }
+.kb-row { display:flex; align-items:center; gap:12px; padding:6px 0; font-size:13px; }
+.kb-key {
+  display:inline-block; padding:2px 8px; font-size:11px; font-family:monospace;
+  background:var(--bg2); border:1px solid var(--border); border-radius:4px;
+  color:var(--text2); min-width:28px; text-align:center;
+}
+.kb-desc { color:var(--text3); }
+
 .chat-input-area { display:flex; gap:8px; padding-top:12px; border-top:1px solid var(--border); flex-shrink:0; align-items:flex-end; }
 .chat-input {
   flex:1; padding:10px 14px; border:1px solid var(--border); border-radius:10px;
@@ -4627,7 +4682,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.22.3</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.22.5</div>
   </div>
 </aside>
 
@@ -4722,9 +4777,10 @@ select.settings-input { padding-right: 26px; }
         </div>
         <div id="chat-ctx-bar" class="chat-ctx-bar" style="display:none"></div>
         <div class="chat-input-area" style="position:relative">
+          <div id="chat-autocomplete" class="chat-autocomplete"></div>
           <div id="chat-file-picker" class="chat-file-picker" style="display:none"></div>
           <button class="chat-attach-btn" onclick="toggleChatFilePicker()" title="Attach file as context">&#128206;</button>
-          <textarea id="chat-input" class="chat-input" placeholder="Type a message&#8230;" rows="1" onkeydown="chatInputKey(event)" oninput="chatAutoResize(this)"></textarea>
+          <textarea id="chat-input" class="chat-input" placeholder="Type a message&#8230;" rows="1" onkeydown="chatInputKey(event)" oninput="chatAutoResize(this); _acCheck()"></textarea>
           <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
           <button id="chat-send-btn" class="chat-send" onclick="chatSend()" disabled>Send</button>
         </div>
@@ -5677,6 +5733,16 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.22.5', date:'2026-02-28', notes:[
+    'New: Global keyboard shortcuts — Ctrl+K for chat, 1-9 for tabs, ? for help',
+    'New: Keyboard shortcut help overlay (press ?)',
+    'UX: Escape closes modals and panels globally',
+  ]},
+  { ver:'v0.22.4', date:'2026-02-28', notes:[
+    'New: Slash command autocomplete — type / to see available skills',
+    'New: @model autocomplete — type @ to see available backends',
+    'UX: Arrow keys navigate suggestions, Enter selects, Escape dismisses',
+  ]},
   { ver:'v0.22.3', date:'2026-02-28', notes:[
     'Fix: Porter Rules section now visible in Admin tab (HTML container was missing)',
     'New: Quick stats row at top of Admin — version, uptime, active models, total sessions',
@@ -8858,7 +8924,131 @@ function chatAutoResize(el) {
   el.style.height = Math.min(el.scrollHeight, 120) + 'px';
 }
 
+
+// ── Chat autocomplete ────────────────────────────────────────────────────
+var _acVisible = false;
+var _acItems = [];
+var _acIdx = -1;
+
+var _defaultSlashCmds = [
+  {cmd: '/help', desc: 'Show available commands', emoji: '\u2753'},
+  {cmd: '/status', desc: 'Check system status', emoji: '\ud83d\udcca'},
+  {cmd: '/flush', desc: 'Flush session to memory', emoji: '\ud83d\udce4'},
+  {cmd: '/clear', desc: 'Clear chat messages', emoji: '\ud83e\uddf9'},
+  {cmd: '/models', desc: 'List available models', emoji: '\ud83e\udd16'},
+  {cmd: '/version', desc: 'Show Porter version', emoji: '\u2139\ufe0f'},
+];
+
+var _defaultAtTargets = [
+  {cmd: '@openclaw', desc: 'Route to OpenClaw (GPT-5.3 Codex)', emoji: '\ud83d\udfe2'},
+  {cmd: '@gemini', desc: 'Route to Gemini', emoji: '\ud83d\udfe6'},
+  {cmd: '@ollama', desc: 'Route to Ollama (local)', emoji: '\ud83d\udfe3'},
+];
+
+function _acShow(items) {
+  var el = document.getElementById('chat-autocomplete');
+  if (!el || !items.length) { _acHide(); return; }
+  _acItems = items;
+  _acIdx = 0;
+  var html = '';
+  items.forEach(function(item, i) {
+    var sel = i === 0 ? ' selected' : '';
+    html += '<div class="chat-ac-item' + sel + '" data-idx="' + i + '" onmousedown="_acSelect(' + i + ')">';
+    html += '<span class="ac-emoji">' + (item.emoji || '') + '</span>';
+    html += '<span class="ac-cmd">' + escHtml(item.cmd) + '</span>';
+    html += '<span class="ac-desc">' + escHtml(item.desc) + '</span>';
+    html += '</div>';
+  });
+  el.innerHTML = html;
+  el.style.display = 'block';
+  _acVisible = true;
+}
+
+function _acHide() {
+  var el = document.getElementById('chat-autocomplete');
+  if (el) el.style.display = 'none';
+  _acVisible = false;
+  _acItems = [];
+  _acIdx = -1;
+}
+
+function _acSelect(idx) {
+  if (idx < 0 || idx >= _acItems.length) return;
+  var input = document.getElementById('chat-input');
+  if (!input) return;
+  input.value = _acItems[idx].cmd + ' ';
+  input.focus();
+  _acHide();
+  chatAutoResize(input);
+}
+
+function _acNavigate(dir) {
+  if (!_acVisible || !_acItems.length) return;
+  _acIdx = (_acIdx + dir + _acItems.length) % _acItems.length;
+  var el = document.getElementById('chat-autocomplete');
+  if (!el) return;
+  el.querySelectorAll('.chat-ac-item').forEach(function(item, i) {
+    item.classList.toggle('selected', i === _acIdx);
+  });
+  // scroll into view
+  var selected = el.querySelector('.chat-ac-item.selected');
+  if (selected) selected.scrollIntoView({block: 'nearest'});
+}
+
+function _acCheck() {
+  var input = document.getElementById('chat-input');
+  if (!input) return;
+  var val = input.value;
+
+  if (val === '/') {
+    // Show all slash commands + loaded skills
+    var cmds = _defaultSlashCmds.slice();
+    // Add loaded skills if available
+    if (window._loadedSkills) {
+      window._loadedSkills.forEach(function(s) {
+        cmds.push({cmd: '/' + s.name, desc: s.description || '', emoji: s.emoji || '\u2699\ufe0f'});
+      });
+    }
+    _acShow(cmds);
+    return;
+  }
+
+  if (val.startsWith('/') && val.length > 1 && !val.includes(' ')) {
+    var q = val.toLowerCase();
+    var cmds = _defaultSlashCmds.slice();
+    if (window._loadedSkills) {
+      window._loadedSkills.forEach(function(s) {
+        cmds.push({cmd: '/' + s.name, desc: s.description || '', emoji: s.emoji || '\u2699\ufe0f'});
+      });
+    }
+    var filtered = cmds.filter(function(c) { return c.cmd.toLowerCase().startsWith(q); });
+    _acShow(filtered);
+    return;
+  }
+
+  if (val === '@') {
+    _acShow(_defaultAtTargets);
+    return;
+  }
+
+  if (val.startsWith('@') && !val.includes(' ')) {
+    var q = val.toLowerCase();
+    var filtered = _defaultAtTargets.filter(function(t) { return t.cmd.toLowerCase().startsWith(q); });
+    _acShow(filtered);
+    return;
+  }
+
+  _acHide();
+}
+
 function chatInputKey(e) {
+  if (_acVisible) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); _acNavigate(1); return; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); _acNavigate(-1); return; }
+    if (e.key === 'Enter') { e.preventDefault(); _acSelect(_acIdx); return; }
+    if (e.key === 'Escape') { e.preventDefault(); _acHide(); return; }
+    if (e.key === 'Tab') { e.preventDefault(); _acSelect(_acIdx); return; }
+  }
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     chatSend();
@@ -13304,6 +13494,57 @@ async function maybeShowWizard() {
 }
 // ── end wizard ─────────────────────────────────────────────────────────────
 
+
+// ── Global keyboard shortcuts ────────────────────────────────────────────
+document.addEventListener('keydown', function(e) {
+  var tag = (e.target.tagName || '').toLowerCase();
+  var isInput = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
+
+  // Ctrl+K: focus chat input
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    switchModule('overview');
+    setTimeout(function() {
+      var ci = document.getElementById('chat-input');
+      if (ci) ci.focus();
+    }, 100);
+    return;
+  }
+
+  // Escape: close overlays
+  if (e.key === 'Escape') {
+    var kb = document.getElementById('kbOverlay');
+    if (kb && kb.classList.contains('open')) { kb.classList.remove('open'); return; }
+    // Close file viewer
+    var fv = document.getElementById('mem-file-viewer');
+    if (fv && fv.style.display !== 'none') { closeMemFileViewer(); return; }
+    return;
+  }
+
+  // Don't intercept when typing in inputs
+  if (isInput) return;
+
+  // ? — show shortcut help
+  if (e.key === '?') {
+    e.preventDefault();
+    var kb = document.getElementById('kbOverlay');
+    if (kb) kb.classList.toggle('open');
+    return;
+  }
+
+  // Number keys 1-9: switch tabs
+  var tabMap = {
+    '1': 'overview', '2': 'agents', '3': 'memory',
+    '4': 'capabilities', '5': 'projects', '6': 'workflows',
+    '7': 'locations', '8': 'files', '9': 'admin'
+  };
+  if (tabMap[e.key]) {
+    e.preventDefault();
+    switchModule(tabMap[e.key]);
+    return;
+  }
+});
+
 init();
 
 // ── Auto-reload on version change ──────────────────────────────────────────
@@ -13452,6 +13693,23 @@ init();
         </div>
       </div>
     </div>
+
+
+<!-- Keyboard shortcuts overlay -->
+<div class="kb-overlay" id="kbOverlay" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="kb-dialog">
+    <div class="kb-title">Keyboard Shortcuts</div>
+    <div class="kb-row"><span class="kb-key">Ctrl+K</span><span class="kb-desc">Focus chat input</span></div>
+    <div class="kb-row"><span class="kb-key">1</span>-<span class="kb-key">9</span><span class="kb-desc">Switch tabs</span></div>
+    <div class="kb-row"><span class="kb-key">Esc</span><span class="kb-desc">Close panel / cancel</span></div>
+    <div class="kb-row"><span class="kb-key">?</span><span class="kb-desc">Show this help</span></div>
+    <div class="kb-row"><span class="kb-key">Enter</span><span class="kb-desc">Send message</span></div>
+    <div class="kb-row"><span class="kb-key">Shift+Enter</span><span class="kb-desc">New line in chat</span></div>
+    <div class="kb-row"><span class="kb-key">/</span><span class="kb-desc">Slash commands (in chat)</span></div>
+    <div class="kb-row"><span class="kb-key">@</span><span class="kb-desc">Target model (in chat)</span></div>
+    <div style="margin-top:12px;text-align:center;font-size:11px;color:var(--text3)">Press Esc or click outside to close</div>
+  </div>
+</div>
 
 </body>
 </html>
@@ -13769,6 +14027,23 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <p style="margin-top:6px"><a href="https://github.com/lobsterhands/porter">GitHub</a> &middot; AGPL-3.0 &middot; Built with &#10084; and Python stdlib</p>
 </footer>
 
+
+<!-- Keyboard shortcuts overlay -->
+<div class="kb-overlay" id="kbOverlay" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="kb-dialog">
+    <div class="kb-title">Keyboard Shortcuts</div>
+    <div class="kb-row"><span class="kb-key">Ctrl+K</span><span class="kb-desc">Focus chat input</span></div>
+    <div class="kb-row"><span class="kb-key">1</span>-<span class="kb-key">9</span><span class="kb-desc">Switch tabs</span></div>
+    <div class="kb-row"><span class="kb-key">Esc</span><span class="kb-desc">Close panel / cancel</span></div>
+    <div class="kb-row"><span class="kb-key">?</span><span class="kb-desc">Show this help</span></div>
+    <div class="kb-row"><span class="kb-key">Enter</span><span class="kb-desc">Send message</span></div>
+    <div class="kb-row"><span class="kb-key">Shift+Enter</span><span class="kb-desc">New line in chat</span></div>
+    <div class="kb-row"><span class="kb-key">/</span><span class="kb-desc">Slash commands (in chat)</span></div>
+    <div class="kb-row"><span class="kb-key">@</span><span class="kb-desc">Target model (in chat)</span></div>
+    <div style="margin-top:12px;text-align:center;font-size:11px;color:var(--text3)">Press Esc or click outside to close</div>
+  </div>
+</div>
+
 </body>
 </html>"""
 
@@ -14030,7 +14305,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.22.3"})
+            self.reply_json({"v": "0.22.5"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17563,7 +17838,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.22.3 ready (localhost only)")
+    print(f"\n  Porter v0.22.5 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
