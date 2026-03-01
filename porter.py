@@ -9795,6 +9795,25 @@ function _chatTransitionToBottom() {
   if (routeBar) routeBar.style.display = '';
   var bottomInput = document.getElementById('chat-input');
   if (bottomInput) { bottomInput.value = ''; bottomInput.focus(); }
+  // Sync model picker: welcome selection → bottom picker
+  var _welSel = document.getElementById('chat-backend-sel-welcome');
+  var _mainSel = document.getElementById('chat-backend-sel');
+  if (_welSel && _mainSel && _welSel.value) _mainSel.value = _welSel.value;
+  // Sync visual picker too
+  var _welPicker = document.querySelector('.chat-welcome-meta .model-picker');
+  var _btmPicker = document.querySelector('.chat-input-bottom-meta .model-picker');
+  if (_welPicker && _btmPicker) {
+    var _selOpt = _welPicker.querySelector('.mp-opt.selected');
+    if (_selOpt) {
+      var _val = _selOpt.dataset.v;
+      var _lbl = _selOpt.textContent;
+      _btmPicker.querySelectorAll('.mp-opt').forEach(function(o) {
+        o.classList.toggle('selected', o.dataset.v === _val);
+      });
+      var _trig = _btmPicker.querySelector('.mp-trigger');
+      if (_trig) _trig.textContent = _lbl;
+    }
+  }
 }
 
 function _chatAutoGrow(el) {
