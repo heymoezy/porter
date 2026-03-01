@@ -15316,6 +15316,58 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.reply_html("console.error('Tour JS not found');", 404)
 
+        elif parsed.path.startswith("/v2"):
+            # Serve React frontend from frontend/dist/
+            if not self.auth_check(): return
+            frontend_dir = Path(__file__).parent / "frontend" / "dist"
+            if not frontend_dir.is_dir():
+                self.reply_html("<h1>Frontend not built</h1><p>Run <code>cd frontend && npm run build</code> first.</p>", 404)
+                return
+            # Strip /v2 prefix to get the asset path
+            asset_path = parsed.path[3:] or "/index.html"  # /v2 → /index.html
+            if asset_path == "/": asset_path = "/index.html"
+            target = (frontend_dir / asset_path.lstrip("/")).resolve()
+            # Security: ensure we stay inside frontend/dist
+            try:
+                target.relative_to(frontend_dir.resolve())
+            except ValueError:
+                self.reply_html("<h1>Forbidden</h1>", 403)
+                return
+            if target.is_file():
+                ctype = "text/html"
+                ext = target.suffix.lower()
+                if ext == ".js": ctype = "application/javascript"
+                elif ext == ".css": ctype = "text/css"
+                elif ext == ".svg": ctype = "image/svg+xml"
+                elif ext == ".png": ctype = "image/png"
+                elif ext == ".json": ctype = "application/json"
+                elif ext == ".map": ctype = "application/json"
+                data = target.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(data)))
+                if ext in (".js", ".css", ".svg", ".png"):
+                    self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+                else:
+                    self.send_header("Cache-Control", "no-cache")
+                self._add_security_headers()
+                self.end_headers()
+                self.wfile.write(data)
+            else:
+                # SPA fallback: serve index.html for all unmatched routes
+                index = frontend_dir / "index.html"
+                if index.is_file():
+                    data = index.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Cache-Control", "no-cache")
+                    self._add_security_headers()
+                    self.end_headers()
+                    self.wfile.write(data)
+                else:
+                    self.reply_html("<h1>Not found</h1>", 404)
+
         elif parsed.path == "/api/roots":
             if not self.auth_check(redirect=False):
                 return
