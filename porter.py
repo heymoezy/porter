@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.18 — Chat Polish"""
+"""Porter v0.25.19 — Chat UX"""
 
 
 
@@ -4168,15 +4168,15 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .chat-welcome-title { font-size:28px; font-weight:700; color:var(--text); }
 .chat-welcome-input-wrap {
-  width:100%; max-width:620px; background:var(--raised); border:1px solid var(--border);
+  width:100%; max-width:620px; background:none; border:1px solid var(--border);
   border-radius:16px; padding:16px 20px 12px; transition:border-color .15s;
 }
 .chat-welcome-input-wrap:focus-within { border-color:var(--accent); }
 .chat-welcome-input-wrap textarea {
-  width:100%; border:none; background:none; color:var(--text); font-size:14px;
+  width:100%; border:none; background:none; color:#fff; font-size:14px;
   font-family:inherit; resize:none; outline:none; min-height:28px; max-height:160px; line-height:1.5;
 }
-.chat-welcome-input-wrap textarea::placeholder { color:var(--text3); }
+.chat-welcome-input-wrap textarea::placeholder { color:var(--text2); }
 .chat-welcome-meta {
   display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:8px;
 }
@@ -4248,23 +4248,23 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   background:var(--bg); position:sticky; bottom:0; z-index:10;
 }
 .chat-input-area .chat-input-wrap {
-  background:var(--raised); border:1px solid var(--border); border-radius:14px;
+  background:none; border:1px solid var(--border); border-radius:14px;
   padding:12px 16px 8px; transition:border-color .15s;
 }
 .chat-input-area .chat-input-wrap:focus-within { border-color:var(--accent); }
 .chat-input-bottom {
-  width:100%; border:none; background:none; color:var(--text); font-size:13px;
+  width:100%; border:none; background:none; color:#fff; font-size:13px;
   font-family:inherit; resize:none; outline:none; min-height:24px; max-height:120px; line-height:1.5;
 }
-.chat-input-bottom::placeholder { color:var(--text3); }
+.chat-input-bottom::placeholder { color:var(--text2); }
 .chat-input-bottom-meta {
   display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:6px;
 }
 .chat-model-dropdown {
   padding:3px 10px; font-size:11px; border:1px solid var(--border); border-radius:6px;
-  background:var(--bg2); color:var(--text3); cursor:pointer; transition:.12s;
+  background:none; color:var(--text2); cursor:pointer; transition:.12s;
 }
-.chat-model-dropdown:hover { border-color:var(--accent); color:var(--text); }
+.chat-model-dropdown:hover { border-color:var(--accent); color:#fff; }
 .chat-sidebar { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
 .chat-sidebar-item {
   display:flex; align-items:center; gap:8px; padding:6px 10px;
@@ -5113,7 +5113,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.18</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.19</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5204,11 +5204,11 @@ select.settings-input { padding-right: 26px; }
               <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
               <select id="chat-backend-sel" class="chat-model-dropdown" title="Select model">
                 <option value="">Auto-route</option>
-                <option value="openclaw">OpenClaw</option>
-                <option value="gemini">Gemini</option>
-                <option value="codex">Codex</option>
-                <option value="claude">Claude</option>
-                <option value="ollama">Ollama</option>
+                <option value="openclaw">OpenClaw (GPT-5.3 Codex)</option>
+                <option value="gemini">Gemini 2.5 Flash</option>
+                <option value="codex">Codex CLI (GPT-5.1)</option>
+                <option value="claude">Claude (Opus 4.6)</option>
+                <option value="ollama">Ollama (Qwen 7B)</option>
               </select>
             </div>
           </div>
@@ -6200,6 +6200,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.19', date:'2026-03-01', notes:['Chat: full model names in dropdown, transparent input wrap, white text, greeting placeholder'] },
   { ver:'v0.25.18', date:'2026-03-01', notes:['Chat: welcome renders instantly (no wait for model load), removed Direct Dispatch section, centered input box'] },
   { ver:'v0.25.17', date:'2026-03-01', notes:['Chat redesign: centered welcome input, pinned bottom after send, model dropdown, no send button or paperclip'] },
   { ver:'v0.25.16', date:'2026-03-01', notes:['Upload stays in directory with slide-in animation for new files (matches delete fade-out)'] },
@@ -9661,17 +9662,16 @@ function renderChatMessages(streamUpdate) {
     // Centered welcome state
     el.classList.add('welcome-state');
     el.innerHTML = '<div class="chat-welcome">'
-      + '<div class="chat-welcome-title">Porter</div>'
       + '<div class="chat-welcome-input-wrap">'
-      + '<textarea id="chat-input-welcome" placeholder="How can I help you today?" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>'
+      + '<textarea id="chat-input-welcome" placeholder="Hey, I\u2019m Porter. How can I help you?" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>'
       + '<div class="chat-welcome-meta">'
       + '<select id="chat-backend-sel-welcome" class="chat-model-dropdown" title="Select model">'
       + '<option value="">Auto-route</option>'
-      + '<option value="openclaw">OpenClaw</option>'
-      + '<option value="gemini">Gemini</option>'
-      + '<option value="codex">Codex</option>'
-      + '<option value="claude">Claude</option>'
-      + '<option value="ollama">Ollama</option>'
+      + '<option value="openclaw">OpenClaw (GPT-5.3 Codex)</option>'
+      + '<option value="gemini">Gemini 2.5 Flash</option>'
+      + '<option value="codex">Codex CLI (GPT-5.1)</option>'
+      + '<option value="claude">Claude (Opus 4.6)</option>'
+      + '<option value="ollama">Ollama (Qwen 7B)</option>'
       + '</select>'
       + '</div></div></div>';
     if (inputArea) inputArea.style.display = 'none';
@@ -16067,7 +16067,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.18"})
+            self.reply_json({"v": "0.25.19"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17071,7 +17071,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.18'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.19'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20123,7 +20123,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.18 ready (localhost only)")
+    print(f"\n  Porter v0.25.19 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
