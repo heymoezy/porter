@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.22.7 — self-hosted file manager"""
+"""Porter v0.22.9 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -3827,6 +3827,38 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .kb-desc { color:var(--text3); }
 
+
+/* Notification center */
+.notif-bell { position:relative; cursor:pointer; font-size:16px; padding:4px 8px; border:none; background:none; color:var(--text2); }
+.notif-bell:hover { color:var(--text); }
+.notif-badge {
+  position:absolute; top:0; right:2px; min-width:14px; height:14px; line-height:14px;
+  font-size:9px; font-weight:700; text-align:center; border-radius:7px;
+  background:var(--danger,#dc3545); color:#fff; padding:0 3px; display:none;
+}
+.notif-dropdown {
+  position:absolute; top:100%; right:0; width:320px; max-height:360px; overflow-y:auto;
+  background:var(--raised); border:1px solid var(--border); border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.3); z-index:200; display:none;
+}
+.notif-dropdown.open { display:block; }
+.notif-hdr { display:flex; align-items:center; padding:10px 14px; border-bottom:1px solid var(--border); }
+.notif-hdr-title { font-size:12px; font-weight:600; color:var(--text); }
+.notif-clear { font-size:10px; color:var(--text3); cursor:pointer; margin-left:auto; border:none; background:none; }
+.notif-clear:hover { color:var(--accent); }
+.notif-item {
+  display:flex; align-items:flex-start; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border);
+  font-size:12px; transition:.08s;
+}
+.notif-item:last-child { border-bottom:none; }
+.notif-item:hover { background:var(--surface2); }
+.notif-item.unread { background:color-mix(in srgb, var(--accent) 5%, transparent); }
+.notif-icon { font-size:14px; flex-shrink:0; margin-top:1px; }
+.notif-body { flex:1; min-width:0; }
+.notif-text { color:var(--text); line-height:1.4; }
+.notif-time { font-size:10px; color:var(--text3); margin-top:2px; }
+.notif-empty { text-align:center; padding:24px; font-size:12px; color:var(--text3); }
+
 .chat-input-area { display:flex; gap:8px; padding-top:12px; border-top:1px solid var(--border); flex-shrink:0; align-items:flex-end; }
 .chat-input {
   flex:1; padding:10px 14px; border:1px solid var(--border); border-radius:10px;
@@ -4606,6 +4638,10 @@ select.settings-input { padding-right: 26px; }
       <span class="logo-name">porter</span>
       <span class="logo-sub">File Manager</span>
     </div>
+    <div style="position:relative;margin-left:auto;margin-right:4px">
+      <button class="notif-bell" onclick="toggleNotifications()" title="Notifications">&#128276;<span class="notif-badge" id="notif-badge">0</span></button>
+      <div class="notif-dropdown" id="notif-dropdown"></div>
+    </div>
     <button class="hbg-btn" id="hbgBtn" onclick="toggleSidebar()" title="Toggle sidebar">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="3" y1="6" x2="21" y2="6"/>
@@ -4682,7 +4718,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.22.7</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.22.9</div>
   </div>
 </aside>
 
@@ -5733,6 +5769,16 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.22.9', date:'2026-03-01', notes:[
+    'New: Chat messages persist across page reloads (localStorage)',
+    'New: /clear wipes both display and saved messages',
+    'UX: Resume conversations where you left off',
+  ]},
+  { ver:'v0.22.8', date:'2026-03-01', notes:[
+    'New: Notification center — bell icon shows recent events (delegations, tasks, errors)',
+    'New: Unread badge with event count',
+    'New: Notification dropdown with timestamps and event types',
+  ]},
   { ver:'v0.22.7', date:'2026-03-01', notes:[
     'New: Smart routing — Porter auto-selects model based on message content',
     'New: Code/technical tasks route to OpenClaw, quick queries to Gemini',
@@ -8797,6 +8843,30 @@ async function loadProjectContext(projectId) {
 // ── Chat Engine ──────────────────────────────────────────────────────────
 let _chatId = '';
 let _chatMessages = [];
+var _CHAT_STORAGE_KEY = 'porter_chat_msgs';
+
+function _saveChatMessages() {
+  try {
+    var toSave = _chatMessages.slice(-50).filter(function(m) {
+      return m.role !== 'skill-pending';
+    });
+    localStorage.setItem(_CHAT_STORAGE_KEY, JSON.stringify(toSave));
+  } catch(e) {}
+}
+
+function _loadChatMessages() {
+  try {
+    var raw = localStorage.getItem(_CHAT_STORAGE_KEY);
+    if (raw) {
+      var msgs = JSON.parse(raw);
+      if (Array.isArray(msgs) && msgs.length > 0) {
+        _chatMessages = msgs;
+        renderChatMessages();
+      }
+    }
+  } catch(e) {}
+}
+
 let _chatStreaming = false;
 let _chatEventSource = null;
 
@@ -8807,6 +8877,7 @@ function _chatModelChanged() {
 }
 
 async function populateChatModels() {
+  _loadChatMessages();
   const sel = document.getElementById('chat-model');
   if (!sel) return;
   const saved = sel.value;
@@ -8927,6 +8998,7 @@ function renderChatMessages(streamUpdate) {
   }).join('');
   el.scrollTop = el.scrollHeight;
   _updateStopBtn(_chatStreaming);
+  if (!streamUpdate) _saveChatMessages();
 }
 
 function chatAutoResize(el) {
@@ -8934,6 +9006,85 @@ function chatAutoResize(el) {
   el.style.height = Math.min(el.scrollHeight, 120) + 'px';
 }
 
+
+
+// ── Notification center ──────────────────────────────────────────────────
+var _notifications = [];
+var _notifUnread = 0;
+
+function addNotification(type, text) {
+  _notifications.unshift({
+    type: type,
+    text: text,
+    ts: Date.now() / 1000,
+    read: false
+  });
+  if (_notifications.length > 30) _notifications.pop();
+  _notifUnread++;
+  _updateNotifBadge();
+}
+
+function _updateNotifBadge() {
+  var badge = document.getElementById('notif-badge');
+  if (!badge) return;
+  if (_notifUnread > 0) {
+    badge.textContent = _notifUnread > 9 ? '9+' : _notifUnread;
+    badge.style.display = 'block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function toggleNotifications() {
+  var dd = document.getElementById('notif-dropdown');
+  if (!dd) return;
+  if (dd.classList.contains('open')) {
+    dd.classList.remove('open');
+    return;
+  }
+  // Mark all as read
+  _notifications.forEach(function(n) { n.read = true; });
+  _notifUnread = 0;
+  _updateNotifBadge();
+  renderNotifications();
+  dd.classList.add('open');
+}
+
+function renderNotifications() {
+  var dd = document.getElementById('notif-dropdown');
+  if (!dd) return;
+  if (!_notifications.length) {
+    dd.innerHTML = '<div class="notif-hdr"><span class="notif-hdr-title">Notifications</span></div><div class="notif-empty">No notifications yet</div>';
+    return;
+  }
+  var icons = {delegation:'\ud83d\udce4', task:'\u2705', error:'\u274c', system:'\u2699\ufe0f', chat:'\ud83d\udcac'};
+  var html = '<div class="notif-hdr"><span class="notif-hdr-title">Notifications</span><button class="notif-clear" onclick="clearNotifications()">Clear all</button></div>';
+  _notifications.forEach(function(n) {
+    var ago = Math.round((Date.now()/1000 - n.ts) / 60);
+    var timeStr = ago < 1 ? 'just now' : ago < 60 ? ago + 'm ago' : Math.round(ago/60) + 'h ago';
+    var icon = icons[n.type] || '\ud83d\udd14';
+    var unread = n.read ? '' : ' unread';
+    html += '<div class="notif-item' + unread + '"><span class="notif-icon">' + icon + '</span><div class="notif-body"><div class="notif-text">' + escHtml(n.text) + '</div><div class="notif-time">' + timeStr + '</div></div></div>';
+  });
+  dd.innerHTML = html;
+}
+
+function clearNotifications() {
+  _notifications = [];
+  _notifUnread = 0;
+  _updateNotifBadge();
+  var dd = document.getElementById('notif-dropdown');
+  if (dd) dd.classList.remove('open');
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  var dd = document.getElementById('notif-dropdown');
+  if (!dd || !dd.classList.contains('open')) return;
+  if (!e.target.closest('.notif-bell') && !e.target.closest('.notif-dropdown')) {
+    dd.classList.remove('open');
+  }
+});
 
 // ── Chat autocomplete ────────────────────────────────────────────────────
 var _acVisible = false;
@@ -9089,6 +9240,7 @@ function chatSend() {
 
     if (cmd === '/clear') {
       _chatMessages = [];
+      try { localStorage.removeItem(_CHAT_STORAGE_KEY); } catch(e) {}
       renderChatMessages();
       return;
     }
@@ -14426,7 +14578,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.22.7"})
+            self.reply_json({"v": "0.22.9"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17967,7 +18119,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.22.7 ready (localhost only)")
+    print(f"\n  Porter v0.22.9 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
