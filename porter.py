@@ -4161,28 +4161,25 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 /* notification CSS removed — dead code */
 
 
-/* Chat dashboard */
-.chat-dash { padding:20px 0; }
-.chat-dash-title { font-size:18px; font-weight:700; color:var(--text); margin-bottom:4px; }
-.chat-dash-sub { font-size:12px; color:var(--text3); margin-bottom:20px; }
-.chat-dash-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:10px; margin-bottom:20px; }
-.chat-dash-card {
-  padding:14px 16px; background:var(--raised); border:1px solid var(--border);
-  border-radius:10px; cursor:pointer; transition:.15s;
+/* Chat welcome (centered, fresh-chat state) */
+.chat-welcome {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  flex:1; gap:16px; text-align:center; padding:0 24px;
 }
-.chat-dash-card:hover { border-color:var(--accent); transform:translateY(-1px); }
-.chat-dash-card .dc-status { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
-.chat-dash-card .dc-status.online { background:#22c55e; }
-.chat-dash-card .dc-status.offline { background:#ef4444; }
-.chat-dash-card .dc-name { font-size:13px; font-weight:600; color:var(--text); }
-.chat-dash-card .dc-model { font-size:11px; color:var(--text3); margin-top:4px; }
-.chat-dash-card .dc-latency { font-size:10px; color:var(--text3); margin-top:2px; }
-.chat-dash-actions { display:flex; gap:8px; flex-wrap:wrap; }
-.chat-dash-action {
-  padding:8px 16px; font-size:12px; border-radius:8px; border:1px solid var(--border);
-  background:none; color:var(--text2); cursor:pointer; transition:.12s;
+.chat-welcome-title { font-size:28px; font-weight:700; color:var(--text); }
+.chat-welcome-input-wrap {
+  width:100%; max-width:620px; background:var(--raised); border:1px solid var(--border);
+  border-radius:16px; padding:16px 20px 12px; transition:border-color .15s;
 }
-.chat-dash-action:hover { background:var(--raised); color:var(--text); border-color:var(--accent); }
+.chat-welcome-input-wrap:focus-within { border-color:var(--accent); }
+.chat-welcome-input-wrap textarea {
+  width:100%; border:none; background:none; color:var(--text); font-size:14px;
+  font-family:inherit; resize:none; outline:none; min-height:28px; max-height:160px; line-height:1.5;
+}
+.chat-welcome-input-wrap textarea::placeholder { color:var(--text3); }
+.chat-welcome-meta {
+  display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:8px;
+}
 
 /* Direct Dispatch bar (inside Chat) */
 .chat-dispatch-section { border-top:1px solid var(--border); flex-shrink:0; }
@@ -4250,30 +4247,28 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .mem-hub-pill.active { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent); }
 
-.chat-input-area { padding:8px 16px 12px; border-top:1px solid var(--border); flex-shrink:0; background:var(--bg); position:sticky; bottom:0; z-index:10; }
-.chat-input-row { display:flex; gap:8px; align-items:flex-end; }
-.chat-input-meta { display:flex; align-items:center; gap:8px; padding-top:6px; }
-.chat-backend-sel { padding:2px 8px; font-size:11px; border:1px solid var(--border); border-radius:5px; background:var(--bg2); color:var(--text3); }
-.chat-backend-sel:hover { border-color:var(--accent); color:var(--text); }
-.chat-backend-hint { font-size:10px; color:var(--text3); }
-.chat-input {
-  flex:1; padding:10px 14px; border:1px solid var(--border); border-radius:10px;
-  background:var(--bg2); color:var(--text); font-size:13px; font-family:inherit;
-  min-height:48px;
-  resize:none; min-height:20px; max-height:120px; line-height:1.4;
+.chat-input-area {
+  padding:8px 20px 12px; border-top:1px solid var(--border); flex-shrink:0;
+  background:var(--bg); position:sticky; bottom:0; z-index:10;
 }
-.chat-input:focus { outline:none; border-color:var(--accent); }
-.chat-send {
-  padding:10px 18px; background:var(--accent); color:#fff; border:none;
-  border-radius:10px; font-size:13px; font-weight:600; cursor:pointer;
-  flex-shrink:0; transition:.12s;
+.chat-input-area .chat-input-wrap {
+  background:var(--raised); border:1px solid var(--border); border-radius:14px;
+  padding:12px 16px 8px; transition:border-color .15s;
 }
-.chat-send:hover { opacity:.85; }
-.chat-send:disabled { opacity:.4; cursor:not-allowed; }
-.chat-model-sel {
-  padding:4px 10px; font-size:12px; border:1px solid var(--border);
-  border-radius:6px; background:var(--bg2); color:var(--text);
+.chat-input-area .chat-input-wrap:focus-within { border-color:var(--accent); }
+.chat-input-bottom {
+  width:100%; border:none; background:none; color:var(--text); font-size:13px;
+  font-family:inherit; resize:none; outline:none; min-height:24px; max-height:120px; line-height:1.5;
 }
+.chat-input-bottom::placeholder { color:var(--text3); }
+.chat-input-bottom-meta {
+  display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:6px;
+}
+.chat-model-dropdown {
+  padding:3px 10px; font-size:11px; border:1px solid var(--border); border-radius:6px;
+  background:var(--bg2); color:var(--text3); cursor:pointer; transition:.12s;
+}
+.chat-model-dropdown:hover { border-color:var(--accent); color:var(--text); }
 .chat-sidebar { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
 .chat-sidebar-item {
   display:flex; align-items:center; gap:8px; padding:6px 10px;
@@ -5186,12 +5181,13 @@ select.settings-input { padding-right: 26px; }
   <!-- module panels -->
   <div id="overview-module" class="module-panel">
     <div class="chat-container">
-      <div class="chat-route-bar">
+      <div class="chat-route-bar" id="chat-route-bar" style="display:none">
         <span class="module-title" style="font-size:16px">Chat</span>
-        <button class="btn btn-ghost" style="font-size:11px;margin-left:auto" onclick="loadChatSessions()">History</button>
+        <button class="btn btn-ghost" style="font-size:11px;margin-left:auto" onclick="chatNewConversation()">New</button>
+        <button class="btn btn-ghost" style="font-size:11px" onclick="loadChatSessions()">History</button>
       </div>
       <select id="chat-route" style="display:none"><option value="general">General</option></select>
-      <select id="chat-model" class="chat-model-sel" style="display:none" onchange="_chatModelChanged()"></select>
+      <select id="chat-model" style="display:none" onchange="_chatModelChanged()"></select>
 
       <div id="chat-history-panel" style="display:none">
         <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);margin-bottom:8px">
@@ -5202,41 +5198,23 @@ select.settings-input { padding-right: 26px; }
       </div>
 
       <div id="chat-main">
-        <div id="chat-messages" class="chat-messages">
-          <div class="chat-empty" id="chat-dashboard">
-            <div class="chat-dash">
-              <div class="chat-dash-title">Porter</div>
-              <div class="chat-dash-sub">Dispatch tasks to agents, chat with AI models, or use quick actions.</div>
-              <div id="chat-dash-models" class="chat-dash-grid"></div>
-              <div class="chat-dash-actions">
-                <button class="chat-dash-action" onclick="document.getElementById('chat-input').value='/status ';chatSend()">System Status</button>
-                <button class="chat-dash-action" onclick="document.getElementById('chat-input').value='/models ';chatSend()">List Models</button>
-                <button class="chat-dash-action" onclick="document.getElementById('chat-input').value='/help ';chatSend()">Help</button>
-                <button class="chat-dash-action" onclick="document.getElementById('chat-input').focus()">Start Chatting</button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <div id="chat-messages" class="chat-messages"></div>
         <div id="chat-ctx-bar" class="chat-ctx-bar" style="display:none"></div>
-        <div class="chat-input-area">
+        <div class="chat-input-area" id="chat-input-area" style="display:none">
           <div id="chat-autocomplete" class="chat-autocomplete"></div>
-          <div id="chat-file-picker" class="chat-file-picker" style="display:none"></div>
-          <div class="chat-input-row">
-            <button class="chat-attach-btn" onclick="toggleChatFilePicker()" title="Attach file as context">&#128206;</button>
-            <textarea id="chat-input" class="chat-input" placeholder="Type a message&#8230;" rows="2" onkeydown="chatInputKey(event)" oninput="chatAutoResize(this); _acCheck()"></textarea>
-            <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
-            <button id="chat-send-btn" class="chat-send" onclick="chatSend()" disabled>Send</button>
-          </div>
-          <div class="chat-input-meta">
-            <select id="chat-backend-sel" class="chat-backend-sel" title="Select backend">
-              <option value="">Auto-route</option>
-              <option value="openclaw">OpenClaw</option>
-              <option value="gemini">Gemini</option>
-              <option value="codex">Codex</option>
-              <option value="claude">Claude</option>
-              <option value="ollama">Ollama</option>
-            </select>
-            <span id="chat-backend-hint" class="chat-backend-hint">auto-route</span>
+          <div class="chat-input-wrap">
+            <textarea id="chat-input" class="chat-input-bottom" placeholder="Reply&#8230;" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
+            <div class="chat-input-bottom-meta">
+              <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
+              <select id="chat-backend-sel" class="chat-model-dropdown" title="Select model">
+                <option value="">Auto-route</option>
+                <option value="openclaw">OpenClaw</option>
+                <option value="gemini">Gemini</option>
+                <option value="codex">Codex</option>
+                <option value="claude">Claude</option>
+                <option value="ollama">Ollama</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -9608,39 +9586,7 @@ function _chatModelChanged() {
 
 // ── Chat dashboard ───────────────────────────────────────────────────────
 function _renderChatDashboard(cachedHealth) {
-  var el = document.getElementById('chat-dash-models');
-  if (!el) return;
-  var models = [
-    {name: 'Claude', backend: 'claude', model: 'Claude Code', color: '#d97706'},
-    {name: 'OpenClaw', backend: 'openclaw', model: 'GPT-5.3 Codex', color: '#059669'},
-    {name: 'Gemini', backend: 'gemini', model: 'Gemini 2.5 Flash', color: '#2563eb'},
-    {name: 'Codex', backend: 'codex', model: 'Codex CLI', color: '#f59e0b'},
-    {name: 'Ollama', backend: 'ollama', model: 'Qwen 7B', color: '#8b5cf6'},
-  ];
-  var html = '';
-  models.forEach(function(m) {
-    html += '<div class="chat-dash-card" style="border-left:3px solid ' + m.color + '" onclick="document.getElementById(\'chat-input\').value=\'@' + m.backend + ' \';document.getElementById(\'chat-input\').focus()">';
-    html += '<div><span class="dc-status" id="dc-' + m.backend + '"></span><span class="dc-name">' + m.name + '</span></div>';
-    html += '<div class="dc-model">' + m.model + '</div>';
-    html += '<div class="dc-latency" id="dc-lat-' + m.backend + '">Checking...</div>';
-    html += '</div>';
-  });
-  el.innerHTML = html;
-  // Apply health data (shared from populateChatModels, no extra API call)
-  {
-    (cachedHealth || []).forEach(function(s) {
-        var backend = null;
-        if (s.name.toLowerCase().includes('openclaw')) backend = 'openclaw';
-        if (s.name.toLowerCase().includes('gemini')) backend = 'gemini';
-        if (s.name.toLowerCase().includes('ollama')) backend = 'ollama';
-        if (backend) {
-          var dot = document.getElementById('dc-' + backend);
-          var lat = document.getElementById('dc-lat-' + backend);
-          if (dot) dot.classList.add(s.status === 'running' || s.status === 'ok' || s.status === 'up' ? 'online' : 'offline');
-          if (lat) lat.textContent = s.version ? 'v' + s.version : (s.status || 'unknown');
-        }
-      });
-  }
+  // Dashboard cards removed — welcome screen is now minimal
 }
 
 async function populateChatModels() {
@@ -9729,28 +9675,42 @@ async function populateChatModels() {
 function chatNewConversation() {
   _chatContextFiles = [];
   renderContextBar();
-  // Keep current route — only route selector changes it
   _chatId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
   _chatMessages = [];
+  try { localStorage.removeItem(_CHAT_STORAGE_KEY); } catch(e) {}
   renderChatMessages();
   closeChatHistory();
-  const input = document.getElementById('chat-input');
-  if (input) { input.value = ''; input.focus(); }
 }
 
 function renderChatMessages(streamUpdate) {
   var el = document.getElementById('chat-messages');
   if (!el) return;
+  var inputArea = document.getElementById('chat-input-area');
+  var routeBar = document.getElementById('chat-route-bar');
   if (!_chatMessages.length) {
-    el.innerHTML = '<div class="chat-empty">'
-      + '<div class="chat-dash-title">Porter</div>'
-      + '<div class="chat-empty-title">Chat</div>'
-      + '<div id="chat-dash-models" class="chat-dash-grid"></div>'
-      + '</div>';
+    // Centered welcome state
+    el.innerHTML = '<div class="chat-welcome">'
+      + '<div class="chat-welcome-title">Porter</div>'
+      + '<div class="chat-welcome-input-wrap">'
+      + '<textarea id="chat-input-welcome" placeholder="How can I help you today?" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>'
+      + '<div class="chat-welcome-meta">'
+      + '<select id="chat-backend-sel-welcome" class="chat-model-dropdown" title="Select model">'
+      + '<option value="">Auto-route</option>'
+      + '<option value="openclaw">OpenClaw</option>'
+      + '<option value="gemini">Gemini</option>'
+      + '<option value="codex">Codex</option>'
+      + '<option value="claude">Claude</option>'
+      + '<option value="ollama">Ollama</option>'
+      + '</select>'
+      + '</div></div></div>';
+    if (inputArea) inputArea.style.display = 'none';
+    if (routeBar) routeBar.style.display = 'none';
     _updateStopBtn(false);
     return;
   }
-  // Streaming optimization: only update last message
+  // Has messages: show bottom-pinned input + header
+  if (inputArea) inputArea.style.display = '';
+  if (routeBar) routeBar.style.display = '';
   if (streamUpdate && _chatStreaming) {
     var last = el.lastElementChild;
     if (last && last.classList.contains('assistant')) {
@@ -9772,10 +9732,20 @@ function renderChatMessages(streamUpdate) {
   if (!streamUpdate) _saveChatMessages();
 }
 
-function chatAutoResize(el) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+function _chatTransitionToBottom() {
+  var inputArea = document.getElementById('chat-input-area');
+  var routeBar = document.getElementById('chat-route-bar');
+  if (inputArea) inputArea.style.display = '';
+  if (routeBar) routeBar.style.display = '';
+  var bottomInput = document.getElementById('chat-input');
+  if (bottomInput) { bottomInput.value = ''; bottomInput.focus(); }
 }
+
+function _chatAutoGrow(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+}
+function chatAutoResize(el) { _chatAutoGrow(el); }
 
 
 
@@ -10033,17 +10003,24 @@ function chatSend() {
       }
     }
   }
-  const input = document.getElementById('chat-input');
+  var _welcomeInput = document.getElementById('chat-input-welcome');
+  var _bottomInput = document.getElementById('chat-input');
+  var input = (_welcomeInput && _welcomeInput.offsetParent !== null) ? _welcomeInput : _bottomInput;
+  if (!input) return;
   const sel = document.getElementById('chat-model');
-  if (!input || !sel) return;
   const text = input.value.trim();
-  const modelId = sel.value;
+  const modelId = sel ? sel.value : '';
   if (!text || _chatStreaming) return;
+  // Sync backend selector from welcome if needed
+  var _welBsel = document.getElementById('chat-backend-sel-welcome');
+  var _mainBsel = document.getElementById('chat-backend-sel');
+  if (_welBsel && _welBsel.value && _mainBsel) _mainBsel.value = _welBsel.value;
 
   // Check for /commands — handle built-ins locally, route rest to OpenClaw
   if (text.startsWith('/')) {
     input.value = '';
     input.style.height = 'auto';
+    _chatTransitionToBottom();
     var cmd = text.split(' ')[0].toLowerCase();
 
     if (cmd === '/clear') {
