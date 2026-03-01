@@ -3875,35 +3875,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 
 
 /* Notification center */
-.notif-bell { position:relative; cursor:pointer; font-size:16px; padding:4px 8px; border:none; background:none; color:var(--text2); }
-.notif-bell:hover { color:var(--text); }
-.notif-badge {
-  position:absolute; top:0; right:2px; min-width:14px; height:14px; line-height:14px;
-  font-size:9px; font-weight:700; text-align:center; border-radius:7px;
-  background:var(--danger,#dc3545); color:#fff; padding:0 3px; display:none;
-}
-.notif-dropdown {
-  position:absolute; top:100%; right:0; width:320px; max-height:360px; overflow-y:auto;
-  background:var(--raised); border:1px solid var(--border); border-radius:10px;
-  box-shadow:0 8px 24px rgba(0,0,0,.3); z-index:200; display:none;
-}
-.notif-dropdown.open { display:block; }
-.notif-hdr { display:flex; align-items:center; padding:10px 14px; border-bottom:1px solid var(--border); }
-.notif-hdr-title { font-size:12px; font-weight:600; color:var(--text); }
-.notif-clear { font-size:10px; color:var(--text3); cursor:pointer; margin-left:auto; border:none; background:none; }
-.notif-clear:hover { color:var(--accent); }
-.notif-item {
-  display:flex; align-items:flex-start; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border);
-  font-size:12px; transition:.08s;
-}
-.notif-item:last-child { border-bottom:none; }
-.notif-item:hover { background:var(--surface2); }
-.notif-item.unread { background:color-mix(in srgb, var(--accent) 5%, transparent); }
-.notif-icon { font-size:14px; flex-shrink:0; margin-top:1px; }
-.notif-body { flex:1; min-width:0; }
-.notif-text { color:var(--text); line-height:1.4; }
-.notif-time { font-size:10px; color:var(--text3); margin-top:2px; }
-.notif-empty { text-align:center; padding:24px; font-size:12px; color:var(--text3); }
+/* notification CSS removed — dead code */
 
 
 /* Chat dashboard */
@@ -4789,10 +4761,7 @@ select.settings-input { padding-right: 26px; }
       <span class="logo-name">porter</span>
       <span class="logo-sub">Mission Control</span>
     </div>
-    <div style="position:relative;margin-left:auto;margin-right:4px">
-      <button class="notif-bell" onclick="toggleNotifications()" title="Notifications">Alerts<span class="notif-badge" id="notif-badge">0</span></button>
-      <div class="notif-dropdown" id="notif-dropdown"></div>
-    </div>
+    <!-- notifications removed: dead code, no callers -->
     <button class="hbg-btn" id="hbgBtn" onclick="toggleSidebar()" title="Toggle sidebar">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="3" y1="6" x2="21" y2="6"/>
@@ -4869,9 +4838,9 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.24.2</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.24.3</div>
 
-    <button onclick="startTour()" style="font-size:10px;color:var(--text3);background:none;border:none;cursor:pointer;padding:2px 0" title="Start guided tour">&#10067; Tour</button>
+    <!-- tour button moved to ? keyboard help overlay -->
   </div>
 </aside>
 
@@ -5005,6 +4974,7 @@ select.settings-input { padding-right: 26px; }
   <div id="agents-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Orchestration</span>
+      <button class="btn btn-ghost"  onclick="testAllOrchConnections()">Test all connections</button>
       <button class="btn btn-ghost"  onclick="loadAgents()">&#8635; Refresh</button>
     </div>
     <div class="module-intro">How AI work flows through Porter.</div>
@@ -5938,6 +5908,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.24.3', date:'2026-03-01', notes:[
+    'UX: Removed notification bell from sidebar (dead code, broke hamburger)',
+    'UX: Tour button removed from sidebar — available via ? keyboard help',
+    'Quality: Removed 80+ lines dead notification code',
+  ]},
   { ver:'v0.24.2', date:'2026-03-01', notes:[
     'UX: Agent Squad branding when 2+ agents are connected',
     'Quality: All bare except blocks now capture and log exceptions',
@@ -9318,83 +9293,9 @@ function chatAutoResize(el) {
 
 
 
-// ── Notification center ──────────────────────────────────────────────────
-var _notifications = [];
-var _notifUnread = 0;
+// Notification center removed — dead code (addNotification never called)
 
-function addNotification(type, text) {
-  _notifications.unshift({
-    type: type,
-    text: text,
-    ts: Date.now() / 1000,
-    read: false
-  });
-  if (_notifications.length > 30) _notifications.pop();
-  _notifUnread++;
-  _updateNotifBadge();
-}
 
-function _updateNotifBadge() {
-  var badge = document.getElementById('notif-badge');
-  if (!badge) return;
-  if (_notifUnread > 0) {
-    badge.textContent = _notifUnread > 9 ? '9+' : _notifUnread;
-    badge.style.display = 'block';
-  } else {
-    badge.style.display = 'none';
-  }
-}
-
-function toggleNotifications() {
-  var dd = document.getElementById('notif-dropdown');
-  if (!dd) return;
-  if (dd.classList.contains('open')) {
-    dd.classList.remove('open');
-    return;
-  }
-  // Mark all as read
-  _notifications.forEach(function(n) { n.read = true; });
-  _notifUnread = 0;
-  _updateNotifBadge();
-  renderNotifications();
-  dd.classList.add('open');
-}
-
-function renderNotifications() {
-  var dd = document.getElementById('notif-dropdown');
-  if (!dd) return;
-  if (!_notifications.length) {
-    dd.innerHTML = '<div class="notif-hdr"><span class="notif-hdr-title">Notifications</span></div><div class="notif-empty">No notifications yet</div>';
-    return;
-  }
-  var icons = {delegation:'\ud83d\udce4', task:'\u2705', error:'\u274c', system:'\u2699\ufe0f', chat:'\ud83d\udcac'};
-  var html = '<div class="notif-hdr"><span class="notif-hdr-title">Notifications</span><button class="notif-clear" onclick="clearNotifications()">Clear all</button></div>';
-  _notifications.forEach(function(n) {
-    var ago = Math.round((Date.now()/1000 - n.ts) / 60);
-    var timeStr = ago < 1 ? 'just now' : ago < 60 ? ago + 'm ago' : Math.round(ago/60) + 'h ago';
-    var icon = icons[n.type] || '\ud83d\udd14';
-    var unread = n.read ? '' : ' unread';
-    html += '<div class="notif-item' + unread + '"><span class="notif-icon">' + icon + '</span><div class="notif-body"><div class="notif-text">' + escHtml(n.text) + '</div><div class="notif-time">' + timeStr + '</div></div></div>';
-  });
-  dd.innerHTML = html;
-}
-
-function clearNotifications() {
-  _notifications = [];
-  _notifUnread = 0;
-  _updateNotifBadge();
-  var dd = document.getElementById('notif-dropdown');
-  if (dd) dd.classList.remove('open');
-}
-
-// Close dropdown when clicking outside
-document.addEventListener('click', function(e) {
-  var dd = document.getElementById('notif-dropdown');
-  if (!dd || !dd.classList.contains('open')) return;
-  if (!e.target.closest('.notif-bell') && !e.target.closest('.notif-dropdown')) {
-    dd.classList.remove('open');
-  }
-});
 
 
 // ── Guided tour (vanilla JS) ────────────────────────────────────────────────
@@ -9403,7 +9304,6 @@ var _tourSteps = [
   { sel: '#chat-input', title: 'Chat Input', desc: 'Type messages to your AI models. Use / for commands, @ to target a specific backend.' },
   { sel: '#chat-model, .chat-model-sel', title: 'Model Selector', desc: 'Choose which AI model responds. Cloud models (OpenClaw, Gemini, Codex) and local (Ollama) are grouped.' },
   { sel: '#chat-dashboard, .chat-dash', title: 'Dashboard', desc: 'Live model status cards. Click a card to start chatting with that backend.' },
-  { sel: '.notif-bell', title: 'Notifications', desc: 'Alerts menu shows recent events — delegations, errors, task completions.' },
 ];
 var _tourStep = 0;
 var _tourActive = false;
@@ -9483,13 +9383,7 @@ function endTour() {
   try { localStorage.setItem('porter_tour_done', '1'); } catch(e) {}
 }
 
-// Auto-start on first visit (skip in headless/test environments)
-setTimeout(function() {
-  try {
-    if (navigator.webdriver) return; // skip in automated testing
-    if (!localStorage.getItem('porter_tour_done')) startTour();
-  } catch(e) {}
-}, 2000);
+// Tour auto-start removed — users can start via ? keyboard shortcut
 
 
 // ── Tab help tooltips ───────────────────────────────────────────────────────
@@ -11906,6 +11800,70 @@ async function doTestAgent(id, name) {
     desc: rows,
     actions: [
       { label: 'Retest', cls: 'btn-ghost', action: () => { closeModal(); doTestAgent(id, name); } },
+      { label: 'Close', cls: 'btn-primary', action: closeModal },
+    ]
+  });
+}
+
+async function testAllOrchConnections() {
+  const agents = (window._lastAgents || []).filter(function(a) {
+    const s = ((a.name || '') + ' ' + (a.type || '')).toLowerCase();
+    return s.includes('openclaw') || s.includes('codex') || s.includes('claude') || s.includes('gemini');
+  });
+  if (!agents.length) {
+    toast('No orchestration agents found', 'err');
+    return;
+  }
+  toast('Testing connections…', 'ok');
+  const results = [];
+  for (const a of agents) {
+    const res = await api('/api/agents', { action: 'test_connection', id: a.id });
+    if (!res) {
+      results.push({ name: a.name, ok: false, endpoint: '—', latency: '—', message: 'No response' });
+      continue;
+    }
+    results.push({
+      name: a.name,
+      ok: !!res.connected,
+      endpoint: String(res.endpoint || '—'),
+      latency: res.latency_ms != null ? (res.latency_ms + 'ms') : '—',
+      message: String(res.message || ''),
+    });
+  }
+  const okCount = results.filter(r => r.ok).length;
+  const rows = results.map(function(r) {
+    const status = r.ok
+      ? '<span style="color:var(--ok,#22c55e);font-weight:600">Connected</span>'
+      : '<span style="color:var(--danger,#ef4444);font-weight:600">Unreachable</span>';
+    return '<tr>'
+      + '<td style="padding:6px 8px;border-bottom:1px solid var(--border)">' + escHtml(r.name) + '</td>'
+      + '<td style="padding:6px 8px;border-bottom:1px solid var(--border)">' + status + '</td>'
+      + '<td style="padding:6px 8px;border-bottom:1px solid var(--border)">' + escHtml(r.latency) + '</td>'
+      + '<td style="padding:6px 8px;border-bottom:1px solid var(--border);max-width:280px;word-break:break-word">' + escHtml(r.endpoint) + '</td>'
+      + '</tr>';
+  }).join('');
+  const failed = results.filter(r => !r.ok);
+  const hint = failed.length
+    ? '<div style="margin-top:8px;font-size:12px;color:var(--text3)">Failed: ' + failed.map(f => escHtml(f.name)).join(', ') + '</div>'
+    : '<div style="margin-top:8px;font-size:12px;color:var(--ok,#22c55e)">All orchestration connections are healthy.</div>';
+  const html = ''
+    + '<div style="font-size:12px;color:var(--text3)">'
+    + 'Healthy: <strong style="color:var(--text)">' + okCount + '/' + results.length + '</strong>'
+    + '</div>'
+    + '<div style="margin-top:10px;max-height:280px;overflow:auto;border:1px solid var(--border);border-radius:8px">'
+    + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+    + '<thead><tr>'
+    + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text3)">Agent</th>'
+    + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text3)">Status</th>'
+    + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text3)">Latency</th>'
+    + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text3)">Endpoint</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+    + hint;
+  showModal({
+    title: 'Orchestration connection report',
+    desc: html,
+    actions: [
+      { label: 'Retest all', cls: 'btn-ghost', action: () => { closeModal(); testAllOrchConnections(); } },
       { label: 'Close', cls: 'btn-primary', action: closeModal },
     ]
   });
