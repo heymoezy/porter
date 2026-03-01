@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Porter v0.23.3 — self-hosted file manager"""
+"""Porter v0.23.4 — self-hosted file manager"""
+
 
 import email
 import hashlib
@@ -4641,6 +4642,7 @@ select.settings-input { padding-right: 26px; }
   word-break: break-all; color: var(--text); margin-bottom: 8px; }
 .wiz-key-note { font-size: 12px; color: var(--danger); margin-bottom: 16px; }
 </style>
+<script src="/js/tour.js" defer></script>
 </head>
 <body>
 
@@ -4742,7 +4744,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.23.3</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.23.4</div>
   </div>
 </aside>
 
@@ -5801,6 +5803,12 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.23.4', date:'2026-03-01', notes:[
+    'Fix: Smart Routing now applies model selection (was computed but never used)',
+    'Fix: Codex CLI dispatcher passes -m model flag (was ignored)',
+    'New: /js/tour.js route for guided tour (vanilla JS, no CDN)',
+    'Fix: Gemini model ID corrected in routing',
+  ]},
   { ver:'v0.23.3', date:'2026-03-01', notes:[
     'New: Claude Code CLI added as chat backend (claude -p)',
     'New: @claude routing target in chat',
@@ -8987,30 +8995,38 @@ async function populateChatModels() {
   } catch(e) {}
 
   var addedValues = {};
-  function addModel(value, label) {
+  function addModel(value, label, groupEl, opts) {
     if (addedValues[value]) return; // dedup
     addedValues[value] = true;
     var opt = document.createElement('option');
     opt.value = value;
     opt.textContent = label;
-    sel.appendChild(opt);
+    if (opts && opts.disabled) opt.disabled = true;
+    (groupEl || sel).appendChild(opt);
   }
 
-  // OpenClaw Gateway
+  var cloudGroup = document.createElement('optgroup');
+  cloudGroup.label = 'Cloud';
+  var localGroup = document.createElement('optgroup');
+  localGroup.label = 'Local';
+
   var openclawUp = healthServices.some(function(s) { return s.name === 'OpenClaw Gateway' && s.status === 'up'; });
-  addModel('openclaw-gateway', 'OpenClaw (GPT-5.3 Codex)' + (openclawUp ? '' : ' [offline]'));
-
-  // Gemini CLI
   var geminiUp = healthServices.some(function(s) { return s.name === 'Gemini CLI' && s.status === 'up'; });
-  if (geminiUp) addModel('gemini-cli-auto', 'Gemini (Google)');
-
-  // Claude Code CLI
   var claudeUp = healthServices.some(function(s) { return s.name === 'Claude CLI' && s.status === 'up'; });
-  if (claudeUp) addModel('claude-cli', 'Claude Code (Anthropic)');
-
-  // Codex CLI
   var codexUp = healthServices.some(function(s) { return s.name === 'Codex CLI' && s.status === 'up'; });
-  if (codexUp) addModel('codex-cli', 'Codex CLI (OpenAI)');
+  var recommendedApplied = false;
+  function addCloudModel(value, baseLabel, isUp) {
+    var label = baseLabel + (isUp ? '' : ' [offline]');
+    if (isUp && !recommendedApplied) {
+      label += ' (recommended)';
+      recommendedApplied = true;
+    }
+    addModel(value, label, cloudGroup, { disabled: !isUp });
+  }
+  addCloudModel('openclaw-gateway', 'OpenClaw (GPT-5.3 Codex)', openclawUp);
+  addCloudModel('claude-cli', 'Claude Code (Anthropic)', claudeUp);
+  addCloudModel('gemini-cli-auto', 'Gemini (Google)', geminiUp);
+  addCloudModel('codex-cli', 'Codex CLI (OpenAI)', codexUp);
 
   // Ollama models
   try {
@@ -9018,10 +9034,13 @@ async function populateChatModels() {
     if (localData && localData.models) {
       localData.models.forEach(function(m) {
         if (m.type !== 'ollama') return;
-        addModel(m.id, m.name + ' (Ollama)');
+        addModel(m.id, m.name + ' (Ollama)', localGroup);
       });
     }
   } catch(e) {}
+
+  if (cloudGroup.children.length > 0) sel.appendChild(cloudGroup);
+  if (localGroup.children.length > 0) sel.appendChild(localGroup);
 
   // Fallback
   if (sel.options.length === 0) {
@@ -9032,7 +9051,9 @@ async function populateChatModels() {
   if (saved && Array.from(sel.options).some(function(o) { return o.value === saved; })) {
     sel.value = saved;
   } else {
-    sel.selectedIndex = 0;
+    var firstEnabled = Array.from(sel.options).find(function(o) { return !o.disabled; });
+    if (firstEnabled) sel.value = firstEnabled.value;
+    else sel.selectedIndex = 0;
   }
   _chatModelChanged();
 }
@@ -14197,8 +14218,9 @@ def _dispatch_codex(message, model=None, timeout=120):
     cdx_bin = _resolve_cli("codex")
     if not cdx_bin:
         return {"ok": False, "error": "Codex CLI not found. Install: npm i -g @openai/codex"}
-    cmd = [cdx_bin, "exec", "--ephemeral", "--json", message]
-    log.info("Agent bridge [codex]: msg=%s", message[:80])
+    codex_model = (model or os.environ.get("PORTER_CODEX_MODEL", "").strip() or "gpt-5.1")
+    cmd = [cdx_bin, "exec", "--ephemeral", "--json", "-m", codex_model, message]
+    log.info("Agent bridge [codex]: model=%s msg=%s", codex_model, message[:80])
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env())
     # Parse JSONL output — find the agent_message item
     text = ""
@@ -14221,7 +14243,7 @@ def _dispatch_codex(message, model=None, timeout=120):
     return {
         "ok": True, "backend": "codex",
         "text": text,
-        "model": model or "codex-cli",
+        "model": codex_model,
         "duration_ms": 0,
         "tokens": {"input": usage.get("input_tokens", 0), "output": usage.get("output_tokens", 0)},
     }
@@ -14616,6 +14638,20 @@ class Handler(BaseHTTPRequestHandler):
                     return
             self.reply_html("<h1>Not found</h1>", 404)
 
+        elif parsed.path == "/js/tour.js":
+            if not self.auth_check(redirect=False): return
+            tour_js = PORTER_DATA_DIR / "runtime" / "www" / "js" / "tour.js"
+            if tour_js.exists():
+                body = tour_js.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/javascript")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.reply_html("console.error('Tour JS not found');", 404)
+
         elif parsed.path == "/api/roots":
             if not self.auth_check(redirect=False):
                 return
@@ -14743,7 +14779,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.23.3"})
+            self.reply_json({"v": "0.23.4"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -15664,16 +15700,26 @@ class Handler(BaseHTTPRequestHandler):
 
 
         elif parsed.path == "/api/chat/stream":
-            # Smart routing: if model is "auto" or starts with "general", pick best backend
-            model_param = params.get("model", [""])[0]
-            if model_param in ("auto", "") or model_param.startswith("general"):
-                prompt_param = params.get("prompt", [""])[0]
-                if prompt_param and prompt_param != "SAVED":
-                    _route_backend, _route_model = _smart_route(prompt_param)
-                    log.info("Smart route: %s → %s", prompt_param[:40], _route_backend)
-
             if not self.auth_check(redirect=False): return
             qs = parse_qs(parsed.query)
+
+            # Smart routing: if model is "auto" or starts with "general", pick best backend
+            model_param = qs.get("model", [""])[0]
+            if model_param in ("auto", "") or model_param.startswith("general"):
+                prompt_param = qs.get("prompt", [""])[0]
+                # parse_qs does not fully unquote, so we do it here for analysis
+                prompt_analyzed = unquote(prompt_param) if prompt_param else ""
+
+                if prompt_analyzed and prompt_analyzed != "SAVED":
+                    _route_backend, _route_model = _smart_route(prompt_analyzed)
+                    log.info("Smart route: %s → %s", prompt_analyzed[:40], _route_backend)
+
+                    # Apply routing decision
+                    if _route_backend == "openclaw":
+                        qs["model"] = ["openclaw-gateway"]
+                    elif _route_backend == "gemini":
+                        qs["model"] = ["gemini-cli-auto"]
+
             model_id = qs.get("model", [""])[0]
             prompt = unquote(qs.get("prompt", [""])[0])
             chat_id = qs.get("chat_id", [""])[0]
@@ -18306,7 +18352,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.23.3 ready (localhost only)")
+    print(f"\n  Porter v0.23.4 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
