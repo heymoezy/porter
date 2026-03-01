@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.24 — Dropdown Align"""
+"""Porter v0.25.25 — Static Welcome"""
 
 
 
@@ -4167,7 +4167,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   flex:1; gap:12px; text-align:center; padding:0 24px;
 }
-.chat-welcome-title { font-size:30px; font-weight:600; color:#fff; letter-spacing:-0.3px; }
+.chat-welcome-title { font-size:30px; font-weight:600; color:rgba(255,255,255,.35); letter-spacing:-0.3px; }
 .chat-welcome-input-wrap {
   width:100%; max-width:640px; background:rgba(255,255,255,.06);
   border:1px solid rgba(255,255,255,.08); border-radius:18px;
@@ -5119,7 +5119,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.24</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.25</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5200,7 +5200,24 @@ select.settings-input { padding-right: 26px; }
       </div>
 
       <div id="chat-main">
-        <div id="chat-messages" class="chat-messages welcome-state"></div>
+        <div id="chat-messages" class="chat-messages welcome-state">
+          <div class="chat-welcome">
+            <div class="chat-welcome-title">Hi, Moe &#x1F44B;</div>
+            <div class="chat-welcome-input-wrap">
+              <textarea id="chat-input-welcome" placeholder="How can I help you today?" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
+              <div class="chat-welcome-meta">
+                <select id="chat-backend-sel-welcome" class="chat-model-dropdown" title="Select model">
+                  <option value="">Auto-route</option>
+                  <option value="openclaw">OpenClaw (GPT-5.3 Codex)</option>
+                  <option value="gemini">Gemini 2.5 Flash</option>
+                  <option value="codex">Codex CLI (GPT-5.1)</option>
+                  <option value="claude">Claude (Opus 4.6)</option>
+                  <option value="ollama">Ollama (Qwen 7B)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
         <div id="chat-ctx-bar" class="chat-ctx-bar" style="display:none"></div>
         <div class="chat-input-area" id="chat-input-area" style="display:none">
           <div id="chat-autocomplete" class="chat-autocomplete"></div>
@@ -6206,6 +6223,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.25', date:'2026-03-01', notes:['Fix: chat loads instantly on refresh (static welcome HTML)','UX: softer greeting color'] },
   { ver:'v0.25.24', date:'2026-03-01', notes:['UX: model dropdown text right-aligned (close to chevron)'] },
   { ver:'v0.25.23', date:'2026-03-01', notes:['Fix: Chat module visible on page load (active class in static HTML)'] },
   { ver:'v0.25.22', date:'2026-03-01', notes:['Fix: welcome input vertically centered (min-height 100% on welcome container)'] },
@@ -16079,7 +16097,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.24"})
+            self.reply_json({"v": "0.25.25"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17083,7 +17101,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.24'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.25'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20135,7 +20153,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.24 ready (localhost only)")
+    print(f"\n  Porter v0.25.25 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
