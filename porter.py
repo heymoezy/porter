@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.23.0 — self-hosted file manager"""
+"""Porter v0.23.2 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -3859,6 +3859,30 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .notif-time { font-size:10px; color:var(--text3); margin-top:2px; }
 .notif-empty { text-align:center; padding:24px; font-size:12px; color:var(--text3); }
 
+
+/* Chat dashboard */
+.chat-dash { padding:20px 0; }
+.chat-dash-title { font-size:18px; font-weight:700; color:var(--text); margin-bottom:4px; }
+.chat-dash-sub { font-size:12px; color:var(--text3); margin-bottom:20px; }
+.chat-dash-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:10px; margin-bottom:20px; }
+.chat-dash-card {
+  padding:14px 16px; background:var(--raised); border:1px solid var(--border);
+  border-radius:10px; cursor:pointer; transition:.15s;
+}
+.chat-dash-card:hover { border-color:var(--accent); transform:translateY(-1px); }
+.chat-dash-card .dc-status { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+.chat-dash-card .dc-status.online { background:#22c55e; }
+.chat-dash-card .dc-status.offline { background:#ef4444; }
+.chat-dash-card .dc-name { font-size:13px; font-weight:600; color:var(--text); }
+.chat-dash-card .dc-model { font-size:11px; color:var(--text3); margin-top:4px; }
+.chat-dash-card .dc-latency { font-size:10px; color:var(--text3); margin-top:2px; }
+.chat-dash-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.chat-dash-action {
+  padding:8px 16px; font-size:12px; border-radius:8px; border:1px solid var(--border);
+  background:none; color:var(--text2); cursor:pointer; transition:.12s;
+}
+.chat-dash-action:hover { background:var(--raised); color:var(--text); border-color:var(--accent); }
+
 .chat-input-area { display:flex; gap:8px; padding-top:12px; border-top:1px solid var(--border); flex-shrink:0; align-items:flex-end; }
 .chat-input {
   flex:1; padding:10px 14px; border:1px solid var(--border); border-radius:10px;
@@ -4718,7 +4742,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.23.0</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.23.2</div>
   </div>
 </aside>
 
@@ -4805,10 +4829,18 @@ select.settings-input { padding-right: 26px; }
 
       <div id="chat-main">
         <div id="chat-messages" class="chat-messages">
-          <div class="chat-empty">
-            <div class="chat-empty-icon">&#9889;</div>
-            <div class="chat-empty-title">Talk to your AI models</div>
-            <div class="chat-empty-hint">Ask anything. /commands for skills, @model to target.</div>
+          <div class="chat-empty" id="chat-dashboard">
+            <div class="chat-dash">
+              <div class="chat-dash-title">Porter</div>
+              <div class="chat-dash-sub">Your AI orchestration hub. Type a message or use a quick action.</div>
+              <div id="chat-dash-models" class="chat-dash-grid"></div>
+              <div class="chat-dash-actions">
+                <button class="chat-dash-action" onclick="document.getElementById('chat-input').value='/status ';chatSend()">System Status</button>
+                <button class="chat-dash-action" onclick="document.getElementById('chat-input').value='/models ';chatSend()">List Models</button>
+                <button class="chat-dash-action" onclick="document.getElementById('chat-input').value='/help ';chatSend()">Help</button>
+                <button class="chat-dash-action" onclick="document.getElementById('chat-input').focus()">Start Chatting</button>
+              </div>
+            </div>
           </div>
         </div>
         <div id="chat-ctx-bar" class="chat-ctx-bar" style="display:none"></div>
@@ -5769,6 +5801,18 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.23.2', date:'2026-03-01', notes:[
+    'Fix: Gemini now appears in chat model selector (was hidden due to scoping bug)',
+    'Fix: Duplicate model entries eliminated from chat dropdown',
+    'New: OpenAI Codex CLI (codex exec) added as chat backend',
+    'New: @codex routing target + dashboard card',
+    'UX: Model selector shows all detected backends cleanly',
+  ]},
+  { ver:'v0.23.1', date:'2026-03-01', notes:[
+    'New: Chat dashboard — live model status, delegation stats, quick actions',
+    'New: Model status cards show which backends are online/offline',
+    'UX: Chat empty state replaced with actionable dashboard',
+  ]},
   { ver:'v0.23.0', date:'2026-03-01', notes:[
     'Fix: BrokenPipeError suppressed (client disconnect no longer logs stack trace)',
     'Perf: Admin health endpoint no longer blocks with sleep(0.1)',
@@ -8881,77 +8925,100 @@ function _chatModelChanged() {
   if (btn) btn.disabled = !sel.value;
 }
 
+
+// ── Chat dashboard ───────────────────────────────────────────────────────
+async function _renderChatDashboard() {
+  var el = document.getElementById('chat-dash-models');
+  if (!el) return;
+  var models = [
+    {name: 'OpenClaw', backend: 'openclaw', model: 'GPT-5.3 Codex', color: '#059669'},
+    {name: 'Gemini', backend: 'gemini', model: 'Gemini 2.5 Flash', color: '#2563eb'},
+    {name: 'Codex', backend: 'codex', model: 'Codex CLI', color: '#f59e0b'},
+    {name: 'Ollama', backend: 'ollama', model: 'Qwen 7B', color: '#8b5cf6'},
+  ];
+  var html = '';
+  models.forEach(function(m) {
+    html += '<div class="chat-dash-card" style="border-left:3px solid ' + m.color + '" onclick="document.getElementById(\'chat-input\').value=\'@' + m.backend + ' \';document.getElementById(\'chat-input\').focus()">';
+    html += '<div><span class="dc-status" id="dc-' + m.backend + '"></span><span class="dc-name">' + m.name + '</span></div>';
+    html += '<div class="dc-model">' + m.model + '</div>';
+    html += '<div class="dc-latency" id="dc-lat-' + m.backend + '">Checking...</div>';
+    html += '</div>';
+  });
+  el.innerHTML = html;
+  // Check status of each backend
+  try {
+    var health = await api('/api/admin/health');
+    if (health && health.services) {
+      health.services.forEach(function(s) {
+        var backend = null;
+        if (s.name.toLowerCase().includes('openclaw')) backend = 'openclaw';
+        if (s.name.toLowerCase().includes('gemini')) backend = 'gemini';
+        if (s.name.toLowerCase().includes('ollama')) backend = 'ollama';
+        if (backend) {
+          var dot = document.getElementById('dc-' + backend);
+          var lat = document.getElementById('dc-lat-' + backend);
+          if (dot) dot.classList.add(s.status === 'running' || s.status === 'ok' || s.status === 'up' ? 'online' : 'offline');
+          if (lat) lat.textContent = s.version ? 'v' + s.version : (s.status || 'unknown');
+        }
+      });
+    }
+  } catch(e) {}
+}
+
 async function populateChatModels() {
   _loadChatMessages();
+  _renderChatDashboard();
   const sel = document.getElementById('chat-model');
   if (!sel) return;
   const saved = sel.value;
   while (sel.options.length > 0) sel.remove(0);
 
-  let ollamaModels = [];
-  let openclawUp = false;
-
-  // Check OpenClaw availability
+  // Gather all service statuses from health endpoint
+  var healthServices = [];
   try {
-    const resp = await api('/api/admin/health');
-    if (resp && resp.services) {
-      openclawUp = resp.services.some(function(s) { return s.name === 'OpenClaw Gateway' && s.status === 'up'; });
-    }
+    var healthResp = await api('/api/admin/health');
+    if (healthResp && healthResp.services) healthServices = healthResp.services;
   } catch(e) {}
 
-  // Add OpenClaw first (preferred — cloud model, higher quality)
-  if (openclawUp) {
-    const opt = document.createElement('option');
-    opt.value = 'openclaw-gateway';
-    opt.textContent = 'OpenClaw Gateway (GPT)';
+  var addedValues = {};
+  function addModel(value, label) {
+    if (addedValues[value]) return; // dedup
+    addedValues[value] = true;
+    var opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
     sel.appendChild(opt);
   }
 
-  // Add Ollama models
+  // OpenClaw Gateway
+  var openclawUp = healthServices.some(function(s) { return s.name === 'OpenClaw Gateway' && s.status === 'up'; });
+  addModel('openclaw-gateway', 'OpenClaw (GPT-5.3 Codex)' + (openclawUp ? '' : ' [offline]'));
+
+  // Gemini CLI
+  var geminiUp = healthServices.some(function(s) { return s.name === 'Gemini CLI' && s.status === 'up'; });
+  if (geminiUp) addModel('gemini-cli-auto', 'Gemini (Google)');
+
+  // Codex CLI
+  var codexUp = healthServices.some(function(s) { return s.name === 'Codex CLI' && s.status === 'up'; });
+  if (codexUp) addModel('codex-cli', 'Codex CLI (OpenAI)');
+
+  // Ollama models
   try {
-    const data = await api('/api/local-models');
-    if (data && data.models) {
-      data.models.forEach(function(m) {
+    var localData = await api('/api/local-models');
+    if (localData && localData.models) {
+      localData.models.forEach(function(m) {
         if (m.type !== 'ollama') return;
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        opt.textContent = m.name + ' (Ollama)';
-        sel.appendChild(opt);
-        ollamaModels.push(m.id);
+        addModel(m.id, m.name + ' (Ollama)');
       });
     }
   } catch(e) {}
 
-  // Add Gemini CLI (detected via health endpoint — no live prompt)
-  try {
-    var geminiUp = resp && resp.services && resp.services.some(function(s) {
-      return s.name === 'Gemini CLI' && s.status === 'up';
-    });
-    if (geminiUp) {
-      var gopt = document.createElement('option');
-      gopt.value = 'gemini-cli-auto';
-      gopt.textContent = 'Gemini (Google)';
-      sel.appendChild(gopt);
-    }
-  } catch(ge) {}
-
-  // Add OpenClaw as fallback if not already added (show even if down)
-  if (!openclawUp) {
-    const opt = document.createElement('option');
-    opt.value = 'openclaw-gateway';
-    opt.textContent = 'OpenClaw Gateway (GPT)';
-    sel.appendChild(opt);
-  }
-
-  // If no options, add a placeholder
+  // Fallback
   if (sel.options.length === 0) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = 'No models available';
-    sel.appendChild(opt);
+    addModel('', 'No models available');
   }
 
-  // Auto-select: restore saved choice, or pick first available
+  // Restore selection
   if (saved && Array.from(sel.options).some(function(o) { return o.value === saved; })) {
     sel.value = saved;
   } else {
@@ -8977,9 +9044,9 @@ function renderChatMessages(streamUpdate) {
   if (!el) return;
   if (!_chatMessages.length) {
     el.innerHTML = '<div class="chat-empty">'
-      + '<div class="chat-empty-icon">&#9889;</div>'
+      + '<div class="chat-dash-title">Porter</div>'
       + '<div class="chat-empty-title">Chat</div>'
-      + '<div class="chat-empty-hint">Ask anything. /commands for skills, @model to target.</div>'
+      + '<div id="chat-dash-models" class="chat-dash-grid"></div>'
       + '</div>';
     _updateStopBtn(false);
     return;
@@ -9116,7 +9183,8 @@ var _defaultSlashCmds = [
 var _defaultAtTargets = [
   {cmd: '@openclaw', desc: 'Route to OpenClaw (GPT-5.3 Codex)', emoji: '\ud83d\udfe2'},
   {cmd: '@gemini', desc: 'Route to Gemini', emoji: '\ud83d\udfe6'},
-  {cmd: '@ollama', desc: 'Route to Ollama (local)', emoji: '\ud83d\udfe3'},
+  {cmd: '@codex', desc: 'Route to Codex CLI (OpenAI)', emoji: '\ud83d\udfe0'},
+        {cmd: '@ollama', desc: 'Route to Ollama (local)', emoji: '\ud83d\udfe3'},
 ];
 
 function _acShow(items) {
@@ -9263,6 +9331,7 @@ function chatSend() {
         '**Routing**\n' +
         '`@openclaw <msg>` — Send to OpenClaw\n' +
         '`@gemini <msg>` — Send to Gemini\n' +
+        '`@codex <msg>` — Send to Codex CLI\n' +
         '`@ollama <msg>` — Send to Ollama\n\n' +
         'Any other `/command` is sent to OpenClaw as a skill invoke.', model: 'porter' });
       renderChatMessages();
@@ -9321,7 +9390,7 @@ function chatSend() {
   }
 
   // Check for @backend prefix — route to specific model
-  const atMatch = text.match(/^@(gemini|openclaw|ollama)\s+(.+)/s);
+  const atMatch = text.match(/^@(gemini|openclaw|ollama|codex)\s+(.+)/s);
   if (atMatch) {
     input.value = '';
     input.style.height = 'auto';
@@ -14071,6 +14140,42 @@ def _dispatch_gemini(message, model=None, timeout=60):
         "tokens": {"total": total_tokens},
     }
 
+
+def _dispatch_codex(message, model=None, timeout=120):
+    """Invoke OpenAI Codex CLI (codex exec) and return normalized response."""
+    import subprocess
+    cdx_bin = _resolve_cli("codex")
+    if not cdx_bin:
+        return {"ok": False, "error": "Codex CLI not found. Install: npm i -g @openai/codex"}
+    cmd = [cdx_bin, "exec", "--ephemeral", "--json", message]
+    log.info("Agent bridge [codex]: msg=%s", message[:80])
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env())
+    # Parse JSONL output — find the agent_message item
+    text = ""
+    usage = {}
+    for line in (result.stdout or "").strip().split("\n"):
+        if not line.strip():
+            continue
+        try:
+            evt = json.loads(line)
+            if evt.get("type") == "item.completed":
+                item = evt.get("item", {})
+                if item.get("type") == "agent_message":
+                    text = item.get("text", "")
+            elif evt.get("type") == "turn.completed":
+                usage = evt.get("usage", {})
+        except Exception:
+            continue
+    if not text and result.returncode != 0:
+        return {"ok": False, "error": (result.stderr or "Codex returned no response")[:500]}
+    return {
+        "ok": True, "backend": "codex",
+        "text": text,
+        "model": model or "codex-cli",
+        "duration_ms": 0,
+        "tokens": {"input": usage.get("input_tokens", 0), "output": usage.get("output_tokens", 0)},
+    }
+
 def _dispatch_ollama(message, model=None, timeout=120):
     """Invoke Ollama via HTTP API and return normalized response."""
     import urllib.request
@@ -14095,6 +14200,7 @@ def _dispatch_ollama(message, model=None, timeout=120):
 AGENT_DISPATCHERS = {
     "openclaw": _dispatch_openclaw,
     "gemini": _dispatch_gemini,
+    "codex": _dispatch_codex,
     "ollama": _dispatch_ollama,
 }
 
@@ -14586,7 +14692,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.23.0"})
+            self.reply_json({"v": "0.23.2"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -14714,6 +14820,7 @@ class Handler(BaseHTTPRequestHandler):
 
             # Auto-sense CLIs — detect any available CLI tools
             cli_checks = [
+                ("Codex CLI", "codex", "npm i -g @openai/codex"),
                 ("Gemini CLI", "gemini", "npm i -g @google/gemini-cli"),
                 ("OpenClaw CLI", "openclaw", "npm i -g @anthropic-ai/openclaw"),
                 ("Claude CLI", "claude", "npm i -g @anthropic-ai/claude-code"),
@@ -15595,6 +15702,17 @@ class Handler(BaseHTTPRequestHandler):
                         self.wfile.flush()
                     else:
                         self.wfile.write(f"data: {json.dumps({'error': gem_result.get('error', 'Gemini error')})}\n\n".encode())
+                        self.wfile.flush()
+
+                elif model_id == "codex-cli":
+                    # Codex via agent bridge (non-streaming — single response)
+                    cdx_result = dispatch_agent(prompt, "codex", timeout=120)
+                    if cdx_result.get("ok"):
+                        full_response = cdx_result.get("text", "")
+                        self.wfile.write(f"data: {json.dumps({'token': full_response})}\n\n".encode())
+                        self.wfile.flush()
+                    else:
+                        self.wfile.write(f"data: {json.dumps({'error': cdx_result.get('error', 'Codex error')})}\n\n".encode())
                         self.wfile.flush()
 
                 else:
@@ -18126,7 +18244,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.23.0 ready (localhost only)")
+    print(f"\n  Porter v0.23.2 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
