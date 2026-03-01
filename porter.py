@@ -10485,14 +10485,24 @@ async function loadChatSession(id) {
   renderChatMessages();
 }
 
-async function renameChatSession(id, currentTitle) {
-  var newTitle = prompt('Rename chat:', currentTitle || '');
-  if (newTitle === null || !newTitle.trim()) return;
-  var resp = await api('/api/chat', { action: 'rename', chat_id: id, title: newTitle.trim() });
-  if (resp && resp.ok) {
-    toast('Chat renamed', 'ok');
-    loadChatSessions();
-  } else { toast('Failed to rename', 'err'); }
+function renameChatSession(id, currentTitle) {
+  showModal({
+    title: 'Rename Chat',
+    desc: '',
+    input: true,
+    inputVal: currentTitle || '',
+    actions: [
+      { label: 'Cancel', cls: 'btn-ghost', action: closeModal },
+      { label: 'Rename', cls: 'btn-primary', action: async function() {
+        var val = document.getElementById('modalInput').value.trim();
+        if (!val) return;
+        closeModal();
+        var resp = await api('/api/chat', { action: 'rename', chat_id: id, title: val });
+        if (resp && resp.ok) { toast('Chat renamed', 'ok'); loadChatSessions(); }
+        else { toast('Failed to rename', 'err'); }
+      }}
+    ]
+  });
 }
 
 async function deleteChatSession(id) {
