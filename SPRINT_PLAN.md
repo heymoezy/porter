@@ -355,6 +355,7 @@ Also fixed: Escape key scope, Agents nav slot, Command Center placeholder, versi
    - First mount (add at least one file location)
    - Network transport (Tailscale / SSH / none — optional)
    - Capability scan (show what's detected, install hints for missing)
+   - ACP runtime setup (install/enable acpx plugin, configure default + allowed ACP agents, verify ACP health)
    - Operator password
 3. **Tutorial overlay:** Each tab gets a first-visit tooltip explaining what it does. Dismissible, one-time.
 4. **Completion gate:** Setup tab shows green checkmarks per step. All required steps must pass before app unlocks.
@@ -369,6 +370,24 @@ Also fixed: Escape key scope, Agents nav slot, Command Center placeholder, versi
 ## Phase B (Monolith split) — DEFERRED
 
 Splitting porter.py into modules after all features are stable. One module per sprint.
+
+---
+
+## Sprint 13 — ACP autonomy controls (SCHEDULED for next release)
+
+**Goal:** Eliminate repetitive Claude/Gemini approval prompts by making approval behavior explicit and configurable inside Porter.
+
+**Scope (release task):**
+
+1. **Approval policy in UI:** Add Settings → Orchestration → "Agent Approval Policy" with default `auto-approve non-destructive` and explicit stop conditions.
+2. **Policy propagation:** Persist policy in `porter_config.json` and apply to ACP task dispatch prompts/instructions for Claude/Gemini/Codex.
+3. **Pending-approval visibility:** Add a compact panel showing pending approval requests by agent/session with quick actions (Approve safe / Escalate / Deny).
+4. **Safety guardrails:** Enforce denylist for destructive/system-level actions regardless of agent prompt behavior.
+5. **Trust UX:** Show current policy badge in chat/orchestration views (e.g., `Auto-safe approvals ON`).
+
+**Version target:** v0.23.4
+
+**Acceptance:** Routine shell work proceeds without per-step prompts; high-risk actions still require explicit human confirmation; policy state is visible and auditable.
 
 ---
 

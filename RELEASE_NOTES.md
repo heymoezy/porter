@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.24.3 (planned)
+
+**Branding + Onboarding Governance Alignment**
+
+- Updated Porter tagline from **File Manager** to **Mission Control** in key UI surfaces
+- Replaced ambiguous bell glyph with explicit **Alerts** label in header notifications control
+- Added Sprint planning scope to include ACP runtime onboarding + autonomy controls for first-time users
+
+---
+
 ## v0.23.0 (2026-03-01)
 
 **Quality, Polish & Intelligence**

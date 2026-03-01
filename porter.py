@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.24.2 — self-hosted file manager"""
+"""Porter v0.24.3 — Mission Control for AI operations"""
 
 
 
@@ -3038,7 +3038,7 @@ body {
     </svg>
     <div>
       <div class="login-logo-name">porter</div>
-      <div class="login-logo-sub">File Manager</div>
+      <div class="login-logo-sub">Mission Control</div>
     </div>
   </div>
   <div class="login-field">
@@ -4787,10 +4787,10 @@ select.settings-input { padding-right: 26px; }
     </svg>
     <div class="logo-text">
       <span class="logo-name">porter</span>
-      <span class="logo-sub">File Manager</span>
+      <span class="logo-sub">Mission Control</span>
     </div>
     <div style="position:relative;margin-left:auto;margin-right:4px">
-      <button class="notif-bell" onclick="toggleNotifications()" title="Notifications">&#128276;<span class="notif-badge" id="notif-badge">0</span></button>
+      <button class="notif-bell" onclick="toggleNotifications()" title="Notifications">Alerts<span class="notif-badge" id="notif-badge">0</span></button>
       <div class="notif-dropdown" id="notif-dropdown"></div>
     </div>
     <button class="hbg-btn" id="hbgBtn" onclick="toggleSidebar()" title="Toggle sidebar">
@@ -6024,7 +6024,7 @@ const CHANGELOG = [
     'UX: Resume conversations where you left off',
   ]},
   { ver:'v0.22.8', date:'2026-03-01', notes:[
-    'New: Notification center — bell icon shows recent events (delegations, tasks, errors)',
+    'New: Notification center — Alerts menu shows recent events (delegations, tasks, errors)',
     'New: Unread badge with event count',
     'New: Notification dropdown with timestamps and event types',
   ]},
@@ -7105,7 +7105,7 @@ const CHANGELOG = [
   { ver:'v0.4', date:'2026-02-23', notes:[
     'Warm dark theme — improved contrast throughout',
     'New geometric logo mark',
-    '"File Manager" subtitle restored in sidebar',
+    '"Mission Control" subtitle restored in sidebar',
     'Version badge in lower-left footer with release notes link',
     'Search always visible — no toggle required',
     'Search results show count, grouped by folder, with match highlighting',
@@ -9403,7 +9403,7 @@ var _tourSteps = [
   { sel: '#chat-input', title: 'Chat Input', desc: 'Type messages to your AI models. Use / for commands, @ to target a specific backend.' },
   { sel: '#chat-model, .chat-model-sel', title: 'Model Selector', desc: 'Choose which AI model responds. Cloud models (OpenClaw, Gemini, Codex) and local (Ollama) are grouped.' },
   { sel: '#chat-dashboard, .chat-dash', title: 'Dashboard', desc: 'Live model status cards. Click a card to start chatting with that backend.' },
-  { sel: '.notif-bell', title: 'Notifications', desc: 'Bell icon shows recent events — delegations, errors, task completions.' },
+  { sel: '.notif-bell', title: 'Notifications', desc: 'Alerts menu shows recent events — delegations, errors, task completions.' },
 ];
 var _tourStep = 0;
 var _tourActive = false;
@@ -15053,7 +15053,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   </div>
   <div class="landing-feat">
     <div class="landing-feat-icon">&#128464;</div>
-    <h3>File Manager</h3>
+    <h3>Mission Control</h3>
     <p>Browse, upload, search, and manage files across multiple mount points. Batch operations, zip downloads, inline preview.</p>
   </div>
   <div class="landing-feat">
