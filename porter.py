@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.27 — Custom Dropdown"""
+"""Porter v0.25.28 — Model Fix"""
 
 
 
@@ -4169,6 +4169,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   flex:1; gap:12px; text-align:center; padding:0 24px;
 }
 .chat-welcome-title { font-size:30px; font-weight:600; color:rgba(255,255,255,.35); letter-spacing:-0.3px; }
+.chat-welcome-sub { font-size:13px; color:rgba(255,255,255,.25); letter-spacing:0.3px; }
 .chat-welcome-input-wrap {
   width:100%; max-width:640px; background:rgba(255,255,255,.06);
   border:1px solid rgba(255,255,255,.08); border-radius:18px;
@@ -5134,7 +5135,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.27</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.28</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5218,10 +5219,11 @@ select.settings-input { padding-right: 26px; }
         <div id="chat-messages" class="chat-messages welcome-state">
           <div class="chat-welcome">
             <div class="chat-welcome-title">Hi there</div>
+            <div class="chat-welcome-sub">\u26A1 One prompt. Every AI. Zero friction.</div>
             <div class="chat-welcome-input-wrap">
               <textarea id="chat-input-welcome" placeholder="How can I help you today?" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
               <div class="chat-welcome-meta">
-<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option></select>
+<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>
                 <div class="model-picker" data-sel="chat-backend-sel-welcome">
                   <button type="button" class="mp-trigger" onclick="_mpToggle(event)">Auto-route</button>
                   <div class="mp-menu">
@@ -5244,7 +5246,7 @@ select.settings-input { padding-right: 26px; }
             <textarea id="chat-input" class="chat-input-bottom" placeholder="Reply&#8230;" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
             <div class="chat-input-bottom-meta">
               <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
-<select id="chat-backend-sel" style="display:none"><option value="">Auto-route</option></select>
+<select id="chat-backend-sel" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>
               <div class="model-picker" data-sel="chat-backend-sel">
                 <button type="button" class="mp-trigger" onclick="_mpToggle(event)">Auto-route</button>
                 <div class="mp-menu">
@@ -6246,6 +6248,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.28', date:'2026-03-01', notes:['Fix: model selection works with custom picker','Fix: Auto-route picks first available model'] },
   { ver:'v0.25.27', date:'2026-03-01', notes:['UX: custom dark model picker replaces native OS dropdown'] },
   { ver:'v0.25.26', date:'2026-03-01', notes:['Fix: welcome perfectly centered (chat-main flex chain)','UX: greeting uses preferred name from settings','UX: Files auto-expands first directory on load'] },
   { ver:'v0.25.25', date:'2026-03-01', notes:['Fix: chat loads instantly on refresh (static welcome HTML)','UX: softer greeting color'] },
@@ -9741,10 +9744,11 @@ function renderChatMessages(streamUpdate) {
     var _wn = (currentUser && currentUser.display_name) ? ', ' + currentUser.display_name : ' there';
     el.innerHTML = '<div class="chat-welcome">'
       + '<div class="chat-welcome-title">Hi' + _wn + '</div>'
+      + '<div class="chat-welcome-sub">\u26A1 One prompt. Every AI. Zero friction.</div>'
       + '<div class="chat-welcome-input-wrap">'
       + '<textarea id="chat-input-welcome" placeholder="How can I help you today?" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>'
       + '<div class="chat-welcome-meta">'
-      + '<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option></select>'
+      + '<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>'
       + '<div class="model-picker" data-sel="chat-backend-sel-welcome">'
       + '<button type="button" class="mp-trigger" onclick="_mpToggle(event)">Auto-route</button>'
       + '<div class="mp-menu">'
@@ -10167,7 +10171,14 @@ function chatSend() {
     return;
   }
 
-  if (!modelId) { toast('Select a model first'); return; }
+  if (!modelId) {
+    // Auto-route: pick first enabled model
+    if (sel && sel.options.length > 0) {
+      var _first = Array.from(sel.options).find(function(o) { return !o.disabled && o.value; });
+      if (_first) { sel.value = _first.value; modelId = _first.value; }
+    }
+  }
+  if (!modelId) { toast('No models available \u2014 check Orchestration'); return; }
 
   // Create chat ID if needed
   if (!_chatId) {
@@ -16160,7 +16171,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.27"})
+            self.reply_json({"v": "0.25.28"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17164,7 +17175,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.27'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.28'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20216,7 +20227,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.27 ready (localhost only)")
+    print(f"\n  Porter v0.25.28 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
