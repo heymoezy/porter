@@ -5233,7 +5233,7 @@ select.settings-input { padding-right: 26px; }
                     <div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini CLI</div>
                     <div class="mp-opt" data-v="codex" onclick="_mpSelect(this)">Codex CLI (GPT-5.1)</div>
                     <div class="mp-opt" data-v="claude" onclick="_mpSelect(this)">Claude (Opus 4.6)</div>
-                    <div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 7B)</div>
+                    <div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 1.5B)</div>
                   </div>
                 </div>
               </div>
@@ -5256,7 +5256,7 @@ select.settings-input { padding-right: 26px; }
                   <div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini CLI</div>
                   <div class="mp-opt" data-v="codex" onclick="_mpSelect(this)">Codex CLI (GPT-5.1)</div>
                   <div class="mp-opt" data-v="claude" onclick="_mpSelect(this)">Claude (Opus 4.6)</div>
-                  <div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 7B)</div>
+                  <div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 1.5B)</div>
                 </div>
               </div>
             </div>
@@ -9805,7 +9805,7 @@ function renderChatMessages(streamUpdate) {
       + '<div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini CLI</div>'
       + '<div class="mp-opt" data-v="codex" onclick="_mpSelect(this)">Codex CLI (GPT-5.1)</div>'
       + '<div class="mp-opt" data-v="claude" onclick="_mpSelect(this)">Claude (Opus 4.6)</div>'
-      + '<div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 7B)</div>'
+      + '<div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 1.5B)</div>'
       + '</div></div>'
       + '</div></div></div>';
     if (inputArea) inputArea.style.display = 'none';
@@ -15471,7 +15471,7 @@ def _dispatch_codex(message, model=None, timeout=120):
 def _dispatch_ollama(message, model=None, timeout=120):
     """Invoke Ollama via HTTP API and return normalized response."""
     import urllib.request
-    ollama_model = model or "qwen2.5-coder:7b-instruct-q4_K_M"
+    ollama_model = model or "qwen2.5-coder:1.5b"
     payload = json.dumps({"model": ollama_model, "prompt": message, "stream": False}).encode()
     req = urllib.request.Request(
         "http://127.0.0.1:11434/api/generate",
