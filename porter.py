@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.24.3 — Mission Control for AI operations"""
+"""Porter v0.25.0 — Real-time Orchestrator"""
 
 
 
@@ -141,6 +141,26 @@ def _db_init():
             username TEXT NOT NULL,
             expires REAL NOT NULL,
             created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tasks (
+            id TEXT PRIMARY KEY,
+            project_id TEXT,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            priority TEXT NOT NULL DEFAULT 'normal',
+            phase TEXT,
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            updated_at REAL,
+            completed_at REAL,
+            assigned_agent_id TEXT,
+            tokens_used INTEGER DEFAULT 0,
+            time_minutes INTEGER DEFAULT 0,
+            result TEXT,
+            tags TEXT, -- JSON string
+            sort_order INTEGER DEFAULT 0
         )
     """)
     # Purge expired sessions on startup
@@ -1777,33 +1797,86 @@ def _reload_config_and_tasks():
 
 
 def _treg_load() -> None:
-    """Load all persisted task-registry entries into _treg at startup."""
+    """Load all persisted task-registry entries from SQLite into _treg at startup."""
     global _treg
     TASKS_REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # 1. One-time migration: Import existing JSON files if SQLite is empty
+    conn = _db_conn()
+    count = conn.execute("SELECT count(*) FROM tasks").fetchone()[0]
+    if count == 0:
+        log.info("Task table empty, migrating JSON files to SQLite...")
+        for fp in TASKS_REGISTRY_DIR.glob("*.json"):
+            try:
+                t = json.loads(fp.read_text(encoding="utf-8"))
+                if not isinstance(t, dict) or not t.get("id"): continue
+                
+                # Normalize timestamps
+                for key in ("created_at", "updated_at", "completed_at"):
+                    if isinstance(t.get(key), str):
+                        try: t[key] = float(t[key])
+                        except: t[key] = 0
+                
+                conn.execute("""
+                    INSERT OR REPLACE INTO tasks 
+                    (id, project_id, title, description, status, priority, phase, 
+                     created_at, updated_at, completed_at, assigned_agent_id, 
+                     tokens_used, time_minutes, result, tags, sort_order)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    t.get("id"), t.get("project_id"), t.get("title", "Untitled"),
+                    t.get("description"), t.get("status", "pending"), t.get("priority", "normal"),
+                    t.get("phase"), t.get("created_at", 0), t.get("updated_at"),
+                    t.get("completed_at"), t.get("assigned_agent_id"), t.get("tokens_used", 0),
+                    t.get("time_minutes", 0), t.get("result"), 
+                    json.dumps(t.get("tags", [])), t.get("sort_order", 0)
+                ))
+            except Exception as e:
+                log.debug("Migration failed for %s: %s", fp.name, e)
+        conn.commit()
+
+    # 2. Load all from DB
     loaded: dict = {}
-    for fp in TASKS_REGISTRY_DIR.glob("*.json"):
-        try:
-            t = json.loads(fp.read_text(encoding="utf-8"))
-            if isinstance(t, dict) and t.get("id"):
-                if isinstance(t.get("created_at"), str):
-                    try: t["created_at"] = float(t["created_at"])
-                    except Exception as e:
-                        log.debug("Failed to parse task %s: %s", task_id, e)
-                        t["created_at"] = 0
-                loaded[t["id"]] = t
-        except Exception as e:
-            log.debug("Ignored: %s", e)
+    rows = conn.execute("SELECT * FROM tasks").fetchall()
+    conn.close()
+    
+    for r in rows:
+        t = dict(r)
+        # De-serialize tags
+        try: t["tags"] = json.loads(t.get("tags", "[]"))
+        except: t["tags"] = []
+        loaded[t["id"]] = t
+        
     with _treg_lock:
+        _treg.clear()
         _treg.update(loaded)
 
-
 def _treg_save(task: dict) -> None:
-    """Atomically persist a single task to disk."""
-    TASKS_REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
-    path = TASKS_REGISTRY_DIR / f"{task['id']}.json"
-    tmp  = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(task, indent=2, default=str), encoding="utf-8")
-    tmp.replace(path)
+    """Persist a single task to SQLite."""
+    try:
+        conn = _db_conn()
+        conn.execute("""
+            INSERT OR REPLACE INTO tasks 
+            (id, project_id, title, description, status, priority, phase, 
+             created_at, updated_at, completed_at, assigned_agent_id, 
+             tokens_used, time_minutes, result, tags, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            task.get("id"), task.get("project_id"), task.get("title", "Untitled"),
+            task.get("description"), task.get("status", "pending"), task.get("priority", "normal"),
+            task.get("phase"), task.get("created_at", 0), task.get("updated_at"),
+            task.get("completed_at"), task.get("assigned_agent_id"), task.get("tokens_used", 0),
+            task.get("time_minutes", 0), task.get("result"), 
+            json.dumps(task.get("tags", [])), task.get("sort_order", 0)
+        ))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.error("Task DB save failed: %s", e)
+    
+    # Also update in-memory cache
+    with _treg_lock:
+        _treg[task["id"]] = task
 
 
 
@@ -2706,6 +2779,14 @@ def create_session(username: str) -> str:
     return token
 
 def get_session(token: str) -> dict | None:
+    # Check memory fallback first
+    if token in _sessions:
+        s = _sessions[token]
+        if time.time() > s["expires"]:
+            _sessions.pop(token, None)
+            return None
+        return s
+
     try:
         conn = _db_conn()
         row = conn.execute(
@@ -2713,23 +2794,17 @@ def get_session(token: str) -> dict | None:
         ).fetchone()
         conn.close()
         if not row:
-            return _sessions.get(token)  # fallback to memory
+            return None
         if time.time() > row["expires"]:
             delete_session(token)
             return None
         return {"username": row["username"], "expires": row["expires"]}
     except Exception as e:
         log.debug("Session DB read failed: %s", e)
-        # Fallback to in-memory
-        s = _sessions.get(token)
-        if not s:
-            return None
-        if time.time() > s["expires"]:
-            del _sessions[token]
-            return None
-        return s
+        return None
 
 def delete_session(token: str) -> None:
+    _sessions.pop(token, None)
     try:
         conn = _db_conn()
         conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
@@ -2737,7 +2812,6 @@ def delete_session(token: str) -> None:
         conn.close()
     except Exception as e:
         log.debug("Session DB delete failed: %s", e)
-    _sessions.pop(token, None)
 
 # ── runtime / memory helpers ───────────────────────────────────────────────
 
@@ -4838,7 +4912,8 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.24.3</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.0</div>
+
 
     <!-- tour button moved to ? keyboard help overlay -->
   </div>
@@ -5908,6 +5983,18 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.0', date:'2026-03-01', notes:[
+    'New: Real-time state synchronization via global SSE event hub',
+    'New: /api/events endpoint for streaming system-wide updates',
+    'New: useEvents React hook for automatic UI invalidation (90% less polling)',
+    'Architecture: React migration complete — dist/ is now the primary UI',
+  ]},
+  { ver:'v0.24.1', date:'2026-03-01', notes:[
+
+    'UX: Orchestration cards now centered over their flow arrows',
+    'UX: GPT-5.1 (Codex CLI) auto-detected as separate model from OpenClaw',
+    'Fix: /api/version endpoint was returning stale v0.23.7',
+  ]},
   { ver:'v0.24.3', date:'2026-03-01', notes:[
     'UX: Removed notification bell from sidebar (dead code, broke hamburger)',
     'UX: Tour button removed from sidebar — available via ? keyboard help',
@@ -11060,12 +11147,15 @@ function renderOrchestration(agents, providers) {
           ${liveInfo}
         </div>`;
       }).join('');
+      // Dynamic grid columns — align cards with flow arrows
+      agentEl.style.gridTemplateColumns = 'repeat(' + Math.min(filtered.length, 6) + ', minmax(0,1fr))';
     }
   }
 
   // ── SVG flow connector: merge (agents → porter) ──
+  const agentCols = Math.min(filtered.length || 1, 6);
   const mergeEl = document.getElementById('flow-merge-1');
-  if (mergeEl) mergeEl.innerHTML = _buildFlowSVG(Math.min(filtered.length, 4), 'merge');
+  if (mergeEl) mergeEl.innerHTML = _buildFlowSVG(agentCols, 'merge');
   // ── Model cards (bottom) ──
   // Derive models: use model_id if set, otherwise infer from type
   const modelMap = {};
@@ -11113,9 +11203,11 @@ function renderOrchestration(agents, providers) {
       // Don't duplicate models already shown from registered agents
       const nameKey = (lm.name || '').toLowerCase();
       if (existingNames.has(nameKey)) return false;
-      // Don't duplicate by provider match
+      // Don't duplicate by provider match — but Codex CLI (gpt-5.1) is separate from OpenClaw
       for (const em of modelList) {
         const emid = em.model_id.toLowerCase();
+        // Skip dedup for Codex CLI — it's a direct interface to GPT-5.1, different from OpenClaw's GPT-5.3
+        if (lm.provider === 'openai' && lm.type === 'cli_agent') continue;
         if (lm.provider === 'openai' && (emid.includes('codex') || emid.includes('gpt'))) return false;
         if (lm.provider === 'anthropic' && emid.includes('claude')) return false;
         if (lm.provider === 'google' && emid.includes('gemini')) return false;
@@ -11148,9 +11240,12 @@ function renderOrchestration(agents, providers) {
 
     const totalModels = modelList.length + localCards.length;
 
+    // Dynamic grid columns — align cards with flow arrows
+    modelEl.style.gridTemplateColumns = 'repeat(' + Math.min(totalModels || 1, 6) + ', minmax(0,1fr))';
+
     // SVG flow connector: fanout (porter → models)
     const fanoutEl = document.getElementById('flow-fanout-1');
-    if (fanoutEl) fanoutEl.innerHTML = _buildFlowSVG(Math.min(totalModels || modelList.length, 4), 'fanout');
+    if (fanoutEl) fanoutEl.innerHTML = _buildFlowSVG(Math.min(totalModels || 1, 6), 'fanout');
     _ensureOrchHubPolling(filtered.length, totalModels);
   } else {
     _ensureOrchHubPolling(filtered.length, Object.values(modelMap).length);
@@ -15098,6 +15193,17 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </body>
 </html>"""
 
+# ── Event Hub (Real-time updates) ───────────────────────────────────────────
+_event_queues = []
+_event_lock = threading.Lock()
+
+def _emit_event(event_type, data):
+    """Broadcast an event to all connected SSE clients."""
+    payload = json.dumps({"type": event_type, "data": data, "timestamp": time.time()})
+    with _event_lock:
+        for q in _event_queues:
+            q.put(payload)
+
 class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
@@ -15131,6 +15237,26 @@ class Handler(BaseHTTPRequestHandler):
         self._add_security_headers()
         self.end_headers()
         self.wfile.write(body)
+
+    def serve_static_file(self, file_path, code=200):
+        ctype, _ = mimetypes.guess_type(str(file_path))
+        ctype = ctype or "application/octet-stream"
+        try:
+            body = file_path.read_bytes()
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            # Cache immutable assets, but not index.html
+            if file_path.name == "index.html":
+                self.send_header("Cache-Control", "no-store")
+            else:
+                self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+            self._add_security_headers()
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            log.error("Failed to serve static file %s: %s", file_path, e)
+            self.reply_html("<h1>Internal Server Error</h1>", 500)
 
     _MAX_BODY_SIZE = 10 * 1024 * 1024  # 10 MB
 
@@ -15215,18 +15341,33 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         qs = parse_qs(parsed.query)
 
-        if parsed.path == "/login":
-            self.reply_html(LOGIN_PAGE)
-
-        elif parsed.path == "/":
-            # Authenticated → app, unauthenticated → landing page
-            token = self.get_session_token()
-            if token and get_session(token):
-                self.reply_html(PAGE)
+        # ── Frontend Extraction (Phase 4) ──
+        # Serve React frontend from runtime/frontend/dist/
+        frontend_dir = _DATA_DIR / "runtime" / "frontend" / "dist"
+        
+        if parsed.path in ("/", "/login") or not parsed.path.startswith("/api"):
+            # If not an API call, serve index.html (SPA routing support)
+            index_file = frontend_dir / "index.html"
+            if index_file.exists():
+                self.serve_static_file(index_file)
+                return
             else:
-                self.reply_html(LANDING_PAGE)
+                # Fallback to embedded landing if frontend not built
+                if parsed.path == "/login": self.reply_html(LOGIN_PAGE)
+                elif parsed.path == "/":
+                    token = self.get_session_token()
+                    if token and get_session(token): self.reply_html(PAGE)
+                    else: self.reply_html(LANDING_PAGE)
+                return
 
-        elif parsed.path == "/api/me":
+        if parsed.path.startswith("/assets/"):
+            # Serve compiled assets (JS, CSS, SVGs)
+            asset_file = frontend_dir / parsed.path.lstrip("/")
+            if asset_file.exists():
+                self.serve_static_file(asset_file)
+                return
+
+        if parsed.path == "/api/me":
             if not self.auth_check(redirect=False):
                 return
             cfg = _config
@@ -15453,7 +15594,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.23.7"})
+            self.reply_json({"v": "0.24.4"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -16384,6 +16525,45 @@ class Handler(BaseHTTPRequestHandler):
             events = _coordination_recent(limit=limit)
             self.reply_json({"ok": True, "events": events, "count": len(events)})
 
+
+        elif parsed.path == "/api/events":
+            if not self.auth_check(redirect=False): return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Connection", "keep-alive")
+            self._add_security_headers()
+            self.end_headers()
+
+            import queue
+            q = queue.Queue()
+            with _event_lock:
+                _event_queues.append(q)
+            
+            log.info("Client connected to event hub")
+            try:
+                # Initial welcome event
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.0'})}\n\n".encode())
+                self.wfile.flush()
+
+                while True:
+                    try:
+                        # Wait for events with a timeout to check if client is still there
+                        payload = q.get(timeout=30)
+                        self.wfile.write(f"data: {payload}\n\n".encode())
+                        self.wfile.flush()
+                    except queue.Empty:
+                        # Send heartbeat
+                        self.wfile.write(b": heartbeat\n\n")
+                        self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            finally:
+                with _event_lock:
+                    if q in _event_queues:
+                        _event_queues.remove(q)
+                log.info("Client disconnected from event hub")
+            return
 
         elif parsed.path == "/api/chat/stream":
             if not self.auth_check(redirect=False): return
