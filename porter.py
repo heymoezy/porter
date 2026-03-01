@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.4 — Real-time Orchestrator"""
+"""Porter v0.25.5 — Real-time Orchestrator"""
 
 
 
@@ -5104,6 +5104,10 @@ select.settings-input { padding-right: 26px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
       <span class="mnav-label">Projects</span>
     </button>
+    <button class="mnav-item" id="mnav-skills" onclick="switchModule('skills')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      <span class="mnav-label">Skills</span>
+    </button>
     <button class="mnav-item" id="mnav-workflows" onclick="switchModule('workflows')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
       <span class="mnav-label">Workflows</span>
@@ -5151,7 +5155,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.4</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.5</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5599,15 +5603,14 @@ select.settings-input { padding-right: 26px; }
 
   </div>
 
-  <!-- Workflows panel — skills browser + automations -->
-  <div id="workflows-module" class="module-panel">
+  <!-- Skills panel — OpenClaw skill browser -->
+  <div id="skills-module" class="module-panel">
     <div class="module-hdr">
-      <span class="module-title">Workflows</span>
-      <button class="btn btn-ghost" onclick="loadWorkflows()">&#8635; Refresh</button>
+      <span class="module-title">Skills</span>
+      <button class="btn btn-ghost" onclick="loadSkills()">&#8635; Refresh</button>
     </div>
-    <div class="module-intro">Skills from OpenClaw that can be composed into automated workflows.</div>
+    <div class="module-intro">Browse, install, and manage OpenClaw skills.</div>
 
-    <!-- Skills section -->
     <div style="margin-bottom:24px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">Skills</div>
@@ -5644,6 +5647,15 @@ select.settings-input { padding-right: 26px; }
       </div>
       <div id="wf-skills-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px"></div>
     </div>
+  </div>
+
+  <!-- Workflows panel — automations only -->
+  <div id="workflows-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Workflows</span>
+      <button class="btn btn-ghost" onclick="loadWorkflows()">&#8635; Refresh</button>
+    </div>
+    <div class="module-intro">Scheduled automations and cron jobs.</div>
 
     <!-- Automations / Cron section -->
     <div style="margin-bottom:16px">
@@ -6256,6 +6268,11 @@ const CHANGELOG = [
     'New: /api/events endpoint for streaming system-wide updates',
     'New: useEvents React hook for automatic UI invalidation (90% less polling)',
     'Architecture: React migration complete — dist/ is now the primary UI',
+  ]},
+  { ver:'v0.25.5', date:'2026-03-01', notes:[
+    'UX: Skills moved to dedicated nav tab (was inside Workflows)',
+    'UX: Workflows tab now shows only Automations/Cron',
+    'Fix: Startup crash resolved (_log -> log.info in checkpoint migration)',
   ]},
   { ver:'v0.25.4', date:'2026-03-01', notes:[
     'Fix: 51 completed tasks now visible (was: DB had done/completed, JS checked complete)',
@@ -7945,7 +7962,7 @@ function switchModule(name) {
   const loaders = {
     overview: function() { populateChatModels(); populateChatRoutes(); }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); loadBridgeRuns(); }, projects: loadProjects, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
-    tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, workflows: loadWorkflows, memory: loadMemory, settings: syncSettingsUI,
+    tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: loadWorkflows, memory: loadMemory, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -7955,6 +7972,19 @@ function switchModule(name) {
 // ── S10: Workflows — Skills browser + Automations ──────────────────────────
 let _wfSkills = [];
 let _wfShowAll = false;
+
+async function loadSkills() {
+  // Reuse the skills loading from loadWorkflows
+  try {
+    const data = await api('/api/openclaw/skills');
+    if (data && data.skills) {
+      _wfSkills = data.skills;
+      renderWorkflowSkills();
+    }
+  } catch(e) {
+    console.debug('loadSkills:', e);
+  }
+}
 
 async function loadWorkflows() {
   const [skillRes, cronRes] = await Promise.all([
@@ -15601,7 +15631,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.25.4' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.25.5' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -16039,7 +16069,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.4"})
+            self.reply_json({"v": "0.25.5"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17043,7 +17073,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.4'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.5'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20050,7 +20080,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.4 ready (localhost only)")
+    print(f"\n  Porter v0.25.5 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
