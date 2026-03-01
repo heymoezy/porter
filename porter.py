@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.21 — Init Fix"""
+"""Porter v0.25.22 — Center Fix"""
 
 
 
@@ -4103,7 +4103,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-header { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--border); margin-bottom:0; flex-shrink:0; }
 .chat-route-bar { display:flex; align-items:center; gap:8px; padding:8px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
 .chat-messages { flex:1; overflow-y:auto; padding:16px 20px 16px; display:flex; flex-direction:column; gap:10px; }
-.chat-messages.welcome-state { padding:0; }
+.chat-messages.welcome-state { padding:0; overflow:hidden; }
+.chat-messages.welcome-state .chat-welcome { min-height:100%; }
 .chat-msg { max-width:85%; padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.6; word-break:break-word; white-space:pre-wrap; }
 .chat-msg.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:2px; }
 .chat-msg.assistant { align-self:flex-start; background:var(--raised); border:1px solid var(--border); border-bottom-left-radius:2px; color:var(--text); }
@@ -5117,7 +5118,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.21</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.22</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6204,6 +6205,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.22', date:'2026-03-01', notes:['Fix: welcome input vertically centered (min-height 100% on welcome container)'] },
   { ver:'v0.25.21', date:'2026-03-01', notes:['Fix: Chat loads instantly on refresh (switchModule before network calls)'] },
   { ver:'v0.25.20', date:'2026-03-01', notes:['Chat: Hi Moe! greeting, elegant input styling, lighter bg contrast, borderless dropdown, vertical centering'] },
   { ver:'v0.25.19', date:'2026-03-01', notes:['Chat: full model names in dropdown, transparent input wrap, white text, greeting placeholder'] },
@@ -16074,7 +16076,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.21"})
+            self.reply_json({"v": "0.25.22"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17078,7 +17080,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.21'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.22'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20130,7 +20132,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.21 ready (localhost only)")
+    print(f"\n  Porter v0.25.22 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
