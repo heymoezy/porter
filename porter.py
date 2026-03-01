@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.14 — Drag-and-Drop Fix"""
+"""Porter v0.25.15 — Drag-and-Drop v3"""
 
 
 
@@ -3786,7 +3786,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 /* file list */
 .file-area {
   flex: 1; overflow-y: auto; position: relative;
-  padding: 16px 28px 0;
+  padding: 16px 28px 0; min-height: 200px;
 }
 .file-area.drag-over::after {
   content: 'Drop to upload'; position: absolute; inset: 0;
@@ -5113,7 +5113,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.14</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.15</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5160,7 +5160,7 @@ select.settings-input { padding-right: 26px; }
     <button class="btn btn-ghost" onclick="clearSelection()" style="padding:5px 12px;font-size:12px">Clear</button>
   </div>
 
-  <div class="file-area" id="fileArea" style="display:none">
+  <div class="file-area" id="fileArea" style="display:none" ondragover="_fileDragOver(event)" ondragenter="_fileDragEnter(event)" ondragleave="_fileDragLeave(event)" ondrop="_fileDrop(event)">
     <div class="list-header">
       <div class="cb-col">
         <input type="checkbox" class="row-cb" id="selectAll" onchange="toggleSelectAll(this.checked)">
@@ -6245,12 +6245,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.25.0', date:'2026-03-01', notes:[
-    'New: Real-time state synchronization via global SSE event hub',
-    'New: /api/events endpoint for streaming system-wide updates',
-    'New: useEvents React hook for automatic UI invalidation (90% less polling)',
-    'Architecture: React migration complete — dist/ is now the primary UI',
-  ]},
+  { ver:'v0.25.15', date:'2026-03-01', notes:['Drag-and-drop v3: inline HTML handlers + min-height drop zone'] },
   { ver:'v0.25.14', date:'2026-03-01', notes:['Robust drag-and-drop: works in home view, auto-selects active mount as upload target'] },
   { ver:'v0.25.13', date:'2026-03-01', notes:['Removed debug banner, fixed toolbar buttons in home view, drag-and-drop upload works in home view'] },
   { ver:'v0.25.12', date:'2026-03-01', notes:['Files tab fix v3 — fhome vars moved to top of script block'] },
@@ -14181,38 +14176,34 @@ async function uploadOne(file) {
   });
 }
 
-// drag and drop — attached to both fileArea and document for robustness
-var _dragCounter = 0;
-const fa = document.getElementById('fileArea');
-if (fa) {
-  fa.addEventListener('dragenter', e => {
-    e.preventDefault();
-    _dragCounter++;
-    if (_currentModule === 'files') {
-      // Auto-select first writable mount if none selected
-      if (!curRoot && _fhomeActive) { curRoot = _fhomeActive.mountId; curPath = _fhomeActive.path || ''; }
-      fa.classList.add('drag-over');
-    }
-  });
-  fa.addEventListener('dragover', e => {
-    if (_currentModule === 'files') e.preventDefault();
-  });
-  fa.addEventListener('dragleave', e => {
-    _dragCounter--;
-    if (_dragCounter <= 0) { _dragCounter = 0; fa.classList.remove('drag-over'); }
-  });
-  fa.addEventListener('drop', e => {
-    e.preventDefault();
-    _dragCounter = 0;
-    fa.classList.remove('drag-over');
-    if (_currentModule !== 'files') return;
-    if (!curRoot) {
-      toast('Select a location first', 'err');
-      return;
-    }
-    if (!curWritable) { toast('This folder is read-only', 'err'); return; }
-    enqueueFiles(e.dataTransfer.files);
-  });
+// drag and drop — named functions called from inline HTML ondragX attributes
+var _dragCtr = 0;
+function _fileDragEnter(e) {
+  e.preventDefault(); e.stopPropagation();
+  _dragCtr++;
+  var el = document.getElementById('fileArea');
+  if (_currentModule === 'files' && el) {
+    if (!curRoot && _fhomeActive) { curRoot = _fhomeActive.mountId; curPath = _fhomeActive.path || ''; }
+    el.classList.add('drag-over');
+  }
+}
+function _fileDragOver(e) { e.preventDefault(); e.stopPropagation(); }
+function _fileDragLeave(e) {
+  _dragCtr--;
+  if (_dragCtr <= 0) {
+    _dragCtr = 0;
+    var el = document.getElementById('fileArea');
+    if (el) el.classList.remove('drag-over');
+  }
+}
+function _fileDrop(e) {
+  e.preventDefault(); e.stopPropagation();
+  _dragCtr = 0;
+  var el = document.getElementById('fileArea');
+  if (el) el.classList.remove('drag-over');
+  if (_currentModule !== 'files') return;
+  if (!curRoot) { toast('Select a location first', 'err'); return; }
+  enqueueFiles(e.dataTransfer.files);
 }
 
 // ── preview panel ──
@@ -16165,7 +16156,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.14"})
+            self.reply_json({"v": "0.25.15"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17169,7 +17160,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.14'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.15'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20221,7 +20212,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.14 ready (localhost only)")
+    print(f"\n  Porter v0.25.15 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
