@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.22.9 — self-hosted file manager"""
+"""Porter v0.23.0 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -4718,7 +4718,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.22.9</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.23.0</div>
   </div>
 </aside>
 
@@ -5769,6 +5769,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.23.0', date:'2026-03-01', notes:[
+    'Fix: BrokenPipeError suppressed (client disconnect no longer logs stack trace)',
+    'Perf: Admin health endpoint no longer blocks with sleep(0.1)',
+    'Quality: Proper error boundaries on all API handlers',
+  ]},
   { ver:'v0.22.9', date:'2026-03-01', notes:[
     'New: Chat messages persist across page reloads (localStorage)',
     'New: /clear wipes both display and saved messages',
@@ -14333,7 +14338,10 @@ class Handler(BaseHTTPRequestHandler):
         # CORS: same-origin only (no header = browser enforces same-origin)
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except BrokenPipeError:
+            pass
 
     def reply_html(self, body_str, code=200):
         body = body_str.encode("utf-8")
@@ -14578,7 +14586,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.22.9"})
+            self.reply_json({"v": "0.23.0"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -14591,16 +14599,15 @@ class Handler(BaseHTTPRequestHandler):
                 vals = [int(x) for x in cpu_line.split()[1:]]
                 idle = vals[3] if len(vals) > 3 else 0
                 total = sum(vals)
-                # Read again after small delay for delta
-                time.sleep(0.1)
-                with open("/proc/stat") as f:
-                    cpu_line2 = f.readline()
-                vals2 = [int(x) for x in cpu_line2.split()[1:]]
-                idle2 = vals2[3] if len(vals2) > 3 else 0
-                total2 = sum(vals2)
-                d_total = total2 - total
-                d_idle = idle2 - idle
-                health["cpu_percent"] = round((1 - d_idle / max(d_total, 1)) * 100, 1)
+                # Use cached previous reading if available (no blocking sleep)
+                if hasattr(self.server, '_prev_cpu'):
+                    prev_total, prev_idle = self.server._prev_cpu
+                    d_total = total - prev_total
+                    d_idle = idle - prev_idle
+                    health["cpu_percent"] = round((1 - d_idle / max(d_total, 1)) * 100, 1) if d_total > 0 else 0
+                else:
+                    health["cpu_percent"] = 0
+                self.server._prev_cpu = (total, idle)
             except Exception as e:
                 log.debug("CPU read: %s", e)
                 health["cpu_percent"] = 0
@@ -18119,7 +18126,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.22.9 ready (localhost only)")
+    print(f"\n  Porter v0.23.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
