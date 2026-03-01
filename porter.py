@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.10 — Files Tab Fix v2"""
+"""Porter v0.25.11 — Files Tab TDZ Fix"""
 
 
 
@@ -5113,7 +5113,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.10</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.11</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6249,6 +6249,7 @@ const CHANGELOG = [
     'New: useEvents React hook for automatic UI invalidation (90% less polling)',
     'Architecture: React migration complete — dist/ is now the primary UI',
   ]},
+  { ver:'v0.25.11', date:'2026-03-01', notes:['Files tab TDZ fix — var instead of let for fhome state variables'] },
   { ver:'v0.25.10', date:'2026-03-01', notes:['Files tab fix v2 — clear stale state on entry, diagnostic banner'] },
   { ver:'v0.25.9', date:'2026-03-01', notes:['Files tab fix — race condition on server hostname resolved, device tree renders correctly'] },
   { ver:'v0.25.8', date:'2026-03-01', notes:[
@@ -13619,11 +13620,11 @@ async function loadDiskInfo(root) {
 }
 
 // ── Files home view (inline location tree in listing) ──
-let _fhomeExpanded = new Set();
-let _fhomeInitDone = false;
+var _fhomeExpanded = new Set();
+var _fhomeInitDone = false;
 
 // _fhomeActive = {mountId, path, entries} | null
-let _fhomeActive = null;
+var _fhomeActive = null;
 function _goFilesHome() { _fhomeActive = null; renderBreadcrumb("",""); showFilesHome(); }
 
 async function selectMount(mountId, path) {
@@ -16148,7 +16149,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.10"})
+            self.reply_json({"v": "0.25.11"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17152,7 +17153,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.10'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.11'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20204,7 +20205,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.10 ready (localhost only)")
+    print(f"\n  Porter v0.25.11 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
