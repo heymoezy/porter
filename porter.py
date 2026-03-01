@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.15 — Drag-and-Drop v3"""
+"""Porter v0.25.16 — Upload Animation"""
 
 
 
@@ -3718,6 +3718,13 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   margin:0 !important; border-color:transparent !important; overflow:hidden;
   transition: opacity .25s ease, max-height .3s ease .1s, padding .3s ease .1s, margin .3s ease .1s, border-color .25s ease;
 }
+.fhome-entry.adding {
+  opacity:0; max-height:0; overflow:hidden;
+  transition: opacity .25s ease .05s, max-height .3s ease;
+}
+.fhome-entry.adding.added {
+  opacity:1; max-height:60px;
+}
 
 /* search */
 .search-wrap { position: relative; display: flex; align-items: center; }
@@ -5113,7 +5120,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.15</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.16</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6245,6 +6252,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.16', date:'2026-03-01', notes:['Upload stays in directory with slide-in animation for new files (matches delete fade-out)'] },
   { ver:'v0.25.15', date:'2026-03-01', notes:['Drag-and-drop v3: inline HTML handlers + min-height drop zone'] },
   { ver:'v0.25.14', date:'2026-03-01', notes:['Robust drag-and-drop: works in home view, auto-selects active mount as upload target'] },
   { ver:'v0.25.13', date:'2026-03-01', notes:['Removed debug banner, fixed toolbar buttons in home view, drag-and-drop upload works in home view'] },
@@ -7544,7 +7552,7 @@ async function processQueue() {
       toast(`Uploaded ${total} files`, 'ok');
     }
     uploadFailed = [];
-    if (_fhomeActive) { selectMount(_fhomeActive.mountId, _fhomeActive.path || ''); }
+    if (_fhomeActive) { _fhomeRefreshAfterUpload(); }
     else { navigate(curRoot, curPath); }
     return;
   }
@@ -13827,6 +13835,29 @@ function _fhomeDelete(evt, mountId, dirPath, name, type) {
   });
 }
 
+async function _fhomeRefreshAfterUpload() {
+  if (!_fhomeActive) return;
+  var mId = _fhomeActive.mountId, mPath = _fhomeActive.path || '';
+  var oldNames = new Set();
+  if (_fhomeActive.entries) _fhomeActive.entries.forEach(function(e) { oldNames.add(e.name); });
+  var data = await api('/api/list?root=' + encodeURIComponent(mId) + '&path=' + encodeURIComponent(mPath));
+  if (!data) return;
+  _fhomeActive = { mountId: mId, path: mPath, entries: data.entries || [] };
+  curWritable = data.writable !== false;
+  showFilesHome();
+  // Animate new entries
+  var rows = document.querySelectorAll('.fhome-entry');
+  rows.forEach(function(row) {
+    var label = row.querySelector('.file-label');
+    if (label && !oldNames.has(label.textContent)) {
+      row.classList.add('adding');
+      void row.offsetHeight;
+      row.classList.add('added');
+      row.addEventListener('transitionend', function() { row.classList.remove('adding', 'added'); }, { once: true });
+    }
+  });
+}
+
 function toggleFhomeNode(nodeId) {
   if (_fhomeExpanded.has(nodeId)) _fhomeExpanded.delete(nodeId);
   else _fhomeExpanded.add(nodeId);
@@ -16156,7 +16187,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.15"})
+            self.reply_json({"v": "0.25.16"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17160,7 +17191,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.15'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.16'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20212,7 +20243,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.15 ready (localhost only)")
+    print(f"\n  Porter v0.25.16 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
