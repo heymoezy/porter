@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.30 — Backend Fix"""
+"""Porter v0.25.31 — Gemini Fix + @ Mentions + Chat History"""
 
 
 
@@ -4294,6 +4294,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .chat-sidebar-item:hover { background:var(--raised); color:var(--text); }
 .chat-sidebar-item.active { background:var(--raised); border-color:var(--border); color:var(--text); }
+.chat-sidebar-actions { display:none; flex-shrink:0; }
+.chat-sidebar-item:hover .chat-sidebar-actions { display:flex; gap:2px; }
 .chat-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1; color:var(--text3); gap:12px; text-align:center; }
 .chat-empty-icon { font-size:48px; opacity:.3; }
 .chat-empty-title { font-size:16px; font-weight:600; color:var(--text); }
@@ -5134,7 +5136,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.30</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.31</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5218,7 +5220,8 @@ select.settings-input { padding-right: 26px; }
         <div id="chat-messages" class="chat-messages welcome-state">
           <div class="chat-welcome">
             <div class="chat-welcome-sub">⚡ One prompt. Every AI. Zero friction.</div>
-            <div class="chat-welcome-input-wrap">
+            <div class="chat-welcome-input-wrap" style="position:relative">
+              <div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>
               <textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
               <div class="chat-welcome-meta">
 <select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>
@@ -5227,7 +5230,7 @@ select.settings-input { padding-right: 26px; }
                   <div class="mp-menu">
                     <div class="mp-opt selected" data-v="" onclick="_mpSelect(this)">Auto-route</div>
                     <div class="mp-opt" data-v="openclaw" onclick="_mpSelect(this)">OpenClaw (GPT-5.3 Codex)</div>
-                    <div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini 2.5 Flash</div>
+                    <div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini CLI</div>
                     <div class="mp-opt" data-v="codex" onclick="_mpSelect(this)">Codex CLI (GPT-5.1)</div>
                     <div class="mp-opt" data-v="claude" onclick="_mpSelect(this)">Claude (Opus 4.6)</div>
                     <div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 7B)</div>
@@ -5250,7 +5253,7 @@ select.settings-input { padding-right: 26px; }
                 <div class="mp-menu">
                   <div class="mp-opt selected" data-v="" onclick="_mpSelect(this)">Auto-route</div>
                   <div class="mp-opt" data-v="openclaw" onclick="_mpSelect(this)">OpenClaw (GPT-5.3 Codex)</div>
-                  <div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini 2.5 Flash</div>
+                  <div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini CLI</div>
                   <div class="mp-opt" data-v="codex" onclick="_mpSelect(this)">Codex CLI (GPT-5.1)</div>
                   <div class="mp-opt" data-v="claude" onclick="_mpSelect(this)">Claude (Opus 4.6)</div>
                   <div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 7B)</div>
@@ -6246,6 +6249,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.31', date:'2026-03-01', notes:['Fix: Gemini CLI v0.31 (-o text, no longer hangs)','@ mentions work in welcome input + mid-message','Chat history grouped by Today/Yesterday/date','Rename/delete buttons show on hover only'] },
   { ver:'v0.25.30', date:'2026-03-01', notes:['Fix: OpenClaw routes through CLI (gateway HTTP 405 fixed)','Fix: Ollama auto-discovers loaded model','Fix: /commands auto-send on select'] },
   { ver:'v0.25.29', date:'2026-03-01', notes:['Fix: chat works immediately (no model-loading race condition)','UX: clean tagline replaces greeting'] },
   { ver:'v0.25.28', date:'2026-03-01', notes:['Fix: model selection works with custom picker','Fix: Auto-route picks first available model'] },
@@ -9752,7 +9756,7 @@ function renderChatMessages(streamUpdate) {
       + '<div class="mp-menu">'
       + '<div class="mp-opt selected" data-v="" onclick="_mpSelect(this)">Auto-route</div>'
       + '<div class="mp-opt" data-v="openclaw" onclick="_mpSelect(this)">OpenClaw (GPT-5.3 Codex)</div>'
-      + '<div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini 2.5 Flash</div>'
+      + '<div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini CLI</div>'
       + '<div class="mp-opt" data-v="codex" onclick="_mpSelect(this)">Codex CLI (GPT-5.1)</div>'
       + '<div class="mp-opt" data-v="claude" onclick="_mpSelect(this)">Claude (Opus 4.6)</div>'
       + '<div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 7B)</div>'
@@ -9950,7 +9954,7 @@ var _defaultAtTargets = [
 ];
 
 function _acShow(items) {
-  var el = document.getElementById('chat-autocomplete');
+  var el = _getAcEl();
   if (!el || !items.length) { _acHide(); return; }
   _acItems = items;
   _acIdx = 0;
@@ -9969,8 +9973,7 @@ function _acShow(items) {
 }
 
 function _acHide() {
-  var el = document.getElementById('chat-autocomplete');
-  if (el) el.style.display = 'none';
+  document.querySelectorAll('.chat-autocomplete').forEach(function(el) { el.style.display = 'none'; });
   _acVisible = false;
   _acItems = [];
   _acIdx = -1;
@@ -9985,6 +9988,17 @@ function _acSelect(idx) {
   if (cmd.startsWith('/')) {
     input.value = cmd;
     chatSend();
+  } else if (cmd.startsWith('@')) {
+    // Replace the last @partial word with the full @target
+    var val = input.value;
+    var lastAt = val.lastIndexOf('@');
+    if (lastAt >= 0) {
+      input.value = val.substring(0, lastAt) + cmd + ' ';
+    } else {
+      input.value = cmd + ' ';
+    }
+    input.focus();
+    _chatAutoGrow(input);
   } else {
     input.value = cmd + ' ';
     input.focus();
@@ -9995,7 +10009,7 @@ function _acSelect(idx) {
 function _acNavigate(dir) {
   if (!_acVisible || !_acItems.length) return;
   _acIdx = (_acIdx + dir + _acItems.length) % _acItems.length;
-  var el = document.getElementById('chat-autocomplete');
+  var el = _getAcEl();
   if (!el) return;
   el.querySelectorAll('.chat-ac-item').forEach(function(item, i) {
     item.classList.toggle('selected', i === _acIdx);
@@ -10048,6 +10062,18 @@ function _acCheck() {
     return;
   }
 
+  // Support @model mid-message (after space)
+  var _lastWord = val.split(/\s/).pop();
+  if (_lastWord === '@') {
+    _acShow(_defaultAtTargets);
+    return;
+  }
+  if (_lastWord.startsWith('@') && _lastWord.length > 1) {
+    var q = _lastWord.toLowerCase();
+    var filtered = _defaultAtTargets.filter(function(t) { return t.cmd.toLowerCase().startsWith(q); });
+    if (filtered.length) { _acShow(filtered); return; }
+  }
+
   _acHide();
 }
 
@@ -10055,6 +10081,11 @@ function _getChatInput() {
   var w = document.getElementById('chat-input-welcome');
   if (w && w.offsetParent !== null) return w;
   return document.getElementById('chat-input');
+}
+function _getAcEl() {
+  var w = document.getElementById('chat-input-welcome');
+  if (w && w.offsetParent !== null) return document.getElementById('chat-autocomplete-welcome');
+  return document.getElementById('chat-autocomplete');
 }
 function chatInputKey(e) {
   if (_acVisible) {
@@ -10344,15 +10375,35 @@ async function loadChatSessions() {
     return;
   }
 
-  list.innerHTML = resp.sessions.map(function(s) {
-    var safeTitle = escHtml(s.title).replace(/'/g, "\\'");
-    return '<div class="chat-sidebar-item' + (s.id === _chatId ? ' active' : '') + '" onclick="loadChatSession(\'' + escHtml(s.id) + '\')">'
-      + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(s.title) + '</span>'
-      + '<span style="font-size:10px;color:var(--text3)">' + (s.messages || 0) + ' msgs</span>'
-      + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();renameChatSession(\'' + escHtml(s.id) + '\',\'' + safeTitle + '\')" title="Rename">&#9998;</button>'
-      + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();deleteChatSession(\'' + escHtml(s.id) + '\')">&#10005;</button>'
-      + '</div>';
-  }).join('');
+  // Group sessions by date
+  var groups = {};
+  var today = new Date(); today.setHours(0,0,0,0);
+  var yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+  resp.sessions.forEach(function(s) {
+    var d = new Date(s.updated);
+    var dDay = new Date(d); dDay.setHours(0,0,0,0);
+    var label;
+    if (dDay.getTime() === today.getTime()) label = 'Today';
+    else if (dDay.getTime() === yesterday.getTime()) label = 'Yesterday';
+    else label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(s);
+  });
+  var html = '';
+  Object.keys(groups).forEach(function(label) {
+    html += '<div style="font-size:10px;color:var(--text3);padding:6px 10px 2px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">' + label + '</div>';
+    groups[label].forEach(function(s) {
+      var safeTitle = escHtml(s.title).replace(/'/g, "\\'");
+      html += '<div class="chat-sidebar-item' + (s.id === _chatId ? ' active' : '') + '" onclick="loadChatSession(\'' + escHtml(s.id) + '\')">'
+        + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(s.title) + '</span>'
+        + '<span class="chat-sidebar-actions">'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();renameChatSession(\'' + escHtml(s.id) + '\',\'' + safeTitle + '\')" title="Rename">&#9998;</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();deleteChatSession(\'' + escHtml(s.id) + '\')">&#10005;</button>'
+        + '</span>'
+        + '</div>';
+    });
+  });
+  list.innerHTML = html;
 }
 
 function closeChatHistory() {
@@ -11283,7 +11334,7 @@ function _modelDisplayName(modelId) {
   if (mid.includes('codex') || mid.includes('gpt-5')) return 'GPT-5.3 Codex';
   if (mid.includes('opus')) return 'Claude Opus 4.6';
   if (mid.includes('sonnet')) return 'Claude Sonnet 4.6';
-  if (mid.includes('gemini')) return 'Gemini 2.5 Pro';
+  if (mid.includes('gemini')) return 'Gemini';
   return modelId;
 }
 
@@ -15223,32 +15274,29 @@ def _dispatch_gemini(message, model=None, timeout=120):
     # Trim message to avoid timeouts on huge conversation histories
     if len(message) > 4000:
         message = message[-4000:]
-    cmd = [gem_bin, "-p", message, "-o", "json", "-y"]
+    # Use -o text (not json) — Gemini CLI v0.31+ hangs with -o json
+    cmd = [gem_bin, "-p", message, "-o", "text", "-y"]
     if model and model != "auto":
         cmd.extend(["-m", model])
     log.info("Agent bridge [gemini]: model=%s msg=%s", model or "auto", message[:80])
+    _start = time.time()
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env(), cwd="/tmp")
+    _elapsed_ms = int((time.time() - _start) * 1000)
     if result.returncode != 0:
-        try:
-            err_data = json.loads(result.stdout)
-            err_msg = err_data.get("error", {}).get("message", result.stderr[:300])
-        except Exception as e:
-            log.debug("Gemini dispatch exception: %s", e)
-            err_msg = result.stderr[:300] or "Gemini returned non-zero"
+        err_msg = result.stderr[:300] or result.stdout[:300] or "Gemini returned non-zero"
         return {"ok": False, "error": err_msg}
-    gem_resp = json.loads(result.stdout)
-    stats = gem_resp.get("stats", {})
-    models_stats = stats.get("models", {})
-    total_latency = sum(m.get("api", {}).get("totalLatencyMs", 0) for m in models_stats.values())
-    total_tokens = sum(m.get("tokens", {}).get("total", 0) for m in models_stats.values())
-    model_used = list(models_stats.keys())[0] if models_stats else model or "gemini-auto"
+    # Text output: strip YOLO mode banners and credential messages
+    text = result.stdout
+    _skip = ("YOLO mode", "Loaded cached", "Loaded saved")
+    lines = text.split("\n")
+    lines = [l for l in lines if not any(l.strip().startswith(s) for s in _skip)]
+    text = "\n".join(lines).strip()
     return {
         "ok": True, "backend": "gemini",
-        "text": gem_resp.get("response", ""),
-        "session_id": gem_resp.get("session_id", ""),
-        "model": model_used,
-        "duration_ms": total_latency,
-        "tokens": {"total": total_tokens},
+        "text": text,
+        "model": model or "gemini",
+        "duration_ms": _elapsed_ms,
+        "tokens": {"total": 0},
     }
 
 
@@ -16229,7 +16277,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.30"})
+            self.reply_json({"v": "0.25.31"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17233,7 +17281,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.30'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.31'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -17451,7 +17499,8 @@ class Handler(BaseHTTPRequestHandler):
                         "title": r["title"] or "Untitled",
                         "model": r["model_id"] or "",
                         "messages": r["msg_count"],
-                        "updated": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(r["updated_at"])),
+                        "updated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(r["updated_at"])),
+                        "updated_ts": r["updated_at"],
                     })
             except Exception as e:
                 log.debug("Chat session fetch error: %s", e)
@@ -20303,7 +20352,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.30 ready (localhost only)")
+    print(f"\n  Porter v0.25.31 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
