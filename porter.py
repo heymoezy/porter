@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.16 — Upload Animation"""
+"""Porter v0.25.17 — Chat Redesign"""
 
 
 
@@ -5117,7 +5117,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.16</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.17</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6232,6 +6232,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.17', date:'2026-03-01', notes:['Chat redesign: centered welcome input, pinned bottom after send, model dropdown, no send button or paperclip'] },
   { ver:'v0.25.16', date:'2026-03-01', notes:['Upload stays in directory with slide-in animation for new files (matches delete fade-out)'] },
   { ver:'v0.25.15', date:'2026-03-01', notes:['Drag-and-drop v3: inline HTML handlers + min-height drop zone'] },
   { ver:'v0.25.14', date:'2026-03-01', notes:['Robust drag-and-drop: works in home view, auto-selects active mount as upload target'] },
@@ -16171,7 +16172,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.16"})
+            self.reply_json({"v": "0.25.17"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17175,7 +17176,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.16'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.17'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20227,7 +20228,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.16 ready (localhost only)")
+    print(f"\n  Porter v0.25.17 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
