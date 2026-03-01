@@ -153,7 +153,7 @@ def _db_init():
     if "user_agent" not in cols:
         conn.execute("ALTER TABLE sessions ADD COLUMN user_agent TEXT")
     if "last_seen_at" not in cols:
-        conn.execute("ALTER TABLE sessions ADD COLUMN last_seen_at REAL DEFAULT (strftime('%s','now'))")
+        conn.execute("ALTER TABLE sessions ADD COLUMN last_seen_at REAL DEFAULT 0")
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS tasks (
