@@ -9960,10 +9960,16 @@ function _acSelect(idx) {
   if (idx < 0 || idx >= _acItems.length) return;
   var input = _getChatInput();
   if (!input) return;
-  input.value = _acItems[idx].cmd + ' ';
-  input.focus();
+  var cmd = _acItems[idx].cmd;
   _acHide();
-  _chatAutoGrow(input);
+  if (cmd.startsWith('/')) {
+    input.value = cmd;
+    chatSend();
+  } else {
+    input.value = cmd + ' ';
+    input.focus();
+    _chatAutoGrow(input);
+  }
 }
 
 function _acNavigate(dir) {
