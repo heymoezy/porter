@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.17 — Chat Redesign"""
+"""Porter v0.25.18 — Chat Polish"""
 
 
 
@@ -4103,7 +4103,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-header { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--border); margin-bottom:0; flex-shrink:0; }
 .chat-route-bar { display:flex; align-items:center; gap:8px; padding:8px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
 .chat-messages { flex:1; overflow-y:auto; padding:16px 20px 16px; display:flex; flex-direction:column; gap:10px; }
-.chat-messages:has(.chat-welcome) { padding:0; }
+.chat-messages.welcome-state { padding:0; }
 .chat-msg { max-width:85%; padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.6; word-break:break-word; white-space:pre-wrap; }
 .chat-msg.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:2px; }
 .chat-msg.assistant { align-self:flex-start; background:var(--raised); border:1px solid var(--border); border-bottom-left-radius:2px; color:var(--text); }
@@ -4181,11 +4181,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:8px;
 }
 
-/* Direct Dispatch bar (inside Chat) */
-.chat-dispatch-section { border-top:1px solid var(--border); flex-shrink:0; }
-.chat-dispatch-toggle { display:flex; align-items:center; gap:6px; padding:8px 16px; width:100%; background:none; border:none; cursor:pointer; color:var(--text3); }
-.chat-dispatch-toggle:hover { background:var(--raised); }
-.chat-dispatch-section.open #dispatch-chevron { transform:rotate(90deg); }
+
 
 /* Guided tour */
 .tour-overlay { position:fixed; inset:0; z-index:9998; pointer-events:none; }
@@ -5117,7 +5113,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.17</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.18</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5219,35 +5215,7 @@ select.settings-input { padding-right: 26px; }
         </div>
       </div>
 
-      <!-- Direct Dispatch (collapsible) -->
-      <div class="chat-dispatch-section" id="chat-dispatch-section">
-        <button class="chat-dispatch-toggle" onclick="toggleDispatchBar()">
-          <span id="dispatch-chevron" style="font-size:10px;transition:.2s;display:inline-block">&#9654;</span>
-          <span style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">Direct Dispatch</span>
-          <span id="dispatch-run-count" style="font-size:10px;color:var(--text3);margin-left:auto"></span>
-        </button>
-        <div id="dispatch-bar" style="display:none">
-          <div style="display:flex;gap:8px;align-items:end;padding:10px 0">
-            <div style="flex:1">
-              <input type="text" id="bridge-prompt" class="settings-input" placeholder="Send a task to an agent..." style="width:100%">
-            </div>
-            <div>
-              <select id="bridge-backend" class="settings-input" style="min-width:120px">
-                <option value="">Auto-route</option>
-                <option value="openclaw">OpenClaw</option>
-                <option value="gemini">Gemini</option>
-                <option value="codex">Codex</option>
-                <option value="claude">Claude</option>
-                <option value="ollama">Ollama</option>
-              </select>
-            </div>
-            <button class="btn btn-primary" onclick="bridgeDispatch()" style="white-space:nowrap">Go</button>
-          </div>
-          <div id="bridge-runs" style="max-height:250px;overflow-y:auto">
-            <div style="color:var(--text3);font-size:12px;text-align:center;padding:12px 0">No recent runs</div>
-          </div>
-        </div>
-      </div>
+
     </div>
   </div>
 
@@ -6232,6 +6200,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.18', date:'2026-03-01', notes:['Chat: welcome renders instantly (no wait for model load), removed Direct Dispatch section, centered input box'] },
   { ver:'v0.25.17', date:'2026-03-01', notes:['Chat redesign: centered welcome input, pinned bottom after send, model dropdown, no send button or paperclip'] },
   { ver:'v0.25.16', date:'2026-03-01', notes:['Upload stays in directory with slide-in animation for new files (matches delete fade-out)'] },
   { ver:'v0.25.15', date:'2026-03-01', notes:['Drag-and-drop v3: inline HTML handlers + min-height drop zone'] },
@@ -7960,7 +7929,7 @@ function switchModule(name) {
     if (_lh) _lh.style.display = 'none';
   }
   const loaders = {
-    overview: function() { populateChatModels(); populateChatRoutes(); loadBridgeRuns(); }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); _loadRoutingPrefs(); }, projects: loadProjects, admin: loadAdmin,
+    overview: function() { renderChatMessages(); populateChatModels(); populateChatRoutes(); }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); _loadRoutingPrefs(); }, projects: loadProjects, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
     tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: function() { loadWorkflows(); loadBuildStatus(); }, memory: loadMemory, settings: syncSettingsUI,
   };
@@ -9690,6 +9659,7 @@ function renderChatMessages(streamUpdate) {
   var routeBar = document.getElementById('chat-route-bar');
   if (!_chatMessages.length) {
     // Centered welcome state
+    el.classList.add('welcome-state');
     el.innerHTML = '<div class="chat-welcome">'
       + '<div class="chat-welcome-title">Porter</div>'
       + '<div class="chat-welcome-input-wrap">'
@@ -9710,6 +9680,7 @@ function renderChatMessages(streamUpdate) {
     return;
   }
   // Has messages: show bottom-pinned input + header
+  el.classList.remove('welcome-state');
   if (inputArea) inputArea.style.display = '';
   if (routeBar) routeBar.style.display = '';
   if (streamUpdate && _chatStreaming) {
@@ -12206,85 +12177,9 @@ function _showModal(title, bodyHtml) {
   overlay.style.display = 'flex';
 }
 
-async function bridgeDispatch() {
-  const promptEl = document.getElementById('bridge-prompt');
-  const backendEl = document.getElementById('bridge-backend');
-  if (!promptEl || !promptEl.value.trim()) { toast('Enter a prompt', 'warn'); return; }
-  const prompt = promptEl.value.trim();
-  const backend = backendEl ? backendEl.value : '';
-  promptEl.value = '';
-  toast('Dispatching to ' + (backend || 'auto-route') + '...', 'info');
-  try {
-    const res = await api('/api/bridge/dispatch', { prompt, backend });
-    if (res && res.ok) {
-      toast('Run ' + res.run_id + ' dispatched to ' + res.backend, 'ok');
-      setTimeout(loadBridgeRuns, 1000);
-    } else {
-      toast((res && res.error) || 'Dispatch failed', 'err');
-    }
-  } catch(e) { toast('Dispatch error: ' + e.message, 'err'); }
-}
+function loadBridgeRuns() { /* removed — dispatch moved to @backend in chat */ }
 
-function toggleDispatchBar() {
-  var sec = document.getElementById('chat-dispatch-section');
-  var bar = document.getElementById('dispatch-bar');
-  if (!sec || !bar) return;
-  var isOpen = bar.style.display !== 'none';
-  bar.style.display = isOpen ? 'none' : '';
-  sec.classList.toggle('open', !isOpen);
-}
 
-async function loadBridgeRuns() {
-  const el = document.getElementById('bridge-runs');
-  if (!el) return;
-  try {
-    const data = await api('/api/bridge/runs');
-    if (!data || !data.runs || !data.runs.length) {
-      el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px 0">No recent runs</div>';
-      var countEl = document.getElementById('dispatch-run-count');
-      if (countEl) countEl.textContent = '';
-      return;
-    }
-    el.innerHTML = data.runs.map(r => {
-      const st = r.status || 'pending';
-      const stColor = st === 'complete' ? '#22c55e' : st === 'failed' ? '#ef4444' : st === 'in_progress' ? '#f59e0b' : 'var(--text3)';
-      const dur = r.duration_ms ? (r.duration_ms / 1000).toFixed(1) + 's' : '...';
-      const ago = r.created_at ? _timeAgo(r.created_at * 1000) : '';
-      const preview = escHtml(r.prompt_preview || '').substring(0, 80);
-      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;cursor:pointer" onclick="showBridgeRun('${r.run_id}')">
-        <span style="width:6px;height:6px;border-radius:50%;background:${stColor};flex-shrink:0"></span>
-        <span style="color:var(--text2);min-width:60px">${escHtml(r.backend || '')}</span>
-        <span style="color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${preview}</span>
-        <span style="color:var(--text3);min-width:40px;text-align:right">${dur}</span>
-        <span style="color:var(--text3);min-width:50px;text-align:right;font-size:11px">${ago}</span>
-      </div>`;
-    }).join('');
-  } catch(e) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:20px 0">Failed to load runs</div>';
-  }
-}
-
-async function showBridgeRun(runId) {
-  try {
-    const data = await api('/api/agent-messages?limit=200');
-    if (!data || !data.messages) return;
-    const msg = data.messages.find(m => m.run_id === runId);
-    if (!msg) { toast('Run not found', 'warn'); return; }
-    const body = '<div style="font-size:12px">'
-      + '<div style="margin-bottom:8px"><strong>Run:</strong> ' + escHtml(runId) + '</div>'
-      + '<div style="margin-bottom:8px"><strong>Backend:</strong> ' + escHtml(msg.to_agent || '') + (msg.model ? ' (' + escHtml(msg.model) + ')' : '') + '</div>'
-      + '<div style="margin-bottom:8px"><strong>Status:</strong> ' + escHtml(msg.status || '') + '</div>'
-      + '<div style="margin-bottom:8px"><strong>Duration:</strong> ' + (msg.duration_ms || 0) + 'ms</div>'
-      + '<div style="margin-bottom:8px"><strong>Tokens:</strong> ' + (msg.tokens_total || 0) + '</div>'
-      + (msg.error ? '<div style="margin-bottom:8px;color:#ef4444"><strong>Error:</strong> ' + escHtml(msg.error) + '</div>' : '')
-      + '<div style="margin-bottom:4px"><strong>Prompt:</strong></div>'
-      + '<pre style="background:var(--bg);padding:8px;border-radius:6px;white-space:pre-wrap;max-height:200px;overflow-y:auto;font-size:11px">' + escHtml(msg.message || '') + '</pre>'
-      + (msg.response ? '<div style="margin-top:8px;margin-bottom:4px"><strong>Response:</strong></div>'
-        + '<pre style="background:var(--bg);padding:8px;border-radius:6px;white-space:pre-wrap;max-height:300px;overflow-y:auto;font-size:11px">' + escHtml(msg.response || '') + '</pre>' : '')
-      + '</div>';
-    _showModal('Run ' + runId, body);
-  } catch(e) { toast('Failed to load run details', 'err'); }
-}
 
 function _timeAgo(ts) {
   if (typeof _timeAgo._fn === 'function') return _timeAgo._fn(ts);
@@ -16172,7 +16067,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.17"})
+            self.reply_json({"v": "0.25.18"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17176,7 +17071,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.17'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.18'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20228,7 +20123,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.17 ready (localhost only)")
+    print(f"\n  Porter v0.25.18 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
