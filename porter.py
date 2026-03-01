@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.12 — Files Tab Fix v3"""
+"""Porter v0.25.13 — Files Upload + Home View"""
 
 
 
@@ -5113,7 +5113,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.12</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.13</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6254,6 +6254,7 @@ const CHANGELOG = [
     'New: useEvents React hook for automatic UI invalidation (90% less polling)',
     'Architecture: React migration complete — dist/ is now the primary UI',
   ]},
+  { ver:'v0.25.13', date:'2026-03-01', notes:['Removed debug banner, fixed toolbar buttons in home view, drag-and-drop upload works in home view'] },
   { ver:'v0.25.12', date:'2026-03-01', notes:['Files tab fix v3 — fhome vars moved to top of script block'] },
   { ver:'v0.25.11', date:'2026-03-01', notes:['Files tab TDZ fix — var instead of let for fhome state variables'] },
   { ver:'v0.25.10', date:'2026-03-01', notes:['Files tab fix v2 — clear stale state on entry, diagnostic banner'] },
@@ -7550,7 +7551,8 @@ async function processQueue() {
       toast(`Uploaded ${total} files`, 'ok');
     }
     uploadFailed = [];
-    navigate(curRoot, curPath);
+    if (_fhomeActive) { selectMount(_fhomeActive.mountId, _fhomeActive.path || ''); }
+    else { navigate(curRoot, curPath); }
     return;
   }
   isUploading = true;
@@ -13662,15 +13664,19 @@ function showFilesHome() {
   const banner = document.getElementById("banner");
   if (banner) banner.style.display = "none";
 
-  // If no active mount, clear curRoot so toolbar context is right
+  // Toggle toolbar buttons based on active mount
+  var _btnMkdir = document.getElementById("btnMkdir");
+  var _btnUpload = document.getElementById("btnUpload");
+  var _btnHidden = document.getElementById("btnHidden");
   if (!_fhomeActive) {
     curRoot = ""; curPath = "";
-    const btnMkdir = document.getElementById("btnMkdir");
-    const btnUpload = document.getElementById("btnUpload");
-    const btnHidden = document.getElementById("btnHidden");
-    if (btnMkdir)  btnMkdir.style.display  = "none";
-    if (btnUpload) btnUpload.style.display  = "none";
-    if (btnHidden) btnHidden.style.display  = "none";
+    if (_btnMkdir)  _btnMkdir.style.display  = "none";
+    if (_btnUpload) _btnUpload.style.display  = "none";
+    if (_btnHidden) _btnHidden.style.display  = "none";
+  } else {
+    if (_btnMkdir)  _btnMkdir.style.display  = "";
+    if (_btnUpload) _btnUpload.style.display  = "";
+    if (_btnHidden) _btnHidden.style.display  = "";
   }
 
   const nodes = Array.isArray(_lastNodes) ? [..._lastNodes] : [];
@@ -13785,15 +13791,7 @@ function showFilesHome() {
       }
     });
   }
-  // Debug: prepend diagnostic info (temporary)
-  var _dbg = '<div style="padding:8px 16px;font-size:11px;color:var(--text3);background:var(--raised);border-radius:6px;margin-bottom:8px">';
-  _dbg += 'Nodes: ' + nodes.length;
-  _dbg += ' | Hostname: ' + (window._serverHostname || 'NOT SET');
-  _dbg += ' | Expanded: ' + Array.from(_fhomeExpanded).join(',');
-  _dbg += ' | fhomeActive: ' + (_fhomeActive ? _fhomeActive.mountId : 'null');
-  _dbg += ' | HTML len: ' + html.length;
-  _dbg += '</div>';
-  listing.innerHTML = _dbg + html;
+  listing.innerHTML = html;
 }
 
 function _fhomeOpenFile(mountId, filePath, fileName) {
@@ -16152,7 +16150,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.12"})
+            self.reply_json({"v": "0.25.13"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17156,7 +17154,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.12'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.13'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20208,7 +20206,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.12 ready (localhost only)")
+    print(f"\n  Porter v0.25.13 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
