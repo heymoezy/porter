@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.26 — Welcome + Center"""
+"""Porter v0.25.27 — Custom Dropdown"""
 
 
 
@@ -4263,15 +4263,29 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-input-bottom-meta {
   display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:6px;
 }
-.chat-model-dropdown {
-  padding:4px 8px; font-size:12px; border:none; border-radius:6px;
-  background:none; color:rgba(255,255,255,.5); cursor:pointer; transition:.15s;
-  -webkit-appearance:none; appearance:none;
+.model-picker { position:relative; display:inline-flex; align-items:center; }
+.mp-trigger {
+  background:none; border:none; color:rgba(255,255,255,.5); font-size:12px;
+  cursor:pointer; padding:4px 20px 4px 8px; font-family:inherit; text-align:right;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='rgba(255,255,255,.4)' stroke-width='1.5'/%3E%3C/svg%3E");
-  background-repeat:no-repeat; background-position:right 4px center; padding-right:20px;
-  text-align:right;
+  background-repeat:no-repeat; background-position:right 4px center; transition:.15s;
 }
-.chat-model-dropdown:hover { color:#fff; }
+.mp-trigger:hover { color:#fff; }
+.mp-menu {
+  display:none; position:absolute; bottom:calc(100% + 6px); right:0;
+  background:#1a1a1a; border:1px solid rgba(255,255,255,.12);
+  border-radius:10px; padding:6px 0; min-width:220px;
+  box-shadow:0 8px 32px rgba(0,0,0,.5); z-index:1000;
+}
+.model-picker.open .mp-menu { display:block; }
+.mp-opt {
+  padding:8px 16px; font-size:13px; color:rgba(255,255,255,.7);
+  cursor:pointer; transition:background .1s; white-space:nowrap;
+}
+.mp-opt:first-child { border-radius:6px 6px 0 0; }
+.mp-opt:last-child { border-radius:0 0 6px 6px; }
+.mp-opt:hover { background:rgba(255,255,255,.06); color:#fff; }
+.mp-opt.selected { color:#fff; }
 .chat-sidebar { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
 .chat-sidebar-item {
   display:flex; align-items:center; gap:8px; padding:6px 10px;
@@ -5120,7 +5134,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.26</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.27</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5203,18 +5217,22 @@ select.settings-input { padding-right: 26px; }
       <div id="chat-main">
         <div id="chat-messages" class="chat-messages welcome-state">
           <div class="chat-welcome">
-            <div class="chat-welcome-title">Hi there &#x1F44B;</div>
+            <div class="chat-welcome-title">Hi there</div>
             <div class="chat-welcome-input-wrap">
               <textarea id="chat-input-welcome" placeholder="How can I help you today?" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
               <div class="chat-welcome-meta">
-                <select id="chat-backend-sel-welcome" class="chat-model-dropdown" title="Select model">
-                  <option value="">Auto-route</option>
-                  <option value="openclaw">OpenClaw (GPT-5.3 Codex)</option>
-                  <option value="gemini">Gemini 2.5 Flash</option>
-                  <option value="codex">Codex CLI (GPT-5.1)</option>
-                  <option value="claude">Claude (Opus 4.6)</option>
-                  <option value="ollama">Ollama (Qwen 7B)</option>
-                </select>
+<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option></select>
+                <div class="model-picker" data-sel="chat-backend-sel-welcome">
+                  <button type="button" class="mp-trigger" onclick="_mpToggle(event)">Auto-route</button>
+                  <div class="mp-menu">
+                    <div class="mp-opt selected" data-v="" onclick="_mpSelect(this)">Auto-route</div>
+                    <div class="mp-opt" data-v="openclaw" onclick="_mpSelect(this)">OpenClaw (GPT-5.3 Codex)</div>
+                    <div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini 2.5 Flash</div>
+                    <div class="mp-opt" data-v="codex" onclick="_mpSelect(this)">Codex CLI (GPT-5.1)</div>
+                    <div class="mp-opt" data-v="claude" onclick="_mpSelect(this)">Claude (Opus 4.6)</div>
+                    <div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 7B)</div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -5226,14 +5244,18 @@ select.settings-input { padding-right: 26px; }
             <textarea id="chat-input" class="chat-input-bottom" placeholder="Reply&#8230;" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
             <div class="chat-input-bottom-meta">
               <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
-              <select id="chat-backend-sel" class="chat-model-dropdown" title="Select model">
-                <option value="">Auto-route</option>
-                <option value="openclaw">OpenClaw (GPT-5.3 Codex)</option>
-                <option value="gemini">Gemini 2.5 Flash</option>
-                <option value="codex">Codex CLI (GPT-5.1)</option>
-                <option value="claude">Claude (Opus 4.6)</option>
-                <option value="ollama">Ollama (Qwen 7B)</option>
-              </select>
+<select id="chat-backend-sel" style="display:none"><option value="">Auto-route</option></select>
+              <div class="model-picker" data-sel="chat-backend-sel">
+                <button type="button" class="mp-trigger" onclick="_mpToggle(event)">Auto-route</button>
+                <div class="mp-menu">
+                  <div class="mp-opt selected" data-v="" onclick="_mpSelect(this)">Auto-route</div>
+                  <div class="mp-opt" data-v="openclaw" onclick="_mpSelect(this)">OpenClaw (GPT-5.3 Codex)</div>
+                  <div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini 2.5 Flash</div>
+                  <div class="mp-opt" data-v="codex" onclick="_mpSelect(this)">Codex CLI (GPT-5.1)</div>
+                  <div class="mp-opt" data-v="claude" onclick="_mpSelect(this)">Claude (Opus 4.6)</div>
+                  <div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 7B)</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -6224,6 +6246,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.27', date:'2026-03-01', notes:['UX: custom dark model picker replaces native OS dropdown'] },
   { ver:'v0.25.26', date:'2026-03-01', notes:['Fix: welcome perfectly centered (chat-main flex chain)','UX: greeting uses preferred name from settings','UX: Files auto-expands first directory on load'] },
   { ver:'v0.25.25', date:'2026-03-01', notes:['Fix: chat loads instantly on refresh (static welcome HTML)','UX: softer greeting color'] },
   { ver:'v0.25.24', date:'2026-03-01', notes:['UX: model dropdown text right-aligned (close to chevron)'] },
@@ -9585,6 +9608,29 @@ function _chatModelChanged() {
   // No send button to toggle — model selected via dropdown
 }
 
+function _mpToggle(e) {
+  e.stopPropagation();
+  var picker = e.currentTarget.closest('.model-picker');
+  var wasOpen = picker.classList.contains('open');
+  document.querySelectorAll('.model-picker.open').forEach(function(p) { p.classList.remove('open'); });
+  if (!wasOpen) picker.classList.add('open');
+}
+function _mpSelect(el) {
+  var picker = el.closest('.model-picker');
+  picker.querySelectorAll('.mp-opt').forEach(function(o) { o.classList.remove('selected'); });
+  el.classList.add('selected');
+  var trigger = picker.querySelector('.mp-trigger');
+  trigger.textContent = el.textContent;
+  picker.classList.remove('open');
+  // Sync to hidden select
+  var selId = picker.dataset.sel;
+  var sel = selId ? document.getElementById(selId) : null;
+  if (sel) sel.value = el.dataset.v;
+}
+document.addEventListener('click', function() {
+  document.querySelectorAll('.model-picker.open').forEach(function(p) { p.classList.remove('open'); });
+});
+
 
 // ── Chat dashboard ───────────────────────────────────────────────────────
 function _renderChatDashboard(cachedHealth) {
@@ -9694,18 +9740,21 @@ function renderChatMessages(streamUpdate) {
     el.classList.add('welcome-state');
     var _wn = (currentUser && currentUser.display_name) ? ', ' + currentUser.display_name : ' there';
     el.innerHTML = '<div class="chat-welcome">'
-      + '<div class="chat-welcome-title">Hi' + _wn + ' \ud83d\udc4b</div>'
+      + '<div class="chat-welcome-title">Hi' + _wn + '</div>'
       + '<div class="chat-welcome-input-wrap">'
       + '<textarea id="chat-input-welcome" placeholder="How can I help you today?" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>'
       + '<div class="chat-welcome-meta">'
-      + '<select id="chat-backend-sel-welcome" class="chat-model-dropdown" title="Select model">'
-      + '<option value="">Auto-route</option>'
-      + '<option value="openclaw">OpenClaw (GPT-5.3 Codex)</option>'
-      + '<option value="gemini">Gemini 2.5 Flash</option>'
-      + '<option value="codex">Codex CLI (GPT-5.1)</option>'
-      + '<option value="claude">Claude (Opus 4.6)</option>'
-      + '<option value="ollama">Ollama (Qwen 7B)</option>'
-      + '</select>'
+      + '<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option></select>'
+      + '<div class="model-picker" data-sel="chat-backend-sel-welcome">'
+      + '<button type="button" class="mp-trigger" onclick="_mpToggle(event)">Auto-route</button>'
+      + '<div class="mp-menu">'
+      + '<div class="mp-opt selected" data-v="" onclick="_mpSelect(this)">Auto-route</div>'
+      + '<div class="mp-opt" data-v="openclaw" onclick="_mpSelect(this)">OpenClaw (GPT-5.3 Codex)</div>'
+      + '<div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini 2.5 Flash</div>'
+      + '<div class="mp-opt" data-v="codex" onclick="_mpSelect(this)">Codex CLI (GPT-5.1)</div>'
+      + '<div class="mp-opt" data-v="claude" onclick="_mpSelect(this)">Claude (Opus 4.6)</div>'
+      + '<div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 7B)</div>'
+      + '</div></div>'
       + '</div></div></div>';
     if (inputArea) inputArea.style.display = 'none';
     if (routeBar) routeBar.style.display = 'none';
@@ -12901,7 +12950,7 @@ async function loadMe() {
   document.getElementById('ucName').textContent = data.display_name || data.username;
   // Update welcome greeting with real name
   var _wt = document.querySelector('.chat-welcome-title');
-  if (_wt && data.display_name) _wt.textContent = 'Hi, ' + data.display_name + ' \ud83d\udc4b';
+  if (_wt && data.display_name) _wt.textContent = 'Hi, ' + data.display_name;
   renderAvatar(document.getElementById('ucAvatar'), data);
   renderAvatar(document.getElementById('saAvatar'), data);
   document.getElementById('sa-full-name').value = data.full_name || '';
@@ -16111,7 +16160,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.26"})
+            self.reply_json({"v": "0.25.27"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17115,7 +17164,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.26'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.27'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20167,7 +20216,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.26 ready (localhost only)")
+    print(f"\n  Porter v0.25.27 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
