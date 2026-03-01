@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.31 — Gemini Fix + @ Mentions + Chat History"""
+"""Porter v0.25.32 — Gemini Fix + @ Mentions + Chat History"""
 
 
 
@@ -5136,7 +5136,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.31</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.32</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6249,6 +6249,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.32', date:'2026-03-01', notes:['Live streaming: see model workings in real-time (tool calls, thinking)','Removed agent restrictions: full CLI capabilities through chat','Ollama downgraded to Qwen 1.5B (fits 8GB VPS)','Porter-styled rename dialog (no more native prompt)'] },
   { ver:'v0.25.31', date:'2026-03-01', notes:['Fix: Gemini CLI v0.31 (-o text, no longer hangs)','@ mentions work in welcome input + mid-message','Chat history grouped by Today/Yesterday/date','Rename/delete buttons show on hover only'] },
   { ver:'v0.25.30', date:'2026-03-01', notes:['Fix: OpenClaw routes through CLI (gateway HTTP 405 fixed)','Fix: Ollama auto-discovers loaded model','Fix: /commands auto-send on select'] },
   { ver:'v0.25.29', date:'2026-03-01', notes:['Fix: chat works immediately (no model-loading race condition)','UX: clean tagline replaces greeting'] },
@@ -15375,7 +15376,7 @@ def _dispatch_claude(message, model=None, timeout=120):
     cl_bin = _resolve_cli("claude")
     if not cl_bin:
         return {"ok": False, "error": "Claude CLI not found. Install: npm i -g @anthropic-ai/claude-code"}
-    cmd = [cl_bin, "-p", "--output-format", "json", "--max-turns", "1", message]
+    cmd = [cl_bin, "-p", "--output-format", "json", message]
     if model:
         cmd.extend(["--model", model])
     log.info("Agent bridge [claude]: msg=%s", message[:80])
@@ -15596,11 +15597,7 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None):
     if not fn:
         return {"ok": False, "error": f"Unknown backend: {backend}. Available: {', '.join(AGENT_DISPATCHERS.keys())}", "run_id": run_id}
     # Prepend bridge context so models know they're responding through Porter
-    _bridge_ctx = (
-        "[Porter Bridge] You are responding through Porter, a multi-AI orchestrator. "
-        "Answer the user's message directly and concisely. "
-        "Do not read files, run commands, or perform actions unless explicitly asked.\n\n"
-    )
+    _bridge_ctx = "[Porter Bridge] Responding via Porter multi-AI orchestrator.\n\n"
     message = _bridge_ctx + message
     # Record outgoing message
     _record_agent_message(run_id, "porter", backend, message, status="in_progress")
@@ -16352,7 +16349,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.31"})
+            self.reply_json({"v": "0.25.32"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17356,7 +17353,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.31'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.32'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -17441,15 +17438,28 @@ class Handler(BaseHTTPRequestHandler):
                             log.debug("Stream parse: %s", e)
 
                 elif model_id == "openclaw-gateway":
-                    # OpenClaw via CLI agent bridge
-                    oc_result = dispatch_agent(prompt, "openclaw", timeout=120)
-                    if oc_result.get("ok"):
-                        full_response = oc_result.get("text", "")
-                        self.wfile.write(f"data: {json.dumps({'token': full_response})}\n\n".encode())
+                    # OpenClaw via CLI — stream output live
+                    oc_bin = _resolve_cli("openclaw")
+                    if not oc_bin:
+                        self.wfile.write(f"data: {json.dumps({'error': 'OpenClaw CLI not found'})}\n\n".encode())
                         self.wfile.flush()
                     else:
-                        self.wfile.write(f"data: {json.dumps({'error': oc_result.get('error', 'OpenClaw error')})}\n\n".encode())
-                        self.wfile.flush()
+                        import subprocess as _sp
+                        _oc_cmd = [oc_bin, "agent", "--agent", "main", "--message", prompt, "--json"]
+                        _proc = _sp.Popen(_oc_cmd, stdout=_sp.PIPE, stderr=_sp.PIPE, text=True, env=_agent_env())
+                        _buf = []
+                        for _line in iter(_proc.stdout.readline, ''):
+                            _buf.append(_line)
+                            self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
+                            self.wfile.flush()
+                        _proc.wait(timeout=130)
+                        full_response = ''.join(_buf).strip()
+                        # Try to extract text from JSON result
+                        try:
+                            _oc_resp = json.loads(full_response)
+                            full_response = _oc_resp.get("result", {}).get("text", "") or full_response
+                        except (json.JSONDecodeError, ValueError):
+                            pass
 
                 elif model_id == "ollama-local":
                     # Discover first Ollama model and stream from it
@@ -17487,38 +17497,119 @@ class Handler(BaseHTTPRequestHandler):
                                 log.debug("Ollama stream parse: %s", e)
 
                 elif model_id.startswith("gemini-"):
-                    # Gemini via agent bridge (non-streaming — single response)
-                    gem_model = model_id.replace("gemini-cli-", "") if model_id.startswith("gemini-cli-") else ""
-                    gem_result = dispatch_agent(prompt, "gemini", model=gem_model or None, timeout=120)
-                    if gem_result.get("ok"):
-                        full_response = gem_result.get("text", "")
-                        self.wfile.write(f"data: {json.dumps({'token': full_response})}\n\n".encode())
+                    # Gemini CLI — stream text output live
+                    gem_bin = _resolve_cli("gemini")
+                    if not gem_bin:
+                        self.wfile.write(f"data: {json.dumps({'error': 'Gemini CLI not found'})}\n\n".encode())
                         self.wfile.flush()
                     else:
-                        self.wfile.write(f"data: {json.dumps({'error': gem_result.get('error', 'Gemini error')})}\n\n".encode())
-                        self.wfile.flush()
+                        import subprocess as _sp
+                        _gem_cmd = [gem_bin, "-p", prompt, "-o", "text", "-y"]
+                        gem_model = model_id.replace("gemini-cli-", "") if model_id.startswith("gemini-cli-") else ""
+                        if gem_model and gem_model != "auto":
+                            _gem_cmd.extend(["-m", gem_model])
+                        _skip_prefixes = ("YOLO mode", "Loaded cached", "Loaded saved")
+                        _proc = _sp.Popen(_gem_cmd, stdout=_sp.PIPE, stderr=_sp.PIPE, text=True, env=_agent_env(), cwd="/tmp")
+                        for _line in iter(_proc.stdout.readline, ''):
+                            if any(_line.strip().startswith(s) for s in _skip_prefixes):
+                                continue
+                            full_response += _line
+                            self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
+                            self.wfile.flush()
+                        _proc.wait(timeout=130)
 
                 elif model_id == "claude-cli":
-                    # Claude Code via agent bridge (non-streaming — single response)
-                    cl_result = dispatch_agent(prompt, "claude", timeout=120)
-                    if cl_result.get("ok"):
-                        full_response = cl_result.get("text", "")
-                        self.wfile.write(f"data: {json.dumps({'token': full_response})}\n\n".encode())
+                    # Claude Code — stream JSON events live
+                    cl_bin = _resolve_cli("claude")
+                    if not cl_bin:
+                        self.wfile.write(f"data: {json.dumps({'error': 'Claude CLI not found'})}\n\n".encode())
                         self.wfile.flush()
                     else:
-                        self.wfile.write(f"data: {json.dumps({'error': cl_result.get('error', 'Claude error')})}\n\n".encode())
-                        self.wfile.flush()
+                        import subprocess as _sp
+                        _cl_cmd = [cl_bin, "-p", "--output-format", "stream-json", prompt]
+                        _proc = _sp.Popen(_cl_cmd, stdout=_sp.PIPE, stderr=_sp.PIPE, text=True, env=_agent_env())
+                        for _line in iter(_proc.stdout.readline, ''):
+                            if not _line.strip():
+                                continue
+                            try:
+                                _evt = json.loads(_line)
+                                _etype = _evt.get("type", "")
+                                # Extract displayable content from stream events
+                                if _etype == "assistant" and _evt.get("message", {}).get("content"):
+                                    for _blk in _evt["message"]["content"]:
+                                        if _blk.get("type") == "text" and _blk.get("text"):
+                                            full_response += _blk["text"]
+                                            self.wfile.write(f"data: {json.dumps({'token': _blk['text']})}\n\n".encode())
+                                            self.wfile.flush()
+                                        elif _blk.get("type") == "tool_use":
+                                            _tool_name = _blk.get("name", "tool")
+                                            _tool_note = f"\n`> {_tool_name}`\n"
+                                            full_response += _tool_note
+                                            self.wfile.write(f"data: {json.dumps({'token': _tool_note})}\n\n".encode())
+                                            self.wfile.flush()
+                                elif _etype == "content_block_delta":
+                                    _delta = _evt.get("delta", {})
+                                    if _delta.get("type") == "text_delta" and _delta.get("text"):
+                                        full_response += _delta["text"]
+                                        self.wfile.write(f"data: {json.dumps({'token': _delta['text']})}\n\n".encode())
+                                        self.wfile.flush()
+                                elif _etype == "result":
+                                    # Final result — extract text if not already captured
+                                    _rtxt = _evt.get("result", "")
+                                    if _rtxt and not full_response:
+                                        full_response = _rtxt
+                                        self.wfile.write(f"data: {json.dumps({'token': _rtxt})}\n\n".encode())
+                                        self.wfile.flush()
+                            except (json.JSONDecodeError, ValueError):
+                                # Non-JSON line — send as-is
+                                full_response += _line
+                                self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
+                                self.wfile.flush()
+                        _proc.wait(timeout=300)
 
                 elif model_id == "codex-cli":
-                    # Codex via agent bridge (non-streaming — single response)
-                    cdx_result = dispatch_agent(prompt, "codex", timeout=120)
-                    if cdx_result.get("ok"):
-                        full_response = cdx_result.get("text", "")
-                        self.wfile.write(f"data: {json.dumps({'token': full_response})}\n\n".encode())
+                    # Codex CLI — stream JSONL events live
+                    cdx_bin = _resolve_cli("codex")
+                    if not cdx_bin:
+                        self.wfile.write(f"data: {json.dumps({'error': 'Codex CLI not found'})}\n\n".encode())
                         self.wfile.flush()
                     else:
-                        self.wfile.write(f"data: {json.dumps({'error': cdx_result.get('error', 'Codex error')})}\n\n".encode())
-                        self.wfile.flush()
+                        import subprocess as _sp
+                        codex_model = os.environ.get("PORTER_CODEX_MODEL", "").strip() or "gpt-5.1"
+                        _cdx_cmd = [cdx_bin, "exec", "--ephemeral", "--json", "--skip-git-repo-check", "-m", codex_model, prompt]
+                        _proc = _sp.Popen(_cdx_cmd, stdout=_sp.PIPE, stderr=_sp.PIPE, text=True, env=_agent_env())
+                        for _line in iter(_proc.stdout.readline, ''):
+                            if not _line.strip():
+                                continue
+                            try:
+                                _evt = json.loads(_line)
+                                _etype = _evt.get("type", "")
+                                if _etype == "item.completed":
+                                    _item = _evt.get("item", {})
+                                    if _item.get("type") == "agent_message":
+                                        _msg = _item.get("text", "")
+                                        if not _msg:
+                                            _parts = [p.get("text","") for p in (_item.get("content",[]) or []) if isinstance(p, dict) and p.get("text")]
+                                            _msg = "".join(_parts).strip()
+                                        if _msg:
+                                            full_response += _msg
+                                            self.wfile.write(f"data: {json.dumps({'token': _msg})}\n\n".encode())
+                                            self.wfile.flush()
+                                    elif _item.get("type") == "tool_call":
+                                        _tool = _item.get("name", "tool")
+                                        _tnote = f"\n`> {_tool}`\n"
+                                        full_response += _tnote
+                                        self.wfile.write(f"data: {json.dumps({'token': _tnote})}\n\n".encode())
+                                        self.wfile.flush()
+                                elif _etype == "error":
+                                    _emsg = _evt.get("message", "Codex error")
+                                    self.wfile.write(f"data: {json.dumps({'error': _emsg})}\n\n".encode())
+                                    self.wfile.flush()
+                            except (json.JSONDecodeError, ValueError):
+                                full_response += _line
+                                self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
+                                self.wfile.flush()
+                        _proc.wait(timeout=300)
 
                 else:
                     self.wfile.write(f"data: {json.dumps({'error': 'Unknown model: ' + model_id})}\n\n".encode())
@@ -20427,7 +20518,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.31 ready (localhost only)")
+    print(f"\n  Porter v0.25.32 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
