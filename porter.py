@@ -15396,31 +15396,17 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         qs = parse_qs(parsed.query)
 
-        # ── Frontend Extraction (Phase 4) ──
-        # Serve React frontend from runtime/frontend/dist/
-        frontend_dir = _DATA_DIR / "runtime" / "frontend" / "dist"
-        
-        if parsed.path in ("/", "/login") or not parsed.path.startswith("/api"):
-            # If not an API call, serve index.html (SPA routing support)
-            index_file = frontend_dir / "index.html"
-            if index_file.exists():
-                self.serve_static_file(index_file)
-                return
+        # ── Root routes (legacy embedded UI) ──
+        if parsed.path == "/login":
+            self.reply_html(LOGIN_PAGE)
+            return
+        elif parsed.path == "/":
+            token = self.get_session_token()
+            if token and get_session(token):
+                self.reply_html(PAGE)
             else:
-                # Fallback to embedded landing if frontend not built
-                if parsed.path == "/login": self.reply_html(LOGIN_PAGE)
-                elif parsed.path == "/":
-                    token = self.get_session_token()
-                    if token and get_session(token): self.reply_html(PAGE)
-                    else: self.reply_html(LANDING_PAGE)
-                return
-
-        if parsed.path.startswith("/assets/"):
-            # Serve compiled assets (JS, CSS, SVGs)
-            asset_file = frontend_dir / parsed.path.lstrip("/")
-            if asset_file.exists():
-                self.serve_static_file(asset_file)
-                return
+                self.reply_html(LANDING_PAGE)
+            return
 
         if parsed.path == "/api/me":
             if not self.auth_check(redirect=False):
