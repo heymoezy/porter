@@ -5217,7 +5217,7 @@ select.settings-input { padding-right: 26px; }
       <div id="chat-main">
         <div id="chat-messages" class="chat-messages welcome-state">
           <div class="chat-welcome">
-            <div class="chat-welcome-sub">One prompt. Every AI. Zero friction.</div>
+            <div class="chat-welcome-sub">⚡ One prompt. Every AI. Zero friction.</div>
             <div class="chat-welcome-input-wrap">
               <textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
               <div class="chat-welcome-meta">
@@ -9742,7 +9742,7 @@ function renderChatMessages(streamUpdate) {
     // Centered welcome state
     el.classList.add('welcome-state');
     el.innerHTML = '<div class="chat-welcome">'
-      + '<div class="chat-welcome-sub">One prompt. Every AI. Zero friction.</div>'
+      + '<div class="chat-welcome-sub">⚡ One prompt. Every AI. Zero friction.</div>'
       + '<div class="chat-welcome-input-wrap">'
       + '<textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>'
       + '<div class="chat-welcome-meta">'
