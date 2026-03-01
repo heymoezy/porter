@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.23.5 — self-hosted file manager"""
+"""Porter v0.23.6 — self-hosted file manager"""
 
 
 import email
@@ -3129,6 +3129,12 @@ async function doLogin() {
     <div class="kb-row"><span class="kb-key">Shift+Enter</span><span class="kb-desc">New line in chat</span></div>
     <div class="kb-row"><span class="kb-key">/</span><span class="kb-desc">Slash commands (in chat)</span></div>
     <div class="kb-row"><span class="kb-key">@</span><span class="kb-desc">Target model (in chat)</span></div>
+    <div class="kb-action">
+      <button class="btn-tour" onclick="startTour()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Start Guided Tour
+      </button>
+    </div>
     <div style="margin-top:12px;text-align:center;font-size:11px;color:var(--text3)">Press Esc or click outside to close</div>
   </div>
 </div>
@@ -3827,6 +3833,15 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   color:var(--text2); min-width:28px; text-align:center;
 }
 .kb-desc { color:var(--text3); }
+.kb-action { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.btn-tour { 
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; background: var(--accent); color: #fff; border: none; 
+  padding: 10px; border-radius: 6px; cursor: pointer; font-size: 13px; 
+  font-weight: 600; transition: .15s; 
+}
+.btn-tour:hover { background: var(--accent-d); }
+.btn-tour svg { width: 14px; height: 14px; }
 
 
 /* Notification center */
@@ -4339,7 +4354,7 @@ body.density-compact .file-name { padding: 6px 0; }
 }
 
 /* flow connectors — SVG based */
-.flow-connector { display:flex; flex-direction:column; align-items:center; padding:2px 0; }
+.flow-connector { display:flex; flex-direction:column; align-items:center; padding:0; }
 .flow-connector svg { display:block; }
 
 /* porter hub */
@@ -4786,7 +4801,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.23.5</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.23.6</div>
     <button onclick="startTour()" style="font-size:10px;color:var(--text3);background:none;border:none;cursor:pointer;padding:2px 0" title="Start guided tour">&#10067; Tour</button>
   </div>
 </aside>
@@ -5846,6 +5861,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.23.6', date:'2026-03-01', notes:[
+    'UX: Orchestration flow arrows — smaller arrowheads, better spacing',
+    'New: Install button on uninstalled skills in Workflows tab',
+    'New: Eligibility badges show missing requirements for skills',
+  ]},
   { ver:'v0.23.5', date:'2026-03-01', notes:[
     'New: Guided tour — vanilla JS spotlight walkthrough on first visit',
     'New: Per-tab help tooltips — ? icon in each tab header',
@@ -7568,16 +7588,30 @@ function renderWorkflowSkills(skills) {
       + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
       + '<span style="font-size:16px">' + emoji + '</span>'
       + '<span style="font-weight:500;font-size:13px;color:var(--text)">' + name + '</span>'
-      + badge + removeBtn
+      + badge + installBtn + removeBtn
       + '</div>'
       + '<div style="font-size:11px;color:var(--text3);line-height:1.4">' + desc + '</div>'
       + (sk.requires && sk.requires.length ? '<div style="font-size:10px;color:var(--text3);margin-top:4px">Requires: ' + sk.requires.join(', ') + '</div>' : '')
+      + (sk.missing && sk.missing.bins && sk.missing.bins.length ? '<div style="font-size:10px;color:var(--danger,#ef4444);margin-top:3px">Missing: ' + sk.missing.bins.join(', ') + '</div>' : '')
       + '</div>';
   }).join('');
 }
 
 function filterWorkflowSkills() {
   _renderFilteredSkills();
+}
+
+
+async function installSkill(id, name) {
+  var action = 'install';
+  toast('Installing skill "' + name + '"...');
+  const res = await api('/api/openclaw/skills', { action: action, id: id, name: name });
+  if (res && res.ok) {
+    toast('Skill "' + name + '" installed');
+    loadWorkflows();
+  } else {
+    toast((res && res.error) || 'Failed to install skill', 'err');
+  }
 }
 
 async function removeSkill(id, name) {
@@ -10832,13 +10866,13 @@ function _fmtBytes(b) {
 }
 
 function _buildFlowSVG(count, direction, label) {
-  const w = 1000, h = 56;
+  const w = 1000, h = 48;
   const mid = w / 2;
   const cols = Math.max(1, Math.min(count, 6));
   const lineColor = 'var(--border2, #555)';
   const arrowColor = 'var(--accent)';
-  const a = 7; // arrow half-width
-  const sw = 2;
+  const a = 4; // arrow half-width (smaller arrowheads)
+  const sw = 1.5;
 
   const colX = [];
   for (let i = 0; i < cols; i++) {
@@ -10848,38 +10882,28 @@ function _buildFlowSVG(count, direction, label) {
 
   let paths = '';
   if (direction === 'merge') {
-    // Bidirectional: arrows at top (pointing up) AND bottom (pointing down)
-    // Top arrows (data flowing up from hub)
+    // Bidirectional: small arrows at top + bottom
     for (const x of colX) {
-      paths += '<polygon class="flow-arrow" points="' + (x-a) + ',8 ' + (x+a) + ',8 ' + x + ',0" fill="' + arrowColor + '"/>';
+      paths += '<polygon class="flow-arrow" points="' + (x-a) + ',6 ' + (x+a) + ',6 ' + x + ',1" fill="' + arrowColor + '"/>';
     }
-    // Animated dashed lines from each card center
     for (const x of colX) {
-      paths += '<line class="flow-line" x1="' + x + '" y1="8" x2="' + x + '" y2="22" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
+      paths += '<line class="flow-line" x1="' + x + '" y1="6" x2="' + x + '" y2="18" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
     }
-    // Horizontal bar
-    paths += '<line x1="' + leftX + '" y1="22" x2="' + rightX + '" y2="22" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
-    // Center stem down
-    paths += '<line class="flow-line" x1="' + mid + '" y1="22" x2="' + mid + '" y2="46" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
-    // Bottom arrow (data flowing down into hub)
-    paths += '<polygon class="flow-arrow" points="' + (mid-a) + ',46 ' + (mid+a) + ',46 ' + mid + ',56" fill="' + arrowColor + '"/>';
-  } else {
-    // Bidirectional: arrow at top (pointing up to hub) AND arrows at bottom (pointing down to models)
-    // Top arrow pointing up
-    paths += '<polygon class="flow-arrow" points="' + (mid-a) + ',8 ' + (mid+a) + ',8 ' + mid + ',0" fill="' + arrowColor + '"/>';
-    // Center stem
-    paths += '<line class="flow-line" x1="' + mid + '" y1="8" x2="' + mid + '" y2="18" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
-    // Horizontal bar
     paths += '<line x1="' + leftX + '" y1="18" x2="' + rightX + '" y2="18" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
-    // Fan-out lines + bottom arrows
+    paths += '<line class="flow-line" x1="' + mid + '" y1="18" x2="' + mid + '" y2="40" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
+    paths += '<polygon class="flow-arrow" points="' + (mid-a) + ',40 ' + (mid+a) + ',40 ' + mid + ',47" fill="' + arrowColor + '"/>';
+  } else {
+    paths += '<polygon class="flow-arrow" points="' + (mid-a) + ',6 ' + (mid+a) + ',6 ' + mid + ',1" fill="' + arrowColor + '"/>';
+    paths += '<line class="flow-line" x1="' + mid + '" y1="6" x2="' + mid + '" y2="16" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
+    paths += '<line x1="' + leftX + '" y1="16" x2="' + rightX + '" y2="16" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
     for (const x of colX) {
-      paths += '<line class="flow-line" x1="' + x + '" y1="18" x2="' + x + '" y2="46" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
-      paths += '<polygon class="flow-arrow" points="' + (x-a) + ',46 ' + (x+a) + ',46 ' + x + ',56" fill="' + arrowColor + '"/>';
+      paths += '<line class="flow-line" x1="' + x + '" y1="16" x2="' + x + '" y2="40" stroke="' + lineColor + '" stroke-width="' + sw + '"/>';
+      paths += '<polygon class="flow-arrow" points="' + (x-a) + ',40 ' + (x+a) + ',40 ' + x + ',47" fill="' + arrowColor + '"/>';
     }
   }
   var labelSvg = '';
   if (label) {
-    labelSvg = '<text x="' + mid + '" y="' + (h/2 + 3) + '" text-anchor="middle" fill="var(--text3)" font-size="22" font-family="inherit" letter-spacing="0.5">' + label + '</text>';
+    labelSvg = '<text x="' + mid + '" y="' + (h/2 + 2) + '" text-anchor="middle" fill="var(--text3)" font-size="18" font-family="inherit" letter-spacing="0.5">' + label + '</text>';
   }
   return '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" style="display:block">' + paths + labelSvg + '</svg>';
 }
@@ -14247,6 +14271,12 @@ init();
     <div class="kb-row"><span class="kb-key">Shift+Enter</span><span class="kb-desc">New line in chat</span></div>
     <div class="kb-row"><span class="kb-key">/</span><span class="kb-desc">Slash commands (in chat)</span></div>
     <div class="kb-row"><span class="kb-key">@</span><span class="kb-desc">Target model (in chat)</span></div>
+    <div class="kb-action">
+      <button class="btn-tour" onclick="startTour()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Start Guided Tour
+      </button>
+    </div>
     <div style="margin-top:12px;text-align:center;font-size:11px;color:var(--text3)">Press Esc or click outside to close</div>
   </div>
 </div>
@@ -14562,6 +14592,77 @@ def dispatch_agent(message, backend, model=None, timeout=120):
         return {"ok": False, "error": str(e)[:500]}
 
 
+def _coord_log_path() -> Path:
+    return RUNTIME_DIR / "coordination.jsonl"
+
+
+def _append_coordination_event(event: dict) -> None:
+    """Append a coordination event to runtime log (best effort)."""
+    try:
+        p = _coord_log_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=True) + "\n")
+    except Exception as e:
+        log.debug("Coordination log append failed: %s", e)
+
+
+def _run_coordination(prompt: str, backends: list[str] | None = None, timeout: int = 45) -> dict:
+    """Run the same prompt across selected backends through Porter's agent bridge."""
+    prompt = (prompt or "").strip()
+    if not prompt:
+        return {"ok": False, "error": "prompt required"}
+    available = list(AGENT_DISPATCHERS.keys())
+    selected = backends or ["openclaw", "claude", "gemini", "codex"]
+    selected = [b for b in selected if b in available]
+    if not selected:
+        return {"ok": False, "error": "no valid backends selected"}
+
+    run_id = f"coord-{int(time.time())}-{uuid.uuid4().hex[:8]}"
+    ts = datetime.now(timezone.utc).isoformat()
+    results = {}
+    for b in selected:
+        r = dispatch_agent(prompt, b, timeout=timeout)
+        out = {
+            "ok": bool(r.get("ok", False)),
+            "model": r.get("model", ""),
+            "text": (r.get("text", "") or "")[:800],
+            "error": (r.get("error", "") or "")[:500],
+            "tokens": r.get("tokens", {}),
+        }
+        results[b] = out
+        _append_coordination_event({
+            "ts": ts,
+            "run_id": run_id,
+            "backend": b,
+            "prompt": prompt[:500],
+            **out,
+        })
+    ok_count = sum(1 for v in results.values() if v.get("ok"))
+    return {"ok": True, "run_id": run_id, "prompt": prompt, "ok_count": ok_count, "results": results}
+
+
+def _coordination_recent(limit: int = 20) -> list[dict]:
+    """Return recent coordination events (most recent first)."""
+    p = _coord_log_path()
+    if not p.exists():
+        return []
+    try:
+        lines = p.read_text(encoding="utf-8", errors="replace").strip().splitlines()
+    except Exception as e:
+        log.debug("Coordination log read failed: %s", e)
+        return []
+    out = []
+    for line in reversed(lines):
+        if len(out) >= max(1, min(200, int(limit or 20))):
+            break
+        try:
+            out.append(json.loads(line))
+        except Exception:
+            continue
+    return out
+
+
 
 LANDING_PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -14713,6 +14814,12 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <div class="kb-row"><span class="kb-key">Shift+Enter</span><span class="kb-desc">New line in chat</span></div>
     <div class="kb-row"><span class="kb-key">/</span><span class="kb-desc">Slash commands (in chat)</span></div>
     <div class="kb-row"><span class="kb-key">@</span><span class="kb-desc">Target model (in chat)</span></div>
+    <div class="kb-action">
+      <button class="btn-tour" onclick="startTour()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Start Guided Tour
+      </button>
+    </div>
     <div style="margin-top:12px;text-align:center;font-size:11px;color:var(--text3)">Press Esc or click outside to close</div>
   </div>
 </div>
@@ -14995,7 +15102,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.23.5"})
+            self.reply_json({"v": "0.23.6"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -15914,6 +16021,16 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
+        elif parsed.path == "/api/coordination":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            try:
+                limit = int(qs.get("limit", ["20"])[0] or "20")
+            except Exception:
+                limit = 20
+            events = _coordination_recent(limit=limit)
+            self.reply_json({"ok": True, "events": events, "count": len(events)})
+
 
         elif parsed.path == "/api/chat/stream":
             if not self.auth_check(redirect=False): return
@@ -16209,6 +16326,23 @@ class Handler(BaseHTTPRequestHandler):
                     "message": str(e)[:300],
                     "retryable": False,
                 }})
+
+        elif parsed.path == "/api/coordination/run":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            prompt = str(data.get("prompt", "")).strip()
+            raw_backends = data.get("backends", [])
+            if isinstance(raw_backends, list):
+                backends = [str(b).strip().lower() for b in raw_backends if str(b).strip()]
+            else:
+                backends = []
+            try:
+                timeout = int(data.get("timeout", 45) or 45)
+            except Exception:
+                timeout = 45
+            timeout = max(10, min(300, timeout))
+            res = _run_coordination(prompt, backends=backends or None, timeout=timeout)
+            self.reply_json(res, 200 if res.get("ok") else 400)
 
         elif parsed.path == "/api/agent-fleet":
             # Admin controls + agent heartbeat/update reporting
@@ -17433,6 +17567,34 @@ class Handler(BaseHTTPRequestHandler):
             data = self.read_json_body()
             action = str(data.get("action", "")).strip()
 
+            if action == "install":
+                skill_id = body.get("id", body.get("name", ""))
+                if not skill_id:
+                    self.reply_json({"ok": False, "error": "No skill ID"}, 400)
+                    return
+                # For bundled skills, they're auto-available — just need to check eligibility
+                # For external skills, attempt clawhub install
+                import subprocess
+                clawhub_bin = _resolve_cli("clawhub")
+                if clawhub_bin:
+                    try:
+                        result = subprocess.run(
+                            [clawhub_bin, "install", skill_id],
+                            capture_output=True, text=True, timeout=30, env=_agent_env()
+                        )
+                        if result.returncode == 0:
+                            self.reply_json({"ok": True, "message": f"Installed {skill_id}"})
+                            return
+                        else:
+                            self.reply_json({"ok": False, "error": result.stderr[:200] or "Install failed"})
+                            return
+                    except Exception as e:
+                        self.reply_json({"ok": False, "error": str(e)[:200]})
+                        return
+                else:
+                    # No clawhub — bundled skills are auto-eligible if requirements are met
+                    self.reply_json({"ok": True, "message": f"Skill '{skill_id}' is bundled — available when requirements are met. Check 'openclaw skills check' for details."})
+                    return
             if action == "remove":
                 skill_id = str(data.get("id", "")).strip()
                 if not skill_id:
@@ -18568,7 +18730,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.23.5 ready (localhost only)")
+    print(f"\n  Porter v0.23.6 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
