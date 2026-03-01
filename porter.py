@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.6 — Real-time Orchestrator"""
+"""Porter v0.25.7 — Real-time Orchestrator"""
 
 
 
@@ -2034,7 +2034,7 @@ def _treg_load() -> None:
                     t.get("description"), t.get("status", "pending"), t.get("priority", "normal"),
                     t.get("phase"), t.get("created_at", 0), t.get("updated_at"),
                     t.get("completed_at"), t.get("assigned_agent_id"), t.get("tokens_used", 0),
-                    t.get("time_minutes", 0), t.get("result"), 
+                    t.get("time_minutes") or t.get("time_spent_mins") or 0, t.get("result"),
                     json.dumps(t.get("tags", [])), t.get("sort_order", 0)
                 ))
             except Exception as e:
@@ -2054,6 +2054,8 @@ def _treg_load() -> None:
         # Normalize legacy status values
         if t.get("status") in ("done", "completed"):
             t["status"] = "complete"
+        # Alias DB column → JS field name
+        t["time_spent_mins"] = t.get("time_minutes", 0)
         loaded[t["id"]] = t
         
     with _treg_lock:
@@ -2075,7 +2077,7 @@ def _treg_save(task: dict) -> None:
             task.get("description"), task.get("status", "pending"), task.get("priority", "normal"),
             task.get("phase"), task.get("created_at", 0), task.get("updated_at"),
             task.get("completed_at"), task.get("assigned_agent_id"), task.get("tokens_used", 0),
-            task.get("time_minutes", 0), task.get("result"), 
+            task.get("time_minutes") or task.get("time_spent_mins") or 0, task.get("result"),
             json.dumps(task.get("tags", [])), task.get("sort_order", 0)
         ))
         conn.commit()
@@ -5155,7 +5157,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.6</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.7</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6303,7 +6305,10 @@ const CHANGELOG = [
     'New: useEvents React hook for automatic UI invalidation (90% less polling)',
     'Architecture: React migration complete — dist/ is now the primary UI',
   ]},
-  { ver:'v0.25.6', date:'2026-03-01', notes:[
+  { ver:'v0.25.7', date:'2026-03-01', notes:[
+    'Fix: Projects tab time calculation (time_minutes → time_spent_mins field mapping)',
+  ]},
+    { ver:'v0.25.6', date:'2026-03-01', notes:[
     'New: Build Workflow — dispatch build tasks to agents from Workflows tab',
     'New: POST /api/build/run + GET /api/build/status endpoints',
     'New: Auto-commit and auto-restart toggles for autonomous builds',
@@ -16209,7 +16214,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.6"})
+            self.reply_json({"v": "0.25.7"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17213,7 +17218,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.6'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.7'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20264,7 +20269,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.6 ready (localhost only)")
+    print(f"\n  Porter v0.25.7 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
