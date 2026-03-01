@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.1 — Real-time Orchestrator"""
+"""Porter v0.25.4 — Real-time Orchestrator"""
 
 
 
@@ -140,9 +140,21 @@ def _db_init():
             token TEXT PRIMARY KEY,
             username TEXT NOT NULL,
             expires REAL NOT NULL,
+            ip_address TEXT,
+            user_agent TEXT,
+            last_seen_at REAL NOT NULL DEFAULT (strftime('%s','now')),
             created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
         )
     """)
+    # Migration: add columns if they don't exist
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(sessions)").fetchall()]
+    if "ip_address" not in cols:
+        conn.execute("ALTER TABLE sessions ADD COLUMN ip_address TEXT")
+    if "user_agent" not in cols:
+        conn.execute("ALTER TABLE sessions ADD COLUMN user_agent TEXT")
+    if "last_seen_at" not in cols:
+        conn.execute("ALTER TABLE sessions ADD COLUMN last_seen_at REAL DEFAULT (strftime('%s','now'))")
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS tasks (
             id TEXT PRIMARY KEY,
@@ -198,7 +210,42 @@ def _db_init():
             FOREIGN KEY(chat_id) REFERENCES chats(id) ON DELETE CASCADE
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chat_attachments (
+            id TEXT PRIMARY KEY,
+            message_id INTEGER,
+            chat_id TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            content_type TEXT,
+            size INTEGER,
+            data BLOB,
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            FOREIGN KEY(chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+            FOREIGN KEY(message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+        )
+    """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat ON chat_messages(chat_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_attachments_chat ON chat_attachments(chat_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_attachments_msg ON chat_attachments(message_id)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS agent_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id TEXT NOT NULL,
+            from_agent TEXT NOT NULL DEFAULT 'porter',
+            to_agent TEXT NOT NULL,
+            message TEXT NOT NULL,
+            response TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            model TEXT,
+            tokens_total INTEGER DEFAULT 0,
+            duration_ms INTEGER DEFAULT 0,
+            error TEXT,
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            completed_at REAL
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_run ON agent_messages(run_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_status ON agent_messages(status)")
     
     # 1. Migrate users from _config if table is empty
     count = conn.execute("SELECT count(*) FROM users").fetchone()[0]
@@ -218,10 +265,83 @@ def _db_init():
 
     # Purge expired sessions on startup
     purged = conn.execute("DELETE FROM sessions WHERE expires < ?", (time.time(),)).rowcount
+    # Normalize legacy task statuses: done/completed → complete
+    normalized = conn.execute("UPDATE tasks SET status='complete' WHERE status IN ('done','completed')").rowcount
     conn.commit()
     conn.close()
+    if normalized:
+        log.info("Normalized %d task statuses (done/completed → complete)", normalized)
     if purged:
         log.info("Purged %d expired sessions from database", purged)
+
+def _db_migrate_chats():
+    """Migrate JSON-based chat history to SQLite."""
+    if not CHAT_DIR.exists():
+        return
+    
+    files = list(CHAT_DIR.glob("*.json"))
+    if not files:
+        return
+
+    log.info("Migrating %d chats from JSON to SQLite...", len(files))
+    conn = _db_conn()
+    migrated = 0
+    errors = 0
+    
+    for f in files:
+        try:
+            chat_id = f.stem
+            # Check if already migrated
+            res = conn.execute("SELECT 1 FROM chats WHERE id = ?", (chat_id,)).fetchone()
+            if res:
+                continue
+                
+            data = json.loads(f.read_text())
+            title = data.get("title", "Untitled")
+            model_id = data.get("model", "")
+            project_id = data.get("project_id", None)
+            username = data.get("username", "admin")
+            
+            # Parse created/updated strings if available
+            def _parse_ts(s):
+                try:
+                    if not s: return time.time()
+                    return time.mktime(time.strptime(s, "%Y-%m-%dT%H:%M:%S"))
+                except:
+                    return time.time()
+
+            created_at = _parse_ts(data.get("created"))
+            updated_at = _parse_ts(data.get("updated"))
+            
+            conn.execute("""
+                INSERT INTO chats (id, title, model_id, project_id, username, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (chat_id, title, model_id, project_id, username, created_at, updated_at))
+            
+            for msg in data.get("messages", []):
+                role = msg.get("role")
+                content = msg.get("content")
+                ts = msg.get("ts", time.time())
+                m_id = msg.get("model_id", model_id if role == "assistant" else None)
+                
+                conn.execute("""
+                    INSERT INTO chat_messages (chat_id, role, content, timestamp, model_id)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (chat_id, role, content, ts, m_id))
+            
+            conn.commit()
+            migrated += 1
+            # Optional: Rename file to .json.bak or delete it
+            # f.rename(f.with_suffix(".json.migrated"))
+        except Exception as e:
+            log.error("Failed to migrate chat %s: %s", f.name, e)
+            errors += 1
+            
+    conn.close()
+    if migrated:
+        log.info("Successfully migrated %d chats to SQLite", migrated)
+    if errors:
+        log.warning("%d chats failed to migrate", errors)
 TASKS_REGISTRY_DIR  = RUNTIME_DIR / "task-registry"
 AUDIT_LOG           = RUNTIME_DIR / "audit.jsonl"
 
@@ -324,6 +444,10 @@ CAPABILITIES: list = [
      "install": "https://nodejs.org",
      "features": ["PDF export", "Puppeteer", "D2 diagrams"],
      "check": lambda: _cap_check_bin("node")},
+    {"id": "npm",         "label": "npm",
+     "install": "https://nodejs.org",
+     "features": ["Package management"],
+     "check": lambda: _cap_check_bin("npm")},
     {"id": "puppeteer",   "label": "Puppeteer",
      "install": "npm install -g puppeteer",
      "features": ["PDF / screenshot export"],
@@ -344,6 +468,34 @@ CAPABILITIES: list = [
      "install": "https://ollama.com",
      "features": ["Local LLM inference", "Model management"],
      "check": lambda: _cap_check_http("http://127.0.0.1:11434/")},
+    {"id": "ffmpeg",      "label": "FFmpeg",
+     "install": "https://ffmpeg.org",
+     "features": ["Audio/video processing", "Format conversion"],
+     "check": lambda: _cap_check_bin("ffmpeg")},
+    {"id": "wkhtmltopdf", "label": "wkhtmltopdf",
+     "install": "https://wkhtmltopdf.org",
+     "features": ["HTML to PDF rendering"],
+     "check": lambda: _cap_check_bin("wkhtmltopdf")},
+    {"id": "codex_cli",   "label": "Codex CLI",
+     "install": "npm install -g @openai/codex",
+     "features": ["AI code generation", "Autonomous tasks"],
+     "check": lambda: _cap_check_bin("codex")},
+    {"id": "claude_cli",  "label": "Claude CLI",
+     "install": "npm install -g @anthropic-ai/claude-code",
+     "features": ["AI code generation", "File editing"],
+     "check": lambda: _cap_check_bin("claude")},
+    {"id": "tailwindcss", "label": "Tailwind CSS",
+     "install": "npm install -g tailwindcss",
+     "features": ["Utility CSS framework"],
+     "check": lambda: _cap_check_npx_pkg("tailwindcss")},
+    {"id": "postcss",     "label": "PostCSS",
+     "install": "npm install -g postcss-cli",
+     "features": ["CSS transformations"],
+     "check": lambda: _cap_check_npx_pkg("postcss")},
+    {"id": "vite",        "label": "Vite",
+     "install": "npm install -g vite",
+     "features": ["Frontend build tool"],
+     "check": lambda: _cap_check_npx_pkg("vite")},
 ]
 
 
@@ -1898,6 +2050,9 @@ def _treg_load() -> None:
         # De-serialize tags
         try: t["tags"] = json.loads(t.get("tags", "[]"))
         except: t["tags"] = []
+        # Normalize legacy status values
+        if t.get("status") in ("done", "completed"):
+            t["status"] = "complete"
         loaded[t["id"]] = t
         
     with _treg_lock:
@@ -2815,23 +2970,23 @@ _config: dict = {}   # loaded at startup
 
 # ── session helpers ───────────────────────────────────────────────────────
 
-def create_session(username: str) -> str:
+def create_session(username: str, ip: str = None, ua: str = None) -> str:
     token = secrets.token_hex(32)
     expires = time.time() + SESSION_TTL
     try:
         conn = _db_conn()
         conn.execute(
-            "INSERT INTO sessions (token, username, expires) VALUES (?, ?, ?)",
-            (token, username, expires)
+            "INSERT INTO sessions (token, username, expires, ip_address, user_agent) VALUES (?, ?, ?, ?, ?)",
+            (token, username, expires, ip, ua)
         )
         conn.commit()
         conn.close()
     except Exception as e:
         log.warning("Session DB write failed, using memory fallback: %s", e)
-        _sessions[token] = {"username": username, "expires": expires}
+        _sessions[token] = {"username": username, "expires": expires, "ip": ip, "ua": ua}
     return token
 
-def get_session(token: str) -> dict | None:
+def get_session(token: str, ip: str = None, ua: str = None) -> dict | None:
     # Check memory fallback first
     if token in _sessions:
         s = _sessions[token]
@@ -2842,16 +2997,28 @@ def get_session(token: str) -> dict | None:
 
     try:
         conn = _db_conn()
+        now = time.time()
         row = conn.execute(
-            "SELECT username, expires FROM sessions WHERE token = ?", (token,)
+            "SELECT username, expires, ip_address, user_agent FROM sessions WHERE token = ?", (token,)
         ).fetchone()
-        conn.close()
         if not row:
+            conn.close()
             return None
-        if time.time() > row["expires"]:
+        if now > row["expires"]:
+            conn.close()
             delete_session(token)
             return None
-        return {"username": row["username"], "expires": row["expires"]}
+        
+        # Update last_seen_at, and optionally ip/ua if they changed
+        if ip or ua:
+            conn.execute("UPDATE sessions SET last_seen_at = ?, ip_address = ?, user_agent = ? WHERE token = ?", 
+                         (now, ip or row["ip_address"], ua or row["user_agent"], token))
+        else:
+            conn.execute("UPDATE sessions SET last_seen_at = ? WHERE token = ?", (now, token))
+        
+        conn.commit()
+        conn.close()
+        return {"username": row["username"], "expires": row["expires"], "ip": row["ip_address"], "ua": row["user_agent"]}
     except Exception as e:
         log.debug("Session DB read failed: %s", e)
         return None
@@ -2934,18 +3101,28 @@ def _safe_lease_running(lease_file, agent_id: str, now: float) -> bool:
 
 
 def _save_chat_message(chat_id, model_id, user_msg, assistant_msg):
-    """Append a message pair to a chat session file."""
-    path = CHAT_DIR / f"{chat_id}.json"
+    """Append a message pair to a chat session in SQLite."""
     try:
-        if path.exists():
-            data = json.loads(path.read_text())
+        conn = _db_conn()
+        now = time.time()
+        # Check if chat exists, if not create it
+        res = conn.execute("SELECT 1 FROM chats WHERE id = ?", (chat_id,)).fetchone()
+        if not res:
+            title = user_msg[:50]
+            conn.execute("""
+                INSERT INTO chats (id, title, model_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (chat_id, title, model_id, now, now))
         else:
-            data = {"title": user_msg[:50], "model": model_id, "messages": [], "created": time.strftime("%Y-%m-%dT%H:%M:%S"), "updated": ""}
-        data["messages"].append({"role": "user", "content": user_msg, "ts": time.time()})
-        data["messages"].append({"role": "assistant", "content": assistant_msg, "ts": time.time()})
-        data["updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-        data["model"] = model_id
-        path.write_text(json.dumps(data, indent=2))
+            conn.execute("UPDATE chats SET updated_at = ?, model_id = ? WHERE id = ?", (now, model_id, chat_id))
+        
+        # Insert messages
+        conn.execute("INSERT INTO chat_messages (chat_id, role, content, timestamp, model_id) VALUES (?, ?, ?, ?, ?)",
+                     (chat_id, "user", user_msg, now, model_id))
+        conn.execute("INSERT INTO chat_messages (chat_id, role, content, timestamp, model_id) VALUES (?, ?, ?, ?, ?)",
+                     (chat_id, "assistant", assistant_msg, now, model_id))
+        conn.commit()
+        conn.close()
     except Exception as e:
         log.warning("Chat save failed: %s", e)
 
@@ -4965,7 +5142,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.1</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.4</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5036,6 +5213,7 @@ select.settings-input { padding-right: 26px; }
         <span class="module-title" style="font-size:16px">Chat</span>
         <select id="chat-route" class="chat-route-sel" onchange="chatRouteChanged()">
           <option value="general">General (Porter decides)</option>
+          <option value="squad">Agent Squad (all agents)</option>
         </select>
         <span id="chat-route-indicator" class="chat-route-ctx">
           <span class="route-dot general"></span>General
@@ -5142,6 +5320,34 @@ select.settings-input { padding-right: 26px; }
       <div class="orch-section-label">Models</div>
       <div id="orch-models" class="orch-grid">
         <div class="loading-indicator">Loading models</div>
+      </div>
+    </div>
+
+    <!-- Bridge Control -->
+    <div class="orch-section" style="margin-top:24px">
+      <div class="orch-section-label">Bridge Control</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+        <div style="display:flex;gap:8px;align-items:end;margin-bottom:16px">
+          <div style="flex:1">
+            <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Prompt</label>
+            <input type="text" id="bridge-prompt" class="settings-input" placeholder="Send a task to an agent..." style="width:100%">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Backend</label>
+            <select id="bridge-backend" class="settings-input" style="min-width:120px">
+              <option value="">Auto-route</option>
+              <option value="openclaw">OpenClaw</option>
+              <option value="gemini">Gemini</option>
+              <option value="codex">Codex</option>
+              <option value="claude">Claude</option>
+              <option value="ollama">Ollama</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="bridgeDispatch()" style="white-space:nowrap">Go</button>
+        </div>
+        <div id="bridge-runs" style="max-height:300px;overflow-y:auto">
+          <div style="color:var(--text3);font-size:12px;text-align:center;padding:20px 0">No recent runs</div>
+        </div>
       </div>
     </div>
 
@@ -6041,6 +6247,17 @@ const CHANGELOG = [
     'New: /api/events endpoint for streaming system-wide updates',
     'New: useEvents React hook for automatic UI invalidation (90% less polling)',
     'Architecture: React migration complete — dist/ is now the primary UI',
+  ]},
+  { ver:'v0.25.4', date:'2026-03-01', notes:[
+    'Fix: 51 completed tasks now visible (was: DB had done/completed, JS checked complete)',
+    'New: Bridge Control — dispatch tasks to agents from Orchestration tab',
+    'New: Agent Squad chat route — view all inter-agent dialogue',
+    'New: POST /api/bridge/dispatch + GET /api/bridge/runs + GET /api/agent-messages endpoints',
+    'New: agent_messages SQLite table tracks all dispatches with run_id, tokens, duration',
+    'New: SSE events for bridge:dispatch, bridge:response, bridge:error',
+    'UX: Extensions tab now scans 14 tools (was 6) — live detection on every refresh',
+    'UX: Completed accordion auto-opens when ≤10 tasks',
+    'Governance: Release rules added to CLAUDE.md + GEMINI.md (no UI overrides, test-first)',
   ]},
   { ver:'v0.25.1', date:'2026-03-01', notes:[
     'Fix: Chat model selector no longer shows duplicate Cloud/Local groups',
@@ -7717,7 +7934,7 @@ function switchModule(name) {
     if (el) el.style.display = isFiles ? '' : 'none';
   });
   const loaders = {
-    overview: function() { populateChatModels(); populateChatRoutes(); }, tasks: () => switchModule('projects'), agents: loadAgents, projects: loadProjects, admin: loadAdmin,
+    overview: function() { populateChatModels(); populateChatRoutes(); }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); loadBridgeRuns(); }, projects: loadProjects, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
     tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, workflows: loadWorkflows, memory: loadMemory, settings: syncSettingsUI,
   };
@@ -7895,7 +8112,7 @@ let _projProjects = [];   // unified project list (registry + task-derived)
 let _projActiveId = null;
 let _projAllTasks = [];
 let _projExpanded = new Set();  // project ids that are expanded
-let _projDoneOpen = new Set();  // project ids with Done section open
+let _projDoneOpen = new Set();  // project ids with Done section open (auto-opens when ≤10)
 let _projOpenCollapsed = new Set();  // project ids with Open section collapsed
 let _cpTaskForModal = null;
 let _projFileCache = {};          // S7: project data cache
@@ -8041,7 +8258,9 @@ function _renderProjectList() {
     const isOpen  = _projExpanded.has(pid);
     const active  = tasks.filter(t => t.status === 'in_progress');
     const pending = tasks.filter(t => t.status === 'pending');
-    const done    = tasks.filter(t => ['complete','failed','cancelled'].includes(t.status));
+    const done    = tasks.filter(t => ['complete','completed','done','failed','cancelled'].includes(t.status));
+    // Auto-open Completed accordion when ≤10 done tasks
+    if (done.length > 0 && done.length <= 10 && !_projDoneOpen._autoChecked) _projDoneOpen.add(pid);
     const live    = [...active, ...pending];
     const cnt     = tasks.length;
     const isAct   = pid === _projActiveId;
@@ -8386,7 +8605,7 @@ async function loadCapabilities() {
   try {
     // Load capabilities and integrations in parallel
     const [capResp, intResp] = await Promise.all([
-      fetch('/api/capabilities'),
+      fetch('/api/capabilities?force=1'),
       fetch('/api/integrations'),
     ]);
     if (capResp.ok) {
@@ -8501,15 +8720,19 @@ function renderCapabilities(caps) {
     const siteUrl = c.install || '';
     const siteLabel = siteUrl.replace('https://','').replace('http://','');
     const site = siteUrl ? '<div style="margin-top:4px;font-size:11px"><a href="' + escHtml(siteUrl) + '" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">' + escHtml(siteLabel) + '</a></div>' : '';
-    const installHint = !ok && siteUrl ? `<div style="margin-top:2px;font-size:11px;color:var(--text3)">Not installed</div>` : '';
-    return `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">
-  <div style="display:flex;align-items:center;gap:8px">
-    ${dot}
-    <span style="font-weight:500;font-size:13px">${escHtml(c.label)}</span>${ver}
-  </div>
-  <div style="font-size:12px;color:var(--text3);margin-top:4px">${escHtml(feats)}</div>
-  ${site}${installHint}
-</div>`;
+    const installHint = !ok && siteUrl ? '<div style="margin-top:2px;font-size:11px;color:var(--text3)">Not installed</div>' : '';
+    // Live scan badge
+    const checkedAt = c.checked_at ? new Date(c.checked_at * 1000) : null;
+    const scanBadge = checkedAt ? '<span style="font-size:10px;color:var(--text3);float:right" title="Last checked: ' + checkedAt.toLocaleTimeString() + '">live</span>' : '';
+    const statusBadge = ok ? '<span style="font-size:10px;color:#22c55e;margin-left:4px">\u2713</span>' : '';
+    return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">'
+      + '<div style="display:flex;align-items:center;gap:8px">'
+      + dot
+      + '<span style="font-weight:500;font-size:13px">' + escHtml(c.label) + '</span>' + ver + statusBadge + scanBadge
+      + '</div>'
+      + '<div style="font-size:12px;color:var(--text3);margin-top:4px">' + escHtml(feats) + '</div>'
+      + site + installHint
+      + '</div>';
   }).join('');
 }
 
@@ -9196,6 +9419,8 @@ function chatRouteChanged() {
   if (ind) {
     if (_chatRoute === 'general') {
       ind.innerHTML = '<span class="route-dot general"></span>General';
+    } else if (_chatRoute === 'squad') {
+      ind.innerHTML = '<span class="route-dot" style="background:#a855f7"></span>Agent Squad';
     } else if (_chatRoute.startsWith('project:')) {
       const name = sel.options[sel.selectedIndex].textContent.replace('Project: ', '');
       ind.innerHTML = '<span class="route-dot project"></span>' + escHtml(name);
@@ -11955,7 +12180,105 @@ async function doTestAgent(id, name) {
   });
 }
 
-async function testAllOrchConnections() {
+async 
+// ── Bridge Control ────────────────────────────────────────────────────────
+
+function _showModal(title, bodyHtml) {
+  let overlay = document.getElementById('bridge-modal-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'bridge-modal-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center';
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+    + '<div style="font-size:14px;font-weight:600;color:var(--text)">' + escHtml(title) + '</div>'
+    + '<button class="btn btn-ghost" onclick="document.getElementById(\'bridge-modal-overlay\').remove()">&times;</button>'
+    + '</div>' + bodyHtml + '</div>';
+  overlay.style.display = 'flex';
+}
+
+async function bridgeDispatch() {
+  const promptEl = document.getElementById('bridge-prompt');
+  const backendEl = document.getElementById('bridge-backend');
+  if (!promptEl || !promptEl.value.trim()) { toast('Enter a prompt', 'warn'); return; }
+  const prompt = promptEl.value.trim();
+  const backend = backendEl ? backendEl.value : '';
+  promptEl.value = '';
+  toast('Dispatching to ' + (backend || 'auto-route') + '...', 'info');
+  try {
+    const res = await api('/api/bridge/dispatch', { prompt, backend });
+    if (res && res.ok) {
+      toast('Run ' + res.run_id + ' dispatched to ' + res.backend, 'ok');
+      setTimeout(loadBridgeRuns, 1000);
+    } else {
+      toast((res && res.error) || 'Dispatch failed', 'err');
+    }
+  } catch(e) { toast('Dispatch error: ' + e.message, 'err'); }
+}
+
+async function loadBridgeRuns() {
+  const el = document.getElementById('bridge-runs');
+  if (!el) return;
+  try {
+    const data = await api('/api/bridge/runs');
+    if (!data || !data.runs || !data.runs.length) {
+      el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:20px 0">No recent runs</div>';
+      return;
+    }
+    el.innerHTML = data.runs.map(r => {
+      const st = r.status || 'pending';
+      const stColor = st === 'complete' ? '#22c55e' : st === 'failed' ? '#ef4444' : st === 'in_progress' ? '#f59e0b' : 'var(--text3)';
+      const dur = r.duration_ms ? (r.duration_ms / 1000).toFixed(1) + 's' : '...';
+      const ago = r.created_at ? _timeAgo(r.created_at * 1000) : '';
+      const preview = escHtml(r.prompt_preview || '').substring(0, 80);
+      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;cursor:pointer" onclick="showBridgeRun('${r.run_id}')">
+        <span style="width:6px;height:6px;border-radius:50%;background:${stColor};flex-shrink:0"></span>
+        <span style="color:var(--text2);min-width:60px">${escHtml(r.backend || '')}</span>
+        <span style="color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${preview}</span>
+        <span style="color:var(--text3);min-width:40px;text-align:right">${dur}</span>
+        <span style="color:var(--text3);min-width:50px;text-align:right;font-size:11px">${ago}</span>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:20px 0">Failed to load runs</div>';
+  }
+}
+
+async function showBridgeRun(runId) {
+  try {
+    const data = await api('/api/agent-messages?limit=200');
+    if (!data || !data.messages) return;
+    const msg = data.messages.find(m => m.run_id === runId);
+    if (!msg) { toast('Run not found', 'warn'); return; }
+    const body = '<div style="font-size:12px">'
+      + '<div style="margin-bottom:8px"><strong>Run:</strong> ' + escHtml(runId) + '</div>'
+      + '<div style="margin-bottom:8px"><strong>Backend:</strong> ' + escHtml(msg.to_agent || '') + (msg.model ? ' (' + escHtml(msg.model) + ')' : '') + '</div>'
+      + '<div style="margin-bottom:8px"><strong>Status:</strong> ' + escHtml(msg.status || '') + '</div>'
+      + '<div style="margin-bottom:8px"><strong>Duration:</strong> ' + (msg.duration_ms || 0) + 'ms</div>'
+      + '<div style="margin-bottom:8px"><strong>Tokens:</strong> ' + (msg.tokens_total || 0) + '</div>'
+      + (msg.error ? '<div style="margin-bottom:8px;color:#ef4444"><strong>Error:</strong> ' + escHtml(msg.error) + '</div>' : '')
+      + '<div style="margin-bottom:4px"><strong>Prompt:</strong></div>'
+      + '<pre style="background:var(--bg);padding:8px;border-radius:6px;white-space:pre-wrap;max-height:200px;overflow-y:auto;font-size:11px">' + escHtml(msg.message || '') + '</pre>'
+      + (msg.response ? '<div style="margin-top:8px;margin-bottom:4px"><strong>Response:</strong></div>'
+        + '<pre style="background:var(--bg);padding:8px;border-radius:6px;white-space:pre-wrap;max-height:300px;overflow-y:auto;font-size:11px">' + escHtml(msg.response || '') + '</pre>' : '')
+      + '</div>';
+    _showModal('Run ' + runId, body);
+  } catch(e) { toast('Failed to load run details', 'err'); }
+}
+
+function _timeAgo(ts) {
+  if (typeof _timeAgo._fn === 'function') return _timeAgo._fn(ts);
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+
+function testAllOrchConnections() {
   const agents = (window._lastAgents || []).filter(function(a) {
     const s = ((a.name || '') + ' ' + (a.type || '')).toLowerCase();
     return s.includes('openclaw') || s.includes('codex') || s.includes('claude') || s.includes('gemini');
@@ -12222,7 +12545,7 @@ async function loadTaskRegistry() {
   const params = [];
   // when filter is 'done' we pass multiple statuses
   if (filter === 'done') {
-    params.push('status=complete,failed,cancelled');
+    params.push('status=complete,completed,done,failed,cancelled');
   } else if (filter) {
     params.push('status=' + encodeURIComponent(filter));
   }
@@ -12286,8 +12609,8 @@ function renderTaskRegistry(tasks) {
     const tagHtml  = (t.tags||[]).map(tg => `<span class="treg-tag">#${escHtml(tg)}</span>`).join('');
 
     const canComplete = ['pending','in_progress'].includes(st);
-    const canCancel   = !['complete','failed','cancelled'].includes(st);
-    const canDelete   = ['complete','failed','cancelled'].includes(st);
+    const canCancel   = !['complete','completed','done','failed','cancelled'].includes(st);
+    const canDelete   = ['complete','completed','done','failed','cancelled'].includes(st);
     const canStart    = st === 'pending';
 
     const acts = [
@@ -12323,7 +12646,7 @@ function renderTaskRegistry(tasks) {
 
   const pending    = tasks.filter(t => t.status === 'pending');
   const inProgress = tasks.filter(t => t.status === 'in_progress');
-  const done       = tasks.filter(t => ['complete','failed','cancelled'].includes(t.status));
+  const done       = tasks.filter(t => ['complete','completed','done','failed','cancelled'].includes(t.status));
 
   let html = '';
   if (pending.length)    html += secHdr('Pending', pending.length) + pending.map(row).join('');
@@ -14996,20 +15319,78 @@ def _smart_route(message):
     # Default → OpenClaw
     return ("openclaw", None)
 
-def dispatch_agent(message, backend, model=None, timeout=120):
+def dispatch_agent(message, backend, model=None, timeout=120, run_id=None):
     """Route a message to the specified backend and return normalized response."""
     import time as _dt
+    import uuid as _uuid
     _dt_start = _dt.time()
+    if not run_id:
+        run_id = _uuid.uuid4().hex[:12]
     fn = AGENT_DISPATCHERS.get(backend)
     if not fn:
-        return {"ok": False, "error": f"Unknown backend: {backend}. Available: {', '.join(AGENT_DISPATCHERS.keys())}"}
+        return {"ok": False, "error": f"Unknown backend: {backend}. Available: {', '.join(AGENT_DISPATCHERS.keys())}", "run_id": run_id}
+    # Record outgoing message
+    _record_agent_message(run_id, "porter", backend, message, status="in_progress")
+    _emit_event("bridge:dispatch", {"run_id": run_id, "backend": backend, "prompt": message[:200]})
     try:
         _result = fn(message, model=model, timeout=timeout)
-        _log_delegation(backend, message, _result, int((_dt.time() - _dt_start) * 1000))
+        dur_ms = int((_dt.time() - _dt_start) * 1000)
+        _log_delegation(backend, message, _result, dur_ms)
+        # Record response
+        _update_agent_message(run_id, response=_result.get("text", "")[:5000],
+                              status="complete", model=_result.get("model", ""),
+                              tokens=_result.get("tokens", {}).get("total", 0), duration_ms=dur_ms)
+        _emit_event("bridge:response", {"run_id": run_id, "backend": backend, "ok": True, "duration_ms": dur_ms})
+        _result["run_id"] = run_id
         return _result
     except Exception as e:
+        dur_ms = int((_dt.time() - _dt_start) * 1000)
         log.error("Agent bridge [%s] exception: %s", backend, e)
-        return {"ok": False, "error": str(e)[:500]}
+        _update_agent_message(run_id, error=str(e)[:500], status="failed", duration_ms=dur_ms)
+        _emit_event("bridge:error", {"run_id": run_id, "backend": backend, "error": str(e)[:200]})
+        return {"ok": False, "error": str(e)[:500], "run_id": run_id}
+
+
+def _record_agent_message(run_id, from_agent, to_agent, message, status="pending"):
+    """Insert an agent message into the database."""
+    try:
+        conn = _db_conn()
+        conn.execute("""INSERT INTO agent_messages (run_id, from_agent, to_agent, message, status)
+                        VALUES (?, ?, ?, ?, ?)""",
+                     (run_id, from_agent, to_agent, message[:10000], status))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.debug("Failed to record agent message: %s", e)
+
+
+def _update_agent_message(run_id, response=None, status=None, model=None, tokens=0, duration_ms=0, error=None):
+    """Update an agent message with its response."""
+    try:
+        conn = _db_conn()
+        sets = []
+        vals = []
+        if response is not None:
+            sets.append("response=?"); vals.append(response)
+        if status:
+            sets.append("status=?"); vals.append(status)
+        if model:
+            sets.append("model=?"); vals.append(model)
+        if tokens:
+            sets.append("tokens_total=?"); vals.append(tokens)
+        if duration_ms:
+            sets.append("duration_ms=?"); vals.append(duration_ms)
+        if error:
+            sets.append("error=?"); vals.append(error)
+        if status in ("complete", "failed"):
+            sets.append("completed_at=strftime('%s','now')")
+        if sets:
+            vals.append(run_id)
+            conn.execute(f"UPDATE agent_messages SET {', '.join(sets)} WHERE run_id=?", vals)
+            conn.commit()
+        conn.close()
+    except Exception as e:
+        log.debug("Failed to update agent message: %s", e)
 
 
 def _coord_log_path() -> Path:
@@ -15211,7 +15592,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.25.1' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.25.4' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -15339,7 +15720,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def auth_check(self, redirect=True) -> bool:
         token = self.get_session_token()
-        if token and get_session(token):
+        ip = self.client_address[0]
+        ua = self.headers.get("User-Agent", "")
+        if token and get_session(token, ip=ip, ua=ua):
             return True
         if redirect:
             self.send_response(302)
@@ -15378,7 +15761,9 @@ class Handler(BaseHTTPRequestHandler):
         the required capability (agent).  Sends 401/403 JSON and returns False on denial."""
         # Browser session → full access
         token = self.get_session_token()
-        if token and get_session(token):
+        ip = self.client_address[0]
+        ua = self.headers.get("User-Agent", "")
+        if token and get_session(token, ip=ip, ua=ua):
             return True
         # Agent Bearer token → check capability
         agent = self.get_agent_from_bearer()
@@ -15402,7 +15787,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         elif parsed.path == "/":
             token = self.get_session_token()
-            if token and get_session(token):
+            ip = self.client_address[0]
+            ua = self.headers.get("User-Agent", "")
+            if token and get_session(token, ip=ip, ua=ua):
                 self.reply_html(PAGE)
             else:
                 self.reply_html(LANDING_PAGE)
@@ -15635,7 +16022,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.1"})
+            self.reply_json({"v": "0.25.4"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -16523,8 +16910,9 @@ class Handler(BaseHTTPRequestHandler):
         # ── P6a: capabilities ─────────────────────────────────────────────────
         elif parsed.path == "/api/capabilities":
             if not self.auth_check(redirect=False): return
-            # Always re-scan capabilities on request (detects newly installed tools)
-            _run_cap_checks()
+            qs = parse_qs(parsed.query)
+            force = qs.get("force", [""])[0] == "1"
+            _run_cap_checks(force=force)
             # Filter to non-AI tools only (AI providers served via /api/ai-providers)
             ai_ids = {p["id"] for p in AI_PROVIDERS}
             caps = [v for v in _capabilities_cache.values() if v["id"] not in ai_ids]
@@ -16566,6 +16954,43 @@ class Handler(BaseHTTPRequestHandler):
             events = _coordination_recent(limit=limit)
             self.reply_json({"ok": True, "events": events, "count": len(events)})
 
+        elif parsed.path == "/api/agent-messages":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            try:
+                limit = int(qs.get("limit", ["50"])[0] or "50")
+            except Exception:
+                limit = 50
+            limit = max(1, min(200, limit))
+            try:
+                conn = _db_conn()
+                rows = conn.execute(
+                    "SELECT * FROM agent_messages ORDER BY created_at DESC LIMIT ?", (limit,)
+                ).fetchall()
+                conn.close()
+                msgs = [dict(r) for r in rows]
+                self.reply_json({"ok": True, "messages": msgs, "count": len(msgs)})
+            except Exception as e:
+                self.reply_json({"ok": True, "messages": [], "count": 0})
+
+        elif parsed.path == "/api/bridge/runs":
+            if not self.auth_check(redirect=False): return
+            try:
+                conn = _db_conn()
+                rows = conn.execute("""
+                    SELECT run_id, to_agent AS backend, status, model,
+                           tokens_total, duration_ms, error,
+                           substr(message, 1, 200) AS prompt_preview,
+                           created_at, completed_at
+                    FROM agent_messages
+                    ORDER BY created_at DESC LIMIT 50
+                """).fetchall()
+                conn.close()
+                runs = [dict(r) for r in rows]
+                self.reply_json({"ok": True, "runs": runs})
+            except Exception as e:
+                self.reply_json({"ok": True, "runs": []})
+
 
         elif parsed.path == "/api/events":
             if not self.auth_check(redirect=False): return
@@ -16584,7 +17009,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.1'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.4'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -16753,20 +17178,47 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/chat/sessions":
             if not self.auth_check(redirect=False): return
             sessions = []
-            if CHAT_DIR.exists():
-                for f in sorted(CHAT_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
-                    try:
-                        meta = json.loads(f.read_text())
-                        sessions.append({
-                            "id": f.stem,
-                            "title": meta.get("title", "Untitled"),
-                            "model": meta.get("model", ""),
-                            "messages": len(meta.get("messages", [])),
-                            "updated": meta.get("updated", ""),
-                        })
-                    except Exception as e:
-                        log.debug("Chat session parse: %s", e)
+            try:
+                conn = _db_conn()
+                rows = conn.execute("""
+                    SELECT c.id, c.title, c.model_id, c.updated_at,
+                           (SELECT count(*) FROM chat_messages WHERE chat_id = c.id) as msg_count
+                    FROM chats c
+                    ORDER BY c.updated_at DESC
+                """).fetchall()
+                conn.close()
+                for r in rows:
+                    sessions.append({
+                        "id": r["id"],
+                        "title": r["title"] or "Untitled",
+                        "model": r["model_id"] or "",
+                        "messages": r["msg_count"],
+                        "updated": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(r["updated_at"])),
+                    })
+            except Exception as e:
+                log.debug("Chat session fetch error: %s", e)
             self.reply_json({"ok": True, "sessions": sessions})
+
+        elif parsed.path == "/api/chat/attachments/download":
+            if not self.auth_check(redirect=False): return
+            att_id = qs.get("id", [""])[0]
+            if not att_id:
+                self.reply_json({"error": "id required"}, 400); return
+            try:
+                conn = _db_conn()
+                row = conn.execute("SELECT filename, content_type, size, data FROM chat_attachments WHERE id = ?", (att_id,)).fetchone()
+                conn.close()
+                if not row:
+                    self.reply_html("<h1>Not found</h1>", 404); return
+                
+                self.send_response(200)
+                self.send_header("Content-Type", row["content_type"] or "application/octet-stream")
+                self.send_header("Content-Length", str(row["size"]))
+                self.send_header("Content-Disposition", f'attachment; filename="{row["filename"]}"')
+                self.end_headers()
+                self.wfile.write(row["data"])
+            except Exception as e:
+                self.reply_json({"error": str(e)}, 500)
 
         else:
             self.reply_html("<h1>Not found</h1>", 404)
@@ -16807,7 +17259,8 @@ class Handler(BaseHTTPRequestHandler):
                 # Clear rate limit on success
                 _login_attempts.pop(client_ip, None)
 
-                token = create_session(username)
+                user_agent = self.headers.get("User-Agent", "")
+                token = create_session(username, ip=client_ip, ua=user_agent)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 ttl = SESSION_TTL
@@ -16918,6 +17371,33 @@ class Handler(BaseHTTPRequestHandler):
             timeout = max(10, min(300, timeout))
             res = _run_coordination(prompt, backends=backends or None, timeout=timeout)
             self.reply_json(res, 200 if res.get("ok") else 400)
+
+        elif parsed.path == "/api/bridge/dispatch":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            prompt = str(data.get("prompt", "")).strip()
+            backend = str(data.get("backend", "")).strip().lower()
+            model_override = data.get("model")
+            if not prompt:
+                self.reply_json({"ok": False, "error": "prompt is required"}, 400); return
+            if not backend:
+                # Auto-route
+                backend, model_override = _smart_route(prompt)
+            if backend not in AGENT_DISPATCHERS:
+                self.reply_json({"ok": False, "error": f"Unknown backend: {backend}"}, 400); return
+            try:
+                timeout = int(data.get("timeout", 60) or 60)
+            except Exception:
+                timeout = 60
+            timeout = max(10, min(300, timeout))
+            # Run in thread to avoid blocking
+            import uuid as _uuid
+            run_id = _uuid.uuid4().hex[:12]
+            def _bridge_run():
+                dispatch_agent(prompt, backend, model=model_override, timeout=timeout, run_id=run_id)
+            t = _threading.Thread(target=_bridge_run, daemon=True)
+            t.start()
+            self.reply_json({"ok": True, "run_id": run_id, "backend": backend, "status": "dispatched"})
 
         elif parsed.path == "/api/agent-fleet":
             # Admin controls + agent heartbeat/update reporting
@@ -18308,31 +18788,119 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
 
             if action == "load":
                 chat_id = data.get("chat_id", "")
-                path = CHAT_DIR / f"{chat_id}.json"
-                if path.exists():
-                    self.reply_json({"ok": True, "chat": json.loads(path.read_text())})
-                else:
-                    self.reply_json({"ok": False, "error": "Chat not found"}, 404)
+                try:
+                    conn = _db_conn()
+                    c = conn.execute("SELECT * FROM chats WHERE id = ?", (chat_id,)).fetchone()
+                    if not c:
+                        self.reply_json({"ok": False, "error": "Chat not found"}, 404)
+                        conn.close()
+                        return
+                    
+                    msgs = conn.execute("SELECT id, role, content, timestamp as ts, model_id FROM chat_messages WHERE chat_id = ? ORDER BY id ASC", (chat_id,)).fetchall()
+                    atts = conn.execute("SELECT id, message_id, filename, content_type, size FROM chat_attachments WHERE chat_id = ?", (chat_id,)).fetchall()
+                    conn.close()
+
+                    # Group attachments by message_id
+                    atts_by_msg = {}
+                    for a in atts:
+                        m_id = a["message_id"]
+                        if m_id not in atts_by_msg: atts_by_msg[m_id] = []
+                        atts_by_msg[m_id].append(dict(a))
+
+                    messages = []
+                    for m in msgs:
+                        m_dict = dict(m)
+                        m_dict["attachments"] = atts_by_msg.get(m["id"], [])
+                        messages.append(m_dict)
+
+                    chat_data = {
+                        "id": c["id"],
+                        "title": c["title"],
+                        "model": c["model_id"],
+                        "project_id": c["project_id"],
+                        "username": c["username"],
+                        "created": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(c["created_at"])),
+                        "updated": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(c["updated_at"])),
+                        "messages": messages
+                    }
+                    self.reply_json({"ok": True, "chat": chat_data})
+
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
 
             elif action == "delete":
                 chat_id = data.get("chat_id", "")
-                path = CHAT_DIR / f"{chat_id}.json"
-                if path.exists():
-                    path.unlink()
-                self.reply_json({"ok": True})
+                try:
+                    conn = _db_conn()
+                    conn.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
+                    conn.commit()
+                    conn.close()
+                    self.reply_json({"ok": True})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
 
             elif action == "rename":
                 chat_id = data.get("chat_id", "")
                 title = data.get("title", "").strip()
-                path = CHAT_DIR / f"{chat_id}.json"
-                if path.exists() and title:
-                    d = json.loads(path.read_text())
-                    d["title"] = title
-                    path.write_text(json.dumps(d, indent=2))
+                if not title:
+                    self.reply_json({"ok": False, "error": "Empty title"}, 400); return
+                try:
+                    conn = _db_conn()
+                    conn.execute("UPDATE chats SET title = ? WHERE id = ?", (title, chat_id))
+                    conn.commit()
+                    conn.close()
                     self.reply_json({"ok": True})
-                else:
-                    self.reply_json({"ok": False, "error": "Not found or empty title"}, 400)
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
 
+            else:
+                self.reply_json({"ok": False, "error": "Unknown action"}, 400)
+
+        elif parsed.path == "/api/chat/attachments":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            action = data.get("action", "")
+
+            if action == "upload":
+                chat_id = data.get("chat_id", "")
+                filename = data.get("filename", "unnamed")
+                content_type = data.get("content_type", "application/octet-stream")
+                b64_data = data.get("data", "") # base64 string
+                message_id = data.get("message_id") # optional
+                
+                if not chat_id or not b64_data:
+                    self.reply_json({"ok": False, "error": "chat_id and data required"}, 400); return
+                
+                try:
+                    import base64
+                    binary_data = base64.b64decode(b64_data)
+                    att_id = secrets.token_hex(16)
+                    conn = _db_conn()
+                    conn.execute("""
+                        INSERT INTO chat_attachments (id, chat_id, message_id, filename, content_type, size, data)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (att_id, chat_id, message_id, filename, content_type, len(binary_data), binary_data))
+                    conn.commit()
+                    conn.close()
+                    self.reply_json({"ok": True, "attachment_id": att_id})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
+
+            elif action == "list":
+                chat_id = data.get("chat_id", "")
+                if not chat_id:
+                    self.reply_json({"ok": False, "error": "chat_id required"}, 400); return
+                try:
+                    conn = _db_conn()
+                    rows = conn.execute("""
+                        SELECT id, message_id, filename, content_type, size, created_at 
+                        FROM chat_attachments WHERE chat_id = ? ORDER BY created_at ASC
+                    """, (chat_id,)).fetchall()
+                    conn.close()
+                    self.reply_json({"ok": True, "attachments": [dict(r) for r in rows]})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
+            
             else:
                 self.reply_json({"ok": False, "error": "Unknown action"}, 400)
 
@@ -18781,7 +19349,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             elif action == "update_status":
                 tid    = str(data.get("task_id", "")).strip()
                 status = str(data.get("status",  "")).strip()
-                valid  = {"pending","in_progress","complete","failed","cancelled"}
+                valid  = {"pending","in_progress","complete","completed","done","failed","cancelled"}
                 if status not in valid:
                     self.reply_json({"ok": False, "error": f"status must be one of {sorted(valid)}"}); return
                 with _treg_lock:
@@ -19296,6 +19864,7 @@ if __name__ == "__main__":
     ensure_chat_dirs()
     ensure_memory_dirs()
     _db_init()  # Initialize SQLite DB + purge expired sessions
+    _db_migrate_chats()  # Migrate JSON chats to SQLite
     _treg_load()  # populate task registry from SQLite (needs _db_init first)
     _migrate_checkpoint_to_registry()  # Gap31: one-time migration
     _sched_thread = threading.Thread(target=_scheduler_loop, name="porter-scheduler", daemon=True)
@@ -19306,7 +19875,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.1 ready (localhost only)")
+    print(f"\n  Porter v0.25.4 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

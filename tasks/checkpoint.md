@@ -1,35 +1,31 @@
-# Checkpoint — DEPRECATED
-# This file is no longer the source of truth for task state.
-# All tasks are now tracked in runtime/task-registry/*.json
-# This file is kept for historical reference only.
-# Last migrated: 2026-02-28 15:08:35 UTC
-#
 # Checkpoint
 project: Porter
-task: Gap tasks — Skills CRUD complete, remaining gaps pending
-status: paused
-step: 1 of N
+task: v0.25.2+ — Critical Fixes, Bridge Control, Governance
+status: in_progress
+step: 1 of 4
 completed:
-  - [x] v0.14.22 — Fix Early Sprints sort order (JS falsy bug), remove Skills from Extensions
-  - [x] v0.15.0 — Sprint 10: Workflows tab (50 skills, cron viewer), nav reorder, project start date fix
-  - [x] v0.15.1 — Sprint 11: Real agent connectivity test (HTTP roundtrip, latency modal, multi-protocol)
-  - [x] v0.15.2 — Gap: Skills CRUD (installed/all filter, remove skill, create manual skill, POST /api/openclaw/skills)
-  - [x] All governance docs updated (RELEASE_NOTES, SPRINT_PLAN, projects.md, task registry, MEMORY.md)
-  - [ ] Gap: session memory flush
-  - [ ] Gap: local model detection
-  - [ ] Gap: workflow creation tool
-  - [ ] Sprint 12 — Onboarding wizard (FINAL)
-next_action: Pick next gap task (session memory flush, local model detection, or workflow creation tool)
+  - [ ] Patch A: Fix completed tasks visibility (v0.25.2)
+  - [ ] Patch B: Governance rules + Gemini guardrails (v0.25.2)
+  - [ ] Patch C: Cross-agent dialogue + Bridge Control (v0.25.3)
+  - [ ] Patch D: Extensions live detection (v0.25.4)
+next_action: Build and apply Patch A — fix JS status filter + DB migration
 modified_files:
   - /home/lobster/documents/porter/porter.py
-  - /home/lobster/documents/porter/runtime/task-registry/eb42638a-88b6-4d25-96b7-4a6680b66596.json
   - /home/lobster/documents/porter/porter_config.json
-  - /home/lobster/documents/porter/SPRINT_PLAN.md
-  - /home/lobster/documents/porter/RELEASE_NOTES.md
-  - /home/lobster/documents/projects.md
+  - /home/lobster/CLAUDE.md
+  - ~/.gemini/GEMINI.md
 notes: |
-  Skills CRUD shipped as v0.15.2. Features: installed/all filter toggle (default installed only),
-  remove skill with confirm dialog, create manual skill form, POST /api/openclaw/skills backend
-  with remove/create actions, shutil.which() install status detection.
-  Remaining gap tasks: session memory flush, local model detection, workflow creation tool.
-  Sprint 12 (onboarding wizard) is absolute LAST — don't schedule until all gaps filled.
+  Key line numbers (verified via grep):
+  - JS filter: line 8163 — needs 'done','completed' added
+  - Second filter: line 12445 — same fix
+  - canCancel/canDelete: lines 12408-12409 — same fix
+  - _projDoneOpen: line 8017 — accordion default closed
+  - _tregShowDone: line 12331 — default false
+  - _treg_load(): line 1949 — add status normalization
+  - _db_init(): line 136 — add agent_messages table
+  - dispatch_agent(): line 15118 — wire to agent_messages
+  - _emit_event(): line 15374 — wire to dispatch
+  - Version strings: line 2, 5087, 6164, 15333, 16712, 19551
+  - Valid statuses backend: line 19025
+  - Chat route selector: line 5156, populateChatRoutes: line 9265
+  - Orch module: line 5221, ends around 5265
