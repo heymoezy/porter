@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.8 — Chat Dispatch, Model Ranking"""
+"""Porter v0.25.9 — Files Tab Fix"""
 
 
 
@@ -5113,7 +5113,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.8</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.9</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6249,6 +6249,7 @@ const CHANGELOG = [
     'New: useEvents React hook for automatic UI invalidation (90% less polling)',
     'Architecture: React migration complete — dist/ is now the primary UI',
   ]},
+  { ver:'v0.25.9', date:'2026-03-01', notes:['Files tab fix — race condition on server hostname resolved, device tree renders correctly'] },
   { ver:'v0.25.8', date:'2026-03-01', notes:[
     'UX: Bridge Control dispatch merged into Chat tab (unified communication hub)',
     'UX: Chat input fixed to bottom of screen (ChatGPT/Claude-style)',
@@ -10677,16 +10678,11 @@ async function loadLocations() {
   const data = await api('/api/nodes');
   if (!data) return;
   _lastNodes = data.nodes || [];
+  if (_lastNodes[0] && !window._serverHostname) window._serverHostname = _lastNodes[0].hostname || _lastNodes[0].id;
   renderNodes(_lastNodes);
   _renderSidebarNodes(_lastNodes, curRoot);
   // Update Files view now that rootMeta is populated
   if (_currentModule === 'files') {
-    // Auto-select first mount so Files opens with contents visible
-    if (!_fhomeActive) {
-      const selfNode = _lastNodes.find(n => _isSelfNode(n));
-      const fm = selfNode && selfNode.mounts && selfNode.mounts.find(m => m.visible !== false);
-      if (fm) { selectMount(fm.id, ''); return; }
-    }
     showFilesHome();
   }
   loadTailscaleStatus();
@@ -11030,10 +11026,7 @@ async function saveEditNode(nodeId, label, type) {
   else toast((res && res.error) || 'Update failed', 'err');
 }
 
-// expose server hostname for addLocalNode
-fetch('/api/nodes').then(r=>r.json()).then(d=>{
-  if (d.nodes && d.nodes[0]) window._serverHostname = d.nodes[0].hostname || d.nodes[0].id;
-}).catch(()=>{});
+// _serverHostname is set by init() and loadLocations() — no fire-and-forget needed
 
 // ── agents ──────────────────────────────────────────────────────────────────
 
@@ -13546,6 +13539,8 @@ async function init() {
   populateChangelog();
   const nodeData = await api('/api/nodes');
   const nodes = (nodeData && nodeData.nodes) || [];
+  _lastNodes = nodes;
+  if (nodes[0] && !window._serverHostname) window._serverHostname = nodes[0].hostname || nodes[0].id;
   _renderSidebarNodes(nodes, null);
   // Default to overview unless a hash/route is added later
   switchModule('overview');
@@ -16130,7 +16125,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.8"})
+            self.reply_json({"v": "0.25.9"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17134,7 +17129,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.8'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.9'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20186,7 +20181,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.8 ready (localhost only)")
+    print(f"\n  Porter v0.25.9 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
