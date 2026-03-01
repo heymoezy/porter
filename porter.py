@@ -15202,7 +15202,7 @@ def _dispatch_gemini(message, model=None, timeout=60):
     if not gem_bin:
         return {"ok": False, "error": "Gemini CLI not found. Install: npm i -g @google/gemini-cli"}
     cmd = [gem_bin, "-p", message, "-o", "json", "-y"]
-    if model:
+    if model and model != "auto":
         cmd.extend(["-m", model])
     log.info("Agent bridge [gemini]: model=%s msg=%s", model or "auto", message[:80])
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env(), cwd="/tmp")
