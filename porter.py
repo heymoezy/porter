@@ -15195,17 +15195,22 @@ def _dispatch_openclaw(message, model=None, timeout=120):
         "tokens": meta.get("agentMeta", {}).get("usage", {}),
     }
 
-def _dispatch_gemini(message, model=None, timeout=60):
+def _dispatch_gemini(message, model=None, timeout=120):
     """Invoke Gemini CLI and return normalized response."""
-    import subprocess
+    import subprocess, tempfile
     gem_bin = _resolve_cli("gemini")
     if not gem_bin:
         return {"ok": False, "error": "Gemini CLI not found. Install: npm i -g @google/gemini-cli"}
+    # Trim message to avoid timeouts on huge conversation histories
+    if len(message) > 4000:
+        message = message[-4000:]
     cmd = [gem_bin, "-p", message, "-o", "json", "-y"]
     if model and model != "auto":
         cmd.extend(["-m", model])
     log.info("Agent bridge [gemini]: model=%s msg=%s", model or "auto", message[:80])
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env(), cwd="/tmp")
+    # Use empty tmpdir as cwd so Gemini doesn't scan project files
+    with tempfile.TemporaryDirectory() as _tmpd:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env(), cwd=_tmpd)
     if result.returncode != 0:
         try:
             err_data = json.loads(result.stdout)
