@@ -12408,7 +12408,7 @@ function _timeAgo(ts) {
   return Math.floor(s/86400) + 'd ago';
 }
 
-function testAllOrchConnections() {
+async function testAllOrchConnections() {
   const agents = (window._lastAgents || []).filter(function(a) {
     const s = ((a.name || '') + ' ' + (a.type || '')).toLowerCase();
     return s.includes('openclaw') || s.includes('codex') || s.includes('claude') || s.includes('gemini');
