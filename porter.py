@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.24.1 — self-hosted file manager"""
+"""Porter v0.24.2 — self-hosted file manager"""
 
 
 
@@ -1435,7 +1435,8 @@ def _flush_preview(session_id: str, source: str) -> dict:
             for line in f:
                 try:
                     entry = json.loads(line)
-                except Exception:
+                except Exception as e:
+                    log.debug("Skipped: %s", e)
                     continue
                 etype = entry.get("type", "")
                 ts = entry.get("timestamp", "")
@@ -1500,7 +1501,8 @@ def _flush_preview(session_id: str, source: str) -> dict:
         for raw_line in lines:
             try:
                 entry = json.loads(raw_line)
-            except Exception:
+            except Exception as e:
+                log.debug("Skipped: %s", e)
                 continue
             etype = entry.get("type", "")
             ts = entry.get("timestamp", "")
@@ -4867,7 +4869,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.24.1</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.24.2</div>
 
     <button onclick="startTour()" style="font-size:10px;color:var(--text3);background:none;border:none;cursor:pointer;padding:2px 0" title="Start guided tour">&#10067; Tour</button>
   </div>
@@ -5936,6 +5938,10 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.24.2', date:'2026-03-01', notes:[
+    'UX: Agent Squad branding when 2+ agents are connected',
+    'Quality: All bare except blocks now capture and log exceptions',
+  ]},
   { ver:'v0.24.1', date:'2026-03-01', notes:[
     'Architecture: React + Tailwind v4 frontend scaffold complete',
     'Theme: Porter color variables and fonts integrated into React stack',
@@ -11051,8 +11057,11 @@ async function _refreshOrchHubActivity(agentCount, modelCount) {
       const statusTxt = last.ok ? 'ok' : 'failed';
       routeText = 'Last route: ' + String(last.backend || 'unknown') + ' · ' + statusTxt + ' · ' + ageTxt;
     }
+    // Update hub label: "Agent Squad" when 2+ agents
+    const hubDesc = document.querySelector('.orch-hub-desc');
+    if (hubDesc) hubDesc.textContent = agentCount >= 2 ? 'Agent Squad — ' + agentCount + ' agents coordinating' : 'Orchestration layer';
     const pills = [
-      { label: 'Agents: ' + agentCount, active: agentCount > 0 },
+      { label: agentCount >= 2 ? 'Squad: ' + agentCount + ' agents' : 'Agents: ' + agentCount, active: agentCount > 0 },
       { label: 'Models: ' + modelCount, active: modelCount > 0 },
       { label: 'Services: ' + up + '/' + total + ' up', active: total > 0 && up > 0 },
       { label: routeText, active: !!last },
@@ -14660,7 +14669,8 @@ def _dispatch_gemini(message, model=None, timeout=60):
         try:
             err_data = json.loads(result.stdout)
             err_msg = err_data.get("error", {}).get("message", result.stderr[:300])
-        except Exception:
+        except Exception as e:
+            log.debug("Gemini dispatch exception: %s", e)
             err_msg = result.stderr[:300] or "Gemini returned non-zero"
         return {"ok": False, "error": err_msg}
     gem_resp = json.loads(result.stdout)
@@ -14761,7 +14771,8 @@ def _dispatch_codex(message, model=None, timeout=120):
                 msg = evt.get("message", "")
                 if msg:
                     errors.append(msg)
-        except Exception:
+        except Exception as e:
+            log.debug("JSONL parse skip: %s", e)
             continue
     if not text:
         err_msg = (result.stderr or "").strip()
@@ -14942,7 +14953,8 @@ def _coordination_recent(limit: int = 20) -> list[dict]:
             break
         try:
             out.append(json.loads(line))
-        except Exception:
+        except Exception as e:
+            log.debug("Log line parse skip: %s", e)
             continue
     return out
 
@@ -15559,7 +15571,8 @@ class Handler(BaseHTTPRequestHandler):
                         import subprocess as _sp
                         ver = _sp.run([found, "--version"], capture_output=True, text=True, timeout=5)
                         version = ver.stdout.strip().split("\n")[0][:40] if ver.returncode == 0 else ""
-                    except Exception:
+                    except Exception as e:
+                        log.debug("Version parse skip: %s", e)
                         version = ""
                     services.append({"name": name, "status": "up", "detail": version or found})
                 else:
@@ -16338,7 +16351,8 @@ class Handler(BaseHTTPRequestHandler):
             qs = parse_qs(parsed.query)
             try:
                 limit = int(qs.get("limit", ["20"])[0] or "20")
-            except Exception:
+            except Exception as e:
+                log.debug("Limit parse fallback: %s", e)
                 limit = 20
             events = _coordination_recent(limit=limit)
             self.reply_json({"ok": True, "events": events, "count": len(events)})
@@ -16650,7 +16664,8 @@ class Handler(BaseHTTPRequestHandler):
                 backends = []
             try:
                 timeout = int(data.get("timeout", 45) or 45)
-            except Exception:
+            except Exception as e:
+                log.debug("Timeout parse fallback: %s", e)
                 timeout = 45
             timeout = max(10, min(300, timeout))
             res = _run_coordination(prompt, backends=backends or None, timeout=timeout)
