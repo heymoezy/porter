@@ -1,5 +1,50 @@
 # Porter Release Notes
 
+## v0.22.6 (2026-03-01)
+
+**Chat Commands + Keyboard Shortcuts + Admin Polish**
+
+Major UX overhaul across multiple subsystems:
+
+### Chat Experience
+- **Built-in commands:** `/help`, `/clear`, `/status`, `/models`, `/version` — handled locally
+- **Slash autocomplete:** Type `/` to see all available commands with descriptions
+- **@model autocomplete:** Type `@` to see available backends (OpenClaw, Gemini, Ollama)
+- **Arrow key navigation:** Up/Down to browse suggestions, Enter/Tab to select, Escape to dismiss
+- Unknown `/commands` still route to OpenClaw as skill invokes
+
+### Memory Tab v3
+- **Educational three-layer view** with labeled flow arrows
+- **Layer descriptions** explain WHY each layer matters
+- **SHARED MEMORY PLANE** hub with coordination description
+- **Model color indicators** on cards (amber=Claude, emerald=OpenClaw, blue=Gemini)
+- **Flow arrow labels:** "guides memory", "supplies context", "logs outcomes"
+- **Session stats bar:** Total sessions, size, message count, model breakdown
+- **Instruction/memory separation:** OpenClaw's SOUL.md, USER.md, AGENTS.md correctly in Instructions layer
+
+### Admin Dashboard
+- **Quick stats row:** Version, uptime, services, CPU, memory at a glance
+- **Porter Rules** section now visible (HTML container was missing)
+- **Delegation log:** Tracks all agent bridge calls with backend, duration, prompt preview
+
+### Quality of Life
+- **Auto-reload:** Browser polls `/api/version` every 30s, refreshes on server restart
+- **Keyboard shortcuts:** Ctrl+K (chat), 1-9 (tabs), ? (help overlay)
+- **Task registry fix:** Sort crash on string `created_at` values
+
+---
+
+## v0.21.2 (2026-02-28)
+
+**Porter Rules**
+
+- **Default governance rules** loaded on first run (12 rules across 4 categories)
+- **CRUD via `/api/rules`** — add, remove, update rules through Admin tab
+- **Category badges:** Architecture, UX, Engineering, Governance — color-coded
+- **Shortened verbose text** across the UI (brief is better)
+
+---
+
 ## v0.21.1 (2026-02-28)
 
 **Public Landing Page**

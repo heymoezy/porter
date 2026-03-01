@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.22.5 — self-hosted file manager"""
+"""Porter v0.22.6 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -4682,7 +4682,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.22.5</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.22.6</div>
   </div>
 </aside>
 
@@ -5733,6 +5733,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.22.6', date:'2026-03-01', notes:[
+    'New: Built-in chat commands — /help, /clear, /status, /models, /version',
+    'New: /clear wipes chat, /help shows command list, /status shows health',
+    'Fix: Only unknown /commands route to OpenClaw (built-ins handled locally)',
+  ]},
   { ver:'v0.22.5', date:'2026-02-28', notes:[
     'New: Global keyboard shortcuts — Ctrl+K for chat, 1-9 for tabs, ? for help',
     'New: Keyboard shortcut help overlay (press ?)',
@@ -9063,11 +9068,83 @@ function chatSend() {
   const modelId = sel.value;
   if (!text || _chatStreaming) return;
 
-  // Check for /skill commands — route to OpenClaw
+  // Check for /commands — handle built-ins locally, route rest to OpenClaw
   if (text.startsWith('/')) {
     input.value = '';
     input.style.height = 'auto';
+    var cmd = text.split(' ')[0].toLowerCase();
+
+    if (cmd === '/clear') {
+      _chatMessages = [];
+      renderChatMessages();
+      return;
+    }
+
     _chatMessages.push({ role: 'user', content: text });
+
+    if (cmd === '/help') {
+      _chatMessages.push({ role: 'assistant', content: '**Available Commands**\n\n' +
+        '`/help` — Show this help\n' +
+        '`/clear` — Clear chat history\n' +
+        '`/status` — System health check\n' +
+        '`/models` — List available AI models\n' +
+        '`/version` — Show Porter version\n' +
+        '`/flush` — Flush session to memory\n\n' +
+        '**Routing**\n' +
+        '`@openclaw <msg>` — Send to OpenClaw\n' +
+        '`@gemini <msg>` — Send to Gemini\n' +
+        '`@ollama <msg>` — Send to Ollama\n\n' +
+        'Any other `/command` is sent to OpenClaw as a skill invoke.', model: 'porter' });
+      renderChatMessages();
+      return;
+    }
+
+    if (cmd === '/version') {
+      fetch('/api/version').then(r=>r.json()).then(function(d) {
+        _chatMessages.push({ role: 'assistant', content: '**Porter ' + d.v + '**', model: 'porter' });
+        renderChatMessages();
+      });
+      return;
+    }
+
+    if (cmd === '/status') {
+      _chatMessages.push({ role: 'assistant', content: '_Checking system health..._', model: 'porter' });
+      renderChatMessages();
+      api('/api/admin/health').then(function(h) {
+        if (!h) { _chatMessages[_chatMessages.length-1].content = 'Failed to get health data.'; renderChatMessages(); return; }
+        var lines = ['**System Status**\n'];
+        if (h.cpu_percent !== undefined) lines.push('CPU: **' + h.cpu_percent + '%**');
+        if (h.mem_used_mb) lines.push('Memory: **' + Math.round(h.mem_used_mb) + ' MB** / ' + Math.round(h.mem_total_mb || 0) + ' MB');
+        if (h.disk_used_gb) lines.push('Disk: **' + h.disk_used_gb + ' GB** / ' + h.disk_total_gb + ' GB');
+        if (h.services) {
+          lines.push('\n**Services**');
+          h.services.forEach(function(s) {
+            var icon = s.status === 'running' || s.status === 'ok' ? '\u2705' : '\u274c';
+            lines.push(icon + ' ' + s.name + (s.version ? ' v' + s.version : ''));
+          });
+        }
+        _chatMessages[_chatMessages.length-1].content = lines.join('\n');
+        renderChatMessages();
+      });
+      return;
+    }
+
+    if (cmd === '/models') {
+      var modelOpts = document.getElementById('chat-model');
+      if (modelOpts) {
+        var lines = ['**Available Models**\n'];
+        Array.from(modelOpts.options).forEach(function(o) {
+          if (o.value) lines.push('- `' + o.value + '` — ' + o.textContent);
+        });
+        _chatMessages.push({ role: 'assistant', content: lines.join('\n'), model: 'porter' });
+      } else {
+        _chatMessages.push({ role: 'assistant', content: 'No models loaded.', model: 'porter' });
+      }
+      renderChatMessages();
+      return;
+    }
+
+    // Unknown /command — route to OpenClaw as skill invoke
     renderChatMessages();
     invokeAgent(text, 'openclaw');
     return;
@@ -14305,7 +14382,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.22.5"})
+            self.reply_json({"v": "0.22.6"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17838,7 +17915,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.22.5 ready (localhost only)")
+    print(f"\n  Porter v0.22.6 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
