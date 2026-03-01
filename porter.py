@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.23.6 — self-hosted file manager"""
+"""Porter v0.23.7 — self-hosted file manager"""
 
 
 import email
@@ -3941,6 +3941,39 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .tab-help-tip.show { display:block; }
 
+/* Memory-specific cards (file-focused, distinct from orch-card) */
+.mem-card {
+  padding:14px 16px; background:var(--raised); border:1px solid var(--border);
+  border-radius:8px; transition:border-color .15s;
+}
+.mem-card:hover { border-color:var(--accent); }
+.mem-card-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.mem-card-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.mem-card-name { font-size:13px; font-weight:600; color:var(--text); }
+.mem-card-sub { font-size:11px; color:var(--text3); }
+.mem-file-row {
+  display:flex; align-items:center; gap:6px; padding:3px 0;
+  font-size:12px; color:var(--text2); cursor:pointer; transition:.1s;
+}
+.mem-file-row:hover { color:var(--accent); }
+.mem-file-icon { font-size:10px; color:var(--text3); }
+.mem-file-size { font-size:10px; color:var(--text3); margin-left:auto; }
+.mem-card-stat { font-size:10px; color:var(--text3); margin-top:6px; padding-top:6px; border-top:1px solid var(--border); }
+
+/* Memory hub (distinct from orch-hub) */
+.mem-hub {
+  padding:16px 20px; background:var(--surface2); border:1px solid var(--border);
+  border-radius:10px; text-align:center;
+}
+.mem-hub-title { font-size:12px; font-weight:700; color:var(--text); letter-spacing:.5px; text-transform:uppercase; margin-bottom:4px; }
+.mem-hub-desc { font-size:11px; color:var(--text3); margin-bottom:10px; }
+.mem-hub-pills { display:flex; flex-wrap:wrap; gap:4px; justify-content:center; }
+.mem-hub-pill {
+  padding:3px 10px; font-size:10px; border-radius:4px; border:1px solid var(--border);
+  color:var(--text3); background:none;
+}
+.mem-hub-pill.active { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent); }
+
 .chat-input-area { display:flex; gap:8px; padding-top:12px; border-top:1px solid var(--border); flex-shrink:0; align-items:flex-end; }
 .chat-input {
   flex:1; padding:10px 14px; border:1px solid var(--border); border-radius:10px;
@@ -4309,7 +4342,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .orch-section { margin-bottom:4px; }
 .orch-section-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
 .orch-section-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.6px; margin-bottom:10px; }
-.orch-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.orch-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
 @media (max-width: 900px) { .orch-grid { grid-template-columns:1fr !important; } }
 
 .orch-card {
@@ -4806,7 +4839,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.23.6</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.23.7</div>
     <button onclick="startTour()" style="font-size:10px;color:var(--text3);background:none;border:none;cursor:pointer;padding:2px 0" title="Start guided tour">&#10067; Tour</button>
   </div>
 </aside>
@@ -5357,7 +5390,7 @@ select.settings-input { padding-right: 26px; }
     <div class="mem-layer">
       <div class="mem-layer-label">Instructions</div>
       <div class="mem-layer-desc">Loaded at the start of every session. You write these — they tell each model who it is and how to behave.</div>
-      <div id="mem-instructions" class="orch-grid">
+      <div id="mem-instructions" class="orch-grid" style="gap:10px">
         <div class="loading-indicator">Loading instructions</div>
       </div>
     </div>
@@ -5369,7 +5402,7 @@ select.settings-input { padding-right: 26px; }
     <div class="mem-layer">
       <div class="mem-layer-label">Persistent Memory</div>
       <div class="mem-layer-desc">What each model remembers between sessions. Auto-updated as models work — lessons, preferences, project state. This is what makes continuity possible.</div>
-      <div id="mem-persistent" class="orch-grid">
+      <div id="mem-persistent" class="orch-grid" style="gap:10px">
         <div class="loading-indicator">Loading memory</div>
       </div>
     </div>
@@ -5494,6 +5527,14 @@ select.settings-input { padding-right: 26px; }
         </div>
         <div class="settings-save-row">
           <button class="btn btn-primary" onclick="saveAccount()">Save changes</button>
+        </div>
+
+        <div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--border)">
+          <div class="settings-page-title" style="font-size:15px;margin-bottom:8px">System Setup</div>
+          <div style="font-size:13px;color:var(--text3);margin-bottom:16px">
+            Reset your configuration and go through the guided setup again.
+          </div>
+          <button class="btn btn-ghost" onclick="openWizard()">Re-run setup wizard</button>
         </div>
         <!-- moved to Password tab -->
       </div>
@@ -5866,6 +5907,19 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.23.7', date:'2026-03-01', notes:[
+    'New: Onboarding Wizard (6 steps) — full guided setup experience',
+    'New: Capability scan step with "Connect Gemini" nudge for research',
+    'New: Operator password setup step in wizard',
+    'New: "Re-run setup wizard" button in Profile settings',
+    'New: 4 new Gemini-powered workflow skills added to registry',
+  ]},
+  { ver:'v0.23.7', date:'2026-03-01', notes:[
+    'Fix: Resolved Orchestration/Memory visual overlap (P0 task)',
+    'UX: Memory cards restyled as file-focused (distinct from agent cards)',
+    'UX: Memory hub restyled as mem-hub (distinct from orch-hub)',
+    'Clean: Each tab now has distinct visual identity and purpose',
+  ]},
   { ver:'v0.23.6', date:'2026-03-01', notes:[
     'UX: Orchestration flow arrows — smaller arrowheads, better spacing',
     'New: Install button on uninstalled skills in Workflows tab',
@@ -8361,8 +8415,8 @@ function _memFileRow(f, opts) {
 }
 
 async function viewMemFileAndEdit(path) {
-  await viewMemFile(path);
-  toggleMemFileEdit();
+  const ok = await viewMemFile(path);
+  if (ok) toggleMemFileEdit();
 }
 
 // ── Layer 1: Instructions ──
@@ -8603,13 +8657,17 @@ async function viewMemFile(path) {
     const resp = await api('/api/memory/read?path=' + encodeURIComponent(path));
     if (resp && resp.ok) {
       content.textContent = resp.content || '(empty file)';
+      editor.value = resp.content || '';
+      return true;
     } else {
       content.style.color = 'var(--err)';
       content.textContent = 'Error: ' + ((resp && resp.error) || 'Failed to read file');
+      return false;
     }
   } catch(e) {
     content.style.color = 'var(--err)';
     content.textContent = 'Error: ' + e.message;
+    return false;
   }
 }
 
@@ -11001,8 +11059,7 @@ function renderOrchestration(agents, providers) {
 
   // ── SVG flow connector: merge (agents → porter) ──
   const mergeEl = document.getElementById('flow-merge-1');
-  if (mergeEl) mergeEl.innerHTML = _buildFlowSVG(Math.min(filtered.length, 3), 'merge');
-
+  if (mergeEl) mergeEl.innerHTML = _buildFlowSVG(Math.min(filtered.length, 4), 'merge');
   // ── Model cards (bottom) ──
   // Derive models: use model_id if set, otherwise infer from type
   const modelMap = {};
@@ -13936,12 +13993,13 @@ function toast(msg, type='') {
 
 // ── api helpers ──
 // ── onboarding wizard ──────────────────────────────────────────────────────
-let _wizStep = 1, _wizLocAdded = false, _wizAgentCreated = false;
+let _wizStep = 1, _wizLocAdded = false, _wizAgentCreated = false, _wizPwChanged = false;
 let _wizAgentKey = '', _wizAgentRole = 'writer';
-const WIZ_TOTAL = 4;
+const WIZ_TOTAL = 6;
 
 function _wizUpdateProgress() {
   const bar = document.getElementById('wizProgress');
+  if (!bar) return;
   bar.innerHTML = Array.from({length: WIZ_TOTAL}, (_, i) => {
     const n = i + 1;
     const cls = n < _wizStep ? 'done' : n === _wizStep ? 'active' : '';
@@ -13954,7 +14012,8 @@ function wizShowStep(n) {
   document.querySelectorAll('.wiz-step').forEach((el, i) => {
     el.classList.toggle('active', i + 1 === n);
   });
-  if (n === 3 && !_wizAgentCreated) {
+  if (n === 3) wizScanCapabilities();
+  if (n === 4 && !_wizAgentCreated) {
     document.getElementById('wiz-agent-key-section').style.display = 'none';
     document.getElementById('wiz-agent-btn').textContent = 'Create agent';
     document.getElementById('wiz-agent-btn').onclick = wizCreateAgent;
@@ -13967,6 +14026,47 @@ function wizShowStep(n) {
 function wizNext() { wizShowStep(_wizStep + 1); }
 function wizPrev() { wizShowStep(_wizStep - 1); }
 function wizSkipStep() { wizNext(); }
+
+async function wizScanCapabilities() {
+  const list = document.getElementById('wiz-cap-list');
+  const note = document.getElementById('wiz-gemini-note');
+  if (!list) return;
+  list.innerHTML = '<div class="loading-indicator" style="grid-column:1/-1">Scanning...</div>';
+  if (note) note.style.display = 'none';
+
+  const r = await api('/api/capabilities');
+  if (r && r.capabilities) {
+    let hasGemini = false;
+    list.innerHTML = r.capabilities.map(c => {
+      const ok = c.detected;
+      if (c.id === 'gemini_cli' && ok) hasGemini = true;
+      return `<li class="wiz-cap-item">
+        <span class="wiz-cap-status ${ok ? 'ok' : 'missing'}"></span>
+        <span>${c.name}</span>
+      </li>`;
+    }).join('');
+    if (!hasGemini && note) note.style.display = 'block';
+  } else {
+    list.innerHTML = '<div style="color:var(--danger);grid-column:1/-1">Scan failed</div>';
+  }
+}
+
+async function wizSetPassword() {
+  const p1 = document.getElementById('wiz-pw-1').value;
+  const p2 = document.getElementById('wiz-pw-2').value;
+  if (!p1) { toast('Enter a new password', 'err'); return; }
+  if (p1.length < 8) { toast('Password must be at least 8 characters', 'err'); return; }
+  if (p1 !== p2) { toast('Passwords do not match', 'err'); return; }
+
+  const r = await api('/api/password/change', { pw_new: p1, pw_confirm: p2 });
+  if (r && r.ok) {
+    _wizPwChanged = true;
+    toast('Password updated', 'ok');
+    wizNext();
+  } else {
+    toast((r && r.error) || 'Failed to update password', 'err');
+  }
+}
 
 async function wizSkip() {
   await api('/api/preferences', { onboarding_complete: true });
@@ -14042,6 +14142,9 @@ function _wizBuildChecklist() {
     { done: _wizAgentCreated,
       label: `Agent created (role: ${_wizAgentRole})`,
       skip:  'No agent connected — add one in Settings → Agents' },
+    { done: _wizPwChanged,
+      label: 'Operator password updated',
+      skip:  'Password not changed — using default "porter"' },
   ];
   document.getElementById('wiz-checklist').innerHTML = items.map(it => `
     <li>
@@ -14054,6 +14157,13 @@ async function wizFinish() {
   await api('/api/preferences', { onboarding_complete: true });
   document.getElementById('wizOverlay').classList.remove('open');
   init(); // refresh sidebar with any newly added locations
+}
+
+async function openWizard() {
+  closeSettings();
+  await api('/api/preferences', { onboarding_complete: false });
+  wizShowStep(1);
+  document.getElementById('wizOverlay').classList.add('open');
 }
 
 async function maybeShowWizard() {
@@ -14155,7 +14265,7 @@ init();
 
     <!-- Step 2: Add Location -->
     <div class="wiz-step" id="wiz-step-2">
-      <div class="wiz-step-badge">Step 1 of 3</div>
+      <div class="wiz-step-badge">Step 1 of 5</div>
       <div class="wiz-title">Add a location</div>
       <div class="wiz-subtitle">Connect a directory on this server. You can add more later in Settings → Locations.</div>
       <div class="wiz-type-cards">
@@ -14194,9 +14304,25 @@ init();
       </div>
     </div>
 
-    <!-- Step 3: Connect Agent -->
+    <!-- Step 3: Capability Scan -->
     <div class="wiz-step" id="wiz-step-3">
-      <div class="wiz-step-badge">Step 2 of 3</div>
+      <div class="wiz-step-badge">Step 2 of 5</div>
+      <div class="wiz-title">Capability Scan</div>
+      <div class="wiz-subtitle">Scanning system for tools and models. Gemini is highly recommended for research.</div>
+      <ul class="wiz-cap-list" id="wiz-cap-list"></ul>
+      <div id="wiz-gemini-note" style="display:none;font-size:12px;color:var(--text3);margin-bottom:16px;background:rgba(247,147,26,.05);padding:10px;border-radius:8px;border:1px solid rgba(247,147,26,.2)">
+        <span style="color:var(--accent)">💡 Tip:</span> <b>Gemini CLI</b> not found. It provides superior research and multimodal capabilities.
+      </div>
+      <div class="wiz-actions">
+        <button class="btn" onclick="wizNext()">Continue</button>
+        <button class="btn-secondary" onclick="wizScanCapabilities()">Re-scan</button>
+        <button class="btn-secondary" onclick="wizPrev()">Back</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Connect Agent -->
+    <div class="wiz-step" id="wiz-step-4">
+      <div class="wiz-step-badge">Step 3 of 5</div>
       <div class="wiz-title">Connect an agent</div>
       <div class="wiz-subtitle">Issue an API key for an AI agent. You can skip this and add agents later in Settings → Agents.</div>
       <div class="settings-field">
@@ -14225,8 +14351,28 @@ init();
       </div>
     </div>
 
-    <!-- Step 4: Complete -->
-    <div class="wiz-step" id="wiz-step-4">
+    <!-- Step 5: Operator Password -->
+    <div class="wiz-step" id="wiz-step-5">
+      <div class="wiz-step-badge">Step 4 of 5</div>
+      <div class="wiz-title">Operator Password</div>
+      <div class="wiz-subtitle">The default password is <code>porter</code>. Change it now to secure your instance.</div>
+      <div class="settings-field">
+        <label>New password</label>
+        <input type="password" class="settings-input" id="wiz-pw-1" placeholder="Minimum 8 characters" />
+      </div>
+      <div class="settings-field">
+        <label>Confirm password</label>
+        <input type="password" class="settings-input" id="wiz-pw-2" placeholder="Repeat password" />
+      </div>
+      <div class="wiz-actions">
+        <button class="btn" onclick="wizSetPassword()">Set Password & Continue</button>
+        <button class="btn-secondary" onclick="wizPrev()">Back</button>
+        <button class="btn-skip" onclick="wizSkipStep()">Keep default</button>
+      </div>
+    </div>
+
+    <!-- Step 6: Complete -->
+    <div class="wiz-step" id="wiz-step-6">
       <div class="wiz-step-badge">Done</div>
       <div class="wiz-title">Porter is ready</div>
       <div class="wiz-subtitle">Here's what was configured. Adjust everything anytime in Settings.</div>
@@ -15109,7 +15255,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.23.6"})
+            self.reply_json({"v": "0.23.7"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -18737,7 +18883,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.23.6 ready (localhost only)")
+    print(f"\n  Porter v0.23.7 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
