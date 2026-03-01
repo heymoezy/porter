@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.23 — Auto-Load Chat"""
+"""Porter v0.25.24 — Dropdown Align"""
 
 
 
@@ -4268,6 +4268,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   -webkit-appearance:none; appearance:none;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='rgba(255,255,255,.4)' stroke-width='1.5'/%3E%3C/svg%3E");
   background-repeat:no-repeat; background-position:right 4px center; padding-right:20px;
+  text-align:right;
 }
 .chat-model-dropdown:hover { color:#fff; }
 .chat-sidebar { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
@@ -5118,7 +5119,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.23</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.24</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6205,6 +6206,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.24', date:'2026-03-01', notes:['UX: model dropdown text right-aligned (close to chevron)'] },
   { ver:'v0.25.23', date:'2026-03-01', notes:['Fix: Chat module visible on page load (active class in static HTML)'] },
   { ver:'v0.25.22', date:'2026-03-01', notes:['Fix: welcome input vertically centered (min-height 100% on welcome container)'] },
   { ver:'v0.25.21', date:'2026-03-01', notes:['Fix: Chat loads instantly on refresh (switchModule before network calls)'] },
@@ -16077,7 +16079,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.23"})
+            self.reply_json({"v": "0.25.24"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17081,7 +17083,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.23'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.24'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20133,7 +20135,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.23 ready (localhost only)")
+    print(f"\n  Porter v0.25.24 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
