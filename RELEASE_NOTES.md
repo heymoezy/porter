@@ -1,5 +1,26 @@
 # Porter Release Notes
 
+## v0.23.0 (2026-03-01)
+
+**Quality, Polish & Intelligence**
+
+### Smart Routing
+- **Porter auto-selects model** based on message content
+- Code/technical → OpenClaw (GPT-5.3 Codex), quick factual → Gemini (fast)
+- Word-boundary matching prevents false positives
+
+### Notifications & Persistence
+- **Notification center** — bell icon shows delegations, tasks, events with timestamps
+- **Chat persistence** — messages survive page reloads (localStorage)
+- **Delegation log** — Admin tab tracks all agent bridge calls
+
+### Quality
+- BrokenPipeError silently suppressed (cleaner logs)
+- Admin health CPU no longer blocks with sleep(0.1)
+- Proper error handling across all API endpoints
+
+---
+
 ## v0.22.6 (2026-03-01)
 
 **Chat Commands + Keyboard Shortcuts + Admin Polish**
