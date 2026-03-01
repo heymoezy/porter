@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.7 — Real-time Orchestrator"""
+"""Porter v0.25.8 — Chat Dispatch, Model Ranking"""
 
 
 
@@ -3937,16 +3937,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 
 /* Admin tab */
 
-/* Admin quick stats */
-.admin-stats-row {
-  display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;
-}
-.admin-stat-card {
-  flex:1; min-width:120px; padding:12px 16px; background:var(--raised);
-  border:1px solid var(--border); border-radius:8px;
-}
-.admin-stat-val { font-size:20px; font-weight:700; color:var(--text); }
-.admin-stat-label { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; margin-top:2px; }
+
 /* Delegation log */
 .deleg-entry {
   display:flex; align-items:center; gap:10px; padding:8px 12px; font-size:12px;
@@ -3962,29 +3953,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 
 .admin-section { margin-bottom:20px; }
 .admin-section-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.6px; margin-bottom:10px; font-weight:600; }
-.admin-grid {
-  display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:10px;
-}
-.admin-card {
-  padding:14px 16px; background:var(--raised); border:1px solid var(--border);
-  border-radius:10px; position:relative;
-}
-.admin-card-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.3px; margin-bottom:6px; }
-.admin-card-value { font-size:22px; font-weight:700; color:var(--text); line-height:1.2; }
-.admin-card-sub { font-size:11px; color:var(--text3); margin-top:4px; }
-.admin-card-bar { height:6px; background:var(--border); border-radius:999px; overflow:hidden; margin-top:8px; }
-.admin-card-bar-fill { height:100%; border-radius:999px; transition:width .3s; }
-.admin-svc-row {
-  display:flex; align-items:center; gap:10px; padding:10px 14px;
-  background:var(--raised); border:1px solid var(--border); border-radius:8px;
-  margin-bottom:6px;
-}
-.admin-svc-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
-.admin-svc-dot.up { background:#22c55e; }
-.admin-svc-dot.down { background:var(--err); }
-.admin-svc-dot.unknown { background:var(--text3); }
-.admin-svc-name { font-size:13px; font-weight:600; color:var(--text); }
-.admin-svc-detail { font-size:11px; color:var(--text3); margin-left:auto; }
+
 .admin-log-controls { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
 .admin-select {
   padding:4px 10px; font-size:11px; border:1px solid var(--border);
@@ -4000,10 +3969,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .admin-log-line-warning { color:var(--accent); }
 .admin-log-line-info { color:var(--text2); }
 .admin-log-line-debug { color:var(--text3); }
-.admin-cfg-table { width:100%; border-collapse:collapse; }
-.admin-cfg-table td { padding:6px 10px; font-size:12px; border-bottom:1px solid var(--border); }
-.admin-cfg-table td:first-child { color:var(--text3); font-weight:500; width:180px; }
-.admin-cfg-table td:last-child { color:var(--text); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; }
+
 
 
 /* Chat routing */
@@ -4133,9 +4099,9 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 
 /* Chat engine */
-.chat-container { display:flex; flex-direction:column; height:calc(100vh - 160px); min-height:400px; }
+.chat-container { display:flex; flex-direction:column; height:calc(100vh - 64px); min-height:400px; position:relative; }
 .chat-header { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--border); margin-bottom:0; flex-shrink:0; }
-.chat-messages { flex:1; overflow-y:auto; padding:16px 0; display:flex; flex-direction:column; gap:10px; }
+.chat-messages { flex:1; overflow-y:auto; padding:16px 0 80px; display:flex; flex-direction:column; gap:10px; }
 .chat-msg { max-width:85%; padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.6; word-break:break-word; white-space:pre-wrap; }
 .chat-msg.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:2px; }
 .chat-msg.assistant { align-self:flex-start; background:var(--raised); border:1px solid var(--border); border-bottom-left-radius:2px; color:var(--text); }
@@ -4216,6 +4182,12 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .chat-dash-action:hover { background:var(--raised); color:var(--text); border-color:var(--accent); }
 
+/* Direct Dispatch bar (inside Chat) */
+.chat-dispatch-section { border-top:1px solid var(--border); flex-shrink:0; }
+.chat-dispatch-toggle { display:flex; align-items:center; gap:6px; padding:8px 16px; width:100%; background:none; border:none; cursor:pointer; color:var(--text3); }
+.chat-dispatch-toggle:hover { background:var(--raised); }
+.chat-dispatch-section.open #dispatch-chevron { transform:rotate(90deg); }
+
 /* Guided tour */
 .tour-overlay { position:fixed; inset:0; z-index:9998; pointer-events:none; }
 .tour-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9997; }
@@ -4242,21 +4214,6 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .tour-btn-primary { background:var(--accent,#6366f1); color:#fff; border-color:var(--accent,#6366f1); }
 .tour-btn-primary:hover { opacity:.9; }
 
-/* Tab help tooltip */
-.tab-help-btn {
-  display:inline-flex; align-items:center; justify-content:center;
-  width:20px; height:20px; border-radius:50%; font-size:11px; font-weight:700;
-  color:var(--text3); border:1px solid var(--border); background:none; cursor:pointer;
-  margin-left:8px; transition:.12s; vertical-align:middle;
-}
-.tab-help-btn:hover { color:var(--accent); border-color:var(--accent); }
-.tab-help-tip {
-  position:absolute; top:100%; left:0; margin-top:8px; padding:10px 14px;
-  background:var(--raised); border:1px solid var(--border); border-radius:8px;
-  font-size:12px; color:var(--text3); line-height:1.5; max-width:280px;
-  box-shadow:0 4px 16px rgba(0,0,0,.3); z-index:100; display:none; white-space:normal;
-}
-.tab-help-tip.show { display:block; }
 
 /* Memory-specific cards (file-focused, distinct from orch-card) */
 .mem-card {
@@ -4291,7 +4248,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .mem-hub-pill.active { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent); }
 
-.chat-input-area { display:flex; gap:8px; padding-top:12px; border-top:1px solid var(--border); flex-shrink:0; align-items:flex-end; }
+.chat-input-area { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--border); flex-shrink:0; align-items:flex-end; background:var(--bg); position:sticky; bottom:0; z-index:10; }
 .chat-input {
   flex:1; padding:10px 14px; border:1px solid var(--border); border-radius:10px;
   background:var(--bg2); color:var(--text); font-size:13px; font-family:inherit;
@@ -5124,7 +5081,7 @@ select.settings-input { padding-right: 26px; }
     </button>
     <button class="mnav-item" id="mnav-admin" onclick="switchModule('admin')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      <span class="mnav-label">Admin</span>
+      <span class="mnav-label">Logs</span>
     </button>
     <button class="mnav-item" id="mnav-policies" style="display:none" onclick="switchModule('policies')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/><circle cx="18" cy="14" r="4"/></svg>
@@ -5157,7 +5114,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.7</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.8</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5251,7 +5208,7 @@ select.settings-input { padding-right: 26px; }
           <div class="chat-empty" id="chat-dashboard">
             <div class="chat-dash">
               <div class="chat-dash-title">Porter</div>
-              <div class="chat-dash-sub">Your AI orchestration hub. Type a message or use a quick action.</div>
+              <div class="chat-dash-sub">Dispatch tasks to agents, chat with AI models, or use quick actions.</div>
               <div id="chat-dash-models" class="chat-dash-grid"></div>
               <div class="chat-dash-actions">
                 <button class="chat-dash-action" onclick="document.getElementById('chat-input').value='/status ';chatSend()">System Status</button>
@@ -5270,6 +5227,36 @@ select.settings-input { padding-right: 26px; }
           <textarea id="chat-input" class="chat-input" placeholder="Type a message&#8230;" rows="1" onkeydown="chatInputKey(event)" oninput="chatAutoResize(this); _acCheck()"></textarea>
           <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
           <button id="chat-send-btn" class="chat-send" onclick="chatSend()" disabled>Send</button>
+        </div>
+      </div>
+
+      <!-- Direct Dispatch (collapsible) -->
+      <div class="chat-dispatch-section" id="chat-dispatch-section">
+        <button class="chat-dispatch-toggle" onclick="toggleDispatchBar()">
+          <span id="dispatch-chevron" style="font-size:10px;transition:.2s;display:inline-block">&#9654;</span>
+          <span style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">Direct Dispatch</span>
+          <span id="dispatch-run-count" style="font-size:10px;color:var(--text3);margin-left:auto"></span>
+        </button>
+        <div id="dispatch-bar" style="display:none">
+          <div style="display:flex;gap:8px;align-items:end;padding:10px 0">
+            <div style="flex:1">
+              <input type="text" id="bridge-prompt" class="settings-input" placeholder="Send a task to an agent..." style="width:100%">
+            </div>
+            <div>
+              <select id="bridge-backend" class="settings-input" style="min-width:120px">
+                <option value="">Auto-route</option>
+                <option value="openclaw">OpenClaw</option>
+                <option value="gemini">Gemini</option>
+                <option value="codex">Codex</option>
+                <option value="claude">Claude</option>
+                <option value="ollama">Ollama</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" onclick="bridgeDispatch()" style="white-space:nowrap">Go</button>
+          </div>
+          <div id="bridge-runs" style="max-height:250px;overflow-y:auto">
+            <div style="color:var(--text3);font-size:12px;text-align:center;padding:12px 0">No recent runs</div>
+          </div>
         </div>
       </div>
     </div>
@@ -5330,6 +5317,15 @@ select.settings-input { padding-right: 26px; }
     <!-- Arrow: Porter → Models (fan-out) -->
     <div class="flow-connector" id="flow-fanout-1"></div>
 
+    <!-- Routing Mode -->
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;margin-top:12px">
+      <span style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Routing</span>
+      <select id="routing-mode-sel" class="settings-input" style="font-size:12px;min-width:180px" onchange="setRoutingMode(this.value)">
+        <option value="auto">Auto-route (content-based)</option>
+        <option value="ranked">Follow rankings</option>
+      </select>
+    </div>
+
     <!-- Models (bottom) -->
     <div class="orch-section">
       <div class="orch-section-label">Models</div>
@@ -5338,33 +5334,7 @@ select.settings-input { padding-right: 26px; }
       </div>
     </div>
 
-    <!-- Bridge Control -->
-    <div class="orch-section" style="margin-top:24px">
-      <div class="orch-section-label">Bridge Control</div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
-        <div style="display:flex;gap:8px;align-items:end;margin-bottom:16px">
-          <div style="flex:1">
-            <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Prompt</label>
-            <input type="text" id="bridge-prompt" class="settings-input" placeholder="Send a task to an agent..." style="width:100%">
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Backend</label>
-            <select id="bridge-backend" class="settings-input" style="min-width:120px">
-              <option value="">Auto-route</option>
-              <option value="openclaw">OpenClaw</option>
-              <option value="gemini">Gemini</option>
-              <option value="codex">Codex</option>
-              <option value="claude">Claude</option>
-              <option value="ollama">Ollama</option>
-            </select>
-          </div>
-          <button class="btn btn-primary" onclick="bridgeDispatch()" style="white-space:nowrap">Go</button>
-        </div>
-        <div id="bridge-runs" style="max-height:300px;overflow-y:auto">
-          <div style="color:var(--text3);font-size:12px;text-align:center;padding:20px 0">No recent runs</div>
-        </div>
-      </div>
-    </div>
+
 
     <!-- Hidden: agent list for settings page -->
     <div id="agents-module-list" style="display:none"></div>
@@ -5706,36 +5676,13 @@ select.settings-input { padding-right: 26px; }
   <!-- Memory tab v4 — Porter memory control center -->
   <div id="admin-module" class="module-panel">
     <div class="module-hdr">
-      <span class="module-title">Admin</span>
+      <span class="module-title">Logs</span>
       <button class="btn btn-ghost" onclick="loadAdmin()">&#8635; Refresh</button>
     </div>
-    <div class="module-intro">System health, logs, and configuration.</div>
-
-    <!-- Quick Stats -->
-    <div id="admin-quick-stats" class="admin-stats-row"></div>
-
-    <!-- Porter Rules -->
-    <div class="admin-section"><div class="admin-section-label">PORTER RULES</div><div id="admin-rules"><div class="loading-indicator">Loading rules</div></div></div>
-
-    <!-- Health Dashboard -->
-    <div class="admin-section">
-      <div class="admin-section-label">SYSTEM HEALTH</div>
-      <div id="admin-health" class="admin-grid">
-        <div class="loading-indicator">Loading health data</div>
-      </div>
-    </div>
-
-    <!-- Service Status -->
-    <div class="admin-section">
-      <div class="admin-section-label">SERVICES</div>
-      <div id="admin-services">
-        <div class="loading-indicator">Checking services</div>
-      </div>
-    </div>
+    <div class="module-intro">Real-time software logs and agent activity.</div>
 
     <!-- Log Viewer -->
     <div class="admin-section">
-      <div class="admin-section-label">LOGS</div>
       <div class="admin-log-controls">
         <select id="admin-log-lines" class="admin-select" onchange="loadAdminLogs()">
           <option value="50">Last 50 lines</option>
@@ -5750,22 +5697,14 @@ select.settings-input { padding-right: 26px; }
         </select>
         <button class="btn btn-ghost" style="font-size:11px" onclick="loadAdminLogs()">&#8635; Refresh</button>
         <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px;margin-left:auto">
-          <input type="checkbox" id="admin-log-auto" onchange="toggleAdminLogAuto()"> Auto-refresh
+          <input type="checkbox" id="admin-log-auto" onchange="toggleAdminLogAuto()" checked> Auto-refresh
         </label>
       </div>
       <pre id="admin-logs" class="admin-log-output">Loading...</pre>
     </div>
 
-    <!-- Delegation Log -->
-    <div class="admin-section"><div class="admin-section-label">DELEGATION LOG</div><div id="admin-deleg-log"><div style="font-size:12px;color:var(--text3);font-style:italic">No delegations yet</div></div></div>
-
-    <!-- Config Summary -->
-    <div class="admin-section">
-      <div class="admin-section-label">CONFIGURATION</div>
-      <div id="admin-config">
-        <div class="loading-indicator">Loading config</div>
-      </div>
-    </div>
+    <!-- Agent Activity -->
+    <div class="admin-section"><div class="admin-section-label">AGENT ACTIVITY</div><div id="admin-deleg-log"><div style="font-size:12px;color:var(--text3);font-style:italic">No delegations yet</div></div></div>
   </div>
 
   <div id="memory-module" class="module-panel">
@@ -6304,6 +6243,18 @@ const CHANGELOG = [
     'New: /api/events endpoint for streaming system-wide updates',
     'New: useEvents React hook for automatic UI invalidation (90% less polling)',
     'Architecture: React migration complete — dist/ is now the primary UI',
+  ]},
+  { ver:'v0.25.8', date:'2026-03-01', notes:[
+    'UX: Bridge Control dispatch merged into Chat tab (unified communication hub)',
+    'UX: Chat input fixed to bottom of screen (ChatGPT/Claude-style)',
+    'New: Model ranking (1-4 priority) with routing mode toggle (auto vs ranked)',
+    'UX: Removed "Used by" coupling from model cards — any agent can use any model',
+    'UX: Removed per-tab ? help buttons (help overlay still accessible via ?)',
+    'UX: Improved cron run display in Workflows (individual run details)',
+    'Backend: _ranked_route() for priority-based model routing',
+    'Backend: model_rankings + routing_mode added to preferences API',
+    'UX: Admin tab renamed to Logs — focused on real-time software logs + agent activity',
+    'Cleanup: Removed System Health, Services, Configuration, Quick Stats from Logs tab',
   ]},
   { ver:'v0.25.7', date:'2026-03-01', notes:[
     'Fix: Projects tab time calculation (time_minutes → time_spent_mins field mapping)',
@@ -8005,7 +7956,7 @@ function switchModule(name) {
     if (el) el.style.display = isFiles ? '' : 'none';
   });
   const loaders = {
-    overview: function() { populateChatModels(); populateChatRoutes(); }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); loadBridgeRuns(); }, projects: loadProjects, admin: loadAdmin,
+    overview: function() { populateChatModels(); populateChatRoutes(); loadBridgeRuns(); }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); _loadRoutingPrefs(); }, projects: loadProjects, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
     tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: function() { loadWorkflows(); loadBuildStatus(); }, memory: loadMemory, settings: syncSettingsUI,
   };
@@ -8120,8 +8071,16 @@ async function loadWorkflows() {
           + '</div>';
       });
       if (runs.length) {
-        html += '<div style="font-size:11px;color:var(--text3);margin-top:8px;padding:0 4px">'
-          + runs.length + ' recent run' + (runs.length !== 1 ? 's' : '') + '</div>';
+        html += '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px 4px">Recent runs</div>';
+        runs.forEach(function(r) {
+          var ts = r.modified ? new Date(r.modified * 1000).toLocaleString() : '';
+          var sizeKb = r.size ? (r.size / 1024).toFixed(1) + 'KB' : '';
+          html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);margin-bottom:4px;font-size:12px">'
+            + '<span style="color:var(--text2)">' + escHtml(r.id || 'run') + '</span>'
+            + '<span style="color:var(--text3);margin-left:auto">' + escHtml(ts) + '</span>'
+            + (sizeKb ? '<span style="color:var(--text3);font-size:10px">' + sizeKb + '</span>' : '')
+            + '</div>';
+        });
       }
       cronListEl.innerHTML = html;
     }
@@ -9888,53 +9847,7 @@ function endTour() {
 // Tour auto-start removed — users can start via ? keyboard shortcut
 
 
-// ── Tab help tooltips ───────────────────────────────────────────────────────
-var _tabHelpTexts = {
-  chat: 'Talk to your AI models. Use /commands for built-in skills, @model to target a specific backend. Smart routing auto-selects the best model.',
-  orchestration: 'See how models work together. Flow diagram shows routing from Porter hub to backends. Live status of each agent.',
-  memory: 'How AI agents remember across sessions. Three layers: Instructions (briefings), Persistent Memory (learned), Session History (raw logs).',
-  extensions: 'Connected integrations (OpenClaw, Gemini) and local tools (ffmpeg, D2, etc). Install or configure backends here.',
-  projects: 'Track active projects and tasks. Each project has its own context, memory plane, and task registry.',
-  workflows: 'Browse OpenClaw skills and manage automations. Skills are agent-invocable commands, automations run on schedules.',
-  locations: 'Manage file system mounts — which directories Porter can browse and edit.',
-  files: 'Browse, edit, upload, and manage files across all mounted locations.',
-  admin: 'System health, service status, logs, configuration. Monitor CPU, RAM, disk, and all connected services.',
-};
 
-function _initTabHelp() {
-  document.querySelectorAll('.module-hdr .module-title').forEach(function(titleEl) {
-    var panel = titleEl.closest('.module-panel');
-    if (!panel) return;
-    var tabId = panel.id ? panel.id.replace('-module','').replace('-panel','') : '';
-    var helpText = _tabHelpTexts[tabId];
-    if (!helpText) return;
-
-    var wrapper = titleEl.parentElement;
-    if (!wrapper) return;
-    wrapper.style.position = 'relative';
-
-    var btn = document.createElement('button');
-    btn.className = 'tab-help-btn';
-    btn.textContent = '?';
-    btn.title = 'About this tab';
-
-    var tip = document.createElement('div');
-    tip.className = 'tab-help-tip';
-    tip.textContent = helpText;
-
-    btn.onclick = function(e) {
-      e.stopPropagation();
-      tip.classList.toggle('show');
-      setTimeout(function() { tip.classList.remove('show'); }, 5000);
-    };
-
-    titleEl.after(btn);
-    btn.after(tip);
-  });
-}
-
-// Init after DOM ready
-try { setTimeout(_initTabHelp, 1000); } catch(e) {}
 
 // ── Chat autocomplete ────────────────────────────────────────────────────
 var _acVisible = false;
@@ -10465,21 +10378,7 @@ async function removeRule(id) {
 }
 
 
-// ── Admin quick stats ─────────────────────────────────────────────────────
-function renderAdminQuickStats(health) {
-  var el = document.getElementById('admin-quick-stats');
-  if (!el) return;
-  var cards = [
-    {val: health.version || '?', label: 'Version'},
-    {val: health.uptime || '?', label: 'Uptime'},
-    {val: (health.services || []).filter(function(s){return s.status==='running'||s.status==='ok'}).length + '/' + (health.services || []).length, label: 'Services Up'},
-    {val: health.cpu_percent ? health.cpu_percent + '%' : '?', label: 'CPU'},
-    {val: health.mem_used_mb ? Math.round(health.mem_used_mb) + ' MB' : '?', label: 'Memory Used'},
-  ];
-  el.innerHTML = cards.map(function(c) {
-    return '<div class="admin-stat-card"><div class="admin-stat-val">' + c.val + '</div><div class="admin-stat-label">' + c.label + '</div></div>';
-  }).join('');
-}
+
 
 async function loadDelegationLog() {
   var el = document.getElementById('admin-deleg-log');
@@ -10504,85 +10403,12 @@ async function loadDelegationLog() {
 }
 
 async function loadAdmin() {
-  loadRules();
   loadDelegationLog();
-  await Promise.all([loadAdminHealth(), loadAdminLogs(), loadAdminConfig()]);
-}
-
-async function loadAdminHealth() {
-  const health = await api('/api/admin/health');
-  if (!health) return;
-  const grid = document.getElementById('admin-health');
-  const svcs = document.getElementById('admin-services');
-  if (!grid || !svcs) return;
-
-  // CPU
-  const cpuPct = health.cpu_percent || 0;
-  const cpuColor = cpuPct > 85 ? 'var(--err)' : cpuPct > 60 ? 'var(--accent)' : '#22c55e';
-
-  // Memory
-  const memTotal = health.mem_total_mb || 0;
-  const memUsed = health.mem_used_mb || 0;
-  const memPct = memTotal ? Math.round(memUsed / memTotal * 100) : 0;
-  const memColor = memPct > 85 ? 'var(--err)' : memPct > 60 ? 'var(--accent)' : '#22c55e';
-
-  // Disk
-  const diskTotal = health.disk_total_gb || 0;
-  const diskUsed = health.disk_used_gb || 0;
-  const diskPct = health.disk_percent || 0;
-  const diskColor = diskPct > 85 ? 'var(--err)' : diskPct > 70 ? 'var(--accent)' : '#22c55e';
-
-  // Swap
-  const swapTotal = health.swap_total_mb || 0;
-  const swapUsed = health.swap_used_mb || 0;
-  const swapPct = swapTotal ? Math.round(swapUsed / swapTotal * 100) : 0;
-
-  grid.innerHTML = ''
-    + '<div class="admin-card">'
-    + '  <div class="admin-card-label">CPU</div>'
-    + '  <div class="admin-card-value">' + cpuPct + '%</div>'
-    + '  <div class="admin-card-sub">' + (health.cpu_count || '?') + ' cores &middot; ' + escHtml(health.cpu_model || 'Unknown') + '</div>'
-    + '  <div class="admin-card-bar"><div class="admin-card-bar-fill" style="width:' + cpuPct + '%;background:' + cpuColor + '"></div></div>'
-    + '</div>'
-    + '<div class="admin-card">'
-    + '  <div class="admin-card-label">Memory</div>'
-    + '  <div class="admin-card-value">' + memUsed.toFixed(0) + ' / ' + memTotal.toFixed(0) + ' MB</div>'
-    + '  <div class="admin-card-sub">' + memPct + '% used</div>'
-    + '  <div class="admin-card-bar"><div class="admin-card-bar-fill" style="width:' + memPct + '%;background:' + memColor + '"></div></div>'
-    + '</div>'
-    + '<div class="admin-card">'
-    + '  <div class="admin-card-label">Disk</div>'
-    + '  <div class="admin-card-value">' + diskUsed.toFixed(1) + ' / ' + diskTotal.toFixed(1) + ' GB</div>'
-    + '  <div class="admin-card-sub">' + diskPct + '% used</div>'
-    + '  <div class="admin-card-bar"><div class="admin-card-bar-fill" style="width:' + diskPct + '%;background:' + diskColor + '"></div></div>'
-    + '</div>'
-    + '<div class="admin-card">'
-    + '  <div class="admin-card-label">Swap</div>'
-    + '  <div class="admin-card-value">' + swapUsed.toFixed(0) + ' / ' + swapTotal.toFixed(0) + ' MB</div>'
-    + '  <div class="admin-card-sub">' + swapPct + '% used</div>'
-    + '  <div class="admin-card-bar"><div class="admin-card-bar-fill" style="width:' + swapPct + '%;background:' + (swapPct > 50 ? 'var(--accent)' : '#22c55e') + '"></div></div>'
-    + '</div>'
-    + '<div class="admin-card">'
-    + '  <div class="admin-card-label">Uptime</div>'
-    + '  <div class="admin-card-value">' + escHtml(health.uptime || 'Unknown') + '</div>'
-    + '  <div class="admin-card-sub">Porter PID ' + (health.porter_pid || '?') + ' &middot; Python ' + escHtml(health.python_version || '?') + '</div>'
-    + '</div>'
-    + '<div class="admin-card">'
-    + '  <div class="admin-card-label">Porter</div>'
-    + '  <div class="admin-card-value">v' + escHtml(health.porter_version || '?') + '</div>'
-    + '  <div class="admin-card-sub">File: ' + ((health.porter_size_kb || 0)).toFixed(0) + ' KB &middot; ' + (health.porter_lines || '?') + ' lines</div>'
-    + '</div>';
-
-  // Services
-  const services = health.services || [];
-  svcs.innerHTML = services.map(function(s) {
-    const dotCls = s.status === 'up' ? 'up' : (s.status === 'down' ? 'down' : 'unknown');
-    return '<div class="admin-svc-row">'
-      + '<div class="admin-svc-dot ' + dotCls + '"></div>'
-      + '<div class="admin-svc-name">' + escHtml(s.name) + '</div>'
-      + '<div class="admin-svc-detail">' + escHtml(s.detail || '') + '</div>'
-      + '</div>';
-  }).join('');
+  await loadAdminLogs();
+  var cb = document.getElementById('admin-log-auto');
+  if (cb && cb.checked && !_adminLogAutoTimer) {
+    _adminLogAutoTimer = setInterval(loadAdminLogs, 5000);
+  }
 }
 
 async function loadAdminLogs() {
@@ -10628,42 +10454,7 @@ function toggleAdminLogAuto() {
   }
 }
 
-async function loadAdminConfig() {
-  const data = await api('/api/config/summary');
-  if (!data) return;
-  const el = document.getElementById('admin-config');
-  if (!el) return;
 
-  const rows = [];
-  // Auth
-  rows.push(['Username', data.auth ? data.auth.username : '?']);
-  rows.push(['Auth mode', data.auth ? data.auth.mode : '?']);
-  rows.push(['Session TTL', data.auth ? (data.auth.session_ttl / 3600).toFixed(0) + ' hours' : '?']);
-  rows.push(['Display name', data.auth ? (data.auth.display_name || data.auth.full_name || '-') : '?']);
-  // Runtime
-  if (data.runtime) {
-    rows.push(['Data directory', data.runtime.runtime_dir || '?']);
-    rows.push(['Memory directory', data.runtime.memory_dir || '?']);
-    rows.push(['Namespaces', (data.runtime.namespaces || []).join(', ') || '-']);
-  }
-  // Locations
-  if (data.locations) {
-    data.locations.forEach(function(loc) {
-      const status = loc.exists ? (loc.writable ? 'writable' : 'read-only') : 'missing';
-      rows.push(['Location: ' + (loc.label || loc.id), loc.path + ' (' + status + ')']);
-    });
-  }
-  // Agents
-  if (data.agents) {
-    data.agents.forEach(function(a) {
-      rows.push(['Agent: ' + (a.name || a.id), (a.type || '?') + ' / ' + (a.role || '?') + ' / ' + (a.status || '?')]);
-    });
-  }
-
-  el.innerHTML = '<table class="admin-cfg-table">' + rows.map(function(r) {
-    return '<tr><td>' + escHtml(r[0]) + '</td><td>' + escHtml(r[1]) + '</td></tr>';
-  }).join('') + '</table>';
-}
 
 // ── Tools module ──
 async function loadTools() {
@@ -11557,7 +11348,7 @@ function renderOrchestration(agents, providers) {
             <button class="orch-card-gear" onclick="openConfigPanel('agent','${esc(a.id)}')" title="Configure">&#9881;</button>
           </div>
           <div class="orch-card-sub">${escHtml(connMethod)}${provBadge}</div>
-          ${modelName ? `<div class="orch-card-model">Model: ${escHtml(modelName)}${preferredModel && inferredModel && inferredModel.toLowerCase() === preferredModel.toLowerCase() ? ' <span style="font-size:10px;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:1px 5px;margin-left:4px">preferred</span>' : ''}</div>` : ''}
+          ${modelName ? `<div class="orch-card-model">Default model: ${escHtml(modelName)}${preferredModel && inferredModel && inferredModel.toLowerCase() === preferredModel.toLowerCase() ? ' <span style="font-size:10px;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:1px 5px;margin-left:4px">preferred</span>' : ''}</div>` : ''}
           ${usageBar}
           ${liveInfo}
         </div>`;
@@ -11606,7 +11397,7 @@ function renderOrchestration(agents, providers) {
             <button class="orch-card-gear" onclick="openConfigPanel('model','${esc(m.model_id)}')" title="Configure">&#9881;</button>
           </div>
           ${m.opt ? `<div class="orch-card-opt">Optimized for: ${escHtml(m.opt)}</div>` : ''}
-          <div class="orch-card-sub" style="margin-top:4px">Used by: ${m.agents.map(n=>escHtml(n)).join(', ')}</div>
+          ${_getModelRankBadge(m.model_id)}
         </div>`;
       }).join('');
     }
@@ -11710,7 +11501,7 @@ function openConfigPanel(type, id) {
         <div style="margin-bottom:16px">
           <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Connection</div>
           <div style="font-size:13px;color:var(--text2)">${escHtml(_agentConnectionMethod(a))}</div>
-          ${modelName ? `<div style="font-size:12px;color:var(--text3);margin-top:4px">Model: ${escHtml(modelName)}</div>` : ''}
+          ${modelName ? `<div style="font-size:12px;color:var(--text3);margin-top:4px">Default model: ${escHtml(modelName)}</div>` : ''}
         </div>
         ${a.raw_key ? `
         <div style="margin-bottom:16px">
@@ -11774,13 +11565,20 @@ function openConfigPanel(type, id) {
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Optimized for</div>
         <div style="font-size:13px;color:var(--text2)">${escHtml(opt)}</div>
       </div>` : ''}
-      ${usedBy.length ? `<div style="margin-bottom:16px">
-        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Used by</div>
-        <div style="font-size:13px;color:var(--text2)">${usedBy.map(n=>escHtml(n)).join(', ')}</div>
-      </div>` : ''}
+      <div style="margin-bottom:16px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Routing Rank</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <select class="settings-input" style="width:80px" onchange="saveModelRanking('${esc(id)}', this.value)">
+            <option value=""${!_getModelRank(id) ? ' selected' : ''}>None</option>
+            <option value="1"${_getModelRank(id)==='1' ? ' selected' : ''}>1 (highest)</option>
+            <option value="2"${_getModelRank(id)==='2' ? ' selected' : ''}>2</option>
+            <option value="3"${_getModelRank(id)==='3' ? ' selected' : ''}>3</option>
+            <option value="4"${_getModelRank(id)==='4' ? ' selected' : ''}>4 (lowest)</option>
+          </select>
+          <span style="font-size:12px;color:var(--text3)">Used when routing mode is "Follow rankings"</span>
+        </div>
+      </div>
       <div style="display:flex;flex-direction:column;gap:8px;padding-top:14px;border-top:1px solid var(--border)">
-        <button class="btn btn-ghost" style="text-align:left" onclick="setPreferredModelFromConfig('${esc(id)}')">${isPreferred ? 'Preferred model (active)' : 'Set as preferred model'}</button>
-        <button class="btn btn-ghost" style="text-align:left" onclick="clearPreferredModelFromConfig()">Clear preferred model</button>
         ${testAgent ? `<button class="btn btn-ghost" style="text-align:left" onclick="doTestAgent('${esc(testAgent.id)}','${escHtml(testAgent.name)}')">Test connection via ${escHtml(testAgent.name)}</button>` : '<div style="font-size:12px;color:var(--text3)">No linked agent to test connection</div>'}
       </div>
       <div style="padding-top:10px;font-size:12px;color:var(--text3)">
@@ -11806,6 +11604,48 @@ async function setPreferredModelFromConfig(modelId) {
 
 async function clearPreferredModelFromConfig() {
   await setPreferredModelFromConfig('');
+}
+
+function _getModelRank(modelId) {
+  var prefs = window._currentPrefs || {};
+  var rankings = prefs.model_rankings || {};
+  return String(rankings[modelId] || rankings[modelId.toLowerCase()] || '');
+}
+
+function _getModelRankBadge(modelId) {
+  var rank = _getModelRank(modelId);
+  if (!rank) return '';
+  var colors = {'1':'#22c55e','2':'#3b82f6','3':'#f59e0b','4':'#94a3b8'};
+  var c = colors[rank] || 'var(--text3)';
+  return '<div style="margin-top:4px"><span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;font-size:11px;font-weight:700;border:1.5px solid '+c+';color:'+c+'">'+rank+'</span><span style="font-size:11px;color:var(--text3);margin-left:6px">priority</span></div>';
+}
+
+async function saveModelRanking(modelId, rank) {
+  var prefs = window._currentPrefs || {};
+  var rankings = prefs.model_rankings || {};
+  if (rank) { rankings[modelId] = rank; } else { delete rankings[modelId]; }
+  var res = await api('/api/preferences', { model_rankings: rankings });
+  if (res && res.ok) {
+    if (!window._currentPrefs) window._currentPrefs = {};
+    window._currentPrefs.model_rankings = rankings;
+    toast('Model rank updated', 'ok');
+    if (window._lastAgents) renderOrchestration(window._lastAgents, window._lastAiProviders || []);
+  } else { toast('Failed to save ranking', 'err'); }
+}
+
+async function setRoutingMode(mode) {
+  var res = await api('/api/preferences', { routing_mode: mode });
+  if (res && res.ok) {
+    if (!window._currentPrefs) window._currentPrefs = {};
+    window._currentPrefs.routing_mode = mode;
+    toast('Routing mode: ' + (mode === 'ranked' ? 'Follow rankings' : 'Auto-route'), 'ok');
+  } else { toast('Failed to update routing mode', 'err'); }
+}
+
+function _loadRoutingPrefs() {
+  var prefs = window._currentPrefs || {};
+  var sel = document.getElementById('routing-mode-sel');
+  if (sel) sel.value = prefs.routing_mode || 'auto';
 }
 
 function closeConfigPanel() {
@@ -12354,13 +12194,24 @@ async function bridgeDispatch() {
   } catch(e) { toast('Dispatch error: ' + e.message, 'err'); }
 }
 
+function toggleDispatchBar() {
+  var sec = document.getElementById('chat-dispatch-section');
+  var bar = document.getElementById('dispatch-bar');
+  if (!sec || !bar) return;
+  var isOpen = bar.style.display !== 'none';
+  bar.style.display = isOpen ? 'none' : '';
+  sec.classList.toggle('open', !isOpen);
+}
+
 async function loadBridgeRuns() {
   const el = document.getElementById('bridge-runs');
   if (!el) return;
   try {
     const data = await api('/api/bridge/runs');
     if (!data || !data.runs || !data.runs.length) {
-      el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:20px 0">No recent runs</div>';
+      el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px 0">No recent runs</div>';
+      var countEl = document.getElementById('dispatch-run-count');
+      if (countEl) countEl.textContent = '';
       return;
     }
     el.innerHTML = data.runs.map(r => {
@@ -15424,10 +15275,45 @@ def _log_delegation(backend, message, result, duration_ms):
             _delegation_log.pop(0)
 
 
+def _ranked_route():
+    """Route based on user-configured model rankings.
+    Returns (backend, model) tuple, or None if no rankings configured.
+    """
+    prefs = _config.get("preferences", {})
+    rankings = prefs.get("model_rankings", {})
+    if not rankings:
+        return None
+    # rankings is {model_id: rank_int} where 1=highest priority
+    # Map model_id patterns to backends
+    model_backend = {
+        "gpt-5.3-codex": "openclaw",
+        "openclaw": "openclaw",
+        "claude": "claude",
+        "gemini": "gemini",
+        "ollama": "ollama",
+        "codex": "codex",
+        "qwen": "ollama",
+    }
+    # Sort by rank (lowest number = highest priority)
+    sorted_models = sorted(rankings.items(), key=lambda x: int(x[1]) if str(x[1]).isdigit() else 99)
+    for model_id, rank in sorted_models:
+        mid = model_id.lower()
+        for pattern, backend in model_backend.items():
+            if pattern in mid:
+                return (backend, None)
+    return None
+
+
 def _smart_route(message):
     """Decide which backend to use based on message content.
     Returns (backend, model) tuple.
     """
+    # If routing_mode is "ranked", use user-configured rankings
+    prefs = _config.get("preferences", {})
+    if prefs.get("routing_mode") == "ranked":
+        ranked = _ranked_route()
+        if ranked:
+            return ranked
     msg = message.lower().strip()
 
     # Code-related keywords → OpenClaw (Codex is best at code)
@@ -16214,7 +16100,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.7"})
+            self.reply_json({"v": "0.25.8"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17218,7 +17104,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.7'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.8'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -19367,7 +19253,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                        "policy_preset", "setup_profile", "skills_routing", "memory_mode",
                        "behavior_preset", "memory_visibility", "usage_warn_threshold",
                        "skills_safe_mode", "external_send_approval", "preferred_model",
-                       "context_compression", "fallback_chain", "timezone"}
+                       "context_compression", "fallback_chain", "timezone",
+                       "model_rankings", "routing_mode"}
             for k, v in data.items():
                 if k in allowed:
                     prefs[k] = v
@@ -20269,7 +20156,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.7 ready (localhost only)")
+    print(f"\n  Porter v0.25.8 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
