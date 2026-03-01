@@ -159,6 +159,7 @@ def _db_init():
         CREATE TABLE IF NOT EXISTS tasks (
             id TEXT PRIMARY KEY,
             project_id TEXT,
+            username TEXT,
             title TEXT NOT NULL,
             description TEXT,
             status TEXT NOT NULL DEFAULT 'pending',
@@ -615,7 +616,7 @@ def _migrate_checkpoint_to_registry():
 """
     checkpoint_path.write_text(deprecated_header + raw, encoding="utf-8")
     if migrated:
-        _log(f"Checkpoint migration: {migrated} items migrated to task registry")
+        log.info("Checkpoint migration: %d items migrated to task registry", migrated)
 
 
 def _time_ago(ts: float) -> str:
@@ -2497,10 +2498,9 @@ def _pep_idem_store(ikey: str, result: dict) -> None:
 
 
 ROLE_CAPS: dict[str, set] = {
-    "viewer":   {"read"},
-    "writer":   {"read", "write", "checkpoint"},
-    "operator": {"read", "write", "checkpoint", "finalize"},
-    "admin":    {"read", "write", "checkpoint", "finalize", "admin"},
+    "viewer":   {"read", "chat_read", "task_read"},
+    "operator": {"read", "write", "chat_read", "chat_write", "task_read", "task_write", "file_read", "file_write", "orch_read", "orch_write", "checkpoint", "finalize"},
+    "admin":    {"read", "write", "chat_read", "chat_write", "task_read", "task_write", "file_read", "file_write", "orch_read", "orch_write", "checkpoint", "finalize", "admin", "user_manage"},
 }
 
 # ── config helpers ────────────────────────────────────────────────────────
@@ -2998,9 +2998,12 @@ def get_session(token: str, ip: str = None, ua: str = None) -> dict | None:
     try:
         conn = _db_conn()
         now = time.time()
-        row = conn.execute(
-            "SELECT username, expires, ip_address, user_agent FROM sessions WHERE token = ?", (token,)
-        ).fetchone()
+        row = conn.execute("""
+            SELECT s.username, s.expires, s.ip_address, s.user_agent, u.role
+            FROM sessions s
+            LEFT JOIN users u ON s.username = u.username
+            WHERE s.token = ?
+        """, (token,)).fetchone()
         if not row:
             conn.close()
             return None
@@ -3018,7 +3021,13 @@ def get_session(token: str, ip: str = None, ua: str = None) -> dict | None:
         
         conn.commit()
         conn.close()
-        return {"username": row["username"], "expires": row["expires"], "ip": row["ip_address"], "ua": row["user_agent"]}
+        return {
+            "username": row["username"], 
+            "expires": row["expires"], 
+            "ip": row["ip_address"], 
+            "ua": row["user_agent"],
+            "role": row["role"] or "operator"
+        }
     except Exception as e:
         log.debug("Session DB read failed: %s", e)
         return None
@@ -12195,7 +12204,7 @@ function _showModal(title, bodyHtml) {
   overlay.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
     + '<div style="font-size:14px;font-weight:600;color:var(--text)">' + escHtml(title) + '</div>'
-    + '<button class="btn btn-ghost" onclick="document.getElementById(\'bridge-modal-overlay\').remove()">&times;</button>'
+    + '<button class="btn btn-ghost" onclick="var o=document.getElementById(&quot;bridge-modal-overlay&quot;);if(o)o.remove()">&times;</button>'
     + '</div>' + bodyHtml + '</div>';
   overlay.style.display = 'flex';
 }
@@ -15759,12 +15768,20 @@ class Handler(BaseHTTPRequestHandler):
     def auth_check_cap(self, capability: str) -> bool:
         """Auth check that accepts a session cookie (browser) OR a Bearer token with
         the required capability (agent).  Sends 401/403 JSON and returns False on denial."""
-        # Browser session → full access
+        # Browser session → check role capabilities
         token = self.get_session_token()
         ip = self.client_address[0]
         ua = self.headers.get("User-Agent", "")
-        if token and get_session(token, ip=ip, ua=ua):
-            return True
+        if token:
+            session = get_session(token, ip=ip, ua=ua)
+            if session:
+                role = session.get("role", "operator")
+                if capability in ROLE_CAPS.get(role, set()):
+                    return True
+                self.reply_json({"error": "forbidden",
+                                 "reason": f"role '{role}' lacks '{capability}' capability"}, 403)
+                return False
+
         # Agent Bearer token → check capability
         agent = self.get_agent_from_bearer()
         if agent:
@@ -16812,7 +16829,14 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── G1: task registry (GET list + GET single) ──────────────────────────
         elif parsed.path == "/api/task-registry" or parsed.path.startswith("/api/task-registry/"):
-            if not self.auth_check(redirect=False): return
+            token = self.get_session_token()
+            session = get_session(token, ip=self.client_address[0], ua=self.headers.get("User-Agent", ""))
+            if not session or "task_read" not in ROLE_CAPS.get(session.get("role"), set()):
+                self.reply_json({"error": "unauthorized"}, 401); return
+            
+            username = session["username"]
+            role = session["role"]
+
             # single task?
             if parsed.path.startswith("/api/task-registry/"):
                 tid = parsed.path[len("/api/task-registry/"):].strip("/")
@@ -16820,8 +16844,14 @@ class Handler(BaseHTTPRequestHandler):
                     task = dict(_treg.get(tid, {}))
                 if not task:
                     self.reply_json({"ok": False, "error": "not found"}, 404); return
+                
+                # Check ownership
+                if role != "admin" and task.get("username") != username:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
+
                 self.reply_json({"ok": True, "task": task})
                 return
+            
             # list with optional filters
             filt_status  = qs.get("status",     [""])[0].strip()
             filt_project = qs.get("project_id", [""])[0].strip()
@@ -16829,6 +16859,10 @@ class Handler(BaseHTTPRequestHandler):
             filt_tag     = qs.get("tag",         [""])[0].strip()
             with _treg_lock:
                 tasks = list(_treg.values())
+            
+            # RBAC Filter
+            if role != "admin":
+                tasks = [t for t in tasks if t.get("username") == username]
             statuses = [s.strip() for s in filt_status.split(",") if s.strip()] if filt_status else []
             if statuses:
                 tasks = [t for t in tasks if t.get("status") in statuses]
@@ -17176,16 +17210,32 @@ class Handler(BaseHTTPRequestHandler):
                     log.debug("Skip probe: %s", e)
 
         elif parsed.path == "/api/chat/sessions":
-            if not self.auth_check(redirect=False): return
+            token = self.get_session_token()
+            session = get_session(token, ip=self.client_address[0], ua=self.headers.get("User-Agent", ""))
+            if not session or "chat_read" not in ROLE_CAPS.get(session.get("role"), set()):
+                self.reply_json({"error": "unauthorized"}, 401); return
+            
+            username = session["username"]
+            role = session["role"]
             sessions = []
             try:
                 conn = _db_conn()
-                rows = conn.execute("""
-                    SELECT c.id, c.title, c.model_id, c.updated_at,
-                           (SELECT count(*) FROM chat_messages WHERE chat_id = c.id) as msg_count
-                    FROM chats c
-                    ORDER BY c.updated_at DESC
-                """).fetchall()
+                # Admins see all, others only see their own
+                if role == "admin":
+                    rows = conn.execute("""
+                        SELECT c.id, c.title, c.model_id, c.updated_at, c.username,
+                               (SELECT count(*) FROM chat_messages WHERE chat_id = c.id) as msg_count
+                        FROM chats c
+                        ORDER BY c.updated_at DESC
+                    """).fetchall()
+                else:
+                    rows = conn.execute("""
+                        SELECT c.id, c.title, c.model_id, c.updated_at, c.username,
+                               (SELECT count(*) FROM chat_messages WHERE chat_id = c.id) as msg_count
+                        FROM chats c
+                        WHERE c.username = ? OR c.username IS NULL
+                        ORDER BY c.updated_at DESC
+                    """, (username,)).fetchall()
                 conn.close()
                 for r in rows:
                     sessions.append({
@@ -18782,7 +18832,13 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
         # ── Gap30: Direct model prompt (POST) ────────────────────────────────
 
         elif parsed.path == "/api/chat":
-            if not self.auth_check(redirect=False): return
+            token = self.get_session_token()
+            session = get_session(token, ip=self.client_address[0], ua=self.headers.get("User-Agent", ""))
+            if not session or "chat_read" not in ROLE_CAPS.get(session.get("role"), set()):
+                self.reply_json({"error": "unauthorized"}, 401); return
+            
+            username = session["username"]
+            role = session["role"]
             data = self.read_json_body()
             action = data.get("action", "")
 
@@ -18790,7 +18846,11 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 chat_id = data.get("chat_id", "")
                 try:
                     conn = _db_conn()
-                    c = conn.execute("SELECT * FROM chats WHERE id = ?", (chat_id,)).fetchone()
+                    if role == "admin":
+                        c = conn.execute("SELECT * FROM chats WHERE id = ?", (chat_id,)).fetchone()
+                    else:
+                        c = conn.execute("SELECT * FROM chats WHERE id = ? AND (username = ? OR username IS NULL)", (chat_id, username)).fetchone()
+                    
                     if not c:
                         self.reply_json({"ok": False, "error": "Chat not found"}, 404)
                         conn.close()
@@ -18832,7 +18892,10 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 chat_id = data.get("chat_id", "")
                 try:
                     conn = _db_conn()
-                    conn.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
+                    if role == "admin":
+                        conn.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
+                    else:
+                        conn.execute("DELETE FROM chats WHERE id = ? AND (username = ? OR username IS NULL)", (chat_id, username))
                     conn.commit()
                     conn.close()
                     self.reply_json({"ok": True})
@@ -18846,13 +18909,66 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     self.reply_json({"ok": False, "error": "Empty title"}, 400); return
                 try:
                     conn = _db_conn()
-                    conn.execute("UPDATE chats SET title = ? WHERE id = ?", (title, chat_id))
+                    if role == "admin":
+                        conn.execute("UPDATE chats SET title = ? WHERE id = ?", (title, chat_id))
+                    else:
+                        conn.execute("UPDATE chats SET title = ? WHERE id = ? AND (username = ? OR username IS NULL)", (title, chat_id, username))
                     conn.commit()
                     conn.close()
                     self.reply_json({"ok": True})
                 except Exception as e:
                     self.reply_json({"ok": False, "error": str(e)}, 500)
 
+            else:
+                self.reply_json({"ok": False, "error": "Unknown action"}, 400)
+
+        elif parsed.path == "/api/admin/users":
+            if not self.auth_check_cap("user_manage"): return
+            data = self.read_json_body()
+            action = data.get("action", "")
+
+            if action == "list":
+                try:
+                    conn = _db_conn()
+                    rows = conn.execute("SELECT username, display_name, full_name, email, role, created_at FROM users").fetchall()
+                    conn.close()
+                    self.reply_json({"ok": True, "users": [dict(r) for r in rows]})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
+
+            elif action == "update_role":
+                target_user = data.get("username", "")
+                new_role = data.get("role", "")
+                if not target_user or new_role not in ROLE_CAPS:
+                    self.reply_json({"ok": False, "error": "Invalid user or role"}, 400); return
+                
+                # Prevent self-demotion
+                current_user = get_session(self.get_session_token())["username"]
+                if target_user == current_user:
+                    self.reply_json({"ok": False, "error": "Cannot change your own role"}, 400); return
+
+                try:
+                    conn = _db_conn()
+                    conn.execute("UPDATE users SET role = ? WHERE username = ?", (new_role, target_user))
+                    conn.commit()
+                    conn.close()
+                    self.reply_json({"ok": True})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
+
+            elif action == "delete":
+                target_user = data.get("username", "")
+                current_user = get_session(self.get_session_token())["username"]
+                if target_user == current_user:
+                    self.reply_json({"ok": False, "error": "Cannot delete yourself"}, 400); return
+                try:
+                    conn = _db_conn()
+                    conn.execute("DELETE FROM users WHERE username = ?", (target_user,))
+                    conn.commit()
+                    conn.close()
+                    self.reply_json({"ok": True})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
             else:
                 self.reply_json({"ok": False, "error": "Unknown action"}, 400)
 
@@ -19305,13 +19421,26 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
 
         # ── G1: task registry mutations ──────────────────────────────────────────
         elif parsed.path == "/api/task-registry":
-            if not self.auth_check(redirect=False): return
+            token = self.get_session_token()
+            session = get_session(token, ip=self.client_address[0], ua=self.headers.get("User-Agent", ""))
+            if not session:
+                self.reply_json({"error": "unauthorized"}, 401); return
+            
+            username = session["username"]
+            role = session["role"]
+            caps = ROLE_CAPS.get(role, set())
+            
+            if "task_read" not in caps:
+                self.reply_json({"error": "forbidden", "reason": "lacks task_read capability"}, 403); return
+
             data   = self.read_json_body()
             action = str(data.get("action", "")).strip()
             now    = time.time()
-            actor  = _config.get("username", "admin")
+            actor  = username
 
             if action == "create":
+                if "task_write" not in caps:
+                    self.reply_json({"error": "forbidden"}, 403); return
                 title = str(data.get("title", "")).strip()
                 if not title:
                     self.reply_json({"ok": False, "error": "title required"}); return
@@ -19335,6 +19464,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     "tags":              [str(t).strip() for t in (data.get("tags") or []) if str(t).strip()],
                     "assigned_agent_id": data.get("assigned_agent_id") or None,
                     "created_by":        actor,
+                    "username":          username,
                     "created_at":        now,
                     "updated_at":        now,
                     "result":            None,
@@ -19347,6 +19477,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": True, "task": task})
 
             elif action == "update_status":
+                if "task_write" not in caps:
+                    self.reply_json({"error": "forbidden"}, 403); return
                 tid    = str(data.get("task_id", "")).strip()
                 status = str(data.get("status",  "")).strip()
                 valid  = {"pending","in_progress","complete","completed","done","failed","cancelled"}
@@ -19356,6 +19488,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     task = _treg.get(tid)
                     if not task:
                         self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    if role != "admin" and task.get("username") != username:
+                        self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                     task["status"]     = status
                     task["updated_at"] = now
                     # Optional metrics
@@ -19370,12 +19504,16 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": True, "task": task})
 
             elif action == "assign":
+                if "task_write" not in caps:
+                    self.reply_json({"error": "forbidden"}, 403); return
                 tid      = str(data.get("task_id",  "")).strip()
                 agent_id = str(data.get("agent_id", "") or "").strip() or None
                 with _treg_lock:
                     task = _treg.get(tid)
                     if not task:
                         self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    if role != "admin" and task.get("username") != username:
+                        self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                     task["assigned_agent_id"] = agent_id
                     task["updated_at"]        = now
                     if agent_id and task["status"] == "pending":
@@ -19386,12 +19524,16 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": True, "task": task})
 
             elif action == "complete":
+                if "task_write" not in caps:
+                    self.reply_json({"error": "forbidden"}, 403); return
                 tid    = str(data.get("task_id", "")).strip()
                 result = str(data.get("result",  "") or "").strip() or None
                 with _treg_lock:
                     task = _treg.get(tid)
                     if not task:
                         self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    if role != "admin" and task.get("username") != username:
+                        self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                     task["status"]     = "complete"
                     task["result"]     = result
                     task["updated_at"] = now
@@ -19400,12 +19542,16 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": True, "task": task})
 
             elif action == "fail":
+                if "task_write" not in caps:
+                    self.reply_json({"error": "forbidden"}, 403); return
                 tid    = str(data.get("task_id", "")).strip()
                 result = str(data.get("result",  "") or "").strip() or None
                 with _treg_lock:
                     task = _treg.get(tid)
                     if not task:
                         self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    if role != "admin" and task.get("username") != username:
+                        self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                     task["status"]     = "failed"
                     task["result"]     = result
                     task["updated_at"] = now
@@ -19414,11 +19560,15 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": True, "task": task})
 
             elif action == "cancel":
+                if "task_write" not in caps:
+                    self.reply_json({"error": "forbidden"}, 403); return
                 tid = str(data.get("task_id", "")).strip()
                 with _treg_lock:
                     task = _treg.get(tid)
                     if not task:
                         self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    if role != "admin" and task.get("username") != username:
+                        self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                     task["status"]     = "cancelled"
                     task["updated_at"] = now
                 _treg_save(task)
@@ -19426,23 +19576,35 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": True, "task": task})
 
             elif action == "add_result":
+                if "task_write" not in caps:
+                    self.reply_json({"error": "forbidden"}, 403); return
                 tid    = str(data.get("task_id", "")).strip()
                 result = str(data.get("result",  "") or "").strip()
                 with _treg_lock:
                     task = _treg.get(tid)
                     if not task:
                         self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    if role != "admin" and task.get("username") != username:
+                        self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                     task["result"]     = result
                     task["updated_at"] = now
                 _treg_save(task)
                 self.reply_json({"ok": True, "task": task})
 
             elif action == "claim":
+                if "task_write" not in caps:
+                    self.reply_json({"error": "forbidden"}, 403); return
                 tid = str(data.get("task_id", "")).strip()
                 with _treg_lock:
                     task = _treg.get(tid)
                     if not task:
                         self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    # Claiming is special: you claim an UNOWNED task or any task if you have permission
+                    # but typically you only claim tasks in your project or assigned to you.
+                    # For now, allow claiming if you see it (which means it's yours or you are admin)
+                    if role != "admin" and task.get("username") != username:
+                        self.reply_json({"ok": False, "error": "forbidden"}, 403); return
+
                     if task["status"] != "pending":
                         self.reply_json({"ok": False, "error": f"task is not pending (status: {task['status']})"}); return
                     task["assigned_agent_id"] = actor
@@ -19453,11 +19615,16 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": True, "task": task})
 
             elif action == "rebuild":
+                if "task_write" not in caps:
+                    self.reply_json({"error": "forbidden"}, 403); return
                 tid = str(data.get("id", "")).strip()
                 with _treg_lock:
                     task = _treg.get(tid)
                 if not task:
                     self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                if role != "admin" and task.get("username") != username:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
+                
                 if task.get("status") != "pending":
                     self.reply_json({"ok": False, "error": "only pending tasks can be rebuilt"}, 400); return
                 fp = TASKS_REGISTRY_DIR / f"{tid}.json"
@@ -19467,6 +19634,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     fresh["result"] = None
                     fresh["tokens_used"] = None
                     fresh["time_spent_mins"] = None
+                    # Keep owner!
+                    fresh["username"] = task.get("username")
                     fp.write_text(json.dumps(fresh, indent=2, default=str), encoding="utf-8")
                     with _treg_lock:
                         _treg[tid] = fresh
@@ -19475,11 +19644,17 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": True, "task": task})
 
             elif action == "delete":
+                if "task_write" not in caps:
+                    self.reply_json({"error": "forbidden"}, 403); return
                 tid = str(data.get("task_id", "")).strip()
                 with _treg_lock:
-                    task = _treg.pop(tid, None)
-                if not task:
-                    self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    task = _treg.get(tid)
+                    if not task:
+                        self.reply_json({"ok": False, "error": "task not found"}, 404); return
+                    if role != "admin" and task.get("username") != username:
+                        self.reply_json({"ok": False, "error": "forbidden"}, 403); return
+                    _treg.pop(tid, None)
+                
                 fp = TASKS_REGISTRY_DIR / f"{tid}.json"
                 try:
                     fp.unlink(missing_ok=True)
