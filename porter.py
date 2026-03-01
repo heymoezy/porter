@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.5 — Real-time Orchestrator"""
+"""Porter v0.25.6 — Real-time Orchestrator"""
 
 
 
@@ -5155,7 +5155,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.5</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.6</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5656,6 +5656,40 @@ select.settings-input { padding-right: 26px; }
       <button class="btn btn-ghost" onclick="loadWorkflows()">&#8635; Refresh</button>
     </div>
     <div class="module-intro">Scheduled automations and cron jobs.</div>
+
+    <!-- Build Workflow section -->
+    <div style="margin-bottom:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">Build Workflow</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Dispatch a build task to an agent. Porter handles dispatch, tracking, and optionally commits + restarts.</div>
+        <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <label style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);display:block;margin-bottom:3px">Task</label>
+            <input type="text" id="build-task" class="settings-input" placeholder="Describe the build task..." style="width:100%">
+          </div>
+          <div>
+            <label style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);display:block;margin-bottom:3px">Agent</label>
+            <select id="build-backend" class="settings-input" style="min-width:100px">
+              <option value="">Auto</option>
+              <option value="openclaw">OpenClaw</option>
+              <option value="codex">Codex</option>
+              <option value="claude">Claude</option>
+              <option value="gemini">Gemini</option>
+            </select>
+          </div>
+          <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="checkbox" id="build-auto-commit"> Auto-commit
+          </label>
+          <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="checkbox" id="build-auto-restart"> Auto-restart
+          </label>
+          <button class="btn btn-primary" onclick="runBuild()" style="white-space:nowrap">Run</button>
+        </div>
+        <div id="build-runs" style="margin-top:12px;max-height:250px;overflow-y:auto"></div>
+      </div>
+    </div>
 
     <!-- Automations / Cron section -->
     <div style="margin-bottom:16px">
@@ -6268,6 +6302,12 @@ const CHANGELOG = [
     'New: /api/events endpoint for streaming system-wide updates',
     'New: useEvents React hook for automatic UI invalidation (90% less polling)',
     'Architecture: React migration complete — dist/ is now the primary UI',
+  ]},
+  { ver:'v0.25.6', date:'2026-03-01', notes:[
+    'New: Build Workflow — dispatch build tasks to agents from Workflows tab',
+    'New: POST /api/build/run + GET /api/build/status endpoints',
+    'New: Auto-commit and auto-restart toggles for autonomous builds',
+    'Architecture: Build runs tracked in agent_messages with build- prefix run_ids',
   ]},
   { ver:'v0.25.5', date:'2026-03-01', notes:[
     'UX: Skills moved to dedicated nav tab (was inside Workflows)',
@@ -7962,7 +8002,7 @@ function switchModule(name) {
   const loaders = {
     overview: function() { populateChatModels(); populateChatRoutes(); }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); loadBridgeRuns(); }, projects: loadProjects, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
-    tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: loadWorkflows, memory: loadMemory, settings: syncSettingsUI,
+    tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: function() { loadWorkflows(); loadBuildStatus(); }, memory: loadMemory, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -7972,6 +8012,57 @@ function switchModule(name) {
 // ── S10: Workflows — Skills browser + Automations ──────────────────────────
 let _wfSkills = [];
 let _wfShowAll = false;
+
+async function runBuild() {
+  const taskEl = document.getElementById('build-task');
+  const backendEl = document.getElementById('build-backend');
+  const autoCommit = document.getElementById('build-auto-commit');
+  const autoRestart = document.getElementById('build-auto-restart');
+  if (!taskEl || !taskEl.value.trim()) { toast('Enter a build task', 'warn'); return; }
+  const task = taskEl.value.trim();
+  taskEl.value = '';
+  toast('Starting build...', 'info');
+  try {
+    const res = await api('/api/build/run', {
+      task: task,
+      backend: backendEl ? backendEl.value : '',
+      auto_commit: autoCommit ? autoCommit.checked : false,
+      auto_restart: autoRestart ? autoRestart.checked : false,
+    });
+    if (res && res.ok) {
+      toast('Build ' + res.build_id + ' started', 'ok');
+      setTimeout(loadBuildStatus, 2000);
+    } else {
+      toast((res && res.error) || 'Build failed', 'err');
+    }
+  } catch(e) { toast('Build error: ' + e.message, 'err'); }
+}
+
+async function loadBuildStatus() {
+  const el = document.getElementById('build-runs');
+  if (!el) return;
+  try {
+    const data = await api('/api/build/status');
+    if (!data || !data.builds || !data.builds.length) {
+      el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px 0">No recent builds</div>';
+      return;
+    }
+    el.innerHTML = data.builds.map(b => {
+      const st = b.status || 'pending';
+      const stColor = st === 'complete' ? '#22c55e' : st === 'failed' ? '#ef4444' : '#f59e0b';
+      const dur = b.duration_ms ? (b.duration_ms / 1000).toFixed(1) + 's' : '...';
+      const preview = escHtml((b.message || '').substring(0, 80));
+      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">'
+        + '<span style="width:6px;height:6px;border-radius:50%;background:' + stColor + ';flex-shrink:0"></span>'
+        + '<span style="color:var(--text2);min-width:50px">' + escHtml(b.to_agent || '') + '</span>'
+        + '<span style="color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + preview + '</span>'
+        + '<span style="color:var(--text3);min-width:35px;text-align:right">' + dur + '</span>'
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px 0">Failed to load builds</div>';
+  }
+}
 
 async function loadSkills() {
   // Reuse the skills loading from loadWorkflows
@@ -15432,6 +15523,55 @@ def _update_agent_message(run_id, response=None, status=None, model=None, tokens
         log.debug("Failed to update agent message: %s", e)
 
 
+def _run_build_workflow(build_id, task_desc, backend=None, auto_commit=False, auto_restart=False):
+    """Run an autonomous build workflow: dispatch task to an agent and handle results."""
+    import time as _bt
+    log.info("Build %s started: %s", build_id, task_desc[:100])
+    _emit_event("build:start", {"build_id": build_id, "task": task_desc[:200]})
+
+    # Pick backend
+    if not backend:
+        backend, _ = _smart_route(task_desc)
+
+    # Step 1: Dispatch the task
+    result = dispatch_agent(task_desc, backend, run_id=build_id, timeout=180)
+
+    if not result.get("ok"):
+        log.warning("Build %s failed: %s", build_id, result.get("error", "unknown"))
+        _emit_event("build:failed", {"build_id": build_id, "error": result.get("error", "")[:200]})
+        return
+
+    response_text = result.get("text", "")
+    log.info("Build %s got response (%d chars)", build_id, len(response_text))
+
+    # Step 2: Auto-commit if requested
+    if auto_commit:
+        try:
+            import subprocess
+            porter_dir = str(Path(__file__).parent)
+            subprocess.run(["git", "add", "-A"], cwd=porter_dir, capture_output=True, timeout=10)
+            commit_msg = f"Auto-build {build_id}: {task_desc[:60]}"
+            subprocess.run(["git", "commit", "-m", commit_msg], cwd=porter_dir, capture_output=True, timeout=10)
+            subprocess.run(["git", "push"], cwd=porter_dir, capture_output=True, timeout=30)
+            log.info("Build %s: auto-committed and pushed", build_id)
+            _emit_event("build:committed", {"build_id": build_id})
+        except Exception as e:
+            log.warning("Build %s: auto-commit failed: %s", build_id, e)
+
+    # Step 3: Auto-restart if requested
+    if auto_restart:
+        try:
+            import subprocess
+            subprocess.run(["systemctl", "--user", "restart", "porter"], capture_output=True, timeout=10)
+            log.info("Build %s: auto-restarted porter", build_id)
+            _emit_event("build:restarted", {"build_id": build_id})
+        except Exception as e:
+            log.warning("Build %s: auto-restart failed: %s", build_id, e)
+
+    _emit_event("build:complete", {"build_id": build_id, "backend": backend,
+                                    "tokens": result.get("tokens", {}).get("total", 0)})
+
+
 def _coord_log_path() -> Path:
     return RUNTIME_DIR / "coordination.jsonl"
 
@@ -15631,7 +15771,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.25.5' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.25.6' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -16069,7 +16209,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.5"})
+            self.reply_json({"v": "0.25.6"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17073,7 +17213,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.5'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.6'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -17478,6 +17618,50 @@ class Handler(BaseHTTPRequestHandler):
             t = _threading.Thread(target=_bridge_run, daemon=True)
             t.start()
             self.reply_json({"ok": True, "run_id": run_id, "backend": backend, "status": "dispatched"})
+
+        elif parsed.path == "/api/build/run":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            task_desc = str(data.get("task", "")).strip()
+            if not task_desc:
+                self.reply_json({"ok": False, "error": "task description required"}, 400); return
+            auto_commit = data.get("auto_commit", False)
+            auto_restart = data.get("auto_restart", False)
+            backend = str(data.get("backend", "")).strip().lower() or None
+            import uuid as _uuid
+            build_id = "build-" + _uuid.uuid4().hex[:8]
+            def _build_run():
+                _run_build_workflow(build_id, task_desc, backend=backend,
+                                   auto_commit=auto_commit, auto_restart=auto_restart)
+            t = _threading.Thread(target=_build_run, daemon=True)
+            t.start()
+            self.reply_json({"ok": True, "build_id": build_id, "status": "started"})
+
+        elif parsed.path == "/api/build/status":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            build_id = qs.get("id", [""])[0]
+            if not build_id:
+                # Return all recent builds
+                try:
+                    conn = _db_conn()
+                    rows = conn.execute(
+                        "SELECT * FROM agent_messages WHERE run_id LIKE 'build-%' ORDER BY created_at DESC LIMIT 20"
+                    ).fetchall()
+                    conn.close()
+                    self.reply_json({"ok": True, "builds": [dict(r) for r in rows]})
+                except Exception:
+                    self.reply_json({"ok": True, "builds": []})
+            else:
+                try:
+                    conn = _db_conn()
+                    rows = conn.execute(
+                        "SELECT * FROM agent_messages WHERE run_id=? ORDER BY created_at", (build_id,)
+                    ).fetchall()
+                    conn.close()
+                    self.reply_json({"ok": True, "steps": [dict(r) for r in rows]})
+                except Exception:
+                    self.reply_json({"ok": True, "steps": []})
 
         elif parsed.path == "/api/agent-fleet":
             # Admin controls + agent heartbeat/update reporting
@@ -20080,7 +20264,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.5 ready (localhost only)")
+    print(f"\n  Porter v0.25.6 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
