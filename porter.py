@@ -4101,7 +4101,9 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 /* Chat engine */
 .chat-container { display:flex; flex-direction:column; height:calc(100vh - 64px); min-height:400px; }
 .chat-header { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--border); margin-bottom:0; flex-shrink:0; }
-.chat-messages { flex:1; overflow-y:auto; padding:16px 0 80px; display:flex; flex-direction:column; gap:10px; }
+.chat-route-bar { display:flex; align-items:center; gap:8px; padding:8px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.chat-messages { flex:1; overflow-y:auto; padding:16px 20px 16px; display:flex; flex-direction:column; gap:10px; }
+.chat-messages:has(.chat-welcome) { padding:0; }
 .chat-msg { max-width:85%; padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.6; word-break:break-word; white-space:pre-wrap; }
 .chat-msg.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:2px; }
 .chat-msg.assistant { align-self:flex-start; background:var(--raised); border:1px solid var(--border); border-bottom-left-radius:2px; color:var(--text); }
@@ -9600,9 +9602,7 @@ let _chatStreaming = false;
 let _chatEventSource = null;
 
 function _chatModelChanged() {
-  const btn = document.getElementById('chat-send-btn');
-  const sel = document.getElementById('chat-model');
-  if (btn) btn.disabled = !sel.value;
+  // No send button to toggle — model selected via dropdown
 }
 
 
@@ -9722,6 +9722,8 @@ async function populateChatModels() {
     else sel.selectedIndex = 0;
   }
   _chatModelChanged();
+  // Ensure welcome state or messages are rendered
+  if (!_chatMessages.length) renderChatMessages();
 }
 
 function chatNewConversation() {
@@ -9931,12 +9933,12 @@ function _acHide() {
 
 function _acSelect(idx) {
   if (idx < 0 || idx >= _acItems.length) return;
-  var input = document.getElementById('chat-input');
+  var input = _getChatInput();
   if (!input) return;
   input.value = _acItems[idx].cmd + ' ';
   input.focus();
   _acHide();
-  chatAutoResize(input);
+  _chatAutoGrow(input);
 }
 
 function _acNavigate(dir) {
@@ -9953,7 +9955,7 @@ function _acNavigate(dir) {
 }
 
 function _acCheck() {
-  var input = document.getElementById('chat-input');
+  var input = _getChatInput();
   if (!input) return;
   var val = input.value;
 
@@ -9998,6 +10000,11 @@ function _acCheck() {
   _acHide();
 }
 
+function _getChatInput() {
+  var w = document.getElementById('chat-input-welcome');
+  if (w && w.offsetParent !== null) return w;
+  return document.getElementById('chat-input');
+}
 function chatInputKey(e) {
   if (_acVisible) {
     if (e.key === 'ArrowDown') { e.preventDefault(); _acNavigate(1); return; }
@@ -10161,7 +10168,7 @@ function chatSend() {
   // Add user message (show original text, not the full context-injected prompt)
   _chatMessages.push({ role: 'user', content: text });
   input.value = '';
-  input.style.height = 'auto';
+  _chatTransitionToBottom();
   renderChatMessages();
 
   // Start streaming — show thinking indicator
