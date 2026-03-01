@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.20 — Chat Welcome"""
+"""Porter v0.25.21 — Init Fix"""
 
 
 
@@ -5117,7 +5117,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.20</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.21</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6204,6 +6204,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.21', date:'2026-03-01', notes:['Fix: Chat loads instantly on refresh (switchModule before network calls)'] },
   { ver:'v0.25.20', date:'2026-03-01', notes:['Chat: Hi Moe! greeting, elegant input styling, lighter bg contrast, borderless dropdown, vertical centering'] },
   { ver:'v0.25.19', date:'2026-03-01', notes:['Chat: full model names in dropdown, transparent input wrap, white text, greeting placeholder'] },
   { ver:'v0.25.18', date:'2026-03-01', notes:['Chat: welcome renders instantly (no wait for model load), removed Direct Dispatch section, centered input box'] },
@@ -13443,6 +13444,8 @@ function _renderSidebarLocs(locs, activeRoot) {
 }
 
 async function init() {
+  // Show chat immediately — before any network calls
+  switchModule('overview');
   loadSettings();
   await loadMe();
   populateChangelog();
@@ -13451,8 +13454,6 @@ async function init() {
   _lastNodes = nodes;
   if (nodes[0] && !window._serverHostname) window._serverHostname = nodes[0].hostname || nodes[0].id;
   _renderSidebarNodes(nodes, null);
-  // Default to overview unless a hash/route is added later
-  switchModule('overview');
   await maybeShowWizard();
 }
 
@@ -16073,7 +16074,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.20"})
+            self.reply_json({"v": "0.25.21"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17077,7 +17078,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.20'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.21'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20129,7 +20130,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.20 ready (localhost only)")
+    print(f"\n  Porter v0.25.21 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
