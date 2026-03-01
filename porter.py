@@ -6294,6 +6294,12 @@ const CHANGELOG = [
     'Perf: Chat model loading parallelized (was 3 sequential API calls)',
     'Fix: Version strings normalized (were scattered across v0.23-v0.25)',
   ]},
+  { ver:'v0.25.0', date:'2026-03-01', notes:[
+    'New: Brave Search API integrated as system-wide OpenClaw skill',
+    'Limit: 1,000 searches/month quota enforced via local tracker',
+    'Research: Strategic audit of 2026 self-hosted AI orchestration features',
+    'UX: Fixed Orchestration flow wrapping and Memory [edit] race condition',
+  ]},
   { ver:'v0.24.4', date:'2026-03-01', notes:[
     'UX: Orchestration cards now centered over their flow arrows',
     'UX: GPT-5.1 (Codex CLI) auto-detected as separate model from OpenClaw',
@@ -6320,12 +6326,6 @@ const CHANGELOG = [
     'Security: Agent key hashing upgraded from SHA-256 to scrypt',
     'Fix: Bare except blocks in admin health replaced with proper logging',
     'Fix: JSON parse errors return 400 instead of 500',
-  ]},
-  { ver:'v0.24.0', date:'2026-03-01', notes:[
-    'New: Brave Search API integrated as system-wide OpenClaw skill',
-    'Limit: 1,000 searches/month quota enforced via local tracker',
-    'Research: Strategic audit of 2026 self-hosted AI orchestration features',
-    'UX: Fixed Orchestration flow wrapping and Memory [edit] race condition',
   ]},
   { ver:'v0.23.9', date:'2026-03-01', notes:[
     'Quality: Systematically replacing bare except Exception as e: log.debug("Health skip: %s", e) blocks with logging',
