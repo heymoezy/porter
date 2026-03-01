@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.29 — Chat Polish"""
+"""Porter v0.25.30 — Backend Fix"""
 
 
 
@@ -5134,7 +5134,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.29</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.30</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6246,6 +6246,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.30', date:'2026-03-01', notes:['Fix: OpenClaw routes through CLI (gateway HTTP 405 fixed)','Fix: Ollama auto-discovers loaded model','Fix: /commands auto-send on select'] },
   { ver:'v0.25.29', date:'2026-03-01', notes:['Fix: chat works immediately (no model-loading race condition)','UX: clean tagline replaces greeting'] },
   { ver:'v0.25.28', date:'2026-03-01', notes:['Fix: model selection works with custom picker','Fix: Auto-route picks first available model'] },
   { ver:'v0.25.27', date:'2026-03-01', notes:['UX: custom dark model picker replaces native OS dropdown'] },
@@ -16206,7 +16207,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.29"})
+            self.reply_json({"v": "0.25.30"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17210,7 +17211,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.29'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.30'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -17295,32 +17296,50 @@ class Handler(BaseHTTPRequestHandler):
                             log.debug("Stream parse: %s", e)
 
                 elif model_id == "openclaw-gateway":
-                    # OpenClaw gateway (non-streaming, send as single chunk)
-                    oc_cfg_path = OPENCLAW_STATE_DIR / "openclaw.json"
-                    gw_port = 18789
-                    auth_token = ""
-                    if oc_cfg_path.exists():
-                        try:
-                            oc_cfg = json.loads(oc_cfg_path.read_text())
-                            gw_port = oc_cfg.get("gatewayPort", 18789)
-                            auth_token = oc_cfg.get("authToken", "")
-                        except Exception as e:
-                            log.debug("OpenClaw config: %s", e)
-                    payload = json.dumps({"message": prompt}).encode()
-                    req = urllib.request.Request(
-                        f"http://127.0.0.1:{gw_port}/v1/chat",
-                        data=payload,
-                        headers={
-                            "Content-Type": "application/json",
-                            "Authorization": f"Bearer {auth_token}",
-                        },
-                    )
-                    resp = urllib.request.urlopen(req, timeout=120)
-                    result = json.loads(resp.read())
-                    text = result.get("response") or result.get("message") or result.get("content") or str(result)
-                    full_response = text
-                    self.wfile.write(f"data: {json.dumps({'token': text})}\n\n".encode())
-                    self.wfile.flush()
+                    # OpenClaw via CLI agent bridge
+                    oc_result = dispatch_agent(prompt, "openclaw", timeout=120)
+                    if oc_result.get("ok"):
+                        full_response = oc_result.get("text", "")
+                        self.wfile.write(f"data: {json.dumps({'token': full_response})}\n\n".encode())
+                        self.wfile.flush()
+                    else:
+                        self.wfile.write(f"data: {json.dumps({'error': oc_result.get('error', 'OpenClaw error')})}\n\n".encode())
+                        self.wfile.flush()
+
+                elif model_id == "ollama-local":
+                    # Discover first Ollama model and stream from it
+                    try:
+                        _tags_req = urllib.request.Request("http://127.0.0.1:11434/api/tags")
+                        _tags_resp = urllib.request.urlopen(_tags_req, timeout=5)
+                        _tags_data = json.loads(_tags_resp.read())
+                        _ollama_models = _tags_data.get("models", [])
+                        if not _ollama_models:
+                            raise Exception("No Ollama models loaded")
+                        ollama_model = _ollama_models[0]["name"]
+                    except Exception as _oe:
+                        self.wfile.write(f"data: {json.dumps({'error': 'Ollama: ' + str(_oe)})}\n\n".encode())
+                        self.wfile.flush()
+                        ollama_model = None
+                    if ollama_model:
+                        payload = json.dumps({"model": ollama_model, "prompt": prompt, "stream": True}).encode()
+                        req = urllib.request.Request(
+                            "http://127.0.0.1:11434/api/generate",
+                            data=payload,
+                            headers={"Content-Type": "application/json"},
+                        )
+                        resp = urllib.request.urlopen(req, timeout=120)
+                        for line in resp:
+                            try:
+                                chunk = json.loads(line)
+                                token = chunk.get("response", "")
+                                if token:
+                                    full_response += token
+                                    self.wfile.write(f"data: {json.dumps({'token': token})}\n\n".encode())
+                                    self.wfile.flush()
+                                if chunk.get("done"):
+                                    break
+                            except Exception as e:
+                                log.debug("Ollama stream parse: %s", e)
 
                 elif model_id.startswith("gemini-"):
                     # Gemini via agent bridge (non-streaming — single response)
@@ -20262,7 +20281,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.29 ready (localhost only)")
+    print(f"\n  Porter v0.25.30 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
