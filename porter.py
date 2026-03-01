@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.28 — Model Fix"""
+"""Porter v0.25.29 — Chat Polish"""
 
 
 
@@ -4168,7 +4168,6 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   flex:1; gap:12px; text-align:center; padding:0 24px;
 }
-.chat-welcome-title { font-size:30px; font-weight:600; color:rgba(255,255,255,.35); letter-spacing:-0.3px; }
 .chat-welcome-sub { font-size:13px; color:rgba(255,255,255,.25); letter-spacing:0.3px; }
 .chat-welcome-input-wrap {
   width:100%; max-width:640px; background:rgba(255,255,255,.06);
@@ -5135,7 +5134,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.28</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.29</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5218,10 +5217,9 @@ select.settings-input { padding-right: 26px; }
       <div id="chat-main">
         <div id="chat-messages" class="chat-messages welcome-state">
           <div class="chat-welcome">
-            <div class="chat-welcome-title">Hi there</div>
-            <div class="chat-welcome-sub">\u26A1 One prompt. Every AI. Zero friction.</div>
+            <div class="chat-welcome-sub">One prompt. Every AI. Zero friction.</div>
             <div class="chat-welcome-input-wrap">
-              <textarea id="chat-input-welcome" placeholder="How can I help you today?" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
+              <textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
               <div class="chat-welcome-meta">
 <select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>
                 <div class="model-picker" data-sel="chat-backend-sel-welcome">
@@ -5243,7 +5241,7 @@ select.settings-input { padding-right: 26px; }
         <div class="chat-input-area" id="chat-input-area" style="display:none">
           <div id="chat-autocomplete" class="chat-autocomplete"></div>
           <div class="chat-input-wrap">
-            <textarea id="chat-input" class="chat-input-bottom" placeholder="Reply&#8230;" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
+            <textarea id="chat-input" class="chat-input-bottom" placeholder="Reply or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
             <div class="chat-input-bottom-meta">
               <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
 <select id="chat-backend-sel" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>
@@ -6248,6 +6246,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.29', date:'2026-03-01', notes:['Fix: chat works immediately (no model-loading race condition)','UX: clean tagline replaces greeting'] },
   { ver:'v0.25.28', date:'2026-03-01', notes:['Fix: model selection works with custom picker','Fix: Auto-route picks first available model'] },
   { ver:'v0.25.27', date:'2026-03-01', notes:['UX: custom dark model picker replaces native OS dropdown'] },
   { ver:'v0.25.26', date:'2026-03-01', notes:['Fix: welcome perfectly centered (chat-main flex chain)','UX: greeting uses preferred name from settings','UX: Files auto-expands first directory on load'] },
@@ -9741,12 +9740,10 @@ function renderChatMessages(streamUpdate) {
   if (!_chatMessages.length) {
     // Centered welcome state
     el.classList.add('welcome-state');
-    var _wn = (currentUser && currentUser.display_name) ? ', ' + currentUser.display_name : ' there';
     el.innerHTML = '<div class="chat-welcome">'
-      + '<div class="chat-welcome-title">Hi' + _wn + '</div>'
-      + '<div class="chat-welcome-sub">\u26A1 One prompt. Every AI. Zero friction.</div>'
+      + '<div class="chat-welcome-sub">One prompt. Every AI. Zero friction.</div>'
       + '<div class="chat-welcome-input-wrap">'
-      + '<textarea id="chat-input-welcome" placeholder="How can I help you today?" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>'
+      + '<textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>'
       + '<div class="chat-welcome-meta">'
       + '<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>'
       + '<div class="model-picker" data-sel="chat-backend-sel-welcome">'
@@ -10048,31 +10045,34 @@ function chatInputKey(e) {
 }
 
 function chatSend() {
-  // Apply backend selector override
-  var _bsel = document.getElementById('chat-backend-sel');
-  if (_bsel && _bsel.value) {
-    var _modelSel = document.getElementById('chat-model');
-    var _backendMap = {openclaw:'openclaw-gateway',gemini:'gemini-cli',codex:'codex-cli',claude:'claude-cli',ollama:'ollama-local'};
-    if (_modelSel) {
-      // Try to select the matching option, fallback to setting value directly
-      var _target = _backendMap[_bsel.value] || _bsel.value;
-      for (var i = 0; i < _modelSel.options.length; i++) {
-        if (_modelSel.options[i].value.toLowerCase().includes(_bsel.value)) { _modelSel.selectedIndex = i; break; }
-      }
-    }
-  }
   var _welcomeInput = document.getElementById('chat-input-welcome');
   var _bottomInput = document.getElementById('chat-input');
   var input = (_welcomeInput && _welcomeInput.offsetParent !== null) ? _welcomeInput : _bottomInput;
   if (!input) return;
-  const sel = document.getElementById('chat-model');
   const text = input.value.trim();
-  const modelId = sel ? sel.value : '';
   if (!text || _chatStreaming) return;
   // Sync backend selector from welcome if needed
   var _welBsel = document.getElementById('chat-backend-sel-welcome');
   var _mainBsel = document.getElementById('chat-backend-sel');
   if (_welBsel && _welBsel.value && _mainBsel) _mainBsel.value = _welBsel.value;
+  // Resolve model: picker override > chat-model select > fallback
+  var _backendMap = {openclaw:'openclaw-gateway',gemini:'gemini-cli-auto',codex:'codex-cli',claude:'claude-cli',ollama:'ollama-local'};
+  var _bsel = document.getElementById('chat-backend-sel');
+  var _bval = _bsel ? _bsel.value : '';
+  var sel = document.getElementById('chat-model');
+  var modelId = '';
+  if (_bval && _backendMap[_bval]) {
+    modelId = _backendMap[_bval];
+  } else if (sel && sel.value) {
+    modelId = sel.value;
+  } else {
+    // Fallback: pick first enabled from chat-model, or default to openclaw
+    if (sel && sel.options.length > 0) {
+      var _first = Array.from(sel.options).find(function(o) { return !o.disabled && o.value; });
+      if (_first) modelId = _first.value;
+    }
+    if (!modelId) modelId = 'openclaw-gateway';
+  }
 
   // Check for /commands — handle built-ins locally, route rest to OpenClaw
   if (text.startsWith('/')) {
@@ -10091,20 +10091,17 @@ function chatSend() {
     _chatMessages.push({ role: 'user', content: text });
 
     if (cmd === '/help') {
-      _chatMessages.push({ role: 'assistant', content: '**Available Commands**\n\n' +
-        '`/help` — Show this help\n' +
+      _chatMessages.push({ role: 'assistant', content: '**Shortcuts**\n\n' +
+        '`/help` — This list\n' +
+        '`/projects` — View projects\n' +
+        '`/agents` — Connected agents\n' +
+        '`/models` — Available AI models\n' +
+        '`/status` — System health\n' +
+        '`/version` — Porter version\n' +
         '`/clear` — Clear chat history\n' +
-        '`/status` — System health check\n' +
-        '`/models` — List available AI models\n' +
-        '`/version` — Show Porter version\n' +
-        '`/flush` — Flush session to memory\n\n' +
-        '**Routing**\n' +
-        '`@claude <msg>` — Send to Claude Code\n' +
-        '`@openclaw <msg>` — Send to OpenClaw\n' +
-        '`@gemini <msg>` — Send to Gemini\n' +
-        '`@codex <msg>` — Send to Codex CLI\n' +
-        '`@ollama <msg>` — Send to Ollama\n\n' +
-        'Any other `/command` is sent to OpenClaw as a skill invoke.', model: 'porter' });
+        '`/flush` — Flush to memory\n\n' +
+        '**Direct routing**\n' +
+        '`@claude <msg>` `@openclaw <msg>` `@gemini <msg>` `@codex <msg>` `@ollama <msg>`', model: 'porter' });
       renderChatMessages();
       return;
     }
@@ -10154,6 +10151,48 @@ function chatSend() {
       return;
     }
 
+    if (cmd === '/projects') {
+      _chatMessages.push({ role: 'assistant', content: '_Loading projects..._', model: 'porter' });
+      renderChatMessages();
+      api('/api/projects').then(function(data) {
+        if (!data || !data.projects || !data.projects.length) {
+          _chatMessages[_chatMessages.length-1].content = 'No projects found.';
+          renderChatMessages(); return;
+        }
+        var lines = ['**Projects**\n'];
+        data.projects.forEach(function(p) {
+          var active = p.active ? ' ✨' : '';
+          var status = p.status || 'active';
+          lines.push('**' + (p.name || p.id) + '**' + active);
+          if (p.description) lines.push('  ' + p.description);
+          lines.push('  Status: ' + status + (p.tasks_open ? ' · ' + p.tasks_open + ' open tasks' : ''));
+          lines.push('');
+        });
+        _chatMessages[_chatMessages.length-1].content = lines.join('\n');
+        renderChatMessages();
+      });
+      return;
+    }
+
+    if (cmd === '/agents') {
+      _chatMessages.push({ role: 'assistant', content: '_Checking agents..._', model: 'porter' });
+      renderChatMessages();
+      api('/api/admin/health').then(function(h) {
+        if (!h || !h.services) {
+          _chatMessages[_chatMessages.length-1].content = 'Could not reach health endpoint.';
+          renderChatMessages(); return;
+        }
+        var lines = ['**Connected Agents**\n'];
+        h.services.forEach(function(s) {
+          var icon = (s.status === 'running' || s.status === 'up' || s.status === 'ok') ? '✅' : '❌';
+          lines.push(icon + ' **' + s.name + '**' + (s.version ? '  v' + s.version : '') + '  — ' + s.status);
+        });
+        _chatMessages[_chatMessages.length-1].content = lines.join('\n');
+        renderChatMessages();
+      });
+      return;
+    }
+
     // Unknown /command — route to OpenClaw as skill invoke
     renderChatMessages();
     invokeAgent(text, 'openclaw');
@@ -10171,14 +10210,7 @@ function chatSend() {
     return;
   }
 
-  if (!modelId) {
-    // Auto-route: pick first enabled model
-    if (sel && sel.options.length > 0) {
-      var _first = Array.from(sel.options).find(function(o) { return !o.disabled && o.value; });
-      if (_first) { sel.value = _first.value; modelId = _first.value; }
-    }
-  }
-  if (!modelId) { toast('No models available \u2014 check Orchestration'); return; }
+  // modelId is resolved above — always has a value
 
   // Create chat ID if needed
   if (!_chatId) {
@@ -12959,9 +12991,6 @@ async function loadMe() {
   if (!data) return;
   currentUser = data;
   document.getElementById('ucName').textContent = data.display_name || data.username;
-  // Update welcome greeting with real name
-  var _wt = document.querySelector('.chat-welcome-title');
-  if (_wt && data.display_name) _wt.textContent = 'Hi, ' + data.display_name;
   renderAvatar(document.getElementById('ucAvatar'), data);
   renderAvatar(document.getElementById('saAvatar'), data);
   document.getElementById('sa-full-name').value = data.full_name || '';
@@ -16171,7 +16200,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.28"})
+            self.reply_json({"v": "0.25.29"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17175,7 +17204,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.28'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.29'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20227,7 +20256,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.28 ready (localhost only)")
+    print(f"\n  Porter v0.25.29 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
