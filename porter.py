@@ -4114,19 +4114,18 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 
 /* Chat autocomplete */
 .chat-autocomplete {
-  position:absolute; bottom:100%; left:0; right:0; max-height:240px; overflow-y:auto;
-  background:var(--raised); border:1px solid var(--border); border-radius:8px;
-  box-shadow:0 -4px 16px rgba(0,0,0,.3); display:none; z-index:100;
-  margin-bottom:4px;
+  position:absolute; bottom:100%; left:0; right:0; max-height:200px; overflow-y:auto;
+  background:#1a1a1a; border:1px solid rgba(255,255,255,.1); border-radius:8px;
+  box-shadow:0 -4px 16px rgba(0,0,0,.4); display:none; z-index:100;
+  margin-bottom:4px; padding:4px 0;
 }
 .chat-ac-item {
-  display:flex; align-items:center; gap:10px; padding:8px 14px; cursor:pointer;
+  display:flex; align-items:center; gap:8px; padding:5px 12px; cursor:pointer;
   font-size:12px; color:var(--text); transition:.08s;
 }
-.chat-ac-item:hover, .chat-ac-item.selected { background:var(--surface2); }
-.chat-ac-item .ac-cmd { font-weight:600; color:var(--accent); min-width:80px; }
-.chat-ac-item .ac-desc { color:var(--text3); flex:1; }
-.chat-ac-item .ac-emoji { font-size:14px; width:20px; text-align:center; }
+.chat-ac-item:hover, .chat-ac-item.selected { background:rgba(255,255,255,.06); }
+.chat-ac-item .ac-cmd { font-weight:600; color:var(--accent); min-width:72px; }
+.chat-ac-item .ac-desc { color:var(--text3); }
 .chat-ac-header { padding:6px 14px; font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; border-bottom:1px solid var(--border); }
 
 
@@ -9984,20 +9983,20 @@ function _showRouteIndicator(backend) {
 }
 
 var _defaultSlashCmds = [
-  {cmd: '/help', desc: 'Show available commands', emoji: '\u2753'},
-  {cmd: '/status', desc: 'Check system status', emoji: '\ud83d\udcca'},
-  {cmd: '/flush', desc: 'Flush session to memory', emoji: '\ud83d\udce4'},
-  {cmd: '/clear', desc: 'Clear chat messages', emoji: '\ud83e\uddf9'},
-  {cmd: '/models', desc: 'List available models', emoji: '\ud83e\udd16'},
-  {cmd: '/version', desc: 'Show Porter version', emoji: '\u2139\ufe0f'},
+  {cmd: '/help', desc: 'Available commands'},
+  {cmd: '/status', desc: 'System status'},
+  {cmd: '/flush', desc: 'Flush to memory'},
+  {cmd: '/clear', desc: 'Clear messages'},
+  {cmd: '/models', desc: 'List models'},
+  {cmd: '/version', desc: 'Porter version'},
 ];
 
 var _defaultAtTargets = [
-  {cmd: '@claude', desc: 'Route to Claude Code (Anthropic)', emoji: '\ud83d\udfe1'},
-        {cmd: '@openclaw', desc: 'Route to OpenClaw (GPT-5.3 Codex)', emoji: '\ud83d\udfe2'},
-  {cmd: '@gemini', desc: 'Route to Gemini', emoji: '\ud83d\udfe6'},
-  {cmd: '@codex', desc: 'Route to Codex CLI (OpenAI)', emoji: '\ud83d\udfe0'},
-        {cmd: '@ollama', desc: 'Route to Ollama (local)', emoji: '\ud83d\udfe3'},
+  {cmd: '@claude', desc: 'Anthropic'},
+  {cmd: '@openclaw', desc: 'GPT-5.3 Codex'},
+  {cmd: '@gemini', desc: 'Google'},
+  {cmd: '@codex', desc: 'OpenAI'},
+  {cmd: '@ollama', desc: 'Local'},
 ];
 
 function _acShow(items) {
@@ -10009,7 +10008,6 @@ function _acShow(items) {
   items.forEach(function(item, i) {
     var sel = i === 0 ? ' selected' : '';
     html += '<div class="chat-ac-item' + sel + '" data-idx="' + i + '" onmousedown="_acSelect(' + i + ')">';
-    html += '<span class="ac-emoji">' + (item.emoji || '') + '</span>';
     html += '<span class="ac-cmd">' + escHtml(item.cmd) + '</span>';
     html += '<span class="ac-desc">' + escHtml(item.desc) + '</span>';
     html += '</div>';
