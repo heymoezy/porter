@@ -9478,6 +9478,52 @@ async function invokeAgent(message, backend) {
   renderChatMessages();
 }
 
+async function _runAtChain(fullText, matches) {
+  // Parse chain segments: each @model gets the text until the next @model
+  var segments = [];
+  for (var i = 0; i < matches.length; i++) {
+    var start = matches[i].idx + matches[i].model.length + 1; // skip @model
+    var end = (i + 1 < matches.length) ? matches[i + 1].idx : fullText.length;
+    var msg = fullText.substring(start, end).trim();
+    // Clean trailing "and send to" / "then" / "and" type connectors
+    msg = msg.replace(/\b(and\s+)?send\s+(it\s+)?to\s*$/i, '').replace(/\bthen\s*$/i, '').replace(/\band\s*$/i, '').trim();
+    segments.push({ model: matches[i].model, msg: msg });
+  }
+  // Execute chain: first segment runs normally, subsequent segments get previous output prepended
+  var prevOutput = '';
+  var labels = { openclaw:'OpenClaw', gemini:'Gemini', ollama:'Ollama', claude:'Claude', codex:'Codex' };
+  for (var s = 0; s < segments.length; s++) {
+    var seg = segments[s];
+    var label = labels[seg.model] || seg.model;
+    var prompt = seg.msg;
+    if (prevOutput) {
+      prompt = 'Previous response from another AI:\n---\n' + prevOutput + '\n---\n\n' + (prompt || 'Please review and respond.');
+    }
+    _chatMessages.push({ role: 'skill-pending', content: 'Dispatching to ' + label + (s > 0 ? ' (chain step ' + (s+1) + ')' : '') + '...' });
+    renderChatMessages();
+    try {
+      var resp = await api('/api/agent/invoke', { message: prompt, backend: seg.model, timeout: 120 });
+      _chatMessages = _chatMessages.filter(function(m) { return m.role !== 'skill-pending'; });
+      if (resp && resp.ok) {
+        prevOutput = resp.text || '';
+        var meta = [];
+        if (resp.backend) meta.push('Via: ' + (labels[resp.backend] || resp.backend));
+        if (resp.model) meta.push('Model: ' + resp.model);
+        if (resp.duration_ms) meta.push('Duration: ' + (resp.duration_ms / 1000).toFixed(1) + 's');
+        _chatMessages.push({ role: 'skill', content: prevOutput + (meta.length ? '\n---\n' + meta.join(' | ') : '') });
+      } else {
+        _chatMessages.push({ role: 'error', content: label + ' error: ' + (resp ? resp.error : 'No response') });
+        break; // Stop chain on error
+      }
+    } catch(e) {
+      _chatMessages = _chatMessages.filter(function(m) { return m.role !== 'skill-pending'; });
+      _chatMessages.push({ role: 'error', content: label + ' chain error: ' + e.message });
+      break;
+    }
+    renderChatMessages();
+  }
+}
+
 // Backward compat alias
 function invokeSkill(message) { invokeAgent(message, 'openclaw'); }
 
@@ -10256,14 +10302,26 @@ function chatSend() {
     return;
   }
 
-  // Check for @backend prefix — route to specific model
-  const atMatch = text.match(/^@(claude|gemini|openclaw|ollama|codex)\s+(.+)/s);
-  if (atMatch) {
+  // Check for @backend mentions — single or chained
+  var _atModels = ['claude','gemini','openclaw','ollama','codex'];
+  var _atRe = new RegExp('@(' + _atModels.join('|') + ')\\b', 'g');
+  var _atMatches = [];
+  var _m;
+  while ((_m = _atRe.exec(text)) !== null) _atMatches.push({ model: _m[1], idx: _m.index });
+  if (_atMatches.length > 0) {
     input.value = '';
     input.style.height = 'auto';
     _chatMessages.push({ role: 'user', content: text });
     renderChatMessages();
-    invokeAgent(atMatch[2].trim(), atMatch[1]);
+    if (_atMatches.length === 1) {
+      // Single @model — extract message after @model
+      var _msg1 = text.substring(_atMatches[0].idx + _atMatches[0].model.length + 1).trim();
+      if (!_msg1) _msg1 = text.replace(/@\w+/g, '').trim();
+      invokeAgent(_msg1, _atMatches[0].model);
+    } else {
+      // Multi-@ chain: @model1 <task> ... @model2 <task>
+      _runAtChain(text, _atMatches);
+    }
     return;
   }
 
@@ -15527,6 +15585,13 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None):
     fn = AGENT_DISPATCHERS.get(backend)
     if not fn:
         return {"ok": False, "error": f"Unknown backend: {backend}. Available: {', '.join(AGENT_DISPATCHERS.keys())}", "run_id": run_id}
+    # Prepend bridge context so models know they're responding through Porter
+    _bridge_ctx = (
+        "[Porter Bridge] You are responding through Porter, a multi-AI orchestrator. "
+        "Answer the user's message directly and concisely. "
+        "Do not read files, run commands, or perform actions unless explicitly asked.\n\n"
+    )
+    message = _bridge_ctx + message
     # Record outgoing message
     _record_agent_message(run_id, "porter", backend, message, status="in_progress")
     _emit_event("bridge:dispatch", {"run_id": run_id, "backend": backend, "prompt": message[:200]})
