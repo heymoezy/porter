@@ -4698,6 +4698,11 @@ select.settings-input { padding-right: 26px; }
   border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;
   word-break: break-all; color: var(--text); margin-bottom: 8px; }
 .wiz-key-note { font-size: 12px; color: var(--danger); margin-bottom: 16px; }
+.wiz-cap-list { list-style: none; padding: 0; margin: 0 0 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.wiz-cap-item { font-size: 12px; display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+.wiz-cap-status { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; }
+.wiz-cap-status.ok { background: #4caf50; box-shadow: 0 0 8px rgba(76,175,80,.4); }
+.wiz-cap-status.missing { background: var(--text3); opacity: .3; }
 </style>
 <script src="/js/tour.js" defer></script>
 </head>
@@ -7584,6 +7589,7 @@ function renderWorkflowSkills(skills) {
       : manual ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);margin-left:auto">manual</span>'
       : '';
     const removeBtn = (installed || manual) ? '<button class="btn-xs" style="font-size:10px;padding:1px 6px;border:1px solid var(--border2);border-radius:3px;background:none;color:var(--text3);cursor:pointer;margin-left:4px" onclick="event.stopPropagation();removeSkill(\'' + escHtml(sk.id) + '\',\'' + name + '\')">\u00d7</button>' : '';
+    const installBtn = (!installed && !manual) ? '<button class="btn-xs" style="font-size:10px;padding:2px 8px;border:1px solid var(--accent);border-radius:4px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);cursor:pointer;margin-left:4px" onclick="event.stopPropagation();installSkill(\'' + escHtml(sk.id || sk.name) + '\',\'' + name + '\')">' + (sk.eligible !== false ? 'Install' : 'Setup') + '</button>' : '';
     return '<div class="wf-skill-card" style="border-color:' + borderColor + ';opacity:' + opacity + '">'
       + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
       + '<span style="font-size:16px">' + emoji + '</span>'
@@ -9358,9 +9364,10 @@ function endTour() {
   try { localStorage.setItem('porter_tour_done', '1'); } catch(e) {}
 }
 
-// Auto-start on first visit
+// Auto-start on first visit (skip in headless/test environments)
 setTimeout(function() {
   try {
+    if (navigator.webdriver) return; // skip in automated testing
     if (!localStorage.getItem('porter_tour_done')) startTour();
   } catch(e) {}
 }, 2000);
@@ -9412,7 +9419,7 @@ function _initTabHelp() {
 }
 
 // Init after DOM ready
-setTimeout(_initTabHelp, 1000);
+try { setTimeout(_initTabHelp, 1000); } catch(e) {}
 
 // ── Chat autocomplete ────────────────────────────────────────────────────
 var _acVisible = false;
