@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.23.7 — self-hosted file manager"""
+"""Porter v0.24.0 — self-hosted file manager"""
 
 
 import email
@@ -749,6 +749,38 @@ def _ping_agent(agent: dict) -> dict:
     agent_type = (agent.get("type") or agent.get("name") or "").lower()
     result = {"ok": False, "latency_ms": None, "version": None, "endpoint": None, "message": ""}
 
+    def _ping_cli(binary: str, label: str) -> dict:
+        """Check CLI reachability via --version using resolved install path."""
+        cli = _resolve_cli(binary)
+        if not cli:
+            return {
+                "ok": False,
+                "latency_ms": None,
+                "version": None,
+                "endpoint": f"{label} CLI binary",
+                "message": f"{binary} binary not found in PATH or common install dirs",
+            }
+        try:
+            t0 = _time.monotonic()
+            r = subprocess.run([cli, "--version"], capture_output=True, text=True, timeout=5)
+            t1 = _time.monotonic()
+            ver = (r.stdout or r.stderr or "").strip().split("\n")[0][:120]
+            return {
+                "ok": r.returncode == 0,
+                "latency_ms": round((t1 - t0) * 1000),
+                "version": ver or binary,
+                "endpoint": f"{label} CLI binary ({cli})",
+                "message": "CLI binary responded" if r.returncode == 0 else "CLI binary returned non-zero",
+            }
+        except Exception as e:
+            return {
+                "ok": False,
+                "latency_ms": None,
+                "version": None,
+                "endpoint": f"{label} CLI binary ({cli})",
+                "message": f"Error: {e}",
+            }
+
     # Determine endpoint to ping based on agent type
     endpoints = []
     oc_cfg = {}
@@ -757,56 +789,35 @@ def _ping_agent(agent: dict) -> dict:
     except Exception as e:
         log.debug("Ignored: %s", e)
 
-    if "openclaw" in agent_type or "codex" in agent_type:
+    if "codex" in agent_type:
+        # Codex should be tested through its own CLI first.
+        cli_ping = _ping_cli("codex", "Codex")
+        if cli_ping["ok"]:
+            return cli_ping
+        # Fallback: if Codex is routed via OpenClaw gateway on this host, try gateway reachability.
         gw = oc_cfg.get("gateway", {})
         port = gw.get("port", 18789)
-        token = (gw.get("auth", {}).get("token") or "").strip()
+        token = (gw.get("auth", {}).get("token") or gw.get("token") or "").strip()
+        endpoints.append(("OpenClaw Gateway", f"http://127.0.0.1:{port}/", token))
+        result["message"] = cli_ping["message"]
+    elif "openclaw" in agent_type:
+        gw = oc_cfg.get("gateway", {})
+        port = gw.get("port", 18789)
+        token = (gw.get("auth", {}).get("token") or gw.get("token") or "").strip()
         endpoints.append(("OpenClaw Gateway", f"http://127.0.0.1:{port}/", token))
     elif "gemini" in agent_type:
-        # Gemini CLI doesn't have an HTTP endpoint — test binary availability
-        try:
-            t0 = _time.monotonic()
-            r = subprocess.run(["gemini", "--version"], capture_output=True, text=True, timeout=5)
-            t1 = _time.monotonic()
-            ver = (r.stdout or r.stderr or "").strip().split("\n")[0][:80]
-            result["ok"] = r.returncode == 0
-            result["latency_ms"] = round((t1 - t0) * 1000)
-            result["version"] = ver or "gemini"
-            result["endpoint"] = "gemini CLI binary"
-            result["message"] = "CLI binary responded" if result["ok"] else "CLI binary not found or errored"
-            return result
-        except FileNotFoundError:
-            result["message"] = "gemini binary not found in PATH"
-            return result
-        except Exception as e:
-            result["message"] = f"Error: {e}"
-            return result
+        # Gemini CLI doesn't expose an HTTP endpoint — test binary availability.
+        return _ping_cli("gemini", "Gemini")
     elif "claude" in agent_type:
-        # Claude Code doesn't have an HTTP endpoint — test binary availability
-        try:
-            t0 = _time.monotonic()
-            r = subprocess.run(["claude", "--version"], capture_output=True, text=True, timeout=5)
-            t1 = _time.monotonic()
-            ver = (r.stdout or r.stderr or "").strip().split("\n")[0][:80]
-            result["ok"] = r.returncode == 0
-            result["latency_ms"] = round((t1 - t0) * 1000)
-            result["version"] = ver or "claude"
-            result["endpoint"] = "claude CLI binary"
-            result["message"] = "CLI binary responded" if result["ok"] else "CLI binary not found or errored"
-            return result
-        except FileNotFoundError:
-            result["message"] = "claude binary not found in PATH"
-            return result
-        except Exception as e:
-            result["message"] = f"Error: {e}"
-            return result
+        # Claude Code doesn't expose an HTTP endpoint — test binary availability.
+        return _ping_cli("claude", "Claude")
     elif "ollama" in agent_type:
         endpoints.append(("Ollama", "http://127.0.0.1:11434/api/tags", ""))
     else:
         # Generic: try the agent's configured URL if any, or OpenClaw gateway
         gw = oc_cfg.get("gateway", {})
         port = gw.get("port", 18789)
-        token = (gw.get("auth", {}).get("token") or "").strip()
+        token = (gw.get("auth", {}).get("token") or gw.get("token") or "").strip()
         endpoints.append(("OpenClaw Gateway", f"http://127.0.0.1:{port}/", token))
 
     # HTTP roundtrip test with challenge token
@@ -1773,7 +1784,9 @@ def _treg_load() -> None:
             if isinstance(t, dict) and t.get("id"):
                 if isinstance(t.get("created_at"), str):
                     try: t["created_at"] = float(t["created_at"])
-                    except: t["created_at"] = 0
+                    except Exception as e:
+                        log.debug("Failed to parse task %s: %s", task_id, e)
+                        t["created_at"] = 0
                 loaded[t["id"]] = t
         except Exception as e:
             log.debug("Ignored: %s", e)
@@ -4839,7 +4852,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.23.7</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.24.0</div>
     <button onclick="startTour()" style="font-size:10px;color:var(--text3);background:none;border:none;cursor:pointer;padding:2px 0" title="Start guided tour">&#10067; Tour</button>
   </div>
 </aside>
@@ -5907,6 +5920,23 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.24.0', date:'2026-03-01', notes:[
+    'New: Brave Search API integrated as system-wide OpenClaw skill',
+    'Limit: 1,000 searches/month quota enforced via local tracker',
+    'Research: Strategic audit of 2026 self-hosted AI orchestration features',
+    'UX: Fixed Orchestration flow wrapping and Memory [edit] race condition',
+  ]},
+  { ver:'v0.23.9', date:'2026-03-01', notes:[
+    'Quality: Systematically replacing bare except: pass blocks with logging',
+    'Architecture: Frontend extraction scaffold initiated',
+    'Logging: Improved visibility for task parsing and config detection errors',
+  ]},
+  { ver:'v0.23.8', date:'2026-03-01', notes:[
+    'Fix: Memory [edit] button race condition — waits for load before toggling',
+    'Fix: Orchestration flow wrapping — expanded grid to 4 columns',
+    'Fix: Standardized password update API payload across UI',
+    'Architecture: Phase 4 Extraction Plan drafted',
+  ]},
   { ver:'v0.23.7', date:'2026-03-01', notes:[
     'New: Onboarding Wizard (6 steps) — full guided setup experience',
     'New: Capability scan step with "Connect Gemini" nudge for research',
@@ -10973,6 +11003,54 @@ function _buildFlowSVG(count, direction, label) {
   return '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" style="display:block">' + paths + labelSvg + '</svg>';
 }
 
+let _orchHubPollTimer = null;
+let _orchHubAgentCount = 0;
+let _orchHubModelCount = 0;
+async function _refreshOrchHubActivity(agentCount, modelCount) {
+  const hub = document.getElementById('orch-hub-features');
+  if (!hub) return;
+  try {
+    const [delegResp, healthResp] = await Promise.all([
+      api('/api/admin/delegations'),
+      api('/api/admin/health'),
+    ]);
+    const delegs = (delegResp && delegResp.delegations) || [];
+    const last = delegs.length ? delegs[delegs.length - 1] : null;
+    const svc = (healthResp && healthResp.services) || [];
+    const up = svc.filter(function(s){ return s.status === 'up' || s.status === 'ok' || s.status === 'running'; }).length;
+    const total = svc.length;
+    let routeText = 'No routing activity yet';
+    if (last) {
+      const ageSec = Math.max(0, Math.round(Date.now() / 1000 - Number(last.ts || 0)));
+      const ageTxt = ageSec < 60 ? (ageSec + 's ago') : (Math.round(ageSec / 60) + 'm ago');
+      const statusTxt = last.ok ? 'ok' : 'failed';
+      routeText = 'Last route: ' + String(last.backend || 'unknown') + ' · ' + statusTxt + ' · ' + ageTxt;
+    }
+    const pills = [
+      { label: 'Agents: ' + agentCount, active: agentCount > 0 },
+      { label: 'Models: ' + modelCount, active: modelCount > 0 },
+      { label: 'Services: ' + up + '/' + total + ' up', active: total > 0 && up > 0 },
+      { label: routeText, active: !!last },
+      { label: 'Live orchestration', active: true },
+    ];
+    hub.innerHTML = pills.map(function(p) {
+      return '<span class="orch-hub-feat' + (p.active ? ' active' : '') + '">' + escHtml(p.label) + '</span>';
+    }).join('');
+  } catch (e) {
+    hub.innerHTML = '<span class="orch-hub-feat">Activity unavailable</span>';
+  }
+}
+
+function _ensureOrchHubPolling(agentCount, modelCount) {
+  _orchHubAgentCount = agentCount;
+  _orchHubModelCount = modelCount;
+  _refreshOrchHubActivity(_orchHubAgentCount, _orchHubModelCount);
+  if (_orchHubPollTimer) return;
+  _orchHubPollTimer = setInterval(function() {
+    _refreshOrchHubActivity(_orchHubAgentCount, _orchHubModelCount);
+  }, 15000);
+}
+
 function renderOrchestration(agents, providers) {
   const isPrimaryAgent = (a) => {
     const s = ((a.name || '') + ' ' + (a.type || '')).toLowerCase();
@@ -11144,7 +11222,10 @@ function renderOrchestration(agents, providers) {
 
     // SVG flow connector: fanout (porter → models)
     const fanoutEl = document.getElementById('flow-fanout-1');
-    if (fanoutEl) fanoutEl.innerHTML = _buildFlowSVG(Math.min(totalModels || modelList.length, 3), 'fanout');
+    if (fanoutEl) fanoutEl.innerHTML = _buildFlowSVG(Math.min(totalModels || modelList.length, 4), 'fanout');
+    _ensureOrchHubPolling(filtered.length, totalModels);
+  } else {
+    _ensureOrchHubPolling(filtered.length, Object.values(modelMap).length);
   }
 }
 
@@ -11240,7 +11321,11 @@ function openConfigPanel(type, id) {
     const opt = _modelOptLine(id);
     // Find which agents use this model
     const agents = window._lastAgents || [];
-    const usedBy = agents.filter(a => _inferModelId(a).toLowerCase().includes(id.toLowerCase())).map(a => a.name);
+    const usedByAgents = agents.filter(a => _inferModelId(a).toLowerCase().includes(id.toLowerCase()));
+    const usedBy = usedByAgents.map(a => a.name);
+    const testAgent = usedByAgents.length ? usedByAgents[0] : null;
+    const prefs = window._currentPrefs || {};
+    const isPreferred = (prefs.preferred_model || '').toLowerCase() === String(id || '').toLowerCase();
     title.textContent = displayName;
     body.innerHTML = `
       <div style="margin-bottom:16px">
@@ -11255,13 +11340,34 @@ function openConfigPanel(type, id) {
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Used by</div>
         <div style="font-size:13px;color:var(--text2)">${usedBy.map(n=>escHtml(n)).join(', ')}</div>
       </div>` : ''}
-      <div style="padding-top:14px;border-top:1px solid var(--border);font-size:12px;color:var(--text3)">
-        Task routing preferences will be configurable in a future update.
+      <div style="display:flex;flex-direction:column;gap:8px;padding-top:14px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost" style="text-align:left" onclick="setPreferredModelFromConfig('${esc(id)}')">${isPreferred ? 'Preferred model (active)' : 'Set as preferred model'}</button>
+        <button class="btn btn-ghost" style="text-align:left" onclick="clearPreferredModelFromConfig()">Clear preferred model</button>
+        ${testAgent ? `<button class="btn btn-ghost" style="text-align:left" onclick="doTestAgent('${esc(testAgent.id)}','${escHtml(testAgent.name)}')">Test connection via ${escHtml(testAgent.name)}</button>` : '<div style="font-size:12px;color:var(--text3)">No linked agent to test connection</div>'}
+      </div>
+      <div style="padding-top:10px;font-size:12px;color:var(--text3)">
+        Routing uses preferred model + policy presets. Changes apply immediately.
       </div>`;
   }
 
   panel.classList.add('open');
   if (main) main.classList.add('config-open');
+}
+
+async function setPreferredModelFromConfig(modelId) {
+  const res = await api('/api/preferences', { preferred_model: modelId || '' });
+  if (res && res.ok) {
+    if (!window._currentPrefs) window._currentPrefs = {};
+    window._currentPrefs.preferred_model = modelId || '';
+    toast('Preferred model updated', 'ok');
+    if (window._lastAgents) renderOrchestration(window._lastAgents, window._lastAiProviders || []);
+  } else {
+    toast((res && res.error) || 'Failed to update preferred model', 'err');
+  }
+}
+
+async function clearPreferredModelFromConfig() {
+  await setPreferredModelFromConfig('');
 }
 
 function closeConfigPanel() {
@@ -14058,7 +14164,7 @@ async function wizSetPassword() {
   if (p1.length < 8) { toast('Password must be at least 8 characters', 'err'); return; }
   if (p1 !== p2) { toast('Passwords do not match', 'err'); return; }
 
-  const r = await api('/api/password/change', { pw_new: p1, pw_confirm: p2 });
+  const r = await api('/api/password/change', { new: p1 });
   if (r && r.ok) {
     _wizPwChanged = true;
     toast('Password updated', 'ok');
@@ -16326,8 +16432,8 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     self.wfile.write(f"data: {json.dumps({'error': str(e)})}\n\n".encode())
                     self.wfile.flush()
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.debug("Skip probe: %s", e)
 
         elif parsed.path == "/api/chat/sessions":
             if not self.auth_check(redirect=False): return
