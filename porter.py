@@ -11873,6 +11873,22 @@ async function doTestAgent(id, name) {
   const latency = res.latency_ms != null ? res.latency_ms + 'ms' : '\u2014';
   const ver = res.version ? escHtml(String(res.version)) : 'Unknown';
   const ep = res.endpoint ? escHtml(String(res.endpoint)) : '\u2014';
+  const msg = String(res.message || '');
+  const msgLower = msg.toLowerCase();
+  let nextHint = '';
+  if (!connected) {
+    if (msgLower.includes('codex')) {
+      nextHint = 'Check Codex CLI auth/session and internet connectivity.';
+    } else if (msgLower.includes('gemini')) {
+      nextHint = 'Check Gemini CLI install/auth and API quota state.';
+    } else if (msgLower.includes('claude')) {
+      nextHint = 'Check Claude CLI install/auth and account/session status.';
+    } else if (msgLower.includes('gateway') || msgLower.includes('connection refused') || msgLower.includes('unreachable')) {
+      nextHint = 'Check OpenClaw Gateway process, port, and auth token settings.';
+    } else {
+      nextHint = 'Check local CLI/service availability and credentials, then retry.';
+    }
+  }
   const statusHtml = connected
     ? '<strong style="color:var(--ok,#22c55e)">\u2714 Connected</strong>'
     : '<strong style="color:var(--danger,#ef4444)">\u2718 Unreachable</strong>';
@@ -11883,7 +11899,8 @@ async function doTestAgent(id, name) {
     + '<span style="color:var(--text3)">Endpoint</span><span style="word-break:break-all">' + ep + '</span>'
     + (res.last_seen ? '<span style="color:var(--text3)">Heartbeat</span><span>' + escHtml(String(res.last_seen)) + '</span>' : '')
     + '</div>'
-    + (res.message ? '<div style="margin-top:8px;font-size:12px;color:var(--text3)">' + escHtml(String(res.message)) + '</div>' : '');
+    + (res.message ? '<div style="margin-top:8px;font-size:12px;color:var(--text3)">' + escHtml(String(res.message)) + '</div>' : '')
+    + (nextHint ? '<div style="margin-top:6px;font-size:12px;color:var(--text2)"><strong>Next step:</strong> ' + escHtml(nextHint) + '</div>' : '');
   showModal({
     title: escHtml(name) + ' \u2014 connectivity test',
     desc: rows,
