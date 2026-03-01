@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.19 — Chat UX"""
+"""Porter v0.25.20 — Chat Welcome"""
 
 
 
@@ -4164,21 +4164,22 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 /* Chat welcome (centered, fresh-chat state) */
 .chat-welcome {
   display:flex; flex-direction:column; align-items:center; justify-content:center;
-  flex:1; gap:16px; text-align:center; padding:0 24px;
+  flex:1; gap:12px; text-align:center; padding:0 24px;
 }
-.chat-welcome-title { font-size:28px; font-weight:700; color:var(--text); }
+.chat-welcome-title { font-size:30px; font-weight:600; color:#fff; letter-spacing:-0.3px; }
 .chat-welcome-input-wrap {
-  width:100%; max-width:620px; background:none; border:1px solid var(--border);
-  border-radius:16px; padding:16px 20px 12px; transition:border-color .15s;
+  width:100%; max-width:640px; background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.08); border-radius:18px;
+  padding:18px 22px 12px; transition:border-color .2s;
 }
-.chat-welcome-input-wrap:focus-within { border-color:var(--accent); }
+.chat-welcome-input-wrap:focus-within { border-color:rgba(247,147,26,.4); }
 .chat-welcome-input-wrap textarea {
-  width:100%; border:none; background:none; color:#fff; font-size:14px;
-  font-family:inherit; resize:none; outline:none; min-height:28px; max-height:160px; line-height:1.5;
+  width:100%; border:none; background:none; color:#fff; font-size:15px;
+  font-family:inherit; resize:none; outline:none; min-height:30px; max-height:160px; line-height:1.5;
 }
-.chat-welcome-input-wrap textarea::placeholder { color:var(--text2); }
+.chat-welcome-input-wrap textarea::placeholder { color:rgba(255,255,255,.35); }
 .chat-welcome-meta {
-  display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:8px;
+  display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:10px;
 }
 
 
@@ -4248,23 +4249,26 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   background:var(--bg); position:sticky; bottom:0; z-index:10;
 }
 .chat-input-area .chat-input-wrap {
-  background:none; border:1px solid var(--border); border-radius:14px;
-  padding:12px 16px 8px; transition:border-color .15s;
+  background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08);
+  border-radius:16px; padding:14px 18px 10px; transition:border-color .2s;
 }
-.chat-input-area .chat-input-wrap:focus-within { border-color:var(--accent); }
+.chat-input-area .chat-input-wrap:focus-within { border-color:rgba(247,147,26,.4); }
 .chat-input-bottom {
-  width:100%; border:none; background:none; color:#fff; font-size:13px;
-  font-family:inherit; resize:none; outline:none; min-height:24px; max-height:120px; line-height:1.5;
+  width:100%; border:none; background:none; color:#fff; font-size:14px;
+  font-family:inherit; resize:none; outline:none; min-height:26px; max-height:120px; line-height:1.5;
 }
-.chat-input-bottom::placeholder { color:var(--text2); }
+.chat-input-bottom::placeholder { color:rgba(255,255,255,.35); }
 .chat-input-bottom-meta {
   display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:6px;
 }
 .chat-model-dropdown {
-  padding:3px 10px; font-size:11px; border:1px solid var(--border); border-radius:6px;
-  background:none; color:var(--text2); cursor:pointer; transition:.12s;
+  padding:4px 8px; font-size:12px; border:none; border-radius:6px;
+  background:none; color:rgba(255,255,255,.5); cursor:pointer; transition:.15s;
+  -webkit-appearance:none; appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='rgba(255,255,255,.4)' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 4px center; padding-right:20px;
 }
-.chat-model-dropdown:hover { border-color:var(--accent); color:#fff; }
+.chat-model-dropdown:hover { color:#fff; }
 .chat-sidebar { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
 .chat-sidebar-item {
   display:flex; align-items:center; gap:8px; padding:6px 10px;
@@ -5113,7 +5117,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.19</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.20</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5194,7 +5198,7 @@ select.settings-input { padding-right: 26px; }
       </div>
 
       <div id="chat-main">
-        <div id="chat-messages" class="chat-messages"></div>
+        <div id="chat-messages" class="chat-messages welcome-state"></div>
         <div id="chat-ctx-bar" class="chat-ctx-bar" style="display:none"></div>
         <div class="chat-input-area" id="chat-input-area" style="display:none">
           <div id="chat-autocomplete" class="chat-autocomplete"></div>
@@ -6200,6 +6204,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.20', date:'2026-03-01', notes:['Chat: Hi Moe! greeting, elegant input styling, lighter bg contrast, borderless dropdown, vertical centering'] },
   { ver:'v0.25.19', date:'2026-03-01', notes:['Chat: full model names in dropdown, transparent input wrap, white text, greeting placeholder'] },
   { ver:'v0.25.18', date:'2026-03-01', notes:['Chat: welcome renders instantly (no wait for model load), removed Direct Dispatch section, centered input box'] },
   { ver:'v0.25.17', date:'2026-03-01', notes:['Chat redesign: centered welcome input, pinned bottom after send, model dropdown, no send button or paperclip'] },
@@ -9662,8 +9667,9 @@ function renderChatMessages(streamUpdate) {
     // Centered welcome state
     el.classList.add('welcome-state');
     el.innerHTML = '<div class="chat-welcome">'
+      + '<div class="chat-welcome-title">Hi, Moe \ud83d\udc4b</div>'
       + '<div class="chat-welcome-input-wrap">'
-      + '<textarea id="chat-input-welcome" placeholder="Hey, I\u2019m Porter. How can I help you?" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>'
+      + '<textarea id="chat-input-welcome" placeholder="How can I help you today?" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>'
       + '<div class="chat-welcome-meta">'
       + '<select id="chat-backend-sel-welcome" class="chat-model-dropdown" title="Select model">'
       + '<option value="">Auto-route</option>'
@@ -16067,7 +16073,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.19"})
+            self.reply_json({"v": "0.25.20"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17071,7 +17077,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.19'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.20'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20123,7 +20129,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.19 ready (localhost only)")
+    print(f"\n  Porter v0.25.20 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
