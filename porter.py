@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.22.6 — self-hosted file manager"""
+"""Porter v0.22.7 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -4682,7 +4682,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.22.6</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.22.7</div>
   </div>
 </aside>
 
@@ -5733,6 +5733,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.22.7', date:'2026-03-01', notes:[
+    'New: Smart routing — Porter auto-selects model based on message content',
+    'New: Code/technical tasks route to OpenClaw, quick queries to Gemini',
+    'UX: Model badge shows which backend actually handled the message',
+  ]},
   { ver:'v0.22.6', date:'2026-03-01', notes:[
     'New: Built-in chat commands — /help, /clear, /status, /models, /version',
     'New: /clear wipes chat, /help shows command list, /status shows health',
@@ -8934,6 +8939,14 @@ function chatAutoResize(el) {
 var _acVisible = false;
 var _acItems = [];
 var _acIdx = -1;
+
+// Smart routing indicator
+function _showRouteIndicator(backend) {
+  var ind = document.getElementById('chat-route-indicator');
+  if (!ind) return;
+  var colors = {openclaw:'#059669', gemini:'#2563eb', ollama:'#8b5cf6'};
+  ind.innerHTML = '<span class="route-dot" style="background:' + (colors[backend]||'var(--text3)') + '"></span>' + backend;
+}
 
 var _defaultSlashCmds = [
   {cmd: '/help', desc: 'Show available commands', emoji: '\u2753'},
@@ -13950,6 +13963,37 @@ def _log_delegation(backend, message, result, duration_ms):
         if len(_delegation_log) > 50:
             _delegation_log.pop(0)
 
+
+def _smart_route(message):
+    """Decide which backend to use based on message content.
+    Returns (backend, model) tuple.
+    """
+    msg = message.lower().strip()
+
+    # Code-related keywords → OpenClaw (Codex is best at code)
+    import re as _re
+    code_patterns = [r'\bdef ', r'\bfunction ', r'\bclass ', r'\bimport ', r'\bconst ',
+                     r'\breturn ', r'\bif\s*\(', r'\bfor\s*\(', r'```', r'error:',
+                     r'\btraceback', r'\bfix\b', r'\bbug\b', r'\bimplement',
+                     r'\brefactor', r'\bdebug', r'\bcode\b',
+                     r'\.py\b', r'\.js\b', r'\.ts\b', r'\.html\b', r'\.css\b', r'\.json\b',
+                     r'\bapi\b', r'\bendpoint\b', r'\bdatabase\b', r'\bquery\b', r'\bsql\b']
+    if any(_re.search(p, msg) for p in code_patterns):
+        return ("openclaw", None)
+
+    # Quick factual / research → Gemini (fast, good at factual)
+    quick_signals = ['what is', 'who is', 'when did', 'how many', 'define ',
+                     'explain ', 'summarize', 'translate', 'list ', 'compare']
+    if any(msg.startswith(s) or (' ' + s) in msg for s in quick_signals):
+        return ("gemini", None)
+
+    # Short messages (< 20 chars) → Gemini (fast responses)
+    if len(msg) < 20:
+        return ("gemini", None)
+
+    # Default → OpenClaw
+    return ("openclaw", None)
+
 def dispatch_agent(message, backend, model=None, timeout=120):
     """Route a message to the specified backend and return normalized response."""
     import time as _dt
@@ -14382,7 +14426,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.22.6"})
+            self.reply_json({"v": "0.22.7"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -15303,6 +15347,14 @@ class Handler(BaseHTTPRequestHandler):
 
 
         elif parsed.path == "/api/chat/stream":
+            # Smart routing: if model is "auto" or starts with "general", pick best backend
+            model_param = params.get("model", [""])[0]
+            if model_param in ("auto", "") or model_param.startswith("general"):
+                prompt_param = params.get("prompt", [""])[0]
+                if prompt_param and prompt_param != "SAVED":
+                    _route_backend, _route_model = _smart_route(prompt_param)
+                    log.info("Smart route: %s → %s", prompt_param[:40], _route_backend)
+
             if not self.auth_check(redirect=False): return
             qs = parse_qs(parsed.query)
             model_id = qs.get("model", [""])[0]
@@ -17915,7 +17967,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.22.6 ready (localhost only)")
+    print(f"\n  Porter v0.22.7 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
