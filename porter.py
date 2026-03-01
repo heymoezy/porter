@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.23.2 — self-hosted file manager"""
+"""Porter v0.23.3 — self-hosted file manager"""
 
 import email
 import hashlib
@@ -4742,7 +4742,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.23.2</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.23.3</div>
   </div>
 </aside>
 
@@ -5801,6 +5801,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.23.3', date:'2026-03-01', notes:[
+    'New: Claude Code CLI added as chat backend (claude -p)',
+    'New: @claude routing target in chat',
+    'New: Claude Code dashboard card + model selector entry',
+  ]},
   { ver:'v0.23.2', date:'2026-03-01', notes:[
     'Fix: Gemini now appears in chat model selector (was hidden due to scoping bug)',
     'Fix: Duplicate model entries eliminated from chat dropdown',
@@ -8931,6 +8936,7 @@ async function _renderChatDashboard() {
   var el = document.getElementById('chat-dash-models');
   if (!el) return;
   var models = [
+    {name: 'Claude', backend: 'claude', model: 'Claude Code', color: '#d97706'},
     {name: 'OpenClaw', backend: 'openclaw', model: 'GPT-5.3 Codex', color: '#059669'},
     {name: 'Gemini', backend: 'gemini', model: 'Gemini 2.5 Flash', color: '#2563eb'},
     {name: 'Codex', backend: 'codex', model: 'Codex CLI', color: '#f59e0b'},
@@ -8997,6 +9003,10 @@ async function populateChatModels() {
   // Gemini CLI
   var geminiUp = healthServices.some(function(s) { return s.name === 'Gemini CLI' && s.status === 'up'; });
   if (geminiUp) addModel('gemini-cli-auto', 'Gemini (Google)');
+
+  // Claude Code CLI
+  var claudeUp = healthServices.some(function(s) { return s.name === 'Claude CLI' && s.status === 'up'; });
+  if (claudeUp) addModel('claude-cli', 'Claude Code (Anthropic)');
 
   // Codex CLI
   var codexUp = healthServices.some(function(s) { return s.name === 'Codex CLI' && s.status === 'up'; });
@@ -9181,7 +9191,8 @@ var _defaultSlashCmds = [
 ];
 
 var _defaultAtTargets = [
-  {cmd: '@openclaw', desc: 'Route to OpenClaw (GPT-5.3 Codex)', emoji: '\ud83d\udfe2'},
+  {cmd: '@claude', desc: 'Route to Claude Code (Anthropic)', emoji: '\ud83d\udfe1'},
+        {cmd: '@openclaw', desc: 'Route to OpenClaw (GPT-5.3 Codex)', emoji: '\ud83d\udfe2'},
   {cmd: '@gemini', desc: 'Route to Gemini', emoji: '\ud83d\udfe6'},
   {cmd: '@codex', desc: 'Route to Codex CLI (OpenAI)', emoji: '\ud83d\udfe0'},
         {cmd: '@ollama', desc: 'Route to Ollama (local)', emoji: '\ud83d\udfe3'},
@@ -9329,6 +9340,7 @@ function chatSend() {
         '`/version` — Show Porter version\n' +
         '`/flush` — Flush session to memory\n\n' +
         '**Routing**\n' +
+        '`@claude <msg>` — Send to Claude Code\n' +
         '`@openclaw <msg>` — Send to OpenClaw\n' +
         '`@gemini <msg>` — Send to Gemini\n' +
         '`@codex <msg>` — Send to Codex CLI\n' +
@@ -9390,7 +9402,7 @@ function chatSend() {
   }
 
   // Check for @backend prefix — route to specific model
-  const atMatch = text.match(/^@(gemini|openclaw|ollama|codex)\s+(.+)/s);
+  const atMatch = text.match(/^@(claude|gemini|openclaw|ollama|codex)\s+(.+)/s);
   if (atMatch) {
     input.value = '';
     input.style.height = 'auto';
@@ -14141,6 +14153,44 @@ def _dispatch_gemini(message, model=None, timeout=60):
     }
 
 
+
+def _dispatch_claude(message, model=None, timeout=120):
+    """Invoke Claude Code CLI (claude -p) and return normalized response."""
+    import subprocess
+    cl_bin = _resolve_cli("claude")
+    if not cl_bin:
+        return {"ok": False, "error": "Claude CLI not found. Install: npm i -g @anthropic-ai/claude-code"}
+    cmd = [cl_bin, "-p", "--output-format", "json", "--max-turns", "1", message]
+    if model:
+        cmd.extend(["--model", model])
+    log.info("Agent bridge [claude]: msg=%s", message[:80])
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env())
+    if result.returncode != 0:
+        return {"ok": False, "error": (result.stderr or "Claude CLI returned non-zero")[:500]}
+    # Parse JSON output
+    try:
+        resp = json.loads(result.stdout)
+        text = resp.get("result", "") or resp.get("response", "") or resp.get("content", "")
+        if not text and isinstance(resp, dict):
+            # Try to find text in nested structure
+            for key in ("text", "message", "output"):
+                if key in resp:
+                    text = resp[key]
+                    break
+        if not text:
+            text = result.stdout.strip()
+        usage = resp.get("usage", {})
+    except (json.JSONDecodeError, ValueError):
+        text = result.stdout.strip()
+        usage = {}
+    return {
+        "ok": True, "backend": "claude",
+        "text": text,
+        "model": model or "claude-code",
+        "duration_ms": 0,
+        "tokens": {"input": usage.get("input_tokens", 0), "output": usage.get("output_tokens", 0)},
+    }
+
 def _dispatch_codex(message, model=None, timeout=120):
     """Invoke OpenAI Codex CLI (codex exec) and return normalized response."""
     import subprocess
@@ -14199,6 +14249,7 @@ def _dispatch_ollama(message, model=None, timeout=120):
 
 AGENT_DISPATCHERS = {
     "openclaw": _dispatch_openclaw,
+    "claude": _dispatch_claude,
     "gemini": _dispatch_gemini,
     "codex": _dispatch_codex,
     "ollama": _dispatch_ollama,
@@ -14692,7 +14743,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.23.2"})
+            self.reply_json({"v": "0.23.3"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -15702,6 +15753,17 @@ class Handler(BaseHTTPRequestHandler):
                         self.wfile.flush()
                     else:
                         self.wfile.write(f"data: {json.dumps({'error': gem_result.get('error', 'Gemini error')})}\n\n".encode())
+                        self.wfile.flush()
+
+                elif model_id == "claude-cli":
+                    # Claude Code via agent bridge (non-streaming — single response)
+                    cl_result = dispatch_agent(prompt, "claude", timeout=120)
+                    if cl_result.get("ok"):
+                        full_response = cl_result.get("text", "")
+                        self.wfile.write(f"data: {json.dumps({'token': full_response})}\n\n".encode())
+                        self.wfile.flush()
+                    else:
+                        self.wfile.write(f"data: {json.dumps({'error': cl_result.get('error', 'Claude error')})}\n\n".encode())
                         self.wfile.flush()
 
                 elif model_id == "codex-cli":
@@ -18244,7 +18306,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.23.2 ready (localhost only)")
+    print(f"\n  Porter v0.23.3 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
