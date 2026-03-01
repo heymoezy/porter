@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.23.4 — self-hosted file manager"""
+"""Porter v0.23.5 — self-hosted file manager"""
 
 
 import email
@@ -3884,6 +3884,48 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .chat-dash-action:hover { background:var(--raised); color:var(--text); border-color:var(--accent); }
 
+/* Guided tour */
+.tour-overlay { position:fixed; inset:0; z-index:9998; pointer-events:none; }
+.tour-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9997; }
+.tour-spotlight {
+  position:absolute; z-index:9999; border-radius:8px;
+  box-shadow:0 0 0 9999px rgba(0,0,0,.55), 0 0 12px rgba(0,0,0,.4);
+  pointer-events:none; transition:.3s;
+}
+.tour-tooltip {
+  position:absolute; z-index:10000; background:var(--raised,#1e1e2e); border:1px solid var(--border,#333);
+  border-radius:10px; padding:16px 18px; max-width:300px; box-shadow:0 8px 24px rgba(0,0,0,.4);
+  pointer-events:all;
+}
+.tour-tooltip-title { font-size:14px; font-weight:700; color:var(--text,#fff); margin-bottom:6px; }
+.tour-tooltip-desc { font-size:12px; color:var(--text3,#999); line-height:1.5; margin-bottom:12px; }
+.tour-tooltip-footer { display:flex; align-items:center; gap:8px; }
+.tour-tooltip-step { font-size:11px; color:var(--text3,#666); }
+.tour-tooltip-nav { margin-left:auto; display:flex; gap:6px; }
+.tour-btn {
+  padding:5px 14px; font-size:12px; border-radius:6px; cursor:pointer;
+  border:1px solid var(--border,#333); background:none; color:var(--text2,#ccc); transition:.12s;
+}
+.tour-btn:hover { background:var(--raised,#252535); }
+.tour-btn-primary { background:var(--accent,#6366f1); color:#fff; border-color:var(--accent,#6366f1); }
+.tour-btn-primary:hover { opacity:.9; }
+
+/* Tab help tooltip */
+.tab-help-btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:20px; height:20px; border-radius:50%; font-size:11px; font-weight:700;
+  color:var(--text3); border:1px solid var(--border); background:none; cursor:pointer;
+  margin-left:8px; transition:.12s; vertical-align:middle;
+}
+.tab-help-btn:hover { color:var(--accent); border-color:var(--accent); }
+.tab-help-tip {
+  position:absolute; top:100%; left:0; margin-top:8px; padding:10px 14px;
+  background:var(--raised); border:1px solid var(--border); border-radius:8px;
+  font-size:12px; color:var(--text3); line-height:1.5; max-width:280px;
+  box-shadow:0 4px 16px rgba(0,0,0,.3); z-index:100; display:none; white-space:normal;
+}
+.tab-help-tip.show { display:block; }
+
 .chat-input-area { display:flex; gap:8px; padding-top:12px; border-top:1px solid var(--border); flex-shrink:0; align-items:flex-end; }
 .chat-input {
   flex:1; padding:10px 14px; border:1px solid var(--border); border-radius:10px;
@@ -4744,7 +4786,8 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:0.5px">PORTER v0.23.4</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.23.5</div>
+    <button onclick="startTour()" style="font-size:10px;color:var(--text3);background:none;border:none;cursor:pointer;padding:2px 0" title="Start guided tour">&#10067; Tour</button>
   </div>
 </aside>
 
@@ -5803,6 +5846,11 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.23.5', date:'2026-03-01', notes:[
+    'New: Guided tour — vanilla JS spotlight walkthrough on first visit',
+    'New: Per-tab help tooltips — ? icon in each tab header',
+    'UX: Tour covers sidebar, chat, model selector, tabs, files',
+  ]},
   { ver:'v0.23.4', date:'2026-03-01', notes:[
     'Fix: Smart Routing now applies model selection (was computed but never used)',
     'Fix: Codex CLI dispatcher passes -m model flag (was ignored)',
@@ -9188,6 +9236,149 @@ document.addEventListener('click', function(e) {
     dd.classList.remove('open');
   }
 });
+
+
+// ── Guided tour (vanilla JS) ────────────────────────────────────────────────
+var _tourSteps = [
+  { sel: '.sidebar', title: 'Sidebar Navigation', desc: 'Switch between tabs: Chat, Orchestration, Memory, Projects, Files, and more.' },
+  { sel: '#chat-input', title: 'Chat Input', desc: 'Type messages to your AI models. Use / for commands, @ to target a specific backend.' },
+  { sel: '#chat-model, .chat-model-sel', title: 'Model Selector', desc: 'Choose which AI model responds. Cloud models (OpenClaw, Gemini, Codex) and local (Ollama) are grouped.' },
+  { sel: '#chat-dashboard, .chat-dash', title: 'Dashboard', desc: 'Live model status cards. Click a card to start chatting with that backend.' },
+  { sel: '.notif-bell', title: 'Notifications', desc: 'Bell icon shows recent events — delegations, errors, task completions.' },
+];
+var _tourStep = 0;
+var _tourActive = false;
+
+function startTour() {
+  if (_tourActive) return;
+  _tourActive = true;
+  _tourStep = 0;
+  _showTourStep();
+}
+
+function _showTourStep() {
+  _clearTour();
+  if (_tourStep >= _tourSteps.length) { endTour(); return; }
+  var step = _tourSteps[_tourStep];
+  var el = document.querySelector(step.sel);
+  if (!el) { _tourStep++; _showTourStep(); return; }
+
+  var rect = el.getBoundingClientRect();
+  var pad = 6;
+
+  // Backdrop
+  var bd = document.createElement('div');
+  bd.className = 'tour-backdrop';
+  bd.id = 'tour-backdrop';
+  bd.onclick = function() { endTour(); };
+  document.body.appendChild(bd);
+
+  // Spotlight
+  var sp = document.createElement('div');
+  sp.className = 'tour-spotlight';
+  sp.id = 'tour-spotlight';
+  sp.style.left = (rect.left - pad) + 'px';
+  sp.style.top = (rect.top - pad) + 'px';
+  sp.style.width = (rect.width + pad * 2) + 'px';
+  sp.style.height = (rect.height + pad * 2) + 'px';
+  document.body.appendChild(sp);
+
+  // Tooltip
+  var tt = document.createElement('div');
+  tt.className = 'tour-tooltip';
+  tt.id = 'tour-tooltip';
+  tt.innerHTML = '<div class="tour-tooltip-title">' + step.title + '</div>' +
+    '<div class="tour-tooltip-desc">' + step.desc + '</div>' +
+    '<div class="tour-tooltip-footer">' +
+    '<span class="tour-tooltip-step">' + (_tourStep + 1) + ' / ' + _tourSteps.length + '</span>' +
+    '<div class="tour-tooltip-nav">' +
+    (_tourStep > 0 ? '<button class="tour-btn" onclick="_tourPrev()">Back</button>' : '') +
+    (_tourStep < _tourSteps.length - 1
+      ? '<button class="tour-btn tour-btn-primary" onclick="_tourNext()">Next</button>'
+      : '<button class="tour-btn tour-btn-primary" onclick="endTour()">Done</button>') +
+    '</div></div>';
+
+  // Position tooltip below or above element
+  var ttTop = rect.bottom + 12;
+  var ttLeft = Math.max(8, rect.left);
+  if (ttTop + 160 > window.innerHeight) ttTop = Math.max(8, rect.top - 160);
+  if (ttLeft + 300 > window.innerWidth) ttLeft = window.innerWidth - 310;
+  tt.style.top = ttTop + 'px';
+  tt.style.left = ttLeft + 'px';
+  document.body.appendChild(tt);
+}
+
+function _tourNext() { _tourStep++; _showTourStep(); }
+function _tourPrev() { if (_tourStep > 0) _tourStep--; _showTourStep(); }
+
+function _clearTour() {
+  ['tour-backdrop', 'tour-spotlight', 'tour-tooltip'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.remove();
+  });
+}
+
+function endTour() {
+  _clearTour();
+  _tourActive = false;
+  try { localStorage.setItem('porter_tour_done', '1'); } catch(e) {}
+}
+
+// Auto-start on first visit
+setTimeout(function() {
+  try {
+    if (!localStorage.getItem('porter_tour_done')) startTour();
+  } catch(e) {}
+}, 2000);
+
+
+// ── Tab help tooltips ───────────────────────────────────────────────────────
+var _tabHelpTexts = {
+  chat: 'Talk to your AI models. Use /commands for built-in skills, @model to target a specific backend. Smart routing auto-selects the best model.',
+  orchestration: 'See how models work together. Flow diagram shows routing from Porter hub to backends. Live status of each agent.',
+  memory: 'How AI agents remember across sessions. Three layers: Instructions (briefings), Persistent Memory (learned), Session History (raw logs).',
+  extensions: 'Connected integrations (OpenClaw, Gemini) and local tools (ffmpeg, D2, etc). Install or configure backends here.',
+  projects: 'Track active projects and tasks. Each project has its own context, memory plane, and task registry.',
+  workflows: 'Browse OpenClaw skills and manage automations. Skills are agent-invocable commands, automations run on schedules.',
+  locations: 'Manage file system mounts — which directories Porter can browse and edit.',
+  files: 'Browse, edit, upload, and manage files across all mounted locations.',
+  admin: 'System health, service status, logs, configuration. Monitor CPU, RAM, disk, and all connected services.',
+};
+
+function _initTabHelp() {
+  document.querySelectorAll('.module-hdr .module-title').forEach(function(titleEl) {
+    var panel = titleEl.closest('.module-panel');
+    if (!panel) return;
+    var tabId = panel.id ? panel.id.replace('-module','').replace('-panel','') : '';
+    var helpText = _tabHelpTexts[tabId];
+    if (!helpText) return;
+
+    var wrapper = titleEl.parentElement;
+    if (!wrapper) return;
+    wrapper.style.position = 'relative';
+
+    var btn = document.createElement('button');
+    btn.className = 'tab-help-btn';
+    btn.textContent = '?';
+    btn.title = 'About this tab';
+
+    var tip = document.createElement('div');
+    tip.className = 'tab-help-tip';
+    tip.textContent = helpText;
+
+    btn.onclick = function(e) {
+      e.stopPropagation();
+      tip.classList.toggle('show');
+      setTimeout(function() { tip.classList.remove('show'); }, 5000);
+    };
+
+    titleEl.after(btn);
+    btn.after(tip);
+  });
+}
+
+// Init after DOM ready
+setTimeout(_initTabHelp, 1000);
 
 // ── Chat autocomplete ────────────────────────────────────────────────────
 var _acVisible = false;
@@ -14219,12 +14410,13 @@ def _dispatch_codex(message, model=None, timeout=120):
     if not cdx_bin:
         return {"ok": False, "error": "Codex CLI not found. Install: npm i -g @openai/codex"}
     codex_model = (model or os.environ.get("PORTER_CODEX_MODEL", "").strip() or "gpt-5.1")
-    cmd = [cdx_bin, "exec", "--ephemeral", "--json", "-m", codex_model, message]
+    cmd = [cdx_bin, "exec", "--ephemeral", "--json", "--skip-git-repo-check", "-m", codex_model, message]
     log.info("Agent bridge [codex]: model=%s msg=%s", codex_model, message[:80])
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env())
-    # Parse JSONL output — find the agent_message item
+    # Parse JSONL output — extract assistant text and usage
     text = ""
     usage = {}
+    errors = []
     for line in (result.stdout or "").strip().split("\n"):
         if not line.strip():
             continue
@@ -14233,13 +14425,37 @@ def _dispatch_codex(message, model=None, timeout=120):
             if evt.get("type") == "item.completed":
                 item = evt.get("item", {})
                 if item.get("type") == "agent_message":
-                    text = item.get("text", "")
+                    msg_text = item.get("text", "") or ""
+                    if not msg_text:
+                        parts = []
+                        for part in (item.get("content", []) or []):
+                            if not isinstance(part, dict):
+                                continue
+                            if isinstance(part.get("text"), str) and part.get("text"):
+                                parts.append(part.get("text"))
+                        if parts:
+                            msg_text = "".join(parts).strip()
+                    if msg_text:
+                        text = msg_text
+                elif item.get("type") == "error":
+                    msg = item.get("message", "")
+                    if msg:
+                        errors.append(msg)
             elif evt.get("type") == "turn.completed":
                 usage = evt.get("usage", {})
+            elif evt.get("type") == "error":
+                msg = evt.get("message", "")
+                if msg:
+                    errors.append(msg)
         except Exception:
             continue
-    if not text and result.returncode != 0:
-        return {"ok": False, "error": (result.stderr or "Codex returned no response")[:500]}
+    if not text:
+        err_msg = (result.stderr or "").strip()
+        if not err_msg and errors:
+            err_msg = " | ".join(errors[-3:])
+        if not err_msg:
+            err_msg = "Codex returned no assistant text"
+        return {"ok": False, "error": err_msg[:500]}
     return {
         "ok": True, "backend": "codex",
         "text": text,
@@ -14640,7 +14856,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/js/tour.js":
             if not self.auth_check(redirect=False): return
-            tour_js = PORTER_DATA_DIR / "runtime" / "www" / "js" / "tour.js"
+            tour_js = _DATA_DIR / "runtime" / "www" / "js" / "tour.js"
             if tour_js.exists():
                 body = tour_js.read_bytes()
                 self.send_response(200)
@@ -14779,7 +14995,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.23.4"})
+            self.reply_json({"v": "0.23.5"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -18352,7 +18568,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.23.4 ready (localhost only)")
+    print(f"\n  Porter v0.23.5 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
