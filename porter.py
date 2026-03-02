@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.43 — Memory Tab: Split-Pane Editor"""
+"""Porter v0.25.44 — Memory Tab: Session Management"""
 
 
 
@@ -231,6 +231,17 @@ def _db_init():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat ON chat_messages(chat_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_attachments_chat ON chat_attachments(chat_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_attachments_msg ON chat_attachments(message_id)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS flush_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            agent TEXT NOT NULL,
+            session_id TEXT,
+            destination TEXT,
+            bytes_written INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'ok'
+        )
+    """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS agent_messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1524,6 +1535,79 @@ def _load_claude_session_summaries() -> list:
     return summaries
 
 
+
+def _load_gemini_session_summaries() -> list:
+    """Load Gemini CLI session summaries from ~/.gemini/tmp/*/chats/*.json"""
+    import glob as _glob
+    home = Path.home()
+    sessions = []
+    chat_dirs = home / ".gemini" / "tmp"
+    if not chat_dirs.exists():
+        return sessions
+    for json_file in sorted(chat_dirs.rglob("chats/*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:50]:
+        try:
+            with open(json_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            sid = data.get("sessionId", json_file.stem)
+            msgs = data.get("messages", [])
+            start = data.get("startTime", "")
+            end = data.get("lastUpdated", "")
+            name = ""
+            for m in msgs:
+                content = m.get("content", [])
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("text"):
+                            name = block["text"][:60].replace("\n", " ").strip()
+                            break
+                if name:
+                    break
+            sessions.append({
+                "id": sid,
+                "name": name or sid[:12],
+                "source": "gemini",
+                "messages": len(msgs),
+                "first_ts": start,
+                "last_ts": end,
+                "size_kb": round(json_file.stat().st_size / 1024, 1),
+                "model": "gemini-cli",
+                "flushed": False,
+            })
+        except Exception as e:
+            log.debug("Gemini session parse error: %s", e)
+    return sessions
+
+
+def _log_flush_history(agent: str, session_id: str, destination: str, bytes_written: int):
+    """Log a flush operation to the database."""
+    try:
+        from datetime import datetime, timezone
+        conn = _db_conn()
+        conn.execute(
+            "INSERT INTO flush_history (timestamp, agent, session_id, destination, bytes_written) VALUES (?, ?, ?, ?, ?)",
+            (datetime.now(timezone.utc).isoformat(), agent, session_id, destination, bytes_written)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.warning("flush_history log failed: %s", e)
+
+
+def _get_flush_history(limit: int = 10) -> list:
+    """Get recent flush history entries."""
+    try:
+        conn = _db_conn()
+        rows = conn.execute(
+            "SELECT timestamp, agent, session_id, destination, bytes_written, status FROM flush_history ORDER BY id DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        log.debug("flush_history read failed: %s", e)
+        return []
+
+
 def _get_memory_overview() -> dict:
     """Return complete memory topology across all detected models."""
     home = Path.home()
@@ -2008,6 +2092,54 @@ def _flush_claude_session(session_id: str) -> dict:
 
     return {"ok": True, "message": f"Session flushed to {target_path}", "path": str(target_path)}
 
+
+
+def _flush_gemini_session(session_id: str) -> dict:
+    """Flush a Gemini CLI session to GEMINI.md memory file."""
+    import glob as _glob
+    home = Path.home()
+    # Find the session file
+    target = None
+    for json_file in (home / ".gemini" / "tmp").rglob("chats/*.json"):
+        try:
+            with open(json_file, "r") as f:
+                data = json.load(f)
+            if data.get("sessionId") == session_id:
+                target = json_file
+                break
+        except Exception:
+            continue
+    if not target:
+        return {"ok": False, "error": f"Gemini session {session_id} not found"}
+    try:
+        with open(target, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        msgs = data.get("messages", [])
+        start = data.get("startTime", "")[:10]
+        msg_count = len(msgs)
+        # Extract first user message
+        first_msg = ""
+        for m in msgs:
+            content = m.get("content", [])
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("text"):
+                        first_msg = block["text"][:200].replace("\n", " ").strip()
+                        break
+            if first_msg:
+                break
+        summary = f"\n## Gemini Session Flush: {start}\n"
+        summary += f"- **Messages:** {msg_count}\n"
+        summary += f"- **Session:** `{session_id[:12]}...`\n"
+        if first_msg:
+            summary += f"- **Topic:** {first_msg}\n"
+        dest = home / ".gemini" / "GEMINI.md"
+        mode = "a" if dest.exists() else "w"
+        with open(dest, mode, encoding="utf-8") as f:
+            f.write(summary)
+        return {"ok": True, "path": str(dest), "bytes": len(summary.encode("utf-8"))}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 def _reload_config_and_tasks():
     """Re-read config and task registry from disk (called by /api/reload)."""
@@ -5549,6 +5681,21 @@ body.density-compact .file-name { padding: 6px 0; }
 /* Quick-add form */
 .mem-quickadd { display:flex;gap:6px;margin-top:8px;align-items:flex-start; }
 .mem-quickadd input { flex:1;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text); }
+/* Session Management */
+.mem-session-search { width:100%;padding:6px 10px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);margin-bottom:8px;box-sizing:border-box; }
+.mem-session-search::placeholder { color:var(--text3); }
+.mem-age-badge { display:inline-block;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600; }
+.mem-age-fresh { background:color-mix(in srgb, #22c55e 15%, transparent);color:#22c55e; }
+.mem-age-warm { background:color-mix(in srgb, #d97706 15%, transparent);color:#d97706; }
+.mem-age-stale { background:color-mix(in srgb, #ef4444 15%, transparent);color:#ef4444; }
+.mem-flush-banner { display:flex;align-items:center;gap:8px;padding:8px 12px;background:color-mix(in srgb, #d97706 10%, transparent);border:1px solid color-mix(in srgb, #d97706 30%, transparent);border-radius:6px;font-size:12px;color:#d97706;margin-bottom:10px; }
+.mem-flush-banner button { font-size:11px;padding:3px 10px;background:none;border:1px solid #d97706;color:#d97706;border-radius:4px;cursor:pointer; }
+.mem-flush-banner button:hover { background:#d97706;color:#fff; }
+.mem-flush-history { margin-top:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden; }
+.mem-flush-history-hdr { padding:8px 12px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;background:var(--surface2);border-bottom:1px solid var(--border); }
+.mem-flush-history-row { display:flex;gap:8px;padding:6px 12px;font-size:11px;color:var(--text2);border-bottom:1px solid var(--border); }
+.mem-flush-history-row:last-child { border-bottom:none; }
+
 
 
 
@@ -5957,7 +6104,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.43</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.44</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6617,11 +6764,17 @@ select.settings-input { padding-right: 26px; }
 
     <!-- Session History -->
     <div style="margin-top:16px">
-      <div class="mem-layer-label">Session History</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div class="mem-layer-label" style="margin:0">Session History</div>
+        <button class="btn btn-ghost" style="font-size:10px;padding:2px 8px;margin-left:auto" id="mem-bulk-flush-btn" style="display:none" onclick="memBulkFlush()">Flush All</button>
+      </div>
       <div class="mem-layer-desc">Raw conversation logs. Flushing extracts key learnings into the shared memory plane.</div>
+      <div id="mem-flush-banner"></div>
+      <input type="text" class="mem-session-search" id="mem-session-search" placeholder="Search sessions..." oninput="memSearchSessions(this.value)">
       <div id="mem-filter-bar" class="mem-filter-bar"></div>
       <div id="mem-session-stats" style="display:none;gap:16px;font-size:11px;color:var(--text3);padding:4px 0;margin-bottom:6px;flex-wrap:wrap"></div>
       <div id="mem-sessions-list"></div>
+      <div id="mem-flush-history"></div>
     </div>
 
     <!-- Split-Pane Editor -->
@@ -7122,6 +7275,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.44', date:'2026-03-02', notes:['Session search: filter sessions by text content','Bulk Flush: flush all pending sessions at once','Gemini session support: detect + display Gemini CLI sessions','Flush history log: last 10 flush ops in SQLite table','Session age badges: green (<1h), yellow (1-24h), red (>24h)','Auto-flush suggestion banner for stale sessions'] },
   { ver:'v0.25.43', date:'2026-03-02', notes:['Split-pane memory editor: file tree left, editor right','Markdown syntax highlighting in editor (headers, bold, code blocks)','Unsaved changes dot indicator','Memory quality score per file (size, staleness)','Diff preview before saving memory edits','Quick-add memory entry button per agent'] },
   { ver:'v0.25.42', date:'2026-03-02', notes:['Memory Tab overhaul: Agent Identity Cards with avatars, role labels, status dots','Per-agent file grouping with collapse/expand (localStorage)','Live agent health via provider probes','Role editor: click agent card to edit role description','Per-agent memory stats: size, file count, sessions'] },
   { ver:'v0.25.41', date:'2026-03-02', notes:['Fix: showAll ReferenceError in renderAgents (Orchestration tab)','Fix: async ReferenceError from intermediate deploy state'] },
@@ -10075,10 +10229,99 @@ function filterMemSessions(source) {
   renderMemorySessions(_memSessionsData);
 }
 
+let _memSearchQuery = '';
+
+function memSearchSessions(query) {
+  _memSearchQuery = query.toLowerCase().trim();
+  renderMemorySessions(_memSessionsData);
+}
+
+function _memAgeBadge(ts) {
+  if (!ts) return '';
+  var ageMs = Date.now() - new Date(ts).getTime();
+  var ageH = ageMs / 3600000;
+  if (ageH < 1) return '<span class="mem-age-badge mem-age-fresh">&lt;1h</span>';
+  if (ageH < 24) return '<span class="mem-age-badge mem-age-warm">' + Math.round(ageH) + 'h</span>';
+  return '<span class="mem-age-badge mem-age-stale">' + Math.round(ageH / 24) + 'd</span>';
+}
+
+function _memAutoFlushBanner(sessions) {
+  var banner = document.getElementById('mem-flush-banner');
+  if (!banner) return;
+  var staleCount = 0;
+  var now = Date.now();
+  sessions.forEach(function(s) {
+    if (s.last_ts) {
+      var ageH = (now - new Date(s.last_ts).getTime()) / 3600000;
+      if (ageH > 24 && !s.flushed) staleCount++;
+    }
+  });
+  if (staleCount > 0) {
+    banner.innerHTML = '<div class="mem-flush-banner"><span>' + staleCount + ' session' + (staleCount > 1 ? 's' : '') + ' older than 24h \u2014 consider flushing</span><button onclick="memBulkFlush()">Flush All</button></div>';
+  } else {
+    banner.innerHTML = '';
+  }
+}
+
+function memBulkFlush() {
+  var flushable = _memSessionsData.filter(function(s) { return s.source === 'claude' || s.source === 'openclaw'; });
+  if (!flushable.length) { toast('No flushable sessions', 'err'); return; }
+  if (!confirm('Flush ' + flushable.length + ' sessions to long-term memory?')) return;
+  var done = 0;
+  var errors = 0;
+  flushable.forEach(function(s) {
+    api('/api/memory/flush-preview', { session_id: s.id, source: s.source }).then(function(preview) {
+      if (!preview || !preview.ok) { errors++; return; }
+      api('/api/memory/flush', {
+        session_id: s.id, source: s.source,
+        summary: preview.summary, destination: preview.destination
+      }).then(function(res) {
+        if (res && res.ok) done++;
+        else errors++;
+        if (done + errors >= flushable.length) {
+          toast('Flushed ' + done + ' sessions' + (errors ? ' (' + errors + ' errors)' : ''));
+          loadMemory();
+        }
+      });
+    });
+  });
+}
+
+function memLoadFlushHistory() {
+  var el = document.getElementById('mem-flush-history');
+  if (!el) return;
+  api('/api/memory/flush-history').then(function(resp) {
+    if (!resp || !resp.ok || !resp.history || !resp.history.length) { el.innerHTML = ''; return; }
+    var html = '<div class="mem-flush-history"><div class="mem-flush-history-hdr">Recent Flushes</div>';
+    resp.history.forEach(function(h) {
+      var ts = h.timestamp ? new Date(h.timestamp).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '?';
+      var dest = (h.destination || '').split('/').pop();
+      html += '<div class="mem-flush-history-row">'
+        + '<span style="min-width:80px">' + escHtml(h.agent) + '</span>'
+        + '<span style="min-width:110px">' + ts + '</span>'
+        + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(dest) + '</span>'
+        + '<span>' + _memSize(h.bytes_written || 0) + '</span>'
+        + '</div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  });
+}
+
 function renderMemorySessions(sessions) {
   const el = document.getElementById('mem-sessions-list');
   if (!el) return;
-  const filtered = _memSessionFilter === 'all' ? sessions : sessions.filter(function(s) { return s.source === _memSessionFilter; });
+  var filtered = _memSessionFilter === 'all' ? sessions : sessions.filter(function(s) { return s.source === _memSessionFilter; });
+  // Apply search
+  if (_memSearchQuery) {
+    filtered = filtered.filter(function(s) {
+      return (s.name || '').toLowerCase().indexOf(_memSearchQuery) >= 0
+        || (s.id || '').toLowerCase().indexOf(_memSearchQuery) >= 0
+        || (s.source || '').toLowerCase().indexOf(_memSearchQuery) >= 0
+        || (s.model || '').toLowerCase().indexOf(_memSearchQuery) >= 0;
+    });
+  }
+  _memAutoFlushBanner(sessions);
   if (!filtered.length) {
     el.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text3);font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">No sessions found.</div>';
     return;
@@ -10087,6 +10330,7 @@ function renderMemorySessions(sessions) {
   el.innerHTML = '<div style="display:flex;flex-direction:column;gap:6px">' + shown.map(function(s) {
     const date = s.first_ts ? new Date(s.first_ts).toLocaleDateString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '?';
     const srcLabel = s.source || 'unknown';
+    const ageBadge = _memAgeBadge(s.last_ts || s.first_ts);
     let durStr = '';
     if (s.first_ts && s.last_ts) {
       const durMin = Math.round((new Date(s.last_ts) - new Date(s.first_ts)) / 60000);
@@ -10096,13 +10340,14 @@ function renderMemorySessions(sessions) {
     const sizeStr = sizeKb > 1024 ? (sizeKb / 1024).toFixed(1) + ' MB' : (sizeKb > 0 ? sizeKb.toFixed(0) + ' KB' : '');
     const tokens = (s.total_input_tokens || 0) + (s.total_output_tokens || 0);
     const tokStr = tokens > 1000 ? Math.round(tokens/1000) + 'K tok' : '';
-    const canFlush = s.source === 'claude' || s.source === 'openclaw';
+    const canFlush = s.source === 'claude' || s.source === 'openclaw' || s.source === 'gemini';
     var srcColors = {claude:'#d97706',openclaw:'#059669',gemini:'#2563eb'};
     var srcColor = srcColors[s.source] || 'var(--border)';
     return '<div class="orch-card" style="padding:10px 14px;border-left:3px solid ' + srcColor + '">'
       + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
       + '<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:var(--border2);color:var(--text)">' + escHtml(srcLabel) + '</span>'
       + '<span style="font-weight:500;font-size:13px;color:var(--text)">' + escHtml(s.name || s.id.substring(0,12)) + '</span>'
+      + ageBadge
       + '<span style="font-size:11px;color:var(--text3);margin-left:auto">' + escHtml(date) + '</span>'
       + '</div>'
       + '<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:11px;color:var(--text3)">'
@@ -10117,6 +10362,7 @@ function renderMemorySessions(sessions) {
       + '</div>';
   }).join('') + '</div>'
   + (filtered.length > 30 ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">Showing 30 of ' + filtered.length + ' sessions</div>' : '');
+  memLoadFlushHistory();
 }
 
 let _memOrigContent = ''; // original content for diff
@@ -18995,7 +19241,8 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             oc_sessions = _load_session_summaries()
             claude_sessions = _load_claude_session_summaries()
-            all_sessions = oc_sessions + claude_sessions
+            gemini_sessions = _load_gemini_session_summaries()
+            all_sessions = oc_sessions + claude_sessions + gemini_sessions
             # Sort by first_ts descending (most recent first)
             all_sessions.sort(key=lambda s: s.get("first_ts", ""), reverse=True)
             self.reply_json({"ok": True, "sessions": all_sessions, "count": len(all_sessions)})
@@ -19017,6 +19264,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "content": content, "path": file_path})
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
+
+
+        # ── Memory tab: Flush history (GET) ──────────────────────────────────
+        elif parsed.path == "/api/memory/flush-history":
+            if not self.auth_check(redirect=False): return
+            history = _get_flush_history(10)
+            self.reply_json({"ok": True, "history": history})
 
         # ── Memory tab: Agent status probes (GET) ────────────────────────────
         elif parsed.path == "/api/memory/agent-status":
@@ -19174,7 +19428,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.43'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.44'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -21261,12 +21515,18 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                         if header: f.write(header)
                         f.write("\n" + custom_summary + "\n")
                     result = {"ok": True, "message": f"Flushed to {dest_path}", "path": str(dest_path)}
+                    _log_flush_history(source, session_id, str(dest_path), len(custom_summary.encode("utf-8")))
                 except Exception as e:
                     result = {"ok": False, "error": str(e)}
             elif source == "claude":
                 result = _flush_claude_session(session_id)
+                if result.get("ok"): _log_flush_history("claude", session_id, result.get("path", ""), result.get("bytes", 0))
             elif source == "openclaw":
                 result = _flush_session_to_memory(session_id, data.get("project_id"))
+                if result.get("ok"): _log_flush_history("openclaw", session_id, result.get("path", ""), result.get("bytes", 0))
+            elif source == "gemini":
+                result = _flush_gemini_session(session_id)
+                if result.get("ok"): _log_flush_history("gemini", session_id, result.get("path", ""), result.get("bytes", 0))
             else:
                 result = {"ok": False, "error": f"Flush not supported for source: {source}"}
             status = 200 if result.get("ok") else 400
@@ -22509,7 +22769,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.43 ready (localhost only)")
+    print(f"\n  Porter v0.25.44 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
