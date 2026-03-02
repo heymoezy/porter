@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.34 — Chat Bug Fixes (cursor, clearing, chains, bridge prompt)"""
+"""Porter v0.25.35 — Chain Parsing + @Mention Indicator"""
 
 
 
@@ -4261,7 +4261,11 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   position:relative; z-index:2;
 }
 .chat-input-bottom::placeholder { color:rgba(255,255,255,.35); }
-/* @mention highlighting done in rendered messages only */
+/* @mention indicator below input */
+.chat-at-indicator { display:flex; gap:6px; padding:4px 4px 0; flex-wrap:wrap; }
+.chat-at-indicator .at-tag {
+  font-size:11px; color:#7dd3fc; font-weight:600; letter-spacing:0.3px;
+}
 .chat-input-bottom-meta {
   display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:6px;
 }
@@ -5138,7 +5142,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.34</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.35</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5224,7 +5228,8 @@ select.settings-input { padding-right: 26px; }
             <div class="chat-welcome-sub">⚡ One prompt. Every AI. Zero friction.</div>
             <div class="chat-welcome-input-wrap">
               <div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>
-              <textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
+              <textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)"></textarea>
+              <div id="chat-at-ind-welcome" class="chat-at-indicator"></div>
               <div class="chat-welcome-meta">
 <select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>
                 <div class="model-picker" data-sel="chat-backend-sel-welcome">
@@ -5246,7 +5251,8 @@ select.settings-input { padding-right: 26px; }
         <div class="chat-input-area" id="chat-input-area" style="display:none">
           <div id="chat-autocomplete" class="chat-autocomplete"></div>
           <div class="chat-input-wrap">
-            <textarea id="chat-input" class="chat-input-bottom" placeholder="Reply or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
+            <textarea id="chat-input" class="chat-input-bottom" placeholder="Reply or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)"></textarea>
+            <div id="chat-at-ind-bottom" class="chat-at-indicator"></div>
             <div class="chat-input-bottom-meta">
               <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
 <select id="chat-backend-sel" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>
@@ -6251,6 +6257,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.35', date:'2026-03-02', notes:['Fixed chain parsing: text before first @model no longer lost','Smart connector stripping (ask/tell/to/and send it to)','@mention indicator shows targeted models below input (cursor-safe)','Fixed single @ extraction losing prefix text'] },
   { ver:'v0.25.34', date:'2026-03-02', notes:['Removed transparent text overlay (fixes cursor misalignment with @mentions)','Fixed input not clearing after @ dispatch','Fixed chain runner: fetch timeout was 15s, now 130s (Gemini needs 18s+)','Fixed @ path missing transition to bottom input','Removed bridge prompt injection (was contaminating model outputs)','Collapsed double spaces in @ text extraction'] },
   { ver:'v0.25.33', date:'2026-03-02', notes:['Gemini streaming fix: trim prompt to 4000 chars (matches non-streaming dispatcher)','Merged stderr→stdout on all CLI backends to prevent pipe deadlock','Added process cleanup with kill-on-timeout for hung CLI processes'] },
   { ver:'v0.25.32', date:'2026-03-01', notes:['Live streaming: see model workings in real-time (tool calls, thinking)','Removed agent restrictions: full CLI capabilities through chat','Ollama downgraded to Qwen 1.5B (fits 8GB VPS)','Porter-styled rename dialog (no more native prompt)'] },
@@ -9477,14 +9484,22 @@ async function invokeAgent(message, backend) {
 }
 
 async function _runAtChain(fullText, matches) {
-  // Parse chain segments: each @model gets the text until the next @model
+  // Parse chain segments
   var segments = [];
   for (var i = 0; i < matches.length; i++) {
     var start = matches[i].idx + matches[i].model.length + 1; // skip @model
     var end = (i + 1 < matches.length) ? matches[i + 1].idx : fullText.length;
     var msg = fullText.substring(start, end).trim();
-    // Clean trailing "and send to" / "then" / "and" type connectors
-    msg = msg.replace(/\b(and\s+)?send\s+(it\s+)?to\s*$/i, '').replace(/\bthen\s*$/i, '').replace(/\band\s*$/i, '').trim();
+    // For first segment, include text before the first @model
+    if (i === 0 && matches[0].idx > 0) {
+      var prefix = fullText.substring(0, matches[0].idx).trim();
+      // Strip command verbs directed at Porter (ask, tell, hey, please)
+      prefix = prefix.replace(/^(ask|tell|hey|please|can you|could you)\s*/i, '').trim();
+      if (prefix) msg = prefix + ' ' + msg;
+    }
+    // Clean connectors at start and end
+    msg = msg.replace(/^(to|and|then|please)\s+/i, '');
+    msg = msg.replace(/\b(and\s+)?(send\s+(it\s+)?)?to\s*$/i, '').replace(/\bthen\s*$/i, '').replace(/\band\s*$/i, '').trim();
     segments.push({ model: matches[i].model, msg: msg });
   }
   // Execute chain: first segment runs normally, subsequent segments get previous output prepended
@@ -9788,7 +9803,8 @@ function renderChatMessages(streamUpdate) {
     el.innerHTML = '<div class="chat-welcome">'
       + '<div class="chat-welcome-sub">⚡ One prompt. Every AI. Zero friction.</div>'
       + '<div class="chat-welcome-input-wrap">'
-      + '<textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>'
+      + '<textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)"></textarea>'
+      + '<div id="chat-at-ind-welcome" class="chat-at-indicator"></div>'
       + '<div class="chat-welcome-meta">'
       + '<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>'
       + '<div class="model-picker" data-sel="chat-backend-sel-welcome">'
@@ -10116,7 +10132,23 @@ function _acCheck() {
   _acHide();
 }
 
-/* _hlMentions removed — @mentions highlighted in rendered messages only */
+function _showAtIndicator(el) {
+  var indId = el.id === 'chat-input-welcome' ? 'chat-at-ind-welcome' : 'chat-at-ind-bottom';
+  var ind = document.getElementById(indId);
+  if (!ind) return;
+  var val = el.value;
+  var models = [];
+  var labels = {claude:'Claude',gemini:'Gemini',openclaw:'OpenClaw',codex:'Codex',ollama:'Ollama'};
+  var re = /@(claude|gemini|openclaw|codex|ollama)\b/g;
+  var m;
+  while ((m = re.exec(val)) !== null) {
+    if (models.indexOf(m[1]) === -1) models.push(m[1]);
+  }
+  if (!models.length) { ind.innerHTML = ''; return; }
+  ind.innerHTML = models.map(function(k) {
+    return '<span class="at-tag">\u2192 ' + (labels[k] || k) + '</span>';
+  }).join('');
+}
 
 function _getChatInput() {
   var w = document.getElementById('chat-input-welcome');
@@ -10328,6 +10360,8 @@ function chatSend() {
     if (_atMatches.length === 1) {
       // Single @model — extract all text except the @model token
       var _msg1 = text.replace(/@(claude|gemini|openclaw|ollama|codex)\b/, '').replace(/\s+/g, ' ').trim();
+      // Strip command verbs directed at Porter
+      _msg1 = _msg1.replace(/^(ask|tell|hey|please|can you|could you)\s+/i, '').replace(/^to\s+/i, '').trim();
       if (!_msg1) _msg1 = 'hello';
       invokeAgent(_msg1, _atMatches[0].model);
     } else {
@@ -16374,7 +16408,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.34"})
+            self.reply_json({"v": "0.25.35"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17378,7 +17412,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.34'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.35'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20548,7 +20582,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.34 ready (localhost only)")
+    print(f"\n  Porter v0.25.35 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
