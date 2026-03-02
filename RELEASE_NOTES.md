@@ -1,5 +1,16 @@
 # Porter Release Notes
 
+## v0.25.48 (2026-03-02)
+
+**Fix: All panels showing at once**
+
+- Removed duplicate `.chat-input-area {` CSS selector (line ~5105) that left an unclosed brace
+- This swallowed all subsequent CSS rules — `.module-panel { display:none }` never applied
+- Every tab, settings page, wizard, and panel rendered simultaneously on page load
+- Root cause: the v0.25.42-v0.25.46 Memory Tab overhaul introduced a duplicate selector line
+
+---
+
 ## v0.25.47 (2026-03-02)
 
 **Fix: Async ReferenceError**
