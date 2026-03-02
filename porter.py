@@ -15319,9 +15319,24 @@ def _dispatch_openclaw(message, model=None, timeout=120):
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env())
     if result.returncode != 0:
         return {"ok": False, "error": result.stderr[:500] or "OpenClaw returned non-zero"}
-    resp = json.loads(result.stdout)
+    try:
+        resp = json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError):
+        # Not JSON — return raw text
+        return {"ok": True, "backend": "openclaw", "text": result.stdout.strip(),
+                "model": "gpt-5.3-codex", "duration_ms": 0, "tokens": {}}
+    # Extract text from multiple possible locations
+    text = ""
     payloads = resp.get("result", {}).get("payloads", [])
-    text = payloads[0].get("text", "") if payloads else ""
+    if payloads and isinstance(payloads, list):
+        text = payloads[0].get("text", "") if isinstance(payloads[0], dict) else ""
+    if not text:
+        text = resp.get("result", {}).get("text", "")
+    if not text:
+        text = resp.get("text", "")
+    if not text:
+        # Last resort: try summary
+        text = resp.get("summary", "") or resp.get("status", "No response text")
     meta = resp.get("result", {}).get("meta", {})
     return {
         "ok": True, "backend": "openclaw",
