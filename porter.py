@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.47 — Async Fix"""
+"""Porter v0.25.48 — CSS Fix"""
 
 
 
@@ -5103,7 +5103,6 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 
 
 .chat-input-area {
-.chat-input-area {
   padding:8px 20px 12px; border-top:1px solid var(--border); flex-shrink:0;
   background:var(--bg); position:sticky; bottom:0; z-index:10;
 }
@@ -6047,7 +6046,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.47</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.48</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7199,6 +7198,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.48', date:'2026-03-02', notes:['Fix: duplicate .chat-input-area CSS selector broke all module hiding — every panel showed at once'] },
   { ver:'v0.25.47', date:'2026-03-02', notes:['Fix: bare async keyword causing ReferenceError spam on every page load'] },
   { ver:'v0.25.46', date:'2026-03-02', notes:['Memory Tab v6: compact silo rows, How Memory Works diagram, config panel editing','Removed: avatar icons, memory map, shared plane, split-pane editor, timeline, stat cards','Nav grouping: Tools & Config section for Extensions/Skills/Logs/Settings','Chat: history button on welcome screen, light mode input fix','Coordination files rail + per-agent session summary with context'] },
   { ver:'v0.25.45', date:'2026-03-02', notes:['Memory header redesign: total size, agent count, last activity','Animated transitions: expand/collapse, fade-in content','Keyboard shortcuts: Ctrl+S save, Esc close, / search','Cross-model memory map: SVG diagram of shared files','Memory timeline: recent changes across all agents','Export/Import memory: ZIP download + upload','Empty state onboarding guidance'] },
@@ -19298,7 +19298,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.47'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.48'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -22639,7 +22639,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.47 ready (localhost only)")
+    print(f"\n  Porter v0.25.48 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
