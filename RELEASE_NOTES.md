@@ -1,5 +1,78 @@
 # Porter Release Notes
 
+## v0.25.46 (2026-03-02)
+
+**Memory Tab Redesign + Nav Grouping + Chat Fixes**
+
+Based on Moe's design feedback, this release strips the Memory tab down to essentials:
+
+### Memory Tab v6
+- **How Memory Works** — collapsible flow diagram explaining Sessions → Flush → MEMORY.md ↔ projects.md
+- **Compact silo rows** — one row per agent with status dot, file count, size, gear icon
+- **Config panel editing** — click ⚙ to open side panel with file browser, editor, quick-add
+- **Coordination files rail** — shows shared files like projects.md
+- **Session summary card** — per-agent counts with stale session warnings and educational context
+- **Removed:** avatar icons, memory map SVG, shared plane hub, split-pane editor, timeline, stat cards, quality badges, diff overlay
+
+### Nav Grouping
+- Added "Tools & Config" section header in sidebar
+- Extensions, Skills, Logs, Settings grouped under it
+- Projects, Workflows, Locations, Files in main section
+
+### Chat Fixes
+- History button now visible on welcome screen
+- Light mode input fix: replaced hardcoded rgba(255,255,255,...) with CSS variables
+- Input box, placeholder text, and borders now theme-aware
+
+---
+
+## v0.25.42–v0.25.45 (2026-03-02)
+
+**Memory Tab Overhaul — 25 Improvements across 4 Patches**
+
+### Patch 1: Agent Identity Cards (v0.25.42)
+- Per-agent identity cards with avatar, name, role label, online/offline status dot
+- Files grouped by agent (instructions + persistent memory sections)
+- Live health integration via provider probes
+- Collapse/expand with localStorage persistence
+- Role editor: click agent card to edit role description
+- Per-agent stats: file count, total size, session count
+
+### Patch 2: Memory Editing Experience (v0.25.43)
+- Split-pane editor: file tree on left, editor on right
+- Markdown syntax highlighting (headers, bold, code, lists, links)
+- Unsaved changes dot indicator in file tree
+- Memory quality score per file (Good/Fair/Stale)
+- Diff preview before saving memory edits
+- Quick-add memory entry button per agent
+
+### Patch 3: Session Management & Flush (v0.25.44)
+- Session search: real-time text filtering
+- Bulk Flush: flush all pending sessions at once
+- Gemini CLI session support (detect + display + flush)
+- Flush history log in SQLite with UI
+- Session age badges: green (<1h), yellow (1-24h), red (>24h)
+- Auto-flush suggestion banner for stale sessions
+
+### Patch 4: Visual Polish & Cross-Model (v0.25.45)
+- Header redesign with total memory size, agent count, last activity
+- Animated transitions: smooth expand/collapse, fade-in content
+- Keyboard shortcuts: Ctrl+S save, Esc close, / focus search
+- Cross-model memory map: SVG diagram of agents and shared files
+- Memory timeline: horizontal timeline of recent changes
+- Export/Import: download all memory as markdown, import back
+- Empty state onboarding guidance
+
+### New Backend Endpoints
+- `GET /api/memory/agent-status` — live agent health probes
+- `GET /api/memory/flush-history` — recent flush operations
+- `GET /api/memory/export` — export all memory files
+
+### New SQLite Table
+- `flush_history` — tracks all flush operations (timestamp, agent, destination, bytes)
+
+---
+
 ## v0.25.40 (2026-03-02)
 
 **Mission Control v2 — Tabbed UI, Bug Reports, Frontend Error Capture**
