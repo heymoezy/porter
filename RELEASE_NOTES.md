@@ -1,5 +1,32 @@
 # Porter Release Notes
 
+## v0.25.40 (2026-03-02)
+
+**Mission Control v2 — Tabbed UI, Bug Reports, Frontend Error Capture**
+
+### Tabbed Right Panel
+- Detail / Incidents / Report tabs replace old detail pane
+- Single-view layout: flex column fills viewport, no page-level scroll
+
+### Report Bug UI
+- "Report Bug" button in MC header (red accent)
+- Report tab: textarea + severity selector + Submit
+- Dispatches to agent squad, streams analysis via SSE `log:bugreport`
+
+### Frontend Error Capture
+- `window.onerror` + `unhandledrejection` auto-POST to `/api/logs/client-error`
+- Errors appear as `frontend.error` events in Mission Control timeline
+
+### New Preset Filters (4)
+- File Ops (`domain:file`), Chat (`domain:chat`), Schedule (`domain:schedule`), Frontend (`domain:frontend`)
+
+### Incidents Enhancements
+- Remediation status badge on incidents (Auto-remediated)
+- Retry Fix button triggers manual `POST /api/logs/remediate`
+- SSE handlers: `log:incident`, `log:remediation`, `log:bugreport` update UI in real-time
+
+---
+
 ## v0.25.39 (2026-03-02)
 
 **Provider Registry + Chain Dispatch — AI-to-AI Communication**

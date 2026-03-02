@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.39 — Chain Dispatch System"""
+"""Porter v0.25.40 — Mission Control v2"""
 
 
 
@@ -5841,7 +5841,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.39</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.40</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6423,6 +6423,7 @@ select.settings-input { padding-right: 26px; }
         <button class="btn btn-ghost" style="font-size:11px" onclick="mcTogglePause()" id="mc-pause-btn">Pause</button>
         <button class="btn btn-ghost" style="font-size:11px" onclick="mcClearFilters()">Clear</button>
         <button class="btn btn-ghost" style="font-size:11px" onclick="mcExport()">Export</button>
+        <button class="btn btn-ghost" style="font-size:11px;color:var(--err)" onclick="mcSwitchTab('report');mcShowReportForm()">Report Bug</button>
       </div>
     </div>
 
@@ -6436,18 +6437,29 @@ select.settings-input { padding-right: 26px; }
 
     <div class="mc-filters">
       <input type="text" class="mc-query" id="mc-query" placeholder="severity:error domain:bridge trace_id:abc..." onkeydown="if(event.key==='Enter')mcRunQuery()">
-      <button class="mc-preset" onclick="mcPreset('bridge')">Bridge Failures</button>
+      <button class="mc-preset" onclick="mcPreset('bridge')">Bridge</button>
       <button class="mc-preset" onclick="mcPreset('timeouts')">Timeouts</button>
-      <button class="mc-preset" onclick="mcPreset('auth')">Auth Issues</button>
-      <button class="mc-preset" onclick="mcPreset('routing')">Route Decisions</button>
+      <button class="mc-preset" onclick="mcPreset('auth')">Auth</button>
+      <button class="mc-preset" onclick="mcPreset('routing')">Routing</button>
+      <button class="mc-preset" onclick="mcPreset('fileops')">File Ops</button>
+      <button class="mc-preset" onclick="mcPreset('chat')">Chat</button>
+      <button class="mc-preset" onclick="mcPreset('schedule')">Schedule</button>
+      <button class="mc-preset" onclick="mcPreset('frontend')">Frontend</button>
     </div>
 
     <div class="mc-body">
       <div class="mc-timeline" id="mc-timeline">
         <div class="mc-empty" id="mc-empty">Loading events...</div>
       </div>
-      <div class="mc-detail" id="mc-detail">
-        <div class="mc-detail-empty">Select an event to view details</div>
+      <div class="mc-right-panel">
+        <div class="mc-right-tabs">
+          <button class="mc-right-tab active" id="mc-tab-detail" onclick="mcSwitchTab('detail')">Detail</button>
+          <button class="mc-right-tab" id="mc-tab-incidents" onclick="mcSwitchTab('incidents')">Incidents</button>
+          <button class="mc-right-tab" id="mc-tab-report" onclick="mcSwitchTab('report')">Report</button>
+        </div>
+        <div class="mc-right-content" id="mc-right-content">
+          <div class="mc-detail-empty">Select an event to view details</div>
+        </div>
       </div>
     </div>
 
@@ -6995,6 +7007,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.40', date:'2026-03-02', notes:['Mission Control v2: tabbed right panel (Detail/Incidents/Report)','Report Bug UI with agent dispatch via SSE','Frontend error capture (window.onerror → /api/logs/client-error)','8 new preset filters (File Ops, Chat, Schedule, Frontend)','Single-view layout: no page scroll, flex viewport fill','SSE handlers for log:incident, log:remediation, log:bugreport','Retry Fix button on incidents'] },
   { ver:'v0.25.39', date:'2026-03-02', notes:['Server-side chain dispatch: _run_chain() with step-level probe + dispatch + output piping','POST /api/bridge/chain: fire multi-step chains in background thread','GET /api/bridge/chains: aggregate chain runs with status/tokens/duration','agent_messages gains chain_id + step_num columns (auto-migrated)','Chain Builder UI in Workflows tab: add steps, run chains, view run history','SSE events: chain:start, chain:step, chain:complete, chain:error','Mission Control logs chain lifecycle events'] },
   { ver:'v0.25.38', date:'2026-03-02', notes:['Provider Registry: 5 probe functions with 15s TTL cache','PROVIDER_REGISTRY replaces AGENT_DISPATCHERS (dispatch, probe, type, label per backend)','GET /api/providers: real-time health status for all 5 backends','Smart routing fallback chain: if preferred backend is down, auto-fallback to next available','Configurable fallback_chain in preferences','Mission Control logs route decisions + fallback events','Fixed stale version in /api/admin/health and /api/version'] },
   { ver:'v0.25.37', date:'2026-03-02', notes:['Mission Control: structured event pipeline (JSONL + SQLite index)','Real-time event timeline with severity, domain, and trace correlation','Alert engine: bridge failure spikes, auth anomalies, timeout bursts','5 summary cards: incidents, errors, timeouts, bridge fails, total','Debug Focus / Live Tail modes + query filter bar + presets','Trace waterfall view in detail panel','6 new API endpoints: /api/logs/query, /trace, /incidents, /metrics, /event, /incidents/:id/ack','24h retention + 1.5GB cap + automatic purge','Export events as JSON'] },
@@ -11519,6 +11532,8 @@ let _mcSelectedId = null;
 let _mcQueryStr = '';
 let _mcMetricsTimer = null;
 let _mcEvtSrc = null;
+let _mcRightTab = 'detail';
+let _mcReportId = null;
 
 
 // ── Porter Rules ─────────────────────────────────────────────────────────
@@ -11600,6 +11615,9 @@ async function mcInit() {
     try {
       var d = JSON.parse(e.data);
       if (d.type === 'log:event') mcOnSSE(d);
+      else if (d.type === 'log:incident') mcOnIncident(d);
+      else if (d.type === 'log:remediation') mcOnRemediation(d);
+      else if (d.type === 'log:bugreport') mcOnBugReport(d);
     } catch(ex) {}
   };
 }
@@ -11661,9 +11679,10 @@ function mcOnSSE(data) {
 
 async function mcSelectEvent(eventId) {
   _mcSelectedId = eventId;
+  mcSwitchTab('detail');
   // Re-render to highlight
   mcRenderTimeline(_mcEvents);
-  var detail = document.getElementById('mc-detail');
+  var detail = document.getElementById('mc-right-content');
   if (!detail) return;
   var ev = _mcEvents.find(function(e) { return e.event_id === eventId; });
   if (!ev) {
@@ -11764,7 +11783,11 @@ function mcPreset(name) {
   else if (name === 'errors') q = 'severity:error';
   else if (name === 'auth') q = 'domain:auth';
   else if (name === 'routing') q = 'domain:routing';
-  else if (name === 'incidents') { mcShowIncidents(); return; }
+  else if (name === 'fileops') q = 'domain:file';
+  else if (name === 'chat') q = 'domain:chat';
+  else if (name === 'schedule') q = 'domain:schedule';
+  else if (name === 'frontend') q = 'domain:frontend';
+  else if (name === 'incidents') { mcSwitchTab('incidents'); mcShowIncidents(); return; }
   else if (name === 'all') q = '';
   if (input) input.value = q;
   mcRunQuery();
@@ -11808,8 +11831,9 @@ function mcClearFilters() {
   document.getElementById('mc-mode-live').className = 'mc-mode-btn active';
   document.getElementById('mc-mode-debug').className = 'mc-mode-btn';
   mcLoadEvents();
-  var detail = document.getElementById('mc-detail');
+  var detail = document.getElementById('mc-right-content');
   if (detail) detail.innerHTML = '<div class="mc-detail-empty">Select an event to view details</div>';
+  mcSwitchTab('detail');
 }
 
 function mcExport() {
@@ -11846,7 +11870,96 @@ function mcFilterTrace(traceId) {
   mcRunQuery();
 }
 
+function mcSwitchTab(tab) {
+  _mcRightTab = tab;
+  ['detail','incidents','report'].forEach(function(t) {
+    var btn = document.getElementById('mc-tab-' + t);
+    if (btn) btn.className = 'mc-right-tab' + (t === tab ? ' active' : '');
+  });
+  if (tab === 'incidents') mcShowIncidents();
+}
 
+function mcShowReportForm() {
+  var el = document.getElementById('mc-right-content');
+  if (!el) return;
+  el.innerHTML = '<div class="mc-detail-title">Report a Bug</div>' +
+    '<div class="mc-report-form">' +
+    '<textarea id="mc-report-desc" placeholder="Describe the issue..."></textarea>' +
+    '<select id="mc-report-sev"><option value="error">Error</option><option value="critical">Critical</option><option value="warning">Warning</option></select>' +
+    '<button class="btn" style="font-size:11px;align-self:flex-start" onclick="mcSubmitReport()">Submit Report</button>' +
+    '<div id="mc-report-status"></div>' +
+    '</div>';
+}
+
+async function mcSubmitReport() {
+  var desc = document.getElementById('mc-report-desc');
+  var sev = document.getElementById('mc-report-sev');
+  var status = document.getElementById('mc-report-status');
+  if (!desc || !desc.value.trim()) return;
+  status.innerHTML = '<span class="mc-rem-status dispatching">Dispatching to agent squad...</span>';
+  var resp = await api('/api/logs/report', {description: desc.value.trim(), severity: sev ? sev.value : 'error'});
+  if (resp && resp.ok) {
+    _mcReportId = resp.report_id;
+    status.innerHTML = '<span class="mc-rem-status dispatching">Analyzing... (report ' + resp.report_id + ')</span>';
+  } else {
+    status.innerHTML = '<span class="mc-rem-status failed">Failed to submit</span>';
+  }
+}
+
+async function mcRetryRemediation(iid) {
+  var resp = await api('/api/logs/remediate', {incident_id: iid});
+  if (resp && resp.ok) {
+    mcShowIncidents();
+  }
+}
+
+function mcOnIncident(data) {
+  mcUpdateCards();
+  if (_mcRightTab === 'incidents') mcShowIncidents();
+}
+
+function mcOnRemediation(data) {
+  if (_mcRightTab === 'incidents') mcShowIncidents();
+  mcUpdateCards();
+}
+
+function mcOnBugReport(data) {
+  var d = data.data || data;
+  if (d.report_id !== _mcReportId) return;
+  var status = document.getElementById('mc-report-status');
+  if (!status) return;
+  if (d.status === 'analyzed') {
+    status.innerHTML = '<span class="mc-rem-status success">Analyzed by ' + escHtml(d.backend || 'agent') + '</span>' +
+      '<div class="mc-report-response">' + escHtml(d.response || '') + '</div>';
+  } else if (d.status === 'failed') {
+    status.innerHTML = '<span class="mc-rem-status failed">Analysis failed</span>' +
+      '<div class="mc-report-response" style="color:var(--err)">' + escHtml(d.response || '') + '</div>';
+  } else if (d.status === 'submitted') {
+    status.innerHTML = '<span class="mc-rem-status dispatching">Dispatching...</span>';
+  }
+}
+
+// Global error handlers — capture frontend JS errors
+window.onerror = function(msg, source, lineno, colno, error) {
+  try {
+    fetch('/api/logs/client-error', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: String(msg).substring(0,500), source: String(source||'').substring(0,200),
+        lineno: lineno||0, colno: colno||0, stack: error && error.stack ? error.stack.substring(0,1000) : ''})
+    }).catch(function(){});
+  } catch(e) {}
+};
+window.addEventListener('unhandledrejection', function(ev) {
+  try {
+    var msg = ev.reason ? String(ev.reason).substring(0,500) : 'Unhandled promise rejection';
+    fetch('/api/logs/client-error', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: msg, source: 'promise', lineno: 0, colno: 0, stack: ''})
+    }).catch(function(){});
+  } catch(e) {}
+});
 
 // ── Tools module ──
 async function loadTools() {
@@ -18829,7 +18942,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.39'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.40'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -22164,7 +22277,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.39 ready (localhost only)")
+    print(f"\n  Porter v0.25.40 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
