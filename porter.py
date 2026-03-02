@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.38 — Provider Registry + Fallback Chain"""
+"""Porter v0.25.39 — Chain Dispatch System"""
 
 
 
@@ -245,11 +245,22 @@ def _db_init():
             duration_ms INTEGER DEFAULT 0,
             error TEXT,
             created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
-            completed_at REAL
+            completed_at REAL,
+            chain_id TEXT,
+            step_num INTEGER DEFAULT 0
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_run ON agent_messages(run_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_status ON agent_messages(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_chain ON agent_messages(chain_id)")
+
+    # Migrate: add chain_id + step_num if missing
+    _am_cols = [r["name"] for r in conn.execute("PRAGMA table_info(agent_messages)").fetchall()]
+    if "chain_id" not in _am_cols:
+        conn.execute("ALTER TABLE agent_messages ADD COLUMN chain_id TEXT")
+    if "step_num" not in _am_cols:
+        conn.execute("ALTER TABLE agent_messages ADD COLUMN step_num INTEGER DEFAULT 0")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_chain ON agent_messages(chain_id)")
     
     # 1. Migrate users from _config if table is empty
     count = conn.execute("SELECT count(*) FROM users").fetchone()[0]
@@ -4570,7 +4581,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .deleg-dur { color:var(--text3); font-size:11px; }
 
 /* ── Mission Control v2 ────────────────────────────────────────── */
-#admin-module.module-panel { overflow:hidden; display:flex; flex-direction:column; }
+#admin-module.module-panel.active { overflow:hidden; display:flex; flex-direction:column; }
 .mc-header { display:flex; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap; flex-shrink:0; }
 .mc-title { font-size:16px; font-weight:700; color:var(--text); }
 .mc-live-badge { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; padding:2px 8px; border-radius:10px; }
@@ -5830,7 +5841,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.38</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.39</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6364,6 +6375,28 @@ select.settings-input { padding-right: 26px; }
         <div id="build-runs" style="margin-top:12px;max-height:250px;overflow-y:auto"></div>
       </div>
     </div>
+
+
+    <!-- Chain Builder section -->
+    <div style="margin-bottom:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">Chain Builder</div>
+        <button class="btn btn-ghost" style="font-size:11px" onclick="loadChainRuns()">&#8635; Runs</button>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Build multi-step AI chains. Each step pipes its output to the next.</div>
+        <div id="chain-steps" style="margin-bottom:10px"></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="addChainStep()" style="font-size:11px">+ Add Step</button>
+          <div style="flex:1;min-width:150px">
+            <input type="text" id="chain-input" class="settings-input" placeholder="Initial input for the chain..." style="width:100%">
+          </div>
+          <button class="btn btn-primary" onclick="runChain()" style="white-space:nowrap">Run Chain</button>
+        </div>
+        <div id="chain-runs" style="margin-top:12px;max-height:250px;overflow-y:auto"></div>
+      </div>
+    </div>
+
 
     <!-- Automations / Cron section -->
     <div style="margin-bottom:16px">
@@ -6962,6 +6995,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.39', date:'2026-03-02', notes:['Server-side chain dispatch: _run_chain() with step-level probe + dispatch + output piping','POST /api/bridge/chain: fire multi-step chains in background thread','GET /api/bridge/chains: aggregate chain runs with status/tokens/duration','agent_messages gains chain_id + step_num columns (auto-migrated)','Chain Builder UI in Workflows tab: add steps, run chains, view run history','SSE events: chain:start, chain:step, chain:complete, chain:error','Mission Control logs chain lifecycle events'] },
   { ver:'v0.25.38', date:'2026-03-02', notes:['Provider Registry: 5 probe functions with 15s TTL cache','PROVIDER_REGISTRY replaces AGENT_DISPATCHERS (dispatch, probe, type, label per backend)','GET /api/providers: real-time health status for all 5 backends','Smart routing fallback chain: if preferred backend is down, auto-fallback to next available','Configurable fallback_chain in preferences','Mission Control logs route decisions + fallback events','Fixed stale version in /api/admin/health and /api/version'] },
   { ver:'v0.25.37', date:'2026-03-02', notes:['Mission Control: structured event pipeline (JSONL + SQLite index)','Real-time event timeline with severity, domain, and trace correlation','Alert engine: bridge failure spikes, auth anomalies, timeout bursts','5 summary cards: incidents, errors, timeouts, bridge fails, total','Debug Focus / Live Tail modes + query filter bar + presets','Trace waterfall view in detail panel','6 new API endpoints: /api/logs/query, /trace, /incidents, /metrics, /event, /incidents/:id/ack','24h retention + 1.5GB cap + automatic purge','Export events as JSON'] },
   { ver:'v0.25.36', date:'2026-03-02', notes:['Bridge service auth: dispatch/runs/invoke accept Bearer tokens via auth_check_cap','New GET /api/bridge/run?id= for single-run polling','GET /api/bridge/runs now supports ?since=&status=&limit= filters','Regenerated OpenClaw API key (scrypt hash)'] },
@@ -8775,6 +8809,96 @@ async function loadBuildStatus() {
   }
 }
 
+
+var _chainStepCount = 0;
+
+function addChainStep() {
+  _chainStepCount++;
+  var container = document.getElementById('chain-steps');
+  if (!container) return;
+  var div = document.createElement('div');
+  div.id = 'chain-step-' + _chainStepCount;
+  div.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px';
+  var stepNum = _chainStepCount;
+  div.innerHTML = '<span style="font-size:11px;font-weight:600;color:var(--text3);min-width:18px">' + stepNum + '</span>'
+    + '<select class="settings-input chain-backend" style="min-width:90px"><option value="openclaw">OpenClaw</option><option value="gemini">Gemini</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="ollama">Ollama</option></select>'
+    + '<input type="text" class="settings-input chain-prompt" placeholder="Prompt template ({input} = original, {previous} = last output)" style="flex:1">'
+    + '<button class="btn btn-ghost" style="font-size:11px;color:var(--err)" onclick="removeChainStep(' + stepNum + ')">×</button>';
+  container.appendChild(div);
+}
+
+function removeChainStep(num) {
+  var el = document.getElementById('chain-step-' + num);
+  if (el) el.remove();
+}
+
+function renderChainSteps() {
+  // Re-number visible steps
+  var container = document.getElementById('chain-steps');
+  if (!container) return;
+  var steps = container.children;
+  for (var i = 0; i < steps.length; i++) {
+    var span = steps[i].querySelector('span');
+    if (span) span.textContent = (i + 1);
+  }
+}
+
+async function runChain() {
+  var container = document.getElementById('chain-steps');
+  var inputEl = document.getElementById('chain-input');
+  if (!container || !inputEl) return;
+  var steps = [];
+  var stepEls = container.children;
+  for (var i = 0; i < stepEls.length; i++) {
+    var be = stepEls[i].querySelector('.chain-backend');
+    var pr = stepEls[i].querySelector('.chain-prompt');
+    if (be && pr && pr.value.trim()) {
+      steps.push({backend: be.value, prompt: pr.value.trim()});
+    }
+  }
+  if (!steps.length) { toast('Add at least one step', 'warn'); return; }
+  var input = inputEl.value.trim();
+  if (!input) { toast('Enter initial input', 'warn'); return; }
+  toast('Starting chain (' + steps.length + ' steps)...', 'info');
+  try {
+    var res = await api('/api/bridge/chain', {steps: steps, input: input, timeout_per_step: 120});
+    if (res && res.ok) {
+      toast('Chain ' + res.chain_id + ' started', 'ok');
+      setTimeout(loadChainRuns, 3000);
+    } else {
+      toast((res && res.error) || 'Chain failed to start', 'err');
+    }
+  } catch(e) { toast('Chain error: ' + e.message, 'err'); }
+}
+
+async function loadChainRuns() {
+  var el = document.getElementById('chain-runs');
+  if (!el) return;
+  try {
+    var data = await api('/api/bridge/chains');
+    if (!data || !data.chains || !data.chains.length) {
+      el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px 0">No chain runs yet</div>';
+      return;
+    }
+    el.innerHTML = data.chains.map(function(c) {
+      var st = c.status || 'pending';
+      var stColor = st === 'complete' ? '#22c55e' : st === 'failed' ? '#ef4444' : '#f59e0b';
+      var dur = c.total_duration_ms ? (c.total_duration_ms / 1000).toFixed(1) + 's' : '...';
+      var tokens = c.total_tokens || 0;
+      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">'
+        + '<span style="width:6px;height:6px;border-radius:50%;background:' + stColor + ';flex-shrink:0"></span>'
+        + '<span style="color:var(--text2);min-width:80px;font-family:monospace;font-size:10px">' + escHtml(c.chain_id || '') + '</span>'
+        + '<span style="color:var(--text3)">' + (c.step_count || 0) + ' steps</span>'
+        + '<span style="color:var(--text3);margin-left:auto">' + dur + '</span>'
+        + (tokens ? '<span style="color:var(--text3);font-size:10px">' + tokens + ' tok</span>' : '')
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px 0">Failed to load chains</div>';
+  }
+}
+
+
 async function loadSkills() {
   // Reuse the skills loading from loadWorkflows
   try {
@@ -8800,6 +8924,9 @@ async function loadWorkflows() {
   const countEl = document.getElementById('wf-skills-count');
   if (countEl) countEl.textContent = installed.length + ' installed / ' + _wfSkills.length + ' total';
   _renderFilteredSkills();
+
+  // Load chain runs
+  loadChainRuns();
 
   // Cron / Automations
   const jobs = (cronRes && cronRes.jobs) || [];
@@ -16701,7 +16828,7 @@ def _smart_route(message):
     return _resolve_with_fallback("openclaw", message)
 
 
-def dispatch_agent(message, backend, model=None, timeout=120, run_id=None):
+def dispatch_agent(message, backend, model=None, timeout=120, run_id=None, chain_id=None, step_num=0):
     """Route a message to the specified backend and return normalized response."""
     import time as _dt
     import uuid as _uuid
@@ -16714,7 +16841,7 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None):
     # Bridge context logged, not injected into prompt (avoids contaminating model output)
     log.info("Bridge dispatch: %s → %s (%s)", "porter", backend, message[:60])
     # Record outgoing message
-    _record_agent_message(run_id, "porter", backend, message, status="in_progress")
+    _record_agent_message(run_id, "porter", backend, message, status="in_progress", chain_id=chain_id, step_num=step_num)
     _emit_event("bridge:dispatch", {"run_id": run_id, "backend": backend, "prompt": message[:200]})
     mlog.emit("info", "bridge", "bridge.dispatch", f"Dispatch to {backend}", run_id=run_id, backend=backend, trace_id=_get_trace_id())
     try:
@@ -16738,18 +16865,17 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None):
         return {"ok": False, "error": str(e)[:500], "run_id": run_id}
 
 
-def _record_agent_message(run_id, from_agent, to_agent, message, status="pending"):
+def _record_agent_message(run_id, from_agent, to_agent, message, status="pending", chain_id=None, step_num=0):
     """Insert an agent message into the database."""
     try:
         conn = _db_conn()
-        conn.execute("""INSERT INTO agent_messages (run_id, from_agent, to_agent, message, status)
-                        VALUES (?, ?, ?, ?, ?)""",
-                     (run_id, from_agent, to_agent, message[:10000], status))
+        conn.execute("""INSERT INTO agent_messages (run_id, from_agent, to_agent, message, status, chain_id, step_num)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                     (run_id, from_agent, to_agent, message[:10000], status, chain_id, step_num))
         conn.commit()
         conn.close()
     except Exception as e:
         log.debug("Failed to record agent message: %s", e)
-
 
 def _update_agent_message(run_id, response=None, status=None, model=None, tokens=0, duration_ms=0, error=None):
     """Update an agent message with its response."""
@@ -16778,6 +16904,87 @@ def _update_agent_message(run_id, response=None, status=None, model=None, tokens
         conn.close()
     except Exception as e:
         log.debug("Failed to update agent message: %s", e)
+
+
+
+def _run_chain(chain_id, steps, initial_input, timeout_per_step=120):
+    """Run a multi-step chain: probe → dispatch → pipe output forward.
+    Emits SSE events: chain:start, chain:step, chain:complete, chain:error.
+    """
+    import time as _ct
+    import uuid as _cu
+    _emit_event("chain:start", {"chain_id": chain_id, "steps": len(steps), "input": initial_input[:200]})
+    mlog.emit("info", "chain", "chain.start", f"Chain {chain_id} started ({len(steps)} steps)",
+              chain_id=chain_id, step_count=len(steps), trace_id=_get_trace_id())
+
+    previous = initial_input
+    results = []
+    for idx, step in enumerate(steps):
+        step_backend = step.get("backend", "openclaw")
+        prompt_template = step.get("prompt", "{input}")
+        step_model = step.get("model")
+        step_timeout = step.get("timeout", timeout_per_step)
+
+        # Substitute placeholders
+        prompt = prompt_template.replace("{input}", initial_input).replace("{previous}", previous)
+
+        _emit_event("chain:step", {"chain_id": chain_id, "step": idx, "backend": step_backend,
+                                    "prompt": prompt[:200], "status": "started"})
+        mlog.emit("info", "chain", "chain.step.start",
+                  f"Chain {chain_id} step {idx}: {step_backend}",
+                  chain_id=chain_id, step_num=idx, backend=step_backend, trace_id=_get_trace_id())
+
+        # Probe backend
+        if not _probe_provider(step_backend):
+            error_msg = f"Backend {step_backend} unavailable at step {idx}"
+            _emit_event("chain:error", {"chain_id": chain_id, "step": idx, "error": error_msg})
+            mlog.emit("error", "chain", "chain.step.fail", error_msg,
+                      chain_id=chain_id, step_num=idx, backend=step_backend, trace_id=_get_trace_id())
+            results.append({"step": idx, "backend": step_backend, "ok": False, "error": error_msg})
+            break
+
+        # Dispatch
+        run_id = f"{chain_id}-s{idx}"
+        result = dispatch_agent(prompt, step_backend, model=step_model, timeout=step_timeout,
+                                run_id=run_id, chain_id=chain_id, step_num=idx)
+
+        if result.get("ok"):
+            previous = result.get("text", "")
+            results.append({"step": idx, "backend": step_backend, "ok": True,
+                            "text": previous[:500], "run_id": run_id,
+                            "duration_ms": result.get("duration_ms", 0),
+                            "tokens": result.get("tokens", {})})
+            _emit_event("chain:step", {"chain_id": chain_id, "step": idx, "backend": step_backend,
+                                        "status": "complete", "duration_ms": result.get("duration_ms", 0)})
+            mlog.emit("info", "chain", "chain.step.complete",
+                      f"Chain {chain_id} step {idx} OK ({result.get('duration_ms', 0)}ms)",
+                      chain_id=chain_id, step_num=idx, backend=step_backend,
+                      duration_ms=result.get("duration_ms", 0), trace_id=_get_trace_id())
+        else:
+            error = result.get("error", "unknown")
+            results.append({"step": idx, "backend": step_backend, "ok": False,
+                            "error": error[:500], "run_id": run_id})
+            _emit_event("chain:error", {"chain_id": chain_id, "step": idx,
+                                         "error": error[:200], "backend": step_backend})
+            mlog.emit("error", "chain", "chain.step.fail",
+                      f"Chain {chain_id} step {idx} failed: {error[:100]}",
+                      chain_id=chain_id, step_num=idx, backend=step_backend, trace_id=_get_trace_id())
+            break  # Stop on first failure
+
+    # Chain complete
+    all_ok = all(r.get("ok") for r in results) and len(results) == len(steps)
+    total_dur = sum(r.get("duration_ms", 0) for r in results)
+    status = "complete" if all_ok else "failed"
+    _emit_event("chain:complete", {"chain_id": chain_id, "status": status,
+                                    "steps_completed": len(results), "total_steps": len(steps),
+                                    "total_duration_ms": total_dur,
+                                    "final_output": previous[:500] if all_ok else ""})
+    mlog.emit("info" if all_ok else "error", "chain", f"chain.{status}",
+              f"Chain {chain_id} {status} ({len(results)}/{len(steps)} steps, {total_dur}ms)",
+              chain_id=chain_id, status=status, steps_completed=len(results),
+              total_steps=len(steps), duration_ms=total_dur, trace_id=_get_trace_id())
+    return {"chain_id": chain_id, "status": status, "results": results,
+            "final_output": previous if all_ok else "", "total_duration_ms": total_dur}
 
 
 def _run_build_workflow(build_id, task_desc, backend=None, auto_commit=False, auto_restart=False):
@@ -17473,7 +17680,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.38"})
+            self.reply_json({"v": "0.25.39"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17560,7 +17767,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.25.38"
+                health["porter_version"] = "0.25.39"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -17652,6 +17859,44 @@ class Handler(BaseHTTPRequestHandler):
                     "label": info["label"],
                 }
             self.reply_json({"ok": True, "providers": status})
+
+        elif parsed.path == "/api/bridge/chains":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            cid = qs.get("id", [""])[0]
+            try:
+                conn = _db_conn()
+                if cid:
+                    rows = conn.execute(
+                        "SELECT * FROM agent_messages WHERE chain_id=? ORDER BY step_num, created_at",
+                        (cid,)
+                    ).fetchall()
+                    conn.close()
+                    self.reply_json({"ok": True, "chain_id": cid, "steps": [dict(r) for r in rows]})
+                else:
+                    rows = conn.execute(
+                        "SELECT chain_id, COUNT(*) as step_count, "
+                        "MIN(created_at) as started_at, MAX(completed_at) as ended_at, "
+                        "SUM(tokens_total) as total_tokens, SUM(duration_ms) as total_duration_ms, "
+                        "GROUP_CONCAT(DISTINCT status) as statuses "
+                        "FROM agent_messages WHERE chain_id IS NOT NULL "
+                        "GROUP BY chain_id ORDER BY started_at DESC LIMIT 20"
+                    ).fetchall()
+                    conn.close()
+                    chains = []
+                    for r in rows:
+                        d = dict(r)
+                        statuses = (d.get("statuses") or "").split(",")
+                        if "failed" in statuses:
+                            d["status"] = "failed"
+                        elif "in_progress" in statuses:
+                            d["status"] = "in_progress"
+                        else:
+                            d["status"] = "complete"
+                        chains.append(d)
+                    self.reply_json({"ok": True, "chains": chains})
+            except Exception:
+                self.reply_json({"ok": True, "chains": [] if not cid else [], "steps": []})
 
         elif parsed.path == "/api/logs/query":
             if not self.auth_check(redirect=False): return
@@ -18584,7 +18829,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.38'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.39'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -19280,6 +19525,26 @@ class Handler(BaseHTTPRequestHandler):
                     self.reply_json({"ok": True, "steps": [dict(r) for r in rows]})
                 except Exception:
                     self.reply_json({"ok": True, "steps": []})
+
+
+        elif parsed.path == "/api/bridge/chain" and self.command == "POST":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            steps = data.get("steps", [])
+            if not steps or not isinstance(steps, list):
+                self.reply_json({"ok": False, "error": "steps array required"}, 400); return
+            initial_input = str(data.get("input", "")).strip()
+            if not initial_input:
+                self.reply_json({"ok": False, "error": "input required"}, 400); return
+            timeout_per_step = min(int(data.get("timeout_per_step", 120)), 300)
+            import uuid as _uuid
+            chain_id = "chain-" + _uuid.uuid4().hex[:8]
+            def _chain_run():
+                _run_chain(chain_id, steps, initial_input, timeout_per_step)
+            t = _threading.Thread(target=_chain_run, daemon=True)
+            t.start()
+            self.reply_json({"ok": True, "chain_id": chain_id, "status": "started",
+                             "steps": len(steps)})
 
         elif parsed.path == "/api/agent-fleet":
             # Admin controls + agent heartbeat/update reporting
@@ -21899,7 +22164,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.38 ready (localhost only)")
+    print(f"\n  Porter v0.25.39 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

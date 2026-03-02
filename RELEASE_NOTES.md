@@ -1,5 +1,39 @@
 # Porter Release Notes
 
+## v0.25.39 (2026-03-02)
+
+**Provider Registry + Chain Dispatch — AI-to-AI Communication**
+
+### Provider Registry
+- 5 probe functions (`_probe_openclaw`, `_probe_ollama`, `_probe_claude`, `_probe_gemini`, `_probe_codex`) with 15s TTL cache
+- `PROVIDER_REGISTRY` dict: dispatch, probe, type, label per backend (replaces flat `AGENT_DISPATCHERS`)
+- `GET /api/providers` — real-time health status for all 5 backends
+
+### Fallback Chain
+- `_resolve_with_fallback()`: if preferred backend is down, auto-walk fallback chain
+- Configurable `preferences.fallback_chain` (default: openclaw → gemini → claude → codex → ollama)
+- Mission Control logs `route.decision`, `route.fallback`, `route.no_backend` events
+
+### Server-Side Chain Dispatch
+- `_run_chain()`: multi-step pipeline — probe → dispatch → pipe output to next step
+- `POST /api/bridge/chain` — fire chains in background thread, returns `chain_id`
+- `GET /api/bridge/chains` — aggregates chain runs with step counts, tokens, duration, status
+- `agent_messages` table gains `chain_id TEXT` + `step_num INTEGER` columns (auto-migrated)
+- SSE events: `chain:start`, `chain:step`, `chain:complete`, `chain:error`
+- Stops on first step failure
+
+### Chain Builder UI
+- New section in Workflows tab: add/remove steps with backend selector + prompt template
+- Placeholder substitution: `{input}` = original input, `{previous}` = last step output
+- Chain runs list with status dots, duration, token counts
+- "Run Chain" button fires `POST /api/bridge/chain`
+
+### Fixes
+- Fixed Mission Control CSS bleed: `#admin-module` no longer forces `display:flex` on hidden tabs
+- Fixed stale version in `/api/admin/health` (was `0.22.1`) and `/api/version` (was `0.25.35`)
+
+---
+
 ## v0.25.38 (2026-03-02)
 
 **Mission Control v2 — Auto-Remediation, Bug Reports, Expanded Instrumentation**
