@@ -4171,17 +4171,18 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-welcome-sub { font-size:13px; color:rgba(255,255,255,.25); letter-spacing:0.3px; }
 .chat-welcome-input-wrap {
   width:100%; max-width:640px; background:rgba(255,255,255,.06);
-  border:1px solid rgba(255,255,255,.08); border-radius:18px;
-  padding:18px 22px 12px; transition:border-color .2s;
+  border:1px solid rgba(255,255,255,.08); border-radius:16px;
+  padding:14px 18px 10px; transition:border-color .2s; position:relative;
 }
 .chat-welcome-input-wrap:focus-within { border-color:rgba(247,147,26,.4); }
 .chat-welcome-input-wrap textarea {
-  width:100%; border:none; background:none; color:#fff; font-size:15px;
-  font-family:inherit; resize:none; outline:none; min-height:30px; max-height:160px; line-height:1.5;
+  width:100%; border:none; background:none; color:transparent; caret-color:#fff; font-size:14px;
+  font-family:inherit; resize:none; outline:none; min-height:26px; max-height:120px; line-height:1.5;
+  position:relative; z-index:2;
 }
 .chat-welcome-input-wrap textarea::placeholder { color:rgba(255,255,255,.35); }
 .chat-welcome-meta {
-  display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:10px;
+  display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:6px;
 }
 
 
@@ -4253,13 +4254,21 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-input-area .chat-input-wrap {
   background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08);
   border-radius:16px; padding:14px 18px 10px; transition:border-color .2s;
+  position:relative;
 }
 .chat-input-area .chat-input-wrap:focus-within { border-color:rgba(247,147,26,.4); }
 .chat-input-bottom {
-  width:100%; border:none; background:none; color:#fff; font-size:14px;
+  width:100%; border:none; background:none; color:transparent; caret-color:#fff; font-size:14px;
   font-family:inherit; resize:none; outline:none; min-height:26px; max-height:120px; line-height:1.5;
+  position:relative; z-index:2;
 }
 .chat-input-bottom::placeholder { color:rgba(255,255,255,.35); }
+.chat-input-overlay {
+  position:absolute; top:14px; left:18px; right:18px; pointer-events:none; z-index:1;
+  color:#fff; font-size:14px; font-family:inherit; line-height:1.5; white-space:pre-wrap;
+  word-break:break-word; overflow:hidden;
+}
+.chat-input-overlay .at-hl { color:#7dd3fc; font-weight:600; }
 .chat-input-bottom-meta {
   display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:6px;
 }
@@ -5220,9 +5229,10 @@ select.settings-input { padding-right: 26px; }
         <div id="chat-messages" class="chat-messages welcome-state">
           <div class="chat-welcome">
             <div class="chat-welcome-sub">⚡ One prompt. Every AI. Zero friction.</div>
-            <div class="chat-welcome-input-wrap" style="position:relative">
+            <div class="chat-welcome-input-wrap">
               <div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>
-              <textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
+              <div id="chat-input-overlay-welcome" class="chat-input-overlay"></div>
+              <textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _hlMentions(this)"></textarea>
               <div class="chat-welcome-meta">
 <select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>
                 <div class="model-picker" data-sel="chat-backend-sel-welcome">
@@ -5244,7 +5254,8 @@ select.settings-input { padding-right: 26px; }
         <div class="chat-input-area" id="chat-input-area" style="display:none">
           <div id="chat-autocomplete" class="chat-autocomplete"></div>
           <div class="chat-input-wrap">
-            <textarea id="chat-input" class="chat-input-bottom" placeholder="Reply or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
+            <div id="chat-input-overlay-bottom" class="chat-input-overlay"></div>
+            <textarea id="chat-input" class="chat-input-bottom" placeholder="Reply or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _hlMentions(this)"></textarea>
             <div class="chat-input-bottom-meta">
               <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
 <select id="chat-backend-sel" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>
@@ -9795,7 +9806,8 @@ function renderChatMessages(streamUpdate) {
     el.innerHTML = '<div class="chat-welcome">'
       + '<div class="chat-welcome-sub">⚡ One prompt. Every AI. Zero friction.</div>'
       + '<div class="chat-welcome-input-wrap">'
-      + '<textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>'
+      + '<div id="chat-input-overlay-welcome" class="chat-input-overlay"></div>'
+      + '<textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _hlMentions(this)"></textarea>'
       + '<div class="chat-welcome-meta">'
       + '<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>'
       + '<div class="model-picker" data-sel="chat-backend-sel-welcome">'
@@ -10121,6 +10133,17 @@ function _acCheck() {
   }
 
   _acHide();
+}
+
+function _hlMentions(el) {
+  var id = el.id === 'chat-input-welcome' ? 'chat-input-overlay-welcome' : 'chat-input-overlay-bottom';
+  var ov = document.getElementById(id);
+  if (!ov) return;
+  var val = el.value;
+  if (!val) { ov.innerHTML = ''; return; }
+  var esc = val.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  ov.innerHTML = esc.replace(/@(claude|gemini|openclaw|codex|ollama)\b/g, '<span class="at-hl">@$1</span>');
+  ov.scrollTop = el.scrollTop;
 }
 
 function _getChatInput() {
