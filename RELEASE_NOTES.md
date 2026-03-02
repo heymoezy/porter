@@ -1,5 +1,57 @@
 # Porter Release Notes
 
+## v0.25.38 (2026-03-02)
+
+**Mission Control v2 — Auto-Remediation, Bug Reports, Expanded Instrumentation**
+
+### Auto-Remediation Engine
+- Incidents auto-dispatch to agent squad (openclaw for bridge/code, gemini for analysis)
+- Gathers context: last 5 events from same domain + system metrics
+- Builds remediation prompt with incident details, dispatches via `dispatch_agent()`
+- Tracks run_id in `log_incidents.run_refs`, emits `log:remediation` SSE events
+- Manual retry via `POST /api/logs/remediate`
+
+### Bug Report System
+- `POST /api/logs/report` — submit bug description + severity, auto-captures recent events
+- Dispatches to agent squad in background thread
+- SSE `log:bugreport` events stream analysis status + response back to UI
+- Report tab in right panel with textarea, severity selector, live status
+
+### Client Error Capture
+- `POST /api/logs/client-error` — accepts frontend JS errors (message, source, stack)
+- `window.onerror` + `unhandledrejection` handlers auto-POST to endpoint
+- Emits `frontend.error` events into Mission Control pipeline
+
+### Expanded Instrumentation
+- **File ops** (8 handlers): upload, delete, rename, mkdir, move, copy, write, zip emit `file.*` events
+- **Chat streaming**: `chat.stream.start`, `chat.stream.complete`, `chat.stream.error` with duration/chars
+- **Scheduler**: `schedule.fire`, `schedule.complete`, `schedule.fail` with job details
+
+### New Alert Rules (4)
+- `file_error_spike`: 5+ file errors in 120s
+- `chat_error_spike`: 3+ chat errors in 120s
+- `schedule_failure_spike`: 3+ schedule failures in 300s
+- `frontend_error_spike`: 10+ frontend JS errors in 120s
+
+### UI Overhaul
+- **Single-view layout**: no page-level scroll, flex column fills viewport
+- **Tabbed right panel**: Detail / Incidents / Report tabs replace old detail pane
+- **Compact cards**: smaller padding (6px 10px) + 16px values for density
+- **4 new presets**: File Ops, Chat, Schedule, Frontend
+- **Report Bug button** in header (red accent)
+- Incidents view shows remediation status badge + Retry Fix button
+
+### New API Endpoints (3)
+- `POST /api/logs/report` — submit bug report
+- `POST /api/logs/client-error` — capture frontend JS errors
+- `POST /api/logs/remediate` — manual retry auto-remediation
+
+### New SSE Event Types (2)
+- `log:remediation` — {incident_id, run_id, status, response}
+- `log:bugreport` — {report_id, status, response, backend}
+
+---
+
 ## v0.25.37 (2026-03-02)
 
 **Mission Control Log System — Structured Observability**

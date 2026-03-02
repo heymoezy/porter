@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.37 — Mission Control Log System"""
+"""Porter v0.25.38 — Provider Registry + Fallback Chain"""
 
 
 
@@ -2279,6 +2279,8 @@ def _fire_schedule_job(job: dict, due_time: datetime) -> None:
     ts_str  = run_ts.strftime("%Y%m%dT%H%M%SZ")
     ok      = False
     detail  = ""
+    mlog.emit("info", "schedule", "schedule.fire", f"Schedule fired: {job.get('name', job_id)}",
+              job_id=job_id, target=target[:200])
     try:
         if target.startswith(("http://", "https://")):
             payload = {
@@ -2319,6 +2321,13 @@ def _fire_schedule_job(job: dict, due_time: datetime) -> None:
     (run_dir / f"{ts_str}.json").write_text(
         __import__("json").dumps(record, indent=2)
     )
+
+    if ok:
+        mlog.emit("info", "schedule", "schedule.complete", f"Schedule OK: {job.get('name', job_id)} — {detail}",
+                  job_id=job_id, detail=detail)
+    else:
+        mlog.emit("error", "schedule", "schedule.fail", f"Schedule failed: {job.get('name', job_id)} — {detail}",
+                  job_id=job_id, detail=detail)
 
     # Update job's last_run fields in _config
     jobs = _config.get("schedules", [])
@@ -3125,6 +3134,18 @@ class _AlertEngine:
             {"id": "timeout_burst", "domain": "bridge", "event_type": "bridge.fail",
              "threshold": 5, "window_s": 300, "sev": "error",
              "title": "Timeout burst", "summary": "{count} timeouts in {window}s"},
+            {"id": "file_error_spike", "domain": "file", "event_type": "file.error",
+             "threshold": 5, "window_s": 120, "sev": "error",
+             "title": "File error spike", "summary": "{count} file errors in {window}s"},
+            {"id": "chat_error_spike", "domain": "chat", "event_type": "chat.stream.error",
+             "threshold": 3, "window_s": 120, "sev": "error",
+             "title": "Chat error spike", "summary": "{count} chat errors in {window}s"},
+            {"id": "schedule_failure_spike", "domain": "schedule", "event_type": "schedule.fail",
+             "threshold": 3, "window_s": 300, "sev": "error",
+             "title": "Schedule failure spike", "summary": "{count} schedule failures in {window}s"},
+            {"id": "frontend_error_spike", "domain": "frontend", "event_type": "frontend.error",
+             "threshold": 10, "window_s": 120, "sev": "warning",
+             "title": "Frontend error spike", "summary": "{count} frontend JS errors in {window}s"},
         ]
 
     def check(self, event):
@@ -3167,8 +3188,108 @@ class _AlertEngine:
             log.warning("Alert: %s — %s", rule["title"], summary)
             _emit_event("log:incident", {"incident_id": iid, "title": rule["title"],
                                           "severity": rule["sev"], "summary": summary})
+            # Auto-remediation: dispatch to agent squad
+            import threading as _thr
+            _thr.Thread(target=_auto_remediate, args=(iid, f"{rule['id']}:{backend}",
+                        rule["sev"], rule["title"], summary), daemon=True).start()
         except Exception as e:
             log.debug("Alert engine incident create failed: %s", e)
+
+
+def _auto_remediate(incident_id, rule_id, severity, title, summary):
+    """Auto-dispatch incident to agent squad for remediation."""
+    import uuid, time as _t
+    run_id = uuid.uuid4().hex[:12]
+    try:
+        _emit_event("log:remediation", {"incident_id": incident_id, "run_id": run_id,
+                                         "status": "dispatching", "response": ""})
+        mlog.emit("info", "remediation", "remediation.start",
+                  f"Auto-remediation for {title}", incident_id=incident_id, run_id=run_id)
+
+        # Gather context: last 5 events from same domain
+        domain = rule_id.split(":")[0].rsplit("_", 1)[0] if ":" in rule_id else "system"
+        context_events = []
+        try:
+            conn = _log_db_conn()
+            rows = conn.execute(
+                "SELECT event_id, severity, event_type, message, ts FROM log_events "
+                "WHERE domain=? ORDER BY ts DESC LIMIT 5", (domain,)
+            ).fetchall()
+            conn.close()
+            for r in rows:
+                context_events.append({"event_id": r[0], "severity": r[1],
+                                       "event_type": r[2], "message": r[3], "ts": r[4]})
+        except Exception:
+            pass
+
+        # Build prompt
+        prompt = (
+            f"INCIDENT ALERT — Auto-Remediation Request\n"
+            f"Severity: {severity}\n"
+            f"Title: {title}\n"
+            f"Summary: {summary}\n"
+            f"Rule ID: {rule_id}\n"
+            f"Incident ID: {incident_id}\n\n"
+            f"Recent events from same domain:\n"
+        )
+        for ce in context_events:
+            prompt += f"  [{ce.get('severity','')}] {ce.get('event_type','')} — {ce.get('message','')[:80]}\n"
+        prompt += (
+            f"\nAnalyze this incident and suggest remediation steps. "
+            f"If it is a transient spike, recommend monitoring. "
+            f"If it indicates a real problem, suggest specific fixes."
+        )
+
+        # Pick backend: openclaw for bridge/code issues, gemini for analysis
+        backend = "openclaw" if domain in ("bridge", "auth", "file") else "gemini"
+        # Check if backend is available, fallback
+        if backend not in AGENT_DISPATCHERS:
+            backend = next(iter(AGENT_DISPATCHERS), None)
+        if not backend:
+            raise RuntimeError("No agent backends available")
+
+        result = dispatch_agent(prompt, backend, timeout=60, run_id=run_id)
+
+        if result.get("ok"):
+            response_text = result.get("text", "")[:2000]
+            _emit_event("log:remediation", {"incident_id": incident_id, "run_id": run_id,
+                                             "status": "success", "response": response_text,
+                                             "backend": backend})
+            mlog.emit("info", "remediation", "remediation.success",
+                      f"Remediation complete for {title}", incident_id=incident_id,
+                      run_id=run_id, backend=backend)
+            # Store run_ref on incident
+            try:
+                conn = _log_db_conn()
+                existing = conn.execute("SELECT run_refs FROM log_incidents WHERE incident_id=?",
+                                        (incident_id,)).fetchone()
+                refs = []
+                if existing and existing[0]:
+                    try:
+                        refs = __import__("json").loads(existing[0])
+                    except Exception:
+                        pass
+                refs.append(run_id)
+                conn.execute("UPDATE log_incidents SET run_refs=?, updated_at=? WHERE incident_id=?",
+                             (__import__("json").dumps(refs), _t.time(), incident_id))
+                conn.commit()
+                conn.close()
+            except Exception:
+                pass
+        else:
+            error = result.get("error", "unknown")[:500]
+            _emit_event("log:remediation", {"incident_id": incident_id, "run_id": run_id,
+                                             "status": "failed", "response": error,
+                                             "backend": backend})
+            mlog.emit("error", "remediation", "remediation.failed",
+                      f"Remediation failed for {title}: {error[:100]}",
+                      incident_id=incident_id, run_id=run_id, backend=backend)
+    except Exception as e:
+        log.error("Auto-remediation error: %s", e)
+        _emit_event("log:remediation", {"incident_id": incident_id, "run_id": run_id,
+                                         "status": "failed", "response": str(e)[:500]})
+        mlog.emit("error", "remediation", "remediation.error",
+                  f"Remediation exception: {str(e)[:100]}", incident_id=incident_id, run_id=run_id)
 
 
 class MissionLog:
@@ -4448,8 +4569,9 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .deleg-time { color:var(--text3); font-size:11px; margin-left:auto; white-space:nowrap; }
 .deleg-dur { color:var(--text3); font-size:11px; }
 
-/* ── Mission Control ───────────────────────────────────────────── */
-.mc-header { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+/* ── Mission Control v2 ────────────────────────────────────────── */
+#admin-module.module-panel { overflow:hidden; display:flex; flex-direction:column; }
+.mc-header { display:flex; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap; flex-shrink:0; }
 .mc-title { font-size:16px; font-weight:700; color:var(--text); }
 .mc-live-badge { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; padding:2px 8px; border-radius:10px; }
 .mc-live-badge.live { background:#10b98120; color:#10b981; }
@@ -4461,14 +4583,14 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-rate { font-size:11px; color:var(--text3); }
 .mc-header-right { margin-left:auto; display:flex; align-items:center; gap:6px; }
 
-.mc-cards { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:12px; }
-.mc-card { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; cursor:pointer; transition:border-color .15s; }
+.mc-cards { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-bottom:10px; flex-shrink:0; }
+.mc-card { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:6px 10px; cursor:pointer; transition:border-color .15s; }
 .mc-card:hover { border-color:var(--accent); }
-.mc-card-val { font-size:20px; font-weight:700; color:var(--text); line-height:1.2; }
+.mc-card-val { font-size:16px; font-weight:700; color:var(--text); line-height:1.2; }
 .mc-card-val.danger { color:var(--err); }
 .mc-card-label { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; margin-top:2px; }
 
-.mc-filters { display:flex; align-items:center; gap:6px; margin-bottom:10px; flex-wrap:wrap; }
+.mc-filters { display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap; flex-shrink:0; }
 .mc-query { flex:1; min-width:180px; padding:5px 10px; font-size:11px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
 .mc-query:focus { outline:none; border-color:var(--accent); }
 .mc-preset { padding:3px 8px; font-size:10px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--text2); cursor:pointer; transition:all .15s; white-space:nowrap; }
@@ -4477,8 +4599,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-mode-btn { padding:3px 10px; font-size:10px; cursor:pointer; background:var(--bg); color:var(--text2); border:none; transition:all .15s; }
 .mc-mode-btn.active { background:var(--accent); color:#fff; }
 
-.mc-body { display:grid; grid-template-columns:1fr 320px; gap:12px; min-height:360px; }
-.mc-timeline { background:var(--bg); border:1px solid var(--border); border-radius:8px; overflow:auto; max-height:500px; }
+.mc-body { display:grid; grid-template-columns:1fr 340px; gap:10px; flex:1; min-height:0; }
+.mc-timeline { background:var(--bg); border:1px solid var(--border); border-radius:8px; overflow-y:auto; min-height:0; }
 .mc-row { display:grid; grid-template-columns:110px 52px 64px 1fr auto 56px 28px; align-items:center; gap:6px; padding:4px 10px; font-size:11px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .1s; }
 .mc-row:hover { background:var(--bg2); }
 .mc-row.selected { background:var(--accent)10; border-left:2px solid var(--accent); }
@@ -4497,7 +4619,13 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-dur { font-size:10px; color:var(--text3); text-align:right; font-family:monospace; }
 .mc-status-icon { font-size:12px; text-align:center; }
 
-.mc-detail { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:14px; overflow:auto; max-height:500px; }
+.mc-right-panel { display:flex; flex-direction:column; min-height:0; background:var(--bg); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.mc-right-tabs { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; }
+.mc-right-tab { flex:1; padding:6px 0; font-size:11px; font-weight:600; text-align:center; cursor:pointer; background:var(--bg); color:var(--text3); border:none; transition:all .15s; }
+.mc-right-tab:hover { color:var(--text); }
+.mc-right-tab.active { color:var(--accent); border-bottom:2px solid var(--accent); background:var(--bg); }
+.mc-right-content { flex:1; overflow-y:auto; padding:14px; min-height:0; }
+
 .mc-detail-empty { color:var(--text3); font-size:12px; font-style:italic; text-align:center; padding-top:40px; }
 .mc-detail-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:10px; }
 .mc-detail-grid { display:grid; grid-template-columns:80px 1fr; gap:4px 8px; font-size:11px; margin-bottom:12px; }
@@ -4508,19 +4636,31 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-trace-item { font-size:10px; padding:3px 6px; border-left:2px solid var(--border); margin-bottom:2px; color:var(--text2); }
 .mc-trace-item.current { border-left-color:var(--accent); background:var(--accent)08; }
 
-.mc-bottom { display:flex; align-items:center; gap:12px; margin-top:10px; font-size:10px; color:var(--text3); }
+.mc-bottom { display:flex; align-items:center; gap:12px; margin-top:8px; font-size:10px; color:var(--text3); flex-shrink:0; }
 .mc-bottom-item { display:flex; align-items:center; gap:4px; }
 
 .mc-incident { background:var(--bg2); border:1px solid var(--err)40; border-radius:6px; padding:8px 10px; margin-bottom:6px; }
 .mc-incident-title { font-size:11px; font-weight:600; color:var(--err); }
 .mc-incident-summary { font-size:10px; color:var(--text2); margin-top:2px; }
-.mc-incident-actions { margin-top:4px; }
+.mc-incident-actions { margin-top:4px; display:flex; gap:6px; }
+
+.mc-report-form { display:flex; flex-direction:column; gap:10px; }
+.mc-report-form textarea { width:100%; min-height:80px; padding:8px; font-size:12px; border:1px solid var(--border); border-radius:6px; background:var(--bg2); color:var(--text); font-family:inherit; resize:vertical; box-sizing:border-box; }
+.mc-report-form textarea:focus { outline:none; border-color:var(--accent); }
+.mc-report-form select { padding:5px 8px; font-size:11px; border:1px solid var(--border); border-radius:6px; background:var(--bg2); color:var(--text); }
+.mc-report-response { font-size:11px; color:var(--text2); white-space:pre-wrap; margin-top:8px; padding:10px; background:var(--bg2); border-radius:6px; max-height:300px; overflow-y:auto; }
+
+.mc-rem-status { display:inline-flex; align-items:center; gap:4px; font-size:9px; font-weight:600; padding:2px 6px; border-radius:3px; text-transform:uppercase; }
+.mc-rem-status.dispatching { background:#3b82f620; color:#3b82f6; }
+.mc-rem-status.success { background:#10b98120; color:#10b981; }
+.mc-rem-status.failed { background:#ef444420; color:#ef4444; }
 
 .mc-empty { text-align:center; padding:40px 20px; color:var(--text3); font-size:12px; }
 
 @media(max-width:768px) {
   .mc-cards { grid-template-columns:repeat(3,1fr); }
   .mc-body { grid-template-columns:1fr; }
+  .mc-right-panel { max-height:300px; }
   .mc-row { grid-template-columns:80px 40px 1fr 28px; }
   .mc-row .mc-domain, .mc-row .mc-chips, .mc-row .mc-dur { display:none; }
 }
@@ -5690,7 +5830,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.37</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.38</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6822,6 +6962,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.38', date:'2026-03-02', notes:['Provider Registry: 5 probe functions with 15s TTL cache','PROVIDER_REGISTRY replaces AGENT_DISPATCHERS (dispatch, probe, type, label per backend)','GET /api/providers: real-time health status for all 5 backends','Smart routing fallback chain: if preferred backend is down, auto-fallback to next available','Configurable fallback_chain in preferences','Mission Control logs route decisions + fallback events','Fixed stale version in /api/admin/health and /api/version'] },
   { ver:'v0.25.37', date:'2026-03-02', notes:['Mission Control: structured event pipeline (JSONL + SQLite index)','Real-time event timeline with severity, domain, and trace correlation','Alert engine: bridge failure spikes, auth anomalies, timeout bursts','5 summary cards: incidents, errors, timeouts, bridge fails, total','Debug Focus / Live Tail modes + query filter bar + presets','Trace waterfall view in detail panel','6 new API endpoints: /api/logs/query, /trace, /incidents, /metrics, /event, /incidents/:id/ack','24h retention + 1.5GB cap + automatic purge','Export events as JSON'] },
   { ver:'v0.25.36', date:'2026-03-02', notes:['Bridge service auth: dispatch/runs/invoke accept Bearer tokens via auth_check_cap','New GET /api/bridge/run?id= for single-run polling','GET /api/bridge/runs now supports ?since=&status=&limit= filters','Regenerated OpenClaw API key (scrypt hash)'] },
   { ver:'v0.25.35', date:'2026-03-02', notes:['Fixed chain parsing: text before first @model no longer lost','Smart connector stripping (ask/tell/to/and send it to)','@mention indicator shows targeted models below input (cursor-safe)','Fixed single @ extraction losing prefix text'] },
@@ -11504,7 +11645,7 @@ function mcPreset(name) {
 
 async function mcShowIncidents() {
   var data = await api('/api/logs/incidents?state=open');
-  var detail = document.getElementById('mc-detail');
+  var detail = document.getElementById('mc-right-content');
   if (!detail || !data) return;
   var incidents = data.incidents || [];
   if (incidents.length === 0) {
@@ -11514,10 +11655,12 @@ async function mcShowIncidents() {
   var html = '<div class="mc-detail-title">Open Incidents (' + incidents.length + ')</div>';
   for (var i = 0; i < incidents.length; i++) {
     var inc = incidents[i];
+    var remHtml = '';
+    if (inc.run_refs) { try { var refs = typeof inc.run_refs === 'string' ? JSON.parse(inc.run_refs) : inc.run_refs; if (refs && refs.length) remHtml = ' <span class="mc-rem-status success">Auto-remediated</span>'; } catch(e) {} }
     html += '<div class="mc-incident">';
     html += '<div class="mc-incident-title"><span class="mc-sev ' + (inc.severity || 'error') + '">' + (inc.severity || '') + '</span> ' + escHtml(inc.title || '') + '</div>';
     html += '<div class="mc-incident-summary">' + escHtml(inc.summary || '') + '</div>';
-    html += '<div class="mc-incident-actions"><button class="btn btn-ghost" style="font-size:10px" onclick="mcAckIncident(\'' + escHtml(inc.incident_id) + '\')">Acknowledge</button></div>';
+    html += '<div class="mc-incident-actions"><button class="btn btn-ghost" style="font-size:10px" onclick="mcAckIncident(\'' + escHtml(inc.incident_id) + '\')">Acknowledge</button><button class="btn btn-ghost" style="font-size:10px" onclick="mcRetryRemediation(\'' + escHtml(inc.incident_id) + '\')">Retry Fix</button>' + remHtml + '</div>';
     html += '</div>';
   }
   detail.innerHTML = html;
@@ -16134,6 +16277,85 @@ def _get_rules():
         rules = _config["rules"]
     return rules
 
+
+# ── Provider Probes — health checks with TTL cache ────────────────────────
+_probe_cache = {}  # {provider: (timestamp, result_bool)}
+_PROBE_TTL = 15  # seconds
+
+def _probe_openclaw():
+    """Check if OpenClaw CLI is available (and optionally gateway)."""
+    import urllib.request
+    oc_bin = _resolve_cli("openclaw")
+    if not oc_bin:
+        return False
+    # Optional: check gateway HTTP
+    try:
+        oc_cfg_path = Path.home() / ".openclaw" / "openclaw.json"
+        if oc_cfg_path.exists():
+            oc_cfg = json.loads(oc_cfg_path.read_text())
+            port = oc_cfg.get("gatewayPort", 18789)
+            token = oc_cfg.get("authToken", "")
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{port}/v1/models",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            urllib.request.urlopen(req, timeout=3)
+    except Exception:
+        pass  # CLI exists, gateway optional
+    return True
+
+def _probe_ollama():
+    """Check if Ollama is running and responding."""
+    import urllib.request
+    try:
+        req = urllib.request.Request("http://127.0.0.1:11434/api/tags", method="GET")
+        urllib.request.urlopen(req, timeout=3)
+        return True
+    except Exception:
+        return False
+
+def _probe_claude():
+    """Check if Claude CLI binary exists."""
+    return _resolve_cli("claude") is not None
+
+def _probe_gemini():
+    """Check if Gemini CLI binary exists."""
+    return _resolve_cli("gemini") is not None
+
+def _probe_codex():
+    """Check if Codex CLI binary exists."""
+    return _resolve_cli("codex") is not None
+
+def _probe_provider(name):
+    """Probe a provider with 15s TTL cache. Returns True/False."""
+    import time as _t
+    cached = _probe_cache.get(name)
+    if cached:
+        ts, result = cached
+        if _t.time() - ts < _PROBE_TTL:
+            return result
+    probes = {
+        "openclaw": _probe_openclaw,
+        "ollama": _probe_ollama,
+        "claude": _probe_claude,
+        "gemini": _probe_gemini,
+        "codex": _probe_codex,
+    }
+    fn = probes.get(name)
+    if not fn:
+        return False
+    try:
+        result = fn()
+    except Exception:
+        result = False
+    _probe_cache[name] = (_t.time(), result)
+    return result
+
+def _probe_all_providers():
+    """Probe all providers and return dict of {name: available}."""
+    names = ["openclaw", "ollama", "claude", "gemini", "codex"]
+    return {n: _probe_provider(n) for n in names}
+
 # ── Agent Bridge — model-agnostic dispatch ─────────────────────────────────
 def _resolve_cli(name, extra_paths=None):
     """Find a CLI binary by name, checking PATH and common locations."""
@@ -16352,13 +16574,14 @@ def _dispatch_ollama(message, model=None, timeout=120):
         "tokens": {"total": data.get("eval_count", 0)},
     }
 
-AGENT_DISPATCHERS = {
-    "openclaw": _dispatch_openclaw,
-    "claude": _dispatch_claude,
-    "gemini": _dispatch_gemini,
-    "codex": _dispatch_codex,
-    "ollama": _dispatch_ollama,
+PROVIDER_REGISTRY = {
+    "openclaw": {"dispatch": _dispatch_openclaw, "probe": _probe_openclaw, "type": "gateway", "label": "OpenClaw"},
+    "claude":   {"dispatch": _dispatch_claude,   "probe": _probe_claude,   "type": "cli",     "label": "Claude Code"},
+    "gemini":   {"dispatch": _dispatch_gemini,   "probe": _probe_gemini,   "type": "cli",     "label": "Gemini"},
+    "codex":    {"dispatch": _dispatch_codex,    "probe": _probe_codex,    "type": "cli",     "label": "Codex"},
+    "ollama":   {"dispatch": _dispatch_ollama,   "probe": _probe_ollama,   "type": "local",   "label": "Ollama"},
 }
+AGENT_DISPATCHERS = {k: v["dispatch"] for k, v in PROVIDER_REGISTRY.items()}
 
 
 # ── Delegation log ─────────────────────────────────────────────────────────
@@ -16412,16 +16635,45 @@ def _ranked_route():
     return None
 
 
+_DEFAULT_FALLBACK_CHAIN = ["openclaw", "gemini", "claude", "codex", "ollama"]
+
+def _resolve_with_fallback(preferred, message=""):
+    """Try preferred backend; if unavailable, walk fallback chain.
+    Returns (backend, model) tuple.
+    """
+    if _probe_provider(preferred):
+        mlog.emit("info", "routing", "route.decision", f"Route → {preferred} (preferred, available)", backend=preferred)
+        return (preferred, None)
+    # Walk fallback chain
+    prefs = _config.get("preferences", {})
+    chain = prefs.get("fallback_chain", _DEFAULT_FALLBACK_CHAIN)
+    if not isinstance(chain, list) or not chain:
+        chain = _DEFAULT_FALLBACK_CHAIN
+    for backend in chain:
+        if backend == preferred:
+            continue
+        if _probe_provider(backend):
+            mlog.emit("warn", "routing", "route.fallback",
+                       f"Route fallback: {preferred} unavailable → {backend}",
+                       preferred=preferred, fallback=backend)
+            return (backend, None)
+    # Nothing available — return preferred anyway (let dispatch handle the error)
+    mlog.emit("error", "routing", "route.no_backend",
+               f"No available backends (tried {preferred} + chain)", preferred=preferred)
+    return (preferred, None)
+
+
 def _smart_route(message):
     """Decide which backend to use based on message content.
-    Returns (backend, model) tuple.
+    Returns (backend, model) tuple. Probes health + walks fallback chain.
     """
     # If routing_mode is "ranked", use user-configured rankings
     prefs = _config.get("preferences", {})
     if prefs.get("routing_mode") == "ranked":
         ranked = _ranked_route()
         if ranked:
-            return ranked
+            preferred = ranked[0]
+            return _resolve_with_fallback(preferred, message)
     msg = message.lower().strip()
 
     # Code-related keywords → OpenClaw (Codex is best at code)
@@ -16433,21 +16685,21 @@ def _smart_route(message):
                      r'\.py\b', r'\.js\b', r'\.ts\b', r'\.html\b', r'\.css\b', r'\.json\b',
                      r'\bapi\b', r'\bendpoint\b', r'\bdatabase\b', r'\bquery\b', r'\bsql\b']
     if any(_re.search(p, msg) for p in code_patterns):
-        return ("openclaw", None)
+        return _resolve_with_fallback("openclaw", message)
 
     # Quick factual / research → Gemini (fast, good at factual)
     quick_signals = ['what is', 'who is', 'when did', 'how many', 'define ',
                      'explain ', 'summarize', 'translate', 'list ', 'compare']
     if any(msg.startswith(s) or (' ' + s) in msg for s in quick_signals):
-        return ("gemini", None)
+        return _resolve_with_fallback("gemini", message)
 
     # Short messages (< 20 chars) → Gemini (fast responses)
     if len(msg) < 20:
-        return ("gemini", None)
+        return _resolve_with_fallback("gemini", message)
 
     # Default → OpenClaw
-    mlog.emit("info", "routing", "route.decision", f"Route → openclaw (default)", backend="openclaw")
-    return ("openclaw", None)
+    return _resolve_with_fallback("openclaw", message)
+
 
 def dispatch_agent(message, backend, model=None, timeout=120, run_id=None):
     """Route a message to the specified backend and return normalized response."""
@@ -16456,9 +16708,9 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None):
     _dt_start = _dt.time()
     if not run_id:
         run_id = _uuid.uuid4().hex[:12]
-    fn = AGENT_DISPATCHERS.get(backend)
+    fn = PROVIDER_REGISTRY.get(backend, {}).get('dispatch')
     if not fn:
-        return {"ok": False, "error": f"Unknown backend: {backend}. Available: {', '.join(AGENT_DISPATCHERS.keys())}", "run_id": run_id}
+        return {"ok": False, "error": f"Unknown backend: {backend}. Available: {', '.join(PROVIDER_REGISTRY.keys())}", "run_id": run_id}
     # Bridge context logged, not injected into prompt (avoids contaminating model output)
     log.info("Bridge dispatch: %s → %s (%s)", "porter", backend, message[:60])
     # Record outgoing message
@@ -17221,7 +17473,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.35"})
+            self.reply_json({"v": "0.25.38"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17308,7 +17560,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.22.1"
+                health["porter_version"] = "0.25.38"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -17388,6 +17640,19 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json(health)
 
         # ── Mission Control Log API ──────────────────────────────────────
+
+        elif parsed.path == "/api/providers":
+            if not self.auth_check(redirect=False): return
+            status = {}
+            for name, info in PROVIDER_REGISTRY.items():
+                available = _probe_provider(name)
+                status[name] = {
+                    "available": available,
+                    "type": info["type"],
+                    "label": info["label"],
+                }
+            self.reply_json({"ok": True, "providers": status})
+
         elif parsed.path == "/api/logs/query":
             if not self.auth_check(redirect=False): return
             qs = parse_qs(parsed.query)
@@ -18319,7 +18584,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.37'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.38'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -18375,6 +18640,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Connection", "keep-alive")
             self.send_header("X-Accel-Buffering", "no")
             self.end_headers()
+            _chat_stream_start = __import__("time").time()
+            mlog.emit("info", "chat", "chat.stream.start", f"Chat stream: {model_id}", model=model_id, prompt_len=len(prompt))
 
             try:
                 import urllib.request
@@ -18589,6 +18856,9 @@ class Handler(BaseHTTPRequestHandler):
                 # Signal done
                 self.wfile.write(f"data: {json.dumps({'done': True, 'full_response': full_response})}\n\n".encode())
                 self.wfile.flush()
+                _chat_dur = int((__import__("time").time() - _chat_stream_start) * 1000)
+                mlog.emit("info", "chat", "chat.stream.complete", f"Chat done: {model_id} ({_chat_dur}ms)",
+                          model=model_id, duration_ms=_chat_dur, response_chars=len(full_response))
 
                 # Auto-save to chat history if chat_id provided
                 if chat_id and full_response:
@@ -18596,6 +18866,9 @@ class Handler(BaseHTTPRequestHandler):
 
             except Exception as e:
                 log.error("Chat stream error: %s", e)
+                _chat_dur = int((__import__("time").time() - _chat_stream_start) * 1000) if '_chat_stream_start' in dir() else 0
+                mlog.emit("error", "chat", "chat.stream.error", f"Chat error: {str(e)[:100]}",
+                          model=model_id, duration_ms=_chat_dur, error=str(e)[:200])
                 try:
                     self.wfile.write(f"data: {json.dumps({'error': str(e)})}\n\n".encode())
                     self.wfile.flush()
@@ -18764,6 +19037,107 @@ class Handler(BaseHTTPRequestHandler):
                     self.reply_json({"error": "not found or already resolved"}, 404)
             else:
                 self.reply_json({"error": "invalid path"}, 400)
+
+        elif parsed.path == "/api/logs/report":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            description = str(data.get("description", "")).strip()
+            severity = str(data.get("severity", "error")).strip()
+            context = data.get("context", "")
+            if not description:
+                self.reply_json({"error": "description required"}, 400); return
+            import uuid as _uuid, time as _t, threading as _thr
+            report_id = _uuid.uuid4().hex[:12]
+            # Capture recent events + health for context
+            recent = []
+            try:
+                conn = _log_db_conn()
+                rows = conn.execute(
+                    "SELECT event_id, severity, event_type, message, domain, ts "
+                    "FROM log_events ORDER BY ts DESC LIMIT 10"
+                ).fetchall()
+                conn.close()
+                for r in rows:
+                    recent.append({"severity": r[1], "event_type": r[2], "message": r[3], "domain": r[4]})
+            except Exception:
+                pass
+            mlog.emit("info", "bugreport", "bugreport.submitted",
+                      f"Bug report: {description[:80]}", report_id=report_id, severity=severity)
+            _emit_event("log:bugreport", {"report_id": report_id, "status": "submitted",
+                                           "description": description[:200], "response": "", "backend": ""})
+            def _handle_report():
+                try:
+                    prompt = (
+                        f"BUG REPORT from user:\n"
+                        f"Severity: {severity}\n"
+                        f"Description: {description}\n"
+                    )
+                    if context:
+                        prompt += f"Additional context: {str(context)[:500]}\n"
+                    prompt += f"\nRecent system events:\n"
+                    for ev in recent[:5]:
+                        prompt += f"  [{ev.get('severity','')}] {ev.get('domain','')}/{ev.get('event_type','')} — {ev.get('message','')[:60]}\n"
+                    prompt += (
+                        f"\nAnalyze this bug report. Identify the likely root cause based on "
+                        f"the system events. Suggest specific remediation steps."
+                    )
+                    backend = "openclaw" if "openclaw" in AGENT_DISPATCHERS else next(iter(AGENT_DISPATCHERS), "gemini")
+                    result = dispatch_agent(prompt, backend, timeout=90)
+                    if result.get("ok"):
+                        _emit_event("log:bugreport", {"report_id": report_id, "status": "analyzed",
+                                                       "response": result.get("text", "")[:2000],
+                                                       "backend": backend})
+                        mlog.emit("info", "bugreport", "bugreport.analyzed",
+                                  f"Bug report analyzed by {backend}", report_id=report_id, backend=backend)
+                    else:
+                        _emit_event("log:bugreport", {"report_id": report_id, "status": "failed",
+                                                       "response": result.get("error", "unknown")[:500],
+                                                       "backend": backend})
+                        mlog.emit("error", "bugreport", "bugreport.failed",
+                                  f"Bug report analysis failed", report_id=report_id, backend=backend)
+                except Exception as e:
+                    log.error("Bug report dispatch error: %s", e)
+                    _emit_event("log:bugreport", {"report_id": report_id, "status": "failed",
+                                                   "response": str(e)[:500], "backend": ""})
+            _thr.Thread(target=_handle_report, daemon=True).start()
+            self.reply_json({"ok": True, "report_id": report_id})
+
+        elif parsed.path == "/api/logs/client-error":
+            # Accept frontend JS errors — no auth required for error reporting
+            data = self.read_json_body()
+            message = str(data.get("message", ""))[:500]
+            source = str(data.get("source", ""))[:200]
+            lineno = data.get("lineno", 0)
+            colno = data.get("colno", 0)
+            stack = str(data.get("stack", ""))[:1000]
+            if message:
+                mlog.emit("error", "frontend", "frontend.error", message,
+                          source=source, lineno=lineno, colno=colno, stack=stack)
+            self.reply_json({"ok": True})
+
+        elif parsed.path == "/api/logs/remediate":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            incident_id = str(data.get("incident_id", "")).strip()
+            if not incident_id:
+                self.reply_json({"error": "incident_id required"}, 400); return
+            # Fetch incident from DB
+            try:
+                conn = _log_db_conn()
+                row = conn.execute(
+                    "SELECT severity, rule_id, title, summary FROM log_incidents WHERE incident_id=?",
+                    (incident_id,)
+                ).fetchone()
+                conn.close()
+            except Exception:
+                row = None
+            if not row:
+                self.reply_json({"error": "incident not found"}, 404); return
+            import threading as _thr
+            _thr.Thread(target=_auto_remediate,
+                        args=(incident_id, row[1], row[0], row[2], row[3]),
+                        daemon=True).start()
+            self.reply_json({"ok": True, "incident_id": incident_id})
 
         elif parsed.path == "/api/tailscale/control":
             if not self.auth_check(redirect=False): return
@@ -19212,8 +19586,10 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 dest.write_bytes(fdata)
                 log.info("Saved: %s (%.1f KB)", dest, len(fdata)/1024)
+                mlog.emit("info", "file", "file.upload", f"Upload: {fname}", root=root, path=path, filename=fname, size=len(fdata))
                 self.reply_json({"ok": True})
             except PermissionError:
+                mlog.emit("warn", "file", "file.error", f"Upload permission denied: {fname}", operation="upload", root=root, path=path)
                 self.reply_json({"ok": False, "error": "Permission denied"}, 403)
 
         elif parsed.path == "/api/delete":
@@ -19230,8 +19606,10 @@ class Handler(BaseHTTPRequestHandler):
                     shutil.rmtree(target)
                 else:
                     target.unlink()
+                mlog.emit("info", "file", "file.delete", f"Delete: {rel}", root=data.get("root",""), path=rel)
                 self.reply_json({"ok": True})
             except Exception as e:
+                mlog.emit("warn", "file", "file.error", f"Delete failed: {str(e)[:80]}", operation="delete", path=rel)
                 self.reply_json({"ok": False, "error": str(e)})
 
         elif parsed.path == "/api/rename":
@@ -19251,8 +19629,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": "Name already exists"}); return
             try:
                 target.rename(dest)
+                mlog.emit("info", "file", "file.rename", f"Rename: {target.name} → {new_name}", root=data.get("root",""), path=rel, new_name=new_name)
                 self.reply_json({"ok": True})
             except Exception as e:
+                mlog.emit("warn", "file", "file.error", f"Rename failed: {str(e)[:80]}", operation="rename", path=rel)
                 self.reply_json({"ok": False, "error": str(e)})
 
         elif parsed.path == "/api/mkdir":
@@ -19271,8 +19651,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": "Already exists"}); return
             try:
                 dest.mkdir()
+                mlog.emit("info", "file", "file.mkdir", f"Mkdir: {name}", root=data.get("root",""), path=data.get("path",""), name=name)
                 self.reply_json({"ok": True})
             except Exception as e:
+                mlog.emit("warn", "file", "file.error", f"Mkdir failed: {str(e)[:80]}", operation="mkdir", name=name)
                 self.reply_json({"ok": False, "error": str(e)})
 
         elif parsed.path == "/api/move":
@@ -19296,8 +19678,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": "Name already exists at destination"}); return
             try:
                 shutil.move(str(src), str(dest))
+                mlog.emit("info", "file", "file.move", f"Move: {src.name} → {dest_path}", root=root, path=src_rel, dest=dest_path)
                 self.reply_json({"ok": True})
             except Exception as e:
+                mlog.emit("warn", "file", "file.error", f"Move failed: {str(e)[:80]}", operation="move", path=src_rel)
                 self.reply_json({"ok": False, "error": str(e)})
 
         elif parsed.path == "/api/copy":
@@ -19331,8 +19715,10 @@ class Handler(BaseHTTPRequestHandler):
                     shutil.copytree(str(src), str(dest))
                 else:
                     shutil.copy2(str(src), str(dest))
+                mlog.emit("info", "file", "file.copy", f"Copy: {src.name} → {new_name}", root=root, path=src_rel, dest=dest_path, new_name=new_name)
                 self.reply_json({"ok": True, "newName": new_name})
             except Exception as e:
+                mlog.emit("warn", "file", "file.error", f"Copy failed: {str(e)[:80]}", operation="copy", path=src_rel)
                 self.reply_json({"ok": False, "error": str(e)})
 
         elif parsed.path == "/api/write":
@@ -19347,8 +19733,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": "Read-only"}, 403); return
             try:
                 target.write_text(data.get("content",""), encoding="utf-8")
+                mlog.emit("info", "file", "file.write", f"Write: {target.name}", root=data.get("root",""), path=data.get("path",""), size=len(data.get("content","")))
                 self.reply_json({"ok": True})
             except Exception as e:
+                mlog.emit("warn", "file", "file.error", f"Write failed: {str(e)[:80]}", operation="write", path=data.get("path",""))
                 self.reply_json({"ok": False, "error": str(e)})
 
         elif parsed.path == "/api/zip":
@@ -19373,6 +19761,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}); return
             body = buf.getvalue()
+            mlog.emit("info", "file", "file.zip", f"Zip export: {len(items)} items, {len(body)} bytes", root=root, item_count=len(items), size=len(body))
             self.send_response(200)
             self.send_header("Content-Type", "application/zip")
             self.send_header("Content-Length", str(len(body)))
@@ -21510,7 +21899,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.37 ready (localhost only)")
+    print(f"\n  Porter v0.25.38 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
