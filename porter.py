@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.41 — MC v2 Bugfix"""
+"""Porter v0.25.42 — Memory Tab: Agent Identity Cards"""
 
 
 
@@ -3203,8 +3203,26 @@ class _AlertEngine:
             import threading as _thr
             _thr.Thread(target=_auto_remediate, args=(iid, f"{rule['id']}:{backend}",
                         rule["sev"], rule["title"], summary), daemon=True).start()
+            # Push notification to chat for critical/error incidents
+            if rule["sev"] in ("critical", "error"):
+                _mc_notify_chat(
+                    f"**Mission Control Alert:** {rule['title']} — {summary}. Auto-fix dispatched.",
+                    severity=rule["sev"]
+                )
         except Exception as e:
             log.debug("Alert engine incident create failed: %s", e)
+
+
+def _mc_notify_chat(message, severity="warning"):
+    """Push a Mission Control notification to the active chat via SSE."""
+    try:
+        _emit_event("chat:system", {
+            "source": "mission-control",
+            "message": message,
+            "severity": severity,
+        })
+    except Exception as e:
+        log.debug("MC chat notify failed: %s", e)
 
 
 def _auto_remediate(incident_id, rule_id, severity, title, summary):
@@ -3217,8 +3235,21 @@ def _auto_remediate(incident_id, rule_id, severity, title, summary):
         mlog.emit("info", "remediation", "remediation.start",
                   f"Auto-remediation for {title}", incident_id=incident_id, run_id=run_id)
 
+        # Extract domain from rule_id (e.g. "frontend_error_spike:None" → "frontend")
+        raw_rule = rule_id.split(":")[0] if ":" in rule_id else rule_id
+        # Map rule prefix to domain
+        _domain_map = {
+            "bridge": "bridge", "auth": "auth", "file": "file",
+            "chat": "chat", "schedule": "schedule", "frontend": "frontend",
+            "timeout": "bridge",
+        }
+        domain = "system"
+        for prefix, dom in _domain_map.items():
+            if raw_rule.startswith(prefix):
+                domain = dom
+                break
+
         # Gather context: last 5 events from same domain
-        domain = rule_id.split(":")[0].rsplit("_", 1)[0] if ":" in rule_id else "system"
         context_events = []
         try:
             conn = _log_db_conn()
@@ -3233,33 +3264,35 @@ def _auto_remediate(incident_id, rule_id, severity, title, summary):
         except Exception:
             pass
 
-        # Build prompt
+        # Build concise prompt (keep under 2000 chars for CLI backends)
         prompt = (
-            f"INCIDENT ALERT — Auto-Remediation Request\n"
-            f"Severity: {severity}\n"
-            f"Title: {title}\n"
-            f"Summary: {summary}\n"
-            f"Rule ID: {rule_id}\n"
-            f"Incident ID: {incident_id}\n\n"
-            f"Recent events from same domain:\n"
+            f"INCIDENT: {title}\n"
+            f"Severity: {severity} | Rule: {rule_id}\n"
+            f"Summary: {summary}\n\n"
+            f"Recent events:\n"
         )
         for ce in context_events:
-            prompt += f"  [{ce.get('severity','')}] {ce.get('event_type','')} — {ce.get('message','')[:80]}\n"
-        prompt += (
-            f"\nAnalyze this incident and suggest remediation steps. "
-            f"If it is a transient spike, recommend monitoring. "
-            f"If it indicates a real problem, suggest specific fixes."
-        )
+            prompt += f"  [{ce.get('severity','')}] {ce.get('event_type','')} — {ce.get('message','')[:60]}\n"
+        prompt += "\nBriefly analyze and suggest fix (2-3 sentences max)."
 
-        # Pick backend: openclaw for bridge/code issues, gemini for analysis
-        backend = "openclaw" if domain in ("bridge", "auth", "file") else "gemini"
-        # Check if backend is available, fallback
-        if backend not in AGENT_DISPATCHERS:
-            backend = next(iter(AGENT_DISPATCHERS), None)
+        # Pick backend using probes — prefer openclaw, fallback to available
+        backend = None
+        for candidate in ["openclaw", "gemini", "claude", "codex"]:
+            if candidate in PROVIDER_REGISTRY:
+                probe = PROVIDER_REGISTRY[candidate].get("probe")
+                if probe:
+                    try:
+                        if probe():
+                            backend = candidate
+                            break
+                    except Exception:
+                        pass
+        if not backend:
+            backend = next(iter(PROVIDER_REGISTRY), None)
         if not backend:
             raise RuntimeError("No agent backends available")
 
-        result = dispatch_agent(prompt, backend, timeout=60, run_id=run_id)
+        result = dispatch_agent(prompt, backend, timeout=120, run_id=run_id)
 
         if result.get("ok"):
             response_text = result.get("text", "")[:2000]
@@ -3287,6 +3320,11 @@ def _auto_remediate(incident_id, rule_id, severity, title, summary):
                 conn.close()
             except Exception:
                 pass
+            # Notify chat with remediation result
+            _mc_notify_chat(
+                f"**Mission Control:** {title} — auto-remediated by {backend}.\n> {response_text[:200]}",
+                severity="info"
+            )
         else:
             error = result.get("error", "unknown")[:500]
             _emit_event("log:remediation", {"incident_id": incident_id, "run_id": run_id,
@@ -3295,13 +3333,21 @@ def _auto_remediate(incident_id, rule_id, severity, title, summary):
             mlog.emit("error", "remediation", "remediation.failed",
                       f"Remediation failed for {title}: {error[:100]}",
                       incident_id=incident_id, run_id=run_id, backend=backend)
+            # Notify chat about failure
+            _mc_notify_chat(
+                f"**Mission Control:** {title} — auto-fix failed ({backend}). Check Admin > Incidents.",
+                severity="error"
+            )
     except Exception as e:
         log.error("Auto-remediation error: %s", e)
         _emit_event("log:remediation", {"incident_id": incident_id, "run_id": run_id,
                                          "status": "failed", "response": str(e)[:500]})
         mlog.emit("error", "remediation", "remediation.error",
                   f"Remediation exception: {str(e)[:100]}", incident_id=incident_id, run_id=run_id)
-
+        _mc_notify_chat(
+            f"**Mission Control:** {title} — remediation crashed. Check Admin > Incidents.",
+            severity="error"
+        )
 
 class MissionLog:
     """Structured log system with JSONL + SQLite index + SSE broadcast."""
@@ -5435,6 +5481,33 @@ body.density-compact .file-name { padding: 6px 0; }
 .mem-health-val { font-size:20px; font-weight:700; color:var(--text); }
 .mem-health-label { font-size:11px; color:var(--text3); margin-top:2px; }
 .mem-health-hint { font-size:10px; color:var(--warn,#d97706); margin-top:4px; }
+/* Memory Tab v5 — Agent Identity Cards */
+.mem-agent-card { border:1px solid var(--border); border-radius:10px; background:var(--raised); overflow:hidden; transition:border-color .2s,box-shadow .2s; }
+.mem-agent-card:hover { border-color:var(--accent); box-shadow:0 2px 8px rgba(0,0,0,.1); }
+.mem-agent-header { display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;user-select:none; }
+.mem-agent-avatar { width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;flex-shrink:0; }
+.mem-agent-info { flex:1;min-width:0; }
+.mem-agent-name { font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px; }
+.mem-agent-role { font-size:11px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.mem-agent-status { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+.mem-agent-status.online { background:#22c55e;box-shadow:0 0 4px rgba(34,197,94,.4); }
+.mem-agent-status.offline { background:var(--text3); }
+.mem-agent-chevron { font-size:12px;color:var(--text3);transition:transform .2s;flex-shrink:0; }
+.mem-agent-chevron.expanded { transform:rotate(90deg); }
+.mem-agent-stats { display:flex;gap:12px;padding:0 16px 10px;font-size:11px;color:var(--text3); }
+.mem-agent-stats span { display:flex;align-items:center;gap:3px; }
+.mem-agent-body { padding:0 16px 14px;border-top:1px solid var(--border); }
+.mem-agent-body.collapsed { display:none; }
+.mem-agent-section { margin-top:10px; }
+.mem-agent-section-label { font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px; }
+.mem-agent-files { display:flex;flex-direction:column;gap:2px; }
+.mem-role-editor textarea { width:100%;min-height:80px;padding:8px 10px;font-size:12px;line-height:1.5;font-family:inherit;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);resize:vertical;box-sizing:border-box; }
+.mem-agent-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px; }
+.mem-empty-state { text-align:center;padding:32px 20px;border:1px dashed var(--border);border-radius:10px;background:var(--surface2); }
+.mem-empty-state-icon { font-size:32px;margin-bottom:8px;opacity:.5; }
+.mem-empty-state-title { font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px; }
+.mem-empty-state-desc { font-size:12px;color:var(--text3);max-width:400px;margin:0 auto; }
+
 
 /* config panel (mirrors preview-panel) */
 .config-panel {
@@ -5841,7 +5914,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.41</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.42</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6474,59 +6547,41 @@ select.settings-input { padding-right: 26px; }
   <div id="memory-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Memory</span>
-      <button class="btn btn-ghost" onclick="loadMemory()">&#8635; Refresh</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-ghost" onclick="loadMemory()">&#8635; Refresh</button>
+      </div>
     </div>
-    <div class="module-intro">How AI agents remember across sessions.</div>
 
-    <!-- Health bar -->
+    <!-- Health summary bar -->
     <div id="mem-health" style="margin-bottom:16px"></div>
 
-    <!-- Layer 1: Instructions -->
-    <div class="mem-layer">
-      <div class="mem-layer-label">Instructions</div>
-      <div class="mem-layer-desc">Loaded at the start of every session. You write these — they tell each model who it is and how to behave.</div>
-      <div id="mem-instructions" class="orch-grid" style="gap:10px">
-        <div class="loading-indicator">Loading instructions</div>
+    <!-- Agent Identity Cards -->
+    <div id="mem-agent-cards" class="mem-agent-grid">
+      <div class="loading-indicator">Loading agents...</div>
+    </div>
+
+    <!-- Shared Memory Plane -->
+    <div style="margin-top:16px">
+      <div class="mem-layer-label">Shared Memory Plane</div>
+      <div class="orch-hub" id="mem-hub">
+        <div class="orch-hub-left">
+          <div class="orch-hub-label">SHARED MEMORY PLANE</div>
+          <div class="orch-hub-desc">Where all models coordinate &mdash; the single source of truth</div>
+        </div>
+        <div class="orch-hub-features" id="mem-hub-features"></div>
       </div>
     </div>
 
-    <!-- Flow: Instructions → Persistent -->
-    <div class="flow-connector" id="mem-flow-1"></div>
-
-    <!-- Layer 2: Persistent Memory -->
-    <div class="mem-layer">
-      <div class="mem-layer-label">Persistent Memory</div>
-      <div class="mem-layer-desc">What each model remembers between sessions. Auto-updated as models work — lessons, preferences, project state. This is what makes continuity possible.</div>
-      <div id="mem-persistent" class="orch-grid" style="gap:10px">
-        <div class="loading-indicator">Loading memory</div>
-      </div>
-    </div>
-
-    <!-- Flow: Persistent → Hub -->
-    <div class="flow-connector" id="mem-flow-2"></div>
-
-    <!-- Porter Memory Hub -->
-    <div class="orch-hub" id="mem-hub">
-      <div class="orch-hub-left">
-        <div class="orch-hub-label">SHARED MEMORY PLANE</div>
-        <div class="orch-hub-desc">Where all models coordinate — the single source of truth</div>
-      </div>
-      <div class="orch-hub-features" id="mem-hub-features"></div>
-    </div>
-
-    <!-- Flow: Hub → Sessions -->
-    <div class="flow-connector" id="mem-flow-3"></div>
-
-    <!-- Layer 3: Session Memory (short-term) -->
-    <div class="mem-layer">
+    <!-- Session History -->
+    <div style="margin-top:16px">
       <div class="mem-layer-label">Session History</div>
       <div class="mem-layer-desc">Raw conversation logs. Flushing extracts key learnings into the shared memory plane.</div>
       <div id="mem-filter-bar" class="mem-filter-bar"></div>
       <div id="mem-session-stats" style="display:none;gap:16px;font-size:11px;color:var(--text3);padding:4px 0;margin-bottom:6px;flex-wrap:wrap"></div>
-    <div id="mem-sessions-list"></div>
+      <div id="mem-sessions-list"></div>
     </div>
 
-    <!-- File viewer/editor (hidden until a file is clicked) -->
+    <!-- File viewer/editor -->
     <div id="mem-file-viewer" style="display:none;margin-top:16px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);overflow:hidden">
       <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--raised)">
         <span style="font-weight:600;font-size:13px;color:var(--text)" id="mem-file-title">File</span>
@@ -7007,6 +7062,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.42', date:'2026-03-02', notes:['Memory Tab overhaul: Agent Identity Cards with avatars, role labels, status dots','Per-agent file grouping with collapse/expand (localStorage)','Live agent health via provider probes','Role editor: click agent card to edit role description','Per-agent memory stats: size, file count, sessions'] },
   { ver:'v0.25.41', date:'2026-03-02', notes:['Fix: showAll ReferenceError in renderAgents (Orchestration tab)','Fix: async ReferenceError from intermediate deploy state'] },
   { ver:'v0.25.40', date:'2026-03-02', notes:['Mission Control v2: tabbed right panel (Detail/Incidents/Report)','Report Bug UI with agent dispatch via SSE','Frontend error capture (window.onerror → /api/logs/client-error)','8 new preset filters (File Ops, Chat, Schedule, Frontend)','Single-view layout: no page scroll, flex viewport fill','SSE handlers for log:incident, log:remediation, log:bugreport','Retry Fix button on incidents'] },
   { ver:'v0.25.39', date:'2026-03-02', notes:['Server-side chain dispatch: _run_chain() with step-level probe + dispatch + output piping','POST /api/bridge/chain: fire multi-step chains in background thread','GET /api/bridge/chains: aggregate chain runs with status/tokens/duration','agent_messages gains chain_id + step_num columns (auto-migrated)','Chain Builder UI in Workflows tab: add steps, run chains, view run history','SSE events: chain:start, chain:step, chain:complete, chain:error','Mission Control logs chain lifecycle events'] },
@@ -9726,12 +9782,16 @@ function renderCapabilities(caps) {
   }).join('');
 }
 
-// Memory tab v4 — Porter memory control center
+// Memory tab v5 — Agent Identity Cards
 let _memViewerPath = '';
 let _memViewerEditing = false;
 let _memSessionFilter = 'all';
 let _memSessionsData = [];
 let _memOverview = null;
+let _memAgentExpand = {};
+let _memAgentStatus = {};
+
+try { _memAgentExpand = JSON.parse(localStorage.getItem('memAgentExpand') || '{}'); } catch(e) {}
 
 function _memSize(bytes) {
   if (bytes > 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
@@ -9739,21 +9799,33 @@ function _memSize(bytes) {
   return bytes + ' B';
 }
 
+function _memSaveExpand() {
+  try { localStorage.setItem('memAgentExpand', JSON.stringify(_memAgentExpand)); } catch(e) {}
+}
+
+function memToggleAgent(agentId) {
+  _memAgentExpand[agentId] = !_memAgentExpand[agentId];
+  _memSaveExpand();
+  var body = document.getElementById('mem-agent-body-' + agentId);
+  var chevron = document.getElementById('mem-agent-chevron-' + agentId);
+  if (body) body.classList.toggle('collapsed', !_memAgentExpand[agentId]);
+  if (chevron) chevron.classList.toggle('expanded', !!_memAgentExpand[agentId]);
+}
+
 async function loadMemory() {
   try {
-    const resp = await api('/api/memory/overview');
-    if (resp && resp.models) {
-      _memOverview = resp;
-      const nonStateless = resp.models.filter(function(m) { return !m.stateless; });
-      const instrCount = Math.min(nonStateless.length, 3);
-      const allCount = Math.min(resp.models.length, 3);
-
-      renderMemoryInstructions(nonStateless);
-      document.getElementById('mem-flow-1').innerHTML = _buildFlowSVG(instrCount, 'merge', 'guides memory');
-      renderMemoryPersistent(resp.models);
-      document.getElementById('mem-flow-2').innerHTML = _buildFlowSVG(allCount, 'merge', 'supplies context');
-      renderMemoryHub(resp.shared_plane, resp.models);
-      document.getElementById('mem-flow-3').innerHTML = _buildFlowSVG(1, 'fanout', 'logs outcomes');
+    const [overviewResp, statusResp] = await Promise.all([
+      api('/api/memory/overview'),
+      api('/api/memory/agent-status')
+    ]);
+    if (overviewResp && overviewResp.models) {
+      _memOverview = overviewResp;
+      if (statusResp && statusResp.ok) {
+        _memAgentStatus = statusResp.status || {};
+      }
+      renderMemAgentCards(overviewResp.models);
+      renderMemoryHub(overviewResp.shared_plane, overviewResp.models);
+      renderMemHealth(overviewResp.models, []);
     }
   } catch(e) {
     console.error('loadMemory failed:', e);
@@ -9761,45 +9833,122 @@ async function loadMemory() {
   loadMemorySessions();
 }
 
-// ── Health bar ──
-
 function renderMemHealth(models, sessions) {
   const el = document.getElementById('mem-health');
   if (!el) return;
-
-  // Calculate totals
-  let totalMemSize = 0;
-  let totalSessionSize = 0;
-  let totalSessions = sessions.length;
-  let modelCount = 0;
-
+  let totalMemSize = 0, totalFiles = 0, modelCount = 0, onlineCount = 0;
   models.forEach(function(m) {
     if (m.stateless) return;
     modelCount++;
-    if (m.instruction_file) totalMemSize += m.instruction_file.size || 0;
-    if (m.memory_files) m.memory_files.forEach(function(f) { totalMemSize += f.size || 0; });
-    totalSessionSize += (m.session_size_mb || 0) * 1048576;
+    if (_memAgentStatus[m.id]) onlineCount++;
+    if (m.instruction_file) { totalMemSize += m.instruction_file.size || 0; totalFiles++; }
+    if (m.memory_files) m.memory_files.forEach(function(f) { totalMemSize += f.size || 0; totalFiles++; });
   });
-
-  let unflushed = sessions.filter(function(s) { return !s.flushed; }).length;
-
+  let totalSessions = sessions.length || _memSessionsData.length;
+  let unflushed = (sessions.length ? sessions : _memSessionsData).filter(function(s) { return !s.flushed; }).length;
   let html = '';
-  html += '<div class="mem-health-card"><div class="mem-health-val">' + modelCount + '</div><div class="mem-health-label">Models with memory</div></div>';
-  html += '<div class="mem-health-card"><div class="mem-health-val">' + _memSize(totalMemSize) + '</div><div class="mem-health-label">Long-term memory</div></div>';
-  html += '<div class="mem-health-card"><div class="mem-health-val">' + _memSize(totalSessionSize) + '</div><div class="mem-health-label">Session logs</div></div>';
-  html += '<div class="mem-health-card"><div class="mem-health-val">' + totalSessions + '</div><div class="mem-health-label">Total sessions</div>'
-    + (unflushed > 0 ? '<div class="mem-health-hint">' + unflushed + ' unflushed</div>' : '')
-    + '</div>';
-
+  html += '<div class="mem-health-card"><div class="mem-health-val">' + onlineCount + '<span style="font-size:12px;color:var(--text3)">/' + modelCount + '</span></div><div class="mem-health-label">Agents online</div></div>';
+  html += '<div class="mem-health-card"><div class="mem-health-val">' + totalFiles + '</div><div class="mem-health-label">Memory files</div></div>';
+  html += '<div class="mem-health-card"><div class="mem-health-val">' + _memSize(totalMemSize) + '</div><div class="mem-health-label">Total memory</div></div>';
+  html += '<div class="mem-health-card"><div class="mem-health-val">' + totalSessions + '</div><div class="mem-health-label">Sessions'
+    + (unflushed > 0 ? '</div><div class="mem-health-hint">' + unflushed + ' unflushed' : '')
+    + '</div></div>';
   el.innerHTML = '<div class="mem-health">' + html + '</div>';
 }
 
-// ── File row helper ──
+var _agentAvatars = { claude:'C', openclaw:'O', gemini:'G', ollama:'Q', codex:'X' };
+var _agentRoles = { claude:'Primary implementation agent', openclaw:'QA, orchestration, governance', gemini:'Research & competitive analysis', ollama:'Local inference (stateless)', codex:'Code generation agent' };
+
+function renderMemAgentCards(models) {
+  const el = document.getElementById('mem-agent-cards');
+  if (!el) return;
+  if (!models.length) {
+    el.innerHTML = '<div class="mem-empty-state"><div class="mem-empty-state-icon">&#129302;</div><div class="mem-empty-state-title">No agents detected</div><div class="mem-empty-state-desc">Connect your first AI agent to start building memory.</div></div>';
+    return;
+  }
+  let html = '';
+  models.forEach(function(m) {
+    var isExpanded = _memAgentExpand[m.id] !== false;
+    if (_memAgentExpand[m.id] === undefined) _memAgentExpand[m.id] = true;
+    var isOnline = !!_memAgentStatus[m.id];
+    var avatar = _agentAvatars[m.id] || m.name.charAt(0).toUpperCase();
+    var role = _agentRoles[m.id] || (m.stateless ? 'Stateless inference' : 'AI agent');
+    var instrFiles = [];
+    var memFiles = [];
+    var instrNames = ['SOUL.md','USER.md','AGENTS.md','IDENTITY.md','TOOLS.md','GEMINI.md'];
+    if (m.instruction_file) instrFiles.push(m.instruction_file);
+    if (m.instruction_files) instrFiles = instrFiles.concat(m.instruction_files);
+    if (m.memory_files) {
+      m.memory_files.forEach(function(f) {
+        if (instrNames.indexOf(f.name) >= 0) instrFiles.push(f);
+        else memFiles.push(f);
+      });
+    }
+    var totalSize = 0, totalFileCount = instrFiles.length + memFiles.length;
+    instrFiles.concat(memFiles).forEach(function(f) { totalSize += f.size || 0; });
+    var lastMod = 0;
+    instrFiles.concat(memFiles).forEach(function(f) { if (f.modified && f.modified > lastMod) lastMod = f.modified; });
+    var lastModStr = lastMod ? new Date(lastMod * 1000).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+
+    html += '<div class="mem-agent-card">';
+    html += '<div class="mem-agent-header" onclick="memToggleAgent(\'' + m.id + '\')">';
+    html += '<div class="mem-agent-avatar" style="background:' + (m.color || 'var(--text3)') + '">' + avatar + '</div>';
+    html += '<div class="mem-agent-info">';
+    html += '<div class="mem-agent-name">' + escHtml(m.name);
+    if (m.stateless) html += ' <span style="font-size:9px;padding:1px 5px;border-radius:8px;background:var(--text3);color:#fff">stateless</span>';
+    html += '</div>';
+    html += '<div class="mem-agent-role">' + escHtml(role) + '</div>';
+    html += '</div>';
+    html += '<div class="mem-agent-status ' + (isOnline ? 'online' : 'offline') + '" title="' + (isOnline ? 'Online' : 'Offline') + '"></div>';
+    html += '<div class="mem-agent-chevron ' + (isExpanded ? 'expanded' : '') + '" id="mem-agent-chevron-' + m.id + '">&#9654;</div>';
+    html += '</div>';
+
+    html += '<div class="mem-agent-stats">';
+    html += '<span>' + totalFileCount + ' files</span>';
+    html += '<span>' + _memSize(totalSize) + '</span>';
+    html += '<span>' + (m.session_count || 0) + ' sessions</span>';
+    if (lastModStr) html += '<span>' + lastModStr + '</span>';
+    html += '</div>';
+
+    html += '<div class="mem-agent-body' + (isExpanded ? '' : ' collapsed') + '" id="mem-agent-body-' + m.id + '">';
+    if (m.stateless) {
+      html += '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:8px 0">No persistent memory. Pure inference only.</div>';
+    } else {
+      if (instrFiles.length) {
+        html += '<div class="mem-agent-section"><div class="mem-agent-section-label">Instructions</div><div class="mem-agent-files">';
+        instrFiles.forEach(function(f) { html += _memFileRow(f); });
+        html += '</div></div>';
+      }
+      if (memFiles.length) {
+        html += '<div class="mem-agent-section"><div class="mem-agent-section-label">Persistent Memory</div><div class="mem-agent-files">';
+        memFiles.forEach(function(f) { html += _memFileRow(f, {editable:true}); });
+        html += '</div></div>';
+      }
+      if (m.daily_logs) html += '<div style="font-size:11px;color:var(--text3);margin-top:8px">+ ' + m.daily_logs + ' daily log' + (m.daily_logs !== 1 ? 's' : '') + '</div>';
+      if (m.session_size_mb > 0) html += '<div style="font-size:11px;color:var(--text3);margin-top:4px">' + m.session_size_mb + ' MB session data</div>';
+      if (!instrFiles.length && !memFiles.length) html += '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:8px 0">No memory files detected</div>';
+      html += '<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)"><button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="event.stopPropagation();memOpenRoleEditor(\'' + m.id + '\')">Edit Role</button></div>';
+    }
+    html += '</div></div>';
+  });
+  el.innerHTML = html;
+}
+
+function memOpenRoleEditor(agentId) {
+  if (!_memOverview || !_memOverview.models) return;
+  var model = _memOverview.models.find(function(m) { return m.id === agentId; });
+  if (!model) return;
+  var target = null;
+  if (model.memory_files) target = model.memory_files.find(function(f) { return f.name === 'SOUL.md'; });
+  if (!target && model.instruction_file) target = model.instruction_file;
+  if (!target && model.memory_files && model.memory_files.length) target = model.memory_files[0];
+  if (target) { viewMemFileAndEdit(target.path); } else { toast('No editable role file for ' + agentId, 'err'); }
+}
 
 function _memFileRow(f, opts) {
   opts = opts || {};
-  const esc = escHtml(f.path).replace(/'/g, "\\'");
-  const editBtn = opts.editable ? ' <span style="font-size:10px;color:var(--accent);margin-left:4px;cursor:pointer" onclick="event.stopPropagation();viewMemFileAndEdit(\'' + esc + '\')">[edit]</span>' : '';
+  var esc = escHtml(f.path).replace(/'/g, "\\'");
+  var editBtn = opts.editable ? ' <span style="font-size:10px;color:var(--accent);margin-left:4px;cursor:pointer" onclick="event.stopPropagation();viewMemFileAndEdit(\'' + esc + '\')">[edit]</span>' : '';
   return '<div class="mem-file-row" onclick="viewMemFile(\'' + esc + '\')">'
     + '<span>' + escHtml(f.name) + '</span>'
     + '<span class="mem-file-size">' + _memSize(f.size) + editBtn + '</span>'
@@ -9807,124 +9956,22 @@ function _memFileRow(f, opts) {
 }
 
 async function viewMemFileAndEdit(path) {
-  const ok = await viewMemFile(path);
+  var ok = await viewMemFile(path);
   if (ok) toggleMemFileEdit();
 }
-
-// ── Layer 1: Instructions ──
-
-function renderMemoryInstructions(models) {
-  const el = document.getElementById('mem-instructions');
-  if (!el) return;
-  let html = '';
-  models.forEach(function(m) {
-    html += '<div class="orch-card" style="border-left:3px solid ' + (m.color || 'var(--border)') + '">';
-    html += '<div class="orch-card-head">';
-    html += '<div class="orch-card-dot" style="background:' + (m.color || 'var(--text3)') + '"></div>';
-    html += '<div class="orch-card-name">' + escHtml(m.name) + '</div>';
-    html += '</div>';
-    // Show instruction files
-    if (m.instruction_file) {
-      html += _memFileRow(m.instruction_file);
-    }
-    if (m.instruction_files && m.instruction_files.length) {
-      m.instruction_files.forEach(function(f) { html += _memFileRow(f); });
-    }
-    // For models with only memory_files, show instruction-like files (SOUL.md, USER.md, AGENTS.md, IDENTITY.md)
-    var instrNames = ['SOUL.md','USER.md','AGENTS.md','IDENTITY.md','TOOLS.md','GEMINI.md'];
-    if (!m.instruction_file && m.memory_files) {
-      var instrFiles = m.memory_files.filter(function(f) { return instrNames.indexOf(f.name) >= 0; });
-      if (instrFiles.length) {
-        instrFiles.forEach(function(f) { html += _memFileRow(f); });
-      }
-    }
-    if (!m.instruction_file && !(m.instruction_files && m.instruction_files.length) && !(m.memory_files && m.memory_files.some(function(f) { return instrNames.indexOf(f.name) >= 0; }))) {
-      html += '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:4px 0">No instruction file</div>';
-    }
-    html += '</div>';
-  });
-  el.innerHTML = html || '<div style="color:var(--text3);font-size:12px">No models detected</div>';
-}
-
-// ── Layer 2: Persistent (Learned) Memory ──
-
-function renderMemoryPersistent(models) {
-  const el = document.getElementById('mem-persistent');
-  if (!el) return;
-  let html = '';
-  models.forEach(function(m) {
-    if (m.stateless) {
-      html += '<div class="orch-card mem-stateless" style="border-style:dashed">';
-      html += '<div class="orch-card-head">';
-      html += '<div class="orch-card-name" style="opacity:.6">' + escHtml(m.name) + '</div>';
-      html += '<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:var(--text3);color:#fff;margin-left:auto">stateless</span>';
-      html += '</div>';
-      html += '<div class="mem-stateless-text">No persistent memory. Pure inference only.</div>';
-      html += '</div>';
-      return;
-    }
-    html += '<div class="orch-card" style="border-left:3px solid ' + (m.color || 'var(--border)') + '">';
-    html += '<div class="orch-card-head">';
-    html += '<div class="orch-card-dot" style="background:' + (m.color || 'var(--text3)') + '"></div>';
-    html += '<div class="orch-card-name">' + escHtml(m.name) + '</div>';
-    if (m.detected) {
-      html += '<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:var(--ok);color:#fff;margin-left:auto">active</span>';
-    }
-    html += '</div>';
-    var instrNames2 = ['SOUL.md','USER.md','AGENTS.md','IDENTITY.md','TOOLS.md','GEMINI.md'];
-    if (m.memory_files && m.memory_files.length) {
-      var memOnly = m.memory_files.filter(function(f) { return instrNames2.indexOf(f.name) < 0; });
-      if (memOnly.length) {
-        memOnly.forEach(function(f) { html += _memFileRow(f, {editable: true}); });
-      } else {
-        html += '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:4px 0">No learned memory</div>';
-      }
-    } else {
-      html += '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:4px 0">No memory files</div>';
-    }
-    if (m.daily_logs) {
-      html += '<div style="font-size:11px;color:var(--text3);margin-top:4px">+ ' + m.daily_logs + ' daily log' + (m.daily_logs !== 1 ? 's' : '') + '</div>';
-    }
-    // Session stats
-    html += '<div style="display:flex;gap:8px;font-size:11px;color:var(--text3);margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">';
-    html += '<span>' + (m.session_count || 0) + ' sessions</span>';
-    if (m.session_size_mb > 0) {
-      html += '<span>\u2022</span><span>' + m.session_size_mb + ' MB</span>';
-    }
-    html += '</div>';
-    html += '</div>';
-  });
-  el.innerHTML = html || '<div style="color:var(--text3);font-size:12px">No models detected</div>';
-}
-
-// ── Hub: Porter memory brain ──
 
 function renderMemoryHub(sp, models) {
   const featEl = document.getElementById('mem-hub-features');
   if (!featEl) return;
-  let html = '';
-
-  // Core coordination files — always show projects.md
-  html += '<span class="orch-hub-feat active">projects.md</span>';
-
-  // Only show directories that actually have files (no empty skeleton fluff)
+  let html = '<span class="orch-hub-feat active">projects.md</span>';
   if (sp && sp.directories && sp.directories.length) {
     sp.directories.forEach(function(d) {
-      if (d.file_count > 0) {
-        html += '<span class="orch-hub-feat active">' + escHtml(d.name) + '/ (' + d.file_count + ')</span>';
-      }
+      if (d.file_count > 0) html += '<span class="orch-hub-feat active">' + escHtml(d.name) + '/ (' + d.file_count + ')</span>';
     });
   }
-
-  // Show total footprint
-  if (sp && sp.total_size > 0) {
-    html += '<span class="orch-hub-feat" style="border:none;font-size:10px;color:var(--text3)">' + _memSize(sp.total_size) + ' total</span>';
-  }
-
+  if (sp && sp.total_size > 0) html += '<span class="orch-hub-feat" style="border:none;font-size:10px;color:var(--text3)">' + _memSize(sp.total_size) + ' total</span>';
   featEl.innerHTML = html;
 }
-
-// ── Layer 3: Sessions with filter + flush ──
 
 async function loadMemorySessions() {
   const el = document.getElementById('mem-sessions-list');
@@ -9936,10 +9983,7 @@ async function loadMemorySessions() {
       _memSessionsData = resp.sessions;
       renderMemFilterBar(resp.sessions);
       renderMemorySessions(resp.sessions);
-      // Now render health bar with full data
-      if (_memOverview && _memOverview.models) {
-        renderMemHealth(_memOverview.models, resp.sessions);
-      }
+      if (_memOverview && _memOverview.models) renderMemHealth(_memOverview.models, resp.sessions);
     }
   } catch(e) {
     el.innerHTML = '<div style="color:var(--err);font-size:12px">Failed to load sessions</div>';
@@ -9950,20 +9994,13 @@ function renderMemFilterBar(sessions) {
   const bar = document.getElementById('mem-filter-bar');
   if (!bar) return;
   const counts = {};
-  sessions.forEach(function(s) {
-    const src = s.source || 'unknown';
-    counts[src] = (counts[src] || 0) + 1;
-  });
+  sessions.forEach(function(s) { var src = s.source || 'unknown'; counts[src] = (counts[src] || 0) + 1; });
   let html = '<button class="mem-filter-btn' + (_memSessionFilter === 'all' ? ' active' : '') + '" onclick="filterMemSessions(\'all\')">All (' + sessions.length + ')</button>';
   ['claude','openclaw','gemini'].forEach(function(src) {
-    if (counts[src]) {
-      html += '<button class="mem-filter-btn' + (_memSessionFilter === src ? ' active' : '') + '" onclick="filterMemSessions(\'' + src + '\')">' + src.charAt(0).toUpperCase() + src.slice(1) + ' (' + counts[src] + ')</button>';
-    }
+    if (counts[src]) html += '<button class="mem-filter-btn' + (_memSessionFilter === src ? ' active' : '') + '" onclick="filterMemSessions(\'' + src + '\')">' + src.charAt(0).toUpperCase() + src.slice(1) + ' (' + counts[src] + ')</button>';
   });
   Object.keys(counts).forEach(function(src) {
-    if (['claude','openclaw','gemini','unknown'].indexOf(src) === -1) {
-      html += '<button class="mem-filter-btn' + (_memSessionFilter === src ? ' active' : '') + '" onclick="filterMemSessions(\'' + src + '\')">' + escHtml(src) + ' (' + counts[src] + ')</button>';
-    }
+    if (['claude','openclaw','gemini','unknown'].indexOf(src) === -1) html += '<button class="mem-filter-btn' + (_memSessionFilter === src ? ' active' : '') + '" onclick="filterMemSessions(\'' + src + '\')">' + escHtml(src) + ' (' + counts[src] + ')</button>';
   });
   bar.innerHTML = html;
 }
@@ -9995,7 +10032,6 @@ function renderMemorySessions(sessions) {
     const sizeStr = sizeKb > 1024 ? (sizeKb / 1024).toFixed(1) + ' MB' : (sizeKb > 0 ? sizeKb.toFixed(0) + ' KB' : '');
     const tokens = (s.total_input_tokens || 0) + (s.total_output_tokens || 0);
     const tokStr = tokens > 1000 ? Math.round(tokens/1000) + 'K tok' : '';
-    // Flush is available for claude and openclaw
     const canFlush = s.source === 'claude' || s.source === 'openclaw';
     var srcColors = {claude:'#d97706',openclaw:'#059669',gemini:'#2563eb'};
     var srcColor = srcColors[s.source] || 'var(--border)';
@@ -10019,8 +10055,6 @@ function renderMemorySessions(sessions) {
   + (filtered.length > 30 ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">Showing 30 of ' + filtered.length + ' sessions</div>' : '');
 }
 
-// ── File viewer (kept from v2) ──
-
 async function viewMemFile(path) {
   const viewer = document.getElementById('mem-file-viewer');
   const title = document.getElementById('mem-file-title');
@@ -10030,7 +10064,6 @@ async function viewMemFile(path) {
   const editBtn = document.getElementById('mem-file-edit-btn');
   const saveBtn = document.getElementById('mem-file-save-btn');
   if (!viewer) return;
-
   _memViewerPath = path;
   _memViewerEditing = false;
   title.textContent = path.split('/').pop();
@@ -10044,7 +10077,6 @@ async function viewMemFile(path) {
   saveBtn.style.display = 'none';
   viewer.style.display = 'block';
   viewer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
   try {
     const resp = await api('/api/memory/read?path=' + encodeURIComponent(path));
     if (resp && resp.ok) {
@@ -10114,8 +10146,6 @@ function closeMemFileViewer() {
   _memViewerEditing = false;
 }
 
-
-// ── Flush Wizard ──
 let _flushWizData = null;
 
 async function openFlushWizard(sessionId, name, source) {
@@ -10126,59 +10156,37 @@ async function openFlushWizard(sessionId, name, source) {
   const impact = document.getElementById('flush-wiz-impact');
   const commitBtn = document.getElementById('flush-wiz-commit');
   if (!overlay) return;
-
   overlay.style.display = 'flex';
-  preview.textContent = 'Loading preview…';
+  preview.textContent = 'Loading preview\u2026';
   editor.value = '';
   commitBtn.disabled = true;
-
   const resp = await api('/api/memory/flush-preview', { session_id: sessionId, source: source });
-  if (!resp || !resp.ok) {
-    preview.textContent = (resp && resp.error) || 'Failed to load preview';
-    return;
-  }
-
+  if (!resp || !resp.ok) { preview.textContent = (resp && resp.error) || 'Failed to load preview'; return; }
   _flushWizData = resp;
   preview.textContent = resp.summary;
   editor.value = resp.summary;
   dest.value = resp.destination;
-
-  // Impact stats
   const destSize = resp.dest_exists ? _memSize(resp.dest_size_bytes) : '(new file)';
   const addBytes = _memSize(resp.summary_bytes);
   const newSize = resp.dest_exists ? _memSize(resp.dest_size_bytes + resp.summary_bytes) : addBytes;
-  impact.innerHTML = '<span><strong>Current file</strong>' + destSize + '</span>'
-    + '<span><strong>Adding</strong>' + addBytes + '</span>'
-    + '<span><strong>After flush</strong>' + newSize + '</span>';
-
+  impact.innerHTML = '<span><strong>Current file</strong>' + destSize + '</span><span><strong>Adding</strong>' + addBytes + '</span><span><strong>After flush</strong>' + newSize + '</span>';
   commitBtn.disabled = false;
 }
 
 async function commitFlush() {
   if (!_flushWizData) return;
   const editor = document.getElementById('flush-wiz-editor');
-  const dest = document.getElementById('flush-wiz-dest');
   const commitBtn = document.getElementById('flush-wiz-commit');
-
   commitBtn.disabled = true;
-  commitBtn.textContent = 'Flushing…';
-
+  commitBtn.textContent = 'Flushing\u2026';
   const res = await api('/api/memory/flush', {
     session_id: _flushWizData.session_id,
     source: _flushWizData.source,
     summary: editor.value.trim(),
-    destination: dest.value.trim(),
+    destination: document.getElementById('flush-wiz-dest').value.trim(),
   });
-
-  if (res && res.ok) {
-    toast('Flushed to memory');
-    closeFlushWizard();
-    loadMemory();
-  } else {
-    toast((res && res.error) || 'Flush failed', 'err');
-    commitBtn.disabled = false;
-    commitBtn.textContent = 'Commit to memory';
-  }
+  if (res && res.ok) { toast('Flushed to memory'); closeFlushWizard(); loadMemory(); }
+  else { toast((res && res.error) || 'Flush failed', 'err'); commitBtn.disabled = false; commitBtn.textContent = 'Commit to memory'; }
 }
 
 function closeFlushWizard() {
@@ -10188,7 +10196,6 @@ function closeFlushWizard() {
   const commitBtn = document.getElementById('flush-wiz-commit');
   if (commitBtn) { commitBtn.textContent = 'Commit to memory'; commitBtn.disabled = false; }
 }
-
 
 // Backward compat wrappers
 function openSettings(tab = 'profile') {
@@ -11619,6 +11626,7 @@ async function mcInit() {
       else if (d.type === 'log:incident') mcOnIncident(d);
       else if (d.type === 'log:remediation') mcOnRemediation(d);
       else if (d.type === 'log:bugreport') mcOnBugReport(d);
+      else if (d.type === 'chat:system') mcOnSystemNotify(d);
     } catch(ex) {}
   };
 }
@@ -11937,6 +11945,20 @@ function mcOnBugReport(data) {
       '<div class="mc-report-response" style="color:var(--err)">' + escHtml(d.response || '') + '</div>';
   } else if (d.status === 'submitted') {
     status.innerHTML = '<span class="mc-rem-status dispatching">Dispatching...</span>';
+  }
+}
+
+function mcOnSystemNotify(data) {
+  var d = data.data || data;
+  if (d.source !== 'mission-control') return;
+  // Show toast notification
+  if (typeof toast === 'function') {
+    toast(d.message.replace(/\*\*/g, '').substring(0, 120), d.severity === 'error' ? 'err' : 'warn');
+  }
+  // If on Chat tab, inject as system message
+  if (typeof _chatMessages !== 'undefined' && Array.isArray(_chatMessages)) {
+    _chatMessages.push({role: 'system', content: d.message, model: 'mission-control'});
+    if (typeof renderChatMessages === 'function') renderChatMessages();
   }
 }
 
@@ -18794,6 +18816,12 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
+        # ── Memory tab: Agent status probes (GET) ────────────────────────────
+        elif parsed.path == "/api/memory/agent-status":
+            if not self.auth_check(redirect=False): return
+            status = _probe_all_providers()
+            self.reply_json({"ok": True, "status": status})
+
         # ── Gap26: Local model detection (GET) ───────────────────────────────
         elif parsed.path == "/api/local-models":
             if not self.auth_check(redirect=False): return
@@ -18944,7 +18972,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.41'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.42'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -22279,7 +22307,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.41 ready (localhost only)")
+    print(f"\n  Porter v0.25.42 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
