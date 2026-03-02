@@ -3993,10 +3993,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 
 /* Skill bridge results */
 .chat-msg.skill {
-  align-self:flex-start; background:var(--bg2); border:1px solid var(--accent);
-  border-left:3px solid var(--accent); border-radius:8px; color:var(--text);
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px;
-  white-space:pre-wrap; padding:12px 14px;
+  align-self:flex-start; background:var(--raised); border:1px solid var(--border);
+  border-bottom-left-radius:2px; color:var(--text);
 }
 .chat-skill-meta {
   font-size:10px; color:var(--text3); margin-top:8px; padding-top:6px;
@@ -4176,7 +4174,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .chat-welcome-input-wrap:focus-within { border-color:rgba(247,147,26,.4); }
 .chat-welcome-input-wrap textarea {
-  width:100%; border:none; background:none; color:transparent; caret-color:#fff; font-size:14px;
+  width:100%; border:none; background:none; color:#fff; font-size:14px;
   font-family:inherit; resize:none; outline:none; min-height:26px; max-height:120px; line-height:1.5;
   position:relative; z-index:2;
 }
@@ -4258,7 +4256,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .chat-input-area .chat-input-wrap:focus-within { border-color:rgba(247,147,26,.4); }
 .chat-input-bottom {
-  width:100%; border:none; background:none; color:transparent; caret-color:#fff; font-size:14px;
+  width:100%; border:none; background:none; color:#fff; font-size:14px;
   font-family:inherit; resize:none; outline:none; min-height:26px; max-height:120px; line-height:1.5;
   position:relative; z-index:2;
 }
@@ -9462,7 +9460,7 @@ function chatStop() {
 
 async function invokeAgent(message, backend) {
   // Unified agent dispatch — routes to any backend
-  const labels = { openclaw: 'OpenClaw', gemini: 'Gemini', ollama: 'Ollama' };
+  const labels = { openclaw: 'OpenClaw', gemini: 'Gemini', ollama: 'Ollama', claude: 'Claude', codex: 'Codex' };
   const label = labels[backend] || backend;
   _chatMessages.push({ role: 'skill-pending', content: 'Dispatching to ' + label + '...' });
   renderChatMessages();
@@ -9472,14 +9470,7 @@ async function invokeAgent(message, backend) {
     _chatMessages = _chatMessages.filter(function(m) { return m.role !== 'skill-pending'; });
 
     if (resp && resp.ok) {
-      const meta = [];
-      if (resp.backend) meta.push('Via: ' + (labels[resp.backend] || resp.backend));
-      if (resp.model) meta.push('Model: ' + resp.model);
-      if (resp.duration_ms) meta.push('Duration: ' + (resp.duration_ms / 1000).toFixed(1) + 's');
-      if (resp.tokens && resp.tokens.total) meta.push('Tokens: ' + resp.tokens.total);
-
-      const content = resp.text + (meta.length ? '\n---\n' + meta.join(' | ') : '');
-      _chatMessages.push({ role: 'skill', content: content });
+      _chatMessages.push({ role: 'assistant', content: resp.text || '', model: resp.model || backend });
     } else {
       _chatMessages.push({ role: 'error', content: label + ' error: ' + (resp ? resp.error : 'No response') });
     }
@@ -9522,7 +9513,7 @@ async function _runAtChain(fullText, matches) {
         if (resp.backend) meta.push('Via: ' + (labels[resp.backend] || resp.backend));
         if (resp.model) meta.push('Model: ' + resp.model);
         if (resp.duration_ms) meta.push('Duration: ' + (resp.duration_ms / 1000).toFixed(1) + 's');
-        _chatMessages.push({ role: 'skill', content: prevOutput + (meta.length ? '\n---\n' + meta.join(' | ') : '') });
+        _chatMessages.push({ role: 'assistant', content: prevOutput, model: resp.model || seg.model });
       } else {
         _chatMessages.push({ role: 'error', content: label + ' error: ' + (resp ? resp.error : 'No response') });
         break; // Stop chain on error
@@ -10140,7 +10131,15 @@ function _hlMentions(el) {
   var ov = document.getElementById(id);
   if (!ov) return;
   var val = el.value;
-  if (!val) { ov.innerHTML = ''; return; }
+  var hasAt = /@(claude|gemini|openclaw|codex|ollama)\b/.test(val);
+  if (!val || !hasAt) {
+    ov.innerHTML = '';
+    el.style.color = '#fff';
+    return;
+  }
+  // Has @mention — go transparent and show overlay
+  el.style.color = 'transparent';
+  el.style.caretColor = '#fff';
   var esc = val.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   ov.innerHTML = esc.replace(/@(claude|gemini|openclaw|codex|ollama)\b/g, '<span class="at-hl">@$1</span>');
   ov.scrollTop = el.scrollTop;
@@ -10204,6 +10203,7 @@ function chatSend() {
   if (text.startsWith('/')) {
     input.value = '';
     input.style.height = 'auto';
+    _hlMentions(input);
     var cmd = text.split(' ')[0].toLowerCase();
 
     if (cmd === '/clear') {
@@ -10353,9 +10353,9 @@ function chatSend() {
     _chatMessages.push({ role: 'user', content: text });
     renderChatMessages();
     if (_atMatches.length === 1) {
-      // Single @model — extract message after @model
-      var _msg1 = text.substring(_atMatches[0].idx + _atMatches[0].model.length + 1).trim();
-      if (!_msg1) _msg1 = text.replace(/@\w+/g, '').trim();
+      // Single @model — extract all text except the @model token
+      var _msg1 = text.replace(/@(claude|gemini|openclaw|ollama|codex)\b/, '').trim();
+      if (!_msg1) _msg1 = 'hello';
       invokeAgent(_msg1, _atMatches[0].model);
     } else {
       // Multi-@ chain: @model1 <task> ... @model2 <task>
