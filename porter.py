@@ -4266,7 +4266,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-input-overlay {
   position:absolute; top:14px; left:18px; right:18px; pointer-events:none; z-index:1;
   color:#fff; font-size:14px; font-family:inherit; line-height:1.5; white-space:pre-wrap;
-  word-break:break-word; overflow:hidden;
+  word-break:break-word; overflow:hidden; text-align:left;
 }
 .chat-input-overlay .at-hl { color:#7dd3fc; font-weight:600; }
 .chat-input-bottom-meta {
