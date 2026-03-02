@@ -9498,9 +9498,14 @@ async function _runAtChain(fullText, matches) {
       if (prefix) msg = prefix + ' ' + msg;
     }
     // Clean connectors at start and end
-    msg = msg.replace(/^(to|and|then|please)\s+/i, '');
+    msg = msg.replace(/^(to|and|then|please|ask|tell|get|send|have|make|let)\s*/i, '');
     msg = msg.replace(/\b(and\s+)?(send\s+(it\s+)?)?to\s*$/i, '').replace(/\bthen\s*$/i, '').replace(/\band\s*$/i, '').trim();
     segments.push({ model: matches[i].model, msg: msg });
+  }
+  // If first segment is empty, user wants it as final reviewer — move to end
+  // e.g. "@claude ask @gemini what time is it" → Gemini first, then Claude reviews
+  if (segments.length > 1 && !segments[0].msg) {
+    segments.push(segments.shift());
   }
   // Execute chain: first segment runs normally, subsequent segments get previous output prepended
   var prevOutput = '';
