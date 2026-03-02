@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.46 — Memory Tab: Visual Polish"""
+"""Porter v0.25.47 — Async Fix"""
 
 
 
@@ -6047,7 +6047,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.46</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.47</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7199,6 +7199,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.47', date:'2026-03-02', notes:['Fix: bare async keyword causing ReferenceError spam on every page load'] },
   { ver:'v0.25.46', date:'2026-03-02', notes:['Memory Tab v6: compact silo rows, How Memory Works diagram, config panel editing','Removed: avatar icons, memory map, shared plane, split-pane editor, timeline, stat cards','Nav grouping: Tools & Config section for Extensions/Skills/Logs/Settings','Chat: history button on welcome screen, light mode input fix','Coordination files rail + per-agent session summary with context'] },
   { ver:'v0.25.45', date:'2026-03-02', notes:['Memory header redesign: total size, agent count, last activity','Animated transitions: expand/collapse, fade-in content','Keyboard shortcuts: Ctrl+S save, Esc close, / search','Cross-model memory map: SVG diagram of shared files','Memory timeline: recent changes across all agents','Export/Import memory: ZIP download + upload','Empty state onboarding guidance'] },
   { ver:'v0.25.44', date:'2026-03-02', notes:['Session search: filter sessions by text content','Bulk Flush: flush all pending sessions at once','Gemini session support: detect + display Gemini CLI sessions','Flush history log: last 10 flush ops in SQLite table','Session age badges: green (<1h), yellow (1-24h), red (>24h)','Auto-flush suggestion banner for stale sessions'] },
@@ -13978,7 +13979,6 @@ async function doTestAgent(id, name) {
   });
 }
 
-async 
 // ── Bridge Control ────────────────────────────────────────────────────────
 
 function _showModal(title, bodyHtml) {
@@ -19298,7 +19298,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.46'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.47'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -22639,7 +22639,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.46 ready (localhost only)")
+    print(f"\n  Porter v0.25.47 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
