@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.49 — Nav Grouping"""
+"""Porter v0.26.0 — Persona-First Architecture — Nav Grouping"""
 
 
 
@@ -125,6 +125,7 @@ AGENT_WORKSPACE_DIR = Path(os.environ.get("PORTER_AGENT_WORKSPACE",
 OPENCLAW_STATE_DIR  = Path(os.environ.get("PORTER_OPENCLAW_STATE",
                            str(Path.home() / ".openclaw")))
 MEMORY_DIR          = _DATA_DIR / "memory"
+PERSONAS_DIR        = _DATA_DIR / "personas"
 USAGE_DIR           = RUNTIME_DIR / "usage"
 CHAT_DIR            = _DATA_DIR / "chat"
 DB_PATH             = _DATA_DIR / "porter.db"
@@ -265,6 +266,24 @@ def _db_init():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_status ON agent_messages(status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_chain ON agent_messages(chain_id)")
 
+    # ── Personas table (Phase A: persona-first architecture) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS personas (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            role TEXT DEFAULT '',
+            avatar TEXT DEFAULT '',
+            preferred_backend TEXT,
+            fallback_backends TEXT DEFAULT '[]',
+            status TEXT DEFAULT 'idle',
+            soul_hash TEXT DEFAULT '',
+            created_at TEXT NOT NULL,
+            last_active TEXT,
+            config TEXT DEFAULT '{}'
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_personas_status ON personas(status)")
+
     # Migrate: add chain_id + step_num if missing
     _am_cols = [r["name"] for r in conn.execute("PRAGMA table_info(agent_messages)").fetchall()]
     if "chain_id" not in _am_cols:
@@ -288,6 +307,39 @@ def _db_init():
             cfg.get("email", ""), cfg.get("password_hash", ""), cfg.get("salt", ""), "admin"
         ))
         conn.commit()
+
+    # Auto-migrate config agents → personas table (one-time)
+    _persona_count = conn.execute("SELECT count(*) FROM personas").fetchone()[0]
+    if _persona_count == 0:
+        log.info("Personas table empty — auto-migrating from config agents...")
+        from datetime import datetime, timezone as _tz
+        _now_iso = datetime.now(_tz.utc).isoformat()
+        _backend_map = {"claude-code": "claude", "openclaw": "openclaw", "gemini": "gemini", "codex": "codex", "ollama": "ollama"}
+        for _ag in _config.get("agents", []):
+            _pid = _ag.get("id", "")
+            _pname = _ag.get("name", "Agent")
+            _ptype = _ag.get("type", "generic")
+            _backend = _backend_map.get(_ptype, _ptype)
+            _avatar = {"claude-code": "🤖", "openclaw": "🐙", "gemini": "💎"}.get(_ptype, "🔧")
+            conn.execute(
+                "INSERT OR IGNORE INTO personas (id, name, role, avatar, preferred_backend, fallback_backends, status, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                (_pid, _pname, _ag.get("role", ""), _avatar, _backend, "[]", "idle", _ag.get("created_at", _now_iso))
+            )
+            # Create persona directory + skeleton SOUL.md
+            _pdir = PERSONAS_DIR / _pid
+            _pdir.mkdir(parents=True, exist_ok=True)
+            (_pdir / "memory").mkdir(exist_ok=True)
+            _soul = _pdir / "SOUL.md"
+            if not _soul.exists():
+                _soul.write_text(f"# {_pname}\n\nRole: {_ag.get('role', 'general')}\nBackend: {_backend}\n")
+            _mem = _pdir / "MEMORY.md"
+            if not _mem.exists():
+                _mem.write_text(f"# {_pname} — Memory\n\nLong-term memories for {_pname}.\n")
+            _hb = _pdir / "heartbeat.md"
+            if not _hb.exists():
+                _hb.write_text("")
+        conn.commit()
+        log.info("Migrated %d agents → personas", len(_config.get("agents", [])))
 
     # Purge expired sessions on startup
     purged = conn.execute("DELETE FROM sessions WHERE expires < ?", (time.time(),)).rowcount
@@ -3956,6 +4008,14 @@ def ensure_memory_dirs():
     for ns in MEMORY_NAMESPACES:
         (MEMORY_DIR / ns).mkdir(parents=True, exist_ok=True)
 
+def ensure_persona_dirs():
+    """Create personas directory and RULES.md if missing."""
+    PERSONAS_DIR.mkdir(parents=True, exist_ok=True)
+    rules_path = PERSONAS_DIR / "RULES.md"
+    if not rules_path.exists():
+        rules_path.write_text("# Global Rules\n\nAll personas must follow these rules.\n\n" +
+                              "\n".join(f"- {r.get('text', '')}" for r in _config.get("rules", [])) + "\n")
+
 # ── helpers ───────────────────────────────────────────────────────────────
 
 def safe_resolve(root_key, rel=""):
@@ -6047,7 +6107,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.49</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.26.0</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7199,7 +7259,8 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.25.49', date:'2026-03-02', notes:['Nav: Locations + Files grouped under Storage section'] },
+  { ver:'v0.26.0', date:'2026-03-02', notes:['Persona-First Architecture (Phase A): personas SQLite table, CRUD API, dispatch_to_persona with SOUL+RULES injection','Auto-migrate config agents → personas on first run','12 new API endpoints: /api/personas CRUD, dispatch, wake/sleep, rules, memory','Bridge dispatch accepts persona_id for persona-routed dispatch','Daily memory logs per persona in PORTER_DATA_DIR/personas/<id>/memory/'] },
+  { ver:'v0.26.0', date:'2026-03-02', notes:['Nav: Locations + Files grouped under Storage section'] },
   { ver:'v0.25.48', date:'2026-03-02', notes:['Fix: duplicate .chat-input-area CSS selector broke all module hiding — every panel showed at once'] },
   { ver:'v0.25.47', date:'2026-03-02', notes:['Fix: bare async keyword causing ReferenceError spam on every page load'] },
   { ver:'v0.25.46', date:'2026-03-02', notes:['Memory Tab v6: compact silo rows, How Memory Works diagram, config panel editing','Removed: avatar icons, memory map, shared plane, split-pane editor, timeline, stat cards','Nav grouping: Tools & Config section for Extensions/Skills/Logs/Settings','Chat: history button on welcome screen, light mode input fix','Coordination files rail + per-agent session summary with context'] },
@@ -17263,6 +17324,263 @@ def _smart_route(message):
     return _resolve_with_fallback("openclaw", message)
 
 
+# ── Persona Layer ──────────────────────────────────────────────────────────
+
+def _persona_by_id(persona_id):
+    """Fetch persona row from SQLite by ID."""
+    try:
+        conn = _db_conn()
+        row = conn.execute("SELECT * FROM personas WHERE id=?", (persona_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+    except Exception as e:
+        log.debug("_persona_by_id error: %s", e)
+        return None
+
+def _persona_list():
+    """List all personas from SQLite."""
+    try:
+        conn = _db_conn()
+        rows = conn.execute("SELECT * FROM personas ORDER BY created_at").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        log.debug("_persona_list error: %s", e)
+        return []
+
+def _persona_create(data):
+    """Create a new persona, writing DB row + filesystem."""
+    import hashlib
+    pid = data.get("id") or secrets.token_hex(8)
+    name = data.get("name", "New Agent")
+    role = data.get("role", "")
+    avatar = data.get("avatar", "🤖")
+    preferred_backend = data.get("preferred_backend", "")
+    fallback_backends = json.dumps(data.get("fallback_backends", []))
+    config_json = json.dumps(data.get("config", {}))
+    from datetime import datetime, timezone as _tz
+    now_iso = datetime.now(_tz.utc).isoformat()
+
+    # Build SOUL.md from wizard answers or raw text
+    soul_text = data.get("soul_text", "")
+    if not soul_text:
+        personality = data.get("personality", "")
+        focus = data.get("focus", "")
+        style = data.get("style", "")
+        soul_text = f"# {name}\n\n"
+        if role: soul_text += f"**Role:** {role}\n\n"
+        if personality: soul_text += f"**Personality:** {personality}\n\n"
+        if focus: soul_text += f"**Focus:** {focus}\n\n"
+        if style: soul_text += f"**Communication style:** {style}\n\n"
+
+    soul_hash = hashlib.sha256(soul_text.encode()).hexdigest()[:16]
+
+    try:
+        conn = _db_conn()
+        conn.execute(
+            """INSERT INTO personas (id, name, role, avatar, preferred_backend, fallback_backends, status, soul_hash, created_at, config)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (pid, name, role, avatar, preferred_backend, fallback_backends, "idle", soul_hash, now_iso, config_json)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.error("Failed to create persona: %s", e)
+        return None
+
+    # Filesystem
+    pdir = PERSONAS_DIR / pid
+    pdir.mkdir(parents=True, exist_ok=True)
+    (pdir / "memory").mkdir(exist_ok=True)
+    (pdir / "SOUL.md").write_text(soul_text)
+    (pdir / "MEMORY.md").write_text(f"# {name} — Memory\n\nLong-term memories for {name}.\n")
+    (pdir / "heartbeat.md").write_text("")
+
+    return {"id": pid, "name": name, "role": role, "avatar": avatar,
+            "preferred_backend": preferred_backend, "soul_hash": soul_hash}
+
+def _persona_update(persona_id, data):
+    """Update persona DB row + optionally SOUL.md."""
+    import hashlib
+    sets, vals = [], []
+    for field in ("name", "role", "avatar", "preferred_backend", "status"):
+        if field in data:
+            sets.append(f"{field}=?")
+            vals.append(data[field])
+    if "fallback_backends" in data:
+        sets.append("fallback_backends=?")
+        vals.append(json.dumps(data["fallback_backends"]))
+    if "config" in data:
+        sets.append("config=?")
+        vals.append(json.dumps(data["config"]))
+    # SOUL.md update
+    soul_text = data.get("soul_text")
+    if soul_text is not None:
+        soul_hash = hashlib.sha256(soul_text.encode()).hexdigest()[:16]
+        sets.append("soul_hash=?")
+        vals.append(soul_hash)
+        soul_path = PERSONAS_DIR / persona_id / "SOUL.md"
+        if soul_path.parent.exists():
+            soul_path.write_text(soul_text)
+    if not sets:
+        return False
+    vals.append(persona_id)
+    try:
+        conn = _db_conn()
+        conn.execute(f"UPDATE personas SET {', '.join(sets)} WHERE id=?", vals)
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        log.error("Failed to update persona %s: %s", persona_id, e)
+        return False
+
+def _persona_delete(persona_id):
+    """Delete persona from DB + filesystem."""
+    import shutil
+    try:
+        conn = _db_conn()
+        conn.execute("DELETE FROM personas WHERE id=?", (persona_id,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.error("Failed to delete persona %s: %s", persona_id, e)
+        return False
+    pdir = PERSONAS_DIR / persona_id
+    if pdir.exists():
+        shutil.rmtree(pdir, ignore_errors=True)
+    return True
+
+def _persona_get_soul(persona_id):
+    """Read SOUL.md for a persona."""
+    soul_path = PERSONAS_DIR / persona_id / "SOUL.md"
+    if soul_path.exists():
+        return soul_path.read_text()
+    return ""
+
+def _persona_get_rules():
+    """Read global RULES.md."""
+    rules_path = PERSONAS_DIR / "RULES.md"
+    if rules_path.exists():
+        return rules_path.read_text()
+    return ""
+
+def _persona_set_rules(text):
+    """Write global RULES.md."""
+    rules_path = PERSONAS_DIR / "RULES.md"
+    PERSONAS_DIR.mkdir(parents=True, exist_ok=True)
+    rules_path.write_text(text)
+    return True
+
+def _persona_get_memory(persona_id):
+    """Get persona's MEMORY.md + daily logs."""
+    pdir = PERSONAS_DIR / persona_id
+    result = {"memory_md": "", "daily_logs": []}
+    mem_path = pdir / "MEMORY.md"
+    if mem_path.exists():
+        result["memory_md"] = mem_path.read_text()
+    log_dir = pdir / "memory"
+    if log_dir.exists():
+        for f in sorted(log_dir.glob("*.md"), reverse=True)[:30]:
+            result["daily_logs"].append({"date": f.stem, "content": f.read_text()[:5000]})
+    return result
+
+def _persona_append_daily_log(persona_id, text):
+    """Append text to today's daily log for a persona."""
+    from datetime import datetime, timezone as _tz
+    today = datetime.now(_tz.utc).strftime("%Y-%m-%d")
+    log_dir = PERSONAS_DIR / persona_id / "memory"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"{today}.md"
+    existing = log_path.read_text() if log_path.exists() else ""
+    from datetime import datetime as _dt2
+    timestamp = _dt2.now(_tz.utc).strftime("%H:%M:%S UTC")
+    log_path.write_text(existing + f"\n## {timestamp}\n\n{text}\n")
+
+
+def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=None, step_num=0):
+    """Dispatch a message to a persona: load SOUL + RULES, resolve backend, call dispatch_agent."""
+    import uuid as _uuid
+    import time as _ptime
+    if not run_id:
+        run_id = _uuid.uuid4().hex[:12]
+
+    persona = _persona_by_id(persona_id)
+    if not persona:
+        return {"ok": False, "error": f"Persona not found: {persona_id}", "run_id": run_id}
+
+    # Load SOUL.md + RULES.md context
+    soul = _persona_get_soul(persona_id)
+    rules = _persona_get_rules()
+    context_parts = []
+    if rules.strip():
+        context_parts.append(f"[GLOBAL RULES]\n{rules.strip()}")
+    if soul.strip():
+        context_parts.append(f"[IDENTITY — {persona.get('name', 'Agent')}]\n{soul.strip()}")
+    context_prefix = "\n\n".join(context_parts)
+    if context_prefix:
+        augmented_message = f"{context_prefix}\n\n[USER MESSAGE]\n{message}"
+    else:
+        augmented_message = message
+
+    # Resolve backend
+    backend = persona.get("preferred_backend", "").strip()
+    model_override = None
+    if not backend or backend not in PROVIDER_REGISTRY:
+        # Try fallback chain
+        try:
+            fallbacks = json.loads(persona.get("fallback_backends", "[]"))
+        except Exception:
+            fallbacks = []
+        for fb in fallbacks:
+            if fb in PROVIDER_REGISTRY:
+                backend = fb
+                break
+        if not backend or backend not in PROVIDER_REGISTRY:
+            # Smart route as last resort
+            backend, model_override = _smart_route(message)
+
+    # Update persona status
+    try:
+        conn = _db_conn()
+        conn.execute("UPDATE personas SET status='active', last_active=strftime('%s','now') WHERE id=?", (persona_id,))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+    log.info("Persona dispatch: %s (%s) → %s", persona.get("name", "?"), persona_id, backend)
+    mlog.emit("info", "bridge", "persona.dispatch", f"Persona {persona.get('name', '?')} → {backend}", persona_id=persona_id, backend=backend, run_id=run_id)
+
+    # Dispatch via existing agent dispatch
+    result = dispatch_agent(augmented_message, backend, model=model_override, timeout=timeout, run_id=run_id, chain_id=chain_id, step_num=step_num)
+
+    # Tag the agent_message with persona_id
+    try:
+        conn = _db_conn()
+        conn.execute("UPDATE agent_messages SET persona_id=? WHERE run_id=?", (persona_id, run_id))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+    # Append to daily log
+    response_text = result.get("text", "")[:500] if result.get("ok") else result.get("error", "")[:200]
+    _persona_append_daily_log(persona_id, f"**Dispatch** ({backend})\n> {message[:200]}\n\nResponse: {response_text}")
+
+    # Reset status to idle
+    try:
+        conn = _db_conn()
+        conn.execute("UPDATE personas SET status='idle' WHERE id=?", (persona_id,))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+    result["persona_id"] = persona_id
+    return result
+
+
 def dispatch_agent(message, backend, model=None, timeout=120, run_id=None, chain_id=None, step_num=0):
     """Route a message to the specified backend and return normalized response."""
     import time as _dt
@@ -17670,7 +17988,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.25.6' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.26.0' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -18092,6 +18410,34 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json(base)
 
         # ── agents ────────────────────────────────────────────────────────
+        # ── Persona CRUD (GET) ──────────────────────────────────────
+        elif parsed.path == "/api/personas":
+            if not self.auth_check(redirect=False): return
+            personas = _persona_list()
+            self.reply_json({"ok": True, "personas": personas})
+
+        elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/memory"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path.split("/")[3]
+            mem = _persona_get_memory(pid)
+            self.reply_json({"ok": True, **mem})
+
+        elif parsed.path == "/api/personas/rules":
+            if not self.auth_check(redirect=False): return
+            rules_text = _persona_get_rules()
+            self.reply_json({"ok": True, "rules": rules_text})
+
+        elif parsed.path.startswith("/api/personas/"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path.split("/")[3]
+            persona = _persona_by_id(pid)
+            if not persona:
+                self.reply_json({"ok": False, "error": "Persona not found"}, 404)
+                return
+            # Include SOUL.md content
+            persona["soul_text"] = _persona_get_soul(pid)
+            self.reply_json({"ok": True, "persona": persona})
+
         elif parsed.path == "/api/agents":
             if not self.auth_check(redirect=False): return
             safe = [{k: v for k, v in a.items() if k != "key_hash"}
@@ -18115,7 +18461,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.39"})
+            self.reply_json({"v": "0.26.0"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -18202,7 +18548,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.25.39"
+                health["porter_version"] = "0.26.0"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -19248,6 +19594,11 @@ class Handler(BaseHTTPRequestHandler):
                 conn = _db_conn()
                 where_clauses = []
                 params = []
+                # Persona filter
+                _runs_persona = qs.get("persona_id", [None])[0]
+                if _runs_persona:
+                    where_clauses.append("persona_id = ?")
+                    params.append(_runs_persona)
                 since = qs.get("since", [None])[0]
                 if since:
                     try:
@@ -19300,7 +19651,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.49'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.26.0'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -19930,6 +20281,20 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check_cap("orch_write"): return
             data = self.read_json_body()
             prompt = str(data.get("prompt", "")).strip()
+            # Persona-first: if persona_id provided, dispatch via persona layer
+            _dispatch_persona_id = data.get("persona_id", "").strip()
+            if _dispatch_persona_id:
+                if not prompt:
+                    self.reply_json({"ok": False, "error": "prompt is required"}, 400); return
+                timeout = max(10, min(300, int(data.get("timeout", 60) or 60)))
+                import uuid as _uuid
+                run_id = _uuid.uuid4().hex[:12]
+                def _persona_bridge_run():
+                    dispatch_to_persona(prompt, _dispatch_persona_id, timeout=timeout, run_id=run_id)
+                t = _threading.Thread(target=_persona_bridge_run, daemon=True)
+                t.start()
+                self.reply_json({"ok": True, "run_id": run_id, "persona_id": _dispatch_persona_id, "status": "dispatched"})
+                return
             backend = str(data.get("backend", "")).strip().lower()
             model_override = data.get("model")
             if not prompt:
@@ -21119,6 +21484,92 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json(result)
 
         # ── agents CRUD ────────────────────────────────────────────────────
+        # ── Persona CRUD (POST) ─────────────────────────────────────
+        elif parsed.path == "/api/personas":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            name = data.get("name", "").strip()
+            if not name:
+                self.reply_json({"ok": False, "error": "name is required"}, 400)
+                return
+            result = _persona_create(data)
+            if result:
+                _emit_event("persona:created", {"id": result["id"], "name": name})
+                mlog.emit("info", "persona", "persona.create", f"Created persona: {name}", persona_id=result["id"])
+                self.reply_json({"ok": True, "persona": result})
+            else:
+                self.reply_json({"ok": False, "error": "Failed to create persona"}, 500)
+
+        elif parsed.path == "/api/personas/rules":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            text = data.get("rules", "")
+            _persona_set_rules(text)
+            self.reply_json({"ok": True})
+
+        elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/dispatch"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path.split("/")[3]
+            data = self.read_json_body()
+            prompt = str(data.get("prompt", "")).strip()
+            if not prompt:
+                self.reply_json({"ok": False, "error": "prompt is required"}, 400)
+                return
+            timeout = max(10, min(300, int(data.get("timeout", 60) or 60)))
+            import uuid as _uuid
+            run_id = _uuid.uuid4().hex[:12]
+            def _persona_run():
+                dispatch_to_persona(prompt, pid, timeout=timeout, run_id=run_id)
+            t = _threading.Thread(target=_persona_run, daemon=True)
+            t.start()
+            self.reply_json({"ok": True, "run_id": run_id, "persona_id": pid, "status": "dispatched"})
+
+        elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/wake"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path.split("/")[3]
+            ok = _persona_update(pid, {"status": "active"})
+            if ok:
+                _emit_event("persona:wake", {"id": pid})
+                self.reply_json({"ok": True, "status": "active"})
+            else:
+                self.reply_json({"ok": False, "error": "Persona not found"}, 404)
+
+        elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/sleep"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path.split("/")[3]
+            ok = _persona_update(pid, {"status": "sleeping"})
+            if ok:
+                _emit_event("persona:sleep", {"id": pid})
+                self.reply_json({"ok": True, "status": "sleeping"})
+            else:
+                self.reply_json({"ok": False, "error": "Persona not found"}, 404)
+
+        elif parsed.path.startswith("/api/personas/"):
+            # PUT-style update via POST (persona_id in path)
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.strip("/").split("/")
+            if len(parts) >= 3:
+                pid = parts[2]
+                data = self.read_json_body()
+                action = data.get("action", "update")
+                if action == "delete":
+                    ok = _persona_delete(pid)
+                    if ok:
+                        _emit_event("persona:deleted", {"id": pid})
+                        mlog.emit("info", "persona", "persona.delete", f"Deleted persona: {pid}", persona_id=pid)
+                        self.reply_json({"ok": True})
+                    else:
+                        self.reply_json({"ok": False, "error": "Failed to delete"}, 500)
+                else:
+                    ok = _persona_update(pid, data)
+                    if ok:
+                        _emit_event("persona:updated", {"id": pid})
+                        self.reply_json({"ok": True})
+                    else:
+                        self.reply_json({"ok": False, "error": "Failed to update"}, 500)
+            else:
+                self.reply_json({"ok": False, "error": "Invalid path"}, 400)
+
         elif parsed.path == "/api/agents":
             if not self.auth_check(redirect=False): return
             data   = self.read_json_body()
@@ -22628,6 +23079,7 @@ if __name__ == "__main__":
     ensure_runtime_dirs()
     ensure_chat_dirs()
     ensure_memory_dirs()
+    ensure_persona_dirs()
     _db_init()  # Initialize SQLite DB + purge expired sessions
     mlog.start()  # Start Mission Control log system
     _db_migrate_chats()  # Migrate JSON chats to SQLite
@@ -22641,7 +23093,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.49 ready (localhost only)")
+    print(f"\n  Porter v0.26.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
