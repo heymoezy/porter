@@ -10263,16 +10263,18 @@ function chatSend() {
     }
 
     if (cmd === '/models') {
-      var modelOpts = document.getElementById('chat-model');
-      if (modelOpts) {
-        var lines = ['**Available Models**\n'];
-        Array.from(modelOpts.options).forEach(function(o) {
-          if (o.value) lines.push('- `' + o.value + '` — ' + o.textContent);
-        });
-        _chatMessages.push({ role: 'assistant', content: lines.join('\n'), model: 'porter' });
-      } else {
-        _chatMessages.push({ role: 'assistant', content: 'No models loaded.', model: 'porter' });
-      }
+      var _mLines = ['**Connected Models**\n'];
+      var _pickers = document.querySelectorAll('.model-picker .mp-opt');
+      var _seen = {};
+      _pickers.forEach(function(o) {
+        var v = o.dataset.v;
+        if (v && !_seen[v]) {
+          _seen[v] = true;
+          _mLines.push('- **' + o.textContent.trim() + '**  `' + v + '`');
+        }
+      });
+      if (Object.keys(_seen).length === 0) _mLines.push('_No models detected._');
+      _chatMessages.push({ role: 'assistant', content: _mLines.join('\n'), model: 'porter' });
       renderChatMessages();
       return;
     }
