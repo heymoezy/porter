@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.48 — CSS Fix"""
+"""Porter v0.25.49 — Nav Grouping"""
 
 
 
@@ -5994,6 +5994,7 @@ select.settings-input { padding-right: 26px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
       <span class="mnav-label">Workflows</span>
     </button>
+    <div class="mnav-group-label">Storage</div>
     <button class="mnav-item" id="mnav-locations" onclick="switchModule('locations')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
       <span class="mnav-label">Locations</span>
@@ -6046,7 +6047,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.48</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.49</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7198,6 +7199,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.49', date:'2026-03-02', notes:['Nav: Locations + Files grouped under Storage section'] },
   { ver:'v0.25.48', date:'2026-03-02', notes:['Fix: duplicate .chat-input-area CSS selector broke all module hiding — every panel showed at once'] },
   { ver:'v0.25.47', date:'2026-03-02', notes:['Fix: bare async keyword causing ReferenceError spam on every page load'] },
   { ver:'v0.25.46', date:'2026-03-02', notes:['Memory Tab v6: compact silo rows, How Memory Works diagram, config panel editing','Removed: avatar icons, memory map, shared plane, split-pane editor, timeline, stat cards','Nav grouping: Tools & Config section for Extensions/Skills/Logs/Settings','Chat: history button on welcome screen, light mode input fix','Coordination files rail + per-agent session summary with context'] },
@@ -19298,7 +19300,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.48'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.49'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -22639,7 +22641,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.48 ready (localhost only)")
+    print(f"\n  Porter v0.25.49 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
