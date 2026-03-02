@@ -10214,6 +10214,9 @@ function chatSend() {
       _chatMessages = [];
       _chatId = '';
       try { localStorage.removeItem(_CHAT_STORAGE_KEY); } catch(e) {}
+      ['chat-at-ind-welcome','chat-at-ind-bottom'].forEach(function(id) {
+        var el = document.getElementById(id); if (el) el.innerHTML = '';
+      });
       renderChatMessages();
       return;
     }
@@ -10354,6 +10357,11 @@ function chatSend() {
   if (_atMatches.length > 0) {
     input.value = '';
     input.style.height = 'auto';
+    // Clear @mention indicator
+    var _ind = document.getElementById('chat-at-ind-welcome');
+    if (_ind) _ind.innerHTML = '';
+    _ind = document.getElementById('chat-at-ind-bottom');
+    if (_ind) _ind.innerHTML = '';
     _chatTransitionToBottom();
     _chatMessages.push({ role: 'user', content: text });
     renderChatMessages();
@@ -10403,6 +10411,10 @@ function chatSend() {
   // Add user message (show original text, not the full context-injected prompt)
   _chatMessages.push({ role: 'user', content: text });
   input.value = '';
+  // Clear @mention indicator
+  ['chat-at-ind-welcome','chat-at-ind-bottom'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.innerHTML = '';
+  });
   _chatTransitionToBottom();
   renderChatMessages();
 
