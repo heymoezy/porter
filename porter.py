@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.35 — Chain Parsing + @Mention Indicator"""
+"""Porter v0.25.36 — Bridge Service Auth (M2M Dispatch)"""
 
 
 
@@ -5142,7 +5142,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.35</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.36</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6257,6 +6257,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.36', date:'2026-03-02', notes:['Bridge service auth: dispatch/runs/invoke accept Bearer tokens via auth_check_cap','New GET /api/bridge/run?id= for single-run polling','GET /api/bridge/runs now supports ?since=&status=&limit= filters','Regenerated OpenClaw API key (scrypt hash)'] },
   { ver:'v0.25.35', date:'2026-03-02', notes:['Fixed chain parsing: text before first @model no longer lost','Smart connector stripping (ask/tell/to/and send it to)','@mention indicator shows targeted models below input (cursor-safe)','Fixed single @ extraction losing prefix text'] },
   { ver:'v0.25.34', date:'2026-03-02', notes:['Removed transparent text overlay (fixes cursor misalignment with @mentions)','Fixed input not clearing after @ dispatch','Fixed chain runner: fetch timeout was 15s, now 130s (Gemini needs 18s+)','Fixed @ path missing transition to bottom input','Removed bridge prompt injection (was contaminating model outputs)','Collapsed double spaces in @ text extraction'] },
   { ver:'v0.25.33', date:'2026-03-02', notes:['Gemini streaming fix: trim prompt to 4000 chars (matches non-streaming dispatcher)','Merged stderr→stdout on all CLI backends to prevent pipe deadlock','Added process cleanup with kill-on-timeout for hung CLI processes'] },
@@ -17398,18 +17399,60 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.reply_json({"ok": True, "messages": [], "count": 0})
 
-        elif parsed.path == "/api/bridge/runs":
-            if not self.auth_check(redirect=False): return
+        elif parsed.path == "/api/bridge/run":
+            if not self.auth_check_cap("orch_read"): return
+            run_id = qs.get("id", [None])[0]
+            if not run_id:
+                self.reply_json({"ok": False, "error": "id parameter required"}, 400); return
             try:
                 conn = _db_conn()
-                rows = conn.execute("""
+                row = conn.execute("""
+                    SELECT run_id, from_agent, to_agent AS backend, message, response,
+                           status, model, tokens_total, duration_ms, error,
+                           created_at, completed_at
+                    FROM agent_messages WHERE run_id = ?
+                """, (run_id,)).fetchone()
+                conn.close()
+                if not row:
+                    self.reply_json({"ok": False, "error": "run not found"}, 404); return
+                self.reply_json({"ok": True, "run": dict(row)})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
+
+        elif parsed.path == "/api/bridge/runs":
+            if not self.auth_check_cap("orch_read"): return
+            try:
+                conn = _db_conn()
+                where_clauses = []
+                params = []
+                since = qs.get("since", [None])[0]
+                if since:
+                    try:
+                        where_clauses.append("created_at >= ?")
+                        params.append(float(since))
+                    except ValueError:
+                        pass
+                status_filter = qs.get("status", [None])[0]
+                if status_filter:
+                    statuses = [s.strip() for s in status_filter.split(",") if s.strip()]
+                    if statuses:
+                        placeholders = ",".join("?" * len(statuses))
+                        where_clauses.append(f"status IN ({placeholders})")
+                        params.extend(statuses)
+                try:
+                    limit = max(1, min(500, int(qs.get("limit", ["50"])[0])))
+                except (ValueError, IndexError):
+                    limit = 50
+                where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+                params.append(limit)
+                rows = conn.execute(f"""
                     SELECT run_id, to_agent AS backend, status, model,
                            tokens_total, duration_ms, error,
                            substr(message, 1, 200) AS prompt_preview,
                            created_at, completed_at
-                    FROM agent_messages
-                    ORDER BY created_at DESC LIMIT 50
-                """).fetchall()
+                    FROM agent_messages{where_sql}
+                    ORDER BY created_at DESC LIMIT ?
+                """, params).fetchall()
                 conn.close()
                 runs = [dict(r) for r in rows]
                 self.reply_json({"ok": True, "runs": runs})
@@ -17434,7 +17477,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.35'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.36'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -17932,7 +17975,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json(res, 200 if res.get("ok") else 400)
 
         elif parsed.path == "/api/bridge/dispatch":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("orch_write"): return
             data = self.read_json_body()
             prompt = str(data.get("prompt", "")).strip()
             backend = str(data.get("backend", "")).strip().lower()
@@ -19620,7 +19663,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": "action required (add, remove, update)"}, 400)
 
         elif parsed.path == "/api/agent/invoke":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("orch_write"): return
             data = self.read_json_body()
             message = data.get("message", "").strip()
             backend = data.get("backend", "").strip()
@@ -20604,7 +20647,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.35 ready (localhost only)")
+    print(f"\n  Porter v0.25.36 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

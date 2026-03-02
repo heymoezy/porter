@@ -1,5 +1,24 @@
 # Porter Release Notes
 
+## v0.25.36 (2026-03-02)
+
+**Bridge Service Auth — M2M Dispatch + Result Retrieval**
+
+### Auth Upgrade
+- `POST /api/bridge/dispatch`, `GET /api/bridge/runs`, `POST /api/agent/invoke` now accept Bearer tokens via `auth_check_cap()` (was session-only `auth_check()`)
+- OpenClaw (role: operator) can now call all bridge endpoints with its API key
+
+### New Endpoint
+- `GET /api/bridge/run?id=<run_id>` — single-run lookup for polling dispatch results
+
+### Enhanced Filtering
+- `GET /api/bridge/runs` supports `?since=<unix_ts>`, `?status=complete,failed`, `?limit=N` query params
+
+### Security
+- Regenerated OpenClaw API key (scrypt hash)
+
+---
+
 ## v0.24.3 (planned)
 
 **Branding + Onboarding Governance Alignment**
