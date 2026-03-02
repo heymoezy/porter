@@ -10204,16 +10204,17 @@ function chatSend() {
   if (text.startsWith('/')) {
     input.value = '';
     input.style.height = 'auto';
-    _chatTransitionToBottom();
     var cmd = text.split(' ')[0].toLowerCase();
 
     if (cmd === '/clear') {
       _chatMessages = [];
+      _chatId = '';
       try { localStorage.removeItem(_CHAT_STORAGE_KEY); } catch(e) {}
       renderChatMessages();
       return;
     }
 
+    _chatTransitionToBottom();
     _chatMessages.push({ role: 'user', content: text });
 
     if (cmd === '/help') {
@@ -10316,6 +10317,19 @@ function chatSend() {
           lines.push(icon + ' **' + s.name + '**' + (s.version ? '  v' + s.version : '') + '  — ' + s.status);
         });
         _chatMessages[_chatMessages.length-1].content = lines.join('\n');
+        renderChatMessages();
+      });
+      return;
+    }
+
+    if (cmd === '/flush') {
+      _chatMessages.push({ role: 'assistant', content: '_Flushing session to memory..._', model: 'porter' });
+      renderChatMessages();
+      api('/api/memory/flush', { session: true }).then(function(r) {
+        _chatMessages[_chatMessages.length-1].content = (r && r.ok) ? 'Session flushed to memory.' : 'Flush failed: ' + ((r && r.error) || 'unknown error');
+        renderChatMessages();
+      }).catch(function() {
+        _chatMessages[_chatMessages.length-1].content = 'Flush endpoint not available.';
         renderChatMessages();
       });
       return;
