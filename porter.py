@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.40 — Mission Control v2"""
+"""Porter v0.25.41 — MC v2 Bugfix"""
 
 
 
@@ -5841,7 +5841,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.40</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.41</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7007,6 +7007,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.41', date:'2026-03-02', notes:['Fix: showAll ReferenceError in renderAgents (Orchestration tab)','Fix: async ReferenceError from intermediate deploy state'] },
   { ver:'v0.25.40', date:'2026-03-02', notes:['Mission Control v2: tabbed right panel (Detail/Incidents/Report)','Report Bug UI with agent dispatch via SSE','Frontend error capture (window.onerror → /api/logs/client-error)','8 new preset filters (File Ops, Chat, Schedule, Frontend)','Single-view layout: no page scroll, flex viewport fill','SSE handlers for log:incident, log:remediation, log:bugreport','Retry Fix button on incidents'] },
   { ver:'v0.25.39', date:'2026-03-02', notes:['Server-side chain dispatch: _run_chain() with step-level probe + dispatch + output piping','POST /api/bridge/chain: fire multi-step chains in background thread','GET /api/bridge/chains: aggregate chain runs with status/tokens/duration','agent_messages gains chain_id + step_num columns (auto-migrated)','Chain Builder UI in Workflows tab: add steps, run chains, view run history','SSE events: chain:start, chain:step, chain:complete, chain:error','Mission Control logs chain lifecycle events'] },
   { ver:'v0.25.38', date:'2026-03-02', notes:['Provider Registry: 5 probe functions with 15s TTL cache','PROVIDER_REGISTRY replaces AGENT_DISPATCHERS (dispatch, probe, type, label per backend)','GET /api/providers: real-time health status for all 5 backends','Smart routing fallback chain: if preferred backend is down, auto-fallback to next available','Configurable fallback_chain in preferences','Mission Control logs route decisions + fallback events','Fixed stale version in /api/admin/health and /api/version'] },
@@ -13274,7 +13275,8 @@ async function promptRenameProject(pid, currentName) {
   }
 }
 
-function renderAgents(agents) {
+function renderAgents(agents, showAll) {
+  if (typeof showAll === 'undefined') showAll = false;
   const el = document.getElementById('agent-list');
   const el2 = document.getElementById('agents-module-list');
   const noAgents = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No agents yet.</div>';
@@ -18942,7 +18944,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.40'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.41'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -22277,7 +22279,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.40 ready (localhost only)")
+    print(f"\n  Porter v0.25.41 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
