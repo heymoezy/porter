@@ -1,5 +1,14 @@
 # Porter Release Notes
 
+## v0.25.47 (2026-03-02)
+
+**Fix: Async ReferenceError**
+
+- Removed dangling `async` keyword (bare keyword left behind from deleted function) that caused `Uncaught ReferenceError: async is not defined` on every page load
+- This was flooding Mission Control logs with `frontend.error` events every few seconds and triggering the `frontend_error_spike` alert rule
+
+---
+
 ## v0.25.46 (2026-03-02)
 
 **Memory Tab Redesign + Nav Grouping + Chat Fixes**
