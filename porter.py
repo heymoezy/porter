@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.36 — Bridge Service Auth (M2M Dispatch)"""
+"""Porter v0.25.37 — Mission Control Log System"""
 
 
 
@@ -9,6 +9,7 @@ import logging
 import io
 import json
 import mimetypes
+import queue
 import os
 import re
 import secrets
@@ -117,6 +118,8 @@ _LOGIN_MAX_ATTEMPTS = 5
 _LOGIN_LOCKOUT_BASE = 30                # seconds, doubles each lockout
 
 RUNTIME_DIR         = _DATA_DIR / "runtime"
+LOG_DIR             = RUNTIME_DIR / "logs"
+LOG_DB_PATH         = LOG_DIR / "log_index.db"
 AGENT_WORKSPACE_DIR = Path(os.environ.get("PORTER_AGENT_WORKSPACE",
                            str(Path.home() / ".openclaw" / "workspace")))
 OPENCLAW_STATE_DIR  = Path(os.environ.get("PORTER_OPENCLAW_STATE",
@@ -3072,8 +3075,495 @@ def porter_uri_to_path(uri: str) -> "Path | None":
         return None
 
 def ensure_runtime_dirs():
-    for d in ("checkpoints", "leases", "drafts", "tmp", "usage", "schedule_runs", "idempotency"):
+    for d in ("checkpoints", "leases", "drafts", "tmp", "usage", "schedule_runs", "idempotency", "logs"):
         (RUNTIME_DIR / d).mkdir(parents=True, exist_ok=True)
+
+
+# ── Mission Control Log System ───────────────────────────────────────────────
+_request_ctx = threading.local()
+
+def _set_trace_id(tid=None):
+    import uuid
+    _request_ctx.trace_id = tid or uuid.uuid4().hex[:16]
+    return _request_ctx.trace_id
+
+def _get_trace_id():
+    return getattr(_request_ctx, "trace_id", None)
+
+def _set_session_id(sid):
+    _request_ctx.session_id = sid
+
+def _get_session_id():
+    return getattr(_request_ctx, "session_id", None)
+
+_REDACT_PATTERNS = [
+    re.compile(r'(Bearer\s+)\S+', re.I),
+    re.compile(r'(password["\s:=]+)\S+', re.I),
+    re.compile(r'(api[_-]?key["\s:=]+)\S+', re.I),
+    re.compile(r'(token["\s:=]+)\S+', re.I),
+    re.compile(r'(porter_session=)\S+', re.I),
+    re.compile(r'(secret["\s:=]+)\S+', re.I),
+]
+
+_SEV_ORDER = {"debug": 0, "info": 1, "warn": 2, "error": 3, "critical": 4}
+def _sev_level(s):
+    return _SEV_ORDER.get(s, 1)
+
+
+class _AlertEngine:
+    """Rolling-window alert detection for bridge/auth/routing anomalies."""
+
+    def __init__(self):
+        self._windows = {}  # key -> list of timestamps
+        self._rules = [
+            {"id": "bridge_failure_spike", "domain": "bridge", "event_type": "bridge.fail",
+             "threshold": 3, "window_s": 120, "sev": "critical",
+             "title": "Bridge failure spike", "summary": "{count} bridge failures in {window}s for {backend}"},
+            {"id": "auth_failure_spike", "domain": "auth", "event_type": "auth.login.fail",
+             "threshold": 5, "window_s": 120, "sev": "error",
+             "title": "Auth failure spike", "summary": "{count} login failures in {window}s"},
+            {"id": "timeout_burst", "domain": "bridge", "event_type": "bridge.fail",
+             "threshold": 5, "window_s": 300, "sev": "error",
+             "title": "Timeout burst", "summary": "{count} timeouts in {window}s"},
+        ]
+
+    def check(self, event):
+        et = event.get("event_type", "")
+        backend = event.get("backend", "unknown")
+        now = event.get("ts", time.time())
+
+        for rule in self._rules:
+            if et != rule["event_type"]:
+                continue
+            key = f"{rule['id']}:{backend}"
+            wins = self._windows.setdefault(key, [])
+            wins.append(now)
+            cutoff = now - rule["window_s"]
+            self._windows[key] = [t for t in wins if t > cutoff]
+            if len(self._windows[key]) >= rule["threshold"]:
+                self._create_incident(rule, backend, len(self._windows[key]), now)
+                self._windows[key] = []  # reset after firing
+
+    def _create_incident(self, rule, backend, count, now):
+        import uuid
+        iid = uuid.uuid4().hex[:12]
+        summary = rule["summary"].format(count=count, window=rule["window_s"], backend=backend)
+        try:
+            conn = _log_db_conn()
+            # Dedup: don't create if open incident exists for same rule+backend
+            existing = conn.execute(
+                "SELECT incident_id FROM log_incidents WHERE rule_id=? AND state='open'",
+                (f"{rule['id']}:{backend}",)
+            ).fetchone()
+            if existing:
+                conn.close()
+                return
+            conn.execute("""INSERT INTO log_incidents
+                (incident_id, severity, rule_id, state, title, summary, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?)""",
+                (iid, rule["sev"], f"{rule['id']}:{backend}", "open", rule["title"], summary, now, now))
+            conn.commit()
+            conn.close()
+            log.warning("Alert: %s — %s", rule["title"], summary)
+            _emit_event("log:incident", {"incident_id": iid, "title": rule["title"],
+                                          "severity": rule["sev"], "summary": summary})
+        except Exception as e:
+            log.debug("Alert engine incident create failed: %s", e)
+
+
+class MissionLog:
+    """Structured log system with JSONL + SQLite index + SSE broadcast."""
+
+    def __init__(self):
+        self._queue = queue.Queue(maxsize=10000)
+        self._consumer = None
+        self._alert = _AlertEngine()
+        self._current_file = None
+        self._current_fh = None
+        self._current_hour = None
+        self._dropped = 0
+        self._total = 0
+        self._started = False
+
+    def start(self):
+        if self._started:
+            return
+        self._started = True
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        _log_db_init()
+        self._consumer = threading.Thread(target=self._consume_loop,
+                                          name="missionlog-consumer", daemon=True)
+        self._consumer.start()
+        self._purge_t = threading.Thread(target=self._purge_loop,
+                                         name="missionlog-purge", daemon=True)
+        self._purge_t.start()
+        self.emit("info", "system", "system.startup", "Mission Control started")
+
+    def emit(self, severity, domain, event_type, message, **kwargs):
+        import uuid
+        event = {
+            "event_id": uuid.uuid4().hex[:16],
+            "ts": time.time(),
+            "severity": severity,
+            "domain": domain,
+            "event_type": event_type,
+            "message": message,
+            "trace_id": kwargs.get("trace_id") or _get_trace_id(),
+            "run_id": kwargs.get("run_id"),
+            "session_id": kwargs.get("session_id") or _get_session_id(),
+            "backend": kwargs.get("backend"),
+            "duration_ms": kwargs.get("duration_ms"),
+            "status": kwargs.get("status"),
+            "extra": kwargs.get("extra"),
+        }
+        try:
+            self._queue.put_nowait(event)
+        except queue.Full:
+            if _sev_level(severity) >= _sev_level("error"):
+                try:
+                    self._queue.get_nowait()
+                    self._dropped += 1
+                    self._queue.put_nowait(event)
+                except Exception:
+                    self._dropped += 1
+            else:
+                self._dropped += 1
+
+    def _consume_loop(self):
+        while True:
+            try:
+                event = self._queue.get(timeout=1)
+            except queue.Empty:
+                continue
+            try:
+                self._process_event(event)
+            except Exception as e:
+                log.debug("MissionLog process error: %s", e)
+
+    def _process_event(self, event):
+        self._total += 1
+        self._redact_event(event)
+        # Hourly file rotation
+        from datetime import datetime, timezone
+        dt = datetime.fromtimestamp(event["ts"], tz=timezone.utc)
+        hour_key = dt.strftime("%Y-%m-%d_%H")
+        if hour_key != self._current_hour:
+            if self._current_fh:
+                self._current_fh.close()
+            fname = f"events_{hour_key}.jsonl"
+            self._current_file = LOG_DIR / fname
+            self._current_fh = open(self._current_file, "a")
+            self._current_hour = hour_key
+
+        # Write JSONL
+        line = json.dumps(event, default=str)
+        byte_offset = self._current_fh.tell()
+        self._current_fh.write(line + "\n")
+        self._current_fh.flush()
+
+        # file_ref for later retrieval
+        file_ref = f"{self._current_file.name}:{byte_offset}"
+        event["file_ref"] = file_ref
+
+        # Index in SQLite
+        self._index_event(event, file_ref)
+
+        # SSE broadcast
+        try:
+            _emit_event("log:event", {
+                "event_id": event["event_id"],
+                "ts": event["ts"],
+                "severity": event["severity"],
+                "domain": event["domain"],
+                "event_type": event["event_type"],
+                "message": event["message"][:200],
+                "trace_id": event.get("trace_id"),
+                "run_id": event.get("run_id"),
+                "backend": event.get("backend"),
+                "duration_ms": event.get("duration_ms"),
+                "status": event.get("status"),
+            })
+        except Exception:
+            pass
+
+        # Alert engine
+        self._alert.check(event)
+
+    def _redact_event(self, event):
+        event["message"] = self._redact_text(event["message"])
+        if event.get("extra") and isinstance(event["extra"], dict):
+            event["extra"] = self._redact_dict(event["extra"])
+
+    def _redact_text(self, text):
+        if not text:
+            return text
+        for pat in _REDACT_PATTERNS:
+            text = pat.sub(r'\1[REDACTED]', text)
+        return text
+
+    def _redact_dict(self, d):
+        out = {}
+        for k, v in d.items():
+            if isinstance(v, str):
+                out[k] = self._redact_text(v)
+            elif isinstance(v, dict):
+                out[k] = self._redact_dict(v)
+            else:
+                out[k] = v
+        return out
+
+    def _index_event(self, event, file_ref):
+        try:
+            conn = _log_db_conn()
+            conn.execute("""INSERT OR IGNORE INTO log_events
+                (event_id, ts, severity, domain, event_type, message, trace_id,
+                 run_id, session_id, backend, duration_ms, status, file_ref)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (event["event_id"], event["ts"], event["severity"], event["domain"],
+                 event["event_type"], event["message"][:500], event.get("trace_id"),
+                 event.get("run_id"), event.get("session_id"), event.get("backend"),
+                 event.get("duration_ms"), event.get("status"), file_ref))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            log.debug("MissionLog index error: %s", e)
+
+    def _purge_loop(self):
+        while True:
+            time.sleep(3600)
+            try:
+                self._purge()
+            except Exception as e:
+                log.debug("MissionLog purge error: %s", e)
+
+    def _purge(self):
+        cutoff = time.time() - 86400  # 24h
+        # Delete old rows
+        try:
+            conn = _log_db_conn()
+            conn.execute("DELETE FROM log_events WHERE ts < ?", (cutoff,))
+            conn.execute("DELETE FROM log_incidents WHERE state='resolved' AND resolved_at < ?", (cutoff,))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            log.debug("Purge db error: %s", e)
+
+        # Delete old JSONL files
+        try:
+            import glob as _g
+            total_size = 0
+            files = sorted(LOG_DIR.glob("events_*.jsonl"))
+            for fp in files:
+                total_size += fp.stat().st_size
+            # Enforce 1.5GB cap
+            cap = 1.5 * 1024 * 1024 * 1024
+            while total_size > cap and files:
+                oldest = files.pop(0)
+                total_size -= oldest.stat().st_size
+                oldest.unlink()
+            # Delete files older than 24h
+            from datetime import datetime, timezone, timedelta
+            cutoff_dt = datetime.now(timezone.utc) - timedelta(hours=24)
+            cutoff_str = cutoff_dt.strftime("%Y-%m-%d_%H")
+            for fp in LOG_DIR.glob("events_*.jsonl"):
+                stem = fp.stem.replace("events_", "")
+                if stem < cutoff_str:
+                    fp.unlink()
+        except Exception as e:
+            log.debug("Purge files error: %s", e)
+
+    def query(self, severity=None, domain=None, event_type=None, trace_id=None,
+              run_id=None, backend=None, q=None, since=None, until=None,
+              limit=100, offset=0):
+        clauses = []
+        params = []
+        if severity:
+            clauses.append("severity=?")
+            params.append(severity)
+        if domain:
+            clauses.append("domain=?")
+            params.append(domain)
+        if event_type:
+            clauses.append("event_type=?")
+            params.append(event_type)
+        if trace_id:
+            clauses.append("trace_id=?")
+            params.append(trace_id)
+        if run_id:
+            clauses.append("run_id=?")
+            params.append(run_id)
+        if backend:
+            clauses.append("backend=?")
+            params.append(backend)
+        if q:
+            clauses.append("message LIKE ?")
+            params.append(f"%{q}%")
+        if since:
+            clauses.append("ts >= ?")
+            params.append(float(since))
+        if until:
+            clauses.append("ts <= ?")
+            params.append(float(until))
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        sql = f"SELECT event_id, ts, severity, domain, event_type, message, trace_id, run_id, session_id, backend, duration_ms, status, file_ref FROM log_events{where} ORDER BY ts DESC LIMIT ? OFFSET ?"
+        params.extend([min(limit, 500), offset])
+        try:
+            conn = _log_db_conn()
+            rows = conn.execute(sql, params).fetchall()
+            conn.close()
+            cols = ["event_id", "ts", "severity", "domain", "event_type", "message",
+                    "trace_id", "run_id", "session_id", "backend", "duration_ms", "status", "file_ref"]
+            return [dict(zip(cols, r)) for r in rows]
+        except Exception as e:
+            log.debug("MissionLog query error: %s", e)
+            return []
+
+    def get_trace(self, trace_id):
+        try:
+            conn = _log_db_conn()
+            rows = conn.execute(
+                "SELECT event_id, ts, severity, domain, event_type, message, trace_id, run_id, session_id, backend, duration_ms, status, file_ref FROM log_events WHERE trace_id=? ORDER BY ts",
+                (trace_id,)).fetchall()
+            conn.close()
+            cols = ["event_id", "ts", "severity", "domain", "event_type", "message",
+                    "trace_id", "run_id", "session_id", "backend", "duration_ms", "status", "file_ref"]
+            return [dict(zip(cols, r)) for r in rows]
+        except Exception as e:
+            log.debug("MissionLog get_trace error: %s", e)
+            return []
+
+    def get_full_event(self, file_ref):
+        try:
+            fname, offset_str = file_ref.split(":")
+            byte_offset = int(offset_str)
+            fpath = LOG_DIR / fname
+            if not fpath.exists():
+                return None
+            with open(fpath, "r") as f:
+                f.seek(byte_offset)
+                line = f.readline()
+            return json.loads(line)
+        except Exception as e:
+            log.debug("MissionLog get_full_event error: %s", e)
+            return None
+
+    def get_metrics(self):
+        try:
+            conn = _log_db_conn()
+            now = time.time()
+            minute_ago = now - 60
+            five_min_ago = now - 300
+            total = conn.execute("SELECT COUNT(*) FROM log_events").fetchone()[0]
+            recent = conn.execute("SELECT COUNT(*) FROM log_events WHERE ts > ?", (minute_ago,)).fetchone()[0]
+            errors_5m = conn.execute("SELECT COUNT(*) FROM log_events WHERE ts > ? AND severity IN ('error','critical')", (five_min_ago,)).fetchone()[0]
+            timeouts = conn.execute("SELECT COUNT(*) FROM log_events WHERE ts > ? AND event_type='bridge.fail'", (five_min_ago,)).fetchone()[0]
+            bridge_fails = conn.execute("SELECT COUNT(*) FROM log_events WHERE ts > ? AND event_type='bridge.fail'", (five_min_ago,)).fetchone()[0]
+            open_incidents = conn.execute("SELECT COUNT(*) FROM log_incidents WHERE state='open'").fetchone()[0]
+            conn.close()
+            # Disk usage
+            disk_bytes = sum(f.stat().st_size for f in LOG_DIR.glob("events_*.jsonl")) if LOG_DIR.exists() else 0
+            db_bytes = LOG_DB_PATH.stat().st_size if LOG_DB_PATH.exists() else 0
+            return {
+                "total_events": total,
+                "events_per_min": recent,
+                "errors_5m": errors_5m,
+                "timeouts_5m": timeouts,
+                "bridge_fails_5m": bridge_fails,
+                "open_incidents": open_incidents,
+                "dropped": self._dropped,
+                "disk_bytes": disk_bytes + db_bytes,
+                "disk_mb": round((disk_bytes + db_bytes) / 1048576, 2),
+            }
+        except Exception as e:
+            log.debug("MissionLog get_metrics error: %s", e)
+            return {"total_events": 0, "events_per_min": 0, "errors_5m": 0,
+                    "timeouts_5m": 0, "bridge_fails_5m": 0, "open_incidents": 0,
+                    "dropped": self._dropped, "disk_bytes": 0, "disk_mb": 0}
+
+    def get_incidents(self, state="open"):
+        try:
+            conn = _log_db_conn()
+            rows = conn.execute(
+                "SELECT incident_id, severity, rule_id, state, title, summary, trace_refs, run_refs, created_at, updated_at, resolved_at, ack_by FROM log_incidents WHERE state=? ORDER BY created_at DESC",
+                (state,)).fetchall()
+            conn.close()
+            cols = ["incident_id", "severity", "rule_id", "state", "title", "summary",
+                    "trace_refs", "run_refs", "created_at", "updated_at", "resolved_at", "ack_by"]
+            return [dict(zip(cols, r)) for r in rows]
+        except Exception as e:
+            log.debug("MissionLog get_incidents error: %s", e)
+            return []
+
+    def ack_incident(self, incident_id, ack_by="operator"):
+        try:
+            now = time.time()
+            conn = _log_db_conn()
+            conn.execute(
+                "UPDATE log_incidents SET state='resolved', resolved_at=?, updated_at=?, ack_by=? WHERE incident_id=?",
+                (now, now, ack_by, incident_id))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            log.debug("MissionLog ack_incident error: %s", e)
+            return False
+
+
+def _log_db_conn():
+    """Get a connection to the log index database."""
+    import sqlite3
+    conn = sqlite3.connect(str(LOG_DB_PATH), timeout=5)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    return conn
+
+def _log_db_init():
+    """Initialize log index database tables."""
+    conn = _log_db_conn()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS log_events (
+            event_id   TEXT PRIMARY KEY,
+            ts         REAL NOT NULL,
+            severity   TEXT NOT NULL,
+            domain     TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            message    TEXT NOT NULL,
+            trace_id   TEXT,
+            run_id     TEXT,
+            session_id TEXT,
+            backend    TEXT,
+            duration_ms INTEGER,
+            status     TEXT,
+            file_ref   TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_le_ts ON log_events(ts);
+        CREATE INDEX IF NOT EXISTS idx_le_sev ON log_events(severity);
+        CREATE INDEX IF NOT EXISTS idx_le_domain ON log_events(domain);
+        CREATE INDEX IF NOT EXISTS idx_le_trace ON log_events(trace_id);
+        CREATE INDEX IF NOT EXISTS idx_le_run ON log_events(run_id);
+        CREATE INDEX IF NOT EXISTS idx_le_etype ON log_events(event_type);
+        CREATE INDEX IF NOT EXISTS idx_le_backend ON log_events(backend);
+
+        CREATE TABLE IF NOT EXISTS log_incidents (
+            incident_id TEXT PRIMARY KEY,
+            severity    TEXT NOT NULL,
+            rule_id     TEXT NOT NULL,
+            state       TEXT NOT NULL DEFAULT 'open',
+            title       TEXT NOT NULL,
+            summary     TEXT,
+            trace_refs  TEXT,
+            run_refs    TEXT,
+            created_at  REAL NOT NULL,
+            updated_at  REAL NOT NULL,
+            resolved_at REAL,
+            ack_by      TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_li_state ON log_incidents(state);
+    """)
+    conn.close()
+
+# Global MissionLog instance
+mlog = MissionLog()
 
 def _append_audit(action: str, target: str, actor: str,
                   actor_type: str = "session", details: dict | None = None,
@@ -3958,24 +4448,82 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .deleg-time { color:var(--text3); font-size:11px; margin-left:auto; white-space:nowrap; }
 .deleg-dur { color:var(--text3); font-size:11px; }
 
-.admin-section { margin-bottom:20px; }
-.admin-section-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.6px; margin-bottom:10px; font-weight:600; }
+/* ── Mission Control ───────────────────────────────────────────── */
+.mc-header { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+.mc-title { font-size:16px; font-weight:700; color:var(--text); }
+.mc-live-badge { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; padding:2px 8px; border-radius:10px; }
+.mc-live-badge.live { background:#10b98120; color:#10b981; }
+.mc-live-badge.paused { background:var(--bg2); color:var(--text3); }
+.mc-live-badge .mc-dot { width:6px; height:6px; border-radius:50%; }
+.mc-live-badge.live .mc-dot { background:#10b981; animation:mc-pulse 1.5s ease infinite; }
+.mc-live-badge.paused .mc-dot { background:var(--text3); }
+@keyframes mc-pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.mc-rate { font-size:11px; color:var(--text3); }
+.mc-header-right { margin-left:auto; display:flex; align-items:center; gap:6px; }
 
-.admin-log-controls { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
-.admin-select {
-  padding:4px 10px; font-size:11px; border:1px solid var(--border);
-  border-radius:6px; background:var(--bg2); color:var(--text);
+.mc-cards { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:12px; }
+.mc-card { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; cursor:pointer; transition:border-color .15s; }
+.mc-card:hover { border-color:var(--accent); }
+.mc-card-val { font-size:20px; font-weight:700; color:var(--text); line-height:1.2; }
+.mc-card-val.danger { color:var(--err); }
+.mc-card-label { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; margin-top:2px; }
+
+.mc-filters { display:flex; align-items:center; gap:6px; margin-bottom:10px; flex-wrap:wrap; }
+.mc-query { flex:1; min-width:180px; padding:5px 10px; font-size:11px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
+.mc-query:focus { outline:none; border-color:var(--accent); }
+.mc-preset { padding:3px 8px; font-size:10px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--text2); cursor:pointer; transition:all .15s; white-space:nowrap; }
+.mc-preset:hover, .mc-preset.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.mc-mode-toggle { display:flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+.mc-mode-btn { padding:3px 10px; font-size:10px; cursor:pointer; background:var(--bg); color:var(--text2); border:none; transition:all .15s; }
+.mc-mode-btn.active { background:var(--accent); color:#fff; }
+
+.mc-body { display:grid; grid-template-columns:1fr 320px; gap:12px; min-height:360px; }
+.mc-timeline { background:var(--bg); border:1px solid var(--border); border-radius:8px; overflow:auto; max-height:500px; }
+.mc-row { display:grid; grid-template-columns:110px 52px 64px 1fr auto 56px 28px; align-items:center; gap:6px; padding:4px 10px; font-size:11px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .1s; }
+.mc-row:hover { background:var(--bg2); }
+.mc-row.selected { background:var(--accent)10; border-left:2px solid var(--accent); }
+.mc-ts { color:var(--text3); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:10px; }
+.mc-sev { padding:1px 6px; border-radius:3px; font-size:9px; font-weight:600; text-transform:uppercase; text-align:center; }
+.mc-sev.debug { background:var(--bg2); color:var(--text3); }
+.mc-sev.info { background:#3b82f620; color:#3b82f6; }
+.mc-sev.warn { background:#f59e0b20; color:#f59e0b; }
+.mc-sev.error { background:#ef444420; color:#ef4444; }
+.mc-sev.critical { background:#ef4444; color:#fff; }
+.mc-domain { font-size:10px; color:var(--text2); background:var(--bg2); padding:1px 5px; border-radius:3px; text-align:center; }
+.mc-msg { color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mc-chips { display:flex; gap:3px; }
+.mc-chip { font-size:9px; padding:1px 4px; border-radius:3px; background:var(--bg2); color:var(--text3); cursor:pointer; white-space:nowrap; }
+.mc-chip:hover { color:var(--accent); }
+.mc-dur { font-size:10px; color:var(--text3); text-align:right; font-family:monospace; }
+.mc-status-icon { font-size:12px; text-align:center; }
+
+.mc-detail { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:14px; overflow:auto; max-height:500px; }
+.mc-detail-empty { color:var(--text3); font-size:12px; font-style:italic; text-align:center; padding-top:40px; }
+.mc-detail-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:10px; }
+.mc-detail-grid { display:grid; grid-template-columns:80px 1fr; gap:4px 8px; font-size:11px; margin-bottom:12px; }
+.mc-detail-key { color:var(--text3); text-align:right; }
+.mc-detail-val { color:var(--text); word-break:break-all; }
+.mc-detail-trace { margin-top:12px; }
+.mc-detail-trace-title { font-size:11px; font-weight:600; color:var(--text2); margin-bottom:6px; text-transform:uppercase; letter-spacing:.4px; }
+.mc-trace-item { font-size:10px; padding:3px 6px; border-left:2px solid var(--border); margin-bottom:2px; color:var(--text2); }
+.mc-trace-item.current { border-left-color:var(--accent); background:var(--accent)08; }
+
+.mc-bottom { display:flex; align-items:center; gap:12px; margin-top:10px; font-size:10px; color:var(--text3); }
+.mc-bottom-item { display:flex; align-items:center; gap:4px; }
+
+.mc-incident { background:var(--bg2); border:1px solid var(--err)40; border-radius:6px; padding:8px 10px; margin-bottom:6px; }
+.mc-incident-title { font-size:11px; font-weight:600; color:var(--err); }
+.mc-incident-summary { font-size:10px; color:var(--text2); margin-top:2px; }
+.mc-incident-actions { margin-top:4px; }
+
+.mc-empty { text-align:center; padding:40px 20px; color:var(--text3); font-size:12px; }
+
+@media(max-width:768px) {
+  .mc-cards { grid-template-columns:repeat(3,1fr); }
+  .mc-body { grid-template-columns:1fr; }
+  .mc-row { grid-template-columns:80px 40px 1fr 28px; }
+  .mc-row .mc-domain, .mc-row .mc-chips, .mc-row .mc-dur { display:none; }
 }
-.admin-log-output {
-  background:var(--bg); border:1px solid var(--border); border-radius:8px;
-  padding:12px; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
-  font-size:11px; line-height:1.5; color:var(--text2); overflow:auto;
-  max-height:400px; white-space:pre-wrap; word-break:break-all; margin:0;
-}
-.admin-log-line-error { color:var(--err); font-weight:600; }
-.admin-log-line-warning { color:var(--accent); }
-.admin-log-line-info { color:var(--text2); }
-.admin-log-line-debug { color:var(--text3); }
 
 
 
@@ -5142,7 +5690,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.36</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.37</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5689,36 +6237,53 @@ select.settings-input { padding-right: 26px; }
 
   <!-- Memory tab v4 — Porter memory control center -->
   <div id="admin-module" class="module-panel">
-    <div class="module-hdr">
-      <span class="module-title">Logs</span>
-      <button class="btn btn-ghost" onclick="loadAdmin()">&#8635; Refresh</button>
-    </div>
-    <div class="module-intro">Real-time software logs and agent activity.</div>
-
-    <!-- Log Viewer -->
-    <div class="admin-section">
-      <div class="admin-log-controls">
-        <select id="admin-log-lines" class="admin-select" onchange="loadAdminLogs()">
-          <option value="50">Last 50 lines</option>
-          <option value="100" selected>Last 100 lines</option>
-          <option value="500">Last 500 lines</option>
-        </select>
-        <select id="admin-log-level" class="admin-select" onchange="filterAdminLogs()">
-          <option value="">All levels</option>
-          <option value="ERROR">Errors only</option>
-          <option value="WARNING">Warnings+</option>
-          <option value="INFO">Info+</option>
-        </select>
-        <button class="btn btn-ghost" style="font-size:11px" onclick="loadAdminLogs()">&#8635; Refresh</button>
-        <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px;margin-left:auto">
-          <input type="checkbox" id="admin-log-auto" onchange="toggleAdminLogAuto()" checked> Auto-refresh
-        </label>
+    <div class="mc-header">
+      <span class="mc-title">Mission Control</span>
+      <span id="mc-badge" class="mc-live-badge live"><span class="mc-dot"></span>LIVE</span>
+      <span id="mc-rate" class="mc-rate">0 events/min</span>
+      <span id="mc-err-rate" class="mc-rate" style="color:var(--err)">0 errors</span>
+      <div class="mc-header-right">
+        <div class="mc-mode-toggle">
+          <button class="mc-mode-btn active" id="mc-mode-live" onclick="mcSetMode('live')">Live Tail</button>
+          <button class="mc-mode-btn" id="mc-mode-debug" onclick="mcSetMode('debug')">Debug Focus</button>
+        </div>
+        <button class="btn btn-ghost" style="font-size:11px" onclick="mcTogglePause()" id="mc-pause-btn">Pause</button>
+        <button class="btn btn-ghost" style="font-size:11px" onclick="mcClearFilters()">Clear</button>
+        <button class="btn btn-ghost" style="font-size:11px" onclick="mcExport()">Export</button>
       </div>
-      <pre id="admin-logs" class="admin-log-output">Loading...</pre>
     </div>
 
-    <!-- Agent Activity -->
-    <div class="admin-section"><div class="admin-section-label">AGENT ACTIVITY</div><div id="admin-deleg-log"><div style="font-size:12px;color:var(--text3);font-style:italic">No delegations yet</div></div></div>
+    <div class="mc-cards">
+      <div class="mc-card" onclick="mcPreset('incidents')"><div id="mc-card-incidents" class="mc-card-val">0</div><div class="mc-card-label">Incidents</div></div>
+      <div class="mc-card" onclick="mcPreset('errors')"><div id="mc-card-errors" class="mc-card-val">0</div><div class="mc-card-label">Errors (5m)</div></div>
+      <div class="mc-card" onclick="mcPreset('timeouts')"><div id="mc-card-timeouts" class="mc-card-val">0</div><div class="mc-card-label">Timeouts</div></div>
+      <div class="mc-card" onclick="mcPreset('bridge')"><div id="mc-card-bridge" class="mc-card-val">0</div><div class="mc-card-label">Bridge Fails</div></div>
+      <div class="mc-card" onclick="mcPreset('all')"><div id="mc-card-total" class="mc-card-val">0</div><div class="mc-card-label">Total Events</div></div>
+    </div>
+
+    <div class="mc-filters">
+      <input type="text" class="mc-query" id="mc-query" placeholder="severity:error domain:bridge trace_id:abc..." onkeydown="if(event.key==='Enter')mcRunQuery()">
+      <button class="mc-preset" onclick="mcPreset('bridge')">Bridge Failures</button>
+      <button class="mc-preset" onclick="mcPreset('timeouts')">Timeouts</button>
+      <button class="mc-preset" onclick="mcPreset('auth')">Auth Issues</button>
+      <button class="mc-preset" onclick="mcPreset('routing')">Route Decisions</button>
+    </div>
+
+    <div class="mc-body">
+      <div class="mc-timeline" id="mc-timeline">
+        <div class="mc-empty" id="mc-empty">Loading events...</div>
+      </div>
+      <div class="mc-detail" id="mc-detail">
+        <div class="mc-detail-empty">Select an event to view details</div>
+      </div>
+    </div>
+
+    <div class="mc-bottom">
+      <span class="mc-bottom-item">Retention: 24h</span>
+      <span class="mc-bottom-item" id="mc-disk">Disk: 0 MB</span>
+      <span class="mc-bottom-item" id="mc-dropped">Dropped: 0</span>
+      <span class="mc-bottom-item" id="mc-total-bottom">Total: 0</span>
+    </div>
   </div>
 
   <div id="memory-module" class="module-panel">
@@ -6257,6 +6822,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.37', date:'2026-03-02', notes:['Mission Control: structured event pipeline (JSONL + SQLite index)','Real-time event timeline with severity, domain, and trace correlation','Alert engine: bridge failure spikes, auth anomalies, timeout bursts','5 summary cards: incidents, errors, timeouts, bridge fails, total','Debug Focus / Live Tail modes + query filter bar + presets','Trace waterfall view in detail panel','6 new API endpoints: /api/logs/query, /trace, /incidents, /metrics, /event, /incidents/:id/ack','24h retention + 1.5GB cap + automatic purge','Export events as JSON'] },
   { ver:'v0.25.36', date:'2026-03-02', notes:['Bridge service auth: dispatch/runs/invoke accept Bearer tokens via auth_check_cap','New GET /api/bridge/run?id= for single-run polling','GET /api/bridge/runs now supports ?since=&status=&limit= filters','Regenerated OpenClaw API key (scrypt hash)'] },
   { ver:'v0.25.35', date:'2026-03-02', notes:['Fixed chain parsing: text before first @model no longer lost','Smart connector stripping (ask/tell/to/and send it to)','@mention indicator shows targeted models below input (cursor-safe)','Fixed single @ extraction losing prefix text'] },
   { ver:'v0.25.34', date:'2026-03-02', notes:['Removed transparent text overlay (fixes cursor misalignment with @mentions)','Fixed input not clearing after @ dispatch','Fixed chain runner: fetch timeout was 15s, now 130s (Gemini needs 18s+)','Fixed @ path missing transition to bottom input','Removed bridge prompt injection (was contaminating model outputs)','Collapsed double spaces in @ text extraction'] },
@@ -10678,8 +11244,13 @@ async function attachChatFile(rootPath, name) {
 
 
 // ── Admin Tab ──────────────────────────────────────────────────────────────
-let _adminLogAutoTimer = null;
-let _adminLogData = [];
+let _mcEvents = [];
+let _mcMode = 'live';
+let _mcPaused = false;
+let _mcSelectedId = null;
+let _mcQueryStr = '';
+let _mcMetricsTimer = null;
+let _mcEvtSrc = null;
 
 
 // ── Porter Rules ─────────────────────────────────────────────────────────
@@ -10746,55 +11317,263 @@ async function loadDelegationLog() {
 }
 
 async function loadAdmin() {
-  loadDelegationLog();
-  await loadAdminLogs();
-  var cb = document.getElementById('admin-log-auto');
-  if (cb && cb.checked && !_adminLogAutoTimer) {
-    _adminLogAutoTimer = setInterval(loadAdminLogs, 5000);
-  }
+  mcInit();
 }
 
-async function loadAdminLogs() {
-  const lines = document.getElementById('admin-log-lines');
-  const n = lines ? parseInt(lines.value) : 100;
-  const data = await api('/api/admin/logs?lines=' + n);
-  if (!data) return;
-  _adminLogData = data.lines || [];
-  filterAdminLogs();
+async function mcInit() {
+  await mcLoadEvents();
+  mcUpdateCards();
+  if (_mcMetricsTimer) clearInterval(_mcMetricsTimer);
+  _mcMetricsTimer = setInterval(mcUpdateCards, 5000);
+  // Subscribe to SSE for live events
+  if (_mcEvtSrc) { _mcEvtSrc.close(); _mcEvtSrc = null; }
+  _mcEvtSrc = new EventSource('/api/events');
+  _mcEvtSrc.onmessage = function(e) {
+    try {
+      var d = JSON.parse(e.data);
+      if (d.type === 'log:event') mcOnSSE(d);
+    } catch(ex) {}
+  };
 }
 
-function filterAdminLogs() {
-  const levelSel = document.getElementById('admin-log-level');
-  const level = levelSel ? levelSel.value : '';
-  const el = document.getElementById('admin-logs');
+async function mcLoadEvents() {
+  var params = 'limit=200';
+  if (_mcQueryStr) params += '&' + _mcQueryStr;
+  var data = await api('/api/logs/query?' + params);
+  if (!data || !data.events) return;
+  _mcEvents = data.events;
+  mcRenderTimeline(_mcEvents);
+}
+
+function mcRenderTimeline(events) {
+  var el = document.getElementById('mc-timeline');
   if (!el) return;
-
-  let lines = _adminLogData;
-  if (level) {
-    const levels = { 'ERROR': ['ERROR'], 'WARNING': ['ERROR','WARNING'], 'INFO': ['ERROR','WARNING','INFO'] };
-    const allowed = levels[level] || [];
-    lines = lines.filter(function(l) {
-      return allowed.some(function(lv) { return l.indexOf(lv) >= 0; });
-    });
+  if (!events || events.length === 0) {
+    el.innerHTML = '<div class="mc-empty">No events matching filters</div>';
+    return;
   }
-
-  el.innerHTML = lines.map(function(l) {
-    let cls = 'admin-log-line-debug';
-    if (l.indexOf('ERROR') >= 0) cls = 'admin-log-line-error';
-    else if (l.indexOf('WARNING') >= 0) cls = 'admin-log-line-warning';
-    else if (l.indexOf('INFO') >= 0) cls = 'admin-log-line-info';
-    return '<span class="' + cls + '">' + escHtml(l) + '</span>';
-  }).join('\n') || '<span style="color:var(--text3)">No log entries</span>';
-
-  el.scrollTop = el.scrollHeight;
+  var html = '';
+  for (var i = 0; i < events.length; i++) {
+    var e = events[i];
+    var ts = new Date(e.ts * 1000);
+    var tStr = ts.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'}) + '.' + String(ts.getMilliseconds()).padStart(3,'0');
+    var sev = e.severity || 'info';
+    var sel = (_mcSelectedId === e.event_id) ? ' selected' : '';
+    var chips = '';
+    if (e.trace_id) chips += '<span class="mc-chip" onclick="event.stopPropagation();mcFilterTrace(\'' + escHtml(e.trace_id) + '\')" title="Trace">T:' + escHtml(e.trace_id.substring(0,8)) + '</span>';
+    if (e.run_id) chips += '<span class="mc-chip" title="Run">R:' + escHtml(e.run_id.substring(0,8)) + '</span>';
+    var dur = e.duration_ms ? (e.duration_ms + 'ms') : '';
+    var statusIcon = '';
+    if (e.status === 'ok') statusIcon = '<span style="color:#10b981">&#10003;</span>';
+    else if (e.status === 'error') statusIcon = '<span style="color:var(--err)">&#10007;</span>';
+    html += '<div class="mc-row' + sel + '" onclick="mcSelectEvent(\'' + escHtml(e.event_id) + '\')" data-eid="' + escHtml(e.event_id) + '">';
+    html += '<span class="mc-ts">' + tStr + '</span>';
+    html += '<span class="mc-sev ' + sev + '">' + sev + '</span>';
+    html += '<span class="mc-domain">' + escHtml(e.domain || '') + '</span>';
+    html += '<span class="mc-msg">' + escHtml(e.message || '') + '</span>';
+    html += '<span class="mc-chips">' + chips + '</span>';
+    html += '<span class="mc-dur">' + dur + '</span>';
+    html += '<span class="mc-status-icon">' + statusIcon + '</span>';
+    html += '</div>';
+  }
+  el.innerHTML = html;
 }
 
-function toggleAdminLogAuto() {
-  const cb = document.getElementById('admin-log-auto');
-  if (_adminLogAutoTimer) { clearInterval(_adminLogAutoTimer); _adminLogAutoTimer = null; }
-  if (cb && cb.checked) {
-    _adminLogAutoTimer = setInterval(loadAdminLogs, 5000);
+function mcOnSSE(data) {
+  if (_mcPaused) return;
+  if (data.type !== 'log:event') return;
+  var e = data.data || data;
+  if (!e.event_id) return;
+  // Check if matches current query
+  if (_mcMode === 'debug' && e.severity !== 'warn' && e.severity !== 'error' && e.severity !== 'critical') return;
+  _mcEvents.unshift(e);
+  if (_mcEvents.length > 500) _mcEvents.pop();
+  mcRenderTimeline(_mcEvents);
+}
+
+async function mcSelectEvent(eventId) {
+  _mcSelectedId = eventId;
+  // Re-render to highlight
+  mcRenderTimeline(_mcEvents);
+  var detail = document.getElementById('mc-detail');
+  if (!detail) return;
+  var ev = _mcEvents.find(function(e) { return e.event_id === eventId; });
+  if (!ev) {
+    detail.innerHTML = '<div class="mc-detail-empty">Event not found</div>';
+    return;
   }
+  var html = '<div class="mc-detail-title">' + escHtml(ev.event_type || '') + '</div>';
+  html += '<div class="mc-detail-grid">';
+  html += '<span class="mc-detail-key">Time</span><span class="mc-detail-val">' + new Date(ev.ts * 1000).toLocaleString() + '</span>';
+  html += '<span class="mc-detail-key">Severity</span><span class="mc-detail-val"><span class="mc-sev ' + (ev.severity||'info') + '">' + (ev.severity||'') + '</span></span>';
+  html += '<span class="mc-detail-key">Domain</span><span class="mc-detail-val">' + escHtml(ev.domain || '') + '</span>';
+  html += '<span class="mc-detail-key">Message</span><span class="mc-detail-val">' + escHtml(ev.message || '') + '</span>';
+  if (ev.backend) html += '<span class="mc-detail-key">Backend</span><span class="mc-detail-val">' + escHtml(ev.backend) + '</span>';
+  if (ev.duration_ms) html += '<span class="mc-detail-key">Duration</span><span class="mc-detail-val">' + ev.duration_ms + 'ms</span>';
+  if (ev.trace_id) html += '<span class="mc-detail-key">Trace ID</span><span class="mc-detail-val"><span class="mc-chip" onclick="mcFilterTrace(\'' + escHtml(ev.trace_id) + '\')">' + escHtml(ev.trace_id) + '</span></span>';
+  if (ev.run_id) html += '<span class="mc-detail-key">Run ID</span><span class="mc-detail-val">' + escHtml(ev.run_id) + '</span>';
+  if (ev.session_id) html += '<span class="mc-detail-key">Session</span><span class="mc-detail-val">' + escHtml(ev.session_id) + '</span>';
+  if (ev.status) html += '<span class="mc-detail-key">Status</span><span class="mc-detail-val">' + escHtml(ev.status) + '</span>';
+  html += '</div>';
+
+  // Load trace if trace_id exists
+  if (ev.trace_id) {
+    html += '<div class="mc-detail-trace"><div class="mc-detail-trace-title">Trace Timeline</div><div id="mc-trace-items">Loading...</div></div>';
+    detail.innerHTML = html;
+    var traceData = await api('/api/logs/trace?id=' + encodeURIComponent(ev.trace_id));
+    var traceEl = document.getElementById('mc-trace-items');
+    if (traceEl && traceData && traceData.events) {
+      var th = '';
+      for (var i = 0; i < traceData.events.length; i++) {
+        var te = traceData.events[i];
+        var isCurrent = (te.event_id === eventId) ? ' current' : '';
+        var tts = new Date(te.ts * 1000).toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3});
+        th += '<div class="mc-trace-item' + isCurrent + '">' + tts + ' ' + escHtml(te.event_type || '') + ' ' + escHtml(te.message || '').substring(0,60) + '</div>';
+      }
+      traceEl.innerHTML = th || '<span style="color:var(--text3)">No trace events</span>';
+    }
+  } else {
+    detail.innerHTML = html;
+  }
+}
+
+function mcSetMode(mode) {
+  _mcMode = mode;
+  document.getElementById('mc-mode-live').className = 'mc-mode-btn' + (mode === 'live' ? ' active' : '');
+  document.getElementById('mc-mode-debug').className = 'mc-mode-btn' + (mode === 'debug' ? ' active' : '');
+  if (mode === 'debug') {
+    _mcQueryStr = 'severity=warn';
+  } else {
+    _mcQueryStr = '';
+  }
+  mcLoadEvents();
+}
+
+function mcTogglePause() {
+  _mcPaused = !_mcPaused;
+  var badge = document.getElementById('mc-badge');
+  var btn = document.getElementById('mc-pause-btn');
+  if (_mcPaused) {
+    badge.className = 'mc-live-badge paused';
+    badge.innerHTML = '<span class="mc-dot"></span>PAUSED';
+    btn.textContent = 'Resume';
+  } else {
+    badge.className = 'mc-live-badge live';
+    badge.innerHTML = '<span class="mc-dot"></span>LIVE';
+    btn.textContent = 'Pause';
+    mcLoadEvents();
+  }
+}
+
+function mcRunQuery() {
+  var input = document.getElementById('mc-query');
+  if (!input) return;
+  var raw = input.value.trim();
+  if (!raw) { _mcQueryStr = ''; mcLoadEvents(); return; }
+  // Parse key:value pairs
+  var parts = raw.split(/\s+/);
+  var params = [];
+  for (var i = 0; i < parts.length; i++) {
+    var p = parts[i];
+    var ci = p.indexOf(':');
+    if (ci > 0) {
+      var k = p.substring(0, ci);
+      var v = p.substring(ci + 1);
+      params.push(encodeURIComponent(k) + '=' + encodeURIComponent(v));
+    } else {
+      params.push('q=' + encodeURIComponent(p));
+    }
+  }
+  _mcQueryStr = params.join('&');
+  mcLoadEvents();
+}
+
+function mcPreset(name) {
+  var input = document.getElementById('mc-query');
+  var q = '';
+  if (name === 'bridge') q = 'event_type:bridge.fail';
+  else if (name === 'timeouts') q = 'event_type:bridge.fail';
+  else if (name === 'errors') q = 'severity:error';
+  else if (name === 'auth') q = 'domain:auth';
+  else if (name === 'routing') q = 'domain:routing';
+  else if (name === 'incidents') { mcShowIncidents(); return; }
+  else if (name === 'all') q = '';
+  if (input) input.value = q;
+  mcRunQuery();
+}
+
+async function mcShowIncidents() {
+  var data = await api('/api/logs/incidents?state=open');
+  var detail = document.getElementById('mc-detail');
+  if (!detail || !data) return;
+  var incidents = data.incidents || [];
+  if (incidents.length === 0) {
+    detail.innerHTML = '<div class="mc-detail-title">Incidents</div><div class="mc-detail-empty">No open incidents</div>';
+    return;
+  }
+  var html = '<div class="mc-detail-title">Open Incidents (' + incidents.length + ')</div>';
+  for (var i = 0; i < incidents.length; i++) {
+    var inc = incidents[i];
+    html += '<div class="mc-incident">';
+    html += '<div class="mc-incident-title"><span class="mc-sev ' + (inc.severity || 'error') + '">' + (inc.severity || '') + '</span> ' + escHtml(inc.title || '') + '</div>';
+    html += '<div class="mc-incident-summary">' + escHtml(inc.summary || '') + '</div>';
+    html += '<div class="mc-incident-actions"><button class="btn btn-ghost" style="font-size:10px" onclick="mcAckIncident(\'' + escHtml(inc.incident_id) + '\')">Acknowledge</button></div>';
+    html += '</div>';
+  }
+  detail.innerHTML = html;
+}
+
+async function mcAckIncident(iid) {
+  await api('/api/logs/incidents/' + iid + '/ack', {method:'POST'});
+  mcShowIncidents();
+  mcUpdateCards();
+}
+
+function mcClearFilters() {
+  var input = document.getElementById('mc-query');
+  if (input) input.value = '';
+  _mcQueryStr = '';
+  _mcSelectedId = null;
+  _mcMode = 'live';
+  document.getElementById('mc-mode-live').className = 'mc-mode-btn active';
+  document.getElementById('mc-mode-debug').className = 'mc-mode-btn';
+  mcLoadEvents();
+  var detail = document.getElementById('mc-detail');
+  if (detail) detail.innerHTML = '<div class="mc-detail-empty">Select an event to view details</div>';
+}
+
+function mcExport() {
+  var blob = new Blob([JSON.stringify(_mcEvents, null, 2)], {type:'application/json'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'mission-control-' + new Date().toISOString().split('T')[0] + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function mcUpdateCards() {
+  var data = await api('/api/logs/metrics');
+  if (!data) return;
+  var el;
+  el = document.getElementById('mc-card-incidents'); if(el) { el.textContent = data.open_incidents || 0; el.className = 'mc-card-val' + ((data.open_incidents > 0) ? ' danger' : ''); }
+  el = document.getElementById('mc-card-errors'); if(el) { el.textContent = data.errors_5m || 0; el.className = 'mc-card-val' + ((data.errors_5m > 0) ? ' danger' : ''); }
+  el = document.getElementById('mc-card-timeouts'); if(el) el.textContent = data.timeouts_5m || 0;
+  el = document.getElementById('mc-card-bridge'); if(el) el.textContent = data.bridge_fails_5m || 0;
+  el = document.getElementById('mc-card-total'); if(el) el.textContent = data.total_events || 0;
+  el = document.getElementById('mc-rate'); if(el) el.textContent = (data.events_per_min || 0) + ' events/min';
+  el = document.getElementById('mc-err-rate'); if(el) el.textContent = (data.errors_5m || 0) + ' errors (5m)';
+  el = document.getElementById('mc-disk'); if(el) el.textContent = 'Disk: ' + (data.disk_mb || 0) + ' MB';
+  el = document.getElementById('mc-dropped'); if(el) el.textContent = 'Dropped: ' + (data.dropped || 0);
+  el = document.getElementById('mc-total-bottom'); if(el) el.textContent = 'Total: ' + (data.total_events || 0);
+}
+
+function mcFilterTrace(traceId) {
+  var input = document.getElementById('mc-query');
+  if (input) input.value = 'trace_id:' + traceId;
+  mcRunQuery();
 }
 
 
@@ -15667,6 +16446,7 @@ def _smart_route(message):
         return ("gemini", None)
 
     # Default → OpenClaw
+    mlog.emit("info", "routing", "route.decision", f"Route → openclaw (default)", backend="openclaw")
     return ("openclaw", None)
 
 def dispatch_agent(message, backend, model=None, timeout=120, run_id=None):
@@ -15684,6 +16464,7 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None):
     # Record outgoing message
     _record_agent_message(run_id, "porter", backend, message, status="in_progress")
     _emit_event("bridge:dispatch", {"run_id": run_id, "backend": backend, "prompt": message[:200]})
+    mlog.emit("info", "bridge", "bridge.dispatch", f"Dispatch to {backend}", run_id=run_id, backend=backend, trace_id=_get_trace_id())
     try:
         _result = fn(message, model=model, timeout=timeout)
         dur_ms = int((_dt.time() - _dt_start) * 1000)
@@ -15693,6 +16474,7 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None):
                               status="complete", model=_result.get("model", ""),
                               tokens=_result.get("tokens", {}).get("total", 0), duration_ms=dur_ms)
         _emit_event("bridge:response", {"run_id": run_id, "backend": backend, "ok": True, "duration_ms": dur_ms})
+        mlog.emit("info", "bridge", "bridge.complete", f"Bridge {backend} OK ({dur_ms}ms)", run_id=run_id, backend=backend, duration_ms=dur_ms, status="ok", trace_id=_get_trace_id())
         _result["run_id"] = run_id
         return _result
     except Exception as e:
@@ -15700,6 +16482,7 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None):
         log.error("Agent bridge [%s] exception: %s", backend, e)
         _update_agent_message(run_id, error=str(e)[:500], status="failed", duration_ms=dur_ms)
         _emit_event("bridge:error", {"run_id": run_id, "backend": backend, "error": str(e)[:200]})
+        mlog.emit("error", "bridge", "bridge.fail", f"Bridge {backend} failed: {str(e)[:100]}", run_id=run_id, backend=backend, duration_ms=dur_ms, status="error", trace_id=_get_trace_id())
         return {"ok": False, "error": str(e)[:500], "run_id": run_id}
 
 
@@ -16132,6 +16915,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
         else:
             self.reply_json({"error": "unauthorized"}, 401)
+            mlog.emit("warn", "auth", "auth.unauthorized", f"Unauthorized request: {self.path}", extra={"path": self.path, "ip": self.client_address[0]})
         return False
 
     def get_agent_from_bearer(self) -> dict | None:
@@ -16189,6 +16973,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         qs = parse_qs(parsed.query)
+        _t0 = time.time()
+        _tid = _set_trace_id()
+        # Set session context for log correlation
+        _stok = self.get_session_token()
+        if _stok:
+            _set_session_id(_stok[:8])
 
         # ── Root routes (legacy embedded UI) ──
         if parsed.path == "/login":
@@ -16596,6 +17386,58 @@ class Handler(BaseHTTPRequestHandler):
 
             health["services"] = services
             self.reply_json(health)
+
+        # ── Mission Control Log API ──────────────────────────────────────
+        elif parsed.path == "/api/logs/query":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            params = {}
+            for k in ("severity", "domain", "event_type", "trace_id", "run_id", "backend", "q"):
+                v = qs.get(k, [None])[0]
+                if v: params[k] = v
+            since = qs.get("since", [None])[0]
+            until = qs.get("until", [None])[0]
+            if since: params["since"] = since
+            if until: params["until"] = until
+            limit = min(int(qs.get("limit", ["100"])[0]), 500)
+            offset = int(qs.get("offset", ["0"])[0])
+            events = mlog.query(limit=limit, offset=offset, **params)
+            self.reply_json({"ok": True, "events": events, "count": len(events)})
+
+        elif parsed.path == "/api/logs/trace":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            tid = qs.get("id", [None])[0]
+            if not tid:
+                self.reply_json({"error": "missing id"}, 400)
+                return
+            events = mlog.get_trace(tid)
+            self.reply_json({"ok": True, "events": events, "trace_id": tid})
+
+        elif parsed.path == "/api/logs/incidents":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            state = qs.get("state", ["open"])[0]
+            incidents = mlog.get_incidents(state=state)
+            self.reply_json({"ok": True, "incidents": incidents})
+
+        elif parsed.path == "/api/logs/metrics":
+            if not self.auth_check(redirect=False): return
+            metrics = mlog.get_metrics()
+            self.reply_json({"ok": True, **metrics})
+
+        elif parsed.path == "/api/logs/event":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            ref = qs.get("ref", [None])[0]
+            if not ref:
+                self.reply_json({"error": "missing ref"}, 400)
+                return
+            event = mlog.get_full_event(ref)
+            if event:
+                self.reply_json({"ok": True, "event": event})
+            else:
+                self.reply_json({"error": "not found"}, 404)
 
         elif parsed.path == "/api/admin/logs":
             if not self.auth_check(redirect=False): return
@@ -17477,7 +18319,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.36'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.37'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -17827,6 +18669,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        _t0 = time.time()
+        _tid = _set_trace_id()
+        _stok = self.get_session_token()
+        if _stok:
+            _set_session_id(_stok[:8])
 
         if parsed.path == "/login":
             # Rate limiting by client IP
@@ -17876,6 +18723,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(body)
                 log.info("Login OK: %s from %s", username, client_ip)
+                mlog.emit("info", "auth", "auth.login.ok", f"Login OK: {username} from {client_ip}", extra={"username": username, "ip": client_ip})
             else:
                 attempts["count"] = attempts.get("count", 0) + 1
                 if attempts["count"] >= _LOGIN_MAX_ATTEMPTS:
@@ -17885,6 +18733,7 @@ class Handler(BaseHTTPRequestHandler):
                     log.warning("Login locked: %s after %d attempts (lockout %ds)", client_ip, attempts["count"], lockout)
                 _login_attempts[client_ip] = attempts
                 log.warning("Login failed: %s from %s (attempt %d)", username, client_ip, attempts["count"])
+                mlog.emit("warn", "auth", "auth.login.fail", f"Login failed: {username} from {client_ip}", extra={"username": username, "ip": client_ip, "attempt": attempts["count"]})
                 self.reply_json({"ok": False, "error": "Invalid username or password"}, 401)
 
         elif parsed.path == "/logout":
@@ -17902,6 +18751,19 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        elif parsed.path.startswith("/api/logs/incidents/") and parsed.path.endswith("/ack"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.split("/")
+            if len(parts) >= 6:
+                iid = parts[4]
+                ok = mlog.ack_incident(iid)
+                if ok:
+                    self.reply_json({"ok": True, "incident_id": iid, "state": "resolved"})
+                else:
+                    self.reply_json({"error": "not found or already resolved"}, 404)
+            else:
+                self.reply_json({"error": "invalid path"}, 400)
 
         elif parsed.path == "/api/tailscale/control":
             if not self.auth_check(redirect=False): return
@@ -20636,6 +21498,7 @@ if __name__ == "__main__":
     ensure_chat_dirs()
     ensure_memory_dirs()
     _db_init()  # Initialize SQLite DB + purge expired sessions
+    mlog.start()  # Start Mission Control log system
     _db_migrate_chats()  # Migrate JSON chats to SQLite
     _treg_load()  # populate task registry from SQLite (needs _db_init first)
     _migrate_checkpoint_to_registry()  # Gap31: one-time migration
@@ -20647,7 +21510,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.36 ready (localhost only)")
+    print(f"\n  Porter v0.25.37 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

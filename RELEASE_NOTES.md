@@ -1,5 +1,46 @@
 # Porter Release Notes
 
+## v0.25.37 (2026-03-02)
+
+**Mission Control Log System — Structured Observability**
+
+### Event Pipeline
+- `MissionLog` singleton: async queue + background consumer thread, JSONL writer + SQLite index
+- Separate log database (`runtime/logs/log_index.db`) — avoids bloating porter.db
+- Hourly JSONL file rotation, 24h retention, 1.5GB disk cap with automatic purge
+- Thread-local `trace_id` propagation for request correlation
+- Automatic redaction of Bearer tokens, passwords, API keys, cookies
+
+### Instrumentation
+- API requests: `api.request.start`/`api.request.end` with trace correlation
+- Bridge dispatch: `bridge.dispatch`, `bridge.complete`, `bridge.fail` with run_id + duration
+- Routing: `route.decision` with backend choice
+- Auth: `auth.login.ok`, `auth.login.fail`, `auth.unauthorized`
+
+### Alert Engine
+- Rolling-window anomaly detection per backend
+- Bridge failure spike (3+ in 2m), auth failure spike (5+ in 2m), timeout burst (5+ in 5m)
+- Auto-creates incidents with dedup, SSE broadcast on `log:incident`
+
+### API Endpoints (6 new)
+- `GET /api/logs/query` — paginated, filtered event query (severity, domain, trace, backend, text)
+- `GET /api/logs/trace?id=` — all events for a trace_id (waterfall view)
+- `GET /api/logs/incidents?state=` — incident list
+- `GET /api/logs/metrics` — event rate, error rate, disk usage, dropped count
+- `GET /api/logs/event?ref=` — full event by file reference
+- `POST /api/logs/incidents/<id>/ack` — acknowledge/resolve incident
+
+### Mission Control UI (replaces Logs tab)
+- Real-time event timeline with severity badges, domain tags, correlation chips, latency
+- 5 summary cards: incidents, errors, timeouts, bridge failures, total events
+- Debug Focus / Live Tail toggle modes
+- Query filter bar with key:value syntax + 4 preset buttons
+- Detail panel with trace waterfall view
+- SSE live stream via `/api/events` (log:event type)
+- Export current events as JSON
+
+---
+
 ## v0.25.36 (2026-03-02)
 
 **Bridge Service Auth — M2M Dispatch + Result Retrieval**
