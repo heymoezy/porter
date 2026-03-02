@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.44 — Memory Tab: Session Management"""
+"""Porter v0.25.45 — Memory Tab: Visual Polish"""
 
 
 
@@ -5695,6 +5695,29 @@ body.density-compact .file-name { padding: 6px 0; }
 .mem-flush-history-hdr { padding:8px 12px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;background:var(--surface2);border-bottom:1px solid var(--border); }
 .mem-flush-history-row { display:flex;gap:8px;padding:6px 12px;font-size:11px;color:var(--text2);border-bottom:1px solid var(--border); }
 .mem-flush-history-row:last-child { border-bottom:none; }
+/* Memory Tab v5c — Animations & Polish */
+.mem-agent-card { animation:memFadeIn .3s ease; }
+@keyframes memFadeIn { from { opacity:0;transform:translateY(8px) } to { opacity:1;transform:translateY(0) } }
+.mem-agent-body { transition:max-height .3s ease,opacity .2s ease,padding .2s ease; overflow:hidden; }
+.mem-agent-body.collapsed { max-height:0 !important;opacity:0;padding-top:0 !important;padding-bottom:0 !important;border-top-color:transparent !important; }
+.mem-split-content pre,.mem-split-content textarea { animation:memFadeIn .2s ease; }
+/* Memory Timeline */
+.mem-timeline { display:flex;gap:2px;overflow-x:auto;padding:8px 0;margin-bottom:12px;scrollbar-width:thin; }
+.mem-timeline-item { flex-shrink:0;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:11px;white-space:nowrap;transition:border-color .15s; }
+.mem-timeline-item:hover { border-color:var(--accent);background:var(--raised); }
+.mem-timeline-item .tl-agent { font-weight:600;color:var(--text); }
+.mem-timeline-item .tl-file { color:var(--text2); }
+.mem-timeline-item .tl-time { color:var(--text3);font-size:10px; }
+/* Cross-Model Memory Map */
+.mem-map { border:1px solid var(--border);border-radius:10px;padding:16px;background:var(--surface2);margin-top:12px;overflow:hidden; }
+.mem-map svg { width:100%;height:auto; }
+/* Export/Import */
+.mem-export-bar { display:flex;gap:6px;align-items:center; }
+/* Header redesign */
+.mem-header-stats { display:flex;gap:16px;font-size:12px;color:var(--text3);margin-top:4px; }
+.mem-header-stats span { display:flex;align-items:center;gap:4px; }
+.mem-header-stats strong { color:var(--text);font-weight:600; }
+
 
 
 
@@ -6104,7 +6127,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.44</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.45</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6737,10 +6760,16 @@ select.settings-input { padding-right: 26px; }
   <div id="memory-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Memory</span>
-      <div style="display:flex;gap:6px">
+      <div style="display:flex;gap:6px" class="mem-export-bar">
+        <button class="btn btn-ghost" style="font-size:11px" onclick="memExportAll()" title="Export all memory files as ZIP">Export</button>
+        <label class="btn btn-ghost" style="font-size:11px;cursor:pointer" title="Import memory ZIP">Import<input type="file" accept=".zip" style="display:none" onchange="memImportZip(this)"></label>
         <button class="btn btn-ghost" onclick="loadMemory()">&#8635; Refresh</button>
       </div>
     </div>
+    <div id="mem-header-stats" class="mem-header-stats"></div>
+
+    <!-- Memory Timeline -->
+    <div id="mem-timeline" class="mem-timeline" style="display:none"></div>
 
     <!-- Health summary bar -->
     <div id="mem-health" style="margin-bottom:16px"></div>
@@ -6749,6 +6778,9 @@ select.settings-input { padding-right: 26px; }
     <div id="mem-agent-cards" class="mem-agent-grid">
       <div class="loading-indicator">Loading agents...</div>
     </div>
+
+    <!-- Cross-Model Memory Map -->
+    <div id="mem-map" class="mem-map" style="display:none"></div>
 
     <!-- Shared Memory Plane -->
     <div style="margin-top:16px">
@@ -7275,6 +7307,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.45', date:'2026-03-02', notes:['Memory header redesign: total size, agent count, last activity','Animated transitions: expand/collapse, fade-in content','Keyboard shortcuts: Ctrl+S save, Esc close, / search','Cross-model memory map: SVG diagram of shared files','Memory timeline: recent changes across all agents','Export/Import memory: ZIP download + upload','Empty state onboarding guidance'] },
   { ver:'v0.25.44', date:'2026-03-02', notes:['Session search: filter sessions by text content','Bulk Flush: flush all pending sessions at once','Gemini session support: detect + display Gemini CLI sessions','Flush history log: last 10 flush ops in SQLite table','Session age badges: green (<1h), yellow (1-24h), red (>24h)','Auto-flush suggestion banner for stale sessions'] },
   { ver:'v0.25.43', date:'2026-03-02', notes:['Split-pane memory editor: file tree left, editor right','Markdown syntax highlighting in editor (headers, bold, code blocks)','Unsaved changes dot indicator','Memory quality score per file (size, staleness)','Diff preview before saving memory edits','Quick-add memory entry button per agent'] },
   { ver:'v0.25.42', date:'2026-03-02', notes:['Memory Tab overhaul: Agent Identity Cards with avatars, role labels, status dots','Per-agent file grouping with collapse/expand (localStorage)','Live agent health via provider probes','Role editor: click agent card to edit role description','Per-agent memory stats: size, file count, sessions'] },
@@ -10041,6 +10074,9 @@ async function loadMemory() {
       renderMemAgentCards(overviewResp.models);
       renderMemoryHub(overviewResp.shared_plane, overviewResp.models);
       renderMemHealth(overviewResp.models, []);
+      renderMemTimeline(overviewResp.models);
+      renderMemHeaderStats(overviewResp.models, []);
+      renderMemMap(overviewResp.models);
     }
   } catch(e) {
     console.error('loadMemory failed:', e);
@@ -10201,7 +10237,7 @@ async function loadMemorySessions() {
       _memSessionsData = resp.sessions;
       renderMemFilterBar(resp.sessions);
       renderMemorySessions(resp.sessions);
-      if (_memOverview && _memOverview.models) renderMemHealth(_memOverview.models, resp.sessions);
+      if (_memOverview && _memOverview.models) { renderMemHealth(_memOverview.models, resp.sessions); renderMemHeaderStats(_memOverview.models, resp.sessions); }
     }
   } catch(e) {
     el.innerHTML = '<div style="color:var(--err);font-size:12px">Failed to load sessions</div>';
@@ -10644,6 +10680,195 @@ function closeFlushWizard() {
   const commitBtn = document.getElementById('flush-wiz-commit');
   if (commitBtn) { commitBtn.textContent = 'Commit to memory'; commitBtn.disabled = false; }
 }
+
+// ── Memory Timeline ──
+function renderMemTimeline(models) {
+  var el = document.getElementById('mem-timeline');
+  if (!el) return;
+  var items = [];
+  models.forEach(function(m) {
+    if (m.stateless) return;
+    var allFiles = [].concat(m.instruction_file ? [m.instruction_file] : [], m.memory_files || []);
+    allFiles.forEach(function(f) {
+      if (f && f.modified) {
+        items.push({ agent: m.name, agentId: m.id, file: f.name, path: f.path, time: f.modified, color: m.color || 'var(--text3)' });
+      }
+    });
+  });
+  items.sort(function(a, b) { return b.time - a.time; });
+  items = items.slice(0, 15);
+  if (!items.length) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  el.innerHTML = items.map(function(it) {
+    var ago = _memTimeAgo(it.time);
+    return '<div class="mem-timeline-item" onclick="viewMemFile(\'' + escHtml(it.path).replace(/'/g, "\\'") + '\')" style="border-left:3px solid ' + it.color + '">'
+      + '<span class="tl-agent">' + escHtml(it.agent) + '</span> '
+      + '<span class="tl-file">' + escHtml(it.file) + '</span> '
+      + '<span class="tl-time">' + ago + '</span>'
+      + '</div>';
+  }).join('');
+}
+
+function _memTimeAgo(ts) {
+  var diff = Math.floor(Date.now() / 1000 - ts);
+  if (diff < 60) return 'now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h';
+  return Math.floor(diff / 86400) + 'd';
+}
+
+// ── Header Stats ──
+function renderMemHeaderStats(models, sessions) {
+  var el = document.getElementById('mem-header-stats');
+  if (!el) return;
+  var totalSize = 0, fileCount = 0, agentCount = 0, lastMod = 0;
+  models.forEach(function(m) {
+    if (m.stateless) return;
+    agentCount++;
+    var allFiles = [].concat(m.instruction_file ? [m.instruction_file] : [], m.memory_files || []);
+    allFiles.forEach(function(f) {
+      if (f) { totalSize += f.size || 0; fileCount++; if (f.modified > lastMod) lastMod = f.modified; }
+    });
+  });
+  var lastStr = lastMod ? _memTimeAgo(lastMod) + ' ago' : 'never';
+  el.innerHTML = '<span><strong>' + agentCount + '</strong> agents</span>'
+    + '<span><strong>' + fileCount + '</strong> files</span>'
+    + '<span><strong>' + _memSize(totalSize) + '</strong> total</span>'
+    + '<span>Last activity: <strong>' + lastStr + '</strong></span>';
+}
+
+// ── Cross-Model Memory Map ──
+function renderMemMap(models) {
+  var el = document.getElementById('mem-map');
+  if (!el) return;
+  // Find shared files (files referenced by multiple agents)
+  var fileAgents = {};
+  models.forEach(function(m) {
+    if (m.stateless) return;
+    var allFiles = [].concat(m.instruction_file ? [m.instruction_file] : [], m.memory_files || []);
+    allFiles.forEach(function(f) {
+      if (!f) return;
+      if (!fileAgents[f.path]) fileAgents[f.path] = { name: f.name, agents: [], path: f.path };
+      fileAgents[f.path].agents.push({ id: m.id, name: m.name, color: m.color || '#6b7280' });
+    });
+  });
+  // Build simple SVG map
+  var agents = models.filter(function(m) { return !m.stateless; });
+  if (agents.length < 2) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  var w = 600, agentY = 30, fileY = 120, h = 160;
+  var agentSpacing = w / (agents.length + 1);
+
+  var svg = '<svg viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg" style="font-family:inherit">';
+  // Agent nodes
+  agents.forEach(function(a, i) {
+    var x = agentSpacing * (i + 1);
+    svg += '<circle cx="' + x + '" cy="' + agentY + '" r="14" fill="' + (a.color || '#6b7280') + '" opacity="0.9"/>';
+    svg += '<text x="' + x + '" y="' + (agentY + 4) + '" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">' + (a.name || '').charAt(0) + '</text>';
+    svg += '<text x="' + x + '" y="' + (agentY + 28) + '" text-anchor="middle" fill="var(--text3)" font-size="9">' + escHtml(a.name) + '</text>';
+  });
+  // Shared files (only show files shared by 2+ agents)
+  var shared = Object.values(fileAgents).filter(function(f) { return f.agents.length >= 2; });
+  var sharedSpacing = shared.length ? w / (shared.length + 1) : 0;
+  shared.forEach(function(f, fi) {
+    var fx = sharedSpacing * (fi + 1);
+    svg += '<rect x="' + (fx - 30) + '" y="' + (fileY - 10) + '" width="60" height="20" rx="4" fill="var(--surface2)" stroke="var(--border)"/>';
+    svg += '<text x="' + fx + '" y="' + (fileY + 3) + '" text-anchor="middle" fill="var(--text2)" font-size="9">' + escHtml(f.name) + '</text>';
+    // Draw lines from each agent to this file
+    f.agents.forEach(function(a) {
+      var ai = agents.findIndex(function(ag) { return ag.id === a.id; });
+      if (ai >= 0) {
+        var ax = agentSpacing * (ai + 1);
+        svg += '<line x1="' + ax + '" y1="' + (agentY + 14) + '" x2="' + fx + '" y2="' + (fileY - 10) + '" stroke="' + a.color + '" stroke-width="1" opacity="0.4"/>';
+      }
+    });
+  });
+  if (!shared.length) {
+    svg += '<text x="' + (w/2) + '" y="' + fileY + '" text-anchor="middle" fill="var(--text3)" font-size="10">No shared files detected</text>';
+  } else {
+    svg += '<text x="' + (w/2) + '" y="' + (h - 10) + '" text-anchor="middle" fill="var(--text3)" font-size="9">Shared memory files</text>';
+  }
+  svg += '</svg>';
+  el.innerHTML = '<div class="mem-layer-label" style="margin-bottom:8px">Cross-Model Memory Map</div>' + svg;
+}
+
+// ── Export Memory ──
+async function memExportAll() {
+  toast('Preparing export...');
+  try {
+    var resp = await api('/api/memory/export');
+    if (resp && resp.ok && resp.files) {
+      // Build a simple text-based export (ZIP requires backend support)
+      var content = '# Porter Memory Export\n# Date: ' + new Date().toISOString() + '\n\n';
+      for (var i = 0; i < resp.files.length; i++) {
+        var f = resp.files[i];
+        content += '## File: ' + f.path + '\n';
+        content += '## Size: ' + f.size + ' bytes\n';
+        content += '---\n' + f.content + '\n---\n\n';
+      }
+      var blob = new Blob([content], { type: 'text/markdown' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'porter-memory-' + new Date().toISOString().split('T')[0] + '.md';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('Memory exported');
+    } else {
+      toast((resp && resp.error) || 'Export failed', 'err');
+    }
+  } catch(e) { toast('Export failed: ' + e.message, 'err'); }
+}
+
+function memImportZip(input) {
+  if (!input.files || !input.files.length) return;
+  var file = input.files[0];
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var text = e.target.result;
+    // Parse the markdown export format
+    var sections = text.split('## File: ');
+    var imported = 0;
+    sections.forEach(function(sec) {
+      if (!sec.trim() || sec.startsWith('# Porter')) return;
+      var lines = sec.split('\n');
+      var path = lines[0].trim();
+      var contentStart = sec.indexOf('---\n');
+      var contentEnd = sec.lastIndexOf('\n---');
+      if (contentStart >= 0 && contentEnd > contentStart) {
+        var content = sec.substring(contentStart + 4, contentEnd);
+        api('/api/memory/write', { path: path, content: content }).then(function(res) {
+          if (res && res.ok) imported++;
+        });
+      }
+    });
+    setTimeout(function() { toast('Imported ' + imported + ' files'); loadMemory(); }, 2000);
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+// ── Keyboard Shortcuts ──
+document.addEventListener('keydown', function(e) {
+  // Only activate on Memory tab
+  var memModule = document.getElementById('memory-module');
+  if (!memModule || memModule.offsetParent === null) return;
+
+  if (e.key === 'Escape') {
+    var diffOverlay = document.getElementById('mem-diff-overlay');
+    if (diffOverlay && diffOverlay.style.display !== 'none') { memCloseDiff(); e.preventDefault(); return; }
+    var pane = document.getElementById('mem-split-pane');
+    if (pane && pane.style.display !== 'none') { closeMemFileViewer(); e.preventDefault(); return; }
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    if (_memViewerEditing) { memShowDiffPreview(); e.preventDefault(); return; }
+  }
+  if (e.key === '/' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+    var search = document.getElementById('mem-session-search');
+    if (search) { search.focus(); e.preventDefault(); }
+  }
+});
+
 
 // Backward compat wrappers
 function openSettings(tab = 'profile') {
@@ -19266,6 +19491,28 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
 
+
+        # ── Memory tab: Export all memory files (GET) ────────────────────────
+        elif parsed.path == "/api/memory/export":
+            if not self.auth_check(redirect=False): return
+            overview = _get_memory_overview()
+            files = []
+            for m in overview.get("models", []):
+                if m.get("stateless"):
+                    continue
+                all_files = []
+                if m.get("instruction_file"):
+                    all_files.append(m["instruction_file"])
+                if m.get("memory_files"):
+                    all_files.extend(m["memory_files"])
+                for f in all_files:
+                    try:
+                        content = Path(f["path"]).read_text(encoding="utf-8")
+                        files.append({"path": f["path"], "name": f["name"], "size": f["size"], "content": content})
+                    except Exception:
+                        pass
+            self.reply_json({"ok": True, "files": files, "count": len(files)})
+
         # ── Memory tab: Flush history (GET) ──────────────────────────────────
         elif parsed.path == "/api/memory/flush-history":
             if not self.auth_check(redirect=False): return
@@ -19428,7 +19675,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.44'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.45'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -22769,7 +23016,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.44 ready (localhost only)")
+    print(f"\n  Porter v0.25.45 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
