@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.32 — Gemini Fix + @ Mentions + Chat History"""
+"""Porter v0.25.33 — Streaming Stability (prompt trim, stderr merge, timeouts)"""
 
 
 
@@ -5143,7 +5143,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.32</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.33</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6258,6 +6258,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.33', date:'2026-03-02', notes:['Gemini streaming fix: trim prompt to 4000 chars (matches non-streaming dispatcher)','Merged stderr→stdout on all CLI backends to prevent pipe deadlock','Added process cleanup with kill-on-timeout for hung CLI processes'] },
   { ver:'v0.25.32', date:'2026-03-01', notes:['Live streaming: see model workings in real-time (tool calls, thinking)','Removed agent restrictions: full CLI capabilities through chat','Ollama downgraded to Qwen 1.5B (fits 8GB VPS)','Porter-styled rename dialog (no more native prompt)'] },
   { ver:'v0.25.31', date:'2026-03-01', notes:['Fix: Gemini CLI v0.31 (-o text, no longer hangs)','@ mentions work in welcome input + mid-message','Chat history grouped by Today/Yesterday/date','Rename/delete buttons show on hover only'] },
   { ver:'v0.25.30', date:'2026-03-01', notes:['Fix: OpenClaw routes through CLI (gateway HTTP 405 fixed)','Fix: Ollama auto-discovers loaded model','Fix: /commands auto-send on select'] },
@@ -16402,7 +16403,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.32"})
+            self.reply_json({"v": "0.25.33"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17406,7 +17407,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.32'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.33'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -17544,19 +17545,29 @@ class Handler(BaseHTTPRequestHandler):
                         self.wfile.flush()
                     else:
                         import subprocess as _sp
-                        _gem_cmd = [gem_bin, "-p", prompt, "-o", "text", "-y"]
+                        # Trim prompt to 4000 chars (matches non-streaming dispatcher)
+                        _gem_prompt = prompt[-4000:] if len(prompt) > 4000 else prompt
+                        _gem_cmd = [gem_bin, "-p", _gem_prompt, "-o", "text", "-y"]
                         gem_model = model_id.replace("gemini-cli-", "") if model_id.startswith("gemini-cli-") else ""
                         if gem_model and gem_model != "auto":
                             _gem_cmd.extend(["-m", gem_model])
                         _skip_prefixes = ("YOLO mode", "Loaded cached", "Loaded saved")
-                        _proc = _sp.Popen(_gem_cmd, stdout=_sp.PIPE, stderr=_sp.PIPE, text=True, env=_agent_env(), cwd="/tmp")
-                        for _line in iter(_proc.stdout.readline, ''):
-                            if any(_line.strip().startswith(s) for s in _skip_prefixes):
-                                continue
-                            full_response += _line
-                            self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
-                            self.wfile.flush()
-                        _proc.wait(timeout=130)
+                        _proc = _sp.Popen(_gem_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env(), cwd="/tmp")
+                        try:
+                            for _line in iter(_proc.stdout.readline, ''):
+                                if any(_line.strip().startswith(s) for s in _skip_prefixes):
+                                    continue
+                                full_response += _line
+                                self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
+                                self.wfile.flush()
+                        except Exception as _gem_err:
+                            log.error("Gemini stream read error: %s", _gem_err)
+                        finally:
+                            try:
+                                _proc.wait(timeout=10)
+                            except _sp.TimeoutExpired:
+                                _proc.kill()
+                                log.warning("Gemini process killed after timeout")
 
                 elif model_id == "claude-cli":
                     # Claude Code — stream JSON events live
@@ -17567,7 +17578,7 @@ class Handler(BaseHTTPRequestHandler):
                     else:
                         import subprocess as _sp
                         _cl_cmd = [cl_bin, "-p", "--output-format", "stream-json", prompt]
-                        _proc = _sp.Popen(_cl_cmd, stdout=_sp.PIPE, stderr=_sp.PIPE, text=True, env=_agent_env())
+                        _proc = _sp.Popen(_cl_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env())
                         for _line in iter(_proc.stdout.readline, ''):
                             if not _line.strip():
                                 continue
@@ -17605,7 +17616,11 @@ class Handler(BaseHTTPRequestHandler):
                                 full_response += _line
                                 self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
                                 self.wfile.flush()
-                        _proc.wait(timeout=300)
+                        try:
+                            _proc.wait(timeout=10)
+                        except _sp.TimeoutExpired:
+                            _proc.kill()
+                            log.warning("Claude process killed after timeout")
 
                 elif model_id == "codex-cli":
                     # Codex CLI — stream JSONL events live
@@ -17617,7 +17632,7 @@ class Handler(BaseHTTPRequestHandler):
                         import subprocess as _sp
                         codex_model = os.environ.get("PORTER_CODEX_MODEL", "").strip() or "gpt-5.1"
                         _cdx_cmd = [cdx_bin, "exec", "--ephemeral", "--json", "--skip-git-repo-check", "-m", codex_model, prompt]
-                        _proc = _sp.Popen(_cdx_cmd, stdout=_sp.PIPE, stderr=_sp.PIPE, text=True, env=_agent_env())
+                        _proc = _sp.Popen(_cdx_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env())
                         for _line in iter(_proc.stdout.readline, ''):
                             if not _line.strip():
                                 continue
@@ -17649,7 +17664,11 @@ class Handler(BaseHTTPRequestHandler):
                                 full_response += _line
                                 self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
                                 self.wfile.flush()
-                        _proc.wait(timeout=300)
+                        try:
+                            _proc.wait(timeout=10)
+                        except _sp.TimeoutExpired:
+                            _proc.kill()
+                            log.warning("Codex process killed after timeout")
 
                 else:
                     self.wfile.write(f"data: {json.dumps({'error': 'Unknown model: ' + model_id})}\n\n".encode())
@@ -20558,7 +20577,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.32 ready (localhost only)")
+    print(f"\n  Porter v0.25.33 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
