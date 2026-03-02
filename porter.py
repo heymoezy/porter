@@ -9515,7 +9515,12 @@ async function _runAtChain(fullText, matches) {
     var label = labels[seg.model] || seg.model;
     var prompt = seg.msg;
     if (prevOutput) {
-      prompt = 'Previous response from another AI:\n---\n' + prevOutput + '\n---\n\n' + (prompt || 'Please review and respond.');
+      // For empty segments, use the full user request as context (not generic "Please review")
+      var segTask = prompt;
+      if (!segTask) {
+        segTask = fullText.replace(/@(claude|gemini|openclaw|codex|ollama)\b/g, '').replace(/\s+/g, ' ').trim();
+      }
+      prompt = 'Previous response:\n---\n' + prevOutput + '\n---\n\nUser request: ' + segTask;
     }
     _chatMessages.push({ role: 'skill-pending', content: 'Dispatching to ' + label + (s > 0 ? ' (chain step ' + (s+1) + ')' : '') + '...' });
     renderChatMessages();
