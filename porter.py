@@ -4108,6 +4108,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-messages.welcome-state .chat-welcome { min-height:100%; }
 .chat-msg { max-width:85%; padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.6; word-break:break-word; white-space:pre-wrap; }
 .chat-msg.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:2px; }
+.chat-at-mention { color:#7dd3fc; font-weight:600; }
 .chat-msg.assistant { align-self:flex-start; background:var(--raised); border:1px solid var(--border); border-bottom-left-radius:2px; color:var(--text); }
 .chat-msg.error { align-self:center; background:none; color:var(--err); font-size:12px; font-style:italic; }
 .chat-msg.streaming { opacity:.9; }
@@ -9829,7 +9830,7 @@ function renderChatMessages(streamUpdate) {
   el.innerHTML = _chatMessages.map(function(m, i) {
     var cls = m.role === 'user' ? 'user' : (m.role === 'error' ? 'error' : (m.role === 'skill' ? 'skill' : (m.role === 'skill-pending' ? 'skill-pending' : 'assistant')));
     var streaming = (i === _chatMessages.length - 1 && _chatStreaming && m.role === 'assistant') ? ' streaming' : '';
-    var content = m.role === 'user' ? escHtml(m.content) : _renderMarkdown(m.content);
+    var content = m.role === 'user' ? escHtml(m.content).replace(/@(claude|gemini|openclaw|codex|ollama)\\b/g, '<span class="chat-at-mention">@$1</span>') : _renderMarkdown(m.content);
     var badge = (m.role === 'assistant' || m.role === 'skill') ? _modelBadge(m) : '';
     return '<div class="chat-msg ' + cls + streaming + '">' + content + badge + '</div>';
   }).join('');
