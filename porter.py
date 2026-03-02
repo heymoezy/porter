@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.33 — Streaming Stability (prompt trim, stderr merge, timeouts)"""
+"""Porter v0.25.34 — Chat Bug Fixes (cursor, clearing, chains, bridge prompt)"""
 
 
 
@@ -4261,12 +4261,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   position:relative; z-index:2;
 }
 .chat-input-bottom::placeholder { color:rgba(255,255,255,.35); }
-.chat-input-overlay {
-  position:absolute; top:14px; left:18px; right:18px; pointer-events:none; z-index:1;
-  color:#fff; font-size:14px; font-family:inherit; line-height:1.5; white-space:pre-wrap;
-  word-break:break-word; overflow:hidden; text-align:left;
-}
-.chat-input-overlay .at-hl { color:#7dd3fc; font-weight:600; }
+/* @mention highlighting done in rendered messages only */
 .chat-input-bottom-meta {
   display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:6px;
 }
@@ -5143,7 +5138,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.33</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.34</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -5229,8 +5224,7 @@ select.settings-input { padding-right: 26px; }
             <div class="chat-welcome-sub">⚡ One prompt. Every AI. Zero friction.</div>
             <div class="chat-welcome-input-wrap">
               <div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>
-              <div id="chat-input-overlay-welcome" class="chat-input-overlay"></div>
-              <textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _hlMentions(this)"></textarea>
+              <textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
               <div class="chat-welcome-meta">
 <select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>
                 <div class="model-picker" data-sel="chat-backend-sel-welcome">
@@ -5252,8 +5246,7 @@ select.settings-input { padding-right: 26px; }
         <div class="chat-input-area" id="chat-input-area" style="display:none">
           <div id="chat-autocomplete" class="chat-autocomplete"></div>
           <div class="chat-input-wrap">
-            <div id="chat-input-overlay-bottom" class="chat-input-overlay"></div>
-            <textarea id="chat-input" class="chat-input-bottom" placeholder="Reply or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _hlMentions(this)"></textarea>
+            <textarea id="chat-input" class="chat-input-bottom" placeholder="Reply or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>
             <div class="chat-input-bottom-meta">
               <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
 <select id="chat-backend-sel" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>
@@ -6258,6 +6251,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.34', date:'2026-03-02', notes:['Removed transparent text overlay (fixes cursor misalignment with @mentions)','Fixed input not clearing after @ dispatch','Fixed chain runner: fetch timeout was 15s, now 130s (Gemini needs 18s+)','Fixed @ path missing transition to bottom input','Removed bridge prompt injection (was contaminating model outputs)','Collapsed double spaces in @ text extraction'] },
   { ver:'v0.25.33', date:'2026-03-02', notes:['Gemini streaming fix: trim prompt to 4000 chars (matches non-streaming dispatcher)','Merged stderr→stdout on all CLI backends to prevent pipe deadlock','Added process cleanup with kill-on-timeout for hung CLI processes'] },
   { ver:'v0.25.32', date:'2026-03-01', notes:['Live streaming: see model workings in real-time (tool calls, thinking)','Removed agent restrictions: full CLI capabilities through chat','Ollama downgraded to Qwen 1.5B (fits 8GB VPS)','Porter-styled rename dialog (no more native prompt)'] },
   { ver:'v0.25.31', date:'2026-03-01', notes:['Fix: Gemini CLI v0.31 (-o text, no longer hangs)','@ mentions work in welcome input + mid-message','Chat history grouped by Today/Yesterday/date','Rename/delete buttons show on hover only'] },
@@ -9467,7 +9461,7 @@ async function invokeAgent(message, backend) {
   renderChatMessages();
 
   try {
-    const resp = await api('/api/agent/invoke', { message: message, backend: backend, timeout: 120 });
+    const resp = await api('/api/agent/invoke', { message: message, backend: backend, timeout: 120 }, 130000);
     _chatMessages = _chatMessages.filter(function(m) { return m.role !== 'skill-pending'; });
 
     if (resp && resp.ok) {
@@ -9506,7 +9500,7 @@ async function _runAtChain(fullText, matches) {
     _chatMessages.push({ role: 'skill-pending', content: 'Dispatching to ' + label + (s > 0 ? ' (chain step ' + (s+1) + ')' : '') + '...' });
     renderChatMessages();
     try {
-      var resp = await api('/api/agent/invoke', { message: prompt, backend: seg.model, timeout: 120 });
+      var resp = await api('/api/agent/invoke', { message: prompt, backend: seg.model, timeout: 120 }, 130000);
       _chatMessages = _chatMessages.filter(function(m) { return m.role !== 'skill-pending'; });
       if (resp && resp.ok) {
         prevOutput = resp.text || '';
@@ -9794,8 +9788,7 @@ function renderChatMessages(streamUpdate) {
     el.innerHTML = '<div class="chat-welcome">'
       + '<div class="chat-welcome-sub">⚡ One prompt. Every AI. Zero friction.</div>'
       + '<div class="chat-welcome-input-wrap">'
-      + '<div id="chat-input-overlay-welcome" class="chat-input-overlay"></div>'
-      + '<textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _hlMentions(this)"></textarea>'
+      + '<textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck()"></textarea>'
       + '<div class="chat-welcome-meta">'
       + '<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>'
       + '<div class="model-picker" data-sel="chat-backend-sel-welcome">'
@@ -10123,24 +10116,7 @@ function _acCheck() {
   _acHide();
 }
 
-function _hlMentions(el) {
-  var id = el.id === 'chat-input-welcome' ? 'chat-input-overlay-welcome' : 'chat-input-overlay-bottom';
-  var ov = document.getElementById(id);
-  if (!ov) return;
-  var val = el.value;
-  var hasAt = /@(claude|gemini|openclaw|codex|ollama)\b/.test(val);
-  if (!val || !hasAt) {
-    ov.innerHTML = '';
-    el.style.color = '#fff';
-    return;
-  }
-  // Has @mention — go transparent and show overlay
-  el.style.color = 'transparent';
-  el.style.caretColor = '#fff';
-  var esc = val.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  ov.innerHTML = esc.replace(/@(claude|gemini|openclaw|codex|ollama)\b/g, '<span class="at-hl">@$1</span>');
-  ov.scrollTop = el.scrollTop;
-}
+/* _hlMentions removed — @mentions highlighted in rendered messages only */
 
 function _getChatInput() {
   var w = document.getElementById('chat-input-welcome');
@@ -10200,7 +10176,6 @@ function chatSend() {
   if (text.startsWith('/')) {
     input.value = '';
     input.style.height = 'auto';
-    _hlMentions(input);
     var cmd = text.split(' ')[0].toLowerCase();
 
     if (cmd === '/clear') {
@@ -10347,11 +10322,12 @@ function chatSend() {
   if (_atMatches.length > 0) {
     input.value = '';
     input.style.height = 'auto';
+    _chatTransitionToBottom();
     _chatMessages.push({ role: 'user', content: text });
     renderChatMessages();
     if (_atMatches.length === 1) {
       // Single @model — extract all text except the @model token
-      var _msg1 = text.replace(/@(claude|gemini|openclaw|ollama|codex)\b/, '').trim();
+      var _msg1 = text.replace(/@(claude|gemini|openclaw|ollama|codex)\b/, '').replace(/\s+/g, ' ').trim();
       if (!_msg1) _msg1 = 'hello';
       invokeAgent(_msg1, _atMatches[0].model);
     } else {
@@ -15646,9 +15622,8 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None):
     fn = AGENT_DISPATCHERS.get(backend)
     if not fn:
         return {"ok": False, "error": f"Unknown backend: {backend}. Available: {', '.join(AGENT_DISPATCHERS.keys())}", "run_id": run_id}
-    # Prepend bridge context so models know they're responding through Porter
-    _bridge_ctx = "[Porter Bridge] Responding via Porter multi-AI orchestrator.\n\n"
-    message = _bridge_ctx + message
+    # Bridge context logged, not injected into prompt (avoids contaminating model output)
+    log.info("Bridge dispatch: %s → %s (%s)", "porter", backend, message[:60])
     # Record outgoing message
     _record_agent_message(run_id, "porter", backend, message, status="in_progress")
     _emit_event("bridge:dispatch", {"run_id": run_id, "backend": backend, "prompt": message[:200]})
@@ -16399,7 +16374,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.25.33"})
+            self.reply_json({"v": "0.25.34"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -17403,7 +17378,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.33'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.34'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -20573,7 +20548,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.33 ready (localhost only)")
+    print(f"\n  Porter v0.25.34 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
