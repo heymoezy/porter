@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.25.42 — Memory Tab: Agent Identity Cards"""
+"""Porter v0.25.43 — Memory Tab: Split-Pane Editor"""
 
 
 
@@ -5507,6 +5507,49 @@ body.density-compact .file-name { padding: 6px 0; }
 .mem-empty-state-icon { font-size:32px;margin-bottom:8px;opacity:.5; }
 .mem-empty-state-title { font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px; }
 .mem-empty-state-desc { font-size:12px;color:var(--text3);max-width:400px;margin:0 auto; }
+/* Memory Tab v5b — Split-Pane Editor */
+.mem-split-pane { display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--raised);margin-top:16px;min-height:400px;max-height:600px; }
+.mem-split-tree { width:240px;min-width:200px;border-right:1px solid var(--border);overflow-y:auto;padding:8px 0;background:var(--surface2);flex-shrink:0; }
+.mem-split-tree-hdr { padding:8px 12px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px; }
+.mem-split-tree-item { display:flex;align-items:center;gap:6px;padding:5px 12px;font-size:12px;color:var(--text2);cursor:pointer;position:relative; }
+.mem-split-tree-item:hover { background:var(--raised);color:var(--text); }
+.mem-split-tree-item.active { background:var(--accent);color:#fff;font-weight:500; }
+.mem-split-tree-item .unsaved-dot { width:6px;height:6px;border-radius:50%;background:var(--accent);position:absolute;right:8px;top:50%;transform:translateY(-50%); }
+.mem-split-tree-agent { padding:4px 12px 2px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-top:6px; }
+.mem-split-tree-agent:first-child { margin-top:0; }
+.mem-split-editor { flex:1;display:flex;flex-direction:column;min-width:0; }
+.mem-split-toolbar { display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--raised); }
+.mem-split-toolbar .file-name { font-weight:600;font-size:13px;color:var(--text); }
+.mem-split-toolbar .file-path { font-size:11px;color:var(--text3); }
+.mem-split-content { flex:1;overflow-y:auto;position:relative; }
+.mem-split-content pre { margin:0;padding:14px;font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word;color:var(--text); }
+.mem-split-content textarea { width:100%;height:100%;padding:14px;font-size:12px;line-height:1.7;font-family:'SF Mono',Menlo,monospace;color:var(--text);background:var(--bg);border:none;resize:none;box-sizing:border-box;outline:none; }
+.mem-quality-badge { display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:500; }
+.mem-quality-good { background:color-mix(in srgb, #22c55e 15%, transparent);color:#22c55e; }
+.mem-quality-ok { background:color-mix(in srgb, #d97706 15%, transparent);color:#d97706; }
+.mem-quality-stale { background:color-mix(in srgb, #ef4444 15%, transparent);color:#ef4444; }
+/* Markdown syntax highlighting (applied to pre content) */
+.mem-md-h1,.mem-md-h2,.mem-md-h3 { font-weight:700;color:var(--accent); }
+.mem-md-h1 { font-size:15px; }
+.mem-md-h2 { font-size:14px; }
+.mem-md-bold { font-weight:700;color:var(--text); }
+.mem-md-code { background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:'SF Mono',Menlo,monospace;font-size:11px; }
+.mem-md-codeblock { background:var(--surface2);display:block;padding:8px 10px;border-radius:6px;margin:4px 0;font-family:'SF Mono',Menlo,monospace;font-size:11px; }
+.mem-md-list { color:var(--accent); }
+.mem-md-link { color:var(--accent);text-decoration:underline; }
+/* Diff preview */
+.mem-diff-overlay { position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:center;justify-content:center; }
+.mem-diff-panel { background:var(--bg);border:1px solid var(--border);border-radius:12px;width:90%;max-width:700px;max-height:80vh;overflow:hidden;display:flex;flex-direction:column; }
+.mem-diff-header { padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px; }
+.mem-diff-header h3 { margin:0;font-size:15px;font-weight:700; }
+.mem-diff-body { flex:1;overflow-y:auto;padding:12px 18px;font-size:12px;line-height:1.6;font-family:'SF Mono',Menlo,monospace; }
+.mem-diff-add { background:color-mix(in srgb, #22c55e 12%, transparent);color:#22c55e; }
+.mem-diff-del { background:color-mix(in srgb, #ef4444 12%, transparent);color:#ef4444;text-decoration:line-through; }
+.mem-diff-actions { padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end; }
+/* Quick-add form */
+.mem-quickadd { display:flex;gap:6px;margin-top:8px;align-items:flex-start; }
+.mem-quickadd input { flex:1;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text); }
+
 
 
 /* config panel (mirrors preview-panel) */
@@ -5914,7 +5957,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.42</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.25.43</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6581,19 +6624,36 @@ select.settings-input { padding-right: 26px; }
       <div id="mem-sessions-list"></div>
     </div>
 
-    <!-- File viewer/editor -->
-    <div id="mem-file-viewer" style="display:none;margin-top:16px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);overflow:hidden">
-      <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--raised)">
-        <span style="font-weight:600;font-size:13px;color:var(--text)" id="mem-file-title">File</span>
-        <span style="font-size:11px;color:var(--text3)" id="mem-file-path"></span>
-        <div style="margin-left:auto;display:flex;gap:6px">
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" id="mem-file-edit-btn" onclick="toggleMemFileEdit()">Edit</button>
-          <button class="btn btn-accent" style="font-size:11px;padding:3px 10px;display:none" id="mem-file-save-btn" onclick="saveMemFileEdit()">Save</button>
-          <button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="closeMemFileViewer()">Close</button>
+    <!-- Split-Pane Editor -->
+    <div id="mem-split-pane" class="mem-split-pane" style="display:none">
+      <div class="mem-split-tree" id="mem-split-tree"></div>
+      <div class="mem-split-editor">
+        <div class="mem-split-toolbar">
+          <span class="file-name" id="mem-file-title">Select a file</span>
+          <span class="file-path" id="mem-file-path"></span>
+          <span id="mem-quality-badge"></span>
+          <div style="margin-left:auto;display:flex;gap:6px">
+            <button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" id="mem-file-edit-btn" onclick="toggleMemFileEdit()">Edit</button>
+            <button class="btn btn-accent" style="font-size:11px;padding:3px 10px;display:none" id="mem-file-save-btn" onclick="memShowDiffPreview()">Save</button>
+            <button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="closeMemFileViewer()">Close</button>
+          </div>
+        </div>
+        <div class="mem-split-content" id="mem-split-content">
+          <pre id="mem-file-content" style="margin:0;padding:14px;font-size:12px;line-height:1.7;color:var(--text);white-space:pre-wrap;word-break:break-word"></pre>
+          <textarea id="mem-file-editor" style="display:none;width:100%;height:100%;padding:14px;font-size:12px;line-height:1.7;font-family:'SF Mono',Menlo,monospace;color:var(--text);background:var(--bg);border:none;resize:none;box-sizing:border-box;outline:none"></textarea>
         </div>
       </div>
-      <pre id="mem-file-content" style="margin:0;padding:14px;font-size:12px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word;max-height:500px;overflow-y:auto"></pre>
-      <textarea id="mem-file-editor" style="display:none;width:100%;min-height:300px;max-height:500px;padding:14px;font-size:12px;line-height:1.6;font-family:inherit;color:var(--text);background:var(--bg);border:none;border-top:1px solid var(--border);resize:vertical;box-sizing:border-box"></textarea>
+    </div>
+    <!-- Diff preview overlay -->
+    <div id="mem-diff-overlay" class="mem-diff-overlay" style="display:none" onclick="if(event.target===this)memCloseDiff()">
+      <div class="mem-diff-panel">
+        <div class="mem-diff-header"><h3>Review changes</h3><span id="mem-diff-file" style="font-size:11px;color:var(--text3)"></span></div>
+        <div class="mem-diff-body" id="mem-diff-body"></div>
+        <div class="mem-diff-actions">
+          <button class="btn btn-ghost" onclick="memCloseDiff()">Cancel</button>
+          <button class="btn btn-accent" onclick="saveMemFileEdit()">Confirm &amp; Save</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -7062,6 +7122,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.25.43', date:'2026-03-02', notes:['Split-pane memory editor: file tree left, editor right','Markdown syntax highlighting in editor (headers, bold, code blocks)','Unsaved changes dot indicator','Memory quality score per file (size, staleness)','Diff preview before saving memory edits','Quick-add memory entry button per agent'] },
   { ver:'v0.25.42', date:'2026-03-02', notes:['Memory Tab overhaul: Agent Identity Cards with avatars, role labels, status dots','Per-agent file grouping with collapse/expand (localStorage)','Live agent health via provider probes','Role editor: click agent card to edit role description','Per-agent memory stats: size, file count, sessions'] },
   { ver:'v0.25.41', date:'2026-03-02', notes:['Fix: showAll ReferenceError in renderAgents (Orchestration tab)','Fix: async ReferenceError from intermediate deploy state'] },
   { ver:'v0.25.40', date:'2026-03-02', notes:['Mission Control v2: tabbed right panel (Detail/Incidents/Report)','Report Bug UI with agent dispatch via SSE','Frontend error capture (window.onerror → /api/logs/client-error)','8 new preset filters (File Ops, Chat, Schedule, Frontend)','Single-view layout: no page scroll, flex viewport fill','SSE handlers for log:incident, log:remediation, log:bugreport','Retry Fix button on incidents'] },
@@ -9927,7 +9988,10 @@ function renderMemAgentCards(models) {
       if (m.daily_logs) html += '<div style="font-size:11px;color:var(--text3);margin-top:8px">+ ' + m.daily_logs + ' daily log' + (m.daily_logs !== 1 ? 's' : '') + '</div>';
       if (m.session_size_mb > 0) html += '<div style="font-size:11px;color:var(--text3);margin-top:4px">' + m.session_size_mb + ' MB session data</div>';
       if (!instrFiles.length && !memFiles.length) html += '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:8px 0">No memory files detected</div>';
-      html += '<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)"><button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="event.stopPropagation();memOpenRoleEditor(\'' + m.id + '\')">Edit Role</button></div>';
+      html += '<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);display:flex;gap:6px">';
+      html += '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="event.stopPropagation();memOpenRoleEditor(\'' + m.id + '\')">Edit Role</button>';
+      if (memFiles.length) html += '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="event.stopPropagation();memQuickAdd(\'' + m.id + '\')">+ Add Entry</button>';
+      html += '</div>';
     }
     html += '</div></div>';
   });
@@ -10055,33 +10119,102 @@ function renderMemorySessions(sessions) {
   + (filtered.length > 30 ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">Showing 30 of ' + filtered.length + ' sessions</div>' : '');
 }
 
+let _memOrigContent = ''; // original content for diff
+let _memUnsaved = {}; // track unsaved files
+
+function _memBuildTree() {
+  var tree = document.getElementById('mem-split-tree');
+  if (!tree || !_memOverview || !_memOverview.models) return;
+  var html = '<div class="mem-split-tree-hdr">Files</div>';
+  _memOverview.models.forEach(function(m) {
+    if (m.stateless) return;
+    var files = [];
+    if (m.instruction_file) files.push(m.instruction_file);
+    if (m.memory_files) files = files.concat(m.memory_files);
+    if (!files.length) return;
+    html += '<div class="mem-split-tree-agent">' + escHtml(m.name) + '</div>';
+    files.forEach(function(f) {
+      var isActive = _memViewerPath === f.path;
+      var hasUnsaved = _memUnsaved[f.path];
+      html += '<div class="mem-split-tree-item' + (isActive ? ' active' : '') + '" onclick="viewMemFile(\'' + escHtml(f.path).replace(/'/g, "\\'") + '\')">';
+      html += escHtml(f.name);
+      if (hasUnsaved) html += '<span class="unsaved-dot"></span>';
+      html += '</div>';
+    });
+  });
+  tree.innerHTML = html;
+}
+
+function _memHighlightMd(text) {
+  // Basic markdown syntax highlighting
+  return escHtml(text)
+    .replace(/^(#{1,3})\s+(.+)$/gm, function(m, hashes, content) {
+      var cls = 'mem-md-h' + Math.min(hashes.length, 3);
+      return '<span class="' + cls + '">' + hashes + ' ' + content + '</span>';
+    })
+    .replace(/\*\*(.+?)\*\*/g, '<span class="mem-md-bold">**$1**</span>')
+    .replace(/`([^`]+)`/g, '<span class="mem-md-code">`$1`</span>')
+    .replace(/^([-*+])\s/gm, '<span class="mem-md-list">$1</span> ')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<span class="mem-md-link">[$1]($2)</span>');
+}
+
+function _memQualityScore(path, content) {
+  // Calculate quality: size, density (non-whitespace ratio), staleness
+  var badge = document.getElementById('mem-quality-badge');
+  if (!badge) return;
+  var size = content.length;
+  var nonWs = content.replace(/\s+/g, '').length;
+  var density = size > 0 ? nonWs / size : 0;
+
+  // Find file modification time from overview
+  var modTime = 0;
+  if (_memOverview && _memOverview.models) {
+    _memOverview.models.forEach(function(m) {
+      var allFiles = [].concat(m.instruction_file ? [m.instruction_file] : [], m.memory_files || []);
+      allFiles.forEach(function(f) { if (f && f.path === path && f.modified) modTime = f.modified; });
+    });
+  }
+  var daysSince = modTime ? Math.floor((Date.now()/1000 - modTime) / 86400) : -1;
+
+  var score = 'good';
+  var label = 'Good';
+  if (daysSince > 14 || size < 50) { score = 'stale'; label = daysSince > 14 ? 'Stale (' + daysSince + 'd)' : 'Sparse'; }
+  else if (daysSince > 7 || density < 0.4) { score = 'ok'; label = daysSince > 7 ? daysSince + 'd old' : 'Fair'; }
+
+  badge.innerHTML = '<span class="mem-quality-badge mem-quality-' + score + '">' + label + '</span>';
+}
+
 async function viewMemFile(path) {
-  const viewer = document.getElementById('mem-file-viewer');
-  const title = document.getElementById('mem-file-title');
-  const pathEl = document.getElementById('mem-file-path');
-  const content = document.getElementById('mem-file-content');
-  const editor = document.getElementById('mem-file-editor');
-  const editBtn = document.getElementById('mem-file-edit-btn');
-  const saveBtn = document.getElementById('mem-file-save-btn');
-  if (!viewer) return;
+  var pane = document.getElementById('mem-split-pane');
+  var title = document.getElementById('mem-file-title');
+  var pathEl = document.getElementById('mem-file-path');
+  var content = document.getElementById('mem-file-content');
+  var editor = document.getElementById('mem-file-editor');
+  var editBtn = document.getElementById('mem-file-edit-btn');
+  var saveBtn = document.getElementById('mem-file-save-btn');
+  if (!pane) return;
+
   _memViewerPath = path;
   _memViewerEditing = false;
   title.textContent = path.split('/').pop();
   pathEl.textContent = path;
-  content.textContent = 'Loading\u2026';
+  content.innerHTML = 'Loading…';
   content.style.display = 'block';
-  content.style.color = 'var(--text)';
   editor.style.display = 'none';
   editBtn.textContent = 'Edit';
   editBtn.style.display = '';
   saveBtn.style.display = 'none';
-  viewer.style.display = 'block';
-  viewer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  pane.style.display = 'flex';
+  _memBuildTree();
+  pane.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
   try {
-    const resp = await api('/api/memory/read?path=' + encodeURIComponent(path));
+    var resp = await api('/api/memory/read?path=' + encodeURIComponent(path));
     if (resp && resp.ok) {
-      content.textContent = resp.content || '(empty file)';
+      _memOrigContent = resp.content || '';
+      content.innerHTML = _memHighlightMd(resp.content || '(empty file)');
       editor.value = resp.content || '';
+      _memQualityScore(path, resp.content || '');
       return true;
     } else {
       content.style.color = 'var(--err)';
@@ -10096,20 +10229,23 @@ async function viewMemFile(path) {
 }
 
 function toggleMemFileEdit() {
-  const content = document.getElementById('mem-file-content');
-  const editor = document.getElementById('mem-file-editor');
-  const editBtn = document.getElementById('mem-file-edit-btn');
-  const saveBtn = document.getElementById('mem-file-save-btn');
+  var content = document.getElementById('mem-file-content');
+  var editor = document.getElementById('mem-file-editor');
+  var editBtn = document.getElementById('mem-file-edit-btn');
+  var saveBtn = document.getElementById('mem-file-save-btn');
   if (_memViewerEditing) {
     _memViewerEditing = false;
-    content.textContent = editor.value;
+    _memUnsaved[_memViewerPath] = editor.value !== _memOrigContent;
+    content.innerHTML = _memHighlightMd(editor.value);
     content.style.display = 'block';
     editor.style.display = 'none';
     editBtn.textContent = 'Edit';
     saveBtn.style.display = 'none';
+    _memBuildTree();
   } else {
     _memViewerEditing = true;
-    editor.value = content.textContent;
+    editor.value = _memOrigContent;
+    if (_memUnsaved[_memViewerPath]) editor.value = editor.value; // keep existing edits in textarea
     content.style.display = 'none';
     editor.style.display = 'block';
     editBtn.textContent = 'Cancel';
@@ -10118,16 +10254,56 @@ function toggleMemFileEdit() {
   }
 }
 
+function memShowDiffPreview() {
+  var editor = document.getElementById('mem-file-editor');
+  var overlay = document.getElementById('mem-diff-overlay');
+  var body = document.getElementById('mem-diff-body');
+  var fileLabel = document.getElementById('mem-diff-file');
+  if (!overlay || !editor) return;
+
+  var newText = editor.value;
+  var oldText = _memOrigContent;
+  fileLabel.textContent = _memViewerPath.split('/').pop();
+
+  // Simple line-based diff
+  var oldLines = oldText.split('\n');
+  var newLines = newText.split('\n');
+  var html = '';
+  var maxLen = Math.max(oldLines.length, newLines.length);
+  for (var i = 0; i < maxLen; i++) {
+    var ol = i < oldLines.length ? oldLines[i] : undefined;
+    var nl = i < newLines.length ? newLines[i] : undefined;
+    if (ol === nl) {
+      html += '<div style="padding:1px 4px">' + escHtml(ol) + '</div>';
+    } else {
+      if (ol !== undefined) html += '<div class="mem-diff-del" style="padding:1px 4px">- ' + escHtml(ol) + '</div>';
+      if (nl !== undefined) html += '<div class="mem-diff-add" style="padding:1px 4px">+ ' + escHtml(nl) + '</div>';
+    }
+  }
+  if (!html) html = '<div style="color:var(--text3);padding:12px">No changes detected.</div>';
+  body.innerHTML = html;
+  overlay.style.display = 'flex';
+}
+
+function memCloseDiff() {
+  var overlay = document.getElementById('mem-diff-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
 async function saveMemFileEdit() {
-  const editor = document.getElementById('mem-file-editor');
-  const saveBtn = document.getElementById('mem-file-save-btn');
-  saveBtn.textContent = 'Saving\u2026';
+  memCloseDiff();
+  var editor = document.getElementById('mem-file-editor');
+  var saveBtn = document.getElementById('mem-file-save-btn');
+  saveBtn.textContent = 'Saving…';
   saveBtn.disabled = true;
   try {
-    const resp = await api('/api/memory/write', { path: _memViewerPath, content: editor.value });
+    var resp = await api('/api/memory/write', { path: _memViewerPath, content: editor.value });
     if (resp && resp.ok) {
+      _memOrigContent = editor.value;
+      delete _memUnsaved[_memViewerPath];
       toast('Saved ' + _memViewerPath.split('/').pop());
       toggleMemFileEdit();
+      _memBuildTree();
       loadMemory();
     } else {
       toast((resp && resp.error) || 'Save failed', 'err');
@@ -10140,10 +10316,36 @@ async function saveMemFileEdit() {
 }
 
 function closeMemFileViewer() {
-  const viewer = document.getElementById('mem-file-viewer');
-  if (viewer) viewer.style.display = 'none';
+  var pane = document.getElementById('mem-split-pane');
+  if (pane) pane.style.display = 'none';
   _memViewerPath = '';
   _memViewerEditing = false;
+}
+
+// Quick-Add memory entry
+function memQuickAdd(agentId) {
+  if (!_memOverview || !_memOverview.models) return;
+  var model = _memOverview.models.find(function(m) { return m.id === agentId; });
+  if (!model) return;
+  // Find the MEMORY.md file for this agent
+  var target = null;
+  if (model.memory_files) target = model.memory_files.find(function(f) { return f.name === 'MEMORY.md'; });
+  if (!target) { toast('No MEMORY.md found for ' + agentId, 'err'); return; }
+
+  var key = prompt('Memory key (e.g., "preferred-framework"):');
+  if (!key) return;
+  var value = prompt('Value:');
+  if (value === null) return;
+
+  var entry = '\n- **' + key + ':** ' + value + '\n';
+  api('/api/memory/read?path=' + encodeURIComponent(target.path)).then(function(resp) {
+    if (!resp || !resp.ok) { toast('Failed to read file', 'err'); return; }
+    var newContent = resp.content + entry;
+    api('/api/memory/write', { path: target.path, content: newContent }).then(function(res) {
+      if (res && res.ok) { toast('Added to ' + target.name); loadMemory(); }
+      else { toast((res && res.error) || 'Failed to write', 'err'); }
+    });
+  });
 }
 
 let _flushWizData = null;
@@ -16271,7 +16473,7 @@ document.addEventListener('keydown', function(e) {
     var kb = document.getElementById('kbOverlay');
     if (kb && kb.classList.contains('open')) { kb.classList.remove('open'); return; }
     // Close file viewer
-    var fv = document.getElementById('mem-file-viewer');
+    var fv = document.getElementById('mem-split-pane');
     if (fv && fv.style.display !== 'none') { closeMemFileViewer(); return; }
     return;
   }
@@ -18972,7 +19174,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.42'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.25.43'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -22307,7 +22509,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.25.42 ready (localhost only)")
+    print(f"\n  Porter v0.25.43 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
