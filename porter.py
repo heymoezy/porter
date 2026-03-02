@@ -17436,28 +17436,15 @@ class Handler(BaseHTTPRequestHandler):
                             log.debug("Stream parse: %s", e)
 
                 elif model_id == "openclaw-gateway":
-                    # OpenClaw via CLI — stream output live
-                    oc_bin = _resolve_cli("openclaw")
-                    if not oc_bin:
-                        self.wfile.write(f"data: {json.dumps({'error': 'OpenClaw CLI not found'})}\n\n".encode())
+                    # OpenClaw buffers all output until done — use blocking dispatch
+                    oc_result = dispatch_agent(prompt, "openclaw", timeout=120)
+                    if oc_result.get("ok"):
+                        full_response = oc_result.get("text", "")
+                        self.wfile.write(f"data: {json.dumps({'token': full_response})}\n\n".encode())
                         self.wfile.flush()
                     else:
-                        import subprocess as _sp
-                        _oc_cmd = [oc_bin, "agent", "--agent", "main", "--message", prompt, "--json"]
-                        _proc = _sp.Popen(_oc_cmd, stdout=_sp.PIPE, stderr=_sp.PIPE, text=True, env=_agent_env())
-                        _buf = []
-                        for _line in iter(_proc.stdout.readline, ''):
-                            _buf.append(_line)
-                            self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
-                            self.wfile.flush()
-                        _proc.wait(timeout=130)
-                        full_response = ''.join(_buf).strip()
-                        # Try to extract text from JSON result
-                        try:
-                            _oc_resp = json.loads(full_response)
-                            full_response = _oc_resp.get("result", {}).get("text", "") or full_response
-                        except (json.JSONDecodeError, ValueError):
-                            pass
+                        self.wfile.write(f"data: {json.dumps({'error': oc_result.get('error', 'OpenClaw error')})}\n\n".encode())
+                        self.wfile.flush()
 
                 elif model_id == "ollama-local":
                     # Discover first Ollama model and stream from it
