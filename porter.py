@@ -9510,10 +9510,6 @@ async function _runAtChain(fullText, matches) {
       _chatMessages = _chatMessages.filter(function(m) { return m.role !== 'skill-pending'; });
       if (resp && resp.ok) {
         prevOutput = resp.text || '';
-        var meta = [];
-        if (resp.backend) meta.push('Via: ' + (labels[resp.backend] || resp.backend));
-        if (resp.model) meta.push('Model: ' + resp.model);
-        if (resp.duration_ms) meta.push('Duration: ' + (resp.duration_ms / 1000).toFixed(1) + 's');
         _chatMessages.push({ role: 'assistant', content: prevOutput, model: resp.model || seg.model });
       } else {
         _chatMessages.push({ role: 'error', content: label + ' error: ' + (resp ? resp.error : 'No response') });
@@ -15403,14 +15399,14 @@ def _dispatch_gemini(message, model=None, timeout=120):
         cmd.extend(["-m", model])
     log.info("Agent bridge [gemini]: model=%s msg=%s", model or "auto", message[:80])
     _start = time.time()
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env(), cwd="/tmp")
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env(), cwd=str(Path.home()))
     _elapsed_ms = int((time.time() - _start) * 1000)
     if result.returncode != 0:
         err_msg = result.stderr[:300] or result.stdout[:300] or "Gemini returned non-zero"
         return {"ok": False, "error": err_msg}
     # Text output: strip YOLO mode banners and credential messages
     text = result.stdout
-    _skip = ("YOLO mode", "Loaded cached", "Loaded saved")
+    _skip = ("YOLO mode", "Loaded cached", "Loaded saved", "[WARN]", "[ERROR]", "Warning:", "Error:")
     lines = text.split("\n")
     lines = [l for l in lines if not any(l.strip().startswith(s) for s in _skip)]
     text = "\n".join(lines).strip()
@@ -17551,8 +17547,8 @@ class Handler(BaseHTTPRequestHandler):
                         gem_model = model_id.replace("gemini-cli-", "") if model_id.startswith("gemini-cli-") else ""
                         if gem_model and gem_model != "auto":
                             _gem_cmd.extend(["-m", gem_model])
-                        _skip_prefixes = ("YOLO mode", "Loaded cached", "Loaded saved")
-                        _proc = _sp.Popen(_gem_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env(), cwd="/tmp")
+                        _skip_prefixes = ("YOLO mode", "Loaded cached", "Loaded saved", "[WARN]", "[ERROR]", "Warning:", "Error:")
+                        _proc = _sp.Popen(_gem_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env(), cwd=str(Path.home()))
                         try:
                             for _line in iter(_proc.stdout.readline, ''):
                                 if any(_line.strip().startswith(s) for s in _skip_prefixes):
