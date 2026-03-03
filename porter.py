@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.1 — Project-Level Agent Assignment + Scope Controls"""
+"""Porter v0.27.2 — Trace Visibility + Agent Telemetry"""
 
 
 
@@ -4052,6 +4052,322 @@ def _log_db_init():
 # Global MissionLog instance
 mlog = MissionLog()
 
+# ── Trace Steps + Telemetry Tables ──────────────────────────────────────────────
+def _init_trace_tables():
+    """Create trace_steps, agent_telemetry, telemetry_hourly, telemetry_daily tables."""
+    conn = _db_conn()
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS trace_steps (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts REAL NOT NULL DEFAULT (strftime('%s','now')),
+        trace_id TEXT,
+        project_id TEXT,
+        agent_id TEXT,
+        agent_name TEXT,
+        stage TEXT DEFAULT 'execute',
+        task_id TEXT,
+        input_summary TEXT,
+        action TEXT NOT NULL,
+        output_summary TEXT,
+        next_step TEXT,
+        status TEXT DEFAULT 'running',
+        duration_ms INTEGER DEFAULT 0,
+        tokens_in INTEGER DEFAULT 0,
+        tokens_out INTEGER DEFAULT 0,
+        tokens_cache INTEGER DEFAULT 0,
+        estimated_cost REAL DEFAULT 0,
+        error TEXT,
+        meta TEXT DEFAULT '{}'
+    );
+    CREATE INDEX IF NOT EXISTS idx_ts_project ON trace_steps(project_id);
+    CREATE INDEX IF NOT EXISTS idx_ts_agent ON trace_steps(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_ts_trace ON trace_steps(trace_id);
+    CREATE INDEX IF NOT EXISTS idx_ts_task ON trace_steps(task_id);
+    CREATE INDEX IF NOT EXISTS idx_ts_ts ON trace_steps(ts);
+    CREATE INDEX IF NOT EXISTS idx_ts_status ON trace_steps(status);
+
+    CREATE TABLE IF NOT EXISTS agent_telemetry (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts REAL NOT NULL DEFAULT (strftime('%s','now')),
+        event_id TEXT,
+        trace_id TEXT,
+        run_id TEXT,
+        project_id TEXT,
+        agent_id TEXT,
+        agent_name TEXT,
+        status TEXT DEFAULT 'complete',
+        tokens_in INTEGER DEFAULT 0,
+        tokens_out INTEGER DEFAULT 0,
+        tokens_cache INTEGER DEFAULT 0,
+        estimated_cost REAL DEFAULT 0,
+        latency_ms INTEGER DEFAULT 0,
+        retries INTEGER DEFAULT 0,
+        blocker_reason TEXT,
+        backend TEXT,
+        action TEXT,
+        safety_class TEXT DEFAULT 'normal'
+    );
+    CREATE INDEX IF NOT EXISTS idx_at_project ON agent_telemetry(project_id);
+    CREATE INDEX IF NOT EXISTS idx_at_agent ON agent_telemetry(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_at_ts ON agent_telemetry(ts);
+    CREATE INDEX IF NOT EXISTS idx_at_backend ON agent_telemetry(backend);
+
+    CREATE TABLE IF NOT EXISTS telemetry_hourly (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        hour_ts REAL NOT NULL,
+        project_id TEXT,
+        agent_id TEXT,
+        agent_name TEXT,
+        active_seconds REAL DEFAULT 0,
+        task_complete INTEGER DEFAULT 0,
+        task_failed INTEGER DEFAULT 0,
+        task_blocked INTEGER DEFAULT 0,
+        tokens_in_total INTEGER DEFAULT 0,
+        tokens_out_total INTEGER DEFAULT 0,
+        tokens_cache_total INTEGER DEFAULT 0,
+        cost_total REAL DEFAULT 0,
+        latency_p50 INTEGER DEFAULT 0,
+        latency_p95 INTEGER DEFAULT 0,
+        latency_max INTEGER DEFAULT 0,
+        throughput REAL DEFAULT 0,
+        retries_total INTEGER DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_th_hour ON telemetry_hourly(hour_ts);
+    CREATE INDEX IF NOT EXISTS idx_th_agent ON telemetry_hourly(agent_id);
+
+    CREATE TABLE IF NOT EXISTS telemetry_daily (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        day_ts REAL NOT NULL,
+        project_id TEXT,
+        agent_id TEXT,
+        agent_name TEXT,
+        active_seconds REAL DEFAULT 0,
+        task_complete INTEGER DEFAULT 0,
+        task_failed INTEGER DEFAULT 0,
+        task_blocked INTEGER DEFAULT 0,
+        tokens_in_total INTEGER DEFAULT 0,
+        tokens_out_total INTEGER DEFAULT 0,
+        tokens_cache_total INTEGER DEFAULT 0,
+        cost_total REAL DEFAULT 0,
+        latency_p50 INTEGER DEFAULT 0,
+        latency_p95 INTEGER DEFAULT 0,
+        latency_max INTEGER DEFAULT 0,
+        throughput REAL DEFAULT 0,
+        retries_total INTEGER DEFAULT 0,
+        efficiency_score REAL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_td_day ON telemetry_daily(day_ts);
+    CREATE INDEX IF NOT EXISTS idx_td_agent ON telemetry_daily(agent_id);
+    """)
+    conn.close()
+
+_init_trace_tables()
+
+
+# ── Trace + Telemetry Functions ──────────────────────────────────────────────────
+
+def emit_trace_step(action: str, *, project_id: str = None, agent_id: str = None,
+                    agent_name: str = None, stage: str = "execute", task_id: str = None,
+                    input_summary: str = None, output_summary: str = None,
+                    next_step: str = None, status: str = "running", duration_ms: int = 0,
+                    tokens_in: int = 0, tokens_out: int = 0, tokens_cache: int = 0,
+                    estimated_cost: float = 0, error: str = None, trace_id: str = None,
+                    meta: dict = None):
+    """Write a trace step to the trace_steps table + emit to MissionLog."""
+    import time as _t
+    tid = trace_id or _get_trace_id()
+    try:
+        conn = _db_conn()
+        conn.execute(
+            """INSERT INTO trace_steps (ts, trace_id, project_id, agent_id, agent_name,
+               stage, task_id, input_summary, action, output_summary, next_step, status,
+               duration_ms, tokens_in, tokens_out, tokens_cache, estimated_cost, error, meta)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (_t.time(), tid, project_id, agent_id, agent_name, stage, task_id,
+             input_summary, action, output_summary, next_step, status,
+             duration_ms, tokens_in, tokens_out, tokens_cache, estimated_cost, error,
+             json.dumps(meta or {}))
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.debug("emit_trace_step error: %s", e)
+
+    # Also emit to MissionLog for SSE broadcast
+    mlog.emit("info", "trace", "step",
+              f"{agent_name or 'unknown'}: {action}" + (f" [{status}]" if status != "running" else ""),
+              trace_id=tid, run_id=task_id,
+              extra={"project_id": project_id, "agent_id": agent_id, "stage": stage,
+                     "tokens_in": tokens_in, "tokens_out": tokens_out})
+
+
+def record_telemetry(*, project_id: str = None, agent_id: str = None,
+                     agent_name: str = None, status: str = "complete",
+                     tokens_in: int = 0, tokens_out: int = 0, tokens_cache: int = 0,
+                     estimated_cost: float = 0, latency_ms: int = 0,
+                     retries: int = 0, blocker_reason: str = None,
+                     backend: str = None, action: str = None,
+                     trace_id: str = None, run_id: str = None,
+                     safety_class: str = "normal"):
+    """Record a telemetry event for agent utilization tracking."""
+    import time as _t
+    eid = secrets.token_hex(8)
+    tid = trace_id or _get_trace_id()
+    try:
+        conn = _db_conn()
+        conn.execute(
+            """INSERT INTO agent_telemetry (ts, event_id, trace_id, run_id, project_id,
+               agent_id, agent_name, status, tokens_in, tokens_out, tokens_cache,
+               estimated_cost, latency_ms, retries, blocker_reason, backend, action, safety_class)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (_t.time(), eid, tid, run_id, project_id, agent_id, agent_name, status,
+             tokens_in, tokens_out, tokens_cache, estimated_cost, latency_ms,
+             retries, blocker_reason, backend, action, safety_class)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.debug("record_telemetry error: %s", e)
+
+
+def _rollup_hourly():
+    """Materialize hourly telemetry rollups from raw agent_telemetry events."""
+    import time as _t, statistics
+    now = _t.time()
+    hour_start = now - (now % 3600) - 3600  # Previous complete hour
+    hour_end = hour_start + 3600
+
+    try:
+        conn = _db_conn()
+        # Check if we already have this hour's rollup
+        existing = conn.execute(
+            "SELECT COUNT(*) FROM telemetry_hourly WHERE hour_ts=?", (hour_start,)
+        ).fetchone()[0]
+        if existing > 0:
+            conn.close()
+            return  # Already rolled up
+
+        # Aggregate per agent+project
+        rows = conn.execute(
+            """SELECT project_id, agent_id, agent_name, status, tokens_in, tokens_out,
+                      tokens_cache, estimated_cost, latency_ms, retries
+               FROM agent_telemetry WHERE ts >= ? AND ts < ?""",
+            (hour_start, hour_end)
+        ).fetchall()
+        conn.close()
+
+        if not rows:
+            return
+
+        # Group by (project_id, agent_id)
+        groups = {}
+        for r in rows:
+            key = (r[0], r[1], r[2])  # project_id, agent_id, agent_name
+            groups.setdefault(key, []).append(r)
+
+        conn = _db_conn()
+        for (pid, aid, aname), events in groups.items():
+            complete = sum(1 for e in events if e[3] == "complete")
+            failed = sum(1 for e in events if e[3] == "failed")
+            blocked = sum(1 for e in events if e[3] == "blocked")
+            tin = sum(e[4] or 0 for e in events)
+            tout = sum(e[5] or 0 for e in events)
+            tcache = sum(e[6] or 0 for e in events)
+            cost = sum(e[7] or 0 for e in events)
+            latencies = [e[8] for e in events if e[8] and e[8] > 0]
+            retries = sum(e[9] or 0 for e in events)
+            active_s = sum((e[8] or 0) / 1000 for e in events)
+
+            p50 = int(statistics.median(latencies)) if latencies else 0
+            p95 = int(sorted(latencies)[int(len(latencies) * 0.95)] if latencies else 0)
+            lmax = max(latencies) if latencies else 0
+            throughput = len(events) / 3600.0
+
+            conn.execute(
+                """INSERT INTO telemetry_hourly (hour_ts, project_id, agent_id, agent_name,
+                   active_seconds, task_complete, task_failed, task_blocked,
+                   tokens_in_total, tokens_out_total, tokens_cache_total, cost_total,
+                   latency_p50, latency_p95, latency_max, throughput, retries_total)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (hour_start, pid, aid, aname, active_s, complete, failed, blocked,
+                 tin, tout, tcache, cost, p50, p95, lmax, throughput, retries)
+            )
+        conn.commit()
+        conn.close()
+        log.info("Hourly telemetry rollup complete: %d groups", len(groups))
+    except Exception as e:
+        log.error("Hourly rollup error: %s", e)
+
+
+def _rollup_daily():
+    """Materialize daily telemetry rollups from hourly rollups."""
+    import time as _t
+    now = _t.time()
+    day_start = now - (now % 86400) - 86400  # Previous complete day
+    day_end = day_start + 86400
+
+    try:
+        conn = _db_conn()
+        existing = conn.execute(
+            "SELECT COUNT(*) FROM telemetry_daily WHERE day_ts=?", (day_start,)
+        ).fetchone()[0]
+        if existing > 0:
+            conn.close()
+            return
+
+        rows = conn.execute(
+            """SELECT project_id, agent_id, agent_name,
+                      SUM(active_seconds), SUM(task_complete), SUM(task_failed), SUM(task_blocked),
+                      SUM(tokens_in_total), SUM(tokens_out_total), SUM(tokens_cache_total),
+                      SUM(cost_total), AVG(latency_p50), MAX(latency_p95), MAX(latency_max),
+                      AVG(throughput), SUM(retries_total)
+               FROM telemetry_hourly WHERE hour_ts >= ? AND hour_ts < ?
+               GROUP BY project_id, agent_id""",
+            (day_start, day_end)
+        ).fetchall()
+        conn.close()
+
+        if not rows:
+            return
+
+        conn = _db_conn()
+        for r in rows:
+            total_tasks = (r[4] or 0) + (r[5] or 0) + (r[6] or 0)
+            efficiency = (r[4] or 0) / total_tasks if total_tasks > 0 else 0
+
+            conn.execute(
+                """INSERT INTO telemetry_daily (day_ts, project_id, agent_id, agent_name,
+                   active_seconds, task_complete, task_failed, task_blocked,
+                   tokens_in_total, tokens_out_total, tokens_cache_total, cost_total,
+                   latency_p50, latency_p95, latency_max, throughput, retries_total,
+                   efficiency_score)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (day_start, r[0], r[1], r[2], r[3], r[4], r[5], r[6],
+                 r[7], r[8], r[9], r[10], int(r[11] or 0), int(r[12] or 0),
+                 int(r[13] or 0), r[14] or 0, r[15] or 0, efficiency)
+            )
+        conn.commit()
+        conn.close()
+        log.info("Daily telemetry rollup complete: %d groups", len(rows))
+    except Exception as e:
+        log.error("Daily rollup error: %s", e)
+
+
+def _telemetry_rollup_loop():
+    """Background thread: runs hourly + daily rollups."""
+    import time as _t
+    while True:
+        _t.sleep(3600)  # Run every hour
+        try:
+            _rollup_hourly()
+            # Daily rollup at midnight-ish
+            hour = int((_t.time() % 86400) / 3600)
+            if hour == 0:
+                _rollup_daily()
+        except Exception as e:
+            log.error("Telemetry rollup loop error: %s", e)
+
+
 def _append_audit(action: str, target: str, actor: str,
                   actor_type: str = "session", details: dict | None = None,
                   project_id: str | None = None, session_id: str | None = None,
@@ -5753,6 +6069,33 @@ body.density-compact .file-name { padding: 6px 0; }
 .chat-persona-btn .persona-btn-name { font-weight:500; }
 
 /* ── Persona Org Chart ──────────────────────────────────────── */
+/* Trace feed */
+.trace-feed { max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg); }
+.trace-step { display:flex;gap:8px;padding:6px 12px;border-bottom:1px solid color-mix(in srgb, var(--border) 50%, transparent);font-size:12px;align-items:center; }
+.trace-step:last-child { border-bottom:none; }
+.trace-step-agent { font-weight:600;color:var(--accent);min-width:80px; }
+.trace-step-action { color:var(--text2);flex:1; }
+.trace-step-status { padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600; }
+.trace-step-status.running { background:#3b82f6;color:#fff; }
+.trace-step-status.complete { background:#22c55e;color:#fff; }
+.trace-step-status.failed { background:#ef4444;color:#fff; }
+.trace-step-status.blocked { background:#f59e0b;color:#fff; }
+.trace-step-time { color:var(--text3);font-size:10px;min-width:50px;text-align:right; }
+.trace-step-tokens { color:var(--text3);font-size:10px; }
+/* Task board */
+.task-board { display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px; }
+.task-board-col { background:var(--surface);border:1px solid var(--border);border-radius:8px;min-height:60px; }
+.task-board-col-hdr { font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:8px 10px;font-weight:600;border-bottom:1px solid var(--border); }
+.task-board-item { padding:6px 10px;font-size:11px;color:var(--text2);border-bottom:1px solid color-mix(in srgb, var(--border) 40%, transparent); }
+.task-board-item:last-child { border-bottom:none; }
+/* Telemetry cards */
+.telem-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:12px; }
+.telem-card { background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px; }
+.telem-card-name { font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px; }
+.telem-card-stat { display:flex;justify-content:space-between;font-size:11px;color:var(--text3);padding:2px 0; }
+.telem-card-val { color:var(--text2);font-weight:500; }
+.telem-export-bar { display:flex;gap:6px;margin-top:12px; }
+.telem-anomaly { color:var(--danger);font-weight:600; }
 .proj-agents-section { padding:8px 16px;border-top:1px solid var(--border); }
 .proj-agents-label { font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px;font-weight:600; }
 .proj-agents-row { display:flex;gap:6px;flex-wrap:wrap;align-items:center; }
@@ -6306,7 +6649,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.1</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.2</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6938,6 +7281,21 @@ select.settings-input { padding-right: 26px; }
     </div>
     <div class="module-intro">AI backends available to Porter. Each persona routes through one of these.</div>
 
+    <!-- Agent Telemetry Summary -->
+    <div style="margin-top:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600;color:var(--text2)">Agent Telemetry (24h)</div>
+        <div class="telem-export-bar">
+          <button class="btn btn-xs btn-ghost" onclick="exportTelemetry('json')">Export JSON</button>
+          <button class="btn btn-xs btn-ghost" onclick="exportTelemetry('csv')">Export CSV</button>
+          <button class="btn btn-xs btn-ghost" onclick="loadAgentTelemetry()">Refresh</button>
+        </div>
+      </div>
+      <div id="telem-agent-grid" class="telem-grid">
+        <div style="grid-column:1/-1;padding:12px;font-size:12px;color:var(--text3)">Loading telemetry...</div>
+      </div>
+    </div>
+
     <!-- Model Cards -->
     <div id="models-grid" class="orch-grid" style="margin-bottom:20px">
       <div class="loading-indicator">Loading models...</div>
@@ -7563,6 +7921,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.2', date:'2026-03-03', notes:['Per-project live trace feed with step schema','Task board (active/queued/blocked/done) per project','Agent telemetry: tokens, cost, latency, retries (24h)','Hourly + daily rollup engine (background thread)','Anomaly flags for latency spikes, high failures, retries','Telemetry export (JSON + CSV)','7 new API endpoints (trace/steps, trace/live, trace/task-board, telemetry/agents, telemetry/project, telemetry/export, telemetry/rollups)'] },
   { ver:'v0.27.1', date:'2026-03-03', notes:['Project-level agent assignment — assign/unassign agents per project','Assigned agents section in project cards with avatars','assign_agent/unassign_agent API actions','Porter project pre-configured with all 3 agents'] },
   { ver:'v0.27.0', date:'2026-03-03', notes:['Nav restructured: Squad (Agents+Memory) + Operations (Projects+Workflows)','Project bootstrap engine — 00_SHARED/ skeleton with 6 governance docs','Agent scaffold engine — 5-file base pack (IDENTITY, SOUL, USER, MEMORY, ROLE_CARD)','Agent avatars: Claude ⚡, OpenClaw 🐙, Gemini 💎','Porter project data refreshed — agents assigned, stale tasks fixed'] },
   { ver:'v0.26.5', date:'2026-03-03', notes:['Status dots on persona cards (idle/active/sleeping)','Persona names in chat message badges','Mission Control events for persona wake/sleep','Periodic persona status refresh (30s)','Claude color in model badge palette'] },
@@ -9339,7 +9698,7 @@ function switchModule(name) {
       }, 30000);
     }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); _loadRoutingPrefs(); }, projects: loadProjects, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
-    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: function() { loadWorkflows(); loadBuildStatus(); }, memory: loadMemory, settings: syncSettingsUI,
+    models: function() { loadModels(); loadAgentTelemetry(); }, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: function() { loadWorkflows(); loadBuildStatus(); }, memory: loadMemory, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -9839,6 +10198,68 @@ function startProjAutoRefresh() {
 
 
 
+function _projTraceSection(project) {
+  var pid = project.id;
+  return '<div class="proj-agents-section">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center">'
+    + '<div class="proj-agents-label">Live Trace</div>'
+    + '<button class="btn btn-xs btn-ghost" onclick="event.stopPropagation();_loadProjectTrace(\'' + pid + '\')">Refresh</button>'
+    + '</div>'
+    + '<div id="proj-trace-' + pid + '" class="trace-feed" style="margin-top:6px">'
+    + '<div style="padding:8px 12px;font-size:11px;color:var(--text3)">Loading trace...</div>'
+    + '</div>'
+    + '<div class="proj-agents-label" style="margin-top:12px">Task Board</div>'
+    + '<div id="proj-board-' + pid + '" class="task-board" style="margin-top:4px">'
+    + '<div style="grid-column:1/-1;padding:8px;font-size:11px;color:var(--text3)">Loading...</div>'
+    + '</div>'
+    + '</div>';
+}
+
+async function _loadProjectTrace(projectId) {
+  try {
+    var r = await api('/api/trace/steps?project_id=' + encodeURIComponent(projectId) + '&limit=20');
+    var el = document.getElementById('proj-trace-' + projectId);
+    if (!el || !r || !r.ok) return;
+    if (!r.steps || !r.steps.length) {
+      el.innerHTML = '<div style="padding:8px 12px;font-size:11px;color:var(--text3)">No trace steps yet. Dispatch to an agent to see activity.</div>';
+      return;
+    }
+    el.innerHTML = r.steps.map(function(s) {
+      var ago = _tsAgo(s.ts);
+      var stCls = s.status || 'running';
+      var tokHtml = (s.tokens_out || s.tokens_in) ? '<span class="trace-step-tokens">' + _fmtNum((s.tokens_in||0)+(s.tokens_out||0)) + ' tok</span>' : '';
+      return '<div class="trace-step">'
+        + '<span class="trace-step-agent">' + escHtml(s.agent_name || '?') + '</span>'
+        + '<span class="trace-step-action">' + escHtml(s.action || '') + '</span>'
+        + '<span class="trace-step-status ' + stCls + '">' + stCls + '</span>'
+        + tokHtml
+        + '<span class="trace-step-time">' + ago + '</span>'
+        + '</div>';
+    }).join('');
+  } catch(e) { console.debug('trace load:', e); }
+
+  // Also load task board
+  try {
+    var br = await api('/api/trace/task-board?project_id=' + encodeURIComponent(projectId));
+    var bel = document.getElementById('proj-board-' + projectId);
+    if (!bel || !br || !br.ok) return;
+    var board = br.board || {};
+    var cols = [
+      { key:'running', label:'Active', color:'#3b82f6' },
+      { key:'queued', label:'Queued', color:'var(--text3)' },
+      { key:'blocked', label:'Blocked', color:'#f59e0b' },
+      { key:'complete', label:'Done', color:'#22c55e' },
+    ];
+    bel.innerHTML = cols.map(function(c) {
+      var items = (board[c.key] || []).slice(0, 10);
+      var body = items.length
+        ? items.map(function(t) { return '<div class="task-board-item">' + escHtml(t.action||t.task_id||'?') + ' <span style="color:var(--text3);font-size:10px">' + escHtml(t.agent_name||'') + '</span></div>'; }).join('')
+        : '<div class="task-board-item" style="color:var(--text3);font-style:italic">None</div>';
+      return '<div class="task-board-col"><div class="task-board-col-hdr" style="color:' + c.color + '">' + c.label + ' (' + items.length + ')</div>' + body + '</div>';
+    }).join('');
+  } catch(e) { console.debug('board load:', e); }
+}
+
 function _projAgentSection(project) {
   var pid = project.id;
   var assigned = project.assigned_personas || [];
@@ -10032,6 +10453,7 @@ function _renderProjectList() {
       + progressHtml
       + metricsHtml
       + (isOpen ? _projAgentSection(p) : '')
+      + (isOpen ? _projTraceSection(p) : '')
       + (bodyHtml ? '<div class="proj-card-tasks">' + bodyHtml + '</div>' : '')
       + '</div>';
   }).join('');
@@ -10051,12 +10473,18 @@ function _renderProjectList() {
   }
 
   el.innerHTML = html;
+  // Auto-load traces for expanded projects
+  _projExpanded.forEach(function(pid) { setTimeout(function() { _loadProjectTrace(pid); }, 200); });
 }
 
 function toggleProject(pid) {
   if (_projExpanded.has(pid)) _projExpanded.delete(pid);
   else _projExpanded.add(pid);
   _renderProjectList();
+  // Auto-load trace for expanded projects
+  if (_projExpanded.has(pid)) {
+    setTimeout(function() { _loadProjectTrace(pid); }, 100);
+  }
 }
 
 
@@ -13683,6 +14111,42 @@ function populateQuickDispatch(data) {
       `<option value="${escHtml(p.id)}">${escHtml(p.label || p.id)}</option>`
     ).join('');
 }
+
+async function loadAgentTelemetry() {
+  try {
+    var r = await api('/api/telemetry/agents');
+    var el = document.getElementById('telem-agent-grid');
+    if (!el || !r || !r.ok) return;
+    if (!r.agents || !r.agents.length) {
+      el.innerHTML = '<div style="grid-column:1/-1;padding:12px;font-size:12px;color:var(--text3)">No telemetry data yet. Dispatch messages to agents to start tracking.</div>';
+      return;
+    }
+    el.innerHTML = r.agents.map(function(a) {
+      var anomaly = '';
+      if (a.max_latency > 30000) anomaly += '<div class="telem-anomaly">⚠ High latency spike (' + Math.round(a.max_latency/1000) + 's)</div>';
+      if (a.total_retries > 5) anomaly += '<div class="telem-anomaly">⚠ High retry count (' + a.total_retries + ')</div>';
+      if (a.failed > a.complete * 0.3 && a.failed > 2) anomaly += '<div class="telem-anomaly">⚠ High failure rate (' + a.failed + '/' + a.event_count + ')</div>';
+      return '<div class="telem-card">'
+        + '<div class="telem-card-name">' + escHtml(a.agent_name || a.agent_id || '?') + '</div>'
+        + '<div class="telem-card-stat"><span>Events</span><span class="telem-card-val">' + a.event_count + '</span></div>'
+        + '<div class="telem-card-stat"><span>Complete</span><span class="telem-card-val">' + (a.complete||0) + '</span></div>'
+        + '<div class="telem-card-stat"><span>Failed</span><span class="telem-card-val">' + (a.failed||0) + '</span></div>'
+        + '<div class="telem-card-stat"><span>Tokens In</span><span class="telem-card-val">' + _fmtNum(a.tokens_in||0) + '</span></div>'
+        + '<div class="telem-card-stat"><span>Tokens Out</span><span class="telem-card-val">' + _fmtNum(a.tokens_out||0) + '</span></div>'
+        + '<div class="telem-card-stat"><span>Est. Cost</span><span class="telem-card-val">$' + (a.total_cost||0).toFixed(4) + '</span></div>'
+        + '<div class="telem-card-stat"><span>Avg Latency</span><span class="telem-card-val">' + _fmtNum(a.avg_latency||0) + 'ms</span></div>'
+        + '<div class="telem-card-stat"><span>Active Time</span><span class="telem-card-val">' + _fmtDuration(Math.round((a.active_seconds||0)/60)) + '</span></div>'
+        + '<div class="telem-card-stat"><span>Retries</span><span class="telem-card-val">' + (a.total_retries||0) + '</span></div>'
+        + anomaly
+        + '</div>';
+    }).join('');
+  } catch(e) { console.debug('telemetry load:', e); }
+}
+
+function exportTelemetry(fmt) {
+  window.open('/api/telemetry/export?format=' + fmt, '_blank');
+}
+
 
 async function quickDispatch() {
   const prompt = (document.getElementById('qd-prompt').value || '').trim();
@@ -18628,6 +19092,13 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     log.info("Persona dispatch: %s (%s) → %s", persona.get("name", "?"), persona_id, backend)
     mlog.emit("info", "bridge", "persona.dispatch", f"Persona {persona.get('name', '?')} → {backend}", persona_id=persona_id, backend=backend, run_id=run_id)
 
+    # Trace: dispatch start
+    emit_trace_step("persona.dispatch",
+        agent_id=persona_id, agent_name=persona.get("name", "?"),
+        stage="dispatch", input_summary=message[:200], status="running",
+        trace_id=_get_trace_id())
+
+    _dtp_t0 = _ptime.time()
     # Dispatch via existing agent dispatch
     result = dispatch_agent(augmented_message, backend, model=model_override, timeout=timeout, run_id=run_id, chain_id=chain_id, step_num=step_num)
 
@@ -18643,6 +19114,23 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     # Append to daily log
     response_text = result.get("text", "")[:500] if result.get("ok") else result.get("error", "")[:200]
     _persona_append_daily_log(persona_id, f"**Dispatch** ({backend})\n> {message[:200]}\n\nResponse: {response_text}")
+
+    # Trace + Telemetry: dispatch complete
+    _dtp_dur = int((_ptime.time() - _dtp_t0) * 1000)
+    _dtp_ok = result.get("ok", False)
+    _dtp_tokens = result.get("tokens_total", 0)
+    emit_trace_step("persona.complete",
+        agent_id=persona_id, agent_name=persona.get("name", "?"),
+        stage="complete", output_summary=(result.get("text", "") or "")[:200],
+        status="complete" if _dtp_ok else "failed",
+        duration_ms=_dtp_dur, tokens_out=_dtp_tokens,
+        trace_id=_get_trace_id())
+    record_telemetry(
+        agent_id=persona_id, agent_name=persona.get("name", "?"),
+        status="complete" if _dtp_ok else "failed",
+        tokens_out=_dtp_tokens, latency_ms=_dtp_dur,
+        backend=backend, action="dispatch_to_persona",
+        run_id=run_id, trace_id=_get_trace_id())
 
     # Reset status to idle
     try:
@@ -19069,7 +19557,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.1' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.2' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -19542,7 +20030,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.1"})
+            self.reply_json({"v": "0.27.2"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -19810,6 +20298,203 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "event": event})
             else:
                 self.reply_json({"error": "not found"}, 404)
+
+        # ── Trace Feed API ──────────────────────────────────────────────────────
+        elif parsed.path == "/api/trace/steps":
+            if not self.auth_check(redirect=False): return
+            project_id = qs.get("project_id", [""])[0].strip()
+            agent_id = qs.get("agent_id", [""])[0].strip()
+            task_id = qs.get("task_id", [""])[0].strip()
+            status = qs.get("status", [""])[0].strip()
+            since = float(qs.get("since", ["0"])[0] or 0)
+            limit = min(int(qs.get("limit", ["100"])[0] or 100), 500)
+
+            where, params = ["1=1"], []
+            if project_id: where.append("project_id=?"); params.append(project_id)
+            if agent_id: where.append("agent_id=?"); params.append(agent_id)
+            if task_id: where.append("task_id=?"); params.append(task_id)
+            if status: where.append("status=?"); params.append(status)
+            if since: where.append("ts>?"); params.append(since)
+            params.append(limit)
+
+            conn = _db_conn()
+            rows = conn.execute(
+                f"SELECT * FROM trace_steps WHERE {' AND '.join(where)} ORDER BY ts DESC LIMIT ?",
+                params
+            ).fetchall()
+            cols = [d[0] for d in conn.execute("PRAGMA table_info(trace_steps)").fetchall()]
+            col_names = [c[1] for c in conn.execute("PRAGMA table_info(trace_steps)").fetchall()]
+            conn.close()
+
+            # Build dicts from rows
+            steps = []
+            for row in rows:
+                step = {}
+                for i, col in enumerate(col_names):
+                    step[col] = row[i]
+                steps.append(step)
+            self.reply_json({"ok": True, "steps": steps, "count": len(steps)})
+
+        elif parsed.path == "/api/trace/live":
+            if not self.auth_check(redirect=False): return
+            # Last 60 seconds of trace steps — for live monitor
+            import time as _t
+            since = _t.time() - 60
+            project_id = qs.get("project_id", [""])[0].strip()
+            conn = _db_conn()
+            where = "ts > ?"
+            params = [since]
+            if project_id:
+                where += " AND project_id=?"
+                params.append(project_id)
+            rows = conn.execute(
+                f"SELECT * FROM trace_steps WHERE {where} ORDER BY ts DESC LIMIT 50",
+                params
+            ).fetchall()
+            col_names = [c[1] for c in conn.execute("PRAGMA table_info(trace_steps)").fetchall()]
+            conn.close()
+            steps = [{col_names[i]: row[i] for i in range(len(col_names))} for row in rows]
+            self.reply_json({"ok": True, "steps": steps, "count": len(steps)})
+
+        # ── Telemetry API ───────────────────────────────────────────────────────
+        elif parsed.path == "/api/telemetry/agents":
+            if not self.auth_check(redirect=False): return
+            # Per-agent summary (last 24h from raw events)
+            import time as _t
+            since = _t.time() - 86400
+            conn = _db_conn()
+            rows = conn.execute(
+                """SELECT agent_id, agent_name, backend,
+                          COUNT(*) as event_count,
+                          SUM(CASE WHEN status='complete' THEN 1 ELSE 0 END) as complete,
+                          SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as failed,
+                          SUM(CASE WHEN status='blocked' THEN 1 ELSE 0 END) as blocked,
+                          SUM(tokens_in) as tokens_in, SUM(tokens_out) as tokens_out,
+                          SUM(tokens_cache) as tokens_cache,
+                          SUM(estimated_cost) as total_cost,
+                          AVG(latency_ms) as avg_latency,
+                          MAX(latency_ms) as max_latency,
+                          SUM(retries) as total_retries,
+                          SUM(latency_ms) / 1000.0 as active_seconds
+                   FROM agent_telemetry WHERE ts > ?
+                   GROUP BY agent_id
+                   ORDER BY event_count DESC""",
+                (since,)
+            ).fetchall()
+            conn.close()
+
+            agents = []
+            for r in rows:
+                agents.append({
+                    "agent_id": r[0], "agent_name": r[1], "backend": r[2],
+                    "event_count": r[3], "complete": r[4], "failed": r[5], "blocked": r[6],
+                    "tokens_in": r[7] or 0, "tokens_out": r[8] or 0, "tokens_cache": r[9] or 0,
+                    "total_cost": round(r[10] or 0, 4), "avg_latency": int(r[11] or 0),
+                    "max_latency": r[12] or 0, "total_retries": r[13] or 0,
+                    "active_seconds": round(r[14] or 0, 1),
+                })
+            self.reply_json({"ok": True, "agents": agents})
+
+        elif parsed.path == "/api/telemetry/project":
+            if not self.auth_check(redirect=False): return
+            pid = qs.get("id", [""])[0].strip()
+            import time as _t
+            since = _t.time() - 86400
+            conn = _db_conn()
+            rows = conn.execute(
+                """SELECT agent_id, agent_name,
+                          COUNT(*) as events,
+                          SUM(CASE WHEN status='complete' THEN 1 ELSE 0 END) as complete,
+                          SUM(tokens_in) as tin, SUM(tokens_out) as tout,
+                          SUM(estimated_cost) as cost, AVG(latency_ms) as lat
+                   FROM agent_telemetry WHERE ts > ? AND project_id=?
+                   GROUP BY agent_id""",
+                (since, pid)
+            ).fetchall()
+            conn.close()
+            agents = [{"agent_id": r[0], "agent_name": r[1], "events": r[2],
+                       "complete": r[3], "tokens_in": r[4] or 0, "tokens_out": r[5] or 0,
+                       "cost": round(r[6] or 0, 4), "avg_latency": int(r[7] or 0)} for r in rows]
+            self.reply_json({"ok": True, "project_id": pid, "agents": agents})
+
+        elif parsed.path == "/api/telemetry/export":
+            if not self.auth_check(redirect=False): return
+            fmt = qs.get("format", ["json"])[0].strip()
+            import time as _t
+            since = float(qs.get("since", [str(_t.time() - 86400)])[0])
+            conn = _db_conn()
+            rows = conn.execute(
+                "SELECT * FROM agent_telemetry WHERE ts > ? ORDER BY ts DESC", (since,)
+            ).fetchall()
+            col_names = [c[1] for c in conn.execute("PRAGMA table_info(agent_telemetry)").fetchall()]
+            conn.close()
+
+            data = [{col_names[i]: row[i] for i in range(len(col_names))} for row in rows]
+
+            if fmt == "csv":
+                import io, csv as _csv
+                output = io.StringIO()
+                if data:
+                    w = _csv.DictWriter(output, fieldnames=col_names)
+                    w.writeheader()
+                    w.writerows(data)
+                csv_str = output.getvalue()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv")
+                self.send_header("Content-Disposition", "attachment; filename=telemetry_export.csv")
+                self.end_headers()
+                self.wfile.write(csv_str.encode())
+            else:
+                self.reply_json({"ok": True, "events": data, "count": len(data)})
+
+        elif parsed.path == "/api/telemetry/rollups":
+            if not self.auth_check(redirect=False): return
+            level = qs.get("level", ["hourly"])[0].strip()
+            import time as _t
+            since = float(qs.get("since", [str(_t.time() - 86400 * 7)])[0])
+
+            conn = _db_conn()
+            table = "telemetry_daily" if level == "daily" else "telemetry_hourly"
+            ts_col = "day_ts" if level == "daily" else "hour_ts"
+            rows = conn.execute(
+                f"SELECT * FROM {table} WHERE {ts_col} > ? ORDER BY {ts_col} DESC",
+                (since,)
+            ).fetchall()
+            col_names = [c[1] for c in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+            conn.close()
+
+            data = [{col_names[i]: row[i] for i in range(len(col_names))} for row in rows]
+            self.reply_json({"ok": True, "rollups": data, "level": level, "count": len(data)})
+
+        elif parsed.path == "/api/trace/task-board":
+            if not self.auth_check(redirect=False): return
+            project_id = qs.get("project_id", [""])[0].strip()
+            # Build task board from trace_steps — group by status
+            import time as _t
+            conn = _db_conn()
+            where = "1=1"
+            params = []
+            if project_id:
+                where = "project_id=?"
+                params = [project_id]
+
+            # Get latest step per task_id (most recent status)
+            rows = conn.execute(
+                f"""SELECT task_id, agent_name, action, status, MAX(ts) as last_ts
+                    FROM trace_steps WHERE {where} AND task_id IS NOT NULL
+                    GROUP BY task_id ORDER BY last_ts DESC LIMIT 100""",
+                params
+            ).fetchall()
+            conn.close()
+
+            board = {"running": [], "queued": [], "blocked": [], "complete": [], "failed": []}
+            for r in rows:
+                item = {"task_id": r[0], "agent_name": r[1], "action": r[2],
+                        "status": r[3], "last_ts": r[4]}
+                bucket = r[3] if r[3] in board else "running"
+                board[bucket].append(item)
+            self.reply_json({"ok": True, "board": board})
+
 
         elif parsed.path == "/api/admin/logs":
             if not self.auth_check(redirect=False): return
@@ -20733,7 +21418,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.1'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.2'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -24263,11 +24948,13 @@ if __name__ == "__main__":
     _cap_thread.start()
     _hb_thread = threading.Thread(target=_heartbeat_loop, name="porter-heartbeat", daemon=True)
     _hb_thread.start()
+    _rollup_thread = threading.Thread(target=_telemetry_rollup_loop, name="porter-rollup", daemon=True)
+    _rollup_thread.start()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.1 ready (localhost only)")
+    print(f"\n  Porter v0.27.2 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
