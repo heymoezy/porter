@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.26.1 — Agents Tab — Nav Grouping"""
+"""Porter v0.26.2 — Models Tab — Nav Grouping"""
 
 
 
@@ -6124,6 +6124,10 @@ select.settings-input { padding-right: 26px; }
       <span class="mnav-label">Files</span>
     </button>
     <div class="mnav-group-label">Tools &amp; Config</div>
+    <button class="mnav-item" id="mnav-models" onclick="switchModule('models')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+      <span class="mnav-label">Models</span>
+    </button>
     <button class="mnav-item" id="mnav-capabilities" onclick="switchModule('capabilities')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
       <span class="mnav-label">Extensions</span>
@@ -6167,7 +6171,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.26.1</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.26.2</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6755,6 +6759,52 @@ select.settings-input { padding-right: 26px; }
   </div>
 
   <!-- Memory tab v4 — Porter memory control center -->
+  <div id="models-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Models</span>
+      <button class="btn btn-ghost" onclick="loadModels()">&#8635; Refresh</button>
+    </div>
+    <div class="module-intro">AI backends available to Porter. Each persona routes through one of these.</div>
+
+    <!-- Model Cards -->
+    <div id="models-grid" class="orch-grid" style="margin-bottom:20px">
+      <div class="loading-indicator">Loading models...</div>
+    </div>
+
+    <!-- Routing Mode -->
+    <div class="module-section">
+      <div class="module-section-title">Routing</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <select id="models-routing-sel" class="settings-input" style="font-size:12px;min-width:200px" onchange="setRoutingMode(this.value)">
+          <option value="auto">Auto-route (content-based)</option>
+          <option value="ranked">Follow rankings</option>
+        </select>
+        <span style="font-size:12px;color:var(--text3)" id="models-routing-hint">Routes based on prompt analysis</span>
+      </div>
+    </div>
+
+    <!-- Quick Dispatch -->
+    <div class="module-section">
+      <div class="module-section-title">Quick Dispatch</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="qd-backend" class="settings-input" style="font-size:12px;min-width:150px">
+          <option value="">Auto-route</option>
+        </select>
+        <input id="qd-prompt" class="settings-input" style="flex:1;font-size:12px" placeholder="Send a raw message to a model (bypass personas)...">
+        <button class="btn btn-primary" onclick="quickDispatch()" style="font-size:12px;white-space:nowrap">Send</button>
+      </div>
+      <div id="qd-result" style="display:none;margin-top:10px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;font-size:12px;white-space:pre-wrap;max-height:200px;overflow-y:auto"></div>
+    </div>
+
+    <!-- Recent Runs -->
+    <div class="module-section">
+      <div class="module-section-title">Recent Runs</div>
+      <div id="models-runs" style="max-height:300px;overflow-y:auto">
+        <div class="loading-indicator">Loading...</div>
+      </div>
+    </div>
+  </div>
+
   <div id="admin-module" class="module-panel">
     <div class="mc-header">
       <span class="mc-title">Mission Control</span>
@@ -7338,8 +7388,10 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.26.2', date:'2026-03-03', notes:['Models Tab: dedicated model management under Tools & Config','Model health cards with live probe status','Quick Dispatch: raw model dispatch for debugging (bypass personas)','Recent Runs viewer from agent_messages table','Routing mode selector'] },
   { ver:'v0.26.1', date:'2026-03-02', notes:['Agents Tab: persona org chart (User → Rules → Persona cards)','Persona detail panel with 4 tabs: Identity (SOUL.md editor), Memory, Activity, Config','7-step onboarding wizard generates SOUL.md from curated questions','Global Rules editor (click RULES node in org chart)','Wake/Sleep persona lifecycle controls','Nav renamed: Orchestration → Agents'] },
   { ver:'v0.26.0', date:'2026-03-02', notes:['Persona-First Architecture (Phase A): personas SQLite table, CRUD API, dispatch_to_persona with SOUL+RULES injection','Auto-migrate config agents → personas on first run','12 new API endpoints: /api/personas CRUD, dispatch, wake/sleep, rules, memory','Bridge dispatch accepts persona_id for persona-routed dispatch','Daily memory logs per persona in PORTER_DATA_DIR/personas/<id>/memory/'] },
+  { ver:'v0.26.2', date:'2026-03-03', notes:['Models Tab: dedicated model management under Tools & Config','Model health cards with live probe status','Quick Dispatch: raw model dispatch for debugging (bypass personas)','Recent Runs viewer from agent_messages table','Routing mode selector'] },
   { ver:'v0.26.1', date:'2026-03-02', notes:['Agents Tab: persona org chart (User → Rules → Persona cards)','Persona detail panel with 4 tabs: Identity (SOUL.md editor), Memory, Activity, Config','7-step onboarding wizard generates SOUL.md from curated questions','Global Rules editor (click RULES node in org chart)','Wake/Sleep persona lifecycle controls','Nav renamed: Orchestration → Agents'] },
   { ver:'v0.26.0', date:'2026-03-02', notes:['Nav: Locations + Files grouped under Storage section'] },
   { ver:'v0.25.48', date:'2026-03-02', notes:['Fix: duplicate .chat-input-area CSS selector broke all module hiding — every panel showed at once'] },
@@ -9103,7 +9155,7 @@ function switchModule(name) {
   const loaders = {
     overview: function() { renderChatMessages(); populateChatModels(); populateChatRoutes(); }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); _loadRoutingPrefs(); }, projects: loadProjects, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
-    tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: function() { loadWorkflows(); loadBuildStatus(); }, memory: loadMemory, settings: syncSettingsUI,
+    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: function() { loadWorkflows(); loadBuildStatus(); }, memory: loadMemory, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -13184,6 +13236,104 @@ function _ensureOrchHubPolling(agentCount, modelCount) {
   _orchHubPollTimer = setInterval(function() {
     _refreshOrchHubActivity(_orchHubAgentCount, _orchHubModelCount);
   }, 15000);
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── Models Tab (Phase C) ────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+async function loadModels() {
+  try {
+    const [providers, runs] = await Promise.all([
+      api('/api/providers'),
+      api('/api/bridge/runs?limit=20'),
+    ]);
+    renderModelCards(providers);
+    renderModelRuns(runs);
+    populateQuickDispatch(providers);
+    _loadRoutingPrefs();
+  } catch(e) { console.debug('loadModels:', e); }
+}
+
+function renderModelCards(data) {
+  const grid = document.getElementById('models-grid');
+  if (!grid) return;
+  const providers = data && data.providers ? data.providers : [];
+  if (!providers.length) {
+    grid.innerHTML = '<div style="color:var(--text3);font-size:13px;grid-column:1/-1">No model backends detected.</div>';
+    return;
+  }
+  grid.innerHTML = providers.map(p => {
+    const dotColor = p.ok ? '#22c55e' : '#ef4444';
+    const statusText = p.ok ? 'Online' : 'Offline';
+    const typeLabel = p.type || 'unknown';
+    return `<div class="orch-card">
+      <div class="orch-card-head">
+        <span class="orch-card-dot" style="background:${dotColor}"></span>
+        <span class="orch-card-name">${escHtml(p.label || p.id)}</span>
+      </div>
+      <div class="orch-card-sub">${escHtml(typeLabel)} · <span style="color:${dotColor}">${statusText}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function renderModelRuns(data) {
+  const el = document.getElementById('models-runs');
+  if (!el) return;
+  const runs = data && data.runs ? data.runs : [];
+  if (!runs.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:12px">No dispatch runs yet.</div>';
+    return;
+  }
+  el.innerHTML = runs.map(run => {
+    const st = run.status === 'complete' ? '#22c55e' : run.status === 'failed' ? '#ef4444' : 'var(--text3)';
+    const ago = run.created_at ? new Date(run.created_at * 1000).toLocaleString() : '';
+    return `<div style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+      <span style="width:6px;height:6px;border-radius:50%;background:${st};flex-shrink:0"></span>
+      <span style="font-size:12px;font-weight:500;color:var(--text);min-width:70px">${escHtml(run.backend || '?')}</span>
+      <span style="font-size:12px;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(run.prompt_preview || '')}</span>
+      <span style="font-size:11px;color:var(--text3);white-space:nowrap">${run.duration_ms ? run.duration_ms + 'ms' : ''}</span>
+      <span style="font-size:10px;color:var(--text3);white-space:nowrap">${ago}</span>
+    </div>`;
+  }).join('');
+}
+
+function populateQuickDispatch(data) {
+  const sel = document.getElementById('qd-backend');
+  if (!sel) return;
+  const providers = data && data.providers ? data.providers : [];
+  sel.innerHTML = '<option value="">Auto-route</option>' +
+    providers.filter(p => p.ok).map(p =>
+      `<option value="${escHtml(p.id)}">${escHtml(p.label || p.id)}</option>`
+    ).join('');
+}
+
+async function quickDispatch() {
+  const prompt = (document.getElementById('qd-prompt').value || '').trim();
+  if (!prompt) return;
+  const backend = document.getElementById('qd-backend').value;
+  const resultEl = document.getElementById('qd-result');
+  resultEl.style.display = 'block';
+  resultEl.textContent = 'Dispatching...';
+  resultEl.style.color = 'var(--text3)';
+  const payload = { prompt };
+  if (backend) payload.backend = backend;
+  try {
+    const r = await api('/api/bridge/dispatch', payload);
+    if (r.ok) {
+      resultEl.textContent = 'Dispatched (run_id: ' + r.run_id + '). Check Recent Runs for result.';
+      resultEl.style.color = 'var(--accent)';
+      document.getElementById('qd-prompt').value = '';
+      // Refresh runs after delay
+      setTimeout(loadModels, 3000);
+    } else {
+      resultEl.textContent = 'Error: ' + (r.error || 'unknown');
+      resultEl.style.color = '#ef4444';
+    }
+  } catch(e) {
+    resultEl.textContent = 'Error: ' + e.message;
+    resultEl.style.color = '#ef4444';
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -18421,7 +18571,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.26.1' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.26.2' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -18894,7 +19044,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.26.1"})
+            self.reply_json({"v": "0.26.2"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20084,7 +20234,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.26.1'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.26.2'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -23526,7 +23676,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.26.1 ready (localhost only)")
+    print(f"\n  Porter v0.26.2 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

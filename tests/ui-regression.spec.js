@@ -289,7 +289,7 @@ test.describe('Nav regression — all tabs render content', () => {
     await login(page);
   });
 
-  const allTabs = ['overview', 'agents', 'memory', 'capabilities', 'projects', 'workflows', 'locations', 'admin'];
+  const allTabs = ['overview', 'agents', 'memory', 'models', 'capabilities', 'projects', 'workflows', 'locations', 'admin'];
 
   test('every tab shows content when clicked', async ({ page }) => {
     for (const tab of allTabs) {
