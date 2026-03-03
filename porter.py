@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.16 — Lobster Grid Card + Identity Fixes"""
+"""Porter v0.27.17 — Global Rules Injection"""
 
 
 
@@ -6695,7 +6695,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.16</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.17</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7934,6 +7934,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.17', date:'2026-03-03', notes:['Global Rules (RULES.md) re-injected into persona dispatch alongside SOUL.md','Rules rewritten as agent behavioral guidelines (not dev governance)','OpenClaw AGENTS.md synced with Porter Global Rules'] },
   { ver:'v0.27.16', date:'2026-03-03', notes:['Lobster now regular grid card with accent border (orchestrator class)','Global Rules button moved to Agents header','Identity queries inject full SOUL.md content','File tabs sorted: IDENTITY.md first, SOUL.md second'] },
   { ver:'v0.27.15', date:'2026-03-03', notes:['@mentions show blue pill badges below input (agents with avatar, models with name)','Personas detected in @indicator alongside model backends'] },
   { ver:'v0.27.14', date:'2026-03-03', notes:['@ autocomplete now shows agent personas (with avatar + role)','Agents listed first, then model backends','Works at start of message and mid-message after space'] },
@@ -19457,15 +19458,24 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     if not persona:
         return {"ok": False, "error": f"Persona not found: {persona_id}", "run_id": run_id}
 
-    # Load SOUL.md for persona identity context
-    # Note: RULES.md is Porter project governance, not agent behavioral rules — do NOT inject it
+    # Load SOUL.md + RULES.md for persona context
     soul = _persona_get_soul(persona_id)
+    rules = ''
+    _rules_path = Path(PORTER_DATA_DIR) / 'personas' / 'RULES.md'
+    if _rules_path.exists():
+        try:
+            rules = _rules_path.read_text().strip()
+        except Exception:
+            rules = ''
     pname = persona.get('name', 'Agent')
+    # Build context suffix: identity + global rules
+    _ctx_parts = []
     if soul.strip():
-        # Keep context brief — models echo verbose system-style prefixes
-        # Frame as a natural instruction at the end, not a [System:] block
-        _soul_brief = soul.strip()[:600]
-        augmented_message = f"{message}\n\n(Respond as {pname}. Identity: {_soul_brief})"
+        _ctx_parts.append(f"Identity: {soul.strip()[:600]}")
+    if rules:
+        _ctx_parts.append(f"Global rules: {rules[:400]}")
+    if _ctx_parts:
+        augmented_message = f"{message}\n\n(Respond as {pname}. {' | '.join(_ctx_parts)})"
     else:
         augmented_message = message
 
@@ -19976,7 +19986,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.16' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.17' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -20458,7 +20468,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.16"})
+            self.reply_json({"v": "0.27.17"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20545,7 +20555,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.16"
+                health["porter_version"] = "0.27.17"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -21846,7 +21856,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.16'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.17'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -25425,7 +25435,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.16 ready (localhost only)")
+    print(f"\n  Porter v0.27.17 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
