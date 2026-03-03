@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.26.4 — Projects + Workflows Persona Integration — Nav Grouping"""
+"""Porter v0.26.5 — Persona-First Architecture Complete — Nav Grouping"""
 
 
 
@@ -6238,7 +6238,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.26.4</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.26.5</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7495,6 +7495,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.26.5', date:'2026-03-03', notes:['Status dots on persona cards (idle/active/sleeping)','Persona names in chat message badges','Mission Control events for persona wake/sleep','Periodic persona status refresh (30s)','Claude color in model badge palette'] },
   { ver:'v0.26.4', date:'2026-03-03', notes:['Projects: persona filter + persona badges on tasks','Chain builder: steps target personas','Heartbeat engine: per-persona cron + checklist editor','Heartbeat daemon thread','Tasks: assigned_persona_id column'] },
   { ver:'v0.26.3', date:'2026-03-03', notes:['Chat: persona cards on welcome screen','Chat: @persona mentions dispatch via persona layer','Memory: persona selector with MEMORY.md + daily logs view','Persona dispatch + polling in chat'] },
   { ver:'v0.26.2', date:'2026-03-03', notes:['Models Tab: dedicated model management under Tools & Config','Model health cards with live probe status','Quick Dispatch: raw model dispatch for debugging (bypass personas)','Recent Runs viewer from agent_messages table','Routing mode selector'] },
@@ -9259,7 +9260,14 @@ function switchModule(name) {
     if (_lh) _lh.style.display = 'none';
   }
   const loaders = {
-    overview: function() { renderChatMessages(); populateChatModels(); populateChatRoutes(); loadPersonas(); }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); _loadRoutingPrefs(); }, projects: loadProjects, admin: loadAdmin,
+    overview: function() {
+      renderChatMessages(); populateChatModels(); populateChatRoutes(); loadPersonas();
+      if (window._personaRefreshTimer) clearInterval(window._personaRefreshTimer);
+      window._personaRefreshTimer = setInterval(function() {
+        if (document.getElementById('overview-module') && document.getElementById('overview-module').classList.contains('active')) loadPersonas();
+        else clearInterval(window._personaRefreshTimer);
+      }, 30000);
+    }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); _loadRoutingPrefs(); }, projects: loadProjects, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
     models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: function() { loadWorkflows(); loadBuildStatus(); }, memory: loadMemory, settings: syncSettingsUI,
   };
@@ -10959,11 +10967,12 @@ function _copyCodeBlock(btn) {
   });
 }
 function _modelBadge(m) {
-  if (!m.model) return '';
-  var colors = { 'openclaw':'#10b981', 'gemini':'#4285f4', 'ollama':'#f59e0b', 'gpt':'#10b981', 'codex':'#10b981' };
-  var c = '#888', name = m.model;
+  if (!m.model && !m.persona_name) return '';
+  var colors = { 'openclaw':'#10b981', 'gemini':'#4285f4', 'ollama':'#f59e0b', 'gpt':'#10b981', 'codex':'#10b981', 'claude':'#d97706' };
+  var c = '#888', name = m.model || '';
   for (var k in colors) { if (name.toLowerCase().indexOf(k) >= 0) { c = colors[k]; break; } }
-  return '<div class="chat-msg-badge"><span class="badge-dot" style="background:'+c+'"></span>'+escHtml(name)+'</div>';
+  var label = m.persona_name ? escHtml(m.persona_name) + ' via ' + escHtml(name) : escHtml(name);
+  return '<div class="chat-msg-badge"><span class="badge-dot" style="background:'+c+'"></span>' + label + '</div>';
 }
 function _updateStopBtn(active) {
   var btn = document.getElementById('chat-stop-btn');
@@ -18896,7 +18905,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.26.4' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.26.5' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -19369,7 +19378,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.26.4"})
+            self.reply_json({"v": "0.26.5"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -19456,7 +19465,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.26.4"
+                health["porter_version"] = "0.26.5"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -20559,7 +20568,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.26.4'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.26.5'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -24038,7 +24047,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.26.4 ready (localhost only)")
+    print(f"\n  Porter v0.26.5 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
