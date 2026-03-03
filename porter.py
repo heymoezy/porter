@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.7 — 3-Selector Chat Bar"""
+"""Porter v0.27.8 — Smart Chat History"""
 
 
 
@@ -4405,7 +4405,28 @@ def _safe_lease_running(lease_file, agent_id: str, now: float) -> bool:
         return False
 
 
-def _save_chat_message(chat_id, model_id, user_msg, assistant_msg):
+def _smart_chat_title(user_msg, persona_name=""):
+    """Generate a smart title: persona prefix + trimmed message."""
+    import re
+    # Strip @mentions and /commands from the message
+    msg = re.sub(r'@\w+', '', user_msg).strip()
+    msg = re.sub(r'^/\w+\s*', '', msg).strip()
+    # Remove filler words from start
+    msg = re.sub(r'^(hey|hi|hello|please|can you|could you|help me|i want to|i need to)\s+', '', msg, flags=re.IGNORECASE).strip()
+    # Capitalize first letter
+    if msg:
+        msg = msg[0].upper() + msg[1:]
+    # Truncate to ~60 chars at word boundary
+    if len(msg) > 60:
+        msg = msg[:57].rsplit(' ', 1)[0] + '...'
+    if not msg:
+        msg = 'New chat'
+    # Prefix with persona name if present
+    if persona_name:
+        return persona_name + ': ' + msg
+    return msg
+
+def _save_chat_message(chat_id, model_id, user_msg, assistant_msg, project_id="", persona_name=""):
     """Append a message pair to a chat session in SQLite."""
     try:
         conn = _db_conn()
@@ -4413,11 +4434,12 @@ def _save_chat_message(chat_id, model_id, user_msg, assistant_msg):
         # Check if chat exists, if not create it
         res = conn.execute("SELECT 1 FROM chats WHERE id = ?", (chat_id,)).fetchone()
         if not res:
-            title = user_msg[:50]
+            title = _smart_chat_title(user_msg, persona_name)
+            _meta = json.dumps({"persona_name": persona_name}) if persona_name else "{}"
             conn.execute("""
-                INSERT INTO chats (id, title, model_id, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-            """, (chat_id, title, model_id, now, now))
+                INSERT INTO chats (id, title, model_id, project_id, created_at, updated_at, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (chat_id, title, model_id, project_id or None, now, now, _meta))
         else:
             conn.execute("UPDATE chats SET updated_at = ?, model_id = ? WHERE id = ?", (now, model_id, chat_id))
         
@@ -5641,8 +5663,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mp-opt.selected { color:#fff; }
 .chat-sidebar { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
 .chat-sidebar-item {
-  display:flex; align-items:center; gap:8px; padding:6px 10px;
-  border-radius:6px; font-size:12px; color:var(--text3); cursor:pointer;
+  display:flex; align-items:center; gap:8px; padding:7px 10px;
+  border-radius:6px; font-size:13px; color:var(--text2); cursor:pointer;
   border:1px solid transparent; transition:.12s;
 }
 .chat-sidebar-item:hover { background:var(--raised); color:var(--text); }
@@ -6663,7 +6685,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.7</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.8</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7913,6 +7935,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.8', date:'2026-03-03', notes:['Smart chat titles: persona prefix + trimmed message','Project badges in chat history','Persona badges in chat history','Bigger font in chat sidebar (13px)','project_id + persona saved with chat sessions'] },
   { ver:'v0.27.7', date:'2026-03-03', notes:['3-selector chat bar: Agent + Project + Model','Agent selector: pick persona for SOUL context injection','Project selector: General / Personality / specific project context','Model override: force specific backend or auto-route via agent preferred','Personality mode: build agent identity through conversation','Dropdown menus with search-friendly layout'] },
   { ver:'v0.27.6', date:'2026-03-03', notes:['Porter-styled modal dialogs (porterPrompt, porterConfirm, porterAlert)','Replaced 17+ browser prompt/confirm/alert calls with themed modals','Keyboard support (Enter to confirm, Escape to cancel)','Overlay click-to-dismiss'] },
   { ver:'v0.27.5', date:'2026-03-03', notes:['Slide-out detail panel from right (full height, overlay)','Agent cards: text wrapping, consistent 130px width','Cards left-aligned in grid','Removed max-height limit on detail content'] },
@@ -12549,10 +12572,14 @@ function chatSend() {
   _chatMessages.push({ role: 'assistant', content: '', model: modelId });
   _updateStopBtn(true);
 
+  var _streamProject = (_chatProject && _chatProject.id && _chatProject.id !== '_personality') ? _chatProject.id : '';
+  var _streamPersona = _chatAgent ? (_chatAgent.name || '') : '';
   const url = '/api/chat/stream?model=' + encodeURIComponent(modelId)
     + '&prompt=' + encodeURIComponent(fullPrompt)
     + '&route=' + encodeURIComponent(_chatRoute)
-    + '&chat_id=' + encodeURIComponent(_chatId);
+    + '&chat_id=' + encodeURIComponent(_chatId)
+    + '&project_id=' + encodeURIComponent(_streamProject)
+    + '&persona_name=' + encodeURIComponent(_streamPersona);
 
   const evtSource = new EventSource(url);
   _chatEventSource = evtSource;
@@ -12605,6 +12632,10 @@ async function loadChatSessions() {
   main.style.display = 'none';
   list.innerHTML = '<div class="loading-indicator">Loading chat history</div>';
 
+  // Fetch projects for badge resolution
+  if (!window._allProjects) {
+    try { var pr = await api('/api/projects'); window._allProjects = (pr && pr.projects) || []; } catch(e) { window._allProjects = []; }
+  }
   const resp = await api('/api/chat/sessions');
   if (!resp || !resp.sessions) { list.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px">No saved chats.</div>'; return; }
 
@@ -12629,11 +12660,23 @@ async function loadChatSessions() {
   });
   var html = '';
   Object.keys(groups).forEach(function(label) {
-    html += '<div style="font-size:10px;color:var(--text3);padding:6px 10px 2px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">' + label + '</div>';
+    html += '<div style="font-size:11px;color:var(--text3);padding:8px 10px 3px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">' + label + '</div>';
     groups[label].forEach(function(s) {
       var safeTitle = escHtml(s.title).replace(/'/g, "\\'");
+      var badges = '';
+      if (s.project_id) {
+        var pName = s.project_id;
+        (_allProjects || []).forEach(function(p) { if (p.id === s.project_id) pName = p.name || p.id; });
+        badges += '<span style="font-size:10px;padding:1px 6px;background:var(--accent);color:#fff;border-radius:3px;white-space:nowrap">📁 ' + escHtml(pName) + '</span>';
+      }
+      if (s.persona) {
+        badges += '<span style="font-size:10px;padding:1px 6px;background:color-mix(in srgb,var(--accent) 15%,var(--bg));color:var(--accent);border-radius:3px;white-space:nowrap">' + escHtml(s.persona) + '</span>';
+      }
       html += '<div class="chat-sidebar-item' + (s.id === _chatId ? ' active' : '') + '" onclick="loadChatSession(\'' + escHtml(s.id) + '\')">'
-        + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(s.title) + '</span>'
+        + '<div style="flex:1;min-width:0">'
+        + '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(s.title) + '</div>'
+        + (badges ? '<div style="display:flex;gap:4px;margin-top:2px">' + badges + '</div>' : '')
+        + '</div>'
         + '<span class="chat-sidebar-actions">'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();renameChatSession(\'' + escHtml(s.id) + '\',\'' + safeTitle + '\')" title="Rename">&#9998;</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();deleteChatSession(\'' + escHtml(s.id) + '\')">&#10005;</button>'
@@ -19844,7 +19887,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.7' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.8' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -20326,7 +20369,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.7"})
+            self.reply_json({"v": "0.27.8"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20413,7 +20456,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.7"
+                health["porter_version"] = "0.27.8"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -21714,7 +21757,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.7'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.8'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -21992,7 +22035,10 @@ class Handler(BaseHTTPRequestHandler):
 
                 # Auto-save to chat history if chat_id provided
                 if chat_id and full_response:
-                    _save_chat_message(chat_id, model_id, prompt, full_response)
+                    _stream_project = qs.get("project_id", [""])[0]
+                    _stream_persona = qs.get("persona_name", [""])[0]
+                    _save_chat_message(chat_id, model_id, prompt, full_response,
+                                       project_id=_stream_project, persona_name=_stream_persona)
 
             except Exception as e:
                 log.error("Chat stream error: %s", e)
@@ -22020,6 +22066,7 @@ class Handler(BaseHTTPRequestHandler):
                 if role == "admin":
                     rows = conn.execute("""
                         SELECT c.id, c.title, c.model_id, c.updated_at, c.username,
+                               c.project_id, c.metadata,
                                (SELECT count(*) FROM chat_messages WHERE chat_id = c.id) as msg_count
                         FROM chats c
                         ORDER BY c.updated_at DESC
@@ -22027,6 +22074,7 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     rows = conn.execute("""
                         SELECT c.id, c.title, c.model_id, c.updated_at, c.username,
+                               c.project_id, c.metadata,
                                (SELECT count(*) FROM chat_messages WHERE chat_id = c.id) as msg_count
                         FROM chats c
                         WHERE c.username = ? OR c.username IS NULL
@@ -22034,6 +22082,11 @@ class Handler(BaseHTTPRequestHandler):
                     """, (username,)).fetchall()
                 conn.close()
                 for r in rows:
+                    _meta = {}
+                    try:
+                        _meta = json.loads(r["metadata"] or "{}")
+                    except Exception:
+                        pass
                     sessions.append({
                         "id": r["id"],
                         "title": r["title"] or "Untitled",
@@ -22041,6 +22094,8 @@ class Handler(BaseHTTPRequestHandler):
                         "messages": r["msg_count"],
                         "updated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(r["updated_at"])),
                         "updated_ts": r["updated_at"],
+                        "project_id": r["project_id"] or "",
+                        "persona": _meta.get("persona_name", ""),
                     })
             except Exception as e:
                 log.debug("Chat session fetch error: %s", e)
@@ -25276,7 +25331,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.7 ready (localhost only)")
+    print(f"\n  Porter v0.27.8 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
