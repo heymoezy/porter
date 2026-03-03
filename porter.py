@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.18 — Soul Shaping via Chat"""
+"""Porter v0.27.19 — Neutral Dispatch CWD"""
 
 
 
@@ -6695,7 +6695,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.18</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.19</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7934,6 +7934,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.19', date:'2026-03-03', notes:['All CLI dispatches run from $HOME (not Porter dir) — prevents CLAUDE.md context bleed','Fixed: agents no longer inherit Porter project identity','Fixed: RULES.md path used PORTER_DATA_DIR (undefined) instead of PERSONAS_DIR'] },
   { ver:'v0.27.18', date:'2026-03-03', notes:['Soul shaping via chat — identity instructions auto-persist to SOUL.md','Trigger phrases: remember that you, from now on, be more/less, etc.','Learned traits appended under ## Learned Traits section','POST /api/personas/<id>/shape endpoint for manual API shaping'] },
   { ver:'v0.27.17', date:'2026-03-03', notes:['Global Rules (RULES.md) re-injected into persona dispatch alongside SOUL.md','Rules rewritten as agent behavioral guidelines (not dev governance)','OpenClaw AGENTS.md synced with Porter Global Rules'] },
   { ver:'v0.27.16', date:'2026-03-03', notes:['Lobster now regular grid card with accent border (orchestrator class)','Global Rules button moved to Agents header','Identity queries inject full SOUL.md content','File tabs sorted: IDENTITY.md first, SOUL.md second'] },
@@ -18918,7 +18919,7 @@ def _dispatch_openclaw(message, model=None, timeout=120):
     agent_id = model or "main"
     cmd = [oc_bin, "agent", "--agent", agent_id, "--message", message, "--json", "--timeout", str(timeout)]
     log.info("Agent bridge [openclaw]: agent=%s msg=%s", agent_id, message[:80])
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env())
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env(), cwd=str(Path.home()))
     if result.returncode != 0:
         return {"ok": False, "error": result.stderr[:500] or "OpenClaw returned non-zero"}
     try:
@@ -18995,7 +18996,7 @@ def _dispatch_claude(message, model=None, timeout=120):
     if model:
         cmd.extend(["--model", model])
     log.info("Agent bridge [claude]: msg=%s", message[:80])
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env())
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env(), cwd=str(Path.home()))
     if result.returncode != 0:
         return {"ok": False, "error": (result.stderr or "Claude CLI returned non-zero")[:500]}
     # Parse JSON output
@@ -19031,7 +19032,7 @@ def _dispatch_codex(message, model=None, timeout=120):
     codex_model = (model or os.environ.get("PORTER_CODEX_MODEL", "").strip() or "gpt-5.1")
     cmd = [cdx_bin, "exec", "--ephemeral", "--json", "--skip-git-repo-check", "-m", codex_model, message]
     log.info("Agent bridge [codex]: model=%s msg=%s", codex_model, message[:80])
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env())
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env(), cwd=str(Path.home()))
     # Parse JSONL output — extract assistant text and usage
     text = ""
     usage = {}
@@ -19490,7 +19491,7 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     # Load SOUL.md + RULES.md for persona context
     soul = _persona_get_soul(persona_id)
     rules = ''
-    _rules_path = Path(PORTER_DATA_DIR) / 'personas' / 'RULES.md'
+    _rules_path = PERSONAS_DIR / 'RULES.md'
     if _rules_path.exists():
         try:
             rules = _rules_path.read_text().strip()
@@ -20027,7 +20028,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.18' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.19' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -20509,7 +20510,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.18"})
+            self.reply_json({"v": "0.27.19"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20596,7 +20597,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.18"
+                health["porter_version"] = "0.27.19"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -21897,7 +21898,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.18'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.19'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -22070,7 +22071,7 @@ class Handler(BaseHTTPRequestHandler):
                     else:
                         import subprocess as _sp
                         _cl_cmd = [cl_bin, "-p", "--output-format", "stream-json", prompt]
-                        _proc = _sp.Popen(_cl_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env())
+                        _proc = _sp.Popen(_cl_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env(), cwd=str(Path.home()))
                         for _line in iter(_proc.stdout.readline, ''):
                             if not _line.strip():
                                 continue
@@ -22124,7 +22125,7 @@ class Handler(BaseHTTPRequestHandler):
                         import subprocess as _sp
                         codex_model = os.environ.get("PORTER_CODEX_MODEL", "").strip() or "gpt-5.1"
                         _cdx_cmd = [cdx_bin, "exec", "--ephemeral", "--json", "--skip-git-repo-check", "-m", codex_model, prompt]
-                        _proc = _sp.Popen(_cdx_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env())
+                        _proc = _sp.Popen(_cdx_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env(), cwd=str(Path.home()))
                         for _line in iter(_proc.stdout.readline, ''):
                             if not _line.strip():
                                 continue
@@ -25487,7 +25488,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.18 ready (localhost only)")
+    print(f"\n  Porter v0.27.19 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
