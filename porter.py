@@ -5416,6 +5416,11 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-msg li { margin:2px 0; font-size:13px; }
 .chat-msg hr { border:none; border-top:1px solid var(--border); margin:8px 0; }
 .chat-msg a { color:var(--accent); text-decoration:underline; }
+.chat-msg table { border-collapse:collapse; width:100%; margin:8px 0; font-size:13px; table-layout:auto; }
+.chat-msg th { text-align:left; padding:6px 12px; border-bottom:2px solid var(--border); font-weight:600; color:var(--text); background:var(--raised); white-space:nowrap; }
+.chat-msg td { padding:5px 12px; border-bottom:1px solid var(--border); color:var(--text2); min-width:80px; }
+.chat-msg td:first-child, .chat-msg th:first-child { white-space:nowrap; }
+.chat-msg tr:last-child td { border-bottom:none; }
 .chat-msg b,.chat-msg strong { font-weight:600; }
 .chat-msg code:not(pre code) {
   background:var(--bg2); padding:1px 5px; border-radius:4px; font-size:12px;
@@ -11531,6 +11536,27 @@ function _renderMarkdown(md) {
     }
     if (inList && line.trim()===''){html.push('</'+lt+'>');inList=false;continue;}
     if (inList){html.push('</'+lt+'>');inList=false;}
+    // Table detection: line starts with |
+    if (/^\|/.test(line.trim())) {
+      // Collect all consecutive | lines
+      var trows = [line];
+      while (li + 1 < lines.length && /^\|/.test(lines[li+1].trim())) { li++; trows.push(lines[li]); }
+      // Parse table
+      var thead = '', tbody = '';
+      for (var ti = 0; ti < trows.length; ti++) {
+        var cells = trows[ti].split('|').slice(1); // skip leading empty
+        if (cells.length && cells[cells.length-1].trim() === '') cells.pop(); // skip trailing empty
+        if (ti === 0) {
+          thead = '<tr>' + cells.map(function(c){return '<th>'+_inlineMd(c.trim())+'</th>';}).join('') + '</tr>';
+        } else if (/^[\s|:-]+$/.test(trows[ti])) {
+          continue; // separator row (|---|---|)
+        } else {
+          tbody += '<tr>' + cells.map(function(c){return '<td>'+_inlineMd(c.trim())+'</td>';}).join('') + '</tr>';
+        }
+      }
+      html.push('<table><thead>'+thead+'</thead><tbody>'+tbody+'</tbody></table>');
+      continue;
+    }
     if (line.trim()!=='') html.push('<p>'+_inlineMd(line)+'</p>');
   }
   if (inList) html.push('</'+lt+'>');
@@ -11956,7 +11982,7 @@ function renderChatMessages(streamUpdate) {
     if (last && last.classList.contains('assistant')) {
       var m = _chatMessages[_chatMessages.length - 1];
       last.innerHTML = _renderMarkdown(m.content) + _modelBadge(m);
-      el.scrollTop = el.scrollHeight;
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 150) el.scrollTop = el.scrollHeight;
       return;
     }
   }
@@ -11967,7 +11993,7 @@ function renderChatMessages(streamUpdate) {
     var badge = (m.role === 'assistant' || m.role === 'skill') ? _modelBadge(m) : '';
     return '<div class="chat-msg ' + cls + streaming + '">' + content + badge + '</div>';
   }).join('');
-  el.scrollTop = el.scrollHeight;
+  if (!_chatStreaming || el.scrollHeight - el.scrollTop - el.clientHeight < 150) el.scrollTop = el.scrollHeight;
   _updateStopBtn(_chatStreaming);
   if (!streamUpdate) _saveChatMessages();
 }
@@ -14474,6 +14500,30 @@ async function _dispatchToPersonaChat(persona, message) {
   }
 }
 
+async function _typePersonaResponse(waitIdx, fullText, persona) {
+  var words = fullText.split(/( +)/);
+  var revealed = '';
+  var chunkSize = 3; // words per tick
+  _chatMessages[waitIdx] = {
+    role: 'assistant', content: '', model: persona.preferred_backend || 'auto', persona_name: persona.name
+  };
+  for (var wi = 0; wi < words.length; wi += chunkSize) {
+    revealed += words.slice(wi, wi + chunkSize).join('');
+    _chatMessages[waitIdx].content = revealed;
+    renderChatMessages(true);
+    await new Promise(function(r) { setTimeout(r, 30); });
+  }
+  _chatMessages[waitIdx].content = fullText;
+  _chatStreaming = false;
+  _updateStopBtn(false);
+  renderChatMessages();
+  if (_chatId) {
+    _save_chat_message_local(_chatId, persona.preferred_backend || 'auto',
+      _chatMessages.filter(function(m){return m.role==='user'}).pop().content || '',
+      fullText);
+  }
+}
+
 async function _pollPersonaResponse(runId, persona, waitIdx) {
   var dots = 0;
   var baseMsg = persona.name + ' is thinking';
@@ -14492,21 +14542,8 @@ async function _pollPersonaResponse(runId, persona, waitIdx) {
         if (run.status === 'complete' || run.status === 'failed') {
           const detail = await api('/api/bridge/run?id=' + runId, null, 30000);
           var responseText = (detail && detail.run && detail.run.response) || '(no response)';
-          _chatMessages[waitIdx] = {
-            role: 'assistant',
-            content: responseText,
-            model: persona.preferred_backend || 'auto',
-            persona_name: persona.name,
-          };
-          _chatStreaming = false;
-          _updateStopBtn(false);
-          renderChatMessages();
-          // Save persona chat to history
-          if (_chatId) {
-            _save_chat_message_local(_chatId, persona.preferred_backend || 'auto',
-              _chatMessages.filter(function(m){return m.role==='user'}).pop().content || '',
-              responseText);
-          }
+          // Typing animation: reveal text progressively
+          await _typePersonaResponse(waitIdx, responseText, persona);
           return;
         }
       }
