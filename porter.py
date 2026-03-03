@@ -5462,7 +5462,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   width:5px; height:5px; border-radius:50%; display:inline-block;
 }
 .chat-msg.assistant { white-space:normal; }
-.chat-msg p { margin:2px 0; }
+.chat-msg p { margin:0 0 8px 0; }
 
 
 /* Rules */
@@ -11531,7 +11531,7 @@ function _renderMarkdown(md) {
     }
     if (inList && line.trim()===''){html.push('</'+lt+'>');inList=false;continue;}
     if (inList){html.push('</'+lt+'>');inList=false;}
-    if (line.trim()==='') html.push('<br>'); else html.push('<p>'+_inlineMd(line)+'</p>');
+    if (line.trim()!=='') html.push('<p>'+_inlineMd(line)+'</p>');
   }
   if (inList) html.push('</'+lt+'>');
   var result = html.join('\n');
@@ -19523,7 +19523,7 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
                           'tell me about you', 'describe yourself', 'your personality', 'your role',
                           'what are you', 'show me your', 'your files']
     if any(t in _msg_lower for t in _identity_triggers) and soul.strip():
-        augmented_message = f"{message}\n\n--- Your SOUL.md file ---\n{soul.strip()}\n--- End SOUL.md ---\n\n(Use the content above to answer. Respond as {pname} in first person.)"
+        augmented_message = f"{message}\n\n--- Your SOUL.md file ---\n{soul.strip()}\n--- End SOUL.md ---\n\n(Respond as {pname} in first person. ONLY use information from the SOUL.md above. Do not invent details about your backend, model, squad, or project assignments. Never mention which AI model you run on. If something is not in your SOUL.md, do not mention it.)"
 
     # Resolve backend
     _be_override = backend_override
