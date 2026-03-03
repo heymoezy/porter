@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.11 — Chat + Logs Polish"""
+"""Porter v0.27.12 — Dispatch Timeout + Echo Fix"""
 
 
 
@@ -6692,7 +6692,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.11</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.12</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7942,6 +7942,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.12', date:'2026-03-03', notes:['Fix: persona dispatch timeout raised to 180s (was 15s default)','Fix: Gemini no longer echoes system prompt — identity instruction moved to suffix','Poll calls timeout set to 30s','Personality mode instruction as suffix, not prefix'] },
   { ver:'v0.27.11', date:'2026-03-03', notes:['Fix: chat titles now use raw user text (not context-injected prompt)','Chat history: General badge when no project selected','Persona dispatch: animated thinking dots, survives tab switching','SOUL context injection shortened (800 char cap)','Personality mode: brief role-play instruction','Fix: Logs tab error loop — client error reporting rate-limited (3/10s)','Logs detail render wrapped in try/catch'] },
   { ver:'v0.27.10', date:'2026-03-03', notes:['Fix: chat titles use raw user text (not context-injected prompt)','Chat history shows General badge when no project','Persona dispatch: animated thinking dots, survives tab switching','SOUL context injection shortened (800 char cap, bracket framing)','Personality mode: brief role-play instruction (no more echo)'] },
   { ver:'v0.27.9', date:'2026-03-03', notes:['Fix: RULES.md no longer injected into persona dispatch (project governance, not agent behavior)','SOUL.md context framed as identity instructions, not raw text dump','Personality mode: dedicated prompt for identity conversations','Backend override passed through dispatch endpoint','Model selector override works in persona dispatch'] },
@@ -14428,7 +14429,7 @@ async function _dispatchToPersonaChat(persona, message) {
     if (window._chatProject && window._chatProject.id === '_personality') {
       dispatchData.personality_mode = true;
     }
-    const r = await api('/api/personas/' + persona.id + '/dispatch', dispatchData);
+    const r = await api('/api/personas/' + persona.id + '/dispatch', dispatchData, 180000);
     if (r.ok) {
       _pollPersonaResponse(r.run_id, persona, waitIdx);
     } else {
@@ -14459,11 +14460,11 @@ async function _pollPersonaResponse(runId, persona, waitIdx) {
       renderChatMessages();
     }
     try {
-      const r = await api('/api/bridge/runs?limit=1&run_id=' + runId);
+      const r = await api('/api/bridge/runs?limit=1&run_id=' + runId, null, 30000);
       if (r.ok && r.runs && r.runs.length > 0) {
         const run = r.runs[0];
         if (run.status === 'complete' || run.status === 'failed') {
-          const detail = await api('/api/bridge/run?id=' + runId);
+          const detail = await api('/api/bridge/run?id=' + runId, null, 30000);
           var responseText = (detail && detail.response) || run.prompt_preview || '(no response)';
           _chatMessages[waitIdx] = {
             role: 'assistant',
@@ -19428,16 +19429,16 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     soul = _persona_get_soul(persona_id)
     pname = persona.get('name', 'Agent')
     if soul.strip():
-        # Keep context brief — models echo verbose instructions
-        # Trim SOUL to first 800 chars to stay under prompt budget
-        _soul_brief = soul.strip()[:800]
-        augmented_message = f"[System: You are {pname}. {_soul_brief}]\n\n{message}"
+        # Keep context brief — models echo verbose system-style prefixes
+        # Frame as a natural instruction at the end, not a [System:] block
+        _soul_brief = soul.strip()[:600]
+        augmented_message = f"{message}\n\n(Respond as {pname}. Identity: {_soul_brief})"
     else:
-        augmented_message = f"[System: You are {pname}.]\n\n{message}"
+        augmented_message = message
 
     # Personality mode: add brief role-play instruction
     if personality_mode:
-        augmented_message = f"[System: Respond as {pname} in first person. Be conversational.]\n\n{message}"
+        augmented_message = f"{message}\n\n(Respond as {pname} in first person. Be conversational. Share your personality and working style.)"
 
     # Resolve backend
     _be_override = backend_override
@@ -19934,7 +19935,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.11' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.12' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -20416,7 +20417,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.11"})
+            self.reply_json({"v": "0.27.12"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20503,7 +20504,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.11"
+                health["porter_version"] = "0.27.12"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -21804,7 +21805,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.11'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.12'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -25383,7 +25384,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.11 ready (localhost only)")
+    print(f"\n  Porter v0.27.12 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
