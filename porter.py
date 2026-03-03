@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.26.2 — Models Tab — Nav Grouping"""
+"""Porter v0.26.3 — Chat + Memory Persona Reframe — Nav Grouping"""
 
 
 
@@ -5630,6 +5630,15 @@ body.density-compact .file-name { padding: 6px 0; }
   background:color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
+/* ── Persona Chat Bar ──────────────────────────────────────── */
+.chat-persona-bar { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:12px 0 8px; }
+.chat-persona-btn { display:flex; align-items:center; gap:6px; padding:8px 14px;
+  background:var(--raised); border:1px solid var(--border); border-radius:8px;
+  cursor:pointer; transition:border-color .15s, background .15s; font-size:12px; color:var(--text); }
+.chat-persona-btn:hover { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 6%, var(--bg)); }
+.chat-persona-btn .persona-btn-avatar { font-size:18px; }
+.chat-persona-btn .persona-btn-name { font-weight:500; }
+
 /* ── Persona Org Chart ──────────────────────────────────────── */
 .persona-org { display:flex; flex-direction:column; align-items:center; gap:0; margin-bottom:24px; }
 .org-node { display:flex; flex-direction:column; align-items:center; padding:14px 20px;
@@ -6171,7 +6180,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.26.2</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.26.3</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6259,6 +6268,8 @@ select.settings-input { padding-right: 26px; }
               <div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>
               <textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)"></textarea>
               <div id="chat-at-ind-welcome" class="chat-at-indicator"></div>
+              <!-- Persona quick-access (Phase D) -->
+              <div id="chat-persona-bar" class="chat-persona-bar"></div>
               <div class="chat-welcome-meta">
                 <button class="btn btn-ghost" style="font-size:11px" onclick="loadChatSessions()">History</button>
 <select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>
@@ -6870,6 +6881,9 @@ select.settings-input { padding-right: 26px; }
   <div id="memory-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Memory</span>
+      <select id="mem-persona-sel" class="settings-input" style="font-size:12px;min-width:150px;margin-left:8px" onchange="loadMemoryForPersona(this.value)">
+        <option value="">All Agents (legacy)</option>
+      </select>
       <div style="display:flex;gap:6px" class="mem-export-bar">
         <button class="btn btn-ghost" style="font-size:11px" onclick="memExportAll()" title="Export memory files">↓ Export</button>
         <label class="btn btn-ghost" style="font-size:11px;cursor:pointer" title="Import memory">↑ Import<input type="file" accept=".zip,.md" style="display:none" onchange="memImportZip(this)"></label>
@@ -7388,12 +7402,10 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.26.3', date:'2026-03-03', notes:['Chat: persona cards on welcome screen','Chat: @persona mentions dispatch via persona layer','Memory: persona selector with MEMORY.md + daily logs view','Persona dispatch + polling in chat'] },
   { ver:'v0.26.2', date:'2026-03-03', notes:['Models Tab: dedicated model management under Tools & Config','Model health cards with live probe status','Quick Dispatch: raw model dispatch for debugging (bypass personas)','Recent Runs viewer from agent_messages table','Routing mode selector'] },
   { ver:'v0.26.1', date:'2026-03-02', notes:['Agents Tab: persona org chart (User → Rules → Persona cards)','Persona detail panel with 4 tabs: Identity (SOUL.md editor), Memory, Activity, Config','7-step onboarding wizard generates SOUL.md from curated questions','Global Rules editor (click RULES node in org chart)','Wake/Sleep persona lifecycle controls','Nav renamed: Orchestration → Agents'] },
-  { ver:'v0.26.0', date:'2026-03-02', notes:['Persona-First Architecture (Phase A): personas SQLite table, CRUD API, dispatch_to_persona with SOUL+RULES injection','Auto-migrate config agents → personas on first run','12 new API endpoints: /api/personas CRUD, dispatch, wake/sleep, rules, memory','Bridge dispatch accepts persona_id for persona-routed dispatch','Daily memory logs per persona in PORTER_DATA_DIR/personas/<id>/memory/'] },
-  { ver:'v0.26.2', date:'2026-03-03', notes:['Models Tab: dedicated model management under Tools & Config','Model health cards with live probe status','Quick Dispatch: raw model dispatch for debugging (bypass personas)','Recent Runs viewer from agent_messages table','Routing mode selector'] },
-  { ver:'v0.26.1', date:'2026-03-02', notes:['Agents Tab: persona org chart (User → Rules → Persona cards)','Persona detail panel with 4 tabs: Identity (SOUL.md editor), Memory, Activity, Config','7-step onboarding wizard generates SOUL.md from curated questions','Global Rules editor (click RULES node in org chart)','Wake/Sleep persona lifecycle controls','Nav renamed: Orchestration → Agents'] },
-  { ver:'v0.26.0', date:'2026-03-02', notes:['Nav: Locations + Files grouped under Storage section'] },
+  { ver:'v0.26.0', date:'2026-03-02', notes:['Persona-First Architecture: personas SQLite table, CRUD API, dispatch_to_persona with SOUL+RULES injection','Auto-migrate config agents → personas','12 new API endpoints','Nav: Locations + Files grouped under Storage'] },
   { ver:'v0.25.48', date:'2026-03-02', notes:['Fix: duplicate .chat-input-area CSS selector broke all module hiding — every panel showed at once'] },
   { ver:'v0.25.47', date:'2026-03-02', notes:['Fix: bare async keyword causing ReferenceError spam on every page load'] },
   { ver:'v0.25.46', date:'2026-03-02', notes:['Memory Tab v6: compact silo rows, How Memory Works diagram, config panel editing','Removed: avatar icons, memory map, shared plane, split-pane editor, timeline, stat cards','Nav grouping: Tools & Config section for Extensions/Skills/Logs/Settings','Chat: history button on welcome screen, light mode input fix','Coordination files rail + per-agent session summary with context'] },
@@ -9153,7 +9165,7 @@ function switchModule(name) {
     if (_lh) _lh.style.display = 'none';
   }
   const loaders = {
-    overview: function() { renderChatMessages(); populateChatModels(); populateChatRoutes(); }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); _loadRoutingPrefs(); }, projects: loadProjects, admin: loadAdmin,
+    overview: function() { renderChatMessages(); populateChatModels(); populateChatRoutes(); loadPersonas(); }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); _loadRoutingPrefs(); }, projects: loadProjects, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
     models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: function() { loadWorkflows(); loadBuildStatus(); }, memory: loadMemory, settings: syncSettingsUI,
   };
@@ -10151,6 +10163,53 @@ function memToggleFlow() {
   var chevron = document.getElementById('mem-flow-chevron');
   if (body) body.classList.toggle('collapsed', _memFlowCollapsed);
   if (chevron) chevron.textContent = _memFlowCollapsed ? '\u25b6' : '\u25bc';
+}
+
+function populateMemPersonaSelector() {
+  const sel = document.getElementById('mem-persona-sel');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All Agents (legacy)</option>' +
+    (_personas || []).map(p =>
+      '<option value="' + p.id + '"' + (current === p.id ? ' selected' : '') + '>' +
+      (p.avatar || '🤖') + ' ' + escHtml(p.name) + '</option>'
+    ).join('');
+}
+
+async function loadMemoryForPersona(personaId) {
+  if (!personaId) {
+    // Load legacy memory view
+    loadMemory();
+    return;
+  }
+  // Load persona-specific memory
+  try {
+    const r = await api('/api/personas/' + personaId + '/memory');
+    if (!r.ok) return;
+    const silosEl = document.getElementById('mem-silos');
+    if (!silosEl) return;
+    const persona = _personas.find(p => p.id === personaId);
+    const name = persona ? persona.name : 'Agent';
+    let html = '<div style="padding:16px;background:var(--raised);border:1px solid var(--border);border-radius:8px;margin-bottom:12px">';
+    html += '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">' + escHtml(name) + ' — MEMORY.md</div>';
+    html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;max-height:300px;overflow-y:auto;color:var(--text2)">' + escHtml(r.memory_md || '(empty)') + '</div>';
+    html += '</div>';
+    if (r.daily_logs && r.daily_logs.length) {
+      html += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Daily Logs</div>';
+      r.daily_logs.forEach(function(dl) {
+        html += '<div style="margin-bottom:8px;padding:10px 12px;background:var(--raised);border:1px solid var(--border);border-radius:6px">';
+        html += '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px">' + escHtml(dl.date) + '</div>';
+        html += '<div style="font-size:12px;white-space:pre-wrap;color:var(--text2);max-height:150px;overflow-y:auto">' + escHtml(dl.content) + '</div>';
+        html += '</div>';
+      });
+    } else {
+      html += '<div style="color:var(--text3);font-size:12px">No daily logs yet.</div>';
+    }
+    silosEl.innerHTML = html;
+    // Hide other sections when viewing persona
+    const coordEl = document.getElementById('mem-coord');
+    if (coordEl) coordEl.parentElement.style.display = 'none';
+  } catch(e) { console.debug('loadMemoryForPersona:', e); }
 }
 
 async function loadMemory() {
@@ -11653,9 +11712,14 @@ function chatSend() {
     return;
   }
 
-  // Check for @backend mentions — single or chained
+  // Check for @backend or @persona mentions — single or chained
   var _atModels = ['claude','gemini','openclaw','ollama','codex'];
-  var _atRe = new RegExp('@(' + _atModels.join('|') + ')\\b', 'g');
+  // Add persona names to @mention list
+  (_personas || []).forEach(function(p) {
+    var slug = (p.name || '').toLowerCase().replace(/\s+/g, '');
+    if (slug && _atModels.indexOf(slug) === -1) _atModels.push(slug);
+  });
+  var _atRe = new RegExp('@(' + _atModels.join('|') + ')\\b', 'gi');
   var _atMatches = [];
   var _m;
   while ((_m = _atRe.exec(text)) !== null) _atMatches.push({ model: _m[1], idx: _m.index });
@@ -11671,12 +11735,20 @@ function chatSend() {
     _chatMessages.push({ role: 'user', content: text });
     renderChatMessages();
     if (_atMatches.length === 1) {
-      // Single @model — extract all text except the @model token
-      var _msg1 = text.replace(/@(claude|gemini|openclaw|ollama|codex)\b/, '').replace(/\s+/g, ' ').trim();
-      // Strip command verbs directed at Porter
+      // Single @mention — check if it's a persona or a model
+      var _mentionName = _atMatches[0].model.toLowerCase();
+      var _matchedPersona = (_personas || []).find(function(p) {
+        return (p.name || '').toLowerCase().replace(/\s+/g, '') === _mentionName;
+      });
+      var _msg1 = text.replace(new RegExp('@' + _atMatches[0].model, 'i'), '').replace(/\s+/g, ' ').trim();
       _msg1 = _msg1.replace(/^(ask|tell|hey|please|can you|could you)\s+/i, '').replace(/^to\s+/i, '').trim();
       if (!_msg1) _msg1 = 'hello';
-      invokeAgent(_msg1, _atMatches[0].model);
+      if (_matchedPersona) {
+        // Dispatch via persona layer
+        _dispatchToPersonaChat(_matchedPersona, _msg1);
+      } else {
+        invokeAgent(_msg1, _atMatches[0].model);
+      }
     } else {
       // Multi-@ chain: @model1 <task> ... @model2 <task>
       _runAtChain(text, _atMatches);
@@ -13353,8 +13425,83 @@ async function loadPersonas() {
     if (r.ok) {
       _personas = r.personas || [];
       renderPersonaOrg();
+      populateChatPersonaBar();
     }
   } catch(e) { console.debug('loadPersonas:', e); }
+}
+
+function populateChatPersonaBar() {
+  const bar = document.getElementById('chat-persona-bar');
+  if (!bar) return;
+  if (!_personas.length) {
+    bar.innerHTML = '';
+    return;
+  }
+  bar.innerHTML = _personas.map(p =>
+    `<button class="chat-persona-btn" onclick="chatWithPersona('${p.id}')" title="Chat with ${escHtml(p.name)}">
+      <span class="persona-btn-avatar">${escHtml(p.avatar || '🤖')}</span>
+      <span class="persona-btn-name">${escHtml(p.name)}</span>
+    </button>`
+  ).join('');
+}
+
+async function _dispatchToPersonaChat(persona, message) {
+  // Dispatch a message to a persona via chat, showing response as assistant message
+  _chatMessages.push({ role: 'assistant', content: '\u23f3 Dispatching to ' + persona.name + '...', model: persona.preferred_backend || 'auto' });
+  renderChatMessages();
+  try {
+    const r = await api('/api/personas/' + persona.id + '/dispatch', { prompt: message, timeout: 120 });
+    if (r.ok) {
+      _chatMessages.pop();
+      _pollPersonaResponse(r.run_id, persona);
+    } else {
+      _chatMessages[_chatMessages.length - 1].content = 'Error: ' + (r.error || 'dispatch failed');
+      renderChatMessages();
+    }
+  } catch(e) {
+    _chatMessages[_chatMessages.length - 1].content = 'Error: ' + e.message;
+    renderChatMessages();
+  }
+}
+
+async function _pollPersonaResponse(runId, persona) {
+  for (var i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const r = await api('/api/bridge/runs?limit=1&run_id=' + runId);
+      if (r.ok && r.runs && r.runs.length > 0) {
+        const run = r.runs[0];
+        if (run.status === 'complete' || run.status === 'failed') {
+          const detail = await api('/api/bridge/run?id=' + runId);
+          var responseText = (detail && detail.response) || run.prompt_preview || '(no response)';
+          _chatMessages.push({
+            role: 'assistant',
+            content: responseText,
+            model: persona.preferred_backend || 'auto',
+            persona_name: persona.name,
+          });
+          renderChatMessages();
+          return;
+        }
+      }
+    } catch(e) { /* continue polling */ }
+  }
+  _chatMessages.push({ role: 'assistant', content: '(dispatch timed out)', model: 'timeout' });
+  renderChatMessages();
+}
+
+async function chatWithPersona(personaId) {
+  // Set the active persona for this chat session
+  window._chatPersonaId = personaId;
+  const persona = _personas.find(p => p.id === personaId);
+  const name = persona ? persona.name : 'Agent';
+  // Pre-fill input with @persona mention
+  const input = document.getElementById('chat-input-welcome') || document.getElementById('chat-input');
+  if (input) {
+    input.value = '@' + name.toLowerCase().replace(/\s+/g, '') + ' ';
+    input.focus();
+  }
+  _chatTransitionToBottom();
 }
 
 function renderPersonaOrg() {
@@ -18571,7 +18718,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.26.2' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.26.3' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -19044,7 +19191,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.26.2"})
+            self.reply_json({"v": "0.26.3"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -19131,7 +19278,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.26.0"
+                health["porter_version"] = "0.26.3"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -20234,7 +20381,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.26.2'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.26.3'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -23676,7 +23823,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.26.2 ready (localhost only)")
+    print(f"\n  Porter v0.26.3 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
