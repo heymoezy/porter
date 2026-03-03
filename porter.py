@@ -6071,10 +6071,12 @@ body.density-compact .file-name { padding: 6px 0; }
 .chat-ctx-sel .ctx-avatar { font-size:14px; }
 .chat-ctx-sel .ctx-label { font-weight:500; max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .chat-ctx-sel .ctx-arrow { font-size:8px; color:var(--text3); margin-left:2px; }
-.chat-ctx-dropdown { position:absolute; top:100%; left:0; min-width:180px; max-height:240px; overflow-y:auto;
+.chat-ctx-dropdown { position:absolute; left:0; min-width:180px; max-height:240px; overflow-y:auto;
   background:var(--raised); border:1px solid var(--border); border-radius:8px;
-  box-shadow:0 8px 24px rgba(0,0,0,.15); z-index:200; display:none; margin-top:4px; }
+  box-shadow:0 8px 24px rgba(0,0,0,.15); z-index:200; display:none; }
 .chat-ctx-dropdown.open { display:block; }
+.chat-ctx-dropdown.drop-down { top:100%; margin-top:4px; }
+.chat-ctx-dropdown.drop-up { bottom:100%; margin-bottom:4px; }
 .chat-ctx-opt { display:flex; align-items:center; gap:8px; padding:8px 12px; cursor:pointer;
   font-size:12px; color:var(--text2); transition:background .1s; }
 .chat-ctx-opt:hover { background:color-mix(in srgb, var(--accent) 8%, var(--bg)); }
@@ -11902,19 +11904,12 @@ function renderChatMessages(streamUpdate) {
       + '<div class="chat-welcome-input-wrap">'
       + '<textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)"></textarea>'
       + '<div id="chat-at-ind-welcome" class="chat-at-indicator"></div>'
+      + '<div id="chat-ctx-selectors" class="chat-ctx-selectors"></div>'
+      + '<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option></select>'
       + '<div class="chat-welcome-meta">'
-      + '<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>'
-      + '<div class="model-picker" data-sel="chat-backend-sel-welcome">'
-      + '<button type="button" class="mp-trigger" onclick="_mpToggle(event)">Auto-route</button>'
-      + '<div class="mp-menu">'
-      + '<div class="mp-opt selected" data-v="" onclick="_mpSelect(this)">Auto-route</div>'
-      + '<div class="mp-opt" data-v="openclaw" onclick="_mpSelect(this)">OpenClaw (GPT-5.3 Codex)</div>'
-      + '<div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini CLI</div>'
-      + '<div class="mp-opt" data-v="codex" onclick="_mpSelect(this)">Codex CLI (GPT-5.1)</div>'
-      + '<div class="mp-opt" data-v="claude" onclick="_mpSelect(this)">Claude (Opus 4.6)</div>'
-      + '<div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 1.5B)</div>'
-      + '</div></div>'
+      + '<button class="btn btn-ghost" style="font-size:11px" onclick="loadChatSessions()">History</button>'
       + '</div></div></div>';
+    buildChatCtxSelectors();
     if (inputArea) inputArea.style.display = 'none';
     if (routeBar) routeBar.style.display = 'none';
     _updateStopBtn(false);
@@ -12408,17 +12403,25 @@ function chatSend() {
     }
 
     if (cmd === '/agents') {
-      _chatMessages.push({ role: 'assistant', content: '_Checking agents..._', model: 'porter' });
+      _chatMessages.push({ role: 'assistant', content: '_Loading agent squad..._', model: 'porter' });
       renderChatMessages();
-      api('/api/admin/health').then(function(h) {
-        if (!h || !h.services) {
-          _chatMessages[_chatMessages.length-1].content = 'Could not reach health endpoint.';
+      api('/api/personas').then(function(data) {
+        if (!data || !data.ok || !data.personas || !data.personas.length) {
+          _chatMessages[_chatMessages.length-1].content = 'No agents found.';
           renderChatMessages(); return;
         }
-        var lines = ['**Connected Agents**\n'];
-        h.services.forEach(function(s) {
-          var icon = (s.status === 'running' || s.status === 'up' || s.status === 'ok') ? '✅' : '❌';
-          lines.push(icon + ' **' + s.name + '**' + (s.version ? '  v' + s.version : '') + '  — ' + s.status);
+        var groupOrder = ['Orchestrator','Strategy','Creative','Technical','Operations',''];
+        var grouped = {};
+        data.personas.forEach(function(p) { var g = p.agent_group || ''; if (!grouped[g]) grouped[g] = []; grouped[g].push(p); });
+        var lines = ['**Agent Squad** (' + data.personas.length + ' agents)\n'];
+        groupOrder.forEach(function(g) {
+          if (!grouped[g] || !grouped[g].length) return;
+          lines.push('**' + (g || 'Ungrouped') + '**');
+          grouped[g].forEach(function(p) {
+            var dot = p.status === 'active' ? '🟢' : p.status === 'sleeping' ? '🟡' : '⚪';
+            lines.push(dot + ' ' + (p.avatar || '') + ' **' + p.name + '** — ' + (p.role || 'General') + ' (' + (p.preferred_backend || 'auto') + ')');
+          });
+          lines.push('');
         });
         _chatMessages[_chatMessages.length-1].content = lines.join('\n');
         renderChatMessages();
@@ -14295,6 +14298,11 @@ function _ctxToggle(event, type) {
     });
   }
   dd.innerHTML = html;
+  // Determine direction: up or down based on screen position
+  var rect = event.currentTarget.getBoundingClientRect();
+  var spaceBelow = window.innerHeight - rect.bottom;
+  dd.classList.remove('drop-up', 'drop-down');
+  dd.classList.add(spaceBelow < 260 ? 'drop-up' : 'drop-down');
   dd.classList.add('open');
 
   // Close on outside click
