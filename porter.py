@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.0 — ClawOps Integration: Nav Groups, Bootstrap, Scaffold"""
+"""Porter v0.27.1 — Project-Level Agent Assignment + Scope Controls"""
 
 
 
@@ -5753,6 +5753,17 @@ body.density-compact .file-name { padding: 6px 0; }
 .chat-persona-btn .persona-btn-name { font-weight:500; }
 
 /* ── Persona Org Chart ──────────────────────────────────────── */
+.proj-agents-section { padding:8px 16px;border-top:1px solid var(--border); }
+.proj-agents-label { font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px;font-weight:600; }
+.proj-agents-row { display:flex;gap:6px;flex-wrap:wrap;align-items:center; }
+.proj-agents-empty { font-size:12px;color:var(--text3);font-style:italic; }
+.proj-agent-chip { display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:color-mix(in srgb, var(--accent) 10%, var(--bg));border:1px solid color-mix(in srgb, var(--accent) 20%, var(--border));font-size:12px; }
+.proj-agent-avatar { font-size:14px; }
+.proj-agent-name { color:var(--text2);font-weight:500; }
+.proj-agent-remove { background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;line-height:1;padding:0 2px;margin-left:2px; }
+.proj-agent-remove:hover { color:var(--danger); }
+.proj-agent-add { font-size:11px;padding:3px 6px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text2);cursor:pointer; }
+.proj-agent-add:hover { border-color:var(--accent); }
 .persona-org { display:flex; flex-direction:column; align-items:center; gap:0; margin-bottom:24px; }
 .org-node { display:flex; flex-direction:column; align-items:center; padding:14px 20px;
   background:var(--raised); border:1px solid var(--border); border-radius:10px; min-width:120px; }
@@ -6295,7 +6306,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.0</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.1</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7552,6 +7563,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.1', date:'2026-03-03', notes:['Project-level agent assignment — assign/unassign agents per project','Assigned agents section in project cards with avatars','assign_agent/unassign_agent API actions','Porter project pre-configured with all 3 agents'] },
   { ver:'v0.27.0', date:'2026-03-03', notes:['Nav restructured: Squad (Agents+Memory) + Operations (Projects+Workflows)','Project bootstrap engine — 00_SHARED/ skeleton with 6 governance docs','Agent scaffold engine — 5-file base pack (IDENTITY, SOUL, USER, MEMORY, ROLE_CARD)','Agent avatars: Claude ⚡, OpenClaw 🐙, Gemini 💎','Porter project data refreshed — agents assigned, stale tasks fixed'] },
   { ver:'v0.26.5', date:'2026-03-03', notes:['Status dots on persona cards (idle/active/sleeping)','Persona names in chat message badges','Mission Control events for persona wake/sleep','Periodic persona status refresh (30s)','Claude color in model badge palette'] },
   { ver:'v0.26.4', date:'2026-03-03', notes:['Projects: persona filter + persona badges on tasks','Chain builder: steps target personas','Heartbeat engine: per-persona cron + checklist editor','Heartbeat daemon thread','Tasks: assigned_persona_id column'] },
@@ -9825,6 +9837,60 @@ function startProjAutoRefresh() {
   _projRefreshTickTimer = setInterval(_updateProjRefreshIndicator, 5000);
 }
 
+
+
+function _projAgentSection(project) {
+  var pid = project.id;
+  var assigned = project.assigned_personas || [];
+  var allP = _personas || [];
+
+  // Build assigned agent chips
+  var chips = assigned.map(function(aid) {
+    var p = allP.find(function(x) { return x.id === aid; });
+    if (!p) return '';
+    return '<span class="proj-agent-chip">'
+      + '<span class="proj-agent-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</span>'
+      + '<span class="proj-agent-name">' + escHtml(p.name) + '</span>'
+      + '<button class="proj-agent-remove" onclick="event.stopPropagation();unassignAgentFromProject(\'' + pid + '\',\'' + aid + '\')" title="Remove">&times;</button>'
+      + '</span>';
+  }).join('');
+
+  // Unassigned agents for the dropdown
+  var unassigned = allP.filter(function(p) { return assigned.indexOf(p.id) < 0; });
+  var addBtn = '';
+  if (unassigned.length) {
+    addBtn = '<select class="proj-agent-add" onchange="if(this.value)assignAgentToProject(\'' + pid + '\',this.value);this.value=\'\';">'
+      + '<option value="">+ Assign agent</option>'
+      + unassigned.map(function(p) { return '<option value="' + p.id + '">' + escHtml((p.avatar||'') + ' ' + p.name) + '</option>'; }).join('')
+      + '</select>';
+  }
+
+  return '<div class="proj-agents-section">'
+    + '<div class="proj-agents-label">Assigned Agents</div>'
+    + '<div class="proj-agents-row">' + (chips || '<span class="proj-agents-empty">No agents assigned</span>') + addBtn + '</div>'
+    + '</div>';
+}
+
+async function assignAgentToProject(projectId, personaId) {
+  var r = await api('/api/projects', { action: 'assign_agent', project_id: projectId, persona_id: personaId });
+  if (r && r.ok) {
+    toast('Agent assigned');
+    loadProjects();
+  } else {
+    toast((r && r.error) || 'Failed', 'err');
+  }
+}
+
+async function unassignAgentFromProject(projectId, personaId) {
+  var r = await api('/api/projects', { action: 'unassign_agent', project_id: projectId, persona_id: personaId });
+  if (r && r.ok) {
+    toast('Agent removed');
+    loadProjects();
+  } else {
+    toast((r && r.error) || 'Failed', 'err');
+  }
+}
+
 function stopProjAutoRefresh() {
   if (_projAutoRefreshTimer) { clearInterval(_projAutoRefreshTimer); _projAutoRefreshTimer = null; }
   if (_projRefreshTickTimer) { clearInterval(_projRefreshTickTimer); _projRefreshTickTimer = null; }
@@ -9965,6 +10031,7 @@ function _renderProjectList() {
       + '</div>'
       + progressHtml
       + metricsHtml
+      + (isOpen ? _projAgentSection(p) : '')
       + (bodyHtml ? '<div class="proj-card-tasks">' + bodyHtml + '</div>' : '')
       + '</div>';
   }).join('');
@@ -19002,7 +19069,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.0' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.1' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -19475,7 +19542,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.0"})
+            self.reply_json({"v": "0.27.1"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20350,6 +20417,7 @@ class Handler(BaseHTTPRequestHandler):
                     "completed_at": p.get("completed_at"),
                     "start_date": p.get("start_date", ""),
                     "end_date": p.get("end_date", ""),
+                    "assigned_personas": p.get("assigned_personas", []),
                 })
             self.reply_json({
                 "projects":         result,
@@ -20665,7 +20733,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.0'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.1'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -23457,6 +23525,59 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 resolution = resolve_project_memory(project_id, agent_id, filename)
                 self.reply_json({"ok": True, **resolution})
 
+            elif action == "assign_agent":
+                pid = str(data.get("project_id", "")).strip()
+                persona_id = str(data.get("persona_id", "")).strip()
+                if not pid or not persona_id:
+                    self.reply_json({"ok": False, "error": "project_id and persona_id required"}); return
+                proj = None
+                for p in _config.get("projects", []):
+                    if p.get("id") == pid:
+                        proj = p; break
+                if not proj:
+                    self.reply_json({"ok": False, "error": "project not found"}); return
+                assigned = proj.get("assigned_personas", [])
+                if persona_id not in assigned:
+                    assigned.append(persona_id)
+                    proj["assigned_personas"] = assigned
+                    proj["updated_at"] = time.time()
+                    save_config(_config)
+                    # Sync to workspace settings.json
+                    sj = AGENT_WORKSPACE_DIR / "projects" / pid / "settings.json"
+                    if sj.exists():
+                        try:
+                            sd = json.loads(sj.read_text())
+                            sd["agents"] = assigned
+                            sj.write_text(json.dumps(sd, indent=2))
+                        except Exception: pass
+                self.reply_json({"ok": True, "assigned_personas": proj.get("assigned_personas", [])})
+
+            elif action == "unassign_agent":
+                pid = str(data.get("project_id", "")).strip()
+                persona_id = str(data.get("persona_id", "")).strip()
+                if not pid or not persona_id:
+                    self.reply_json({"ok": False, "error": "project_id and persona_id required"}); return
+                proj = None
+                for p in _config.get("projects", []):
+                    if p.get("id") == pid:
+                        proj = p; break
+                if not proj:
+                    self.reply_json({"ok": False, "error": "project not found"}); return
+                assigned = proj.get("assigned_personas", [])
+                if persona_id in assigned:
+                    assigned.remove(persona_id)
+                    proj["assigned_personas"] = assigned
+                    proj["updated_at"] = time.time()
+                    save_config(_config)
+                    sj = AGENT_WORKSPACE_DIR / "projects" / pid / "settings.json"
+                    if sj.exists():
+                        try:
+                            sd = json.loads(sj.read_text())
+                            sd["agents"] = assigned
+                            sj.write_text(json.dumps(sd, indent=2))
+                        except Exception: pass
+                self.reply_json({"ok": True, "assigned_personas": proj.get("assigned_personas", [])})
+
             elif action == "update":
                 pid = str(data.get("project_id", "")).strip()
                 proj = None
@@ -23496,6 +23617,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                         sdata["type"] = proj.get("type", "manual")
                         if "memory_isolation" in proj:
                             sdata["memory_isolation"] = proj["memory_isolation"]
+                        if "assigned_personas" in proj:
+                            sdata["agents"] = proj["assigned_personas"]
                         sj.write_text(json.dumps(sdata, indent=2))
                     except Exception as e:
                         log.debug("Ignored: %s", e)
@@ -24144,7 +24267,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.0 ready (localhost only)")
+    print(f"\n  Porter v0.27.1 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
