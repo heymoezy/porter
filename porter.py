@@ -6077,12 +6077,11 @@ body.density-compact .file-name { padding: 6px 0; }
 .chat-ctx-dropdown.open { display:block; }
 .chat-ctx-dropdown.drop-down { top:100%; margin-top:4px; }
 .chat-ctx-dropdown.drop-up { bottom:100%; margin-bottom:4px; }
-.chat-ctx-opt { display:flex; align-items:center; gap:8px; padding:8px 12px; cursor:pointer;
-  font-size:12px; color:var(--text2); transition:background .1s; }
+.chat-ctx-opt { display:flex; align-items:center; gap:6px; padding:5px 10px; cursor:pointer;
+  font-size:11px; color:var(--text2); transition:background .1s; white-space:nowrap; }
 .chat-ctx-opt:hover { background:color-mix(in srgb, var(--accent) 8%, var(--bg)); }
 .chat-ctx-opt.selected { color:var(--accent); font-weight:600; }
-.chat-ctx-opt .ctx-opt-avatar { font-size:16px; }
-.chat-ctx-opt .ctx-opt-sub { font-size:10px; color:var(--text3); }
+.chat-ctx-opt .ctx-opt-avatar { font-size:14px; }
 .chat-ctx-divider { height:1px; background:var(--border); margin:4px 0; }
 /* Legacy persona bar — replaced */
 .chat-persona-bar { display:none; }
@@ -6752,11 +6751,10 @@ select.settings-input { padding-right: 26px; }
               <div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>
               <textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)"></textarea>
               <div id="chat-at-ind-welcome" class="chat-at-indicator"></div>
-              <!-- Context selectors: Agent + Project + Model -->
-              <div id="chat-ctx-selectors" class="chat-ctx-selectors"></div>
               <div id="chat-persona-bar" class="chat-persona-bar"></div>
               <select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option></select>
               <div class="chat-welcome-meta">
+                <div id="chat-ctx-selectors" class="chat-ctx-selectors" style="margin:0"></div>
                 <button class="btn btn-ghost" style="font-size:11px" onclick="loadChatSessions()">History</button>
               </div>
             </div>
@@ -11904,9 +11902,9 @@ function renderChatMessages(streamUpdate) {
       + '<div class="chat-welcome-input-wrap">'
       + '<textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)"></textarea>'
       + '<div id="chat-at-ind-welcome" class="chat-at-indicator"></div>'
-      + '<div id="chat-ctx-selectors" class="chat-ctx-selectors"></div>'
       + '<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option></select>'
       + '<div class="chat-welcome-meta">'
+      + '<div id="chat-ctx-selectors" class="chat-ctx-selectors" style="margin:0"></div>'
       + '<button class="btn btn-ghost" style="font-size:11px" onclick="loadChatSessions()">History</button>'
       + '</div></div></div>';
     buildChatCtxSelectors();
@@ -14234,7 +14232,7 @@ function buildChatCtxSelectors() {
 
     var agentLabel = _chatAgent ? _chatAgent.avatar + ' ' + _chatAgent.name : 'No Agent';
     var projectLabel = _chatProject ? (_chatProject.id === '_personality' ? '🎭 Personality' : '📁 ' + _chatProject.name) : 'General';
-    var modelLabel = _chatModel ? _chatModel.charAt(0).toUpperCase() + _chatModel.slice(1) : 'Auto';
+    var modelLabel = _chatModel ? _chatModel.charAt(0).toUpperCase() + _chatModel.slice(1) : 'Model';
 
     el.innerHTML = ''
       + '<div class="chat-ctx-sel' + (_chatAgent ? ' active' : '') + '" onclick="_ctxToggle(event,\'agent\')">'
@@ -14264,12 +14262,11 @@ function _ctxToggle(event, type) {
     html += '<div class="chat-ctx-divider"></div>';
     (_personas || []).forEach(function(p) {
       html += '<div class="chat-ctx-opt' + (_chatAgent && _chatAgent.id === p.id ? ' selected' : '') + '" onclick="_ctxPick(event,\'agent\',\'' + p.id + '\')">'
-        + '<span class="ctx-opt-avatar">' + (p.avatar || '🤖') + '</span>'
-        + '<div><div>' + escHtml(p.name) + '</div><div class="ctx-opt-sub">' + escHtml(p.role || '') + '</div></div></div>';
+        + '<span class="ctx-opt-avatar">' + (p.avatar || '🤖') + '</span>' + escHtml(p.name) + '</div>';
     });
   } else if (type === 'project') {
     html += '<div class="chat-ctx-opt' + (!_chatProject ? ' selected' : '') + '" onclick="_ctxPick(event,\'project\',null)">General</div>';
-    html += '<div class="chat-ctx-opt' + (_chatProject && _chatProject.id === '_personality' ? ' selected' : '') + '" onclick="_ctxPick(event,\'project\',\'_personality\')"><span class="ctx-opt-avatar">🎭</span><div><div>Personality</div><div class="ctx-opt-sub">Build agent identity</div></div></div>';
+    html += '<div class="chat-ctx-opt' + (_chatProject && _chatProject.id === '_personality' ? ' selected' : '') + '" onclick="_ctxPick(event,\'project\',\'_personality\')"><span class="ctx-opt-avatar">🎭</span>Personality</div>';
     html += '<div class="chat-ctx-divider"></div>';
     // Fetch projects
     api('/api/projects').then(function(data) {
@@ -14277,15 +14274,14 @@ function _ctxToggle(event, type) {
       var projHtml = '';
       data.projects.forEach(function(p) {
         projHtml += '<div class="chat-ctx-opt' + (_chatProject && _chatProject.id === p.id ? ' selected' : '') + '" onclick="_ctxPick(event,\'project\',\'' + p.id + '\')">'
-          + '<span class="ctx-opt-avatar">📁</span>'
-          + '<div><div>' + escHtml(p.name || p.id) + '</div><div class="ctx-opt-sub">' + (p.tasks_open || 0) + ' tasks</div></div></div>';
+          + '<span class="ctx-opt-avatar">📁</span>' + escHtml(p.name || p.id) + '</div>';
       });
       // Append to existing dropdown
       dd.innerHTML += projHtml;
     });
   } else if (type === 'model') {
     var models = [
-      { v:'', label:'Auto', sub:'Use agent preferred' },
+      { v:'', label:'Auto' },
       { v:'openclaw', label:'OpenClaw', sub:'GPT-5.3 Codex' },
       { v:'claude', label:'Claude', sub:'Opus 4.6' },
       { v:'gemini', label:'Gemini', sub:'CLI' },
@@ -14293,8 +14289,7 @@ function _ctxToggle(event, type) {
       { v:'ollama', label:'Ollama', sub:'Qwen 1.5B' },
     ];
     models.forEach(function(m) {
-      html += '<div class="chat-ctx-opt' + (_chatModel === m.v ? ' selected' : '') + '" onclick="_ctxPick(event,\'model\',\'' + m.v + '\')">'
-        + '<div><div>' + m.label + '</div><div class="ctx-opt-sub">' + m.sub + '</div></div></div>';
+      html += '<div class="chat-ctx-opt' + (_chatModel === m.v ? ' selected' : '') + '" onclick="_ctxPick(event,\'model\',\'' + m.v + '\')">' + m.label + '</div>';
     });
   }
   dd.innerHTML = html;
