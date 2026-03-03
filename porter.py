@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.9 — Persona Dispatch Fix"""
+"""Porter v0.27.11 — Chat + Logs Polish"""
 
 
 
@@ -4408,17 +4408,24 @@ def _safe_lease_running(lease_file, agent_id: str, now: float) -> bool:
 def _smart_chat_title(user_msg, persona_name=""):
     """Generate a smart title: persona prefix + trimmed message."""
     import re
-    # Strip @mentions and /commands from the message
-    msg = re.sub(r'@\w+', '', user_msg).strip()
+    msg = user_msg or ""
+    # Strip context prefixes that get prepended to prompts
+    msg = re.sub(r'^Conversation history:.*?New message:\s*', '', msg, flags=re.DOTALL).strip()
+    msg = re.sub(r'^Context files:.*?User message:\s*', '', msg, flags=re.DOTALL).strip()
+    msg = re.sub(r'^You are \w+\..*?---\s*', '', msg, flags=re.DOTALL).strip()
+    # Strip @mentions and /commands
+    msg = re.sub(r'@\w+', '', msg).strip()
     msg = re.sub(r'^/\w+\s*', '', msg).strip()
     # Remove filler words from start
-    msg = re.sub(r'^(hey|hi|hello|please|can you|could you|help me|i want to|i need to)\s+', '', msg, flags=re.IGNORECASE).strip()
+    msg = re.sub(r'^(hey|hi|hello|please|can you|could you|help me|i want to|i need to|i\'d like to|tell me about|what is|what are)\s+', '', msg, flags=re.IGNORECASE).strip()
+    # Remove trailing punctuation clutter
+    msg = msg.strip('.,!? ')
     # Capitalize first letter
     if msg:
         msg = msg[0].upper() + msg[1:]
-    # Truncate to ~60 chars at word boundary
-    if len(msg) > 60:
-        msg = msg[:57].rsplit(' ', 1)[0] + '...'
+    # Truncate to ~50 chars at word boundary
+    if len(msg) > 50:
+        msg = msg[:47].rsplit(' ', 1)[0] + '...'
     if not msg:
         msg = 'New chat'
     # Prefix with persona name if present
@@ -6685,7 +6692,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.9</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.11</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7935,6 +7942,8 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.11', date:'2026-03-03', notes:['Fix: chat titles now use raw user text (not context-injected prompt)','Chat history: General badge when no project selected','Persona dispatch: animated thinking dots, survives tab switching','SOUL context injection shortened (800 char cap)','Personality mode: brief role-play instruction','Fix: Logs tab error loop — client error reporting rate-limited (3/10s)','Logs detail render wrapped in try/catch'] },
+  { ver:'v0.27.10', date:'2026-03-03', notes:['Fix: chat titles use raw user text (not context-injected prompt)','Chat history shows General badge when no project','Persona dispatch: animated thinking dots, survives tab switching','SOUL context injection shortened (800 char cap, bracket framing)','Personality mode: brief role-play instruction (no more echo)'] },
   { ver:'v0.27.9', date:'2026-03-03', notes:['Fix: RULES.md no longer injected into persona dispatch (project governance, not agent behavior)','SOUL.md context framed as identity instructions, not raw text dump','Personality mode: dedicated prompt for identity conversations','Backend override passed through dispatch endpoint','Model selector override works in persona dispatch'] },
   { ver:'v0.27.8', date:'2026-03-03', notes:['Smart chat titles: persona prefix + trimmed message','Project badges in chat history','Persona badges in chat history','Bigger font in chat sidebar (13px)','project_id + persona saved with chat sessions'] },
   { ver:'v0.27.7', date:'2026-03-03', notes:['3-selector chat bar: Agent + Project + Model','Agent selector: pick persona for SOUL context injection','Project selector: General / Personality / specific project context','Model override: force specific backend or auto-route via agent preferred','Personality mode: build agent identity through conversation','Dropdown menus with search-friendly layout'] },
@@ -12580,7 +12589,8 @@ function chatSend() {
     + '&route=' + encodeURIComponent(_chatRoute)
     + '&chat_id=' + encodeURIComponent(_chatId)
     + '&project_id=' + encodeURIComponent(_streamProject)
-    + '&persona_name=' + encodeURIComponent(_streamPersona);
+    + '&persona_name=' + encodeURIComponent(_streamPersona)
+    + '&raw_text=' + encodeURIComponent(text);
 
   const evtSource = new EventSource(url);
   _chatEventSource = evtSource;
@@ -12668,10 +12678,12 @@ async function loadChatSessions() {
       if (s.project_id) {
         var pName = s.project_id;
         (_allProjects || []).forEach(function(p) { if (p.id === s.project_id) pName = p.name || p.id; });
-        badges += '<span style="font-size:10px;padding:1px 6px;background:var(--accent);color:#fff;border-radius:3px;white-space:nowrap">📁 ' + escHtml(pName) + '</span>';
+        badges += '<span style="font-size:10px;padding:1px 5px;background:var(--accent);color:#fff;border-radius:3px;white-space:nowrap">📁 ' + escHtml(pName) + '</span>';
+      } else {
+        badges += '<span style="font-size:10px;padding:1px 5px;background:var(--raised);color:var(--text3);border-radius:3px;white-space:nowrap">General</span>';
       }
       if (s.persona) {
-        badges += '<span style="font-size:10px;padding:1px 6px;background:color-mix(in srgb,var(--accent) 15%,var(--bg));color:var(--accent);border-radius:3px;white-space:nowrap">' + escHtml(s.persona) + '</span>';
+        badges += '<span style="font-size:10px;padding:1px 5px;background:color-mix(in srgb,var(--accent) 15%,var(--bg));color:var(--accent);border-radius:3px;white-space:nowrap">' + escHtml(s.persona) + '</span>';
       }
       html += '<div class="chat-sidebar-item' + (s.id === _chatId ? ' active' : '') + '" onclick="loadChatSession(\'' + escHtml(s.id) + '\')">'
         + '<div style="flex:1;min-width:0">'
@@ -12989,7 +13001,6 @@ function mcOnSSE(data) {
 async function mcSelectEvent(eventId) {
   _mcSelectedId = eventId;
   mcSwitchTab('detail');
-  // Re-render to highlight
   mcRenderTimeline(_mcEvents);
   var detail = document.getElementById('mc-right-content');
   if (!detail) return;
@@ -12998,6 +13009,9 @@ async function mcSelectEvent(eventId) {
     detail.innerHTML = '<div class="mc-detail-empty">Event not found</div>';
     return;
   }
+  try { _renderEventDetail(ev, eventId, detail); } catch(e) { detail.innerHTML = '<div class="mc-detail-empty">Render error: ' + escHtml(String(e)) + '</div>'; }
+}
+async function _renderEventDetail(ev, eventId, detail) {
   var html = '<div class="mc-detail-title">' + escHtml(ev.event_type || '') + '</div>';
   html += '<div class="mc-detail-grid">';
   html += '<span class="mc-detail-key">Time</span><span class="mc-detail-val">' + new Date(ev.ts * 1000).toLocaleString() + '</span>';
@@ -13263,25 +13277,28 @@ function mcOnSystemNotify(data) {
 }
 
 // Global error handlers — capture frontend JS errors
-window.onerror = function(msg, source, lineno, colno, error) {
+// Rate-limited client error reporting (max 3 per 10s to prevent error loops)
+var _ceCount = 0, _ceReset = 0;
+function _reportClientError(payload) {
+  var now = Date.now();
+  if (now - _ceReset > 10000) { _ceCount = 0; _ceReset = now; }
+  if (_ceCount >= 3) return;
+  _ceCount++;
   try {
     fetch('/api/logs/client-error', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({message: String(msg).substring(0,500), source: String(source||'').substring(0,200),
-        lineno: lineno||0, colno: colno||0, stack: error && error.stack ? error.stack.substring(0,1000) : ''})
+      body: JSON.stringify(payload)
     }).catch(function(){});
   } catch(e) {}
+}
+window.onerror = function(msg, source, lineno, colno, error) {
+  _reportClientError({message: String(msg).substring(0,500), source: String(source||'').substring(0,200),
+    lineno: lineno||0, colno: colno||0, stack: error && error.stack ? error.stack.substring(0,1000) : ''});
 };
 window.addEventListener('unhandledrejection', function(ev) {
-  try {
-    var msg = ev.reason ? String(ev.reason).substring(0,500) : 'Unhandled promise rejection';
-    fetch('/api/logs/client-error', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({message: msg, source: 'promise', lineno: 0, colno: 0, stack: ''})
-    }).catch(function(){});
-  } catch(e) {}
+  var msg = ev.reason ? String(ev.reason).substring(0,500) : 'Unhandled promise rejection';
+  _reportClientError({message: msg, source: 'promise', lineno: 0, colno: 0, stack: ''});
 });
 
 // ── Tools module ──
@@ -14397,7 +14414,10 @@ function _ctxPick(event, type, value) {
 
 async function _dispatchToPersonaChat(persona, message) {
   // Dispatch a message to a persona via chat, showing response as assistant message
-  _chatMessages.push({ role: 'assistant', content: '\u23f3 Dispatching to ' + persona.name + '...', model: persona.preferred_backend || 'auto' });
+  var waitIdx = _chatMessages.length;
+  _chatMessages.push({ role: 'assistant', content: '\u23f3 ' + persona.name + ' is thinking...', model: persona.preferred_backend || 'auto', _pending: true });
+  _chatStreaming = true;
+  _updateStopBtn(true);
   renderChatMessages();
   try {
     var dispatchData = { prompt: message, timeout: 120 };
@@ -14410,21 +14430,34 @@ async function _dispatchToPersonaChat(persona, message) {
     }
     const r = await api('/api/personas/' + persona.id + '/dispatch', dispatchData);
     if (r.ok) {
-      _chatMessages.pop();
-      _pollPersonaResponse(r.run_id, persona);
+      _pollPersonaResponse(r.run_id, persona, waitIdx);
     } else {
-      _chatMessages[_chatMessages.length - 1].content = 'Error: ' + (r.error || 'dispatch failed');
+      _chatMessages[waitIdx].content = 'Error: ' + (r.error || 'dispatch failed');
+      _chatMessages[waitIdx]._pending = false;
+      _chatStreaming = false;
+      _updateStopBtn(false);
       renderChatMessages();
     }
   } catch(e) {
-    _chatMessages[_chatMessages.length - 1].content = 'Error: ' + e.message;
+    _chatMessages[waitIdx].content = 'Error: ' + e.message;
+    _chatMessages[waitIdx]._pending = false;
+    _chatStreaming = false;
+    _updateStopBtn(false);
     renderChatMessages();
   }
 }
 
-async function _pollPersonaResponse(runId, persona) {
+async function _pollPersonaResponse(runId, persona, waitIdx) {
+  var dots = 0;
+  var baseMsg = persona.name + ' is thinking';
   for (var i = 0; i < 60; i++) {
     await new Promise(r => setTimeout(r, 2000));
+    // Update dots animation in waiting message
+    dots = (dots + 1) % 4;
+    if (_chatMessages[waitIdx] && _chatMessages[waitIdx]._pending) {
+      _chatMessages[waitIdx].content = '\u23f3 ' + baseMsg + '.'.repeat(dots + 1);
+      renderChatMessages();
+    }
     try {
       const r = await api('/api/bridge/runs?limit=1&run_id=' + runId);
       if (r.ok && r.runs && r.runs.length > 0) {
@@ -14432,19 +14465,29 @@ async function _pollPersonaResponse(runId, persona) {
         if (run.status === 'complete' || run.status === 'failed') {
           const detail = await api('/api/bridge/run?id=' + runId);
           var responseText = (detail && detail.response) || run.prompt_preview || '(no response)';
-          _chatMessages.push({
+          _chatMessages[waitIdx] = {
             role: 'assistant',
             content: responseText,
             model: persona.preferred_backend || 'auto',
             persona_name: persona.name,
-          });
+          };
+          _chatStreaming = false;
+          _updateStopBtn(false);
           renderChatMessages();
+          // Save persona chat to history
+          if (_chatId) {
+            _save_chat_message_local(_chatId, persona.preferred_backend || 'auto',
+              _chatMessages.filter(function(m){return m.role==='user'}).pop().content || '',
+              responseText);
+          }
           return;
         }
       }
     } catch(e) { /* continue polling */ }
   }
-  _chatMessages.push({ role: 'assistant', content: '(dispatch timed out)', model: 'timeout' });
+  _chatMessages[waitIdx] = { role: 'assistant', content: '(dispatch timed out after 2 minutes)', model: 'timeout' };
+  _chatStreaming = false;
+  _updateStopBtn(false);
   renderChatMessages();
 }
 
@@ -19385,22 +19428,16 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     soul = _persona_get_soul(persona_id)
     pname = persona.get('name', 'Agent')
     if soul.strip():
-        augmented_message = (
-            f"You are {pname}. Stay in character at all times.\n\n"
-            f"--- Your Identity ---\n{soul.strip()}\n--- End Identity ---\n\n"
-            f"{message}"
-        )
+        # Keep context brief — models echo verbose instructions
+        # Trim SOUL to first 800 chars to stay under prompt budget
+        _soul_brief = soul.strip()[:800]
+        augmented_message = f"[System: You are {pname}. {_soul_brief}]\n\n{message}"
     else:
-        augmented_message = message
+        augmented_message = f"[System: You are {pname}.]\n\n{message}"
 
-    # Personality mode: frame as identity conversation
+    # Personality mode: add brief role-play instruction
     if personality_mode:
-        augmented_message = (
-            f"You are {pname}. The user wants to get to know you and help develop your identity.\n"
-            f"Respond naturally as yourself. Share your personality, preferences, and working style.\n"
-            f"If the user suggests identity changes, acknowledge them — your SOUL.md can be updated later.\n\n"
-            + augmented_message
-        )
+        augmented_message = f"[System: Respond as {pname} in first person. Be conversational.]\n\n{message}"
 
     # Resolve backend
     _be_override = backend_override
@@ -19897,7 +19934,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.9' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.11' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -20379,7 +20416,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.9"})
+            self.reply_json({"v": "0.27.11"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20466,7 +20503,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.9"
+                health["porter_version"] = "0.27.11"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -21767,7 +21804,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.9'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.11'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -22047,7 +22084,8 @@ class Handler(BaseHTTPRequestHandler):
                 if chat_id and full_response:
                     _stream_project = qs.get("project_id", [""])[0]
                     _stream_persona = qs.get("persona_name", [""])[0]
-                    _save_chat_message(chat_id, model_id, prompt, full_response,
+                    _raw_text = unquote(qs.get("raw_text", [""])[0]) or prompt
+                    _save_chat_message(chat_id, model_id, _raw_text, full_response,
                                        project_id=_stream_project, persona_name=_stream_persona)
 
             except Exception as e:
@@ -25345,7 +25383,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.9 ready (localhost only)")
+    print(f"\n  Porter v0.27.11 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
