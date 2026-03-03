@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.5 — Slide-Out Agent Panel + Card Wrapping"""
+"""Porter v0.27.6 — Porter-Styled Dialogs"""
 
 
 
@@ -6646,7 +6646,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.5</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.6</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7917,6 +7917,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.6', date:'2026-03-03', notes:['Porter-styled modal dialogs (porterPrompt, porterConfirm, porterAlert)','Replaced 17+ browser prompt/confirm/alert calls with themed modals','Keyboard support (Enter to confirm, Escape to cancel)','Overlay click-to-dismiss'] },
   { ver:'v0.27.5', date:'2026-03-03', notes:['Slide-out detail panel from right (full height, overlay)','Agent cards: text wrapping, consistent 130px width','Cards left-aligned in grid','Removed max-height limit on detail content'] },
   { ver:'v0.27.4', date:'2026-03-03', notes:['Compact agent grid (removed org chart hierarchy)','Inline group badges (Strategy/Creative/Technical/Operations)','Operator bar: Lobster compact header with Global Rules button','Global Rules moved out of org chart into settings button'] },
   { ver:'v0.27.3', date:'2026-03-03', notes:['Agent groupings (Strategy/Creative/Technical/Operations)','Lobster=Moe merged into operator node','Dynamic .md file editor (list all files, create new ones)','Global rules textarea expands to fill space','ClawOps 8-agent squad imported','POST /file accepts any .md filename'] },
@@ -10043,7 +10044,8 @@ async function installSkill(id, name) {
 }
 
 async function removeSkill(id, name) {
-  if (!confirm('Remove skill "' + name + '"? This cannot be undone.')) return;
+  var skillOk = await porterConfirm('Remove Skill', 'Remove <b>' + escHtml(name) + '</b>? This cannot be undone.', { danger:true, confirmLabel:'Remove' });
+  if (!skillOk) return;
   const res = await api('/api/openclaw/skills', { action: 'remove', id: id });
   if (res && res.ok) {
     toast('Skill "' + name + '" removed');
@@ -10142,7 +10144,8 @@ let _projRefreshTickTimer = null;
 
 // S7h: Rebuild a pending task — resets it based on sprint plan
 async function rebuildTask(taskId) {
-  if (!confirm('Rebuild this task from sprint plan? This will reset its description and metadata.')) return;
+  var rebOk = await porterConfirm('Rebuild Task', 'Rebuild this task from sprint plan? This will reset its description and metadata.', { confirmLabel:'Rebuild' });
+  if (!rebOk) return;
   const d = await api('/api/task-registry', {action:'rebuild', id: taskId});
   if (d && d.ok) {
     toast('Task rebuilt from sprint plan');
@@ -10568,7 +10571,8 @@ async function setActiveProject(projId) {
 }
 
 async function deleteProject(projId) {
-  if (!confirm('Delete this project? Its tasks in the registry will remain (unassigned).')) return;
+  var delOk = await porterConfirm('Delete Project', 'Delete this project? Its tasks in the registry will remain (unassigned).', { danger:true, confirmLabel:'Delete' });
+  if (!delOk) return;
   const res = await api('/api/projects', { action: 'delete', project_id: projId });
   if (res && res.ok) { toast('Project deleted', 'ok'); loadProjects(); }
   else toast((res && res.error) || 'Failed', 'err');
@@ -10605,7 +10609,7 @@ async function migrateToRegistry(name) {
 
 
 async function startRenameProject(name) {
-  const newName = prompt('Rename project:', name);
+  const newName = await porterPrompt('Rename Project', 'Enter new project name:', name);
   if (!newName || newName.trim() === name) return;
   const r = await fetch('/api/projects-dashboard', {
     method: 'POST',
@@ -11131,7 +11135,8 @@ function _memAutoFlushBanner(sessions) {
 function memBulkFlush() {
   var flushable = _memSessionsData.filter(function(s) { return s.source === 'claude' || s.source === 'openclaw'; });
   if (!flushable.length) { toast('No flushable sessions', 'err'); return; }
-  if (!confirm('Flush ' + flushable.length + ' sessions to long-term memory?')) return;
+  var flushOk = await porterConfirm('Flush Sessions', 'Flush ' + flushable.length + ' sessions to long-term memory?', { confirmLabel:'Flush' });
+  if (!flushOk) return;
   var done = 0, errors = 0;
   flushable.forEach(function(s) {
     api('/api/memory/flush-preview', { session_id: s.id, source: s.source }).then(function(preview) {
@@ -13291,7 +13296,8 @@ async function saveTool() {
   else toast((r && r.error) || 'Failed', 'err');
 }
 async function deleteTool(id) {
-  if (!confirm('Remove this tool?')) return;
+  var toolOk = await porterConfirm('Remove Tool', 'Remove this tool from the detected list?', { danger:true, confirmLabel:'Remove' });
+  if (!toolOk) return;
   const r = await api('/api/tools', { method: 'POST', body: JSON.stringify({ action: 'delete_tool', id }) });
   if (r && r.ok) { loadTools(); toast('Tool removed', 'ok'); }
   else toast((r && r.error) || 'Failed', 'err');
@@ -13574,7 +13580,7 @@ function copyIp(btn, text) {
 }
 
 async function promptDeviceNickname(nodeId, type, isVirtual, hostname, tailscaleIp, canonicalName, currentNickname) {
-  const proposed = prompt(`Set nickname for ${canonicalName}:`, currentNickname || '');
+  const proposed = await porterPrompt('Set Nickname', `Enter a nickname for <b>${escHtml(canonicalName)}</b>:`, currentNickname || '');
   if (proposed === null) return;
   const nickname = proposed.trim();
   if (!nickname) {
@@ -13585,7 +13591,8 @@ async function promptDeviceNickname(nodeId, type, isVirtual, hostname, tailscale
 }
 
 async function clearDeviceNickname(nodeId, type, isVirtual, hostname, tailscaleIp, canonicalName) {
-  if (!confirm(`Remove nickname for ${canonicalName}?`)) return;
+  var nickOk = await porterConfirm("Remove Nickname", `Remove nickname for <b>${escHtml(canonicalName)}</b>?`, { confirmLabel:"Remove" });
+  if (!nickOk) return;
   await setDeviceNickname(nodeId, type, isVirtual, hostname, tailscaleIp, canonicalName, '');
 }
 
@@ -13620,13 +13627,15 @@ async function setDeviceNickname(nodeId, type, isVirtual, hostname, tailscaleIp,
 
 // node / mount CRUD
 async function deleteNode(nodeId, label) {
-  if (!confirm(`Remove location "${label}" and all its paths?`)) return;
+  var locOk = await porterConfirm("Remove Location", `Remove <b>${escHtml(label)}</b> and all its paths?`, { danger:true, confirmLabel:"Remove" });
+  if (!locOk) return;
   const res = await api('/api/nodes', { action: 'delete_node', id: nodeId });
   if (res && res.ok) { toast('Location removed', 'ok'); loadLocations(); }
   else toast((res && res.error) || 'Remove failed', 'err');
 }
 async function deleteMount(nodeId, mountId, label) {
-  if (!confirm(`Remove mount "${label}"?`)) return;
+  var mountOk = await porterConfirm("Remove Mount", `Remove mount <b>${escHtml(label)}</b>?`, { danger:true, confirmLabel:"Remove" });
+  if (!mountOk) return;
   const res = await api('/api/nodes', { action: 'delete_mount', node_id: nodeId, mount_id: mountId });
   if (res && res.ok) { toast('Mount removed', 'ok'); loadLocations(); }
   else toast((res && res.error) || 'Remove failed', 'err');
@@ -13759,7 +13768,7 @@ function cancelLocationForm() {
 
 // node rename (inline prompt)
 function openEditNode(nodeId, currentLabel, currentType) {
-  const newLabel = prompt('Rename location:', currentLabel);
+  const newLabel = await porterPrompt('Rename Location', 'Enter new label:', currentLabel);
   if (newLabel === null) return;  // cancelled
   const trimmed = newLabel.trim();
   if (!trimmed) { toast('Label cannot be empty', 'err'); return; }
@@ -14464,15 +14473,15 @@ function switchFileTab(btn, key) {
 }
 
 async function createNewAgentFile() {
-  var name = prompt('New file name (must end with .md):');
+  if (!_selectedPersonaId) return;
+  var name = await porterPrompt('New File', 'Enter filename (must end with .md):', '', 'CUSTOM_RULES.md');
   if (!name || !name.trim()) return;
   name = name.trim();
   if (!name.endsWith('.md')) name += '.md';
-  if (!_selectedPersonaId) return;
   var r = await api('/api/personas/' + _selectedPersonaId + '/file', { filename: name, content: '# ' + name.replace('.md','') + '\n\n' });
   if (r && r.ok) {
     toast(name + ' created');
-    selectPersona(_selectedPersonaId); // refresh
+    selectPersona(_selectedPersonaId);
   } else {
     toast((r && r.error) || 'Create failed', 'err');
   }
@@ -14521,7 +14530,8 @@ async function savePersonaMeta() {
 async function deletePersona() {
   const p = window._selectedPersona;
   if (!p) return;
-  if (!confirm('Delete persona "' + p.name + '"? This removes their SOUL.md, memory, and all data.')) return;
+  var ok = await porterConfirm('Delete Agent', 'Delete <b>' + escHtml(p.name) + '</b>? This removes their SOUL.md, memory, and all data.', { danger:true, confirmLabel:'Delete' });
+  if (!ok) return;
   const r = await api('/api/personas/' + p.id, { action: 'delete' });
   if (r.ok) {
     _showToast('Persona deleted');
@@ -14625,7 +14635,7 @@ function updateWizUI() {
 
 async function createPersonaFromWizard() {
   const name = (document.getElementById('wiz-name').value || '').trim();
-  if (!name) { alert('Name is required'); _wizCurrentStep = 1; updateWizUI(); return; }
+  if (!name) { porterAlert('Missing Field', 'Agent name is required.'); _wizCurrentStep = 1; updateWizUI(); return; }
   const data = {
     name,
     role: document.getElementById('wiz-role').value || '',
@@ -14641,8 +14651,91 @@ async function createPersonaFromWizard() {
     closePersonaWizard();
     loadPersonas();
   } else {
-    alert('Failed: ' + (r.error || 'unknown error'));
+    porterAlert('Creation Failed', r.error || 'Unknown error');
   }
+}
+
+// ── Porter-styled modal dialogs (replaces browser prompt/confirm/alert) ──
+function _porterModal(opts) {
+  // opts: { title, message, input (bool), inputValue, inputPlaceholder, confirmLabel, cancelLabel, danger, onConfirm, onCancel }
+  var existing = document.getElementById('porter-dialog-overlay');
+  if (existing) existing.remove();
+  var ov = document.createElement('div');
+  ov.id = 'porter-dialog-overlay';
+  ov.className = 'overlay';
+  ov.style.zIndex = '950';
+  var m = document.createElement('div');
+  m.className = 'modal';
+  m.innerHTML = '<h3>' + (opts.title || 'Confirm') + '</h3>'
+    + (opts.message ? '<p>' + opts.message + '</p>' : '')
+    + (opts.input ? '<input id="porter-dialog-input" class="settings-input" value="' + (opts.inputValue || '') + '" placeholder="' + (opts.inputPlaceholder || '') + '" style="margin-bottom:16px" autofocus>' : '')
+    + '<div class="modal-actions">'
+    + (opts.cancelLabel !== false ? '<button class="btn btn-ghost" id="porter-dialog-cancel">' + (opts.cancelLabel || 'Cancel') + '</button>' : '')
+    + '<button class="btn ' + (opts.danger ? 'btn-ghost" style="color:#ef4444' : 'btn-primary') + '" id="porter-dialog-ok">' + (opts.confirmLabel || 'OK') + '</button>'
+    + '</div>';
+  ov.appendChild(m);
+  document.body.appendChild(ov);
+  // Focus input or OK button
+  var inp = document.getElementById('porter-dialog-input');
+  if (inp) { inp.focus(); inp.select(); } else { document.getElementById('porter-dialog-ok').focus(); }
+  // Enter key
+  function onKey(e) {
+    if (e.key === 'Enter') { document.getElementById('porter-dialog-ok').click(); }
+    if (e.key === 'Escape') { close(false); }
+  }
+  ov.addEventListener('keydown', onKey);
+  function close(result) {
+    ov.remove();
+    if (result && opts.onConfirm) opts.onConfirm(inp ? inp.value : true);
+    if (!result && opts.onCancel) opts.onCancel();
+  }
+  document.getElementById('porter-dialog-ok').onclick = function() { close(true); };
+  var cancel = document.getElementById('porter-dialog-cancel');
+  if (cancel) cancel.onclick = function() { close(false); };
+  // Click overlay to cancel
+  ov.addEventListener('click', function(e) { if (e.target === ov) close(false); });
+}
+
+function porterPrompt(title, message, defaultValue, placeholder) {
+  return new Promise(function(resolve) {
+    _porterModal({
+      title: title,
+      message: message,
+      input: true,
+      inputValue: defaultValue || '',
+      inputPlaceholder: placeholder || '',
+      confirmLabel: 'OK',
+      onConfirm: function(v) { resolve(v); },
+      onCancel: function() { resolve(null); }
+    });
+  });
+}
+
+function porterConfirm(title, message, opts) {
+  opts = opts || {};
+  return new Promise(function(resolve) {
+    _porterModal({
+      title: title,
+      message: message,
+      confirmLabel: opts.confirmLabel || 'Confirm',
+      cancelLabel: opts.cancelLabel || 'Cancel',
+      danger: opts.danger || false,
+      onConfirm: function() { resolve(true); },
+      onCancel: function() { resolve(false); }
+    });
+  });
+}
+
+function porterAlert(title, message) {
+  return new Promise(function(resolve) {
+    _porterModal({
+      title: title,
+      message: message,
+      confirmLabel: 'OK',
+      cancelLabel: false,
+      onConfirm: function() { resolve(); }
+    });
+  });
 }
 
 function _showToast(msg) {
@@ -15193,7 +15286,7 @@ async function saveProjectConfig(projId) {
 
 // S7h: Rename project via prompt dialog
 async function promptRenameProject(pid, currentName) {
-  const newName = prompt('Rename project:', currentName);
+  const newName = await porterPrompt('Rename Project', 'Enter new project name:', currentName);
   if (newName === null || !newName.trim() || newName.trim() === currentName) return;
   const d = await api('/api/projects', {
     method: 'POST',
@@ -16815,7 +16908,7 @@ async function quickExposePath(node) {
     const path = String(pathValue || '').trim();
     if (!path) return;
     const suggested = path.split('/').filter(Boolean).pop() || 'Path';
-    const label = prompt('Label for this path:', suggested);
+    const label = await porterPrompt('Label Path', 'Enter a label for this path:', suggested);
     if (label === null || !label.trim()) return;
     const res = await api('/api/nodes', {
       action: 'add_mount',
@@ -19617,7 +19710,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.5' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.6' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -20099,7 +20192,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.5"})
+            self.reply_json({"v": "0.27.6"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20186,7 +20279,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.5"
+                health["porter_version"] = "0.27.6"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -21487,7 +21580,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.5'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.6'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -25049,7 +25142,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.5 ready (localhost only)")
+    print(f"\n  Porter v0.27.6 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
