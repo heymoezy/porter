@@ -11132,7 +11132,7 @@ function _memAutoFlushBanner(sessions) {
   }
 }
 
-function memBulkFlush() {
+async function memBulkFlush() {
   var flushable = _memSessionsData.filter(function(s) { return s.source === 'claude' || s.source === 'openclaw'; });
   if (!flushable.length) { toast('No flushable sessions', 'err'); return; }
   var flushOk = await porterConfirm('Flush Sessions', 'Flush ' + flushable.length + ' sessions to long-term memory?', { confirmLabel:'Flush' });
@@ -12656,7 +12656,7 @@ async function loadChatSession(id) {
   renderChatMessages();
 }
 
-function renameChatSession(id, currentTitle) {
+async function renameChatSession(id, currentTitle) {
   showModal({
     title: 'Rename Chat',
     desc: '',
@@ -13767,7 +13767,7 @@ function cancelLocationForm() {
 }
 
 // node rename (inline prompt)
-function openEditNode(nodeId, currentLabel, currentType) {
+async function openEditNode(nodeId, currentLabel, currentType) {
   const newLabel = await porterPrompt('Rename Location', 'Enter new label:', currentLabel);
   if (newLabel === null) return;  // cancelled
   const trimmed = newLabel.trim();
@@ -16451,7 +16451,7 @@ async function changePassword() {
   }
 }
 
-function triggerAvatarUpload() { document.getElementById('avatarInput').click(); }
+async function triggerAvatarUpload() { document.getElementById('avatarInput').click(); }
 
 document.getElementById('avatarInput').onchange = async function() {
   const file = this.files[0]; if (!file) return;
@@ -17221,7 +17221,7 @@ function _fhomeOpenFile(mountId, filePath, fileName) {
   openPreview(name);
 }
 
-function _fhomeDelete(evt, mountId, dirPath, name, type) {
+async function _fhomeDelete(evt, mountId, dirPath, name, type) {
   // Find the row element before the modal opens
   const rowEl = evt.target.closest('.fhome-entry');
   curRoot = mountId;
@@ -17826,7 +17826,7 @@ async function downloadZip() {
 }
 
 // ── bulk delete ──
-function bulkDelete() {
+async function bulkDelete() {
   const names = [...selectedItems];
   if (!names.length) return;
   showModal({
@@ -17851,7 +17851,7 @@ function bulkDelete() {
 }
 
 // ── move ──
-function openMove(name) {
+async function openMove(name) {
   openFolderPicker(async (destPath) => {
     const res = await api('/api/move', {
       root: curRoot, path: curPath, name, destPath
@@ -18009,7 +18009,7 @@ document.getElementById('modalInput').addEventListener('keydown', e => {
 });
 
 // ── rename ──
-function openRename(name, type) {
+async function openRename(name, type) {
   showModal({
     title: `Rename ${type}`,
     desc: `Enter a new name for <strong>${escHtml(name)}</strong>`,
@@ -18029,7 +18029,7 @@ function openRename(name, type) {
 }
 
 // ── delete ──
-function openDelete(name, type) {
+async function openDelete(name, type) {
   showModal({
     title: `Delete ${type}`,
     desc: `Delete <strong>${escHtml(name)}</strong>?${type==='dir'?'<br><br>All contents will be deleted.' : ''}`,
@@ -18046,7 +18046,7 @@ function openDelete(name, type) {
 }
 
 // ── mkdir ──
-function openMkdir() {
+async function openMkdir() {
   showModal({
     title: 'New folder',
     input: true, inputVal: 'untitled folder',
