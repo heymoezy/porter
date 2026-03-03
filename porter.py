@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.14 — @Agent Autocomplete"""
+"""Porter v0.27.15 — @Mention Blue Highlights"""
 
 
 
@@ -5640,7 +5640,9 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 /* @mention indicator below input */
 .chat-at-indicator { display:flex; gap:6px; padding:4px 4px 0; flex-wrap:wrap; }
 .chat-at-indicator .at-tag {
-  font-size:11px; color:#7dd3fc; font-weight:600; letter-spacing:0.3px;
+  font-size:11px; font-weight:600; letter-spacing:0.3px;
+  padding:2px 8px; border-radius:10px; background:color-mix(in srgb, var(--accent) 20%, var(--bg));
+  color:var(--accent);
 }
 .chat-input-bottom-meta {
   display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:6px;
@@ -6692,7 +6694,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.14</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.15</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7942,6 +7944,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.15', date:'2026-03-03', notes:['@mentions show blue pill badges below input (agents with avatar, models with name)','Personas detected in @indicator alongside model backends'] },
   { ver:'v0.27.14', date:'2026-03-03', notes:['@ autocomplete now shows agent personas (with avatar + role)','Agents listed first, then model backends','Works at start of message and mid-message after space'] },
   { ver:'v0.27.13', date:'2026-03-03', notes:['Fix: persona chat was showing input prompt instead of model response','Root cause: poll read detail.response (undefined) instead of detail.run.response','Sage + Pretty + Quill switched from Gemini (slow) to faster backends'] },
   { ver:'v0.27.12', date:'2026-03-03', notes:['Fix: persona dispatch timeout raised to 180s (was 15s default)','Fix: Gemini no longer echoes system prompt — identity instruction moved to suffix','Poll calls timeout set to 30s','Personality mode instruction as suffix, not prefix'] },
@@ -12276,16 +12279,29 @@ function _showAtIndicator(el) {
   var ind = document.getElementById(indId);
   if (!ind) return;
   var val = el.value;
-  var models = [];
-  var labels = {claude:'Claude',gemini:'Gemini',openclaw:'OpenClaw',codex:'Codex',ollama:'Ollama'};
-  var re = /@(claude|gemini|openclaw|codex|ollama)\b/g;
+  var found = [];
+  // Build lookup: model backends + persona slugs
+  var modelLabels = {claude:'Claude',gemini:'Gemini',openclaw:'OpenClaw',codex:'Codex',ollama:'Ollama'};
+  var personaLookup = {};
+  (_personas || []).forEach(function(p) {
+    var slug = (p.name || '').toLowerCase().replace(/\s+/g, '');
+    if (slug) personaLookup[slug] = { name: p.name, avatar: p.avatar || '' };
+  });
+  // Match all @words in the input
+  var re = /@(\w+)/g;
   var m;
   while ((m = re.exec(val)) !== null) {
-    if (models.indexOf(m[1]) === -1) models.push(m[1]);
+    var slug = m[1].toLowerCase();
+    if (found.some(function(f) { return f.slug === slug; })) continue;
+    if (personaLookup[slug]) {
+      found.push({ slug: slug, label: personaLookup[slug].avatar + ' ' + personaLookup[slug].name, isAgent: true });
+    } else if (modelLabels[slug]) {
+      found.push({ slug: slug, label: modelLabels[slug], isAgent: false });
+    }
   }
-  if (!models.length) { ind.innerHTML = ''; return; }
-  ind.innerHTML = models.map(function(k) {
-    return '<span class="at-tag">\u2192 ' + (labels[k] || k) + '</span>';
+  if (!found.length) { ind.innerHTML = ''; return; }
+  ind.innerHTML = found.map(function(f) {
+    return '<span class="at-tag">' + escHtml(f.label) + '</span>';
   }).join('');
 }
 
@@ -19950,7 +19966,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.14' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.15' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -20432,7 +20448,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.14"})
+            self.reply_json({"v": "0.27.15"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20519,7 +20535,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.14"
+                health["porter_version"] = "0.27.15"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -21820,7 +21836,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.14'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.15'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -25399,7 +25415,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.14 ready (localhost only)")
+    print(f"\n  Porter v0.27.15 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
