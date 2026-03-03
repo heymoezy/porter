@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.8 — Smart Chat History"""
+"""Porter v0.27.9 — Persona Dispatch Fix"""
 
 
 
@@ -6685,7 +6685,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.8</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.9</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7935,6 +7935,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.9', date:'2026-03-03', notes:['Fix: RULES.md no longer injected into persona dispatch (project governance, not agent behavior)','SOUL.md context framed as identity instructions, not raw text dump','Personality mode: dedicated prompt for identity conversations','Backend override passed through dispatch endpoint','Model selector override works in persona dispatch'] },
   { ver:'v0.27.8', date:'2026-03-03', notes:['Smart chat titles: persona prefix + trimmed message','Project badges in chat history','Persona badges in chat history','Bigger font in chat sidebar (13px)','project_id + persona saved with chat sessions'] },
   { ver:'v0.27.7', date:'2026-03-03', notes:['3-selector chat bar: Agent + Project + Model','Agent selector: pick persona for SOUL context injection','Project selector: General / Personality / specific project context','Model override: force specific backend or auto-route via agent preferred','Personality mode: build agent identity through conversation','Dropdown menus with search-friendly layout'] },
   { ver:'v0.27.6', date:'2026-03-03', notes:['Porter-styled modal dialogs (porterPrompt, porterConfirm, porterAlert)','Replaced 17+ browser prompt/confirm/alert calls with themed modals','Keyboard support (Enter to confirm, Escape to cancel)','Overlay click-to-dismiss'] },
@@ -19368,8 +19369,8 @@ def _persona_append_daily_log(persona_id, text):
     log_path.write_text(existing + f"\n## {timestamp}\n\n{text}\n")
 
 
-def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=None, step_num=0):
-    """Dispatch a message to a persona: load SOUL + RULES, resolve backend, call dispatch_agent."""
+def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=None, step_num=0, personality_mode=False, backend_override=""):
+    """Dispatch a message to a persona: load SOUL, resolve backend, call dispatch_agent."""
     import uuid as _uuid
     import time as _ptime
     if not run_id:
@@ -19379,22 +19380,31 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     if not persona:
         return {"ok": False, "error": f"Persona not found: {persona_id}", "run_id": run_id}
 
-    # Load SOUL.md + RULES.md context
+    # Load SOUL.md for persona identity context
+    # Note: RULES.md is Porter project governance, not agent behavioral rules — do NOT inject it
     soul = _persona_get_soul(persona_id)
-    rules = _persona_get_rules()
-    context_parts = []
-    if rules.strip():
-        context_parts.append(f"[GLOBAL RULES]\n{rules.strip()}")
+    pname = persona.get('name', 'Agent')
     if soul.strip():
-        context_parts.append(f"[IDENTITY — {persona.get('name', 'Agent')}]\n{soul.strip()}")
-    context_prefix = "\n\n".join(context_parts)
-    if context_prefix:
-        augmented_message = f"{context_prefix}\n\n[USER MESSAGE]\n{message}"
+        augmented_message = (
+            f"You are {pname}. Stay in character at all times.\n\n"
+            f"--- Your Identity ---\n{soul.strip()}\n--- End Identity ---\n\n"
+            f"{message}"
+        )
     else:
         augmented_message = message
 
+    # Personality mode: frame as identity conversation
+    if personality_mode:
+        augmented_message = (
+            f"You are {pname}. The user wants to get to know you and help develop your identity.\n"
+            f"Respond naturally as yourself. Share your personality, preferences, and working style.\n"
+            f"If the user suggests identity changes, acknowledge them — your SOUL.md can be updated later.\n\n"
+            + augmented_message
+        )
+
     # Resolve backend
-    backend = persona.get("preferred_backend", "").strip()
+    _be_override = backend_override
+    backend = _be_override if _be_override and _be_override in PROVIDER_REGISTRY else persona.get("preferred_backend", "").strip()
     model_override = None
     if not backend or backend not in PROVIDER_REGISTRY:
         # Try fallback chain
@@ -19887,7 +19897,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.8' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.9' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -20369,7 +20379,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.8"})
+            self.reply_json({"v": "0.27.9"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20456,7 +20466,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.8"
+                health["porter_version"] = "0.27.9"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -21757,7 +21767,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.8'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.9'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -23660,10 +23670,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": "prompt is required"}, 400)
                 return
             timeout = max(10, min(300, int(data.get("timeout", 60) or 60)))
+            _personality_mode = bool(data.get("personality_mode"))
+            _backend_override = str(data.get("backend_override", "")).strip()
             import uuid as _uuid
             run_id = _uuid.uuid4().hex[:12]
             def _persona_run():
-                dispatch_to_persona(prompt, pid, timeout=timeout, run_id=run_id)
+                dispatch_to_persona(prompt, pid, timeout=timeout, run_id=run_id,
+                                    personality_mode=_personality_mode,
+                                    backend_override=_backend_override)
             t = _threading.Thread(target=_persona_run, daemon=True)
             t.start()
             self.reply_json({"ok": True, "run_id": run_id, "persona_id": pid, "status": "dispatched"})
@@ -25331,7 +25345,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.8 ready (localhost only)")
+    print(f"\n  Porter v0.27.9 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
