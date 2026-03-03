@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.26.3 — Chat + Memory Persona Reframe — Nav Grouping"""
+"""Porter v0.26.4 — Projects + Workflows Persona Integration — Nav Grouping"""
 
 
 
@@ -672,6 +672,7 @@ def _migrate_checkpoint_to_registry():
                 "tags": ["migrated", "checkpoint"],
                 "sort_order": 50,
                 "assigned_agent_id": None,
+                "assigned_persona_id": None,
                 "created_by": "checkpoint-migration",
                 "created_at": time.time(),
                 "updated_at": time.time(),
@@ -2236,14 +2237,14 @@ def _treg_load() -> None:
                 conn.execute("""
                     INSERT OR REPLACE INTO tasks 
                     (id, project_id, title, description, status, priority, phase, 
-                     created_at, updated_at, completed_at, assigned_agent_id, 
+                     created_at, updated_at, completed_at, assigned_agent_id, assigned_persona_id, 
                      tokens_used, time_minutes, result, tags, sort_order)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     t.get("id"), t.get("project_id"), t.get("title", "Untitled"),
                     t.get("description"), t.get("status", "pending"), t.get("priority", "normal"),
                     t.get("phase"), t.get("created_at", 0), t.get("updated_at"),
-                    t.get("completed_at"), t.get("assigned_agent_id"), t.get("tokens_used", 0),
+                    t.get("completed_at"), t.get("assigned_agent_id"), task.get("assigned_persona_id"), t.get("tokens_used", 0),
                     t.get("time_minutes") or t.get("time_spent_mins") or 0, t.get("result"),
                     json.dumps(t.get("tags", [])), t.get("sort_order", 0)
                 ))
@@ -2279,14 +2280,14 @@ def _treg_save(task: dict) -> None:
         conn.execute("""
             INSERT OR REPLACE INTO tasks 
             (id, project_id, title, description, status, priority, phase, 
-             created_at, updated_at, completed_at, assigned_agent_id, 
+             created_at, updated_at, completed_at, assigned_agent_id, assigned_persona_id, 
              tokens_used, time_minutes, result, tags, sort_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             task.get("id"), task.get("project_id"), task.get("title", "Untitled"),
             task.get("description"), task.get("status", "pending"), task.get("priority", "normal"),
             task.get("phase"), task.get("created_at", 0), task.get("updated_at"),
-            task.get("completed_at"), task.get("assigned_agent_id"), task.get("tokens_used", 0),
+            task.get("completed_at"), task.get("assigned_agent_id"), task.get("assigned_persona_id"), task.get("tokens_used", 0),
             task.get("time_minutes") or task.get("time_spent_mins") or 0, task.get("result"),
             json.dumps(task.get("tags", [])), task.get("sort_order", 0)
         ))
@@ -2581,6 +2582,63 @@ def _scheduler_loop() -> None:
         except Exception as e:
             log.debug("Ignored: %s", e)
         _time.sleep(_SCHED_INTERVAL)
+
+
+# ── Heartbeat Engine (Phase E) ────────────────────────────────────────────────
+
+def _heartbeat_tick():
+    """Check all personas with enabled heartbeats and dispatch if due."""
+    now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    conn = _db()
+    rows = conn.execute(
+        "SELECT id, name, heartbeat_cron, last_heartbeat FROM personas WHERE heartbeat_enabled = 1 AND heartbeat_cron != ''"
+    ).fetchall()
+    for row in rows:
+        pid, pname, cron_expr, last_hb = row["id"], row["name"], row["heartbeat_cron"], row["last_heartbeat"]
+        try:
+            from_dt = datetime.fromisoformat(last_hb) if last_hb else (now - timedelta(days=1))
+            due = _cron_next(cron_expr, from_dt=from_dt)
+            if due and due <= now:
+                _run_heartbeat(pid, pname)
+                conn.execute("UPDATE personas SET last_heartbeat = ? WHERE id = ?",
+                             (now.isoformat(), pid))
+                conn.commit()
+        except Exception as e:
+            log.debug("Heartbeat skip %s: %s", pid, e)
+
+
+def _run_heartbeat(persona_id, persona_name):
+    """Execute a heartbeat check for a persona."""
+    # Load heartbeat.md checklist
+    hb_path = PERSONAS_DIR / persona_id / "heartbeat.md"
+    if not hb_path.exists():
+        return  # No checklist = no heartbeat action
+    checklist = hb_path.read_text().strip()
+    if not checklist:
+        return  # Empty checklist = nothing to do
+    prompt = f"HEARTBEAT CHECK\n\nReview this checklist and take any needed actions. Reply HEARTBEAT_OK if nothing to do.\n\n{checklist}"
+    try:
+        result = dispatch_to_persona(prompt, persona_id, timeout=60)
+        status = "ok" if result.get("ok") else "failed"
+        mlog.emit("info", "heartbeat", f"heartbeat.{status}",
+                  f"Heartbeat for {persona_name}: {status}",
+                  persona_id=persona_id, trace_id=_get_trace_id())
+    except Exception as e:
+        log.debug("Heartbeat dispatch error for %s: %s", persona_id, e)
+        mlog.emit("error", "heartbeat", "heartbeat.error",
+                  f"Heartbeat error for {persona_name}: {e}",
+                  persona_id=persona_id, trace_id=_get_trace_id())
+
+
+def _heartbeat_loop():
+    """Background daemon loop for persona heartbeats — ticks every 60s."""
+    import time as _htime
+    while True:
+        try:
+            _heartbeat_tick()
+        except Exception as e:
+            log.debug("Heartbeat loop error: %s", e)
+        _htime.sleep(60)
 
 
 # ── PEP/1 helpers ─────────────────────────────────────────────────────────────
@@ -6180,7 +6238,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.26.3</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.26.4</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6621,6 +6679,9 @@ select.settings-input { padding-right: 26px; }
   <div id="projects-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Projects</span>
+      <select id="proj-persona-filter" class="settings-input" style="font-size:11px;min-width:130px;margin-left:8px" onchange="filterProjectsByPersona(this.value)">
+        <option value="">All personas</option>
+      </select>
       <span id="proj-refresh-indicator" style="font-size:11px;color:var(--text3);margin-left:auto"></span>
     </div>
     <div class="module-intro">Active projects and their task backlogs.</div>
@@ -6758,6 +6819,38 @@ select.settings-input { padding-right: 26px; }
       </div>
     </div>
 
+
+    <!-- Heartbeats section (Phase E) -->
+    <div style="margin-bottom:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">Heartbeats</div>
+        <span style="font-size:11px;color:var(--text3)">Periodic persona check-ins</span>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Each persona can have a heartbeat checklist. When the schedule fires, Porter dispatches the checklist to the persona.</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <select id="hb-persona-sel" class="settings-input" style="font-size:12px;min-width:180px" onchange="loadHeartbeatConfig(this.value)">
+            <option value="">Select persona...</option>
+          </select>
+        </div>
+        <div id="hb-editor" style="display:none">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+            <label style="font-size:11px;color:var(--text2)">Cron:</label>
+            <input id="hb-cron" class="settings-input" style="font-size:12px;width:120px" placeholder="0 9 * * *" title="5-field cron expression">
+            <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer">
+              <input type="checkbox" id="hb-enabled"> Enabled
+            </label>
+            <span id="hb-last" style="font-size:10px;color:var(--text3);margin-left:auto"></span>
+          </div>
+          <textarea id="hb-checklist" class="settings-input" style="font-size:12px;min-height:100px;width:100%;resize:vertical;font-family:monospace" placeholder="- [ ] Check system health
+- [ ] Review pending tasks
+- [ ] Update daily log"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn btn-primary" onclick="saveHeartbeatConfig()" style="font-size:12px">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Automations / Cron section -->
     <div style="margin-bottom:16px">
@@ -7402,6 +7495,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.26.4', date:'2026-03-03', notes:['Projects: persona filter + persona badges on tasks','Chain builder: steps target personas','Heartbeat engine: per-persona cron + checklist editor','Heartbeat daemon thread','Tasks: assigned_persona_id column'] },
   { ver:'v0.26.3', date:'2026-03-03', notes:['Chat: persona cards on welcome screen','Chat: @persona mentions dispatch via persona layer','Memory: persona selector with MEMORY.md + daily logs view','Persona dispatch + polling in chat'] },
   { ver:'v0.26.2', date:'2026-03-03', notes:['Models Tab: dedicated model management under Tools & Config','Model health cards with live probe status','Quick Dispatch: raw model dispatch for debugging (bypass personas)','Recent Runs viewer from agent_messages table','Routing mode selector'] },
   { ver:'v0.26.1', date:'2026-03-02', notes:['Agents Tab: persona org chart (User → Rules → Persona cards)','Persona detail panel with 4 tabs: Identity (SOUL.md editor), Memory, Activity, Config','7-step onboarding wizard generates SOUL.md from curated questions','Global Rules editor (click RULES node in org chart)','Wake/Sleep persona lifecycle controls','Nav renamed: Orchestration → Agents'] },
@@ -9273,7 +9367,12 @@ async function runChain() {
     var be = stepEls[i].querySelector('.chain-backend');
     var pr = stepEls[i].querySelector('.chain-prompt');
     if (be && pr && pr.value.trim()) {
-      steps.push({backend: be.value, prompt: pr.value.trim()});
+      var beVal = be.value;
+      if (beVal.startsWith('persona:')) {
+        steps.push({persona_id: beVal.slice(8), prompt: pr.value.trim()});
+      } else {
+        steps.push({backend: beVal, prompt: pr.value.trim()});
+      }
     }
   }
   if (!steps.length) { toast('Add at least one step', 'warn'); return; }
@@ -9289,6 +9388,47 @@ async function runChain() {
       toast((res && res.error) || 'Chain failed to start', 'err');
     }
   } catch(e) { toast('Chain error: ' + e.message, 'err'); }
+}
+
+function populateHeartbeatPersonas() {
+  var sel = document.getElementById('hb-persona-sel');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Select persona...</option>' +
+    (_personas || []).map(function(p) {
+      return '<option value="' + p.id + '">' + escHtml((p.avatar||'') + ' ' + p.name) + '</option>';
+    }).join('');
+}
+
+async function loadHeartbeatConfig(personaId) {
+  var editor = document.getElementById('hb-editor');
+  if (!personaId) { if (editor) editor.style.display = 'none'; return; }
+  if (editor) editor.style.display = 'block';
+  try {
+    var r = await api('/api/personas/' + personaId + '/heartbeat', {});
+    if (r && r.ok) {
+      document.getElementById('hb-cron').value = r.cron || '';
+      document.getElementById('hb-enabled').checked = !!r.enabled;
+      document.getElementById('hb-checklist').value = r.checklist || '';
+      document.getElementById('hb-last').textContent = r.last_heartbeat ? 'Last: ' + r.last_heartbeat : 'Never run';
+    }
+  } catch(e) { console.debug('loadHeartbeatConfig:', e); }
+}
+
+async function saveHeartbeatConfig() {
+  var sel = document.getElementById('hb-persona-sel');
+  var personaId = sel ? sel.value : '';
+  if (!personaId) { toast('Select a persona first', 'warn'); return; }
+  var data = {
+    action: 'save',
+    cron: (document.getElementById('hb-cron').value || '').trim(),
+    enabled: document.getElementById('hb-enabled').checked,
+    checklist: (document.getElementById('hb-checklist').value || ''),
+  };
+  try {
+    var r = await api('/api/personas/' + personaId + '/heartbeat', data);
+    if (r && r.ok) toast('Heartbeat saved', 'ok');
+    else toast((r && r.error) || 'Save failed', 'err');
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
 }
 
 async function loadChainRuns() {
@@ -9333,6 +9473,7 @@ async function loadSkills() {
 }
 
 async function loadWorkflows() {
+  populateHeartbeatPersonas();
   const [skillRes, cronRes] = await Promise.all([
     api('/api/openclaw/skills'),
     api('/api/openclaw/cron'),
@@ -9514,6 +9655,7 @@ let _cpTaskForModal = null;
 let _projFileCache = {};          // S7: project data cache
 
 async function loadProjects() {
+  populateProjPersonaFilter();
   const el = document.getElementById('proj-content-projects');
   if (el) el.innerHTML = '<div class="loading-indicator" style="padding:16px 28px">Loading projects</div>';
 
@@ -9622,14 +9764,35 @@ function stopProjAutoRefresh() {
   if (_projRefreshTickTimer) { clearInterval(_projRefreshTickTimer); _projRefreshTickTimer = null; }
 }
 
+var _projPersonaFilter = '';
+
+function populateProjPersonaFilter() {
+  var sel = document.getElementById('proj-persona-filter');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">All personas</option>' +
+    (_personas || []).map(function(p) {
+      return '<option value="' + p.id + '">' + escHtml((p.avatar||'') + ' ' + p.name) + '</option>';
+    }).join('');
+}
+
+function filterProjectsByPersona(personaId) {
+  _projPersonaFilter = personaId || '';
+  _renderProjectList();
+}
+
 function _renderProjectList() {
   const el = document.getElementById('proj-content-projects');
   if (!el) return;
 
+  // Filter by persona if active
+  var filteredTasks = _projAllTasks;
+  if (_projPersonaFilter) {
+    filteredTasks = _projAllTasks.filter(function(t) { return t.assigned_persona_id === _projPersonaFilter; });
+  }
   // Group tasks by project_id
   const tasksByProject = {};
   const unassigned = [];
-  _projAllTasks.forEach(t => {
+  filteredTasks.forEach(t => {
     if (t.project_id) {
       (tasksByProject[t.project_id] = tasksByProject[t.project_id] || []).push(t);
     } else {
@@ -9824,8 +9987,15 @@ function _ptaskRow(t) {
   if (t.tokens_used) metaItems.push(_fmtNum(t.tokens_used) + ' tokens');
   if (t.time_spent_mins) metaItems.push(_fmtDuration(t.time_spent_mins));
   const metaHtml = metaItems.join(' · ');
+  // Persona badge
+  var personaBadge = '';
+  if (t.assigned_persona_id) {
+    var _tp = (_personas || []).find(function(p) { return p.id === t.assigned_persona_id; });
+    if (_tp) personaBadge = '<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:color-mix(in srgb, var(--accent) 12%, var(--bg));color:var(--accent);margin-left:4px">' + escHtml((_tp.avatar||'') + ' ' + _tp.name) + '</span>';
+  }
   return '<div class="ptask-row">'
     + '<span class="ptask-row-title">' + escHtml(t.title || '') + '</span>'
+    + personaBadge
     + (showPill ? '<span class="st-pill ' + pillClass + '">' + escHtml(stLabel) + '</span>' : '')
     + '<span class="ptask-row-age">' + metaHtml + '</span>'
     + '</div>';
@@ -18133,10 +18303,13 @@ def _persona_update(persona_id, data):
     """Update persona DB row + optionally SOUL.md."""
     import hashlib
     sets, vals = [], []
-    for field in ("name", "role", "avatar", "preferred_backend", "status"):
+    for field in ("name", "role", "avatar", "preferred_backend", "status", "heartbeat_cron"):
         if field in data:
             sets.append(f"{field}=?")
             vals.append(data[field])
+    if "heartbeat_enabled" in data:
+        sets.append("heartbeat_enabled=?")
+        vals.append(1 if data["heartbeat_enabled"] else 0)
     if "fallback_backends" in data:
         sets.append("fallback_backends=?")
         vals.append(json.dumps(data["fallback_backends"]))
@@ -18417,19 +18590,24 @@ def _run_chain(chain_id, steps, initial_input, timeout_per_step=120):
                   f"Chain {chain_id} step {idx}: {step_backend}",
                   chain_id=chain_id, step_num=idx, backend=step_backend, trace_id=_get_trace_id())
 
-        # Probe backend
-        if not _probe_provider(step_backend):
-            error_msg = f"Backend {step_backend} unavailable at step {idx}"
-            _emit_event("chain:error", {"chain_id": chain_id, "step": idx, "error": error_msg})
-            mlog.emit("error", "chain", "chain.step.fail", error_msg,
-                      chain_id=chain_id, step_num=idx, backend=step_backend, trace_id=_get_trace_id())
-            results.append({"step": idx, "backend": step_backend, "ok": False, "error": error_msg})
-            break
-
-        # Dispatch
+        # Dispatch — persona or direct backend
         run_id = f"{chain_id}-s{idx}"
-        result = dispatch_agent(prompt, step_backend, model=step_model, timeout=step_timeout,
-                                run_id=run_id, chain_id=chain_id, step_num=idx)
+        step_persona_id = step.get("persona_id")
+        if step_persona_id:
+            # Route through persona layer (handles backend resolution + SOUL injection)
+            result = dispatch_to_persona(prompt, step_persona_id, timeout=step_timeout,
+                                         run_id=run_id, chain_id=chain_id, step_num=idx)
+        else:
+            # Direct backend dispatch (original behavior)
+            if not _probe_provider(step_backend):
+                error_msg = f"Backend {step_backend} unavailable at step {idx}"
+                _emit_event("chain:error", {"chain_id": chain_id, "step": idx, "error": error_msg})
+                mlog.emit("error", "chain", "chain.step.fail", error_msg,
+                          chain_id=chain_id, step_num=idx, backend=step_backend, trace_id=_get_trace_id())
+                results.append({"step": idx, "backend": step_backend, "ok": False, "error": error_msg})
+                break
+            result = dispatch_agent(prompt, step_backend, model=step_model, timeout=step_timeout,
+                                    run_id=run_id, chain_id=chain_id, step_num=idx)
 
         if result.get("ok"):
             previous = result.get("text", "")
@@ -18718,7 +18896,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.26.3' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.26.4' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -19191,7 +19369,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.26.3"})
+            self.reply_json({"v": "0.26.4"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -19278,7 +19456,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.26.3"
+                health["porter_version"] = "0.26.4"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -20381,7 +20559,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.26.3'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.26.4'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -22274,6 +22452,37 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.reply_json({"ok": False, "error": "Persona not found"}, 404)
 
+        elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/heartbeat"):
+            # GET or POST heartbeat config for a persona
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.strip("/").split("/")
+            pid = parts[2] if len(parts) >= 4 else ""
+            data = self.read_json_body()
+            if data.get("action") == "save":
+                # Save heartbeat checklist
+                hb_path = PERSONAS_DIR / pid / "heartbeat.md"
+                hb_path.parent.mkdir(parents=True, exist_ok=True)
+                hb_path.write_text(data.get("checklist", ""))
+                # Update cron + enabled in DB
+                _persona_update(pid, {
+                    "heartbeat_cron": data.get("cron", ""),
+                    "heartbeat_enabled": data.get("enabled", False),
+                })
+                self.reply_json({"ok": True})
+            else:
+                # Read heartbeat config
+                hb_path = PERSONAS_DIR / pid / "heartbeat.md"
+                checklist = hb_path.read_text() if hb_path.exists() else ""
+                conn = _db()
+                row = conn.execute("SELECT heartbeat_cron, heartbeat_enabled, last_heartbeat FROM personas WHERE id=?", (pid,)).fetchone()
+                self.reply_json({
+                    "ok": True,
+                    "checklist": checklist,
+                    "cron": row["heartbeat_cron"] if row else "",
+                    "enabled": bool(row["heartbeat_enabled"]) if row else False,
+                    "last_heartbeat": row["last_heartbeat"] if row else None,
+                })
+
         elif parsed.path.startswith("/api/personas/"):
             # PUT-style update via POST (persona_id in path)
             if not self.auth_check(redirect=False): return
@@ -23234,6 +23443,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     "project_name":      proj_name,
                     "tags":              [str(t).strip() for t in (data.get("tags") or []) if str(t).strip()],
                     "assigned_agent_id": data.get("assigned_agent_id") or None,
+                    "assigned_persona_id": data.get("assigned_persona_id") or None,
                     "created_by":        actor,
                     "username":          username,
                     "created_at":        now,
@@ -23286,12 +23496,15 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     if role != "admin" and task.get("username") != username:
                         self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                     task["assigned_agent_id"] = agent_id
+                    # Also support persona assignment
+                    persona_id = str(data.get("persona_id", "") or "").strip() or None
+                    task["assigned_persona_id"] = persona_id
                     task["updated_at"]        = now
-                    if agent_id and task["status"] == "pending":
+                    if (agent_id or persona_id) and task["status"] == "pending":
                         task["status"] = "in_progress"
                 _treg_save(task)
                 _append_audit("task_registry.assign", tid, actor,
-                              details={"assigned_agent_id": agent_id})
+                              details={"assigned_agent_id": agent_id, "assigned_persona_id": persona_id})
                 self.reply_json({"ok": True, "task": task})
 
             elif action == "complete":
@@ -23819,11 +24032,13 @@ if __name__ == "__main__":
     _sched_thread.start()
     _cap_thread = threading.Thread(target=_run_cap_checks, name="porter-cap-check", daemon=True)
     _cap_thread.start()
+    _hb_thread = threading.Thread(target=_heartbeat_loop, name="porter-heartbeat", daemon=True)
+    _hb_thread.start()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.26.3 ready (localhost only)")
+    print(f"\n  Porter v0.26.4 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
