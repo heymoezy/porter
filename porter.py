@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.26.0 — Persona-First Architecture — Nav Grouping"""
+"""Porter v0.26.1 — Agents Tab — Nav Grouping"""
 
 
 
@@ -5630,6 +5630,66 @@ body.density-compact .file-name { padding: 6px 0; }
   background:color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
+/* ── Persona Org Chart ──────────────────────────────────────── */
+.persona-org { display:flex; flex-direction:column; align-items:center; gap:0; margin-bottom:24px; }
+.org-node { display:flex; flex-direction:column; align-items:center; padding:14px 20px;
+  background:var(--raised); border:1px solid var(--border); border-radius:10px; min-width:120px; }
+.org-node.org-user { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 6%, var(--bg)); }
+.org-node.org-rules { cursor:pointer; transition:border-color .15s; }
+.org-node.org-rules:hover { border-color:var(--accent); }
+.org-avatar { font-size:24px; margin-bottom:4px; }
+.org-name { font-size:13px; font-weight:600; color:var(--text); }
+.org-role { font-size:11px; color:var(--text3); }
+.org-line { width:2px; height:20px; background:var(--border); }
+.persona-cards-row { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; padding:4px 0; }
+.persona-card { display:flex; flex-direction:column; align-items:center; padding:16px 20px;
+  background:var(--raised); border:1px solid var(--border); border-radius:10px;
+  min-width:110px; max-width:160px; cursor:pointer; transition:border-color .15s, box-shadow .15s; }
+.persona-card:hover { border-color:var(--accent); box-shadow:0 2px 8px rgba(0,0,0,.08); }
+.persona-card.selected { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 6%, var(--bg)); }
+.persona-card-avatar { font-size:28px; margin-bottom:6px; }
+.persona-card-name { font-size:13px; font-weight:600; color:var(--text); text-align:center;
+  max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.persona-card-role { font-size:11px; color:var(--text3); text-align:center;
+  max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.persona-card-status { display:flex; align-items:center; gap:4px; margin-top:6px; font-size:10px; }
+.persona-card-dot { width:6px; height:6px; border-radius:50%; }
+
+/* ── Persona Detail Panel ─────────────────────────────────── */
+.persona-detail { margin-top:16px; background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:0; overflow:hidden; }
+.persona-detail-header { display:flex; align-items:center; gap:12px;
+  padding:16px 20px; border-bottom:1px solid var(--border); }
+.persona-detail-avatar { font-size:28px; }
+.persona-detail-name { font-size:16px; font-weight:600; color:var(--text); }
+.persona-detail-role { font-size:12px; color:var(--text3); }
+.persona-detail-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); }
+.pd-tab { padding:10px 18px; font-size:12px; font-weight:500; color:var(--text3);
+  background:none; border:none; border-bottom:2px solid transparent; cursor:pointer;
+  transition:color .15s, border-color .15s; }
+.pd-tab:hover { color:var(--text); }
+.pd-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.persona-detail-content { padding:20px; min-height:200px; max-height:400px; overflow-y:auto; }
+.persona-editor { width:100%; min-height:300px; padding:14px; font-family:monospace; font-size:13px;
+  background:var(--bg2); color:var(--text); border:1px solid var(--border); border-radius:8px;
+  resize:vertical; line-height:1.6; }
+
+/* ── Persona Wizard ───────────────────────────────────────── */
+.wizard-steps { padding:20px; }
+.wizard-step { display:none; animation:fadeIn .2s; }
+.wizard-step.active { display:block; }
+.wizard-label { display:block; font-size:14px; font-weight:600; color:var(--text); margin-bottom:12px; }
+.wizard-nav { display:flex; align-items:center; justify-content:space-between; padding:14px 20px;
+  border-top:1px solid var(--border); }
+.wizard-progress { font-size:12px; color:var(--text3); }
+.emoji-grid { display:flex; flex-wrap:wrap; gap:8px; }
+.emoji-grid .emoji-btn { width:44px; height:44px; display:flex; align-items:center; justify-content:center;
+  font-size:22px; border:1px solid var(--border); border-radius:8px; cursor:pointer;
+  background:var(--bg2); transition:border-color .15s, background .15s; }
+.emoji-grid .emoji-btn:hover { border-color:var(--accent); }
+.emoji-grid .emoji-btn.selected { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+@keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+
 /* Memory tab v6 — compact layout */
 .mem-section-label { font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px; }
 .mem-flow-toggle { display:flex;align-items:center;gap:6px;padding:8px 0;cursor:pointer;user-select:none; }
@@ -6040,7 +6100,7 @@ select.settings-input { padding-right: 26px; }
     </button>
     <button class="mnav-item" id="mnav-agents" onclick="switchModule('agents')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
-      <span class="mnav-label">Orchestration</span>
+      <span class="mnav-label">Agents</span>
     </button>
     <button class="mnav-item" id="mnav-memory" onclick="switchModule('memory')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10"/><path d="M12 2a15 15 0 0 0-4 10 15 15 0 0 0 4 10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
@@ -6107,7 +6167,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.26.0</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.26.1</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6261,105 +6321,124 @@ select.settings-input { padding-right: 26px; }
 
   <div id="agents-module" class="module-panel">
     <div class="module-hdr">
-      <span class="module-title">Orchestration</span>
-      <button class="btn btn-ghost"  onclick="testAllOrchConnections()">Test all connections</button>
-      <button class="btn btn-ghost"  onclick="loadAgents()">&#8635; Refresh</button>
+      <span class="module-title">Agents</span>
+      <button class="btn btn-primary" onclick="openPersonaWizard()" style="font-size:12px">+ New Persona</button>
+      <button class="btn btn-ghost" onclick="loadPersonas()">&#8635; Refresh</button>
     </div>
-    <div class="module-intro">How AI work flows through Porter.</div>
 
-    <!-- Connected Agents (top) -->
-    <div class="orch-section">
-      <div class="orch-section-label">Connected Agents</div>
-      <div id="orch-agents" class="orch-grid">
-        <div class="loading-indicator">Loading agents</div>
+    <!-- Org Chart -->
+    <div id="persona-org-chart" class="persona-org">
+      <!-- User (operator) node -->
+      <div class="org-node org-user">
+        <div class="org-avatar">&#128100;</div>
+        <div class="org-name" id="org-user-name">Moe</div>
+        <div class="org-role">Operator</div>
+      </div>
+      <div class="org-line"></div>
+      <!-- Global Rules node -->
+      <div class="org-node org-rules" onclick="openRulesEditor()">
+        <div class="org-avatar">&#128203;</div>
+        <div class="org-name">Global Rules</div>
+        <div class="org-role" style="cursor:pointer;color:var(--accent)">click to edit</div>
+      </div>
+      <div class="org-line"></div>
+      <!-- Persona cards row -->
+      <div id="persona-cards-row" class="persona-cards-row">
+        <div class="loading-indicator">Loading personas...</div>
       </div>
     </div>
 
-    <!-- Arrow: Agents → Porter (merge) -->
-    <div class="flow-connector" id="flow-merge-1"></div>
-
-    <!-- Porter Hub -->
-    <div class="orch-hub">
-      <div class="orch-hub-left">
-        <div class="orch-hub-label">PORTER</div>
-        <div class="orch-hub-desc">Orchestration layer</div>
-      </div>
-      <div class="orch-hub-features" id="orch-hub-features">
-        <span class="orch-hub-feat active">Prompt cleanup</span>
-        <span class="orch-hub-feat active">Model routing</span>
-        <span class="orch-hub-feat active">Task dispatch</span>
-        <span class="orch-hub-feat">Shared memory</span>
-        <span class="orch-hub-feat">Task registry</span>
-        <span class="orch-hub-feat">Scheduler</span>
-      </div>
-    </div>
-
-    <!-- Arrow: Porter → Models (fan-out) -->
-    <div class="flow-connector" id="flow-fanout-1"></div>
-
-    <!-- Routing Mode -->
-    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;margin-top:12px">
-      <span style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Routing</span>
-      <select id="routing-mode-sel" class="settings-input" style="font-size:12px;min-width:180px" onchange="setRoutingMode(this.value)">
-        <option value="auto">Auto-route (content-based)</option>
-        <option value="ranked">Follow rankings</option>
-      </select>
-    </div>
-
-    <!-- Models (bottom) -->
-    <div class="orch-section">
-      <div class="orch-section-label">Models</div>
-      <div id="orch-models" class="orch-grid">
-        <div class="loading-indicator">Loading models</div>
-      </div>
-    </div>
-
-
-
-    <!-- Hidden: agent list for settings page -->
-    <div id="agents-module-list" style="display:none"></div>
-
-    <!-- Config slide-out panel: moved after </main> for cross-tab visibility -->
-
-    <div id="agent-workspace" style="display:none;margin-top:0;border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden;height:100%">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border)">
-        <div style="font-size:13px;font-weight:600;color:var(--text)">Agent Workspace · <span id="aw-agent-name" style="color:var(--accent)"></span></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-ghost"  onclick="loadAgentWorkspaceList()">Refresh files</button>
-          <button class="btn btn-ghost"  onclick="closeAgentWorkspace()">Close</button>
+    <!-- Persona Detail Panel (hidden until a persona is selected) -->
+    <div id="persona-detail" class="persona-detail" style="display:none">
+      <div class="persona-detail-header">
+        <span id="pd-avatar" class="persona-detail-avatar"></span>
+        <div>
+          <div id="pd-name" class="persona-detail-name"></div>
+          <div id="pd-role" class="persona-detail-role"></div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="deletePersona()" style="color:#ef4444;font-size:11px">Delete</button>
+          <button class="btn btn-ghost" onclick="closePersonaDetail()">Close</button>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:220px minmax(0,1fr) 260px;height:calc(100% - 49px)">
-        <div style="border-right:1px solid var(--border);padding:10px;overflow:auto">
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Config files</div>
-          <div id="aw-file-list" style="display:flex;flex-direction:column;gap:4px"></div>
+      <div class="persona-detail-tabs">
+        <button class="pd-tab active" onclick="switchPdTab('identity')">Identity</button>
+        <button class="pd-tab" onclick="switchPdTab('memory')">Memory</button>
+        <button class="pd-tab" onclick="switchPdTab('activity')">Activity</button>
+        <button class="pd-tab" onclick="switchPdTab('config')">Config</button>
+      </div>
+      <div id="pd-content" class="persona-detail-content"></div>
+    </div>
+
+    <!-- Rules Editor (hidden) -->
+    <div id="rules-editor" style="display:none">
+      <div class="persona-detail-header">
+        <span class="persona-detail-avatar">&#128203;</span>
+        <div>
+          <div class="persona-detail-name">Global Rules</div>
+          <div class="persona-detail-role">Applied to all personas on every dispatch</div>
         </div>
-        <div style="display:flex;flex-direction:column;min-width:0">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border)">
-            <div id="aw-current-file" style="font-size:12px;color:var(--text2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Select a file</div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <input id="aw-find" type="text" placeholder="Find in file" class="settings-input" style="height:28px;width:180px" onkeydown="if(event.key==='Enter'){findInWorkspace()}">
-              <button class="btn btn-ghost"  onclick="findInWorkspace()">Find</button>
-              <button class="btn btn-primary"  onclick="saveAgentWorkspaceFile()">Save</button>
-            </div>
-          </div>
-          <textarea id="aw-editor" style="flex:1;height:100%;min-height:0;width:100%;max-width:100%;resize:none;box-sizing:border-box;overflow:auto;background:var(--bg);color:var(--text);border:none;outline:none;padding:12px;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;font-size:12px;line-height:1.45"></textarea>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-primary" onclick="saveRules()" style="font-size:12px">Save</button>
+          <button class="btn btn-ghost" onclick="closeRulesEditor()">Close</button>
         </div>
-        <div style="border-left:1px solid var(--border);padding:10px;overflow:auto">
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">File guide</div>
-          <div id="aw-file-purpose" style="font-size:12px;color:var(--text2);line-height:1.45;margin-bottom:8px">Select a file to see guidance.</div>
-          <div id="aw-file-guidance" style="font-size:12px;color:var(--text3);line-height:1.45">You’ll see what the file is for and how to edit it safely.</div>
-          <div id="aw-file-quality-wrap" style="margin-top:10px;display:none">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-              <span style="font-size:11px;color:var(--text3)">Markdown quality</span>
-              <span id="aw-file-quality-score" style="font-size:11px;color:var(--accent);font-weight:600">0/100</span>
-            </div>
-            <div style="height:6px;background:var(--border);border-radius:999px;overflow:hidden">
-              <div id="aw-file-quality-bar" style="height:100%;width:0%;background:var(--accent)"></div>
-            </div>
-          </div>
-          <div id="aw-save-state" style="margin-top:10px;font-size:11px;color:var(--text3)"></div>
+      </div>
+      <textarea id="rules-editor-textarea" class="persona-editor" placeholder="# Global Rules"></textarea>
+    </div>
+
+    <!-- Onboarding Wizard (hidden) -->
+    <div id="persona-wizard" style="display:none">
+      <div class="persona-detail-header">
+        <span class="persona-detail-avatar">&#10024;</span>
+        <div>
+          <div class="persona-detail-name">Create New Persona</div>
+          <div class="persona-detail-role">Answer a few questions to build their identity</div>
         </div>
+        <div style="margin-left:auto">
+          <button class="btn btn-ghost" onclick="closePersonaWizard()">Cancel</button>
+        </div>
+      </div>
+      <div id="wizard-steps" class="wizard-steps">
+        <div class="wizard-step active" data-step="1">
+          <label class="wizard-label">What should this agent be called?</label>
+          <input id="wiz-name" class="settings-input" placeholder="e.g. Monica, DevBot, QA Lead">
+        </div>
+        <div class="wizard-step" data-step="2">
+          <label class="wizard-label">What is their role?</label>
+          <input id="wiz-role" class="settings-input" placeholder="e.g. Chief of Staff, Code Reviewer">
+        </div>
+        <div class="wizard-step" data-step="3">
+          <label class="wizard-label">Pick an avatar</label>
+          <div id="wiz-emoji-grid" class="emoji-grid"></div>
+        </div>
+        <div class="wizard-step" data-step="4">
+          <label class="wizard-label">Which model should they primarily use?</label>
+          <select id="wiz-backend" class="settings-input">
+            <option value="">Auto-route (recommended)</option>
+            <option value="openclaw">OpenClaw</option>
+            <option value="claude">Claude Code</option>
+            <option value="gemini">Gemini</option>
+            <option value="codex">Codex</option>
+            <option value="ollama">Ollama</option>
+          </select>
+        </div>
+        <div class="wizard-step" data-step="5">
+          <label class="wizard-label">Describe their personality in a few words</label>
+          <input id="wiz-personality" class="settings-input" placeholder="e.g. Precise, analytical, and direct">
+        </div>
+        <div class="wizard-step" data-step="6">
+          <label class="wizard-label">What should they focus on?</label>
+          <input id="wiz-focus" class="settings-input" placeholder="e.g. Code quality, testing, documentation">
+        </div>
+        <div class="wizard-step" data-step="7">
+          <label class="wizard-label">Communication style preferences?</label>
+          <input id="wiz-style" class="settings-input" placeholder="e.g. Brief and technical, always include code examples">
+        </div>
+      </div>
+      <div class="wizard-nav">
+        <button id="wiz-back" class="btn btn-ghost" onclick="wizStep(-1)" disabled>Back</button>
+        <div id="wiz-progress" class="wizard-progress">Step 1 of 7</div>
+        <button id="wiz-next" class="btn btn-primary" onclick="wizStep(1)">Next</button>
       </div>
     </div>
   </div>
@@ -7259,7 +7338,9 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.26.1', date:'2026-03-02', notes:['Agents Tab: persona org chart (User → Rules → Persona cards)','Persona detail panel with 4 tabs: Identity (SOUL.md editor), Memory, Activity, Config','7-step onboarding wizard generates SOUL.md from curated questions','Global Rules editor (click RULES node in org chart)','Wake/Sleep persona lifecycle controls','Nav renamed: Orchestration → Agents'] },
   { ver:'v0.26.0', date:'2026-03-02', notes:['Persona-First Architecture (Phase A): personas SQLite table, CRUD API, dispatch_to_persona with SOUL+RULES injection','Auto-migrate config agents → personas on first run','12 new API endpoints: /api/personas CRUD, dispatch, wake/sleep, rules, memory','Bridge dispatch accepts persona_id for persona-routed dispatch','Daily memory logs per persona in PORTER_DATA_DIR/personas/<id>/memory/'] },
+  { ver:'v0.26.1', date:'2026-03-02', notes:['Agents Tab: persona org chart (User → Rules → Persona cards)','Persona detail panel with 4 tabs: Identity (SOUL.md editor), Memory, Activity, Config','7-step onboarding wizard generates SOUL.md from curated questions','Global Rules editor (click RULES node in org chart)','Wake/Sleep persona lifecycle controls','Nav renamed: Orchestration → Agents'] },
   { ver:'v0.26.0', date:'2026-03-02', notes:['Nav: Locations + Files grouped under Storage section'] },
   { ver:'v0.25.48', date:'2026-03-02', notes:['Fix: duplicate .chat-input-area CSS selector broke all module hiding — every panel showed at once'] },
   { ver:'v0.25.47', date:'2026-03-02', notes:['Fix: bare async keyword causing ReferenceError spam on every page load'] },
@@ -12840,6 +12921,7 @@ async function saveEditNode(nodeId, label, type) {
 // ── agents ──────────────────────────────────────────────────────────────────
 
 async function loadAgents() {
+  loadPersonas(); // Also refresh persona org chart
   const [data, localData] = await Promise.all([
     api('/api/agents'),
     api('/api/local-models'),
@@ -13104,6 +13186,357 @@ function _ensureOrchHubPolling(agentCount, modelCount) {
   }, 15000);
 }
 
+// ══════════════════════════════════════════════════════════════
+// ── Persona Management (Phase B) ────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+let _personas = [];
+let _selectedPersonaId = null;
+let _wizCurrentStep = 1;
+let _wizSelectedEmoji = '🤖';
+
+const PERSONA_EMOJIS = ['🤖','🐙','💎','🔧','🔍','📊','🎯','🧪','📝','🛡️','⚡','🌐','🧠','💡','🎨','🦊','🐺','🦉','🐱','🐻'];
+
+async function loadPersonas() {
+  try {
+    const r = await api('/api/personas');
+    if (r.ok) {
+      _personas = r.personas || [];
+      renderPersonaOrg();
+    }
+  } catch(e) { console.debug('loadPersonas:', e); }
+}
+
+function renderPersonaOrg() {
+  const row = document.getElementById('persona-cards-row');
+  if (!row) return;
+  // Update user name from config
+  const userName = document.getElementById('org-user-name');
+  if (userName && window._currentPrefs) {
+    // Pull from config if available
+  }
+  if (!_personas.length) {
+    row.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:12px">No personas yet. Click <b>+ New Persona</b> to create one.</div>';
+    return;
+  }
+  row.innerHTML = _personas.map(p => {
+    const dotColor = p.status === 'active' ? '#22c55e' : p.status === 'sleeping' ? '#f59e0b' : 'var(--text3)';
+    const statusLabel = p.status === 'active' ? 'active' : p.status === 'sleeping' ? 'sleeping' : 'idle';
+    const isSelected = p.id === _selectedPersonaId;
+    return `<div class="persona-card${isSelected ? ' selected' : ''}" onclick="selectPersona('${p.id}')">
+      <div class="persona-card-avatar">${escHtml(p.avatar || '🤖')}</div>
+      <div class="persona-card-name">${escHtml(p.name)}</div>
+      <div class="persona-card-role">${escHtml(p.role || 'General')}</div>
+      <div class="persona-card-status">
+        <span class="persona-card-dot" style="background:${dotColor}"></span>
+        <span style="color:var(--text3)">${statusLabel}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function selectPersona(id) {
+  _selectedPersonaId = id;
+  renderPersonaOrg(); // highlight selected card
+  const detail = document.getElementById('persona-detail');
+  if (!detail) return;
+  detail.style.display = 'block';
+  // Close other panels
+  document.getElementById('rules-editor').style.display = 'none';
+  document.getElementById('persona-wizard').style.display = 'none';
+  // Fetch full persona data
+  try {
+    const r = await api('/api/personas/' + id);
+    if (!r.ok) return;
+    const p = r.persona;
+    document.getElementById('pd-avatar').textContent = p.avatar || '🤖';
+    document.getElementById('pd-name').textContent = p.name;
+    document.getElementById('pd-role').textContent = p.role || 'No role assigned';
+    window._selectedPersona = p;
+    switchPdTab('identity');
+  } catch(e) { console.debug('selectPersona:', e); }
+}
+
+function closePersonaDetail() {
+  _selectedPersonaId = null;
+  document.getElementById('persona-detail').style.display = 'none';
+  renderPersonaOrg();
+}
+
+function switchPdTab(tab) {
+  document.querySelectorAll('.pd-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.pd-tab[onclick*="${tab}"]`).classList.add('active');
+  const content = document.getElementById('pd-content');
+  const p = window._selectedPersona;
+  if (!p) return;
+  if (tab === 'identity') {
+    content.innerHTML = `
+      <div style="margin-bottom:16px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">SOUL.md</div>
+        <textarea id="pd-soul-editor" class="persona-editor" style="min-height:200px">${escHtml(p.soul_text || '')}</textarea>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button class="btn btn-primary" onclick="saveSoul()" style="font-size:12px">Save SOUL.md</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="settings-field"><label>Name</label>
+          <input class="settings-input" id="pd-edit-name" value="${escHtml(p.name)}"></div>
+        <div class="settings-field"><label>Role</label>
+          <input class="settings-input" id="pd-edit-role" value="${escHtml(p.role || '')}"></div>
+        <div class="settings-field"><label>Backend</label>
+          <select class="settings-input" id="pd-edit-backend">
+            <option value="">Auto-route</option>
+            ${Object.keys(window._providerRegistry || {openclaw:1,claude:1,gemini:1,codex:1,ollama:1}).map(k =>
+              '<option value="' + k + '"' + (p.preferred_backend === k ? ' selected' : '') + '>' + k + '</option>'
+            ).join('')}
+          </select></div>
+        <div class="settings-field"><label>Avatar</label>
+          <input class="settings-input" id="pd-edit-avatar" value="${p.avatar || '🤖'}" style="width:60px"></div>
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn btn-ghost" onclick="savePersonaMeta()" style="font-size:12px">Save Changes</button>
+      </div>`;
+  } else if (tab === 'memory') {
+    content.innerHTML = '<div class="loading-indicator">Loading memory...</div>';
+    api('/api/personas/' + p.id + '/memory').then(r => {
+      if (!r.ok) { content.innerHTML = '<div style="color:var(--text3)">Failed to load memory.</div>'; return; }
+      let html = '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">MEMORY.md</div>';
+      html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:monospace;font-size:12px;white-space:pre-wrap;max-height:200px;overflow-y:auto;color:var(--text2)">' + escHtml(r.memory_md || '(empty)') + '</div>';
+      if (r.daily_logs && r.daily_logs.length) {
+        html += '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Daily Logs</div>';
+        r.daily_logs.forEach(dl => {
+          html += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px">' + escHtml(dl.date) + '</div>';
+          html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;white-space:pre-wrap;max-height:150px;overflow-y:auto;color:var(--text2)">' + escHtml(dl.content || '(empty)') + '</div></div>';
+        });
+      } else {
+        html += '<div style="color:var(--text3);font-size:12px;margin-top:12px">No daily logs yet. Dispatch a message to this persona to start logging.</div>';
+      }
+      content.innerHTML = html;
+    });
+  } else if (tab === 'activity') {
+    content.innerHTML = '<div class="loading-indicator">Loading activity...</div>';
+    api('/api/bridge/runs?persona_id=' + p.id + '&limit=20').then(r => {
+      if (!r.ok || !r.runs || !r.runs.length) {
+        content.innerHTML = '<div style="color:var(--text3);font-size:12px">No dispatch activity yet.</div>';
+        return;
+      }
+      let html = '<div style="display:flex;flex-direction:column;gap:8px">';
+      r.runs.forEach(run => {
+        const st = run.status === 'complete' ? '#22c55e' : run.status === 'failed' ? '#ef4444' : 'var(--text3)';
+        const ago = run.created_at ? new Date(run.created_at * 1000).toLocaleString() : '';
+        html += `<div style="padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="width:6px;height:6px;border-radius:50%;background:${st}"></span>
+            <span style="font-size:12px;font-weight:500;color:var(--text)">${escHtml(run.backend || '?')}</span>
+            <span style="font-size:11px;color:var(--text3);margin-left:auto">${ago}</span>
+          </div>
+          <div style="font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(run.prompt_preview || '')}</div>
+          ${run.duration_ms ? '<div style="font-size:10px;color:var(--text3);margin-top:2px">' + run.duration_ms + 'ms · ' + (run.tokens_total || 0) + ' tokens</div>' : ''}
+        </div>`;
+      });
+      html += '</div>';
+      content.innerHTML = html;
+    });
+  } else if (tab === 'config') {
+    let fb = [];
+    try { fb = JSON.parse(p.fallback_backends || '[]'); } catch(e){}
+    let cfg = {};
+    try { cfg = JSON.parse(p.config || '{}'); } catch(e){}
+    content.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="settings-field"><label>Preferred Backend</label>
+          <div style="font-size:13px;color:var(--text)">${escHtml(p.preferred_backend || 'Auto-route')}</div></div>
+        <div class="settings-field"><label>Status</label>
+          <div style="font-size:13px;color:var(--text)">${escHtml(p.status || 'idle')}</div></div>
+        <div class="settings-field"><label>Fallback Backends</label>
+          <div style="font-size:13px;color:var(--text)">${fb.length ? fb.join(', ') : 'None'}</div></div>
+        <div class="settings-field"><label>Soul Hash</label>
+          <div style="font-size:13px;color:var(--text2);font-family:monospace">${escHtml(p.soul_hash || 'none')}</div></div>
+        <div class="settings-field"><label>Created</label>
+          <div style="font-size:13px;color:var(--text2)">${escHtml(p.created_at || '?')}</div></div>
+        <div class="settings-field"><label>Last Active</label>
+          <div style="font-size:13px;color:var(--text2)">${p.last_active ? new Date(p.last_active * 1000).toLocaleString() : 'Never'}</div></div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="wakePersona('${p.id}')" style="font-size:12px">Wake</button>
+        <button class="btn btn-ghost" onclick="sleepPersona('${p.id}')" style="font-size:12px">Sleep</button>
+      </div>`;
+  }
+}
+
+async function saveSoul() {
+  const p = window._selectedPersona;
+  if (!p) return;
+  const text = document.getElementById('pd-soul-editor').value;
+  const r = await api('/api/personas/' + p.id, { soul_text: text });
+  if (r.ok) {
+    window._selectedPersona.soul_text = text;
+    _showToast('SOUL.md saved');
+  }
+}
+
+async function savePersonaMeta() {
+  const p = window._selectedPersona;
+  if (!p) return;
+  const data = {
+    name: document.getElementById('pd-edit-name').value,
+    role: document.getElementById('pd-edit-role').value,
+    preferred_backend: document.getElementById('pd-edit-backend').value,
+    avatar: document.getElementById('pd-edit-avatar').value,
+  };
+  const r = await api('/api/personas/' + p.id, data);
+  if (r.ok) {
+    _showToast('Persona updated');
+    loadPersonas();
+    // Re-select to refresh detail
+    setTimeout(() => selectPersona(p.id), 300);
+  }
+}
+
+async function deletePersona() {
+  const p = window._selectedPersona;
+  if (!p) return;
+  if (!confirm('Delete persona "' + p.name + '"? This removes their SOUL.md, memory, and all data.')) return;
+  const r = await api('/api/personas/' + p.id, { action: 'delete' });
+  if (r.ok) {
+    _showToast('Persona deleted');
+    closePersonaDetail();
+    loadPersonas();
+  }
+}
+
+async function wakePersona(id) {
+  await api('/api/personas/' + id + '/wake', {});
+  loadPersonas();
+  if (window._selectedPersona && window._selectedPersona.id === id) {
+    window._selectedPersona.status = 'active';
+    switchPdTab('config');
+  }
+}
+
+async function sleepPersona(id) {
+  await api('/api/personas/' + id + '/sleep', {});
+  loadPersonas();
+  if (window._selectedPersona && window._selectedPersona.id === id) {
+    window._selectedPersona.status = 'sleeping';
+    switchPdTab('config');
+  }
+}
+
+// ── Rules Editor ──
+async function openRulesEditor() {
+  document.getElementById('rules-editor').style.display = 'block';
+  document.getElementById('persona-detail').style.display = 'none';
+  document.getElementById('persona-wizard').style.display = 'none';
+  const r = await api('/api/personas/rules');
+  if (r.ok) {
+    document.getElementById('rules-editor-textarea').value = r.rules || '';
+  }
+}
+
+function closeRulesEditor() {
+  document.getElementById('rules-editor').style.display = 'none';
+}
+
+async function saveRules() {
+  const text = document.getElementById('rules-editor-textarea').value;
+  const r = await api('/api/personas/rules', { rules: text });
+  if (r.ok) {
+    _showToast('Global rules saved');
+    closeRulesEditor();
+  }
+}
+
+// ── Onboarding Wizard ──
+function openPersonaWizard() {
+  document.getElementById('persona-wizard').style.display = 'block';
+  document.getElementById('persona-detail').style.display = 'none';
+  document.getElementById('rules-editor').style.display = 'none';
+  _wizCurrentStep = 1;
+  _wizSelectedEmoji = '🤖';
+  // Reset inputs
+  ['wiz-name','wiz-role','wiz-personality','wiz-focus','wiz-style'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const backendSel = document.getElementById('wiz-backend');
+  if (backendSel) backendSel.value = '';
+  // Build emoji grid
+  const grid = document.getElementById('wiz-emoji-grid');
+  grid.innerHTML = PERSONA_EMOJIS.map(e =>
+    `<button class="emoji-btn${e === _wizSelectedEmoji ? ' selected' : ''}" onclick="wizSelectEmoji(this, '${e}')">${e}</button>`
+  ).join('');
+  updateWizUI();
+}
+
+function closePersonaWizard() {
+  document.getElementById('persona-wizard').style.display = 'none';
+}
+
+function wizSelectEmoji(btn, emoji) {
+  _wizSelectedEmoji = emoji;
+  document.querySelectorAll('#wiz-emoji-grid .emoji-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+
+function wizStep(dir) {
+  _wizCurrentStep += dir;
+  if (_wizCurrentStep < 1) _wizCurrentStep = 1;
+  if (_wizCurrentStep > 7) {
+    // Submit
+    createPersonaFromWizard();
+    return;
+  }
+  updateWizUI();
+}
+
+function updateWizUI() {
+  document.querySelectorAll('.wizard-step').forEach(s => s.classList.remove('active'));
+  const step = document.querySelector(`.wizard-step[data-step="${_wizCurrentStep}"]`);
+  if (step) step.classList.add('active');
+  document.getElementById('wiz-back').disabled = _wizCurrentStep <= 1;
+  document.getElementById('wiz-next').textContent = _wizCurrentStep >= 7 ? 'Create' : 'Next';
+  document.getElementById('wiz-progress').textContent = `Step ${_wizCurrentStep} of 7`;
+}
+
+async function createPersonaFromWizard() {
+  const name = (document.getElementById('wiz-name').value || '').trim();
+  if (!name) { alert('Name is required'); _wizCurrentStep = 1; updateWizUI(); return; }
+  const data = {
+    name,
+    role: document.getElementById('wiz-role').value || '',
+    avatar: _wizSelectedEmoji,
+    preferred_backend: document.getElementById('wiz-backend').value || '',
+    personality: document.getElementById('wiz-personality').value || '',
+    focus: document.getElementById('wiz-focus').value || '',
+    style: document.getElementById('wiz-style').value || '',
+  };
+  const r = await api('/api/personas', data);
+  if (r.ok) {
+    _showToast('Persona "' + name + '" created!');
+    closePersonaWizard();
+    loadPersonas();
+  } else {
+    alert('Failed: ' + (r.error || 'unknown error'));
+  }
+}
+
+function _showToast(msg) {
+  // Simple toast notification
+  let t = document.getElementById('_persona_toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = '_persona_toast';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  setTimeout(() => { t.style.opacity = '0'; }, 2000);
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── Original Orchestration rendering (kept for Models tab) ──
+// ══════════════════════════════════════════════════════════════
 function renderOrchestration(agents, providers) {
   const isPrimaryAgent = (a) => {
     const s = ((a.name || '') + ' ' + (a.type || '')).toLowerCase();
@@ -17988,7 +18421,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.26.0' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.26.1' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -18461,7 +18894,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.26.0"})
+            self.reply_json({"v": "0.26.1"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -19651,7 +20084,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.26.0'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.26.1'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -23093,7 +23526,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.26.0 ready (localhost only)")
+    print(f"\n  Porter v0.26.1 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
