@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.26.5 — Persona-First Architecture Complete — Nav Grouping"""
+"""Porter v0.27.0 — ClawOps Integration: Nav Groups, Bootstrap, Scaffold"""
 
 
 
@@ -865,7 +865,56 @@ def scaffold_project_dir(project_id: str, project_name: str) -> "Path":
             "memory_isolation": "project",
             "agents":           [],
         }, indent=2))
+
+    # 00_SHARED/ skeleton — governance docs for multi-agent collaboration
+    shared = proj_dir / "00_SHARED"
+    shared.mkdir(exist_ok=True)
+    _bootstrap_shared_docs(shared, project_name, now_iso)
+
     return proj_dir
+
+
+def _bootstrap_shared_docs(shared_dir: "Path", project_name: str, created: str):
+    """Create 00_SHARED/ governance templates. Idempotent — skips existing files."""
+    templates = {
+        "PROJECT_BRIEF.md": (
+            f"# {project_name} — Project Brief\n\n"
+            f"Created: {created}\n\n"
+            "## Problem\n\n## Solution\n\n## Scope\n\n"
+            "## Non-Negotiables\n\n## Success Looks Like\n"
+        ),
+        "SUCCESS_CRITERIA.md": (
+            f"# {project_name} — Success Criteria\n\n"
+            "## Product Outcomes\n\n## Early KPIs\n\n"
+            "## Trust KPIs\n\n## Business KPIs\n"
+        ),
+        "OPERATING_PROTOCOL.md": (
+            f"# {project_name} — Operating Protocol\n\n"
+            "## Agent Assignment\n\n"
+            "## Communication Rules\n\n"
+            "## Learning Flush Schedule\n\n"
+            "## Quality Gates\n"
+        ),
+        "ARCHITECTURE_JOURNAL.md": (
+            f"# {project_name} — Architecture Journal\n\n"
+            "Log of architectural decisions and their rationale.\n\n"
+            "| Date | Decision | Rationale | Status |\n"
+            "|------|----------|-----------|--------|\n"
+        ),
+        "DECISION_LOG.md": (
+            f"# {project_name} — Decision Log\n\n"
+            "| Date | Decision | Context | Owner |\n"
+            "|------|----------|---------|-------|\n"
+        ),
+        "RISKS_AND_GUARDRAILS.md": (
+            f"# {project_name} — Risks & Guardrails\n\n"
+            "## Known Risks\n\n## Guardrails\n\n## Contingencies\n"
+        ),
+    }
+    for filename, content in templates.items():
+        fp = shared_dir / filename
+        if not fp.exists():
+            fp.write_text(content)
 
 
 def resolve_project_memory(project_id: "str | None", agent_id: "str | None",
@@ -897,12 +946,18 @@ def _project_file_chain(project_id: str) -> list:
     """Stat canonical project files and return chain metadata."""
     wp = AGENT_WORKSPACE_DIR / "projects" / str(project_id)
     canonical = [
-        ("PROJECT.md",          "Project config"),
-        ("MEMORY.md",           "Project memory"),
-        ("SPRINT_PLAN.md",      "Sprint plan"),
-        ("tasks/checkpoint.md", "Checkpoint"),
-        ("tasks/lessons.md",    "Lessons learned"),
-        ("settings.json",       "Settings"),
+        ("PROJECT.md",                         "Project config"),
+        ("MEMORY.md",                          "Project memory"),
+        ("settings.json",                      "Settings"),
+        ("SPRINT_PLAN.md",                     "Sprint plan"),
+        ("tasks/checkpoint.md",                "Checkpoint"),
+        ("tasks/lessons.md",                   "Lessons learned"),
+        ("00_SHARED/PROJECT_BRIEF.md",         "Project brief"),
+        ("00_SHARED/SUCCESS_CRITERIA.md",      "Success criteria"),
+        ("00_SHARED/OPERATING_PROTOCOL.md",    "Operating protocol"),
+        ("00_SHARED/ARCHITECTURE_JOURNAL.md",  "Architecture journal"),
+        ("00_SHARED/DECISION_LOG.md",          "Decision log"),
+        ("00_SHARED/RISKS_AND_GUARDRAILS.md",  "Risks & guardrails"),
     ]
     chain = []
     for rel, label in canonical:
@@ -6165,6 +6220,7 @@ select.settings-input { padding-right: 26px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
       <span class="mnav-label">Chat</span>
     </button>
+    <div class="mnav-group-label">Squad</div>
     <button class="mnav-item" id="mnav-agents" onclick="switchModule('agents')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
       <span class="mnav-label">Agents</span>
@@ -6173,6 +6229,7 @@ select.settings-input { padding-right: 26px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10"/><path d="M12 2a15 15 0 0 0-4 10 15 15 0 0 0 4 10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
       <span class="mnav-label">Memory</span>
     </button>
+    <div class="mnav-group-label">Operations</div>
     <button class="mnav-item" id="mnav-projects" onclick="switchModule('projects')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
       <span class="mnav-label">Projects</span>
@@ -6238,7 +6295,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.26.5</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.0</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7495,6 +7552,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.0', date:'2026-03-03', notes:['Nav restructured: Squad (Agents+Memory) + Operations (Projects+Workflows)','Project bootstrap engine — 00_SHARED/ skeleton with 6 governance docs','Agent scaffold engine — 5-file base pack (IDENTITY, SOUL, USER, MEMORY, ROLE_CARD)','Agent avatars: Claude ⚡, OpenClaw 🐙, Gemini 💎','Porter project data refreshed — agents assigned, stale tasks fixed'] },
   { ver:'v0.26.5', date:'2026-03-03', notes:['Status dots on persona cards (idle/active/sleeping)','Persona names in chat message badges','Mission Control events for persona wake/sleep','Periodic persona status refresh (30s)','Claude color in model badge palette'] },
   { ver:'v0.26.4', date:'2026-03-03', notes:['Projects: persona filter + persona badges on tasks','Chain builder: steps target personas','Heartbeat engine: per-persona cron + checklist editor','Heartbeat daemon thread','Tasks: assigned_persona_id column'] },
   { ver:'v0.26.3', date:'2026-03-03', notes:['Chat: persona cards on welcome screen','Chat: @persona mentions dispatch via persona layer','Memory: persona selector with MEMORY.md + daily logs view','Persona dispatch + polling in chat'] },
@@ -18297,12 +18355,51 @@ def _persona_create(data):
         log.error("Failed to create persona: %s", e)
         return None
 
-    # Filesystem
+    # Filesystem — 5-file base pack (ClawOps standard)
     pdir = PERSONAS_DIR / pid
     pdir.mkdir(parents=True, exist_ok=True)
     (pdir / "memory").mkdir(exist_ok=True)
+
+    # 1. SOUL.md — personality, values, style
     (pdir / "SOUL.md").write_text(soul_text)
-    (pdir / "MEMORY.md").write_text(f"# {name} — Memory\n\nLong-term memories for {name}.\n")
+
+    # 2. IDENTITY.md — who this agent is
+    identity_text = f"# {name}\n\n"
+    identity_text += f"**Role:** {role}\n" if role else ""
+    identity_text += f"**Avatar:** {avatar}\n" if avatar else ""
+    identity_text += f"**Backend:** {preferred_backend}\n" if preferred_backend else ""
+    identity_text += f"\n**Created:** {now_iso}\n"
+    if not (pdir / "IDENTITY.md").exists():
+        (pdir / "IDENTITY.md").write_text(identity_text)
+
+    # 3. MEMORY.md — long-term learned patterns
+    if not (pdir / "MEMORY.md").exists():
+        (pdir / "MEMORY.md").write_text(
+            f"# {name} — Memory\n\n"
+            f"Durable rules and learned patterns for {name}.\n\n"
+            "## Hard Rules\n\n## Learned Patterns\n\n## Context\n"
+        )
+
+    # 4. USER.md — operator preferences
+    if not (pdir / "USER.md").exists():
+        (pdir / "USER.md").write_text(
+            f"# User Context for {name}\n\n"
+            "**Human:** Moe\n"
+            "**Timezone:** SGT (UTC+8)\n"
+            "**Style:** Direct, practical\n"
+        )
+
+    # 5. ROLE_CARD.md — mission, inputs, outputs, authority
+    if not (pdir / "ROLE_CARD.md").exists():
+        (pdir / "ROLE_CARD.md").write_text(
+            f"# {name} — Role Card\n\n"
+            f"**Mission:** {role or 'General assistant'}\n\n"
+            "## Inputs\n\n- Shared docs from project 00_SHARED/\n\n"
+            "## Outputs\n\n- Role-specific deliverables\n- Learning flush updates\n\n"
+            "## Authority\n\n- Can flag quality/risk concerns\n"
+        )
+
+    # Legacy compatibility
     (pdir / "heartbeat.md").write_text("")
 
     return {"id": pid, "name": name, "role": role, "avatar": avatar,
@@ -18905,7 +19002,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.26.5' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.0' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -19378,7 +19475,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.26.5"})
+            self.reply_json({"v": "0.27.0"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -19465,7 +19562,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.26.5"
+                health["porter_version"] = "0.27.0"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -20568,7 +20665,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.26.5'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.0'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -24047,7 +24144,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.26.5 ready (localhost only)")
+    print(f"\n  Porter v0.27.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
