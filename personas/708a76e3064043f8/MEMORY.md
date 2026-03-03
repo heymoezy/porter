@@ -1,6 +1,6 @@
 # MEMORY.md - Quill
 
 ## Durable rules
-- Project-scoped by default for NewProject.
+- Work across multiple projects as assigned by Moe.
 - Write only distilled learnings, not chat transcripts.
 - Flush decisions to shared logs frequently.
