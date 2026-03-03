@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.17 — Global Rules Injection"""
+"""Porter v0.27.18 — Soul Shaping via Chat"""
 
 
 
@@ -6695,7 +6695,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.17</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.18</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7934,6 +7934,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.18', date:'2026-03-03', notes:['Soul shaping via chat — identity instructions auto-persist to SOUL.md','Trigger phrases: remember that you, from now on, be more/less, etc.','Learned traits appended under ## Learned Traits section','POST /api/personas/<id>/shape endpoint for manual API shaping'] },
   { ver:'v0.27.17', date:'2026-03-03', notes:['Global Rules (RULES.md) re-injected into persona dispatch alongside SOUL.md','Rules rewritten as agent behavioral guidelines (not dev governance)','OpenClaw AGENTS.md synced with Porter Global Rules'] },
   { ver:'v0.27.16', date:'2026-03-03', notes:['Lobster now regular grid card with accent border (orchestrator class)','Global Rules button moved to Agents header','Identity queries inject full SOUL.md content','File tabs sorted: IDENTITY.md first, SOUL.md second'] },
   { ver:'v0.27.15', date:'2026-03-03', notes:['@mentions show blue pill badges below input (agents with avatar, models with name)','Personas detected in @indicator alongside model backends'] },
@@ -19407,6 +19408,34 @@ def _persona_get_soul(persona_id):
         return soul_path.read_text()
     return ""
 
+
+def _persona_update_soul(persona_id, instruction):
+    """Append a shaping instruction to a persona's SOUL.md."""
+    soul_path = PERSONAS_DIR / persona_id / "SOUL.md"
+    soul_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = soul_path.read_text().strip() if soul_path.exists() else ""
+    from datetime import datetime, timezone as _tz
+    ts = datetime.now(_tz.utc).strftime("%Y-%m-%d")
+    entry = f"- {instruction.strip()}"
+    # Add under a "## Learned Traits" section, create if missing
+    if "## Learned Traits" in existing:
+        updated = existing + "\n" + entry
+    else:
+        updated = existing + f"\n\n## Learned Traits\n_Shaped through conversation with Moe._\n\n{entry}"
+    soul_path.write_text(updated + "\n")
+    # Update soul_hash in DB
+    import hashlib
+    try:
+        h = hashlib.sha256(updated.encode()).hexdigest()[:16]
+        conn = _db_conn()
+        conn.execute("UPDATE personas SET soul_hash=? WHERE id=?", (h, persona_id))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+    log.info("SOUL.md updated for persona %s: %s", persona_id, instruction[:80])
+
+
 def _persona_get_rules():
     """Read global RULES.md."""
     rules_path = PERSONAS_DIR / "RULES.md"
@@ -19543,6 +19572,18 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     # Append to daily log
     response_text = result.get("text", "")[:500] if result.get("ok") else result.get("error", "")[:200]
     _persona_append_daily_log(persona_id, f"**Dispatch** ({backend})\n> {message[:200]}\n\nResponse: {response_text}")
+
+    # Soul shaping: detect identity instructions and persist to SOUL.md
+    _shaping_triggers = ['remember that you', 'from now on you', 'you should always',
+                         'you should never', 'your personality is', 'your tone should',
+                         'start being more', 'stop being so', 'be more', 'be less',
+                         'you are now', 'i want you to be', 'change your', 'update your personality',
+                         'update your soul', 'add to your soul', 'your new trait',
+                         'always remember', 'never forget that you']
+    if any(t in _msg_lower for t in _shaping_triggers) and result.get("ok"):
+        # Extract the instruction (use the raw message, not augmented)
+        _persona_update_soul(persona_id, message.strip())
+        _persona_append_daily_log(persona_id, f"**Soul shaped**: {message[:200]}")
 
     # Trace + Telemetry: dispatch complete
     _dtp_dur = int((_ptime.time() - _dtp_t0) * 1000)
@@ -19986,7 +20027,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.17' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.18' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -20468,7 +20509,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.17"})
+            self.reply_json({"v": "0.27.18"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20555,7 +20596,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.17"
+                health["porter_version"] = "0.27.18"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -21856,7 +21897,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.17'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.18'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -23725,6 +23766,17 @@ class Handler(BaseHTTPRequestHandler):
             _persona_set_rules(text)
             self.reply_json({"ok": True})
 
+        elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/shape"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path.split("/")[3]
+            data = self.read_json_body()
+            instruction = data.get('instruction', '').strip() if data else ''
+            if not instruction:
+                self.reply_json({"ok": False, "error": "instruction required"}, 400)
+                return
+            _persona_update_soul(pid, instruction)
+            self.reply_json({"ok": True, "message": f"SOUL.md updated"})
+
         elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/file"):
             if not self.auth_check(redirect=False): return
             pid = parsed.path.split("/")[3]
@@ -25435,7 +25487,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.17 ready (localhost only)")
+    print(f"\n  Porter v0.27.18 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
