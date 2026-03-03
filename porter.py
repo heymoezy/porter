@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.15 — @Mention Blue Highlights"""
+"""Porter v0.27.16 — Lobster Grid Card + Identity Fixes"""
 
 
 
@@ -6163,6 +6163,7 @@ body.density-compact .file-name { padding: 6px 0; }
   width:130px; cursor:pointer; transition:border-color .15s, box-shadow .15s; }
 .persona-card:hover { border-color:var(--accent); box-shadow:0 2px 8px rgba(0,0,0,.08); }
 .persona-card.selected { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 6%, var(--bg)); }
+.persona-card.orchestrator { border-color:var(--accent); border-width:2px; }
 .persona-card-avatar { font-size:24px; margin-bottom:4px; }
 .persona-card-name { font-size:12px; font-weight:600; color:var(--text); text-align:center;
   word-wrap:break-word; overflow-wrap:break-word; }
@@ -6694,7 +6695,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.15</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.16</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6831,23 +6832,12 @@ select.settings-input { padding-right: 26px; }
     <div class="module-hdr">
       <span class="module-title">Agents</span>
       <button class="btn btn-primary" onclick="openPersonaWizard()" style="font-size:12px">+ New Persona</button>
-      <button class="btn btn-ghost" onclick="loadPersonas()">&#8635; Refresh</button>
+      <button class="btn btn-ghost" onclick="openRulesEditor()" style="font-size:12px">📋 Global Rules</button>
+      <button class="btn btn-ghost" onclick="loadPersonas()">&#8635;</button>
     </div>
 
     <!-- Agent Grid -->
     <div id="persona-org-chart" style="margin-bottom:16px">
-      <!-- Lobster master agent bar — clickable to edit -->
-      <div id="lobster-bar" style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:8px 12px;background:var(--raised);border:1px solid var(--accent);border-radius:8px;cursor:pointer;transition:box-shadow .15s" onclick="selectLobster()">
-        <span style="font-size:20px">🦞</span>
-        <div style="flex:1">
-          <div style="font-size:13px;font-weight:600;color:var(--text)">Lobster <span style="font-size:10px;color:var(--text3);font-weight:400">(Moe)</span></div>
-          <div style="font-size:10px;color:var(--text3)">Global Orchestrator &middot; Master Agent</div>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center" onclick="event.stopPropagation()">
-          <button class="btn btn-ghost" onclick="openRulesEditor()" style="font-size:11px;padding:4px 10px">Global Rules</button>
-        </div>
-      </div>
-      <!-- Persona cards grid -->
       <div id="persona-cards-row" class="persona-cards-row">
         <div class="loading-indicator">Loading personas...</div>
       </div>
@@ -7944,6 +7934,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.16', date:'2026-03-03', notes:['Lobster now regular grid card with accent border (orchestrator class)','Global Rules button moved to Agents header','Identity queries inject full SOUL.md content','File tabs sorted: IDENTITY.md first, SOUL.md second'] },
   { ver:'v0.27.15', date:'2026-03-03', notes:['@mentions show blue pill badges below input (agents with avatar, models with name)','Personas detected in @indicator alongside model backends'] },
   { ver:'v0.27.14', date:'2026-03-03', notes:['@ autocomplete now shows agent personas (with avatar + role)','Agents listed first, then model backends','Works at start of message and mid-message after space'] },
   { ver:'v0.27.13', date:'2026-03-03', notes:['Fix: persona chat was showing input prompt instead of model response','Root cause: poll read detail.response (undefined) instead of detail.run.response','Sage + Pretty + Quill switched from Gemini (slow) to faster backends'] },
@@ -14541,15 +14532,21 @@ function renderPersonaOrg() {
     return;
   }
   const groupColors = { Orchestrator:'#ef4444', Strategy:'#6366f1', Creative:'#ec4899', Technical:'#06b6d4', Operations:'#f59e0b' };
-  // Lobster renders in operator bar, not in grid
-  row.innerHTML = _personas.filter(function(p) { return p.name !== 'Lobster'; }).map(function(p) {
+  // Sort: Orchestrator first, then by group
+  var sorted = _personas.slice().sort(function(a, b) {
+    if (a.agent_group === 'Orchestrator' && b.agent_group !== 'Orchestrator') return -1;
+    if (b.agent_group === 'Orchestrator' && a.agent_group !== 'Orchestrator') return 1;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+  row.innerHTML = sorted.map(function(p) {
     var dotColor = p.status === 'active' ? '#22c55e' : p.status === 'sleeping' ? '#f59e0b' : 'var(--text3)';
     var statusLabel = p.status === 'active' ? 'active' : p.status === 'sleeping' ? 'sleeping' : 'idle';
     var isSelected = p.id === _selectedPersonaId;
+    var isOrch = p.agent_group === 'Orchestrator';
     var grp = p.agent_group || '';
     var grpColor = groupColors[grp] || 'var(--text3)';
     var grpBadge = grp ? '<div style="font-size:9px;padding:1px 6px;border-radius:3px;background:' + grpColor + '20;color:' + grpColor + ';font-weight:600;margin-top:4px;letter-spacing:.3px">' + grp + '</div>' : '';
-    return '<div class="persona-card' + (isSelected ? ' selected' : '') + '" onclick="selectPersona(\'' + p.id + '\')">'
+    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + '" onclick="selectPersona(\'' + p.id + '\')">'
       + '<div class="persona-card-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
       + '<div class="persona-card-role">' + escHtml(p.role || 'General') + '</div>'
@@ -14561,11 +14558,7 @@ function renderPersonaOrg() {
   }).join('');
 }
 
-function selectLobster() {
-  // Find Lobster's ID from _personas
-  var lobster = _personas.find(function(p) { return p.name === 'Lobster'; });
-  if (lobster) selectPersona(lobster.id);
-}
+
 
 async function selectPersona(id) {
   _selectedPersonaId = id;
@@ -14608,10 +14601,19 @@ function switchPdTab(tab) {
   if (!p) return;
   if (tab === 'identity') {
     // Dynamic files from API response
-    var _files = (p.files || []).map(function(f) {
+    var _filesRaw = (p.files || []).map(function(f) {
       var key = f.filename.replace(/\.md$/,'').replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
       return { key: key, label: f.filename, file: f.filename, content: f.content || '', size: f.size || 0 };
     });
+    // Sort: IDENTITY.md first, SOUL.md second, rest alphabetical
+    var _priority = {'identity.md':0, 'soul.md':1};
+    _filesRaw.sort(function(a, b) {
+      var pa = _priority[a.file.toLowerCase()]; if (pa === undefined) pa = 99;
+      var pb = _priority[b.file.toLowerCase()]; if (pb === undefined) pb = 99;
+      if (pa !== pb) return pa - pb;
+      return a.file.localeCompare(b.file);
+    });
+    var _files = _filesRaw;
     if (!_files.length) _files = [{ key:'soul', label:'SOUL.md', file:'SOUL.md', content:'', size:0 }];
 
     var fileTabs = _files.map(function(f, i) {
@@ -14814,7 +14816,7 @@ async function sleepPersona(id) {
 // ── Rules Editor ──
 async function openRulesEditor() {
   document.getElementById('rules-editor').style.display = 'flex';
-  document.getElementById('persona-detail').style.display = 'none';
+  closePersonaDetail();
   document.getElementById('persona-wizard').style.display = 'none';
   const r = await api('/api/personas/rules');
   if (r.ok) {
@@ -19471,6 +19473,14 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     if personality_mode:
         augmented_message = f"{message}\n\n(Respond as {pname} in first person. Be conversational. Share your personality and working style.)"
 
+    # If user asks about identity/soul, include full SOUL.md in the message
+    _msg_lower = message.lower()
+    _identity_triggers = ['soul.md', 'your soul', 'your identity', 'about yourself', 'who are you',
+                          'tell me about you', 'describe yourself', 'your personality', 'your role',
+                          'what are you', 'show me your', 'your files']
+    if any(t in _msg_lower for t in _identity_triggers) and soul.strip():
+        augmented_message = f"{message}\n\n--- Your SOUL.md file ---\n{soul.strip()}\n--- End SOUL.md ---\n\n(Use the content above to answer. Respond as {pname} in first person.)"
+
     # Resolve backend
     _be_override = backend_override
     backend = _be_override if _be_override and _be_override in PROVIDER_REGISTRY else persona.get("preferred_backend", "").strip()
@@ -19966,7 +19976,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.15' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.16' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -20448,7 +20458,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.15"})
+            self.reply_json({"v": "0.27.16"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20535,7 +20545,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.15"
+                health["porter_version"] = "0.27.16"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -21836,7 +21846,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.15'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.16'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -25415,7 +25425,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.15 ready (localhost only)")
+    print(f"\n  Porter v0.27.16 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
