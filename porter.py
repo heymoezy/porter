@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.3 — Agent Groupings + Dynamic File Editor"""
+"""Porter v0.27.5 — Slide-Out Agent Panel + Card Wrapping"""
 
 
 
@@ -6108,45 +6108,41 @@ body.density-compact .file-name { padding: 6px 0; }
 .proj-agent-remove:hover { color:var(--danger); }
 .proj-agent-add { font-size:11px;padding:3px 6px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text2);cursor:pointer; }
 .proj-agent-add:hover { border-color:var(--accent); }
-.persona-org { display:flex; flex-direction:column; align-items:center; gap:0; margin-bottom:24px; }
-.org-node { display:flex; flex-direction:column; align-items:center; padding:14px 20px;
-  background:var(--raised); border:1px solid var(--border); border-radius:10px; min-width:120px; }
-.org-node.org-user { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 6%, var(--bg)); }
-.org-node.org-rules { cursor:pointer; transition:border-color .15s; }
-.org-node.org-rules:hover { border-color:var(--accent); }
-.org-avatar { font-size:24px; margin-bottom:4px; }
-.org-name { font-size:13px; font-weight:600; color:var(--text); }
-.org-role { font-size:11px; color:var(--text3); }
-.org-line { width:2px; height:20px; background:var(--border); }
-.persona-cards-row { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; padding:4px 0; }
-.persona-card { display:flex; flex-direction:column; align-items:center; padding:16px 20px;
+/* Agent grid (compact layout) */
+.persona-cards-row { display:flex; gap:10px; flex-wrap:wrap; padding:4px 0; }
+.persona-card { display:flex; flex-direction:column; align-items:center; padding:12px 14px;
   background:var(--raised); border:1px solid var(--border); border-radius:10px;
-  min-width:110px; max-width:160px; cursor:pointer; transition:border-color .15s, box-shadow .15s; }
+  width:130px; cursor:pointer; transition:border-color .15s, box-shadow .15s; }
 .persona-card:hover { border-color:var(--accent); box-shadow:0 2px 8px rgba(0,0,0,.08); }
 .persona-card.selected { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 6%, var(--bg)); }
-.persona-card-avatar { font-size:28px; margin-bottom:6px; }
-.persona-card-name { font-size:13px; font-weight:600; color:var(--text); text-align:center;
-  max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.persona-card-role { font-size:11px; color:var(--text3); text-align:center;
-  max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.persona-card-status { display:flex; align-items:center; gap:4px; margin-top:6px; font-size:10px; }
-.persona-card-dot { width:6px; height:6px; border-radius:50%; }
+.persona-card-avatar { font-size:24px; margin-bottom:4px; }
+.persona-card-name { font-size:12px; font-weight:600; color:var(--text); text-align:center;
+  word-wrap:break-word; overflow-wrap:break-word; }
+.persona-card-role { font-size:10px; color:var(--text3); text-align:center;
+  word-wrap:break-word; overflow-wrap:break-word; line-height:1.3; }
+.persona-card-status { display:flex; align-items:center; gap:4px; margin-top:4px; font-size:9px; }
+.persona-card-dot { width:5px; height:5px; border-radius:50%; }
 
-/* ── Persona Detail Panel ─────────────────────────────────── */
-.persona-detail { margin-top:16px; background:var(--surface); border:1px solid var(--border);
-  border-radius:10px; padding:0; overflow:hidden; }
+/* ── Persona Detail — slide-out right panel ──────────────── */
+.persona-detail { position:fixed; top:0; right:0; width:520px; height:100vh; z-index:900;
+  background:var(--surface); border-left:1px solid var(--border); box-shadow:-4px 0 20px rgba(0,0,0,.12);
+  display:flex; flex-direction:column; transform:translateX(100%); transition:transform .2s ease; }
+.persona-detail.open { transform:translateX(0); }
 .persona-detail-header { display:flex; align-items:center; gap:12px;
-  padding:16px 20px; border-bottom:1px solid var(--border); }
-.persona-detail-avatar { font-size:28px; }
-.persona-detail-name { font-size:16px; font-weight:600; color:var(--text); }
-.persona-detail-role { font-size:12px; color:var(--text3); }
-.persona-detail-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); }
-.pd-tab { padding:10px 18px; font-size:12px; font-weight:500; color:var(--text3);
+  padding:14px 20px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.persona-detail-avatar { font-size:24px; }
+.persona-detail-name { font-size:15px; font-weight:600; color:var(--text); }
+.persona-detail-role { font-size:11px; color:var(--text3); }
+.persona-detail-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); flex-shrink:0; }
+.pd-tab { padding:10px 16px; font-size:12px; font-weight:500; color:var(--text3);
   background:none; border:none; border-bottom:2px solid transparent; cursor:pointer;
   transition:color .15s, border-color .15s; }
 .pd-tab:hover { color:var(--text); }
 .pd-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
-.persona-detail-content { padding:20px; min-height:200px; max-height:400px; overflow-y:auto; }
+.persona-detail-content { padding:20px; flex:1; overflow-y:auto; }
+.persona-detail-overlay { position:fixed; top:0; left:0; width:100vw; height:100vh;
+  background:rgba(0,0,0,.3); z-index:899; opacity:0; transition:opacity .2s; pointer-events:none; }
+.persona-detail-overlay.open { opacity:1; pointer-events:auto; }
 .persona-editor { width:100%; min-height:300px; padding:14px; font-family:monospace; font-size:13px;
   background:var(--bg2); color:var(--text); border:1px solid var(--border); border-radius:8px;
   resize:vertical; line-height:1.6; }
@@ -6650,7 +6646,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.3</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.5</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6811,30 +6807,29 @@ select.settings-input { padding-right: 26px; }
       <button class="btn btn-ghost" onclick="loadPersonas()">&#8635; Refresh</button>
     </div>
 
-    <!-- Org Chart -->
-    <div id="persona-org-chart" class="persona-org">
-      <!-- User (operator) node — Lobster = Moe -->
-      <div class="org-node org-user">
-        <div class="org-avatar">🦞</div>
-        <div class="org-name" id="org-user-name">Lobster</div>
-        <div class="org-role">Global Orchestrator (Moe)</div>
+    <!-- Agent Grid -->
+    <div id="persona-org-chart" style="margin-bottom:16px">
+      <!-- Lobster master agent bar — clickable to edit -->
+      <div id="lobster-bar" style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:8px 12px;background:var(--raised);border:1px solid var(--accent);border-radius:8px;cursor:pointer;transition:box-shadow .15s" onclick="selectLobster()">
+        <span style="font-size:20px">🦞</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">Lobster <span style="font-size:10px;color:var(--text3);font-weight:400">(Moe)</span></div>
+          <div style="font-size:10px;color:var(--text3)">Global Orchestrator &middot; Master Agent</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center" onclick="event.stopPropagation()">
+          <button class="btn btn-ghost" onclick="openRulesEditor()" style="font-size:11px;padding:4px 10px">Global Rules</button>
+        </div>
       </div>
-      <div class="org-line"></div>
-      <!-- Global Rules node -->
-      <div class="org-node org-rules" onclick="openRulesEditor()">
-        <div class="org-avatar">&#128203;</div>
-        <div class="org-name">Global Rules</div>
-        <div class="org-role" style="cursor:pointer;color:var(--accent)">click to edit</div>
-      </div>
-      <div class="org-line"></div>
-      <!-- Persona cards row -->
+      <!-- Persona cards grid -->
       <div id="persona-cards-row" class="persona-cards-row">
         <div class="loading-indicator">Loading personas...</div>
       </div>
     </div>
 
-    <!-- Persona Detail Panel (hidden until a persona is selected) -->
-    <div id="persona-detail" class="persona-detail" style="display:none">
+    <!-- Slide-out overlay -->
+    <div id="persona-detail-overlay" class="persona-detail-overlay" onclick="closePersonaDetail()"></div>
+    <!-- Persona Detail Panel — slides from right -->
+    <div id="persona-detail" class="persona-detail">
       <div class="persona-detail-header">
         <span id="pd-avatar" class="persona-detail-avatar"></span>
         <div>
@@ -7922,6 +7917,8 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.5', date:'2026-03-03', notes:['Slide-out detail panel from right (full height, overlay)','Agent cards: text wrapping, consistent 130px width','Cards left-aligned in grid','Removed max-height limit on detail content'] },
+  { ver:'v0.27.4', date:'2026-03-03', notes:['Compact agent grid (removed org chart hierarchy)','Inline group badges (Strategy/Creative/Technical/Operations)','Operator bar: Lobster compact header with Global Rules button','Global Rules moved out of org chart into settings button'] },
   { ver:'v0.27.3', date:'2026-03-03', notes:['Agent groupings (Strategy/Creative/Technical/Operations)','Lobster=Moe merged into operator node','Dynamic .md file editor (list all files, create new ones)','Global rules textarea expands to fill space','ClawOps 8-agent squad imported','POST /file accepts any .md filename'] },
   { ver:'v0.27.2', date:'2026-03-03', notes:['Per-project live trace feed with step schema','Task board (active/queued/blocked/done) per project','Agent telemetry: tokens, cost, latency, retries (24h)','Hourly + daily rollup engine (background thread)','Anomaly flags for latency spikes, high failures, retries','Telemetry export (JSON + CSV)','7 new API endpoints (trace/steps, trace/live, trace/task-board, telemetry/agents, telemetry/project, telemetry/export, telemetry/rollups)'] },
   { ver:'v0.27.1', date:'2026-03-03', notes:['Project-level agent assignment — assign/unassign agents per project','Assigned agents section in project cards with avatars','assign_agent/unassign_agent API actions','Porter project pre-configured with all 3 agents'] },
@@ -14281,46 +14278,41 @@ function renderPersonaOrg() {
     row.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:12px">No personas yet. Click <b>+ New Persona</b> to create one.</div>';
     return;
   }
-  // Group agents by agent_group
-  const groupOrder = ['Strategy','Creative','Technical','Operations',''];
-  const groupLabels = { Strategy:'Strategy', Creative:'Creative', Technical:'Technical', Operations:'Operations', '':'Ungrouped' };
-  const grouped = {};
-  _personas.forEach(p => {
-    const g = p.agent_group || '';
-    if (!grouped[g]) grouped[g] = [];
-    grouped[g].push(p);
-  });
-  let html = '';
-  groupOrder.forEach(g => {
-    if (!grouped[g] || !grouped[g].length) return;
-    const label = groupLabels[g] || g;
-    html += '<div class="persona-group" style="width:100%;margin-bottom:12px">';
-    if (g) html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;padding-left:4px">' + label + '</div>';
-    html += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
-    grouped[g].forEach(p => {
-      const dotColor = p.status === 'active' ? '#22c55e' : p.status === 'sleeping' ? '#f59e0b' : 'var(--text3)';
-      const statusLabel = p.status === 'active' ? 'active' : p.status === 'sleeping' ? 'sleeping' : 'idle';
-      const isSelected = p.id === _selectedPersonaId;
-      html += '<div class="persona-card' + (isSelected ? ' selected' : '') + '" onclick="selectPersona(\'' + p.id + '\')">'
-        + '<div class="persona-card-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</div>'
-        + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
-        + '<div class="persona-card-role">' + escHtml(p.role || 'General') + '</div>'
-        + '<div class="persona-card-status">'
-        + '<span class="persona-card-dot" style="background:' + dotColor + '"></span>'
-        + '<span style="color:var(--text3)">' + statusLabel + '</span>'
-        + '</div></div>';
-    });
-    html += '</div></div>';
-  });
-  row.innerHTML = html;
+  const groupColors = { Orchestrator:'#ef4444', Strategy:'#6366f1', Creative:'#ec4899', Technical:'#06b6d4', Operations:'#f59e0b' };
+  // Lobster renders in operator bar, not in grid
+  row.innerHTML = _personas.filter(function(p) { return p.name !== 'Lobster'; }).map(function(p) {
+    var dotColor = p.status === 'active' ? '#22c55e' : p.status === 'sleeping' ? '#f59e0b' : 'var(--text3)';
+    var statusLabel = p.status === 'active' ? 'active' : p.status === 'sleeping' ? 'sleeping' : 'idle';
+    var isSelected = p.id === _selectedPersonaId;
+    var grp = p.agent_group || '';
+    var grpColor = groupColors[grp] || 'var(--text3)';
+    var grpBadge = grp ? '<div style="font-size:9px;padding:1px 6px;border-radius:3px;background:' + grpColor + '20;color:' + grpColor + ';font-weight:600;margin-top:4px;letter-spacing:.3px">' + grp + '</div>' : '';
+    return '<div class="persona-card' + (isSelected ? ' selected' : '') + '" onclick="selectPersona(\'' + p.id + '\')">'
+      + '<div class="persona-card-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</div>'
+      + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
+      + '<div class="persona-card-role">' + escHtml(p.role || 'General') + '</div>'
+      + grpBadge
+      + '<div class="persona-card-status">'
+      + '<span class="persona-card-dot" style="background:' + dotColor + '"></span>'
+      + '<span style="color:var(--text3)">' + statusLabel + '</span>'
+      + '</div></div>';
+  }).join('');
+}
+
+function selectLobster() {
+  // Find Lobster's ID from _personas
+  var lobster = _personas.find(function(p) { return p.name === 'Lobster'; });
+  if (lobster) selectPersona(lobster.id);
 }
 
 async function selectPersona(id) {
   _selectedPersonaId = id;
   renderPersonaOrg(); // highlight selected card
   const detail = document.getElementById('persona-detail');
+  const overlay = document.getElementById('persona-detail-overlay');
   if (!detail) return;
-  detail.style.display = 'block';
+  detail.classList.add('open');
+  if (overlay) overlay.classList.add('open');
   // Close other panels
   document.getElementById('rules-editor').style.display = 'none';
   document.getElementById('persona-wizard').style.display = 'none';
@@ -14339,7 +14331,10 @@ async function selectPersona(id) {
 
 function closePersonaDetail() {
   _selectedPersonaId = null;
-  document.getElementById('persona-detail').style.display = 'none';
+  var d = document.getElementById('persona-detail');
+  var o = document.getElementById('persona-detail-overlay');
+  if (d) d.classList.remove('open');
+  if (o) o.classList.remove('open');
   renderPersonaOrg();
 }
 
@@ -19622,7 +19617,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.3' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.5' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -20104,7 +20099,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.3"})
+            self.reply_json({"v": "0.27.5"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20191,7 +20186,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.3"
+                health["porter_version"] = "0.27.5"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -21492,7 +21487,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.3'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.5'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -25054,7 +25049,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.3 ready (localhost only)")
+    print(f"\n  Porter v0.27.5 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
