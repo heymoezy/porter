@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.2 — Trace Visibility + Agent Telemetry"""
+"""Porter v0.27.3 — Agent Groupings + Dynamic File Editor"""
 
 
 
@@ -277,6 +277,7 @@ def _db_init():
             fallback_backends TEXT DEFAULT '[]',
             status TEXT DEFAULT 'idle',
             soul_hash TEXT DEFAULT '',
+            agent_group TEXT DEFAULT '',
             created_at TEXT NOT NULL,
             last_active TEXT,
             config TEXT DEFAULT '{}'
@@ -6649,7 +6650,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.2</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.3</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6812,11 +6813,11 @@ select.settings-input { padding-right: 26px; }
 
     <!-- Org Chart -->
     <div id="persona-org-chart" class="persona-org">
-      <!-- User (operator) node -->
+      <!-- User (operator) node — Lobster = Moe -->
       <div class="org-node org-user">
-        <div class="org-avatar">&#128100;</div>
-        <div class="org-name" id="org-user-name">Moe</div>
-        <div class="org-role">Operator</div>
+        <div class="org-avatar">🦞</div>
+        <div class="org-name" id="org-user-name">Lobster</div>
+        <div class="org-role">Global Orchestrator (Moe)</div>
       </div>
       <div class="org-line"></div>
       <!-- Global Rules node -->
@@ -6855,7 +6856,7 @@ select.settings-input { padding-right: 26px; }
     </div>
 
     <!-- Rules Editor (hidden) -->
-    <div id="rules-editor" style="display:none">
+    <div id="rules-editor" style="display:none;flex-direction:column;height:calc(100vh - 160px)">
       <div class="persona-detail-header">
         <span class="persona-detail-avatar">&#128203;</span>
         <div>
@@ -6867,7 +6868,7 @@ select.settings-input { padding-right: 26px; }
           <button class="btn btn-ghost" onclick="closeRulesEditor()">Close</button>
         </div>
       </div>
-      <textarea id="rules-editor-textarea" class="persona-editor" placeholder="# Global Rules"></textarea>
+      <textarea id="rules-editor-textarea" class="persona-editor" style="flex:1;min-height:0;margin:12px;resize:none" placeholder="# Global Rules"></textarea>
     </div>
 
     <!-- Onboarding Wizard (hidden) -->
@@ -7921,6 +7922,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.3', date:'2026-03-03', notes:['Agent groupings (Strategy/Creative/Technical/Operations)','Lobster=Moe merged into operator node','Dynamic .md file editor (list all files, create new ones)','Global rules textarea expands to fill space','ClawOps 8-agent squad imported','POST /file accepts any .md filename'] },
   { ver:'v0.27.2', date:'2026-03-03', notes:['Per-project live trace feed with step schema','Task board (active/queued/blocked/done) per project','Agent telemetry: tokens, cost, latency, retries (24h)','Hourly + daily rollup engine (background thread)','Anomaly flags for latency spikes, high failures, retries','Telemetry export (JSON + CSV)','7 new API endpoints (trace/steps, trace/live, trace/task-board, telemetry/agents, telemetry/project, telemetry/export, telemetry/rollups)'] },
   { ver:'v0.27.1', date:'2026-03-03', notes:['Project-level agent assignment — assign/unassign agents per project','Assigned agents section in project cards with avatars','assign_agent/unassign_agent API actions','Porter project pre-configured with all 3 agents'] },
   { ver:'v0.27.0', date:'2026-03-03', notes:['Nav restructured: Squad (Agents+Memory) + Operations (Projects+Workflows)','Project bootstrap engine — 00_SHARED/ skeleton with 6 governance docs','Agent scaffold engine — 5-file base pack (IDENTITY, SOUL, USER, MEMORY, ROLE_CARD)','Agent avatars: Claude ⚡, OpenClaw 🐙, Gemini 💎','Porter project data refreshed — agents assigned, stale tasks fixed'] },
@@ -14275,29 +14277,42 @@ async function chatWithPersona(personaId) {
 function renderPersonaOrg() {
   const row = document.getElementById('persona-cards-row');
   if (!row) return;
-  // Update user name from config
-  const userName = document.getElementById('org-user-name');
-  if (userName && window._currentPrefs) {
-    // Pull from config if available
-  }
   if (!_personas.length) {
     row.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:12px">No personas yet. Click <b>+ New Persona</b> to create one.</div>';
     return;
   }
-  row.innerHTML = _personas.map(p => {
-    const dotColor = p.status === 'active' ? '#22c55e' : p.status === 'sleeping' ? '#f59e0b' : 'var(--text3)';
-    const statusLabel = p.status === 'active' ? 'active' : p.status === 'sleeping' ? 'sleeping' : 'idle';
-    const isSelected = p.id === _selectedPersonaId;
-    return `<div class="persona-card${isSelected ? ' selected' : ''}" onclick="selectPersona('${p.id}')">
-      <div class="persona-card-avatar">${escHtml(p.avatar || '🤖')}</div>
-      <div class="persona-card-name">${escHtml(p.name)}</div>
-      <div class="persona-card-role">${escHtml(p.role || 'General')}</div>
-      <div class="persona-card-status">
-        <span class="persona-card-dot" style="background:${dotColor}"></span>
-        <span style="color:var(--text3)">${statusLabel}</span>
-      </div>
-    </div>`;
-  }).join('');
+  // Group agents by agent_group
+  const groupOrder = ['Strategy','Creative','Technical','Operations',''];
+  const groupLabels = { Strategy:'Strategy', Creative:'Creative', Technical:'Technical', Operations:'Operations', '':'Ungrouped' };
+  const grouped = {};
+  _personas.forEach(p => {
+    const g = p.agent_group || '';
+    if (!grouped[g]) grouped[g] = [];
+    grouped[g].push(p);
+  });
+  let html = '';
+  groupOrder.forEach(g => {
+    if (!grouped[g] || !grouped[g].length) return;
+    const label = groupLabels[g] || g;
+    html += '<div class="persona-group" style="width:100%;margin-bottom:12px">';
+    if (g) html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;padding-left:4px">' + label + '</div>';
+    html += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
+    grouped[g].forEach(p => {
+      const dotColor = p.status === 'active' ? '#22c55e' : p.status === 'sleeping' ? '#f59e0b' : 'var(--text3)';
+      const statusLabel = p.status === 'active' ? 'active' : p.status === 'sleeping' ? 'sleeping' : 'idle';
+      const isSelected = p.id === _selectedPersonaId;
+      html += '<div class="persona-card' + (isSelected ? ' selected' : '') + '" onclick="selectPersona(\'' + p.id + '\')">'
+        + '<div class="persona-card-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</div>'
+        + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
+        + '<div class="persona-card-role">' + escHtml(p.role || 'General') + '</div>'
+        + '<div class="persona-card-status">'
+        + '<span class="persona-card-dot" style="background:' + dotColor + '"></span>'
+        + '<span style="color:var(--text3)">' + statusLabel + '</span>'
+        + '</div></div>';
+    });
+    html += '</div></div>';
+  });
+  row.innerHTML = html;
 }
 
 async function selectPersona(id) {
@@ -14335,32 +14350,48 @@ function switchPdTab(tab) {
   const p = window._selectedPersona;
   if (!p) return;
   if (tab === 'identity') {
-    content.innerHTML = `
-      <div style="margin-bottom:16px">
-        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">SOUL.md</div>
-        <textarea id="pd-soul-editor" class="persona-editor" style="min-height:200px">${escHtml(p.soul_text || '')}</textarea>
-        <div style="margin-top:8px;display:flex;gap:8px">
-          <button class="btn btn-primary" onclick="saveSoul()" style="font-size:12px">Save SOUL.md</button>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="settings-field"><label>Name</label>
-          <input class="settings-input" id="pd-edit-name" value="${escHtml(p.name)}"></div>
-        <div class="settings-field"><label>Role</label>
-          <input class="settings-input" id="pd-edit-role" value="${escHtml(p.role || '')}"></div>
-        <div class="settings-field"><label>Backend</label>
-          <select class="settings-input" id="pd-edit-backend">
-            <option value="">Auto-route</option>
-            ${Object.keys(window._providerRegistry || {openclaw:1,claude:1,gemini:1,codex:1,ollama:1}).map(k =>
+    // Dynamic files from API response
+    var _files = (p.files || []).map(function(f) {
+      var key = f.filename.replace(/\.md$/,'').replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
+      return { key: key, label: f.filename, file: f.filename, content: f.content || '', size: f.size || 0 };
+    });
+    if (!_files.length) _files = [{ key:'soul', label:'SOUL.md', file:'SOUL.md', content:'', size:0 }];
+
+    var fileTabs = _files.map(function(f, i) {
+      return '<button class="pd-file-tab' + (i===0?' active':'') + '" onclick="switchFileTab(this,\'' + f.key + '\')" style="font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:' + (i===0?'var(--accent)':'var(--surface)') + ';color:' + (i===0?'#fff':'var(--text2)') + ';cursor:pointer">' + f.label + '</button>';
+    }).join('');
+    fileTabs += '<button class="pd-file-tab" onclick="createNewAgentFile()" style="font-size:11px;padding:4px 10px;border:1px dashed var(--border);border-radius:4px;background:var(--surface);color:var(--text3);cursor:pointer" title="Create new .md file">+</button>';
+
+    var fileEditors = _files.map(function(f, i) {
+      return '<div id="pd-file-' + f.key + '" class="pd-file-panel" style="display:' + (i===0?'block':'none') + '">'
+        + '<textarea id="pd-editor-' + f.key + '" class="persona-editor" style="min-height:220px;font-family:monospace;font-size:12px;width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:12px;resize:vertical">' + escHtml(f.content) + '</textarea>'
+        + '<div style="margin-top:6px;display:flex;gap:6px;align-items:center">'
+        + '<button class="btn btn-primary" onclick="savePersonaFile(\'' + f.file + '\',\'' + f.key + '\')" style="font-size:11px">Save ' + f.label + '</button>'
+        + '<span style="font-size:10px;color:var(--text3)">' + f.size + ' bytes</span>'
+        + '</div></div>';
+    }).join('');
+
+    content.innerHTML = '<div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;align-items:center">' + fileTabs + '</div>'
+      + fileEditors
+      + '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">'
+      + '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Quick Settings</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+      + '<div class="settings-field"><label>Name</label>'
+      + '  <input class="settings-input" id="pd-edit-name" value="' + escHtml(p.name) + '"></div>'
+      + '<div class="settings-field"><label>Role</label>'
+      + '  <input class="settings-input" id="pd-edit-role" value="' + escHtml(p.role || '') + '"></div>'
+      + '<div class="settings-field"><label>Backend</label>'
+      + '  <select class="settings-input" id="pd-edit-backend">'
+      + '    <option value="">Auto-route</option>'
+      +      Object.keys(window._providerRegistry || {openclaw:1,claude:1,gemini:1,codex:1,ollama:1}).map(k =>
               '<option value="' + k + '"' + (p.preferred_backend === k ? ' selected' : '') + '>' + k + '</option>'
-            ).join('')}
-          </select></div>
-        <div class="settings-field"><label>Avatar</label>
-          <input class="settings-input" id="pd-edit-avatar" value="${p.avatar || '🤖'}" style="width:60px"></div>
-      </div>
-      <div style="margin-top:12px">
-        <button class="btn btn-ghost" onclick="savePersonaMeta()" style="font-size:12px">Save Changes</button>
-      </div>`;
+            ).join('')
+      + '  </select></div>'
+      + '<div class="settings-field"><label>Avatar</label>'
+      + '  <input class="settings-input" id="pd-edit-avatar" value="' + (p.avatar || '\u{1F916}') + '" style="width:60px"></div>'
+      + '</div>'
+      + '<div style="margin-top:8px"><button class="btn btn-ghost" onclick="savePersonaMeta()" style="font-size:11px">Save Settings</button></div>'
+      + '</div>';
   } else if (tab === 'memory') {
     content.innerHTML = '<div class="loading-indicator">Loading memory...</div>';
     api('/api/personas/' + p.id + '/memory').then(r => {
@@ -14429,6 +14460,40 @@ function switchPdTab(tab) {
   }
 }
 
+function switchFileTab(btn, key) {
+  document.querySelectorAll('.pd-file-tab').forEach(function(t) { t.style.background='var(--surface)'; t.style.color='var(--text2)'; t.classList.remove('active'); });
+  btn.style.background='var(--accent)'; btn.style.color='#fff'; btn.classList.add('active');
+  document.querySelectorAll('.pd-file-panel').forEach(function(p) { p.style.display='none'; });
+  var panel = document.getElementById('pd-file-' + key);
+  if (panel) panel.style.display = 'block';
+}
+
+async function createNewAgentFile() {
+  var name = prompt('New file name (must end with .md):');
+  if (!name || !name.trim()) return;
+  name = name.trim();
+  if (!name.endsWith('.md')) name += '.md';
+  if (!_selectedPersonaId) return;
+  var r = await api('/api/personas/' + _selectedPersonaId + '/file', { filename: name, content: '# ' + name.replace('.md','') + '\n\n' });
+  if (r && r.ok) {
+    toast(name + ' created');
+    selectPersona(_selectedPersonaId); // refresh
+  } else {
+    toast((r && r.error) || 'Create failed', 'err');
+  }
+}
+
+async function savePersonaFile(filename, key) {
+  var textarea = document.getElementById('pd-editor-' + key);
+  if (!textarea || !_selectedPersonaId) return;
+  var r = await api('/api/personas/' + _selectedPersonaId + '/file', { filename: filename, content: textarea.value });
+  if (r && r.ok) {
+    toast(filename + ' saved (' + r.size + ' bytes)');
+  } else {
+    toast((r && r.error) || 'Save failed', 'err');
+  }
+}
+
 async function saveSoul() {
   const p = window._selectedPersona;
   if (!p) return;
@@ -14490,7 +14555,7 @@ async function sleepPersona(id) {
 
 // ── Rules Editor ──
 async function openRulesEditor() {
-  document.getElementById('rules-editor').style.display = 'block';
+  document.getElementById('rules-editor').style.display = 'flex';
   document.getElementById('persona-detail').style.display = 'none';
   document.getElementById('persona-wizard').style.display = 'none';
   const r = await api('/api/personas/rules');
@@ -19557,7 +19622,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.2' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.3' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -20003,8 +20068,17 @@ class Handler(BaseHTTPRequestHandler):
             if not persona:
                 self.reply_json({"ok": False, "error": "Persona not found"}, 404)
                 return
-            # Include SOUL.md content
+            # Include ALL .md files from persona directory
             persona["soul_text"] = _persona_get_soul(pid)
+            pdir = PERSONAS_DIR / pid
+            persona["files"] = []
+            if pdir.exists():
+                for fpath in sorted(pdir.glob("*.md")):
+                    persona["files"].append({
+                        "filename": fpath.name,
+                        "content": fpath.read_text(),
+                        "size": fpath.stat().st_size
+                    })
             self.reply_json({"ok": True, "persona": persona})
 
         elif parsed.path == "/api/agents":
@@ -20030,7 +20104,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.2"})
+            self.reply_json({"v": "0.27.3"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20117,7 +20191,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.0"
+                health["porter_version"] = "0.27.3"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -21418,7 +21492,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.2'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.3'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -23274,6 +23348,32 @@ class Handler(BaseHTTPRequestHandler):
             _persona_set_rules(text)
             self.reply_json({"ok": True})
 
+        elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/file"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path.split("/")[3]
+            pdir = PERSONAS_DIR / pid
+            if not pdir.exists():
+                self.reply_json({"ok": False, "error": "Persona not found"}, 404); return
+            data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            filename = str(data.get("filename", "")).strip()
+            content = str(data.get("content", ""))
+            # Allow any .md file, prevent path traversal
+            if not filename.endswith(".md") or "/" in filename or "\\" in filename or ".." in filename:
+                self.reply_json({"ok": False, "error": f"Invalid filename: {filename}"}); return
+            (pdir / filename).write_text(content)
+            log.info("Saved persona file: %s/%s (%d bytes)", pid, filename, len(content))
+            # If SOUL.md, update hash in DB
+            if filename == "SOUL.md":
+                import hashlib as _hl
+                soul_hash = _hl.sha256(content.encode()).hexdigest()[:16]
+                try:
+                    conn = _db_conn()
+                    conn.execute("UPDATE personas SET soul_hash=? WHERE id=?", (soul_hash, pid))
+                    conn.commit()
+                    conn.close()
+                except Exception: pass
+            self.reply_json({"ok": True, "filename": filename, "size": len(content)})
+
         elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/dispatch"):
             if not self.auth_check(redirect=False): return
             pid = parsed.path.split("/")[3]
@@ -24954,7 +25054,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.2 ready (localhost only)")
+    print(f"\n  Porter v0.27.3 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
