@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.6 — Porter-Styled Dialogs"""
+"""Porter v0.27.7 — 3-Selector Chat Bar"""
 
 
 
@@ -6060,14 +6060,30 @@ body.density-compact .file-name { padding: 6px 0; }
   background:color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
-/* ── Persona Chat Bar ──────────────────────────────────────── */
-.chat-persona-bar { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:12px 0 8px; }
-.chat-persona-btn { display:flex; align-items:center; gap:6px; padding:8px 14px;
+/* ── Chat Context Bar (Agent + Project + Model selectors) ─── */
+.chat-ctx-selectors { display:flex; gap:6px; align-items:center; justify-content:center; margin:10px 0 6px; flex-wrap:wrap; }
+.chat-ctx-sel { display:flex; align-items:center; gap:4px; padding:5px 10px;
+  background:var(--raised); border:1px solid var(--border); border-radius:6px;
+  cursor:pointer; font-size:11px; color:var(--text2); transition:border-color .15s;
+  position:relative; user-select:none; }
+.chat-ctx-sel:hover { border-color:var(--accent); color:var(--text); }
+.chat-ctx-sel.active { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 6%, var(--bg)); }
+.chat-ctx-sel .ctx-avatar { font-size:14px; }
+.chat-ctx-sel .ctx-label { font-weight:500; max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chat-ctx-sel .ctx-arrow { font-size:8px; color:var(--text3); margin-left:2px; }
+.chat-ctx-dropdown { position:absolute; top:100%; left:0; min-width:180px; max-height:240px; overflow-y:auto;
   background:var(--raised); border:1px solid var(--border); border-radius:8px;
-  cursor:pointer; transition:border-color .15s, background .15s; font-size:12px; color:var(--text); }
-.chat-persona-btn:hover { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 6%, var(--bg)); }
-.chat-persona-btn .persona-btn-avatar { font-size:18px; }
-.chat-persona-btn .persona-btn-name { font-weight:500; }
+  box-shadow:0 8px 24px rgba(0,0,0,.15); z-index:200; display:none; margin-top:4px; }
+.chat-ctx-dropdown.open { display:block; }
+.chat-ctx-opt { display:flex; align-items:center; gap:8px; padding:8px 12px; cursor:pointer;
+  font-size:12px; color:var(--text2); transition:background .1s; }
+.chat-ctx-opt:hover { background:color-mix(in srgb, var(--accent) 8%, var(--bg)); }
+.chat-ctx-opt.selected { color:var(--accent); font-weight:600; }
+.chat-ctx-opt .ctx-opt-avatar { font-size:16px; }
+.chat-ctx-opt .ctx-opt-sub { font-size:10px; color:var(--text3); }
+.chat-ctx-divider { height:1px; background:var(--border); margin:4px 0; }
+/* Legacy persona bar — replaced */
+.chat-persona-bar { display:none; }
 
 /* ── Persona Org Chart ──────────────────────────────────────── */
 /* Trace feed */
@@ -6646,7 +6662,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.6</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.7</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6734,22 +6750,12 @@ select.settings-input { padding-right: 26px; }
               <div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>
               <textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)"></textarea>
               <div id="chat-at-ind-welcome" class="chat-at-indicator"></div>
-              <!-- Persona quick-access (Phase D) -->
+              <!-- Context selectors: Agent + Project + Model -->
+              <div id="chat-ctx-selectors" class="chat-ctx-selectors"></div>
               <div id="chat-persona-bar" class="chat-persona-bar"></div>
+              <select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option></select>
               <div class="chat-welcome-meta">
                 <button class="btn btn-ghost" style="font-size:11px" onclick="loadChatSessions()">History</button>
-<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>
-                <div class="model-picker" data-sel="chat-backend-sel-welcome">
-                  <button type="button" class="mp-trigger" onclick="_mpToggle(event)">Auto-route</button>
-                  <div class="mp-menu">
-                    <div class="mp-opt selected" data-v="" onclick="_mpSelect(this)">Auto-route</div>
-                    <div class="mp-opt" data-v="openclaw" onclick="_mpSelect(this)">OpenClaw (GPT-5.3 Codex)</div>
-                    <div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini CLI</div>
-                    <div class="mp-opt" data-v="codex" onclick="_mpSelect(this)">Codex CLI (GPT-5.1)</div>
-                    <div class="mp-opt" data-v="claude" onclick="_mpSelect(this)">Claude (Opus 4.6)</div>
-                    <div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 1.5B)</div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -6762,18 +6768,8 @@ select.settings-input { padding-right: 26px; }
             <div id="chat-at-ind-bottom" class="chat-at-indicator"></div>
             <div class="chat-input-bottom-meta">
               <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
-<select id="chat-backend-sel" style="display:none"><option value="">Auto-route</option><option value="openclaw">openclaw</option><option value="gemini">gemini</option><option value="codex">codex</option><option value="claude">claude</option><option value="ollama">ollama</option></select>
-              <div class="model-picker" data-sel="chat-backend-sel">
-                <button type="button" class="mp-trigger" onclick="_mpToggle(event)">Auto-route</button>
-                <div class="mp-menu">
-                  <div class="mp-opt selected" data-v="" onclick="_mpSelect(this)">Auto-route</div>
-                  <div class="mp-opt" data-v="openclaw" onclick="_mpSelect(this)">OpenClaw (GPT-5.3 Codex)</div>
-                  <div class="mp-opt" data-v="gemini" onclick="_mpSelect(this)">Gemini CLI</div>
-                  <div class="mp-opt" data-v="codex" onclick="_mpSelect(this)">Codex CLI (GPT-5.1)</div>
-                  <div class="mp-opt" data-v="claude" onclick="_mpSelect(this)">Claude (Opus 4.6)</div>
-                  <div class="mp-opt" data-v="ollama" onclick="_mpSelect(this)">Ollama (Qwen 1.5B)</div>
-                </div>
-              </div>
+              <select id="chat-backend-sel" style="display:none"><option value="">Auto-route</option></select>
+              <div id="chat-ctx-selectors-bottom" class="chat-ctx-selectors" style="margin:0;justify-content:flex-start"></div>
             </div>
           </div>
         </div>
@@ -7917,6 +7913,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.7', date:'2026-03-03', notes:['3-selector chat bar: Agent + Project + Model','Agent selector: pick persona for SOUL context injection','Project selector: General / Personality / specific project context','Model override: force specific backend or auto-route via agent preferred','Personality mode: build agent identity through conversation','Dropdown menus with search-friendly layout'] },
   { ver:'v0.27.6', date:'2026-03-03', notes:['Porter-styled modal dialogs (porterPrompt, porterConfirm, porterAlert)','Replaced 17+ browser prompt/confirm/alert calls with themed modals','Keyboard support (Enter to confirm, Escape to cancel)','Overlay click-to-dismiss'] },
   { ver:'v0.27.5', date:'2026-03-03', notes:['Slide-out detail panel from right (full height, overlay)','Agent cards: text wrapping, consistent 130px width','Cards left-aligned in grid','Removed max-height limit on detail content'] },
   { ver:'v0.27.4', date:'2026-03-03', notes:['Compact agent grid (removed org chart hierarchy)','Inline group badges (Strategy/Creative/Technical/Operations)','Operator bar: Lobster compact header with Global Rules button','Global Rules moved out of org chart into settings button'] },
@@ -12492,6 +12489,17 @@ function chatSend() {
     return;
   }
 
+  // Check if agent is selected — route through persona dispatch
+  if (_chatAgent) {
+    input.value = '';
+    input.style.height = 'auto';
+    _chatTransitionToBottom();
+    _chatMessages.push({ role: 'user', content: text });
+    renderChatMessages();
+    _dispatchToPersonaChat(_chatAgent, text);
+    return;
+  }
+
   // modelId is resolved above — always has a value
 
   // Create chat ID if needed
@@ -14207,18 +14215,137 @@ async function loadPersonas() {
 }
 
 function populateChatPersonaBar() {
-  const bar = document.getElementById('chat-persona-bar');
-  if (!bar) return;
-  if (!_personas.length) {
-    bar.innerHTML = '';
-    return;
+  // Replaced by buildChatCtxSelectors
+  buildChatCtxSelectors();
+}
+
+// Chat context state
+window._chatAgent = null;   // selected persona object or null
+window._chatProject = null; // {id, name} or null (General) or {id:'_personality', name:'Personality'}
+window._chatModel = '';     // '' = auto, or 'openclaw','claude','gemini','codex','ollama'
+
+function buildChatCtxSelectors() {
+  ['chat-ctx-selectors','chat-ctx-selectors-bottom'].forEach(function(containerId) {
+    var el = document.getElementById(containerId);
+    if (!el) return;
+
+    var agentLabel = _chatAgent ? _chatAgent.avatar + ' ' + _chatAgent.name : 'No Agent';
+    var projectLabel = _chatProject ? (_chatProject.id === '_personality' ? '🎭 Personality' : '📁 ' + _chatProject.name) : 'General';
+    var modelLabel = _chatModel ? _chatModel.charAt(0).toUpperCase() + _chatModel.slice(1) : 'Auto';
+
+    el.innerHTML = ''
+      + '<div class="chat-ctx-sel' + (_chatAgent ? ' active' : '') + '" onclick="_ctxToggle(event,\'agent\')">'
+      + '<span class="ctx-label">' + agentLabel + '</span><span class="ctx-arrow">▾</span>'
+      + '<div class="chat-ctx-dropdown" id="ctx-dd-agent-' + containerId + '"></div></div>'
+      + '<div class="chat-ctx-sel' + (_chatProject ? ' active' : '') + '" onclick="_ctxToggle(event,\'project\')">'
+      + '<span class="ctx-label">' + projectLabel + '</span><span class="ctx-arrow">▾</span>'
+      + '<div class="chat-ctx-dropdown" id="ctx-dd-project-' + containerId + '"></div></div>'
+      + '<div class="chat-ctx-sel' + (_chatModel ? ' active' : '') + '" onclick="_ctxToggle(event,\'model\')">'
+      + '<span class="ctx-label">via ' + modelLabel + '</span><span class="ctx-arrow">▾</span>'
+      + '<div class="chat-ctx-dropdown" id="ctx-dd-model-' + containerId + '"></div></div>';
+  });
+}
+
+function _ctxToggle(event, type) {
+  event.stopPropagation();
+  // Close all other dropdowns first
+  document.querySelectorAll('.chat-ctx-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
+
+  var dd = event.currentTarget.querySelector('.chat-ctx-dropdown');
+  if (!dd) return;
+
+  // Build dropdown content
+  var html = '';
+  if (type === 'agent') {
+    html += '<div class="chat-ctx-opt' + (!_chatAgent ? ' selected' : '') + '" onclick="_ctxPick(event,\'agent\',null)">No Agent</div>';
+    html += '<div class="chat-ctx-divider"></div>';
+    (_personas || []).forEach(function(p) {
+      html += '<div class="chat-ctx-opt' + (_chatAgent && _chatAgent.id === p.id ? ' selected' : '') + '" onclick="_ctxPick(event,\'agent\',\'' + p.id + '\')">'
+        + '<span class="ctx-opt-avatar">' + (p.avatar || '🤖') + '</span>'
+        + '<div><div>' + escHtml(p.name) + '</div><div class="ctx-opt-sub">' + escHtml(p.role || '') + '</div></div></div>';
+    });
+  } else if (type === 'project') {
+    html += '<div class="chat-ctx-opt' + (!_chatProject ? ' selected' : '') + '" onclick="_ctxPick(event,\'project\',null)">General</div>';
+    html += '<div class="chat-ctx-opt' + (_chatProject && _chatProject.id === '_personality' ? ' selected' : '') + '" onclick="_ctxPick(event,\'project\',\'_personality\')"><span class="ctx-opt-avatar">🎭</span><div><div>Personality</div><div class="ctx-opt-sub">Build agent identity</div></div></div>';
+    html += '<div class="chat-ctx-divider"></div>';
+    // Fetch projects
+    api('/api/projects').then(function(data) {
+      if (!data || !data.projects) return;
+      var projHtml = '';
+      data.projects.forEach(function(p) {
+        projHtml += '<div class="chat-ctx-opt' + (_chatProject && _chatProject.id === p.id ? ' selected' : '') + '" onclick="_ctxPick(event,\'project\',\'' + p.id + '\')">'
+          + '<span class="ctx-opt-avatar">📁</span>'
+          + '<div><div>' + escHtml(p.name || p.id) + '</div><div class="ctx-opt-sub">' + (p.tasks_open || 0) + ' tasks</div></div></div>';
+      });
+      // Append to existing dropdown
+      dd.innerHTML += projHtml;
+    });
+  } else if (type === 'model') {
+    var models = [
+      { v:'', label:'Auto', sub:'Use agent preferred' },
+      { v:'openclaw', label:'OpenClaw', sub:'GPT-5.3 Codex' },
+      { v:'claude', label:'Claude', sub:'Opus 4.6' },
+      { v:'gemini', label:'Gemini', sub:'CLI' },
+      { v:'codex', label:'Codex', sub:'GPT-5.1 CLI' },
+      { v:'ollama', label:'Ollama', sub:'Qwen 1.5B' },
+    ];
+    models.forEach(function(m) {
+      html += '<div class="chat-ctx-opt' + (_chatModel === m.v ? ' selected' : '') + '" onclick="_ctxPick(event,\'model\',\'' + m.v + '\')">'
+        + '<div><div>' + m.label + '</div><div class="ctx-opt-sub">' + m.sub + '</div></div></div>';
+    });
   }
-  bar.innerHTML = _personas.map(p =>
-    `<button class="chat-persona-btn" onclick="chatWithPersona('${p.id}')" title="Chat with ${escHtml(p.name)}">
-      <span class="persona-btn-avatar">${escHtml(p.avatar || '🤖')}</span>
-      <span class="persona-btn-name">${escHtml(p.name)}</span>
-    </button>`
-  ).join('');
+  dd.innerHTML = html;
+  dd.classList.add('open');
+
+  // Close on outside click
+  function closeHandler(e) {
+    if (!dd.contains(e.target) && !event.currentTarget.contains(e.target)) {
+      dd.classList.remove('open');
+      document.removeEventListener('click', closeHandler);
+    }
+  }
+  setTimeout(function() { document.addEventListener('click', closeHandler); }, 0);
+}
+
+function _ctxPick(event, type, value) {
+  event.stopPropagation();
+  if (type === 'agent') {
+    if (value) {
+      _chatAgent = (_personas || []).find(function(p) { return p.id === value; }) || null;
+    } else {
+      _chatAgent = null;
+    }
+    // Auto-set model to agent's preferred if on auto
+    if (_chatAgent && !_chatModel) {
+      // Keep auto — dispatch will use agent's preferred
+    }
+  } else if (type === 'project') {
+    if (!value) {
+      _chatProject = null;
+    } else if (value === '_personality') {
+      _chatProject = { id: '_personality', name: 'Personality' };
+    } else {
+      // Fetch project name
+      api('/api/projects').then(function(data) {
+        if (data && data.projects) {
+          var p = data.projects.find(function(pr) { return pr.id === value; });
+          if (p) _chatProject = { id: p.id, name: p.name || p.id };
+          buildChatCtxSelectors();
+        }
+      });
+      _chatProject = { id: value, name: value.slice(0,12) + '...' };
+    }
+  } else if (type === 'model') {
+    _chatModel = value || '';
+    // Sync to hidden select for backward compat
+    var sel = document.getElementById('chat-backend-sel');
+    if (sel) sel.value = _chatModel;
+    var selW = document.getElementById('chat-backend-sel-welcome');
+    if (selW) selW.value = _chatModel;
+  }
+  // Close dropdown
+  document.querySelectorAll('.chat-ctx-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
+  buildChatCtxSelectors();
 }
 
 async function _dispatchToPersonaChat(persona, message) {
@@ -14226,7 +14353,15 @@ async function _dispatchToPersonaChat(persona, message) {
   _chatMessages.push({ role: 'assistant', content: '\u23f3 Dispatching to ' + persona.name + '...', model: persona.preferred_backend || 'auto' });
   renderChatMessages();
   try {
-    const r = await api('/api/personas/' + persona.id + '/dispatch', { prompt: message, timeout: 120 });
+    var dispatchData = { prompt: message, timeout: 120 };
+    if (window._chatModel) dispatchData.backend_override = window._chatModel;
+    if (window._chatProject && window._chatProject.id && window._chatProject.id !== '_personality') {
+      dispatchData.project_id = window._chatProject.id;
+    }
+    if (window._chatProject && window._chatProject.id === '_personality') {
+      dispatchData.personality_mode = true;
+    }
+    const r = await api('/api/personas/' + persona.id + '/dispatch', dispatchData);
     if (r.ok) {
       _chatMessages.pop();
       _pollPersonaResponse(r.run_id, persona);
@@ -14267,17 +14402,13 @@ async function _pollPersonaResponse(runId, persona) {
 }
 
 async function chatWithPersona(personaId) {
-  // Set the active persona for this chat session
-  window._chatPersonaId = personaId;
-  const persona = _personas.find(p => p.id === personaId);
-  const name = persona ? persona.name : 'Agent';
-  // Pre-fill input with @persona mention
-  const input = document.getElementById('chat-input-welcome') || document.getElementById('chat-input');
-  if (input) {
-    input.value = '@' + name.toLowerCase().replace(/\s+/g, '') + ' ';
-    input.focus();
+  var persona = _personas.find(function(p) { return p.id === personaId; });
+  if (persona) {
+    _chatAgent = persona;
+    buildChatCtxSelectors();
   }
-  _chatTransitionToBottom();
+  var input = document.getElementById('chat-input-welcome') || document.getElementById('chat-input');
+  if (input) input.focus();
 }
 
 function renderPersonaOrg() {
@@ -19710,7 +19841,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </section>
 
 <div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.6' + """</div><div class="label">Version</div></div>
+  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.7' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
@@ -20192,7 +20323,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.6"})
+            self.reply_json({"v": "0.27.7"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -20279,7 +20410,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.6"
+                health["porter_version"] = "0.27.7"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -21580,7 +21711,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.6'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.7'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -25142,7 +25273,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.6 ready (localhost only)")
+    print(f"\n  Porter v0.27.7 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
