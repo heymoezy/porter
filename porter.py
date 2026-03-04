@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.20 — Persona Identity Isolation"""
+"""Porter v0.27.21 — Persona Identity Isolation"""
 
 
 
@@ -6142,14 +6142,22 @@ body.density-compact .file-name { padding: 6px 0; }
 .task-board-col-hdr { font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:8px 10px;font-weight:600;border-bottom:1px solid var(--border); }
 .task-board-item { padding:6px 10px;font-size:11px;color:var(--text2);border-bottom:1px solid color-mix(in srgb, var(--border) 40%, transparent); }
 .task-board-item:last-child { border-bottom:none; }
-/* Telemetry cards */
-.telem-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:12px; }
-.telem-card { background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px; }
-.telem-card-name { font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px; }
-.telem-card-stat { display:flex;justify-content:space-between;font-size:11px;color:var(--text3);padding:2px 0; }
-.telem-card-val { color:var(--text2);font-weight:500; }
-.telem-export-bar { display:flex;gap:6px;margin-top:12px; }
-.telem-anomaly { color:var(--danger);font-weight:600; }
+/* Model cards v2 */
+.models-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:14px; }
+@media (max-width:700px) { .models-grid { grid-template-columns:1fr; } }
+.model-card { padding:18px 20px;background:var(--raised);border:1px solid var(--border);border-radius:10px;transition:border-color .15s; }
+.model-card:hover { border-color:var(--accent); }
+.model-card.offline { opacity:.55; }
+.model-card-head { display:flex;align-items:center;gap:10px;margin-bottom:4px; }
+.model-card-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+.model-card-name { font-size:15px;font-weight:600;color:var(--text); }
+.model-card-type { font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px; }
+.model-card-desc { font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px; }
+.model-card-tags { display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px; }
+.model-card-tag { font-size:11px;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,var(--accent) 12%,var(--bg));color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border)); }
+.model-card-agents-label { font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px;font-weight:600; }
+.model-card-agents { display:flex;flex-wrap:wrap;gap:5px; }
+.model-card-agent { display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text2); }
 .proj-agents-section { padding:8px 16px;border-top:1px solid var(--border); }
 .proj-agents-label { font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px;font-weight:600; }
 .proj-agents-row { display:flex;gap:6px;flex-wrap:wrap;align-items:center; }
@@ -6700,7 +6708,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.20</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.21</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7298,58 +7306,9 @@ select.settings-input { padding-right: 26px; }
       <button class="btn btn-ghost" onclick="loadModels()">&#8635; Refresh</button>
     </div>
     <div class="module-intro">AI backends available to Porter. Each persona routes through one of these.</div>
-
-    <!-- Agent Telemetry Summary -->
-    <div style="margin-top:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div style="font-size:13px;font-weight:600;color:var(--text2)">Agent Telemetry (24h)</div>
-        <div class="telem-export-bar">
-          <button class="btn btn-xs btn-ghost" onclick="exportTelemetry('json')">Export JSON</button>
-          <button class="btn btn-xs btn-ghost" onclick="exportTelemetry('csv')">Export CSV</button>
-          <button class="btn btn-xs btn-ghost" onclick="loadAgentTelemetry()">Refresh</button>
-        </div>
-      </div>
-      <div id="telem-agent-grid" class="telem-grid">
-        <div style="grid-column:1/-1;padding:12px;font-size:12px;color:var(--text3)">Loading telemetry...</div>
-      </div>
-    </div>
-
-    <!-- Model Cards -->
-    <div id="models-grid" class="orch-grid" style="margin-bottom:20px">
+    <div id="models-summary" style="margin:12px 0 16px;font-size:13px;color:var(--text2)"></div>
+    <div id="models-grid" class="models-grid">
       <div class="loading-indicator">Loading models...</div>
-    </div>
-
-    <!-- Routing Mode -->
-    <div class="module-section">
-      <div class="module-section-title">Routing</div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <select id="models-routing-sel" class="settings-input" style="font-size:12px;min-width:200px" onchange="setRoutingMode(this.value)">
-          <option value="auto">Auto-route (content-based)</option>
-          <option value="ranked">Follow rankings</option>
-        </select>
-        <span style="font-size:12px;color:var(--text3)" id="models-routing-hint">Routes based on prompt analysis</span>
-      </div>
-    </div>
-
-    <!-- Quick Dispatch -->
-    <div class="module-section">
-      <div class="module-section-title">Quick Dispatch</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <select id="qd-backend" class="settings-input" style="font-size:12px;min-width:150px">
-          <option value="">Auto-route</option>
-        </select>
-        <input id="qd-prompt" class="settings-input" style="flex:1;font-size:12px" placeholder="Send a raw message to a model (bypass personas)...">
-        <button class="btn btn-primary" onclick="quickDispatch()" style="font-size:12px;white-space:nowrap">Send</button>
-      </div>
-      <div id="qd-result" style="display:none;margin-top:10px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;font-size:12px;white-space:pre-wrap;max-height:200px;overflow-y:auto"></div>
-    </div>
-
-    <!-- Recent Runs -->
-    <div class="module-section">
-      <div class="module-section-title">Recent Runs</div>
-      <div id="models-runs" style="max-height:300px;overflow-y:auto">
-        <div class="loading-indicator">Loading...</div>
-      </div>
     </div>
   </div>
 
@@ -7939,6 +7898,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.21', date:'2026-03-04', notes:['Models Tab v2: clean fleet reference with descriptions, best-for tags, and assigned agents','Removed: Agent Telemetry, Routing Mode, Quick Dispatch, Recent Runs from Models tab','Extended /api/providers with model metadata and persona assignments'] },
   { ver:'v0.27.20', date:'2026-03-03', notes:['Personality mode now includes SOUL.md + RULES.md context (was overwriting them)','Agents instructed to never mention which AI model they run on','Fixed: personality mode gave zero identity context, agents hallucinated old associations'] },
   { ver:'v0.27.19', date:'2026-03-03', notes:['All CLI dispatches run from $HOME (not Porter dir) — prevents CLAUDE.md context bleed','Fixed: agents no longer inherit Porter project identity','Fixed: RULES.md path used PORTER_DATA_DIR (undefined) instead of PERSONAS_DIR'] },
   { ver:'v0.27.18', date:'2026-03-03', notes:['Soul shaping via chat — identity instructions auto-persist to SOUL.md','Trigger phrases: remember that you, from now on, be more/less, etc.','Learned traits appended under ## Learned Traits section','POST /api/personas/<id>/shape endpoint for manual API shaping'] },
@@ -9732,9 +9692,9 @@ function switchModule(name) {
         if (document.getElementById('overview-module') && document.getElementById('overview-module').classList.contains('active')) loadPersonas();
         else clearInterval(window._personaRefreshTimer);
       }, 30000);
-    }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); _loadRoutingPrefs(); }, projects: loadProjects, admin: loadAdmin,
+    }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); }, projects: loadProjects, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
-    models: function() { loadModels(); loadAgentTelemetry(); }, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: function() { loadWorkflows(); loadBuildStatus(); }, memory: loadMemory, settings: syncSettingsUI,
+    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: function() { loadWorkflows(); loadBuildStatus(); }, memory: loadMemory, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -14179,132 +14139,53 @@ function _ensureOrchHubPolling(agentCount, modelCount) {
 
 async function loadModels() {
   try {
-    const [providers, runs] = await Promise.all([
-      api('/api/providers'),
-      api('/api/bridge/runs?limit=20'),
-    ]);
-    renderModelCards(providers);
-    renderModelRuns(runs);
-    populateQuickDispatch(providers);
-    _loadRoutingPrefs();
+    var data = await api('/api/providers');
+    _renderModelsSummary(data);
+    _renderModelCards(data);
   } catch(e) { console.debug('loadModels:', e); }
 }
 
-function renderModelCards(data) {
-  const grid = document.getElementById('models-grid');
-  if (!grid) return;
-  const providers = data && data.providers ? data.providers : [];
-  if (!providers.length) {
+function _renderModelsSummary(data) {
+  var el = document.getElementById('models-summary');
+  if (!el || !data || !data.providers) return;
+  var online = data.providers.filter(function(p){ return p.available; }).length;
+  var offline = data.providers.length - online;
+  var parts = [];
+  if (online) parts.push('<span style="color:#22c55e">● ' + online + ' online</span>');
+  if (offline) parts.push('<span style="color:var(--text3)">○ ' + offline + ' offline</span>');
+  el.innerHTML = parts.join(' · ') || 'No models detected.';
+}
+
+function _renderModelCards(data) {
+  var grid = document.getElementById('models-grid');
+  if (!grid || !data || !data.providers) return;
+  if (!data.providers.length) {
     grid.innerHTML = '<div style="color:var(--text3);font-size:13px;grid-column:1/-1">No model backends detected.</div>';
     return;
   }
-  grid.innerHTML = providers.map(p => {
-    const dotColor = p.ok ? '#22c55e' : '#ef4444';
-    const statusText = p.ok ? 'Online' : 'Offline';
-    const typeLabel = p.type || 'unknown';
-    return `<div class="orch-card">
-      <div class="orch-card-head">
-        <span class="orch-card-dot" style="background:${dotColor}"></span>
-        <span class="orch-card-name">${escHtml(p.label || p.id)}</span>
-      </div>
-      <div class="orch-card-sub">${escHtml(typeLabel)} · <span style="color:${dotColor}">${statusText}</span></div>
-    </div>`;
-  }).join('');
-}
-
-function renderModelRuns(data) {
-  const el = document.getElementById('models-runs');
-  if (!el) return;
-  const runs = data && data.runs ? data.runs : [];
-  if (!runs.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:12px">No dispatch runs yet.</div>';
-    return;
-  }
-  el.innerHTML = runs.map(run => {
-    const st = run.status === 'complete' ? '#22c55e' : run.status === 'failed' ? '#ef4444' : 'var(--text3)';
-    const ago = run.created_at ? new Date(run.created_at * 1000).toLocaleString() : '';
-    return `<div style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-      <span style="width:6px;height:6px;border-radius:50%;background:${st};flex-shrink:0"></span>
-      <span style="font-size:12px;font-weight:500;color:var(--text);min-width:70px">${escHtml(run.backend || '?')}</span>
-      <span style="font-size:12px;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(run.prompt_preview || '')}</span>
-      <span style="font-size:11px;color:var(--text3);white-space:nowrap">${run.duration_ms ? run.duration_ms + 'ms' : ''}</span>
-      <span style="font-size:10px;color:var(--text3);white-space:nowrap">${ago}</span>
-    </div>`;
-  }).join('');
-}
-
-function populateQuickDispatch(data) {
-  const sel = document.getElementById('qd-backend');
-  if (!sel) return;
-  const providers = data && data.providers ? data.providers : [];
-  sel.innerHTML = '<option value="">Auto-route</option>' +
-    providers.filter(p => p.ok).map(p =>
-      `<option value="${escHtml(p.id)}">${escHtml(p.label || p.id)}</option>`
-    ).join('');
-}
-
-async function loadAgentTelemetry() {
-  try {
-    var r = await api('/api/telemetry/agents');
-    var el = document.getElementById('telem-agent-grid');
-    if (!el || !r || !r.ok) return;
-    if (!r.agents || !r.agents.length) {
-      el.innerHTML = '<div style="grid-column:1/-1;padding:12px;font-size:12px;color:var(--text3)">No telemetry data yet. Dispatch messages to agents to start tracking.</div>';
-      return;
-    }
-    el.innerHTML = r.agents.map(function(a) {
-      var anomaly = '';
-      if (a.max_latency > 30000) anomaly += '<div class="telem-anomaly">⚠ High latency spike (' + Math.round(a.max_latency/1000) + 's)</div>';
-      if (a.total_retries > 5) anomaly += '<div class="telem-anomaly">⚠ High retry count (' + a.total_retries + ')</div>';
-      if (a.failed > a.complete * 0.3 && a.failed > 2) anomaly += '<div class="telem-anomaly">⚠ High failure rate (' + a.failed + '/' + a.event_count + ')</div>';
-      return '<div class="telem-card">'
-        + '<div class="telem-card-name">' + escHtml(a.agent_name || a.agent_id || '?') + '</div>'
-        + '<div class="telem-card-stat"><span>Events</span><span class="telem-card-val">' + a.event_count + '</span></div>'
-        + '<div class="telem-card-stat"><span>Complete</span><span class="telem-card-val">' + (a.complete||0) + '</span></div>'
-        + '<div class="telem-card-stat"><span>Failed</span><span class="telem-card-val">' + (a.failed||0) + '</span></div>'
-        + '<div class="telem-card-stat"><span>Tokens In</span><span class="telem-card-val">' + _fmtNum(a.tokens_in||0) + '</span></div>'
-        + '<div class="telem-card-stat"><span>Tokens Out</span><span class="telem-card-val">' + _fmtNum(a.tokens_out||0) + '</span></div>'
-        + '<div class="telem-card-stat"><span>Est. Cost</span><span class="telem-card-val">$' + (a.total_cost||0).toFixed(4) + '</span></div>'
-        + '<div class="telem-card-stat"><span>Avg Latency</span><span class="telem-card-val">' + _fmtNum(a.avg_latency||0) + 'ms</span></div>'
-        + '<div class="telem-card-stat"><span>Active Time</span><span class="telem-card-val">' + _fmtDuration(Math.round((a.active_seconds||0)/60)) + '</span></div>'
-        + '<div class="telem-card-stat"><span>Retries</span><span class="telem-card-val">' + (a.total_retries||0) + '</span></div>'
-        + anomaly
-        + '</div>';
+  grid.innerHTML = data.providers.map(function(p) {
+    var dotColor = p.available ? '#22c55e' : '#ef4444';
+    var offClass = p.available ? '' : ' offline';
+    var tags = (p.best_for || []).map(function(t) {
+      return '<span class="model-card-tag">' + escHtml(t) + '</span>';
     }).join('');
-  } catch(e) { console.debug('telemetry load:', e); }
-}
-
-function exportTelemetry(fmt) {
-  window.open('/api/telemetry/export?format=' + fmt, '_blank');
-}
-
-
-async function quickDispatch() {
-  const prompt = (document.getElementById('qd-prompt').value || '').trim();
-  if (!prompt) return;
-  const backend = document.getElementById('qd-backend').value;
-  const resultEl = document.getElementById('qd-result');
-  resultEl.style.display = 'block';
-  resultEl.textContent = 'Dispatching...';
-  resultEl.style.color = 'var(--text3)';
-  const payload = { prompt };
-  if (backend) payload.backend = backend;
-  try {
-    const r = await api('/api/bridge/dispatch', payload);
-    if (r.ok) {
-      resultEl.textContent = 'Dispatched (run_id: ' + r.run_id + '). Check Recent Runs for result.';
-      resultEl.style.color = 'var(--accent)';
-      document.getElementById('qd-prompt').value = '';
-      // Refresh runs after delay
-      setTimeout(loadModels, 3000);
-    } else {
-      resultEl.textContent = 'Error: ' + (r.error || 'unknown');
-      resultEl.style.color = '#ef4444';
-    }
-  } catch(e) {
-    resultEl.textContent = 'Error: ' + e.message;
-    resultEl.style.color = '#ef4444';
-  }
+    var agents = (p.agents || []).map(function(a) {
+      return '<span class="model-card-agent">' + (a.avatar || '🤖') + ' ' + escHtml(a.name) + '</span>';
+    }).join('');
+    var agentSection = agents
+      ? '<div class="model-card-agents-label">Agents</div><div class="model-card-agents">' + agents + '</div>'
+      : '<div style="font-size:11px;color:var(--text3);font-style:italic">No agents assigned</div>';
+    return '<div class="model-card' + offClass + '">'
+      + '<div class="model-card-head">'
+      + '<span class="model-card-dot" style="background:' + dotColor + '"></span>'
+      + '<span class="model-card-name">' + escHtml(p.label || p.id) + '</span>'
+      + '</div>'
+      + '<div class="model-card-type">' + escHtml(p.type || 'unknown') + '</div>'
+      + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
+      + (tags ? '<div class="model-card-tags">' + tags + '</div>' : '')
+      + agentSection
+      + '</div>';
+  }).join('');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -15466,20 +15347,7 @@ async function saveModelRanking(modelId, rank) {
   } else { toast('Failed to save ranking', 'err'); }
 }
 
-async function setRoutingMode(mode) {
-  var res = await api('/api/preferences', { routing_mode: mode });
-  if (res && res.ok) {
-    if (!window._currentPrefs) window._currentPrefs = {};
-    window._currentPrefs.routing_mode = mode;
-    toast('Routing mode: ' + (mode === 'ranked' ? 'Follow rankings' : 'Auto-route'), 'ok');
-  } else { toast('Failed to update routing mode', 'err'); }
-}
 
-function _loadRoutingPrefs() {
-  var prefs = window._currentPrefs || {};
-  var sel = document.getElementById('routing-mode-sel');
-  if (sel) sel.value = prefs.routing_mode || 'auto';
-}
 
 function closeConfigPanel() {
   const panel = document.getElementById('configPanel');
@@ -19153,6 +19021,29 @@ PROVIDER_REGISTRY = {
 }
 AGENT_DISPATCHERS = {k: v["dispatch"] for k, v in PROVIDER_REGISTRY.items()}
 
+MODEL_METADATA = {
+    "openclaw": {
+        "description": "Multi-model gateway routing to GPT-5.3 Codex and others.",
+        "best_for": ["code generation", "task execution", "automation"],
+    },
+    "claude": {
+        "description": "Advanced reasoning and code generation via Anthropic CLI.",
+        "best_for": ["analysis", "code", "planning", "writing"],
+    },
+    "gemini": {
+        "description": "Google's multimodal model for research and content.",
+        "best_for": ["research", "summarization", "multimodal"],
+    },
+    "codex": {
+        "description": "OpenAI Codex CLI for code-focused tasks.",
+        "best_for": ["code generation", "refactoring", "debugging"],
+    },
+    "ollama": {
+        "description": "Local model inference via Ollama. No data leaves the machine.",
+        "best_for": ["privacy", "fast prototyping", "offline"],
+    },
+}
+
 
 # ── Delegation log ─────────────────────────────────────────────────────────
 _delegation_log = []  # List of recent delegations (max 50)
@@ -20638,7 +20529,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.20"
+                health["porter_version"] = "0.27.21"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -20721,15 +20612,33 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/providers":
             if not self.auth_check(redirect=False): return
-            status = {}
+            # Build persona-to-backend map
+            _pmap = {}
+            try:
+                _pconn = _db_conn()
+                _prows = _pconn.execute(
+                    "SELECT id, name, avatar, preferred_backend FROM personas "
+                    "WHERE preferred_backend IS NOT NULL AND preferred_backend != ''"
+                ).fetchall()
+                for _pr in _prows:
+                    _bk = _pr[3]
+                    if _bk not in _pmap: _pmap[_bk] = []
+                    _pmap[_bk].append({"id": _pr[0], "name": _pr[1], "avatar": _pr[2] or ""})
+            except Exception:
+                pass
+            providers = []
             for name, info in PROVIDER_REGISTRY.items():
-                available = _probe_provider(name)
-                status[name] = {
-                    "available": available,
+                _meta = MODEL_METADATA.get(name, {})
+                providers.append({
+                    "id": name,
+                    "available": _probe_provider(name),
                     "type": info["type"],
                     "label": info["label"],
-                }
-            self.reply_json({"ok": True, "providers": status})
+                    "description": _meta.get("description", ""),
+                    "best_for": _meta.get("best_for", []),
+                    "agents": _pmap.get(name, []),
+                })
+            self.reply_json({"ok": True, "providers": providers})
 
         elif parsed.path == "/api/bridge/chains":
             if not self.auth_check(redirect=False): return
@@ -21939,7 +21848,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.20'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.21'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -25529,7 +25438,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.20 ready (localhost only)")
+    print(f"\n  Porter v0.27.21 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
