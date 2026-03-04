@@ -14226,7 +14226,7 @@ async function _selectModel(sel) {
   var backend = sel.getAttribute('data-backend');
   var model = sel.value;
   try {
-    var res = await api('/api/models/select', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({backend:backend, model:model}) });
+    var res = await api('/api/models/select', {backend:backend, model:model});
     if (res && res.ok) {
       showToast('Model set: ' + (res.resolved || model), 'success');
       loadModels();
