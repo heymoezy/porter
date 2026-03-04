@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.23 — Model Selector: Per-Backend Model Switching"""
+"""Porter v0.27.24 — Model Activity Slide-Out Pane"""
 
 
 
@@ -6168,9 +6168,30 @@ body.density-compact .file-name { padding: 6px 0; }
 .model-card-run-dot { width:5px;height:5px;border-radius:50%;flex-shrink:0; }
 .model-card-run-preview { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .model-card-run-meta { color:var(--text3);white-space:nowrap; }
-.model-card-trace { margin-top:8px; }
-.model-card-trace-toggle { font-size:11px;color:var(--accent);cursor:pointer;user-select:none; }
-.model-card-trace-panel { margin-top:6px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:monospace;font-size:11px;color:var(--text2);max-height:150px;overflow-y:auto;white-space:pre-wrap;line-height:1.4; }
+/* ── Model Activity Slide-Out Panel ── */
+.model-activity-overlay { position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.3);z-index:899;opacity:0;transition:opacity .2s;pointer-events:none; }
+.model-activity-overlay.open { opacity:1;pointer-events:auto; }
+.model-activity-panel { position:fixed;top:0;right:0;width:520px;height:100vh;z-index:900;background:var(--surface);border-left:1px solid var(--border);box-shadow:-4px 0 20px rgba(0,0,0,.12);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .2s ease; }
+.model-activity-panel.open { transform:translateX(0); }
+.model-activity-header { display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0; }
+.model-activity-header .ma-title { font-size:15px;font-weight:600;color:var(--text); }
+.model-activity-header .ma-status { font-size:11px;padding:2px 8px;border-radius:8px;font-weight:500; }
+.model-activity-header .ma-status.working { background:rgba(99,102,241,.15);color:var(--accent); }
+.model-activity-header .ma-status.idle { background:rgba(255,255,255,.06);color:var(--text3); }
+.model-activity-body { flex:1;overflow-y:auto;padding:20px; }
+.ma-section { margin-bottom:20px; }
+.ma-section-title { font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:8px;font-weight:600; }
+.ma-trace-box { background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:monospace;font-size:11px;color:var(--text2);max-height:300px;overflow-y:auto;white-space:pre-wrap;line-height:1.5;min-height:60px; }
+.ma-trace-box.empty { color:var(--text3);font-style:italic;font-family:inherit; }
+.ma-stats-grid { display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px; }
+.ma-stat-card { background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center; }
+.ma-stat-value { font-size:20px;font-weight:700;color:var(--text); }
+.ma-stat-label { font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-top:2px; }
+.ma-run { display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px; }
+.ma-run:last-child { border-bottom:none; }
+.ma-run-dot { width:6px;height:6px;border-radius:50%;flex-shrink:0; }
+.ma-run-preview { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2); }
+.ma-run-meta { color:var(--text3);white-space:nowrap;font-size:11px; }
 .model-card-activity .pulse-dot { width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse-dot .8s ease-in-out infinite alternate; }
 .model-card-selector { margin-top:8px; }
 .model-select { width:100%;padding:6px 10px;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;cursor:pointer;outline:none; }
@@ -6726,7 +6747,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.23</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.24</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6896,6 +6917,21 @@ select.settings-input { padding-right: 26px; }
         <button class="pd-tab" onclick="switchPdTab('config')">Config</button>
       </div>
       <div id="pd-content" class="persona-detail-content"></div>
+    </div>
+
+    <!-- Model Activity Slide-Out -->
+    <div id="model-activity-overlay" class="model-activity-overlay" onclick="_closeModelActivity()"></div>
+    <div id="model-activity-panel" class="model-activity-panel">
+      <div class="model-activity-header">
+        <div>
+          <div class="ma-title" id="ma-title"></div>
+        </div>
+        <span class="ma-status" id="ma-status"></span>
+        <div style="margin-left:auto">
+          <button class="btn btn-ghost" onclick="_closeModelActivity()">Close</button>
+        </div>
+      </div>
+      <div id="ma-body" class="model-activity-body"></div>
     </div>
 
     <!-- Rules Editor (hidden) -->
@@ -7916,6 +7952,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.24', date:'2026-03-04', notes:['Model Activity slide-out pane replaces inline trace toggles','Activity button on each model card opens 520px right panel','Panel shows: live trace, 24h stats (runs/success/avg), recent runs','SSE chunks stream into panel in real-time when dispatch active','Stale in_progress runs older than 10min auto-marked as failed','Removed: inline trace toggle, trace polling per-card'] },
   { ver:'v0.27.23', date:'2026-03-04', notes:['Model Selector: per-backend model switching with dropdown','New: /api/models/available endpoint for model catalog per backend','New: /api/models/select POST endpoint to persist active model choice','Cards show active model name (Opus 4.6) with backend as subtitle','Chat selector shows resolved model names with backend label','Dispatch and streaming handlers use user-selected active models'] },
   { ver:'v0.27.22', date:'2026-03-04', notes:['Models Tab v2.1: live activity status, 24h stats, recent runs, and streaming trace','New: /api/models/activity endpoint for per-backend stats from agent_messages','New: /api/models/<backend>/trace endpoint for live streaming chunks','bridge:chunk SSE events emitted during all streaming handlers','Elapsed timer + relative timestamps + expandable trace panel'] },
   { ver:'v0.27.21', date:'2026-03-04', notes:['Models Tab v2: clean fleet reference with descriptions, best-for tags, and assigned agents','Removed: Agent Telemetry, Routing Mode, Quick Dispatch, Recent Runs from Models tab','Extended /api/providers with model metadata and persona assignments'] },
@@ -14177,8 +14214,8 @@ function _ensureOrchHubPolling(agentCount, modelCount) {
 
 // ── Models Tab v2.1 — Live Activity + Stats + Trace ──────────────
 var _modelTimers = {};
-var _modelTraceOpen = {};
-var _modelTracePollers = {};
+var _modelActivityBackend = null;
+var _modelActivityPoller = null;
 var _modelEvtSrc = null;
 var _modelActivityData = {};
 var _modelAvailableData = {};
@@ -14320,14 +14357,8 @@ function _renderModelCards(data, act) {
       recentHtml = '<div class="model-card-recent"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:4px;font-weight:600">Recent</div>' + runs + '</div>';
     }
 
-    // Trace panel (only when working)
-    var traceHtml = '';
-    if (activeRuns.length > 0) {
-      traceHtml = '<div class="model-card-trace">'
-        + '<span class="model-card-trace-toggle" onclick="_toggleModelTrace(\'' + escHtml(p.id) + '\')" data-trace-toggle="' + escHtml(p.id) + '">▶ Trace</span>'
-        + '<div class="model-card-trace-panel" data-trace-panel="' + escHtml(p.id) + '" style="display:none"></div>'
-        + '</div>';
-    }
+    // Activity button
+    var activityBtn = '<div style="margin-top:8px"><button class="btn btn-ghost" style="font-size:11px;width:100%" onclick="_openModelActivity(\'' + escHtml(p.id) + '\')">Activity</button></div>';
 
     // Model selector: show active model name as card title
     var _avBk = (_modelAvailableData || {})[p.id] || {};
@@ -14359,7 +14390,7 @@ function _renderModelCards(data, act) {
       + activityHtml
       + statsHtml
       + (recentHtml ? '<div class="model-card-divider"></div>' + recentHtml : '')
-      + traceHtml
+      + activityBtn
       + '</div>';
   }).join('');
 
@@ -14376,33 +14407,92 @@ function _renderModelCards(data, act) {
   });
 }
 
-function _toggleModelTrace(backend) {
-  var panel = document.querySelector('[data-trace-panel="' + backend + '"]');
-  var toggle = document.querySelector('[data-trace-toggle="' + backend + '"]');
-  if (!panel) return;
-  var isOpen = panel.style.display !== 'none';
-  if (isOpen) {
-    panel.style.display = 'none';
-    toggle.textContent = '▶ Trace';
-    _modelTraceOpen[backend] = false;
-    if (_modelTracePollers[backend]) { clearInterval(_modelTracePollers[backend]); delete _modelTracePollers[backend]; }
-  } else {
-    panel.style.display = 'block';
-    toggle.textContent = '▼ Trace';
-    _modelTraceOpen[backend] = true;
-    _pollModelTrace(backend);
-    _modelTracePollers[backend] = setInterval(function() { _pollModelTrace(backend); }, 1500);
+function _openModelActivity(backend) {
+  _modelActivityBackend = backend;
+  var overlay = document.getElementById('model-activity-overlay');
+  var panel = document.getElementById('model-activity-panel');
+  if (!overlay || !panel) return;
+
+  // Header
+  var titleEl = document.getElementById('ma-title');
+  var statusEl = document.getElementById('ma-status');
+  titleEl.textContent = backend;
+  // Check if working
+  var ba = (_modelActivityData || {})[backend] || {};
+  var isWorking = (ba.active || []).length > 0;
+  statusEl.textContent = isWorking ? 'WORKING' : 'Idle';
+  statusEl.className = 'ma-status ' + (isWorking ? 'working' : 'idle');
+
+  // Body
+  var body = document.getElementById('ma-body');
+  var stats = ba.stats || {};
+  var recent = ba.recent || [];
+
+  // Live Trace section
+  var traceContent = '<div class="ma-section">'
+    + '<div class="ma-section-title">Live Trace</div>'
+    + '<div class="ma-trace-box' + (isWorking ? '' : ' empty') + '" id="ma-trace">'
+    + (isWorking ? 'Streaming...' : 'No active dispatch') + '</div></div>';
+
+  // 24h Stats section
+  var total = stats.total || 0;
+  var pct = total > 0 ? Math.round(((stats.complete || 0) / total) * 100) : 0;
+  var avgDur = stats.avg_ms ? _formatDuration(stats.avg_ms) : '—';
+  var statsContent = '<div class="ma-section">'
+    + '<div class="ma-section-title">24h Stats</div>'
+    + '<div class="ma-stats-grid">'
+    + '<div class="ma-stat-card"><div class="ma-stat-value">' + total + '</div><div class="ma-stat-label">Runs</div></div>'
+    + '<div class="ma-stat-card"><div class="ma-stat-value">' + pct + '%</div><div class="ma-stat-label">Success</div></div>'
+    + '<div class="ma-stat-card"><div class="ma-stat-value">' + avgDur + '</div><div class="ma-stat-label">Avg Duration</div></div>'
+    + '</div></div>';
+
+  // Recent Runs section
+  var runsContent = '';
+  if (recent.length > 0) {
+    var runs = recent.slice(0, 5).map(function(r) {
+      var rdot = r.status === 'complete' ? '#22c55e' : (r.status === 'failed' ? '#ef4444' : 'var(--accent)');
+      var dur = r.duration_ms ? _formatDuration(r.duration_ms) : '';
+      var ago = _relativeTime(r.created_at);
+      return '<div class="ma-run">'
+        + '<span class="ma-run-dot" style="background:' + rdot + '"></span>'
+        + '<span class="ma-run-preview">' + escHtml((r.preview || '').substring(0, 80)) + '</span>'
+        + '<span class="ma-run-meta">' + dur + (ago ? '  ' + ago : '') + '</span>'
+        + '</div>';
+    }).join('');
+    runsContent = '<div class="ma-section">'
+      + '<div class="ma-section-title">Recent Runs</div>' + runs + '</div>';
+  }
+
+  body.innerHTML = traceContent + statsContent + runsContent;
+
+  overlay.classList.add('open');
+  panel.classList.add('open');
+
+  // Start trace polling if working
+  if (isWorking) {
+    _pollActivityTrace(backend);
+    _modelActivityPoller = setInterval(function() { _pollActivityTrace(backend); }, 1500);
   }
 }
 
-async function _pollModelTrace(backend) {
+function _closeModelActivity() {
+  _modelActivityBackend = null;
+  if (_modelActivityPoller) { clearInterval(_modelActivityPoller); _modelActivityPoller = null; }
+  var overlay = document.getElementById('model-activity-overlay');
+  var panel = document.getElementById('model-activity-panel');
+  if (overlay) overlay.classList.remove('open');
+  if (panel) panel.classList.remove('open');
+}
+
+async function _pollActivityTrace(backend) {
   try {
     var data = await api('/api/models/' + backend + '/trace');
-    var panel = document.querySelector('[data-trace-panel="' + backend + '"]');
-    if (!panel || !data || !data.traces || !data.traces.length) return;
+    var traceBox = document.getElementById('ma-trace');
+    if (!traceBox || !data || !data.traces || !data.traces.length) return;
     var text = data.traces[0].chunks.join('');
-    panel.textContent = text;
-    panel.scrollTop = panel.scrollHeight;
+    traceBox.className = 'ma-trace-box';
+    traceBox.textContent = text;
+    traceBox.scrollTop = traceBox.scrollHeight;
   } catch(e) { /* ignore */ }
 }
 
@@ -14449,14 +14539,16 @@ function _handleModelDispatch(data) {
     var el = actDiv.querySelector('.model-elapsed');
     if (el) el.textContent = _elapsedStr(started);
   }, 1000);
-  // Show trace toggle if not present
-  var traceDiv = card.querySelector('.model-card-trace');
-  if (!traceDiv) {
-    var div = document.createElement('div');
-    div.className = 'model-card-trace';
-    div.innerHTML = '<span class="model-card-trace-toggle" onclick="_toggleModelTrace(\'' + bk + '\')" data-trace-toggle="' + bk + '">▶ Trace</span>'
-      + '<div class="model-card-trace-panel" data-trace-panel="' + bk + '" style="display:none"></div>';
-    card.appendChild(div);
+  // Update activity panel if open for this backend
+  if (_modelActivityBackend === bk) {
+    var traceBox = document.getElementById('ma-trace');
+    if (traceBox) { traceBox.className = 'ma-trace-box'; traceBox.textContent = 'Streaming...'; }
+    var statusEl = document.getElementById('ma-status');
+    if (statusEl) { statusEl.textContent = 'WORKING'; statusEl.className = 'ma-status working'; }
+    if (!_modelActivityPoller) {
+      _pollActivityTrace(bk);
+      _modelActivityPoller = setInterval(function() { _pollActivityTrace(bk); }, 1500);
+    }
   }
 }
 
@@ -14470,6 +14562,14 @@ function _handleModelResponse(data) {
     actDiv.innerHTML = 'Idle';
   }
   if (_modelTimers[bk]) { clearInterval(_modelTimers[bk]); delete _modelTimers[bk]; }
+  // Update activity panel if open
+  if (_modelActivityBackend === bk) {
+    if (_modelActivityPoller) { clearInterval(_modelActivityPoller); _modelActivityPoller = null; }
+    var statusEl = document.getElementById('ma-status');
+    if (statusEl) { statusEl.textContent = 'Idle'; statusEl.className = 'ma-status idle'; }
+    var traceBox = document.getElementById('ma-trace');
+    if (traceBox && traceBox.textContent === 'Streaming...') { traceBox.className = 'ma-trace-box empty'; traceBox.textContent = 'Dispatch complete'; }
+  }
   // Refresh activity data after a short delay
   setTimeout(function() {
     api('/api/models/activity').then(function(act) {
@@ -14501,11 +14601,15 @@ function _handleModelError(data) {
 
 function _handleModelChunk(data) {
   var bk = data.backend;
-  if (!_modelTraceOpen[bk]) return;
-  var panel = document.querySelector('[data-trace-panel="' + bk + '"]');
-  if (!panel) return;
-  panel.textContent += (data.text || '');
-  panel.scrollTop = panel.scrollHeight;
+  if (_modelActivityBackend !== bk) return;
+  var traceBox = document.getElementById('ma-trace');
+  if (!traceBox) return;
+  if (traceBox.classList.contains('empty')) {
+    traceBox.className = 'ma-trace-box';
+    traceBox.textContent = '';
+  }
+  traceBox.textContent += (data.text || '');
+  traceBox.scrollTop = traceBox.scrollHeight;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -20918,7 +21022,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.23"
+                health["porter_version"] = "0.27.24"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -21037,6 +21141,14 @@ class Handler(BaseHTTPRequestHandler):
             activity = {}
             try:
                 _act_conn = _db_conn()
+                # Stale run cleanup: mark in_progress runs older than 10 min as failed
+                _stale_cutoff = _act_now - 600
+                _act_conn.execute(
+                    "UPDATE agent_messages SET status='failed' "
+                    "WHERE status='in_progress' AND created_at<?",
+                    (_stale_cutoff,)
+                )
+                _act_conn.commit()
                 for _bk in PROVIDER_REGISTRY:
                     # Active runs (in_progress)
                     _act_active = _act_conn.execute(
@@ -22312,7 +22424,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.23'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.24'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -25965,7 +26077,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.23 ready (localhost only)")
+    print(f"\n  Porter v0.27.24 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
