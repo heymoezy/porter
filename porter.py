@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.22 — Models Tab v2.1: Live Activity + Stats + Trace"""
+"""Porter v0.27.23 — Model Selector: Per-Backend Model Switching"""
 
 
 
@@ -6172,6 +6172,9 @@ body.density-compact .file-name { padding: 6px 0; }
 .model-card-trace-toggle { font-size:11px;color:var(--accent);cursor:pointer;user-select:none; }
 .model-card-trace-panel { margin-top:6px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:monospace;font-size:11px;color:var(--text2);max-height:150px;overflow-y:auto;white-space:pre-wrap;line-height:1.4; }
 .model-card-activity .pulse-dot { width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse-dot .8s ease-in-out infinite alternate; }
+.model-card-selector { margin-top:8px; }
+.model-select { width:100%;padding:6px 10px;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;cursor:pointer;outline:none; }
+.model-select:focus { border-color:var(--accent); }
 @keyframes pulse-dot { from{opacity:1;transform:scale(1)} to{opacity:.4;transform:scale(.7)} }
 .proj-agents-section { padding:8px 16px;border-top:1px solid var(--border); }
 .proj-agents-label { font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px;font-weight:600; }
@@ -6723,7 +6726,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.22</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.23</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7913,6 +7916,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.23', date:'2026-03-04', notes:['Model Selector: per-backend model switching with dropdown','New: /api/models/available endpoint for model catalog per backend','New: /api/models/select POST endpoint to persist active model choice','Cards show active model name (Opus 4.6) with backend as subtitle','Chat selector shows resolved model names with backend label','Dispatch and streaming handlers use user-selected active models'] },
   { ver:'v0.27.22', date:'2026-03-04', notes:['Models Tab v2.1: live activity status, 24h stats, recent runs, and streaming trace','New: /api/models/activity endpoint for per-backend stats from agent_messages','New: /api/models/<backend>/trace endpoint for live streaming chunks','bridge:chunk SSE events emitted during all streaming handlers','Elapsed timer + relative timestamps + expandable trace panel'] },
   { ver:'v0.27.21', date:'2026-03-04', notes:['Models Tab v2: clean fleet reference with descriptions, best-for tags, and assigned agents','Removed: Agent Telemetry, Routing Mode, Quick Dispatch, Recent Runs from Models tab','Extended /api/providers with model metadata and persona assignments'] },
   { ver:'v0.27.20', date:'2026-03-03', notes:['Personality mode now includes SOUL.md + RULES.md context (was overwriting them)','Agents instructed to never mention which AI model they run on','Fixed: personality mode gave zero identity context, agents hallucinated old associations'] },
@@ -11839,16 +11843,19 @@ async function populateChatModels() {
   const saved = sel.value;
   sel.innerHTML = '';  // clear ALL children including optgroups
 
-  // Gather health + local models in parallel
+  // Gather health + local models + available models in parallel
   var healthServices = [];
   var localModelsData = null;
+  var chatAvail = {};
   try {
-    var [healthResp, localData] = await Promise.all([
+    var [healthResp, localData, availResp] = await Promise.all([
       api('/api/admin/health').catch(function() { return null; }),
       api('/api/local-models').catch(function() { return null; }),
+      api('/api/models/available').catch(function() { return null; }),
     ]);
     if (healthResp && healthResp.services) healthServices = healthResp.services;
     localModelsData = localData;
+    if (availResp && availResp.backends) chatAvail = availResp.backends;
   } catch(e) {}
   _renderChatDashboard(healthServices);
 
@@ -11881,10 +11888,25 @@ async function populateChatModels() {
     }
     addModel(value, label, cloudGroup, { disabled: !isUp });
   }
-  addCloudModel('openclaw-gateway', 'OpenClaw (GPT-5.3 Codex)', openclawUp);
-  addCloudModel('claude-cli', 'Claude Code (Anthropic)', claudeUp);
-  addCloudModel('gemini-cli-auto', 'Gemini (Google)', geminiUp);
-  addCloudModel('codex-cli', 'Codex CLI (OpenAI)', codexUp);
+  // Use resolved model names from available data
+  var _ocName = (chatAvail.openclaw || {}).resolved || 'GPT-5.3 Codex';
+  var _clName = (chatAvail.claude || {}).resolved || 'claude-opus-4-6';
+  var _gmName = (chatAvail.gemini || {}).resolved || 'gemini-2.5-pro';
+  var _cdName = (chatAvail.codex || {}).resolved || 'gpt-5.1';
+  // Lookup friendly names
+  function _friendlyModel(bkData, resolved) {
+    if (!bkData || !bkData.models) return resolved;
+    var found = bkData.models.find(function(m) { return m.id === resolved; });
+    return found ? found.name : resolved;
+  }
+  var _ocLabel = _friendlyModel(chatAvail.openclaw, _ocName) + ' (OpenClaw)';
+  var _clLabel = _friendlyModel(chatAvail.claude, _clName) + ' (Claude)';
+  var _gmLabel = _friendlyModel(chatAvail.gemini, _gmName) + ' (Gemini)';
+  var _cdLabel = _friendlyModel(chatAvail.codex, _cdName) + ' (Codex)';
+  addCloudModel('openclaw-gateway', _ocLabel, openclawUp);
+  addCloudModel('claude-cli', _clLabel, claudeUp);
+  addCloudModel('gemini-cli-auto', _gmLabel, geminiUp);
+  addCloudModel('codex-cli', _cdLabel, codexUp);
 
   // Ollama models (already fetched in parallel above)
   if (localModelsData && localModelsData.models) {
@@ -14159,6 +14181,7 @@ var _modelTraceOpen = {};
 var _modelTracePollers = {};
 var _modelEvtSrc = null;
 var _modelActivityData = {};
+var _modelAvailableData = {};
 
 function _relativeTime(ts) {
   if (!ts) return '';
@@ -14186,15 +14209,31 @@ function _elapsedStr(startTs) {
 
 async function loadModels() {
   try {
-    var [data, act] = await Promise.all([
+    var [data, act, avail] = await Promise.all([
       api('/api/providers'),
       api('/api/models/activity'),
+      api('/api/models/available'),
     ]);
     _modelActivityData = (act && act.activity) ? act.activity : {};
+    _modelAvailableData = (avail && avail.backends) ? avail.backends : {};
     _renderModelsSummary(data);
     _renderModelCards(data, _modelActivityData);
     _connectModelSSE();
   } catch(e) { console.debug('loadModels:', e); }
+}
+
+async function _selectModel(sel) {
+  var backend = sel.getAttribute('data-backend');
+  var model = sel.value;
+  try {
+    var res = await api('/api/models/select', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({backend:backend, model:model}) });
+    if (res && res.ok) {
+      showToast('Model set: ' + (res.resolved || model), 'success');
+      loadModels();
+    } else {
+      showToast('Failed: ' + ((res && res.error) || 'Unknown error'), 'error');
+    }
+  } catch(e) { showToast('Error selecting model', 'error'); }
 }
 
 function _renderModelsSummary(data) {
@@ -14290,15 +14329,32 @@ function _renderModelCards(data, act) {
         + '</div>';
     }
 
+    // Model selector: show active model name as card title
+    var _avBk = (_modelAvailableData || {})[p.id] || {};
+    var _avResolved = _avBk.resolved || '';
+    var _avModels = _avBk.models || [];
+    var _avActive = _avBk.active || 'auto';
+    var _resolvedName = '';
+    _avModels.forEach(function(m) { if (m.id === _avResolved) _resolvedName = m.name; });
+    if (!_resolvedName) _resolvedName = _avResolved || (p.label || p.id);
+    // Build model dropdown
+    var _selHtml = '<div class="model-card-selector"><select class="model-select" onchange="_selectModel(this)" data-backend="' + escHtml(p.id) + '">';
+    _avModels.forEach(function(m) {
+      var sel = m.id === _avActive ? ' selected' : '';
+      _selHtml += '<option value="' + escHtml(m.id) + '"' + sel + '>' + escHtml(m.name) + (m.default ? ' (default)' : '') + '</option>';
+    });
+    _selHtml += '</select></div>';
+
     return '<div class="model-card' + offClass + '" data-model-id="' + escHtml(p.id) + '">'
       + '<div class="model-card-head">'
       + '<span class="model-card-dot" style="background:' + dotColor + '"></span>'
-      + '<span class="model-card-name">' + escHtml(p.label || p.id) + '</span>'
+      + '<span class="model-card-name">' + escHtml(_resolvedName) + '</span>'
       + '</div>'
-      + '<div class="model-card-type">' + escHtml(p.type || 'unknown') + '</div>'
+      + '<div class="model-card-type">' + escHtml(p.label || p.id) + ' · ' + escHtml(p.type || 'unknown') + '</div>'
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
       + (tags ? '<div class="model-card-tags">' + tags + '</div>' : '')
       + agentSection
+      + _selHtml
       + '<div class="model-card-divider"></div>'
       + activityHtml
       + statsHtml
@@ -14539,16 +14595,20 @@ function _ctxToggle(event, type) {
       dd.innerHTML += projHtml;
     });
   } else if (type === 'model') {
-    var models = [
-      { v:'', label:'Auto' },
-      { v:'openclaw', label:'OpenClaw', sub:'GPT-5.3 Codex' },
-      { v:'claude', label:'Claude', sub:'Opus 4.6' },
-      { v:'gemini', label:'Gemini', sub:'CLI' },
-      { v:'codex', label:'Codex', sub:'GPT-5.1 CLI' },
-      { v:'ollama', label:'Ollama', sub:'Qwen 1.5B' },
-    ];
+    var models = [{ v:'', label:'Auto', sub:'' }];
+    var _ctxAvail = _modelAvailableData || {};
+    ['openclaw','claude','gemini','codex','ollama'].forEach(function(bk) {
+      var bkData = _ctxAvail[bk] || {};
+      var resolved = bkData.resolved || '';
+      var bkModels = bkData.models || [];
+      var friendly = resolved;
+      bkModels.forEach(function(m) { if (m.id === resolved) friendly = m.name; });
+      var bkLabel = bk.charAt(0).toUpperCase() + bk.slice(1);
+      models.push({ v: bk, label: bkLabel, sub: friendly });
+    });
     models.forEach(function(m) {
-      html += '<div class="chat-ctx-opt' + (_chatModel === m.v ? ' selected' : '') + '" onclick="_ctxPick(event,\'model\',\'' + m.v + '\')">' + m.label + '</div>';
+      var sub = m.sub ? '<span style="font-size:10px;color:var(--text3);margin-left:6px">' + escHtml(m.sub) + '</span>' : '';
+      html += '<div class="chat-ctx-opt' + (_chatModel === m.v ? ' selected' : '') + '" onclick="_ctxPick(event,\'model\',\'' + m.v + '\')">' + escHtml(m.label) + sub + '</div>';
     });
   }
   dd.innerHTML = html;
@@ -19308,6 +19368,57 @@ MODEL_METADATA = {
     },
 }
 
+AVAILABLE_MODELS = {
+    "openclaw": [{"id": "gpt-5.3-codex", "name": "GPT-5.3 Codex", "default": True}],
+    "claude":   [
+        {"id": "claude-opus-4-6", "name": "Opus 4.6", "default": True},
+        {"id": "claude-sonnet-4-6", "name": "Sonnet 4.6"},
+        {"id": "claude-haiku-4-5", "name": "Haiku 4.5"},
+    ],
+    "gemini":   [
+        {"id": "gemini-2.5-pro", "name": "2.5 Pro", "default": True},
+        {"id": "gemini-2.5-flash", "name": "2.5 Flash"},
+    ],
+    "codex":    [
+        {"id": "gpt-5.1", "name": "GPT-5.1", "default": True},
+        {"id": "o3", "name": "o3"},
+    ],
+    "ollama":   [],  # Runtime-detected via /api/tags
+}
+
+
+def _get_available_models(backend):
+    """Return list of available models for a backend. Ollama queries live."""
+    if backend == "ollama":
+        try:
+            import urllib.request, json as _j
+            req = urllib.request.Request("http://127.0.0.1:11434/api/tags", method="GET")
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                data = _j.loads(resp.read())
+                models = []
+                for m in data.get("models", []):
+                    name = m.get("name", "")
+                    if name:
+                        models.append({"id": name, "name": name, "default": len(models) == 0})
+                return models
+        except Exception:
+            return []
+    return AVAILABLE_MODELS.get(backend, [])
+
+
+def _get_active_model(backend):
+    """Return the active model ID for a backend. Resolves 'auto' to default."""
+    prefs = _config.get("preferences", {})
+    active_models = prefs.get("active_models", {})
+    choice = active_models.get(backend, "auto")
+    if choice == "auto":
+        models = _get_available_models(backend)
+        for m in models:
+            if m.get("default"):
+                return m["id"]
+        return models[0]["id"] if models else ""
+    return choice
+
 
 # ── Active Streams (for live trace) ───────────────────────────────────────
 _active_streams = {}  # {run_id: {"backend": str, "chunks": [], "started_at": float}}
@@ -19822,6 +19933,9 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None, chain
     _dt_start = _dt.time()
     if not run_id:
         run_id = _uuid.uuid4().hex[:12]
+    # Resolve active model if none specified
+    if model is None:
+        model = _get_active_model(backend) or None
     fn = PROVIDER_REGISTRY.get(backend, {}).get('dispatch')
     if not fn:
         return {"ok": False, "error": f"Unknown backend: {backend}. Available: {', '.join(PROVIDER_REGISTRY.keys())}", "run_id": run_id}
@@ -20804,7 +20918,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.22"
+                health["porter_version"] = "0.27.23"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -20976,6 +21090,19 @@ class Handler(BaseHTTPRequestHandler):
                             "started_at": _sd["started_at"],
                         })
             self.reply_json({"ok": True, "traces": traces})
+
+        elif parsed.path == "/api/models/available":
+            if not self.auth_check(redirect=False): return
+            prefs = _config.get("preferences", {})
+            active_models = prefs.get("active_models", {})
+            backends_out = {}
+            for bk in ["openclaw", "claude", "gemini", "codex", "ollama"]:
+                models = _get_available_models(bk)
+                choice = active_models.get(bk, "auto")
+                resolved = _get_active_model(bk)
+                catalog = [{"id": "auto", "name": "Auto"}] + models
+                backends_out[bk] = {"active": choice, "resolved": resolved, "models": catalog}
+            self.reply_json({"ok": True, "backends": backends_out})
 
         elif parsed.path == "/api/bridge/chains":
             if not self.auth_check(redirect=False): return
@@ -22185,7 +22312,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.22'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.23'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -22350,6 +22477,10 @@ class Handler(BaseHTTPRequestHandler):
                         gem_model = model_id.replace("gemini-cli-", "") if model_id.startswith("gemini-cli-") else ""
                         if gem_model and gem_model != "auto":
                             _gem_cmd.extend(["-m", gem_model])
+                        else:
+                            _gem_active = _get_active_model("gemini")
+                            if _gem_active and _gem_active != "auto":
+                                _gem_cmd.extend(["-m", _gem_active])
                         _skip_prefixes = ("YOLO mode", "Loaded cached", "Loaded saved", "[WARN]", "[ERROR]", "Warning:", "Error:")
                         _proc = _sp.Popen(_gem_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env(), cwd=str(Path.home()))
                         try:
@@ -22377,7 +22508,11 @@ class Handler(BaseHTTPRequestHandler):
                         self.wfile.flush()
                     else:
                         import subprocess as _sp
-                        _cl_cmd = [cl_bin, "-p", "--output-format", "stream-json", prompt]
+                        _cl_active = _get_active_model("claude")
+                        _cl_cmd = [cl_bin, "-p", "--output-format", "stream-json"]
+                        if _cl_active and _cl_active != "auto":
+                            _cl_cmd.extend(["--model", _cl_active])
+                        _cl_cmd.append(prompt)
                         _proc = _sp.Popen(_cl_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env(), cwd=str(Path.home()))
                         for _line in iter(_proc.stdout.readline, ''):
                             if not _line.strip():
@@ -22435,7 +22570,7 @@ class Handler(BaseHTTPRequestHandler):
                         self.wfile.flush()
                     else:
                         import subprocess as _sp
-                        codex_model = os.environ.get("PORTER_CODEX_MODEL", "").strip() or "gpt-5.1"
+                        codex_model = os.environ.get("PORTER_CODEX_MODEL", "").strip() or _get_active_model("codex") or "gpt-5.1"
                         _cdx_cmd = [cdx_bin, "exec", "--ephemeral", "--json", "--skip-git-repo-check", "-m", codex_model, prompt]
                         _proc = _sp.Popen(_cdx_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env(), cwd=str(Path.home()))
                         for _line in iter(_proc.stdout.readline, ''):
@@ -22857,6 +22992,27 @@ class Handler(BaseHTTPRequestHandler):
             timeout = max(10, min(300, timeout))
             res = _run_coordination(prompt, backends=backends or None, timeout=timeout)
             self.reply_json(res, 200 if res.get("ok") else 400)
+
+        elif parsed.path == "/api/models/select":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            _sel_bk = str(data.get("backend", "")).strip()
+            _sel_model = str(data.get("model", "")).strip()
+            if not _sel_bk:
+                self.reply_json({"ok": False, "error": "backend is required"}, 400); return
+            avail = _get_available_models(_sel_bk)
+            valid_ids = ["auto"] + [m["id"] for m in avail]
+            if _sel_model not in valid_ids:
+                self.reply_json({"ok": False, "error": f"Invalid model '{_sel_model}' for {_sel_bk}. Valid: {valid_ids}"}, 400); return
+            if "preferences" not in _config:
+                _config["preferences"] = {}
+            if "active_models" not in _config["preferences"]:
+                _config["preferences"]["active_models"] = {}
+            _config["preferences"]["active_models"][_sel_bk] = _sel_model
+            save_config(_config)
+            resolved = _get_active_model(_sel_bk)
+            log.info("Model selected: %s → %s (resolved: %s)", _sel_bk, _sel_model, resolved)
+            self.reply_json({"ok": True, "backend": _sel_bk, "model": _sel_model, "resolved": resolved})
 
         elif parsed.path == "/api/bridge/dispatch":
             if not self.auth_check_cap("orch_write"): return
@@ -25809,7 +25965,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.22 ready (localhost only)")
+    print(f"\n  Porter v0.27.23 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
