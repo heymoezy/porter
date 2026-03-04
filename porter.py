@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.21 — Persona Identity Isolation"""
+"""Porter v0.27.22 — Models Tab v2.1: Live Activity + Stats + Trace"""
 
 
 
@@ -6158,6 +6158,21 @@ body.density-compact .file-name { padding: 6px 0; }
 .model-card-agents-label { font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px;font-weight:600; }
 .model-card-agents { display:flex;flex-wrap:wrap;gap:5px; }
 .model-card-agent { display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text2); }
+.model-card-divider { border-top:1px solid var(--border);margin:10px 0;padding-top:10px; }
+.model-card-activity { display:flex;align-items:center;gap:8px;font-size:12px; }
+.model-card-activity.working { color:var(--accent);font-weight:500; }
+.model-card-activity.idle { color:var(--text3);font-style:italic; }
+.model-card-stats { font-size:11px;color:var(--text3);margin-top:6px; }
+.model-card-recent { margin-top:8px; }
+.model-card-run { display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0;color:var(--text2); }
+.model-card-run-dot { width:5px;height:5px;border-radius:50%;flex-shrink:0; }
+.model-card-run-preview { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.model-card-run-meta { color:var(--text3);white-space:nowrap; }
+.model-card-trace { margin-top:8px; }
+.model-card-trace-toggle { font-size:11px;color:var(--accent);cursor:pointer;user-select:none; }
+.model-card-trace-panel { margin-top:6px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:monospace;font-size:11px;color:var(--text2);max-height:150px;overflow-y:auto;white-space:pre-wrap;line-height:1.4; }
+.model-card-activity .pulse-dot { width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse-dot .8s ease-in-out infinite alternate; }
+@keyframes pulse-dot { from{opacity:1;transform:scale(1)} to{opacity:.4;transform:scale(.7)} }
 .proj-agents-section { padding:8px 16px;border-top:1px solid var(--border); }
 .proj-agents-label { font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px;font-weight:600; }
 .proj-agents-row { display:flex;gap:6px;flex-wrap:wrap;align-items:center; }
@@ -6708,7 +6723,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.21</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.22</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7898,6 +7913,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.22', date:'2026-03-04', notes:['Models Tab v2.1: live activity status, 24h stats, recent runs, and streaming trace','New: /api/models/activity endpoint for per-backend stats from agent_messages','New: /api/models/<backend>/trace endpoint for live streaming chunks','bridge:chunk SSE events emitted during all streaming handlers','Elapsed timer + relative timestamps + expandable trace panel'] },
   { ver:'v0.27.21', date:'2026-03-04', notes:['Models Tab v2: clean fleet reference with descriptions, best-for tags, and assigned agents','Removed: Agent Telemetry, Routing Mode, Quick Dispatch, Recent Runs from Models tab','Extended /api/providers with model metadata and persona assignments'] },
   { ver:'v0.27.20', date:'2026-03-03', notes:['Personality mode now includes SOUL.md + RULES.md context (was overwriting them)','Agents instructed to never mention which AI model they run on','Fixed: personality mode gave zero identity context, agents hallucinated old associations'] },
   { ver:'v0.27.19', date:'2026-03-03', notes:['All CLI dispatches run from $HOME (not Porter dir) — prevents CLAUDE.md context bleed','Fixed: agents no longer inherit Porter project identity','Fixed: RULES.md path used PORTER_DATA_DIR (undefined) instead of PERSONAS_DIR'] },
@@ -14137,11 +14153,47 @@ function _ensureOrchHubPolling(agentCount, modelCount) {
 // ── Models Tab (Phase C) ────────────────────────────────────
 // ══════════════════════════════════════════════════════════════
 
+// ── Models Tab v2.1 — Live Activity + Stats + Trace ──────────────
+var _modelTimers = {};
+var _modelTraceOpen = {};
+var _modelTracePollers = {};
+var _modelEvtSrc = null;
+var _modelActivityData = {};
+
+function _relativeTime(ts) {
+  if (!ts) return '';
+  var now = Date.now() / 1000;
+  var diff = Math.max(0, now - ts);
+  if (diff < 60) return Math.round(diff) + 's ago';
+  if (diff < 3600) return Math.round(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.round(diff / 3600) + 'h ago';
+  return Math.round(diff / 86400) + 'd ago';
+}
+
+function _formatDuration(ms) {
+  if (!ms) return '';
+  if (ms < 1000) return ms + 'ms';
+  var s = ms / 1000;
+  if (s < 60) return s.toFixed(1) + 's';
+  return Math.floor(s / 60) + 'm ' + Math.round(s % 60) + 's';
+}
+
+function _elapsedStr(startTs) {
+  var diff = Math.max(0, Date.now() / 1000 - startTs);
+  if (diff < 60) return Math.round(diff) + 's';
+  return Math.floor(diff / 60) + 'm ' + Math.round(diff % 60) + 's';
+}
+
 async function loadModels() {
   try {
-    var data = await api('/api/providers');
+    var [data, act] = await Promise.all([
+      api('/api/providers'),
+      api('/api/models/activity'),
+    ]);
+    _modelActivityData = (act && act.activity) ? act.activity : {};
     _renderModelsSummary(data);
-    _renderModelCards(data);
+    _renderModelCards(data, _modelActivityData);
+    _connectModelSSE();
   } catch(e) { console.debug('loadModels:', e); }
 }
 
@@ -14156,13 +14208,17 @@ function _renderModelsSummary(data) {
   el.innerHTML = parts.join(' · ') || 'No models detected.';
 }
 
-function _renderModelCards(data) {
+function _renderModelCards(data, act) {
   var grid = document.getElementById('models-grid');
   if (!grid || !data || !data.providers) return;
   if (!data.providers.length) {
     grid.innerHTML = '<div style="color:var(--text3);font-size:13px;grid-column:1/-1">No model backends detected.</div>';
     return;
   }
+  // Clear old timers
+  Object.keys(_modelTimers).forEach(function(k) { clearInterval(_modelTimers[k]); });
+  _modelTimers = {};
+
   grid.innerHTML = data.providers.map(function(p) {
     var dotColor = p.available ? '#22c55e' : '#ef4444';
     var offClass = p.available ? '' : ' offline';
@@ -14175,7 +14231,66 @@ function _renderModelCards(data) {
     var agentSection = agents
       ? '<div class="model-card-agents-label">Agents</div><div class="model-card-agents">' + agents + '</div>'
       : '<div style="font-size:11px;color:var(--text3);font-style:italic">No agents assigned</div>';
-    return '<div class="model-card' + offClass + '">'
+
+    // Activity data
+    var ba = (act || {})[p.id] || {};
+    var activeRuns = ba.active || [];
+    var stats = ba.stats || {};
+    var recent = ba.recent || [];
+
+    // Activity bar
+    var activityHtml = '';
+    if (activeRuns.length > 0) {
+      var ar = activeRuns[0];
+      var preview = (ar.prompt || '').substring(0, 60);
+      activityHtml = '<div class="model-card-activity working" data-backend="' + escHtml(p.id) + '">'
+        + '<span class="pulse-dot"></span>'
+        + '<span>WORKING</span>'
+        + '<span style="opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">"' + escHtml(preview) + '"</span>'
+        + '<span class="model-elapsed" data-started="' + (ar.started_at || 0) + '" style="opacity:.6"></span>'
+        + '</div>';
+    } else {
+      activityHtml = '<div class="model-card-activity idle" data-backend="' + escHtml(p.id) + '">Idle</div>';
+    }
+
+    // 24h stats
+    var statsHtml = '';
+    if (stats.total > 0) {
+      var pct = stats.total > 0 ? Math.round((stats.complete / stats.total) * 100) : 0;
+      statsHtml = '<div class="model-card-stats">24h: ' + stats.total + ' runs · ' + pct + '%'
+        + (stats.avg_ms > 0 ? ' · avg ' + _formatDuration(stats.avg_ms) : '')
+        + '</div>';
+    } else {
+      statsHtml = '<div class="model-card-stats">24h: No dispatches</div>';
+    }
+
+    // Recent runs
+    var recentHtml = '';
+    if (recent.length > 0) {
+      var runs = recent.slice(0, 3).map(function(r) {
+        var rdot = r.status === 'complete' ? '#22c55e' : (r.status === 'failed' ? '#ef4444' : 'var(--accent)');
+        var icon = r.status === 'failed' ? '✗' : '●';
+        var dur = r.duration_ms ? _formatDuration(r.duration_ms) : '';
+        var ago = _relativeTime(r.created_at);
+        return '<div class="model-card-run">'
+          + '<span class="model-card-run-dot" style="background:' + rdot + '"></span>'
+          + '<span class="model-card-run-preview">' + escHtml((r.preview || '').substring(0, 50)) + '</span>'
+          + '<span class="model-card-run-meta">' + dur + (ago ? '  ' + ago : '') + '</span>'
+          + '</div>';
+      }).join('');
+      recentHtml = '<div class="model-card-recent"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:4px;font-weight:600">Recent</div>' + runs + '</div>';
+    }
+
+    // Trace panel (only when working)
+    var traceHtml = '';
+    if (activeRuns.length > 0) {
+      traceHtml = '<div class="model-card-trace">'
+        + '<span class="model-card-trace-toggle" onclick="_toggleModelTrace(\'' + escHtml(p.id) + '\')" data-trace-toggle="' + escHtml(p.id) + '">▶ Trace</span>'
+        + '<div class="model-card-trace-panel" data-trace-panel="' + escHtml(p.id) + '" style="display:none"></div>'
+        + '</div>';
+    }
+
+    return '<div class="model-card' + offClass + '" data-model-id="' + escHtml(p.id) + '">'
       + '<div class="model-card-head">'
       + '<span class="model-card-dot" style="background:' + dotColor + '"></span>'
       + '<span class="model-card-name">' + escHtml(p.label || p.id) + '</span>'
@@ -14184,8 +14299,157 @@ function _renderModelCards(data) {
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
       + (tags ? '<div class="model-card-tags">' + tags + '</div>' : '')
       + agentSection
+      + '<div class="model-card-divider"></div>'
+      + activityHtml
+      + statsHtml
+      + (recentHtml ? '<div class="model-card-divider"></div>' + recentHtml : '')
+      + traceHtml
       + '</div>';
   }).join('');
+
+  // Start elapsed timers for working models
+  document.querySelectorAll('.model-elapsed').forEach(function(el) {
+    var started = parseFloat(el.getAttribute('data-started'));
+    if (started > 0) {
+      el.textContent = _elapsedStr(started);
+      var bk = el.closest('.model-card-activity').getAttribute('data-backend');
+      _modelTimers[bk] = setInterval(function() {
+        el.textContent = _elapsedStr(started);
+      }, 1000);
+    }
+  });
+}
+
+function _toggleModelTrace(backend) {
+  var panel = document.querySelector('[data-trace-panel="' + backend + '"]');
+  var toggle = document.querySelector('[data-trace-toggle="' + backend + '"]');
+  if (!panel) return;
+  var isOpen = panel.style.display !== 'none';
+  if (isOpen) {
+    panel.style.display = 'none';
+    toggle.textContent = '▶ Trace';
+    _modelTraceOpen[backend] = false;
+    if (_modelTracePollers[backend]) { clearInterval(_modelTracePollers[backend]); delete _modelTracePollers[backend]; }
+  } else {
+    panel.style.display = 'block';
+    toggle.textContent = '▼ Trace';
+    _modelTraceOpen[backend] = true;
+    _pollModelTrace(backend);
+    _modelTracePollers[backend] = setInterval(function() { _pollModelTrace(backend); }, 1500);
+  }
+}
+
+async function _pollModelTrace(backend) {
+  try {
+    var data = await api('/api/models/' + backend + '/trace');
+    var panel = document.querySelector('[data-trace-panel="' + backend + '"]');
+    if (!panel || !data || !data.traces || !data.traces.length) return;
+    var text = data.traces[0].chunks.join('');
+    panel.textContent = text;
+    panel.scrollTop = panel.scrollHeight;
+  } catch(e) { /* ignore */ }
+}
+
+function _connectModelSSE() {
+  // Use existing SSE event source if available, or set up listener
+  // We'll listen on the main event source from Mission Control or create our own
+  if (_modelEvtSrc) { _modelEvtSrc.close(); _modelEvtSrc = null; }
+  _modelEvtSrc = new EventSource('/api/events');
+  _modelEvtSrc.onmessage = function(e) {
+    try {
+      var d = JSON.parse(e.data);
+      if (!d || !d.type) return;
+      var evtData = d.data || {};
+
+      if (d.type === 'bridge:dispatch') {
+        _handleModelDispatch(evtData);
+      } else if (d.type === 'bridge:response') {
+        _handleModelResponse(evtData);
+      } else if (d.type === 'bridge:error') {
+        _handleModelError(evtData);
+      } else if (d.type === 'bridge:chunk') {
+        _handleModelChunk(evtData);
+      }
+    } catch(ex) { /* ignore parse errors */ }
+  };
+}
+
+function _handleModelDispatch(data) {
+  var bk = data.backend;
+  var card = document.querySelector('[data-model-id="' + bk + '"]');
+  if (!card) return;
+  var actDiv = card.querySelector('.model-card-activity');
+  if (!actDiv) return;
+  var started = Date.now() / 1000;
+  actDiv.className = 'model-card-activity working';
+  actDiv.setAttribute('data-backend', bk);
+  actDiv.innerHTML = '<span class="pulse-dot"></span>'
+    + '<span>WORKING</span>'
+    + '<span style="opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">"' + escHtml((data.prompt || '').substring(0, 60)) + '"</span>'
+    + '<span class="model-elapsed" style="opacity:.6">0s</span>';
+  // Start timer
+  if (_modelTimers[bk]) clearInterval(_modelTimers[bk]);
+  _modelTimers[bk] = setInterval(function() {
+    var el = actDiv.querySelector('.model-elapsed');
+    if (el) el.textContent = _elapsedStr(started);
+  }, 1000);
+  // Show trace toggle if not present
+  var traceDiv = card.querySelector('.model-card-trace');
+  if (!traceDiv) {
+    var div = document.createElement('div');
+    div.className = 'model-card-trace';
+    div.innerHTML = '<span class="model-card-trace-toggle" onclick="_toggleModelTrace(\'' + bk + '\')" data-trace-toggle="' + bk + '">▶ Trace</span>'
+      + '<div class="model-card-trace-panel" data-trace-panel="' + bk + '" style="display:none"></div>';
+    card.appendChild(div);
+  }
+}
+
+function _handleModelResponse(data) {
+  var bk = data.backend;
+  var card = document.querySelector('[data-model-id="' + bk + '"]');
+  if (!card) return;
+  var actDiv = card.querySelector('.model-card-activity');
+  if (actDiv) {
+    actDiv.className = 'model-card-activity idle';
+    actDiv.innerHTML = 'Idle';
+  }
+  if (_modelTimers[bk]) { clearInterval(_modelTimers[bk]); delete _modelTimers[bk]; }
+  // Refresh activity data after a short delay
+  setTimeout(function() {
+    api('/api/models/activity').then(function(act) {
+      if (act && act.activity) {
+        _modelActivityData = act.activity;
+        api('/api/providers').then(function(pdata) {
+          _renderModelCards(pdata, _modelActivityData);
+        });
+      }
+    });
+  }, 500);
+}
+
+function _handleModelError(data) {
+  var bk = data.backend;
+  var card = document.querySelector('[data-model-id="' + bk + '"]');
+  if (!card) return;
+  var actDiv = card.querySelector('.model-card-activity');
+  if (actDiv) {
+    actDiv.className = 'model-card-activity idle';
+    actDiv.innerHTML = '<span style="color:#ef4444">Error: ' + escHtml((data.error || '').substring(0, 60)) + '</span>';
+    setTimeout(function() {
+      actDiv.className = 'model-card-activity idle';
+      actDiv.innerHTML = 'Idle';
+    }, 5000);
+  }
+  if (_modelTimers[bk]) { clearInterval(_modelTimers[bk]); delete _modelTimers[bk]; }
+}
+
+function _handleModelChunk(data) {
+  var bk = data.backend;
+  if (!_modelTraceOpen[bk]) return;
+  var panel = document.querySelector('[data-trace-panel="' + bk + '"]');
+  if (!panel) return;
+  panel.textContent += (data.text || '');
+  panel.scrollTop = panel.scrollHeight;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -19045,6 +19309,9 @@ MODEL_METADATA = {
 }
 
 
+# ── Active Streams (for live trace) ───────────────────────────────────────
+_active_streams = {}  # {run_id: {"backend": str, "chunks": [], "started_at": float}}
+_streams_lock = __import__("threading").Lock()
 # ── Delegation log ─────────────────────────────────────────────────────────
 _delegation_log = []  # List of recent delegations (max 50)
 _delegation_lock = _threading.Lock()
@@ -20008,6 +20275,14 @@ def _emit_event(event_type, data):
         for q in _event_queues:
             q.put(payload)
 
+
+def _stream_chunk(run_id, backend, token):
+    """Record a streaming chunk for live trace."""
+    with _streams_lock:
+        if run_id in _active_streams:
+            _active_streams[run_id]["chunks"].append(token)
+    _emit_event("bridge:chunk", {"run_id": run_id, "backend": backend, "text": token})
+
 class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
@@ -20529,7 +20804,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.21"
+                health["porter_version"] = "0.27.22"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -20639,6 +20914,68 @@ class Handler(BaseHTTPRequestHandler):
                     "agents": _pmap.get(name, []),
                 })
             self.reply_json({"ok": True, "providers": providers})
+
+        elif parsed.path == "/api/models/activity":
+            if not self.auth_check(redirect=False): return
+            import time as _act_t
+            _act_now = _act_t.time()
+            _act_since = _act_now - 86400
+            activity = {}
+            try:
+                _act_conn = _db_conn()
+                for _bk in PROVIDER_REGISTRY:
+                    # Active runs (in_progress)
+                    _act_active = _act_conn.execute(
+                        "SELECT run_id, message, created_at FROM agent_messages "
+                        "WHERE to_agent=? AND status='in_progress' ORDER BY created_at DESC LIMIT 3",
+                        (_bk,)
+                    ).fetchall()
+                    # 24h stats
+                    _act_stats = _act_conn.execute(
+                        "SELECT COUNT(*) as total, "
+                        "SUM(CASE WHEN status='complete' THEN 1 ELSE 0 END) as complete, "
+                        "SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as failed, "
+                        "AVG(CASE WHEN status='complete' THEN duration_ms END) as avg_ms "
+                        "FROM agent_messages WHERE to_agent=? AND created_at>?",
+                        (_bk, _act_since)
+                    ).fetchone()
+                    # Recent runs (last 5)
+                    _act_recent = _act_conn.execute(
+                        "SELECT run_id, status, substr(message,1,80) as preview, "
+                        "duration_ms, created_at FROM agent_messages "
+                        "WHERE to_agent=? ORDER BY created_at DESC LIMIT 5",
+                        (_bk,)
+                    ).fetchall()
+                    activity[_bk] = {
+                        "active": [{"run_id": r[0], "prompt": r[1][:80] if r[1] else "", "started_at": r[2]} for r in _act_active],
+                        "stats": {
+                            "total": _act_stats[0] or 0,
+                            "complete": _act_stats[1] or 0,
+                            "failed": _act_stats[2] or 0,
+                            "avg_ms": int(_act_stats[3] or 0),
+                        },
+                        "recent": [{"run_id": r[0], "status": r[1], "preview": r[2] or "",
+                                   "duration_ms": r[3] or 0, "created_at": r[4]} for r in _act_recent],
+                    }
+                _act_conn.close()
+            except Exception:
+                pass
+            self.reply_json({"ok": True, "activity": activity})
+
+        elif parsed.path.startswith("/api/models/") and parsed.path.endswith("/trace"):
+            if not self.auth_check(redirect=False): return
+            _trace_parts = parsed.path.split("/")
+            _trace_bk = _trace_parts[3] if len(_trace_parts) >= 5 else ""
+            traces = []
+            with _streams_lock:
+                for _rid, _sd in _active_streams.items():
+                    if _sd["backend"] == _trace_bk:
+                        traces.append({
+                            "run_id": _rid,
+                            "chunks": _sd["chunks"][-100:],
+                            "started_at": _sd["started_at"],
+                        })
+            self.reply_json({"ok": True, "traces": traces})
 
         elif parsed.path == "/api/bridge/chains":
             if not self.auth_check(redirect=False): return
@@ -21848,7 +22185,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.21'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.22'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -21905,6 +22242,23 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("X-Accel-Buffering", "no")
             self.end_headers()
             _chat_stream_start = __import__("time").time()
+
+            _stream_run_id = __import__("uuid").uuid4().hex[:12]
+            _stream_backend = model_id.split("-")[0] if "-" in model_id else model_id
+            # Map model_id prefixes to backend names
+            if model_id.startswith("local-ollama-") or model_id == "ollama-local":
+                _stream_backend = "ollama"
+            elif model_id == "openclaw-gateway":
+                _stream_backend = "openclaw"
+            elif model_id.startswith("gemini-"):
+                _stream_backend = "gemini"
+            elif model_id == "claude-cli":
+                _stream_backend = "claude"
+            elif model_id == "codex-cli":
+                _stream_backend = "codex"
+            with _streams_lock:
+                _active_streams[_stream_run_id] = {"backend": _stream_backend, "chunks": [], "started_at": __import__("time").time()}
+            _emit_event("bridge:dispatch", {"run_id": _stream_run_id, "backend": _stream_backend, "prompt": prompt[:200], "source": "chat"})
             mlog.emit("info", "chat", "chat.stream.start", f"Chat stream: {model_id}", model=model_id, prompt_len=len(prompt))
 
             try:
@@ -21929,6 +22283,7 @@ class Handler(BaseHTTPRequestHandler):
                                 full_response += token
                                 self.wfile.write(f"data: {json.dumps({'token': token})}\n\n".encode())
                                 self.wfile.flush()
+                                _stream_chunk(_stream_run_id, _stream_backend, token)
                             if chunk.get("done"):
                                 break
                         except Exception as e:
@@ -21975,6 +22330,7 @@ class Handler(BaseHTTPRequestHandler):
                                     full_response += token
                                     self.wfile.write(f"data: {json.dumps({'token': token})}\n\n".encode())
                                     self.wfile.flush()
+                                    _stream_chunk(_stream_run_id, _stream_backend, token)
                                 if chunk.get("done"):
                                     break
                             except Exception as e:
@@ -22003,6 +22359,7 @@ class Handler(BaseHTTPRequestHandler):
                                 full_response += _line
                                 self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
                                 self.wfile.flush()
+                                _stream_chunk(_stream_run_id, _stream_backend, _line)
                         except Exception as _gem_err:
                             log.error("Gemini stream read error: %s", _gem_err)
                         finally:
@@ -22035,18 +22392,21 @@ class Handler(BaseHTTPRequestHandler):
                                             full_response += _blk["text"]
                                             self.wfile.write(f"data: {json.dumps({'token': _blk['text']})}\n\n".encode())
                                             self.wfile.flush()
+                                            _stream_chunk(_stream_run_id, _stream_backend, _blk['text'])
                                         elif _blk.get("type") == "tool_use":
                                             _tool_name = _blk.get("name", "tool")
                                             _tool_note = f"\n`> {_tool_name}`\n"
                                             full_response += _tool_note
                                             self.wfile.write(f"data: {json.dumps({'token': _tool_note})}\n\n".encode())
                                             self.wfile.flush()
+                                            _stream_chunk(_stream_run_id, _stream_backend, _tool_note)
                                 elif _etype == "content_block_delta":
                                     _delta = _evt.get("delta", {})
                                     if _delta.get("type") == "text_delta" and _delta.get("text"):
                                         full_response += _delta["text"]
                                         self.wfile.write(f"data: {json.dumps({'token': _delta['text']})}\n\n".encode())
                                         self.wfile.flush()
+                                        _stream_chunk(_stream_run_id, _stream_backend, _delta['text'])
                                 elif _etype == "result":
                                     # Final result — extract text if not already captured
                                     _rtxt = _evt.get("result", "")
@@ -22054,11 +22414,13 @@ class Handler(BaseHTTPRequestHandler):
                                         full_response = _rtxt
                                         self.wfile.write(f"data: {json.dumps({'token': _rtxt})}\n\n".encode())
                                         self.wfile.flush()
+                                        _stream_chunk(_stream_run_id, _stream_backend, _rtxt)
                             except (json.JSONDecodeError, ValueError):
                                 # Non-JSON line — send as-is
                                 full_response += _line
                                 self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
                                 self.wfile.flush()
+                                _stream_chunk(_stream_run_id, _stream_backend, _line)
                         try:
                             _proc.wait(timeout=10)
                         except _sp.TimeoutExpired:
@@ -22093,12 +22455,14 @@ class Handler(BaseHTTPRequestHandler):
                                             full_response += _msg
                                             self.wfile.write(f"data: {json.dumps({'token': _msg})}\n\n".encode())
                                             self.wfile.flush()
+                                            _stream_chunk(_stream_run_id, _stream_backend, _msg)
                                     elif _item.get("type") == "tool_call":
                                         _tool = _item.get("name", "tool")
                                         _tnote = f"\n`> {_tool}`\n"
                                         full_response += _tnote
                                         self.wfile.write(f"data: {json.dumps({'token': _tnote})}\n\n".encode())
                                         self.wfile.flush()
+                                        _stream_chunk(_stream_run_id, _stream_backend, _tnote)
                                 elif _etype == "error":
                                     _emsg = _evt.get("message", "Codex error")
                                     self.wfile.write(f"data: {json.dumps({'error': _emsg})}\n\n".encode())
@@ -22107,6 +22471,7 @@ class Handler(BaseHTTPRequestHandler):
                                 full_response += _line
                                 self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
                                 self.wfile.flush()
+                                _stream_chunk(_stream_run_id, _stream_backend, _line)
                         try:
                             _proc.wait(timeout=10)
                         except _sp.TimeoutExpired:
@@ -22116,6 +22481,12 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     self.wfile.write(f"data: {json.dumps({'error': 'Unknown model: ' + model_id})}\n\n".encode())
                     self.wfile.flush()
+
+                # Clean up active stream tracking
+                with _streams_lock:
+                    _active_streams.pop(_stream_run_id, None)
+                _chat_dur_pre = int((__import__("time").time() - _chat_stream_start) * 1000)
+                _emit_event("bridge:response", {"run_id": _stream_run_id, "backend": _stream_backend, "ok": True, "duration_ms": _chat_dur_pre, "source": "chat"})
 
                 # Signal done
                 self.wfile.write(f"data: {json.dumps({'done': True, 'full_response': full_response})}\n\n".encode())
@@ -25438,7 +25809,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.21 ready (localhost only)")
+    print(f"\n  Porter v0.27.22 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
