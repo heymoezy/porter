@@ -11450,7 +11450,7 @@ async function _loadInlineSessions(source, backend) {
       var listDiv = document.createElement('div');
       container.appendChild(listDiv);
       _renderInlineSessions(resp.sessions, source, listDiv);
-      setTimeout(_autoSizeAllLearnTextareas, 50);
+      setTimeout(function() { _autoSizeAllLearnTextareas(); _populateLearnDests(); }, 50);
     } else {
       container.innerHTML = '<div style="padding:8px;font-size:11px;color:var(--text3)">No sessions</div>';
     }
@@ -11519,7 +11519,7 @@ async function _loadActivitySessions(source) {
     if (resp && resp.sessions) {
       _maSessionsData = resp.sessions;
       _renderActivitySessions(resp.sessions, source);
-      setTimeout(_autoSizeAllLearnTextareas, 50);
+      setTimeout(function() { _autoSizeAllLearnTextareas(); _populateLearnDests(); }, 50);
     }
   } catch(e) {
     el.innerHTML = '<div style="color:var(--err);font-size:12px">Failed to load sessions</div>';
@@ -11716,13 +11716,8 @@ async function _showSessionLearnings(btn, sid, source) {
 }
 
 var _learnDestCache = null;
-async function _populateLearnDests() {
-  if (_learnDestCache) return;
-  try {
-    var r = await api('/api/sessions/destinations');
-    _learnDestCache = (r && r.destinations) || [];
-  } catch(e) { _learnDestCache = []; }
-  // Populate all destination selects on the page
+function _fillLearnSelects() {
+  if (!_learnDestCache || !_learnDestCache.length) return;
   document.querySelectorAll('.sess-learn-dest').forEach(function(sel) {
     if (sel.options.length > 0) return;
     _learnDestCache.forEach(function(d) {
@@ -11732,6 +11727,15 @@ async function _populateLearnDests() {
       sel.appendChild(opt);
     });
   });
+}
+async function _populateLearnDests() {
+  if (!_learnDestCache) {
+    try {
+      var r = await api('/api/sessions/destinations');
+      _learnDestCache = (r && r.destinations) || [];
+    } catch(e) { _learnDestCache = []; }
+  }
+  _fillLearnSelects();
 }
 async function _saveLearnDirect(btn, sid, source) {
   var container = btn.closest('.sess-learnings-inline');
