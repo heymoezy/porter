@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.26 — Model Activity Slide-Out Pane"""
+"""Porter v0.27.27 — Model Activity Slide-Out Pane"""
 
 
 import email
@@ -231,6 +231,13 @@ def _db_init():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat ON chat_messages(chat_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_attachments_chat ON chat_attachments(chat_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_attachments_msg ON chat_attachments(message_id)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS session_names (
+            session_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            updated_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS flush_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1552,9 +1559,12 @@ def _load_session_summaries() -> list:
                         session_name = _key.replace("agent:main:", "")
                         break
 
+            # Check for custom renamed name
+            _custom_oc = _get_session_custom_names()
+            _custom_name_oc = _custom_oc.get(session_id, "")
             summaries.append({
                 "id": session_id,
-                "name": session_name or session_id[:12],
+                "name": _custom_name_oc or session_name or session_id[:12],
                 "source": "openclaw",
                 "file": jsonl_file.name,
                 "first_ts": first_ts,
@@ -1631,9 +1641,11 @@ def _load_claude_session_summaries() -> list:
                         assistant_msgs += 1
 
             session_name = first_user_text or f"Session {session_id[:8]}"
+            _custom_cl = _get_session_custom_names()
+            _custom_name_cl = _custom_cl.get(session_id, "")
             summaries.append({
                 "id": session_id,
-                "name": session_name,
+                "name": _custom_name_cl or session_name,
                 "source": "claude",
                 "file": jsonl_file.name,
                 "first_ts": first_ts,
@@ -1684,9 +1696,12 @@ def _load_gemini_session_summaries() -> list:
                             break
                 if name:
                     break
+            # Check for custom renamed name
+            _custom_gm = _get_session_custom_names()
+            _custom_name_gm = _custom_gm.get(sid, "")
             sessions.append({
                 "id": sid,
-                "name": name or sid[:12],
+                "name": _custom_name_gm or name or sid[:12],
                 "source": "gemini",
                 "messages": len(msgs),
                 "first_ts": start,
@@ -1698,6 +1713,17 @@ def _load_gemini_session_summaries() -> list:
         except Exception as e:
             log.debug("Gemini session parse error: %s", e)
     return sessions
+
+
+def _get_session_custom_names() -> dict:
+    """Return dict of session_id → custom name from session_names table."""
+    try:
+        conn = _db_conn()
+        rows = conn.execute("SELECT session_id, name FROM session_names").fetchall()
+        conn.close()
+        return {r["session_id"]: r["name"] for r in rows}
+    except Exception:
+        return {}
 
 
 def _session_summary(session_id: str, source: str) -> dict:
@@ -1733,6 +1759,16 @@ def _session_summary(session_id: str, source: str) -> dict:
                             content = msg.get("content", "")
                             if isinstance(content, list):
                                 text = " ".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
+                                # Fallback: thinking or tool_use blocks (Claude often has no text)
+                                if not text.strip():
+                                    for blk in content:
+                                        if isinstance(blk, dict):
+                                            if blk.get("type") == "thinking":
+                                                text = "[thinking] " + str(blk.get("thinking", ""))[:200]
+                                                break
+                                            elif blk.get("type") == "tool_use":
+                                                text = "[tool: " + str(blk.get("name", "unknown")) + "]"
+                                                break
                             else:
                                 text = str(content)
                         else:
@@ -6379,7 +6415,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .emoji-grid .emoji-btn.selected { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, var(--bg)); }
 @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
-/* Memory tab v6 — compact layout (stripped in v0.27.26, kept: .mem-section-label, .mem-age-badge, .mem-coord-*) */
+/* Memory tab v6 — compact layout (stripped in v0.27.27, kept: .mem-section-label, .mem-age-badge, .mem-coord-*) */
     /* Model list rows (replaces dropdown) */
     .model-list-rows { display:flex;flex-direction:column;gap:1px; }
     .model-list-row { display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;cursor:pointer;transition:.12s;font-size:12px;color:var(--text2); }
@@ -6824,7 +6860,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.26</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.27</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -6960,7 +6996,7 @@ select.settings-input { padding-right: 26px; }
   <div id="agents-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Agents</span>
-      <button class="btn btn-primary" onclick="openPersonaWizard()" style="font-size:12px">+ New Persona</button>
+      <button class="btn btn-primary" onclick="openPersonaWizard()" style="font-size:12px">+ New Agent</button>
       <button class="btn btn-ghost" onclick="openRulesEditor()" style="font-size:12px">📋 Global Rules</button>
       <button class="btn btn-ghost" onclick="loadPersonas()">&#8635;</button>
     </div>
@@ -7032,7 +7068,7 @@ select.settings-input { padding-right: 26px; }
       <div class="persona-detail-header">
         <span class="persona-detail-avatar">&#10024;</span>
         <div>
-          <div class="persona-detail-name">Create New Persona</div>
+          <div class="persona-detail-name">Create New Agent</div>
           <div class="persona-detail-role">Answer a few questions to build their identity</div>
         </div>
         <div style="margin-left:auto">
@@ -7978,6 +8014,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.27', date:'2026-03-05', notes:['Fix: model selection (showToast→toast)','Fix: Resume button leads to overview (not blank chat)','Fix: session summary counts thinking/tool_use turns','Session rename: pencil icon on inline cards, editable names persist','Backend version probing: /api/models/versions endpoint','Model cards show version badge with update indicator','Update modal shows install command for outdated backends'] },
   { ver:'v0.27.26', date:'2026-03-05', notes:['Models tab redesign: model list replaces dropdown selector','Inline expandable sessions on model cards (no more slide-out for sessions)','Memory tab removed entirely','Coordination files moved to Projects tab as Shared Files section','Live Trace button on working models opens slide-out panel'] },
   { ver:'v0.27.25', date:'2026-03-05', notes:['Sessions moved from Memory tab into Model Activity slide-out panel','Source filter on /api/sessions endpoint (?source=claude|openclaw|gemini)','New /api/sessions/<id>/summary endpoint returns last 10 turns','Session cards with Summary/Flush/Chat actions per model backend','Chat button injects session as context and switches to Chat tab','Memory tab cleaned: sessions section, filter bar, flush history removed'] },
   { ver:'v0.27.24', date:'2026-03-04', notes:['Model Activity slide-out pane replaces inline trace toggles','Activity button on each model card opens 520px right panel','Panel shows: live trace, 24h stats (runs/success/avg), recent runs','SSE chunks stream into panel in real-time when dispatch active','Stale in_progress runs older than 10min auto-marked as failed','Removed: inline trace toggle, trace polling per-card'] },
@@ -11061,6 +11098,71 @@ function _toggleInlineSessions(btn, backend, source) {
   _loadInlineSessions(source, backend);
 }
 
+function _showUpdateModal(backend, version) {
+  var cmds = {
+    openclaw: 'npm update -g openclaw',
+    ollama: 'curl -fsSL https://ollama.com/install.sh | sh',
+    codex: 'npm update -g @openai/codex',
+    gemini: 'npm update -g @anthropic-ai/gemini'
+  };
+  var cmd = cmds[backend] || 'Check the ' + backend + ' docs for update instructions';
+  var modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)';
+  modal.innerHTML = '<div style="background:var(--raised);border:1px solid var(--border);border-radius:10px;padding:24px;max-width:400px;width:90%">'
+    + '<div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px">Update ' + escHtml(backend) + ' to v' + escHtml(version) + '</div>'
+    + '<div style="font-size:12px;color:var(--text2);margin-bottom:16px">Run this command to update:</div>'
+    + '<code style="display:block;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;color:var(--accent);word-break:break-all">' + escHtml(cmd) + '</code>'
+    + '<div style="margin-top:16px;text-align:right"><button class="btn btn-ghost" style="font-size:12px" onclick="this.closest(\u0027div[style*=fixed]\u0027).remove()">Close</button></div>'
+    + '</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+}
+
+function _renameSession(btn, sessionId, source) {
+  var card = btn.closest('.inline-sess-card');
+  if (!card) return;
+  var nameEl = card.querySelector('span[style*="font-weight:500"]');
+  if (!nameEl) return;
+  var oldName = nameEl.textContent;
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.value = oldName;
+  input.style.cssText = 'font-size:11px;font-weight:500;color:var(--text);background:var(--bg);border:1px solid var(--accent);border-radius:3px;padding:1px 4px;width:100%;outline:none';
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+  function save() {
+    var newName = input.value.trim();
+    if (!newName || newName === oldName) {
+      var span = document.createElement('span');
+      span.style.cssText = 'font-size:11px;font-weight:500;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      span.textContent = oldName;
+      input.replaceWith(span);
+      return;
+    }
+    api('/api/sessions/' + encodeURIComponent(sessionId) + '/rename', {name: newName}).then(function(res) {
+      var span = document.createElement('span');
+      span.style.cssText = 'font-size:11px;font-weight:500;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      if (res && res.ok) {
+        span.textContent = newName;
+        toast('Session renamed');
+      } else {
+        span.textContent = oldName;
+        toast('Rename failed', 'err');
+      }
+      input.replaceWith(span);
+    }).catch(function() {
+      var span = document.createElement('span');
+      span.style.cssText = 'font-size:11px;font-weight:500;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      span.textContent = oldName;
+      input.replaceWith(span);
+      toast('Rename failed', 'err');
+    });
+  }
+  input.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); save(); } if (e.key === 'Escape') { input.value = oldName; save(); } });
+  input.addEventListener('blur', save);
+}
+
 async function _loadInlineSessions(source, backend) {
   var container = document.getElementById('inline-sess-' + backend);
   if (!container) return;
@@ -11102,6 +11204,7 @@ function _renderInlineSessions(sessions, source, container) {
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_maSessionSummary(\'' + sid + '\',\'' + ssrc + '\')">Summary</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="openFlushWizard(\'' + sid + '\',\'' + sname + '\',\'' + ssrc + '\')">Flush</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_renameSession(this,\'' + sid + '\',\'' + ssrc + '\')">✏</button>'
         + '</div></div>';
     }).join('')
     + (sessions.length > 20 ? '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:4px">Showing 20 of ' + sessions.length + '</div>' : '')
@@ -11224,7 +11327,7 @@ async function _maSessionChat(sessionId, source, name) {
     if (overlay) overlay.classList.remove('open');
     if (panel) panel.classList.remove('open');
     // Switch to Chat tab
-    switchModule('chat');
+    switchModule('overview');
     // Inject session content as context
     _chatContextFiles.push({
       path: 'session://' + source + '/' + sessionId,
@@ -11366,7 +11469,7 @@ async function _memCfgQuickAdd(agentId) {
   } catch(e) { toast('Error: ' + e.message, 'err'); }
 }
 
-// ── Keyboard Shortcuts (memory module removed in v0.27.26) ──
+// ── Keyboard Shortcuts (memory module removed in v0.27.27) ──
 
 
 // Backward compat wrappers
@@ -14122,13 +14225,15 @@ function _elapsedStr(startTs) {
 async function loadModels() {
   _preloadSessionCounts();
   try {
-    var [data, act, avail] = await Promise.all([
+    var [data, act, avail, vers] = await Promise.all([
       api('/api/providers'),
       api('/api/models/activity'),
       api('/api/models/available'),
+      api('/api/models/versions'),
     ]);
     _modelActivityData = (act && act.activity) ? act.activity : {};
     _modelAvailableData = (avail && avail.backends) ? avail.backends : {};
+    window._modelVersions = (vers && vers.versions) ? vers.versions : {};
     _renderModelsSummary(data);
     _renderModelCards(data, _modelActivityData);
     _connectModelSSE();
@@ -14151,12 +14256,12 @@ async function _selectModel(sel) {
   try {
     var res = await api('/api/models/select', {backend:backend, model:model});
     if (res && res.ok) {
-      showToast('Model set: ' + (res.resolved || model), 'success');
+      toast('Model set: ' + (res.resolved || model));
       loadModels();
     } else {
-      showToast('Failed: ' + ((res && res.error) || 'Unknown error'), 'error');
+      toast('Failed: ' + ((res && res.error) || 'Unknown error'), 'err');
     }
-  } catch(e) { showToast('Error selecting model', 'error'); }
+  } catch(e) { toast('Error selecting model', 'err'); }
 }
 
 function _renderModelsSummary(data) {
@@ -14200,30 +14305,13 @@ function _renderModelCards(data, act) {
     var stats = ba.stats || {};
     var recent = ba.recent || [];
 
-    // Activity bar
-    var activityHtml = '';
-    if (activeRuns.length > 0) {
-      var ar = activeRuns[0];
-      var preview = (ar.prompt || '').substring(0, 60);
-      activityHtml = '<div class="model-card-activity working" data-backend="' + escHtml(p.id) + '">'
-        + '<span class="pulse-dot"></span>'
-        + '<span>WORKING</span>'
-        + '<span style="opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">"' + escHtml(preview) + '"</span>'
-        + '<span class="model-elapsed" data-started="' + (ar.started_at || 0) + '" style="opacity:.6"></span>'
-        + '</div>';
-    } else {
-      activityHtml = '<div class="model-card-activity idle" data-backend="' + escHtml(p.id) + '">Idle</div>';
-    }
-
-    // 24h stats
+    // 24h stats (only shown when there's data)
     var statsHtml = '';
     if (stats.total > 0) {
       var pct = stats.total > 0 ? Math.round((stats.complete / stats.total) * 100) : 0;
       statsHtml = '<div class="model-card-stats">24h: ' + stats.total + ' runs · ' + pct + '%'
         + (stats.avg_ms > 0 ? ' · avg ' + _formatDuration(stats.avg_ms) : '')
         + '</div>';
-    } else {
-      statsHtml = '<div class="model-card-stats">24h: No dispatches</div>';
     }
 
     // Inline expandable sessions + Live Trace button
@@ -14268,18 +14356,36 @@ function _renderModelCards(data, act) {
       _selHtml += '</div></div>';
     }
 
+    // Compact status badge for upper-right
+    var _statusBadge = '';
+    if (activeRuns.length > 0) {
+      _statusBadge = '<span style="font-size:9px;font-weight:600;color:var(--accent);display:flex;align-items:center;gap:3px"><span class="pulse-dot"></span>WORKING</span>';
+    } else {
+      _statusBadge = '<span style="font-size:9px;color:var(--text3);font-style:italic">Idle</span>';
+    }
+
     return '<div class="model-card' + offClass + '" data-model-id="' + escHtml(p.id) + '">'
-      + '<div class="model-card-head">'
-      + '<span class="model-card-dot" style="background:' + dotColor + '"></span>'
-      + '<span class="model-card-name">' + escHtml(_resolvedName) + '</span>'
+      + '<div class="model-card-head" style="justify-content:space-between">'
+      + '<div style="display:flex;align-items:center;gap:10px"><span class="model-card-dot" style="background:' + dotColor + '"></span>'
+      + '<span class="model-card-name">' + escHtml(_resolvedName) + '</span></div>'
+      + _statusBadge
       + '</div>'
       + '<div class="model-card-type">' + escHtml(p.label || p.id) + ' · ' + escHtml(p.type || 'unknown') + '</div>'
+      + (function() {
+          var vd = (window._modelVersions || {})[p.id];
+          if (!vd || !vd.version) return '';
+          var badge = '<div style="font-size:10px;color:var(--text3);margin-bottom:6px;font-family:monospace">v' + escHtml(vd.version) + '</div>';
+          if (vd.update_available) {
+            badge += '<div style="font-size:10px;color:#f59e0b;margin-bottom:6px;cursor:pointer" onclick="_showUpdateModal(\'' + escHtml(p.id) + '\',\'' + escHtml(vd.update_available) + '\')">'
+              + '\u26a0 Update: v' + escHtml(vd.update_available) + ' available</div>';
+          }
+          return badge;
+        })()
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
       + (tags ? '<div class="model-card-tags">' + tags + '</div>' : '')
       + agentSection
       + _selHtml
       + '<div class="model-card-divider"></div>'
-      + activityHtml
       + statsHtml
       + sessionsBtn
       + liveTraceBtn
@@ -14771,7 +14877,7 @@ function renderPersonaOrg() {
   const row = document.getElementById('persona-cards-row');
   if (!row) return;
   if (!_personas.length) {
-    row.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:12px">No personas yet. Click <b>+ New Persona</b> to create one.</div>';
+    row.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:12px">No personas yet. Click <b>+ New Agent</b> to create one.</div>';
     return;
   }
   const groupColors = { Orchestrator:'#ef4444', Strategy:'#6366f1', Creative:'#ec4899', Technical:'#06b6d4', Operations:'#f59e0b' };
@@ -14865,7 +14971,7 @@ function switchPdTab(tab) {
 
     var fileEditors = _files.map(function(f, i) {
       return '<div id="pd-file-' + f.key + '" class="pd-file-panel" style="display:' + (i===0?'block':'none') + '">'
-        + '<textarea id="pd-editor-' + f.key + '" class="persona-editor" style="min-height:220px;font-family:monospace;font-size:12px;width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:12px;resize:vertical">' + escHtml(f.content) + '</textarea>'
+        + '<textarea id="pd-editor-' + f.key + '" class="persona-editor" style="min-height:440px;font-family:monospace;font-size:12px;width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:12px;resize:vertical">' + escHtml(f.content) + '</textarea>'
         + '<div style="margin-top:6px;display:flex;gap:6px;align-items:center">'
         + '<button class="btn btn-primary" onclick="savePersonaFile(\'' + f.file + '\',\'' + f.key + '\')" style="font-size:11px">Save ' + f.label + '</button>'
         + '<span style="font-size:10px;color:var(--text3)">' + f.size + ' bytes</span>'
@@ -19359,6 +19465,82 @@ MODEL_METADATA = {
     },
 }
 
+# ── Backend Version Probing ─────────────────────────────────────────────
+_backend_version_cache = {"data": None, "ts": 0}
+
+KNOWN_LATEST = {
+    "openclaw": "2026.3.2",
+    "ollama": "0.6.2",
+}
+
+def _probe_backend_versions():
+    """Detect version strings for each backend. Cached 5 minutes."""
+    import time as _t
+    now = _t.time()
+    if _backend_version_cache["data"] and (now - _backend_version_cache["ts"]) < 300:
+        return _backend_version_cache["data"]
+
+    versions = {}
+
+    # OpenClaw
+    try:
+        import subprocess
+        result = subprocess.run(["openclaw", "--version"], capture_output=True, text=True, timeout=5)
+        ver = result.stdout.strip().split()[-1] if result.stdout.strip() else ""
+        if ver:
+            versions["openclaw"] = {"version": ver, "detected": True}
+    except Exception:
+        versions["openclaw"] = {"version": "", "detected": False}
+
+    # Ollama
+    try:
+        import urllib.request, json as _j2
+        req = urllib.request.Request("http://127.0.0.1:11434/api/version", method="GET")
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = _j2.loads(resp.read())
+            versions["ollama"] = {"version": data.get("version", ""), "detected": True}
+    except Exception:
+        versions["ollama"] = {"version": "", "detected": False}
+
+    # Claude — hardcoded API version
+    versions["claude"] = {"version": "2023-06-01", "detected": True}
+
+    # Gemini
+    try:
+        import subprocess
+        result = subprocess.run(["gemini", "--version"], capture_output=True, text=True, timeout=5)
+        ver = result.stdout.strip().split()[-1] if result.stdout.strip() else result.stdout.strip()
+        if ver:
+            versions["gemini"] = {"version": ver, "detected": True}
+        else:
+            versions["gemini"] = {"version": "", "detected": False}
+    except Exception:
+        versions["gemini"] = {"version": "", "detected": False}
+
+    # Codex
+    try:
+        import subprocess
+        result = subprocess.run(["codex", "--version"], capture_output=True, text=True, timeout=5)
+        ver = result.stdout.strip()
+        if ver:
+            versions["codex"] = {"version": ver, "detected": True}
+        else:
+            versions["codex"] = {"version": "", "detected": False}
+    except Exception:
+        versions["codex"] = {"version": "", "detected": False}
+
+    # Check for updates
+    for bk, latest in KNOWN_LATEST.items():
+        if bk in versions and versions[bk]["detected"] and versions[bk]["version"]:
+            detected = versions[bk]["version"]
+            if detected != latest:
+                versions[bk]["update_available"] = latest
+
+    _backend_version_cache["data"] = versions
+    _backend_version_cache["ts"] = now
+    return versions
+
+
 AVAILABLE_MODELS = {
     "openclaw": [{"id": "gpt-5.3-codex", "name": "GPT-5.3 Codex", "default": True}],
     "claude":   [
@@ -20819,7 +21001,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.26"})
+            self.reply_json({"v": "0.27.27"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -21086,6 +21268,11 @@ class Handler(BaseHTTPRequestHandler):
                             "started_at": _sd["started_at"],
                         })
             self.reply_json({"ok": True, "traces": traces})
+
+        elif parsed.path == "/api/models/versions":
+            if not self.auth_check(redirect=False): return
+            versions = _probe_backend_versions()
+            self.reply_json({"ok": True, "versions": versions})
 
         elif parsed.path == "/api/models/available":
             if not self.auth_check(redirect=False): return
@@ -22319,7 +22506,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.26'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.27'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -22999,6 +23186,32 @@ class Handler(BaseHTTPRequestHandler):
             timeout = max(10, min(300, timeout))
             res = _run_coordination(prompt, backends=backends or None, timeout=timeout)
             self.reply_json(res, 200 if res.get("ok") else 400)
+
+        # ── Session rename (POST /api/sessions/<id>/rename) ──────────
+        elif parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/rename"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.split("/")
+            _rename_sid = parts[3] if len(parts) >= 5 else ""
+            if not _rename_sid:
+                self.reply_json({"ok": False, "error": "session_id required"}, 400); return
+            data = self.read_json_body()
+            _rename_name = str(data.get("name", "")).strip()
+            if not _rename_name:
+                self.reply_json({"ok": False, "error": "name required"}, 400); return
+            if len(_rename_name) > 200:
+                _rename_name = _rename_name[:200]
+            try:
+                conn = _db_conn()
+                conn.execute(
+                    "INSERT OR REPLACE INTO session_names (session_id, name, updated_at) VALUES (?, ?, ?)",
+                    (_rename_sid, _rename_name, time.time())
+                )
+                conn.commit()
+                conn.close()
+                self.reply_json({"ok": True, "session_id": _rename_sid, "name": _rename_name})
+            except Exception as e:
+                log.error("Session rename failed: %s", e)
+                self.reply_json({"ok": False, "error": str(e)}, 500)
 
         elif parsed.path == "/api/models/select":
             if not self.auth_check(redirect=False): return
@@ -25970,7 +26183,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.26 ready (localhost only)")
+    print(f"\n  Porter v0.27.27 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
