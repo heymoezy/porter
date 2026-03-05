@@ -11487,7 +11487,7 @@ function _renderInlineSessions(sessions, source, container) {
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_renameSession(this,\'' + sid + '\',\'' + ssrc + '\')">\u270f</button>'
         + '</div>'
         + '<div class="sess-learnings-inline" style="margin-top:3px;font-size:10px;color:var(--text3);' + (s.learnings ? '' : 'display:none;') + 'max-height:0;overflow:hidden;transition:max-height .2s" data-sid="' + sid + '">'
-        + '<div class="sess-learn-text" style="white-space:pre-wrap;line-height:1.5">' + (s.learnings ? escHtml(s.learnings) : '') + '</div>'
+        + '<textarea class="sess-learn-text" onclick="event.stopPropagation()" style="width:100%;min-height:60px;max-height:200px;resize:vertical;line-height:1.5;font-size:10px;font-family:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px;box-sizing:border-box">' + (s.learnings ? escHtml(s.learnings) : '') + '</textarea>'
         + '<div style="display:flex;gap:4px;margin-top:3px">'
         + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_saveLearnInline(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
         + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">\u21bb</button>'
@@ -11556,7 +11556,7 @@ function _renderActivitySessions(sessions, source) {
       + '<button class="btn btn-ghost" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
       + '</div>'
       + '<div class="sess-learnings-inline" style="margin-top:4px;font-size:10px;color:var(--text3);' + (s.learnings ? '' : 'display:none;') + 'max-height:0;overflow:hidden;transition:max-height .2s" data-sid="' + sid + '">'
-      + '<div class="sess-learn-text" style="white-space:pre-wrap;line-height:1.5">' + (s.learnings ? escHtml(s.learnings) : '') + '</div>'
+      + '<textarea class="sess-learn-text" onclick="event.stopPropagation()" style="width:100%;min-height:60px;max-height:200px;resize:vertical;line-height:1.5;font-size:10px;font-family:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px;box-sizing:border-box">' + (s.learnings ? escHtml(s.learnings) : '') + '</textarea>'
       + '<div style="display:flex;gap:4px;margin-top:3px">'
       + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_saveLearnInline(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
       + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">\u21bb</button>'
@@ -11662,27 +11662,30 @@ async function _showSessionLearnings(btn, sid, source) {
   el.style.display = '';
   var textDiv = el.querySelector('.sess-learn-text');
   // If no learnings yet, extract them
-  if (!textDiv.textContent.trim()) {
-    textDiv.innerHTML = '<span class="learn-spinner"></span> Extracting learnings\u2026';
-    el.style.maxHeight = '40px';
+  if (!(textDiv.value || textDiv.textContent || '').trim()) {
+    textDiv.value = 'Extracting learnings\u2026';
+    textDiv.disabled = true;
+    el.style.maxHeight = '60px';
     var _start = Date.now();
     var _timer = setInterval(function() {
       var s = Math.round((Date.now() - _start) / 1000);
-      textDiv.innerHTML = '<span class="learn-spinner"></span> Extracting learnings\u2026 ' + s + 's';
+      textDiv.value = 'Extracting learnings\u2026 ' + s + 's';
     }, 1000);
     try {
       var resp = await api('/api/sessions/' + encodeURIComponent(sid) + '/extract-learnings', { source: source }, 60000);
       clearInterval(_timer);
+      textDiv.disabled = false;
       if (resp && resp.ok && resp.learnings) {
-        textDiv.textContent = resp.learnings;
+        textDiv.value = resp.learnings;
         btn.textContent = '\u25be Learnings';
         if (resp.cached) toast('Loaded cached learnings');
       } else {
-        textDiv.textContent = (resp && resp.error) || 'No learnings extracted';
+        textDiv.value = (resp && resp.error) || 'No learnings extracted';
       }
     } catch(e) {
       clearInterval(_timer);
-      textDiv.textContent = 'Extraction failed';
+      textDiv.disabled = false;
+      textDiv.value = 'Extraction failed';
     }
   } else {
     btn.textContent = '\u25be Learnings';
@@ -11701,7 +11704,7 @@ async function _saveLearnInline(btn, sid, source) {
     } catch(e) { _learnDestCache = []; }
   }
   var container = btn.closest('.sess-learnings-inline');
-  var text = container ? container.querySelector('.sess-learn-text').textContent : '';
+  var text = container ? (container.querySelector('.sess-learn-text').value || container.querySelector('.sess-learn-text').textContent || '') : '';
   var picker = document.createElement('div');
   picker.className = 'learn-dest-picker';
   picker.style.cssText = 'display:flex;gap:4px;align-items:center;margin-top:3px';
@@ -11744,8 +11747,8 @@ async function _reextractLearn(sid, source) {
   var el = document.querySelector('.sess-learnings-inline[data-sid="' + sid + '"]');
   if (!el) return;
   var textDiv = el.querySelector('.sess-learn-text');
-  var old = textDiv.textContent;
-  textDiv.innerHTML = '<span class="learn-spinner"></span> Re-analyzing\u2026';
+  var old = textDiv.value || textDiv.textContent || '';
+  textDiv.value = 'Re-analyzing\u2026';
   var _start = Date.now();
   var _timer = setInterval(function() {
     var s = Math.round((Date.now() - _start) / 1000);
@@ -11764,7 +11767,7 @@ async function _reextractLearn(sid, source) {
     }
   } catch(e) {
     clearInterval(_timer);
-    textDiv.textContent = old;
+    textDiv.value = old;
     toast('Re-extract failed', 'err');
   }
 }
