@@ -14145,7 +14145,7 @@ async function _selectModelFromList(el, backend, modelId) {
   _selectModel(fakeSel);
 }
 
-function _selectModel(sel) {
+async function _selectModel(sel) {
   var backend = sel.getAttribute('data-backend');
   var model = sel.value;
   try {
