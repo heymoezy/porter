@@ -11486,8 +11486,8 @@ function _renderInlineSessions(sessions, source, container) {
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_renameSession(this,\'' + sid + '\',\'' + ssrc + '\')">\u270f</button>'
         + '</div>'
-        + '<div class="sess-learnings-inline" style="margin-top:3px;font-size:10px;color:var(--text3);' + (s.learnings ? '' : 'display:none;') + 'max-height:0;overflow:hidden;transition:max-height .2s" data-sid="' + sid + '">'
-        + '<textarea class="sess-learn-text" onclick="event.stopPropagation()" style="width:100%;min-height:60px;max-height:200px;resize:vertical;line-height:1.5;font-size:10px;font-family:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px;box-sizing:border-box">' + (s.learnings ? escHtml(s.learnings) : '') + '</textarea>'
+        + '<div class="sess-learnings-inline" style="margin-top:3px;font-size:10px;color:var(--text3);' + (s.learnings ? '' : 'display:none;') + 'overflow:visible" data-sid="' + sid + '">'
+        + '<textarea class="sess-learn-text" onclick="event.stopPropagation()" style="width:100%;min-height:40px;resize:none;overflow:hidden;line-height:1.5;font-size:10px;font-family:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px;box-sizing:border-box">' + (s.learnings ? escHtml(s.learnings) : '') + '</textarea>'
         + '<div style="display:flex;gap:4px;margin-top:3px">'
         + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_saveLearnInline(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
         + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">\u21bb</button>'
@@ -11555,8 +11555,8 @@ function _renderActivitySessions(sessions, source) {
       + '<button class="btn btn-ghost" onclick="archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
       + '<button class="btn btn-ghost" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
       + '</div>'
-      + '<div class="sess-learnings-inline" style="margin-top:4px;font-size:10px;color:var(--text3);' + (s.learnings ? '' : 'display:none;') + 'max-height:0;overflow:hidden;transition:max-height .2s" data-sid="' + sid + '">'
-      + '<textarea class="sess-learn-text" onclick="event.stopPropagation()" style="width:100%;min-height:60px;max-height:200px;resize:vertical;line-height:1.5;font-size:10px;font-family:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px;box-sizing:border-box">' + (s.learnings ? escHtml(s.learnings) : '') + '</textarea>'
+      + '<div class="sess-learnings-inline" style="margin-top:4px;font-size:10px;color:var(--text3);' + (s.learnings ? '' : 'display:none;') + 'overflow:visible" data-sid="' + sid + '">'
+      + '<textarea class="sess-learn-text" onclick="event.stopPropagation()" style="width:100%;min-height:40px;resize:none;overflow:hidden;line-height:1.5;font-size:10px;font-family:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px;box-sizing:border-box">' + (s.learnings ? escHtml(s.learnings) : '') + '</textarea>'
       + '<div style="display:flex;gap:4px;margin-top:3px">'
       + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_saveLearnInline(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
       + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">\u21bb</button>'
@@ -11648,18 +11648,31 @@ async function _maSessionChat(sessionId, source, name) {
 
 // ── Smart Learnings: inline functions ──
 
+function _autoSizeTextarea(ta) {
+  if (!ta) return;
+  ta.style.height = 'auto';
+  ta.style.height = ta.scrollHeight + 'px';
+  // Also resize parent container
+  var parent = ta.closest('.sess-learnings-inline');
+  if (parent) parent.style.maxHeight = 'none';
+}
+// Auto-resize on input
+document.addEventListener('input', function(e) {
+  if (e.target.classList.contains('sess-learn-text')) _autoSizeTextarea(e.target);
+});
+
 async function _showSessionLearnings(btn, sid, source) {
   var el = document.querySelector('.sess-learnings-inline[data-sid="' + sid + '"]');
   if (!el) return;
   // If already visible, toggle closed
-  if (el.style.display !== 'none' && el.style.maxHeight && el.style.maxHeight !== '0px') {
-    el.style.maxHeight = '0';
-    setTimeout(function() { el.style.display = 'none'; }, 200);
+  if (el.style.display !== 'none') {
+    el.style.display = 'none';
     btn.textContent = 'Learnings';
     return;
   }
   // Show the container
   el.style.display = '';
+  el.style.maxHeight = 'none';
   var textDiv = el.querySelector('.sess-learn-text');
   // If no learnings yet, extract them
   if (!(textDiv.value || textDiv.textContent || '').trim()) {
@@ -11690,7 +11703,8 @@ async function _showSessionLearnings(btn, sid, source) {
   } else {
     btn.textContent = '\u25be Learnings';
   }
-  el.style.maxHeight = el.scrollHeight + 30 + 'px';
+  el.style.maxHeight = 'none';
+  _autoSizeTextarea(el.querySelector('.sess-learn-text'));
   _populateLearnDests();
 }
 
