@@ -6508,12 +6508,10 @@ body.density-compact .file-name { padding: 6px 0; }
 .chat-ctx-sel .ctx-avatar { font-size:14px; }
 .chat-ctx-sel .ctx-label { font-weight:500; max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .chat-ctx-sel .ctx-arrow { font-size:8px; color:var(--text3); margin-left:2px; }
-.chat-ctx-dropdown { position:absolute; left:0; min-width:180px; max-height:240px; overflow-y:auto;
+.chat-ctx-dropdown { position:fixed; min-width:200px; max-height:260px; overflow-y:auto;
   background:var(--raised); border:1px solid var(--border); border-radius:8px;
   box-shadow:0 8px 24px rgba(0,0,0,.15); z-index:200; display:none; }
 .chat-ctx-dropdown.open { display:block; }
-.chat-ctx-dropdown.drop-down { top:100%; margin-top:4px; }
-.chat-ctx-dropdown.drop-up { bottom:100%; margin-bottom:4px; }
 .chat-ctx-opt { display:flex; align-items:center; gap:6px; padding:5px 10px; cursor:pointer;
   font-size:11px; color:var(--text2); transition:background .1s; white-space:nowrap; }
 .chat-ctx-opt:hover { background:color-mix(in srgb, var(--accent) 8%, var(--bg)); }
@@ -12802,14 +12800,9 @@ function chatSend() {
   if (!input) return;
   const text = input.value.trim();
   if (!text || _chatStreaming) return;
-  // Sync backend selector from welcome if needed
-  var _welBsel = document.getElementById('chat-backend-sel-welcome');
-  var _mainBsel = document.getElementById('chat-backend-sel');
-  if (_welBsel && _welBsel.value && _mainBsel) _mainBsel.value = _welBsel.value;
-  // Resolve model: picker override > chat-model select > fallback
+  // Resolve model: context bar _chatModel > chat-model select > fallback
   var _backendMap = {openclaw:'openclaw-gateway',gemini:'gemini-cli-auto',codex:'codex-cli',claude:'claude-cli',ollama:'ollama-local'};
-  var _bsel = document.getElementById('chat-backend-sel');
-  var _bval = _bsel ? _bsel.value : '';
+  var _bval = window._chatModel || '';
   var sel = document.getElementById('chat-model');
   var modelId = '';
   if (_bval && _backendMap[_bval]) {
@@ -15135,7 +15128,7 @@ function _ctxToggle(event, type) {
       dd.innerHTML += projHtml;
     });
   } else if (type === 'model') {
-    var models = [{ v:'', label:'Auto', sub:'' }];
+    var models = [{ v:'', label:'Auto', sub:'best available' }];
     var _ctxAvail = _modelAvailableData || {};
     ['openclaw','claude','gemini','codex','ollama'].forEach(function(bk) {
       var bkData = _ctxAvail[bk] || {};
@@ -15144,29 +15137,38 @@ function _ctxToggle(event, type) {
       var friendly = resolved;
       bkModels.forEach(function(m) { if (m.id === resolved) friendly = m.name; });
       var bkLabel = bk.charAt(0).toUpperCase() + bk.slice(1);
-      models.push({ v: bk, label: bkLabel, sub: friendly });
+      models.push({ v: bk, label: friendly || bkLabel, sub: bkLabel + (friendly ? '' : '') });
     });
     models.forEach(function(m) {
-      var sub = m.sub ? '<span style="font-size:10px;color:var(--text3);margin-left:6px">' + escHtml(m.sub) + '</span>' : '';
-      html += '<div class="chat-ctx-opt' + (_chatModel === m.v ? ' selected' : '') + '" onclick="_ctxPick(event,\'model\',\'' + m.v + '\')">' + escHtml(m.label) + sub + '</div>';
+      html += '<div class="chat-ctx-opt' + (_chatModel === m.v ? ' selected' : '') + '" onclick="_ctxPick(event,\'model\',\'' + m.v + '\')" style="flex-direction:column;align-items:flex-start;gap:1px">'
+        + '<span>' + escHtml(m.label) + '</span>'
+        + '<span style="font-size:9px;color:var(--text3)">' + escHtml(m.sub) + '</span>'
+        + '</div>';
     });
   }
   dd.innerHTML = html;
-  // Determine direction: up or down based on screen position
+  // Position fixed relative to trigger
   var rect = event.currentTarget.getBoundingClientRect();
   var spaceBelow = window.innerHeight - rect.bottom;
-  dd.classList.remove('drop-up', 'drop-down');
-  dd.classList.add(spaceBelow < 260 ? 'drop-up' : 'drop-down');
+  if (spaceBelow < 270) {
+    dd.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+    dd.style.top = 'auto';
+  } else {
+    dd.style.top = (rect.bottom + 4) + 'px';
+    dd.style.bottom = 'auto';
+  }
+  dd.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - 220)) + 'px';
   dd.classList.add('open');
 
   // Close on outside click
+  var _trigger = event.currentTarget;
   function closeHandler(e) {
-    if (!dd.contains(e.target) && !event.currentTarget.contains(e.target)) {
+    if (!dd.contains(e.target) && !_trigger.contains(e.target)) {
       dd.classList.remove('open');
       document.removeEventListener('click', closeHandler);
     }
   }
-  setTimeout(function() { document.addEventListener('click', closeHandler); }, 0);
+  setTimeout(function() { document.addEventListener('click', closeHandler); }, 10);
 }
 
 function _ctxPick(event, type, value) {
