@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.25 — Model Activity Slide-Out Pane"""
-
+"""Porter v0.27.26 — Model Activity Slide-Out Pane"""
 
 
 import email
@@ -977,7 +976,6 @@ def _project_file_chain(project_id: str) -> list:
     return chain
 
 
-
 def _load_integrations() -> dict:
     """Read OpenClaw skills, sessions, and auth profiles for integration visibility."""
     result = {"ok": True, "openclaw_available": False, "skills": [], "sessions": [],
@@ -1100,7 +1098,6 @@ def _validate_no_hardcoding():
         for i in issues:
             print(f"  WARNING: hardcoding detected — {i}")
     return len(issues) == 0
-
 
 
 def _ping_agent(agent: dict) -> dict:
@@ -1661,7 +1658,6 @@ def _load_claude_session_summaries() -> list:
     return summaries
 
 
-
 def _load_gemini_session_summaries() -> list:
     """Load Gemini CLI session summaries from ~/.gemini/tmp/*/chats/*.json"""
     import glob as _glob
@@ -1971,7 +1967,6 @@ def _is_allowed_memory_path(path_str: str) -> bool:
         except ValueError:
             continue
     return False
-
 
 
 def _flush_preview(session_id: str, source: str) -> dict:
@@ -2328,7 +2323,6 @@ def _flush_claude_session(session_id: str) -> dict:
     return {"ok": True, "message": f"Session flushed to {target_path}", "path": str(target_path)}
 
 
-
 def _flush_gemini_session(session_id: str) -> dict:
     """Flush a Gemini CLI session to GEMINI.md memory file."""
     import glob as _glob
@@ -2469,8 +2463,6 @@ def _treg_save(task: dict) -> None:
     # Also update in-memory cache
     with _treg_lock:
         _treg[task["id"]] = task
-
-
 
 
 def _load_projects_dashboard() -> dict:
@@ -3412,7 +3404,6 @@ def _pep_proxy_fs(agent: dict, method: str, sub_path: str,
         msg = str(e)[:300]
         code = "NODE_TIMEOUT" if "timed out" in msg.lower() else "NODE_OFFLINE"
         return 503, {"error": {"code": code, "message": msg, "retryable": True}}
-
 
 
 _config: dict = {}   # loaded at startup
@@ -5318,7 +5309,6 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 
 
-
 /* Flush wizard modal */
 .flush-wizard-overlay {
   position:fixed; top:0; left:0; right:0; bottom:0;
@@ -5500,7 +5490,6 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 
 
-
 /* Chat routing */
 .chat-route-bar {
   display:flex; align-items:center; gap:6px; padding-bottom:10px;
@@ -5510,7 +5499,6 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   padding:5px 10px; font-size:12px; border:1px solid var(--border);
   border-radius:6px; background:var(--bg2); color:var(--text); flex:1; max-width:240px;
 }
-
 
 
 /* Skill bridge results */
@@ -5711,7 +5699,6 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 
 
-
 /* Guided tour */
 .tour-overlay { position:fixed; inset:0; z-index:9998; pointer-events:none; }
 .tour-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9997; }
@@ -5737,7 +5724,6 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .tour-btn:hover { background:var(--raised,#252535); }
 .tour-btn-primary { background:var(--accent,#6366f1); color:#fff; border-color:var(--accent,#6366f1); }
 .tour-btn-primary:hover { opacity:.9; }
-
 
 
 .chat-input-area {
@@ -6393,28 +6379,23 @@ body.density-compact .file-name { padding: 6px 0; }
 .emoji-grid .emoji-btn.selected { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, var(--bg)); }
 @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
-/* Memory tab v6 — compact layout */
+/* Memory tab v6 — compact layout (stripped in v0.27.26, kept: .mem-section-label, .mem-age-badge, .mem-coord-*) */
+    /* Model list rows (replaces dropdown) */
+    .model-list-rows { display:flex;flex-direction:column;gap:1px; }
+    .model-list-row { display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;cursor:pointer;transition:.12s;font-size:12px;color:var(--text2); }
+    .model-list-row:hover { background:var(--surface2);color:var(--text); }
+    .model-list-row.active { background:color-mix(in srgb, var(--accent) 12%, var(--raised));color:var(--text);font-weight:500; }
+    .model-list-dot { width:6px;height:6px;border-radius:50%;flex-shrink:0;border:1px solid var(--border); }
+    .model-list-name { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+    /* Inline session cards */
+    .inline-sess-card { padding:6px 8px;border:1px solid var(--border);border-radius:5px;background:var(--raised);transition:border-color .12s; }
+    .inline-sess-card:hover { border-color:var(--accent); }
 .mem-section-label { font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px; }
-.mem-flow-toggle { display:flex;align-items:center;gap:6px;padding:8px 0;cursor:pointer;user-select:none; }
-.mem-flow-diagram { padding:12px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:4px; }
-.mem-flow-diagram.collapsed { display:none; }
-.mem-flow-nodes { display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap; }
-.mem-flow-node { padding:8px 14px;border:1px solid var(--border);border-radius:6px;background:var(--raised);text-align:center;min-width:80px; }
-.mem-flow-node-primary { border-color:var(--accent);background:color-mix(in srgb, var(--accent) 8%, var(--raised)); }
-.mem-flow-node-label { font-size:12px;font-weight:600;color:var(--text); }
-.mem-flow-node-desc { font-size:10px;color:var(--text3);margin-top:2px; }
-.mem-flow-arrow { font-size:12px;color:var(--text3);white-space:nowrap; }
-.mem-flow-text { font-size:12px;color:var(--text3);line-height:1.5;margin:10px 0 0;max-width:640px; }
+
+
 .mem-silos { display:flex;flex-direction:column;gap:2px; }
-.mem-silo-row { display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--raised);transition:border-color .15s; }
-.mem-silo-row:hover { border-color:var(--accent); }
-.mem-silo-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
-.mem-silo-dot.online { background:#22c55e;box-shadow:0 0 4px rgba(34,197,94,.4); }
-.mem-silo-dot.offline { background:var(--text3); }
-.mem-silo-name { font-size:13px;font-weight:500;color:var(--text);min-width:90px; }
-.mem-silo-meta { font-size:11px;color:var(--text3);flex:1;display:flex;gap:12px; }
-.mem-silo-gear { background:none;border:none;cursor:pointer;font-size:14px;color:var(--text3);padding:2px 6px;border-radius:4px;transition:.12s; }
-.mem-silo-gear:hover { color:var(--accent);background:var(--surface2); }
+
+
 .mem-coord-rail { display:flex;flex-direction:column;gap:2px; }
 .mem-coord-item { display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--raised);font-size:12px; }
 .mem-coord-item .coord-name { font-weight:500;color:var(--text); }
@@ -6429,23 +6410,8 @@ body.density-compact .file-name { padding: 6px 0; }
 .mem-age-warm { background:color-mix(in srgb, #d97706 15%, transparent);color:#d97706; }
 .mem-age-stale { background:color-mix(in srgb, #ef4444 15%, transparent);color:#ef4444; }
 
-.mem-export-bar { display:flex;gap:6px;align-items:center; }
+
 /* Config panel memory editing */
-.mem-cfg-files { display:flex;flex-direction:column;gap:2px;margin-top:8px; }
-.mem-cfg-file { display:flex;align-items:center;gap:6px;padding:5px 8px;font-size:12px;border-radius:4px;cursor:pointer;color:var(--text2);transition:.12s; }
-.mem-cfg-file:hover { background:var(--raised);color:var(--text); }
-.mem-cfg-file.active { background:var(--accent);color:#fff; }
-.mem-cfg-file-size { font-size:10px;color:var(--text3);margin-left:auto; }
-.mem-cfg-editor { margin-top:10px; }
-.mem-cfg-editor textarea { width:100%;min-height:200px;max-height:400px;padding:10px;font-size:12px;line-height:1.6;font-family:'SF Mono',Menlo,monospace;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:6px;resize:vertical;box-sizing:border-box;outline:none; }
-.mem-cfg-editor textarea:focus { border-color:var(--accent); }
-.mem-cfg-quickadd { display:flex;gap:6px;margin-top:8px; }
-.mem-cfg-quickadd input { flex:1;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text); }
-
-
-
-
-
 
 
 /* config panel (mirrors preview-panel) */
@@ -6791,10 +6757,7 @@ select.settings-input { padding-right: 26px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
       <span class="mnav-label">Agents</span>
     </button>
-    <button class="mnav-item" id="mnav-memory" onclick="switchModule('memory')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10"/><path d="M12 2a15 15 0 0 0-4 10 15 15 0 0 0 4 10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
-      <span class="mnav-label">Memory</span>
-    </button>
+
     <div class="mnav-group-label">Operations</div>
     <button class="mnav-item" id="mnav-projects" onclick="switchModule('projects')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
@@ -6861,7 +6824,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.25</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.26</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7291,6 +7254,12 @@ select.settings-input { padding-right: 26px; }
     </div>
     <div class="module-intro">Active projects and their task backlogs.</div>
     <div id="proj-content-projects"></div>
+
+    <!-- Shared Coordination Files (moved from Memory tab) -->
+    <div style="margin-top:16px">
+      <div class="mem-section-label">Shared Files</div>
+      <div id="proj-shared-files" class="mem-coord-rail"></div>
+    </div>
   </div>
 
   <div id="capabilities-module" class="module-panel">
@@ -7542,51 +7511,6 @@ select.settings-input { padding-right: 26px; }
     </div>
   </div>
 
-  <div id="memory-module" class="module-panel">
-    <div class="module-hdr">
-      <span class="module-title">Memory</span>
-      <select id="mem-persona-sel" class="settings-input" style="font-size:12px;min-width:150px;margin-left:8px" onchange="loadMemoryForPersona(this.value)">
-        <option value="">All Agents (legacy)</option>
-      </select>
-      <div style="display:flex;gap:6px" class="mem-export-bar">
-        <button class="btn btn-ghost" style="font-size:11px" onclick="memExportAll()" title="Export memory files">↓ Export</button>
-        <label class="btn btn-ghost" style="font-size:11px;cursor:pointer" title="Import memory">↑ Import<input type="file" accept=".zip,.md" style="display:none" onchange="memImportZip(this)"></label>
-        <button class="btn btn-ghost" onclick="loadMemory()">⟳ Refresh</button>
-      </div>
-    </div>
-
-    <!-- How Memory Works -->
-    <div id="mem-flow-section">
-      <div class="mem-flow-toggle" onclick="memToggleFlow()">
-        <span id="mem-flow-chevron" style="font-size:10px;color:var(--text3)">▼</span>
-        <span style="font-size:12px;font-weight:600;color:var(--text)">How Memory Works</span>
-      </div>
-      <div id="mem-flow-body" class="mem-flow-diagram">
-        <div class="mem-flow-nodes">
-          <div class="mem-flow-node"><div class="mem-flow-node-label">Activity</div><div class="mem-flow-node-desc">model panels</div></div>
-          <div class="mem-flow-arrow">→ flush →</div>
-          <div class="mem-flow-node mem-flow-node-primary"><div class="mem-flow-node-label">MEMORY.md</div><div class="mem-flow-node-desc">persistent</div></div>
-          <div class="mem-flow-arrow">↔</div>
-          <div class="mem-flow-node"><div class="mem-flow-node-label">projects.md</div><div class="mem-flow-node-desc">shared</div></div>
-        </div>
-        <p class="mem-flow-text">Each agent keeps its own memory. Flushing extracts learnings into persistent files. Shared files like projects.md let agents coordinate across sessions.</p>
-      </div>
-    </div>
-
-    <!-- Agent Memory Silos -->
-    <div style="margin-top:12px">
-      <div class="mem-section-label">Agent Memory Silos</div>
-      <div id="mem-silos" class="mem-silos"><div class="loading-indicator">Loading agents...</div></div>
-    </div>
-
-    <!-- Coordination Files -->
-    <div style="margin-top:16px">
-      <div class="mem-section-label">Coordination Files</div>
-      <div id="mem-coord" class="mem-coord-rail"></div>
-    </div>
-
-
-  </div>
 
   <!-- settings panel
   <!-- settings panel — module panel, shown when settings module active -->
@@ -8054,6 +7978,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.26', date:'2026-03-05', notes:['Models tab redesign: model list replaces dropdown selector','Inline expandable sessions on model cards (no more slide-out for sessions)','Memory tab removed entirely','Coordination files moved to Projects tab as Shared Files section','Live Trace button on working models opens slide-out panel'] },
   { ver:'v0.27.25', date:'2026-03-05', notes:['Sessions moved from Memory tab into Model Activity slide-out panel','Source filter on /api/sessions endpoint (?source=claude|openclaw|gemini)','New /api/sessions/<id>/summary endpoint returns last 10 turns','Session cards with Summary/Flush/Chat actions per model backend','Chat button injects session as context and switches to Chat tab','Memory tab cleaned: sessions section, filter bar, flush history removed'] },
   { ver:'v0.27.24', date:'2026-03-04', notes:['Model Activity slide-out pane replaces inline trace toggles','Activity button on each model card opens 520px right panel','Panel shows: live trace, 24h stats (runs/success/avg), recent runs','SSE chunks stream into panel in real-time when dispatch active','Stale in_progress runs older than 10min auto-marked as failed','Removed: inline trace toggle, trace polling per-card'] },
   { ver:'v0.27.23', date:'2026-03-04', notes:['Model Selector: per-backend model switching with dropdown','New: /api/models/available endpoint for model catalog per backend','New: /api/models/select POST endpoint to persist active model choice','Cards show active model name (Opus 4.6) with backend as subtitle','Chat selector shows resolved model names with backend label','Dispatch and streaming handlers use user-selected active models'] },
@@ -9854,11 +9779,10 @@ function switchModule(name) {
       }, 30000);
     }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); }, projects: loadProjects, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
-    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: function() { loadWorkflows(); loadBuildStatus(); }, memory: loadMemory, settings: syncSettingsUI,
+    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: function() { loadWorkflows(); loadBuildStatus(); }, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
-
 
 
 // ── S10: Workflows — Skills browser + Automations ──────────────────────────
@@ -10283,9 +10207,33 @@ async function loadProjects() {
   // Auto-expand all on first load; preserve state after that
   if (_projExpanded.size === 0) _projProjects.forEach(p => _projExpanded.add(p.id));
   _renderProjectList();
+  _renderProjSharedFiles();
   _projLastRefreshTs = Date.now();
   _updateProjRefreshIndicator();
   startProjAutoRefresh();
+}
+
+async function _renderProjSharedFiles() {
+  var el = document.getElementById('proj-shared-files');
+  if (!el) return;
+  try {
+    var resp = await api('/api/memory/overview');
+    var files = (resp && resp.coordination_files) || [];
+    if (!files.length) {
+      el.innerHTML = '<div class="mem-coord-item"><span class="coord-name">projects.md</span><span class="coord-desc">shared by all agents</span><button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="openConfigPanel(\'memory\',\'coordination\')">view</button></div>';
+      return;
+    }
+    el.innerHTML = files.map(function(f) {
+      return '<div class="mem-coord-item">'
+        + '<span class="coord-name">' + escHtml(f.name) + '</span>'
+        + '<span class="coord-desc">' + escHtml(f.description || 'shared by all agents') + '</span>'
+        + '<span class="coord-size">' + (f.size ? (f.size > 1024 ? (f.size/1024).toFixed(1) + ' KB' : f.size + ' B') : '') + '</span>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="openConfigPanel(\'memory\',\'coordination\')">view</button>'
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--text3)">Could not load shared files</div>';
+  }
 }
 
 function switchProjTab(tab) { /* compat no-op */ }
@@ -10295,7 +10243,6 @@ let _projConfigProjects = [];
 let _projAutoRefreshTimer = null;
 let _projLastRefreshTs = 0;
 let _projRefreshTickTimer = null;
-
 
 
 // S7h: Rebuild a pending task — resets it based on sprint plan
@@ -10353,7 +10300,6 @@ function startProjAutoRefresh() {
   if (_projRefreshTickTimer) clearInterval(_projRefreshTickTimer);
   _projRefreshTickTimer = setInterval(_updateProjRefreshIndicator, 5000);
 }
-
 
 
 function _projTraceSection(project) {
@@ -10646,7 +10592,6 @@ function toggleProject(pid) {
 }
 
 
-
 function toggleProjOpen(pid) {
   if (_projOpenCollapsed.has(pid)) _projOpenCollapsed.delete(pid);
   else _projOpenCollapsed.add(pid);
@@ -10761,7 +10706,6 @@ async function migrateToRegistry(name) {
   if (res && res.ok) { toast('Project added to registry', 'ok'); loadProjects(); }
   else toast((res && res.error) || 'Failed', 'err');
 }
-
 
 
 async function startRenameProject(name) {
@@ -11023,13 +10967,23 @@ function renderCapabilities(caps) {
 }
 
 // Memory tab v6 — compact layout
-let _memViewerPath = '';
-let _memViewerEditing = false;
+// Memory globals — still used by config panel + flush wizard
+var _memOverview = null;
+var _memAgentStatus = {};
 
-let _memOverview = null;
-let _memAgentStatus = {};
-let _memFlowCollapsed = false;
-try { _memFlowCollapsed = localStorage.getItem('memFlowCollapsed') === '1'; } catch(e) {}
+// loadMemory stub — refreshes overview data for config panel use
+async function loadMemory() {
+  try {
+    const [overviewResp, statusResp] = await Promise.all([
+      api('/api/memory/overview'),
+      api('/api/memory/agent-status')
+    ]);
+    if (overviewResp && overviewResp.models) {
+      _memOverview = overviewResp;
+      if (statusResp && statusResp.ok) _memAgentStatus = statusResp.status || {};
+    }
+  } catch(e) { console.debug('loadMemory:', e); }
+}
 
 function _memSize(bytes) {
   if (bytes > 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
@@ -11045,14 +10999,6 @@ function _memTimeAgo(ts) {
   return Math.floor(diff / 86400) + 'd';
 }
 
-function memToggleFlow() {
-  _memFlowCollapsed = !_memFlowCollapsed;
-  try { localStorage.setItem('memFlowCollapsed', _memFlowCollapsed ? '1' : '0'); } catch(e) {}
-  var body = document.getElementById('mem-flow-body');
-  var chevron = document.getElementById('mem-flow-chevron');
-  if (body) body.classList.toggle('collapsed', _memFlowCollapsed);
-  if (chevron) chevron.textContent = _memFlowCollapsed ? '\u25b6' : '\u25bc';
-}
 
 function populateMemPersonaSelector() {
   const sel = document.getElementById('mem-persona-sel');
@@ -11065,119 +11011,6 @@ function populateMemPersonaSelector() {
     ).join('');
 }
 
-async function loadMemoryForPersona(personaId) {
-  if (!personaId) {
-    // Load legacy memory view
-    loadMemory();
-    return;
-  }
-  // Load persona-specific memory
-  try {
-    const r = await api('/api/personas/' + personaId + '/memory');
-    if (!r.ok) return;
-    const silosEl = document.getElementById('mem-silos');
-    if (!silosEl) return;
-    const persona = _personas.find(p => p.id === personaId);
-    const name = persona ? persona.name : 'Agent';
-    let html = '<div style="padding:16px;background:var(--raised);border:1px solid var(--border);border-radius:8px;margin-bottom:12px">';
-    html += '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">' + escHtml(name) + ' — MEMORY.md</div>';
-    html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;max-height:300px;overflow-y:auto;color:var(--text2)">' + escHtml(r.memory_md || '(empty)') + '</div>';
-    html += '</div>';
-    if (r.daily_logs && r.daily_logs.length) {
-      html += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Daily Logs</div>';
-      r.daily_logs.forEach(function(dl) {
-        html += '<div style="margin-bottom:8px;padding:10px 12px;background:var(--raised);border:1px solid var(--border);border-radius:6px">';
-        html += '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px">' + escHtml(dl.date) + '</div>';
-        html += '<div style="font-size:12px;white-space:pre-wrap;color:var(--text2);max-height:150px;overflow-y:auto">' + escHtml(dl.content) + '</div>';
-        html += '</div>';
-      });
-    } else {
-      html += '<div style="color:var(--text3);font-size:12px">No daily logs yet.</div>';
-    }
-    silosEl.innerHTML = html;
-    // Hide other sections when viewing persona
-    const coordEl = document.getElementById('mem-coord');
-    if (coordEl) coordEl.parentElement.style.display = 'none';
-  } catch(e) { console.debug('loadMemoryForPersona:', e); }
-}
-
-async function loadMemory() {
-  // Apply saved flow state
-  var fb = document.getElementById('mem-flow-body');
-  var fc = document.getElementById('mem-flow-chevron');
-  if (fb) fb.classList.toggle('collapsed', _memFlowCollapsed);
-  if (fc) fc.textContent = _memFlowCollapsed ? '\u25b6' : '\u25bc';
-
-  try {
-    const [overviewResp, statusResp] = await Promise.all([
-      api('/api/memory/overview'),
-      api('/api/memory/agent-status')
-    ]);
-    if (overviewResp && overviewResp.models) {
-      _memOverview = overviewResp;
-      if (statusResp && statusResp.ok) {
-        _memAgentStatus = statusResp.status || {};
-      }
-      renderMemSilos(overviewResp.models);
-      renderMemCoord(overviewResp);
-    }
-  } catch(e) {
-    console.error('loadMemory failed:', e);
-  }
-}
-
-function renderMemSilos(models) {
-  var el = document.getElementById('mem-silos');
-  if (!el) return;
-  if (!models.length) {
-    el.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text3);font-size:12px">No agents detected. Connect an AI agent to get started.</div>';
-    return;
-  }
-  var html = '';
-  models.forEach(function(m) {
-    var isOnline = !!_memAgentStatus[m.id];
-    var fileCount = 0, totalSize = 0;
-    if (m.instruction_file) { fileCount++; totalSize += m.instruction_file.size || 0; }
-    if (m.memory_files) m.memory_files.forEach(function(f) { fileCount++; totalSize += f.size || 0; });
-    var isLocal = m.id === 'ollama';
-    var metaText = '';
-    if (isLocal) {
-      metaText = '<span>local model \u2014 no persistent memory</span>';
-    } else {
-      metaText = '<span>' + fileCount + ' file' + (fileCount !== 1 ? 's' : '') + '</span>'
-        + '<span>' + _memSize(totalSize) + '</span>';
-      if (m.session_count) metaText += '<span>' + m.session_count + ' sessions</span>';
-    }
-    html += '<div class="mem-silo-row">';
-    html += '<div class="mem-silo-dot ' + (isOnline ? 'online' : 'offline') + '" title="' + (isOnline ? 'Online' : 'Offline') + '"></div>';
-    html += '<span class="mem-silo-name">' + escHtml(m.name) + '</span>';
-    html += '<span class="mem-silo-meta">' + metaText + '</span>';
-    html += '<button class="mem-silo-gear" onclick="openConfigPanel(\'memory\',\'' + m.id + '\')" title="Configure ' + escHtml(m.name) + ' memory">\u2699</button>';
-    html += '</div>';
-  });
-  el.innerHTML = html;
-}
-
-function renderMemCoord(overview) {
-  var el = document.getElementById('mem-coord');
-  if (!el) return;
-  var files = (overview && overview.coordination_files) || [];
-  if (!files.length) {
-    // Fallback: show projects.md if coordination_files not provided
-    el.innerHTML = '<div class="mem-coord-item"><span class="coord-name">projects.md</span><span class="coord-desc">shared by all agents</span><button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="openConfigPanel(\'memory\',\'coordination\')">view</button></div>';
-    return;
-  }
-  var html = '';
-  files.forEach(function(f) {
-    html += '<div class="mem-coord-item">';
-    html += '<span class="coord-name">' + escHtml(f.name) + '</span>';
-    html += '<span class="coord-desc">' + escHtml(f.description || 'shared by all agents') + '</span>';
-    html += '<span class="coord-size">' + _memSize(f.size || 0) + '</span>';
-    html += '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="openConfigPanel(\'memory\',\'coordination\')">view</button>';
-    html += '</div>';
-  });
-  el.innerHTML = html;
-}
 
 function _memAgeBadge(ts) {
   if (!ts) return '';
@@ -11189,7 +11022,6 @@ function _memAgeBadge(ts) {
 }
 
 
-
 var _maSessionsData = [];
 var _maSessionCounts = {}; // {source: {count: N}}
 
@@ -11199,15 +11031,81 @@ async function _preloadSessionCounts() {
       var resp = await api('/api/sessions?source=' + src);
       if (resp && resp.ok !== false) {
         _maSessionCounts[src] = { count: resp.count || 0 };
-        // Update button label if visible
-        var btn = document.querySelector('[data-model-id="' + src + '"] .btn-ghost');
-        if (btn && btn.textContent.match(/session/i)) {
+        // Update toggle button label if visible
+        var btn = document.querySelector('[data-model-id="' + src + '"] .model-sessions-toggle');
+        if (btn) {
           var c = resp.count || 0;
-          btn.textContent = c + ' session' + (c !== 1 ? 's' : '');
+          btn.textContent = '\u25bc ' + c + ' session' + (c !== 1 ? 's' : '');
         }
       }
     } catch(e) { /* ignore */ }
   });
+}
+
+var _inlineSessionsExpanded = {};
+
+function _toggleInlineSessions(btn, backend, source) {
+  var container = document.getElementById('inline-sess-' + backend);
+  if (!container) return;
+  var isOpen = container.style.display !== 'none';
+  if (isOpen) {
+    container.style.display = 'none';
+    btn.textContent = btn.textContent.replace('\u25b2', '\u25bc');
+    _inlineSessionsExpanded[backend] = false;
+    return;
+  }
+  container.style.display = 'block';
+  btn.textContent = btn.textContent.replace('\u25bc', '\u25b2');
+  _inlineSessionsExpanded[backend] = true;
+  container.innerHTML = '<div class="loading-indicator" style="padding:8px;font-size:11px">Loading sessions</div>';
+  _loadInlineSessions(source, backend);
+}
+
+async function _loadInlineSessions(source, backend) {
+  var container = document.getElementById('inline-sess-' + backend);
+  if (!container) return;
+  try {
+    var resp = await api('/api/sessions?source=' + encodeURIComponent(source));
+    if (resp && resp.sessions) {
+      _renderInlineSessions(resp.sessions, source, container);
+    } else {
+      container.innerHTML = '<div style="padding:8px;font-size:11px;color:var(--text3)">No sessions</div>';
+    }
+  } catch(e) {
+    container.innerHTML = '<div style="padding:8px;font-size:11px;color:var(--err)">Failed to load</div>';
+  }
+}
+
+function _renderInlineSessions(sessions, source, container) {
+  if (!sessions.length) {
+    container.innerHTML = '<div style="padding:8px;font-size:11px;color:var(--text3)">No sessions</div>';
+    return;
+  }
+  var shown = sessions.slice(0, 20);
+  container.innerHTML = '<div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">'
+    + shown.map(function(s) {
+      var ageBadge = _memAgeBadge(s.last_ts || s.first_ts);
+      var sid = escHtml(s.id);
+      var shortId = sid.substring(0, 8);
+      var sname = escHtml(s.name || s.id.substring(0, 12));
+      var ssrc = escHtml(s.source || source);
+      return '<div class="inline-sess-card">'
+        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
+        + '<span style="font-size:11px;font-weight:500;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sname + '</span>'
+        + ageBadge
+        + '</div>'
+        + '<div style="display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text3)">'
+        + '<span style="font-family:monospace">' + shortId + '</span>'
+        + '<span>' + (s.messages || 0) + ' msgs</span>'
+        + '</div>'
+        + '<div style="display:flex;gap:4px;margin-top:3px">'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_maSessionSummary(\'' + sid + '\',\'' + ssrc + '\')">Summary</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="openFlushWizard(\'' + sid + '\',\'' + sname + '\',\'' + ssrc + '\')">Flush</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
+        + '</div></div>';
+    }).join('')
+    + (sessions.length > 20 ? '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:4px">Showing 20 of ' + sessions.length + '</div>' : '')
+    + '</div>';
 }
 
 async function _loadActivitySessions(source) {
@@ -11391,58 +11289,7 @@ function closeFlushWizard() {
   if (commitBtn) { commitBtn.textContent = 'Commit to memory'; commitBtn.disabled = false; }
 }
 
-async function memExportAll() {
-  toast('Preparing export...');
-  try {
-    var resp = await api('/api/memory/export');
-    if (resp && resp.ok && resp.files) {
-      var content = '# Porter Memory Export\n# Date: ' + new Date().toISOString() + '\n\n';
-      for (var i = 0; i < resp.files.length; i++) {
-        var f = resp.files[i];
-        content += '## File: ' + f.path + '\n';
-        content += '## Size: ' + f.size + ' bytes\n';
-        content += '---\n' + f.content + '\n---\n\n';
-      }
-      var blob = new Blob([content], { type: 'text/markdown' });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url;
-      a.download = 'porter-memory-' + new Date().toISOString().split('T')[0] + '.md';
-      a.click();
-      URL.revokeObjectURL(url);
-      toast('Memory exported');
-    } else {
-      toast((resp && resp.error) || 'Export failed', 'err');
-    }
-  } catch(e) { toast('Export failed: ' + e.message, 'err'); }
-}
 
-function memImportZip(input) {
-  if (!input.files || !input.files.length) return;
-  var file = input.files[0];
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var text = e.target.result;
-    var sections = text.split('## File: ');
-    var imported = 0;
-    sections.forEach(function(sec) {
-      if (!sec.trim() || sec.startsWith('# Porter')) return;
-      var lines = sec.split('\n');
-      var path = lines[0].trim();
-      var contentStart = sec.indexOf('---\n');
-      var contentEnd = sec.lastIndexOf('\n---');
-      if (contentStart >= 0 && contentEnd > contentStart) {
-        var content = sec.substring(contentStart + 4, contentEnd);
-        api('/api/memory/write', { path: path, content: content }).then(function(res) {
-          if (res && res.ok) imported++;
-        });
-      }
-    });
-    setTimeout(function() { toast('Imported ' + imported + ' files'); loadMemory(); }, 2000);
-  };
-  reader.readAsText(file);
-  input.value = '';
-}
 
 // ── Memory config panel editing state ──
 var _memCfgPath = '';
@@ -11519,21 +11366,7 @@ async function _memCfgQuickAdd(agentId) {
   } catch(e) { toast('Error: ' + e.message, 'err'); }
 }
 
-// ── Keyboard Shortcuts ──
-document.addEventListener('keydown', function(e) {
-  var memModule = document.getElementById('memory-module');
-  if (!memModule || memModule.offsetParent === null) return;
-  if (e.key === '/' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
-    var search = document.getElementById('mem-session-search');
-    if (search) { search.focus(); e.preventDefault(); }
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-    if (_memCfgPath && document.getElementById('mem-cfg-textarea')) {
-      _memCfgSave(); e.preventDefault();
-    }
-  }
-});
-
+// ── Keyboard Shortcuts (memory module removed in v0.27.26) ──
 
 
 // Backward compat wrappers
@@ -11570,7 +11403,6 @@ function switchSettingsTab(tab) {
     setTimeout(populateChangelog, 0);
   }
 }
-
 
 
 // ── Markdown renderer (inline, no deps) ──────────────────────────────────
@@ -12123,10 +11955,7 @@ function _chatAutoGrow(el) {
 function chatAutoResize(el) { _chatAutoGrow(el); }
 
 
-
 // Notification center removed — dead code (addNotification never called)
-
-
 
 
 // ── Guided tour (vanilla JS) ────────────────────────────────────────────────
@@ -12215,8 +12044,6 @@ function endTour() {
 }
 
 // Tour auto-start removed — users can start via ? keyboard shortcut
-
-
 
 
 // ── Chat autocomplete ────────────────────────────────────────────────────
@@ -12982,9 +12809,7 @@ async function attachChatFile(rootPath, name) {
 }
 
 
-
 /* loadOverview/renderOverview removed — overview is now Chat tab */
-
 
 
 // ── Admin Tab ──────────────────────────────────────────────────────────────
@@ -13036,8 +12861,6 @@ async function removeRule(id) {
   await api('/api/rules', {action: 'remove', id: id});
   loadRules();
 }
-
-
 
 
 async function loadDelegationLog() {
@@ -13555,7 +13378,6 @@ function renderAudit(entries) {
 }
 
 
-
 // ── Policies module ──
 function saveOrchestrationPolicy() {
   const body = {
@@ -14037,8 +13859,6 @@ async function autoRefreshUsage() {
 }
 
 
-
-
 async function showBootstrapCmd(osName) {
   const data = await api(`/api/agent/bootstrap?os=${enc(osName)}&arch=x64`);
   if (!data || !data.install_command) return;
@@ -14315,7 +14135,17 @@ async function loadModels() {
   } catch(e) { console.debug('loadModels:', e); }
 }
 
-async function _selectModel(sel) {
+async function _selectModelFromList(el, backend, modelId) {
+  // Highlight selected row
+  var container = el.parentElement;
+  container.querySelectorAll('.model-list-row').forEach(function(r) { r.classList.remove('active'); });
+  el.classList.add('active');
+  // Use same API as dropdown
+  var fakeSel = { value: modelId, getAttribute: function() { return backend; } };
+  _selectModel(fakeSel);
+}
+
+function _selectModel(sel) {
   var backend = sel.getAttribute('data-backend');
   var model = sel.value;
   try {
@@ -14396,14 +14226,23 @@ function _renderModelCards(data, act) {
       statsHtml = '<div class="model-card-stats">24h: No dispatches</div>';
     }
 
-    // Session count button (replaces recent runs)
+    // Inline expandable sessions + Live Trace button
     var _maSourceMap2 = {claude:'claude', openclaw:'openclaw', gemini:'gemini'};
     var _maCardSource = _maSourceMap2[p.id] || null;
     var sessionsBtn = '';
     if (_maCardSource) {
       var _cachedCount = ((_maSessionCounts || {})[_maCardSource] || {}).count;
-      var countLabel = typeof _cachedCount === 'number' ? _cachedCount + ' session' + (_cachedCount !== 1 ? 's' : '') : 'Sessions';
-      sessionsBtn = '<div style="margin-top:8px"><button class="btn btn-ghost" style="font-size:11px;width:100%" onclick="_openModelActivity(\'' + escHtml(p.id) + '\')">' + countLabel + '</button></div>';
+      var countLabel = typeof _cachedCount === 'number' ? '\u25bc ' + _cachedCount + ' session' + (_cachedCount !== 1 ? 's' : '') : '\u25bc Sessions';
+      sessionsBtn = '<div style="margin-top:8px">'
+        + '<button class="btn btn-ghost model-sessions-toggle" style="font-size:11px;width:100%" '
+        + 'onclick="_toggleInlineSessions(this,\'' + escHtml(p.id) + '\',\'' + escHtml(_maCardSource) + '\')">' + countLabel + '</button>'
+        + '<div class="model-inline-sessions" id="inline-sess-' + escHtml(p.id) + '" style="display:none"></div>'
+        + '</div>';
+    }
+    // Live Trace button (only when working)
+    var liveTraceBtn = '';
+    if (activeRuns.length > 0) {
+      liveTraceBtn = '<div style="margin-top:4px"><button class="btn btn-ghost" style="font-size:10px;width:100%;color:var(--accent)" onclick="_openModelActivity(\'' + escHtml(p.id) + '\')">Live Trace</button></div>';
     }
 
     // Model selector: show active model name as card title
@@ -14414,13 +14253,20 @@ function _renderModelCards(data, act) {
     var _resolvedName = '';
     _avModels.forEach(function(m) { if (m.id === _avResolved) _resolvedName = m.name; });
     if (!_resolvedName) _resolvedName = _avResolved || (p.label || p.id);
-    // Build model dropdown
-    var _selHtml = '<div class="model-card-selector"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Active model via gateway</div><select class="model-select" onchange="_selectModel(this)" data-backend="' + escHtml(p.id) + '">';
-    _avModels.forEach(function(m) {
-      var sel = m.id === _avActive ? ' selected' : '';
-      _selHtml += '<option value="' + escHtml(m.id) + '"' + sel + '>' + escHtml(m.name) + (m.default ? ' (default)' : '') + '</option>';
-    });
-    _selHtml += '</select></div>';
+    // Build model list (replaces dropdown)
+    var _selHtml = '';
+    if (_avModels.length > 0) {
+      _selHtml = '<div class="model-card-selector"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Models</div><div class="model-list-rows">';
+      _avModels.forEach(function(m) {
+        var isActive = m.id === _avActive;
+        var isResolved = m.id === _avResolved;
+        _selHtml += '<div class="model-list-row' + (isActive ? ' active' : '') + '" onclick="_selectModelFromList(this,\'' + escHtml(p.id) + '\',\'' + escHtml(m.id) + '\')" title="' + escHtml(m.id) + '">';
+        _selHtml += '<span class="model-list-dot" style="background:' + (isResolved ? 'var(--accent)' : 'transparent') + '"></span>';
+        _selHtml += '<span class="model-list-name">' + escHtml(m.name) + (m.default ? ' <span style=\"font-size:9px;color:var(--text3)\">(default)</span>' : '') + '</span>';
+        _selHtml += '</div>';
+      });
+      _selHtml += '</div></div>';
+    }
 
     return '<div class="model-card' + offClass + '" data-model-id="' + escHtml(p.id) + '">'
       + '<div class="model-card-head">'
@@ -14436,6 +14282,7 @@ function _renderModelCards(data, act) {
       + activityHtml
       + statsHtml
       + sessionsBtn
+      + liveTraceBtn
       + '</div>';
   }).join('');
 
@@ -14508,24 +14355,8 @@ function _openModelActivity(backend) {
       + '<div class="ma-section-title">Recent Runs</div>' + runs + '</div>';
   }
 
-  // Sessions section (only for stateful backends)
-  var _maSourceMap = {claude:'claude', openclaw:'openclaw', gemini:'gemini'};
-  var sessionsContent = '';
-  var maSource = _maSourceMap[backend] || null;
-  if (maSource) {
-    sessionsContent = '<div class="ma-section">'
-      + '<div class="ma-section-title">Sessions</div>'
-      + '<input type="text" class="ma-session-search" placeholder="Search sessions..." oninput="_maFilterSessions(this.value)">'
-      + '<div id="ma-sessions-list"><div class="loading-indicator" style="padding:8px">Loading sessions</div></div>'
-      + '</div>';
-  }
-
-  body.innerHTML = sessionsContent + traceContent + statsContent + runsContent;
-
-  // Load sessions async
-  if (maSource) {
-    _loadActivitySessions(maSource);
-  }
+  // Sessions now inline on cards — slide-out is Live Trace + Stats only
+  body.innerHTML = traceContent + statsContent + runsContent;
 
   overlay.classList.add('open');
   panel.classList.add('open');
@@ -14969,7 +14800,6 @@ function renderPersonaOrg() {
       + '</div></div>';
   }).join('');
 }
-
 
 
 async function selectPersona(id) {
@@ -15838,7 +15668,6 @@ async function saveModelRanking(modelId, rank) {
 }
 
 
-
 function closeConfigPanel() {
   const panel = document.getElementById('configPanel');
   const main  = document.getElementById('mainEl');
@@ -16112,7 +15941,6 @@ function renderAgents(agents, showAll) {
 }
 
 
-
 function cancelAgentForm() {
   document.getElementById('agent-form').style.display = 'none';
 }
@@ -16367,7 +16195,6 @@ function _showModal(title, bodyHtml) {
 }
 
 function loadBridgeRuns() { /* removed — dispatch moved to @backend in chat */ }
-
 
 
 function _timeAgo(ts) {
@@ -19179,7 +19006,6 @@ init();
 # ── HTTP handler ──────────────────────────────────────────────────────────
 
 
-
 # ── Porter Rules — governance principles ───────────────────────────────────
 DEFAULT_RULES = [
     {"id": "agnostic", "text": "Everything about Porter must be agnostic and configurable. No model-specific bridges.", "category": "architecture"},
@@ -19379,7 +19205,6 @@ def _dispatch_gemini(message, model=None, timeout=120):
         "duration_ms": _elapsed_ms,
         "tokens": {"total": 0},
     }
-
 
 
 def _dispatch_claude(message, model=None, timeout=120):
@@ -20173,7 +19998,6 @@ def _update_agent_message(run_id, response=None, status=None, model=None, tokens
         log.debug("Failed to update agent message: %s", e)
 
 
-
 def _run_chain(chain_id, steps, initial_input, timeout_per_step=120):
     """Run a multi-step chain: probe → dispatch → pipe output forward.
     Emits SSE events: chain:start, chain:step, chain:complete, chain:error.
@@ -20378,7 +20202,6 @@ def _coordination_recent(limit: int = 20) -> list[dict]:
             log.debug("Log line parse skip: %s", e)
             continue
     return out
-
 
 
 LANDING_PAGE = """<!DOCTYPE html>
@@ -20985,7 +20808,6 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"agents": safe, "ai_providers": providers})
 
 
-
         elif parsed.path == "/api/rules":
             if not self.auth_check(redirect=False): return
             self.reply_json({"ok": True, "rules": _get_rules()})
@@ -20997,7 +20819,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.20"})
+            self.reply_json({"v": "0.27.26"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -21084,7 +20906,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.25"
+                health["porter_version"] = "0.27.26"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -22309,7 +22131,6 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
 
-
         # ── Memory tab: Export all memory files (GET) ────────────────────────
         elif parsed.path == "/api/memory/export":
             if not self.auth_check(redirect=False): return
@@ -22498,7 +22319,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.25'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.26'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -25056,8 +24877,6 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": "Unknown action"}, 400)
 
 
-
-
         elif parsed.path == "/api/rules":
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
@@ -26151,7 +25970,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.25 ready (localhost only)")
+    print(f"\n  Porter v0.27.26 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
