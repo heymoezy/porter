@@ -11749,24 +11749,27 @@ async function _reextractLearn(sid, source) {
   var textDiv = el.querySelector('.sess-learn-text');
   var old = textDiv.value || textDiv.textContent || '';
   textDiv.value = 'Re-analyzing\u2026';
+  textDiv.disabled = true;
   var _start = Date.now();
   var _timer = setInterval(function() {
     var s = Math.round((Date.now() - _start) / 1000);
-    textDiv.innerHTML = '<span class="learn-spinner"></span> Re-analyzing\u2026 ' + s + 's';
+    textDiv.value = 'Re-analyzing\u2026 ' + s + 's';
   }, 1000);
   try {
     var resp = await api('/api/sessions/' + encodeURIComponent(sid) + '/extract-learnings', { source: source, force: true }, 60000);
     clearInterval(_timer);
+    textDiv.disabled = false;
     if (resp && resp.ok && resp.learnings) {
-      textDiv.textContent = resp.learnings;
+      textDiv.value = resp.learnings;
       el.style.maxHeight = el.scrollHeight + 30 + 'px';
       toast('Learnings refreshed');
     } else {
-      textDiv.textContent = old;
+      textDiv.value = old;
       toast('Re-extract failed', 'err');
     }
   } catch(e) {
     clearInterval(_timer);
+    textDiv.disabled = false;
     textDiv.value = old;
     toast('Re-extract failed', 'err');
   }
@@ -11776,27 +11779,69 @@ var _extractAllRunning = false;
 async function _extractAllLearnings(source) {
   if (_extractAllRunning) {
     _extractAllRunning = false;
-    var btn = document.getElementById('extract-all-btn');
-    if (btn) { btn.disabled = false; btn.textContent = 'Update Learnings'; }
-    toast('Cancelled');
     return;
   }
   _extractAllRunning = true;
   var btn = document.getElementById('extract-all-btn');
-  if (btn) { btn.disabled = false; btn.innerHTML = '<span class="learn-spinner"></span> Extracting\u2026 (click to cancel)'; }
-  try {
-    var resp = await api('/api/sessions/extract-all', { source: source || '' }, 300000);
-    if (resp && resp.ok) {
-      toast('Extracted ' + resp.extracted + ' sessions (' + resp.skipped + ' cached, ' + resp.errors + ' errors)');
-      if (typeof _loadActivitySessions === 'function') _loadActivitySessions(source);
-    } else {
-      toast((resp && resp.error) || 'Batch extract failed', 'err');
-    }
-  } catch(e) {
-    toast('Batch extract failed', 'err');
+
+  // Get sessions that need extraction
+  var sessions = (_maSessionsData || []).filter(function(s) { return !s.learnings; });
+  var total = sessions.length;
+  var cached = (_maSessionsData || []).length - total;
+  if (total === 0) {
+    toast('All ' + cached + ' sessions already have learnings');
+    _extractAllRunning = false;
+    return;
   }
+  var done = 0, errors = 0;
+  if (btn) btn.innerHTML = '<span class="learn-spinner"></span> 0/' + total + ' extracting\u2026';
+
+  for (var i = 0; i < sessions.length; i++) {
+    if (!_extractAllRunning) break; // cancelled
+    var s = sessions[i];
+    var sid = s.id;
+    var ssrc = s.source || source;
+
+    // Show spinner on this session's Learnings button
+    var learnBtn = null;
+    var card = document.querySelector('.ma-session-card[data-session-id="' + sid.toLowerCase() + '"]');
+    if (card) {
+      var btns = card.querySelectorAll('button');
+      btns.forEach(function(b) { if (b.textContent.indexOf('Learnings') >= 0) learnBtn = b; });
+      if (learnBtn) learnBtn.innerHTML = '<span class="learn-spinner"></span>';
+    }
+
+    try {
+      var resp = await api('/api/sessions/' + encodeURIComponent(sid) + '/extract-learnings', { source: ssrc }, 60000);
+      if (resp && resp.ok && resp.learnings) {
+        done++;
+        // Update the card's learnings panel
+        var el = document.querySelector('.sess-learnings-inline[data-sid="' + sid + '"]');
+        if (el) {
+          var ta = el.querySelector('.sess-learn-text');
+          if (ta) ta.value = resp.learnings;
+        }
+        if (learnBtn) learnBtn.textContent = '\u25be Learnings';
+      } else {
+        errors++;
+        if (learnBtn) learnBtn.textContent = 'Learnings';
+      }
+    } catch(e) {
+      errors++;
+      if (learnBtn) learnBtn.textContent = 'Learnings';
+    }
+    if (btn) btn.innerHTML = '<span class="learn-spinner"></span> ' + (done + errors) + '/' + total + ' extracting\u2026';
+  }
+
+  var msg = 'Done: ' + done + ' extracted';
+  if (cached) msg += ', ' + cached + ' cached';
+  if (errors) msg += ', ' + errors + ' failed';
+  if (!_extractAllRunning) msg = 'Stopped: ' + done + ' extracted';
+  toast(msg);
   _extractAllRunning = false;
-  if (btn) { btn.disabled = false; btn.textContent = 'Update Learnings'; }
+  if (btn) btn.textContent = 'Update Learnings';
+  // Reload to get fresh data
+  if (done > 0 && typeof _loadActivitySessions === 'function') _loadActivitySessions(source);
 }
 
 // Legacy aliases (no-ops)
