@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.28 — Model Activity Slide-Out Pane"""
+"""Porter v0.27.29 — Smart Learnings"""
 
 
 import email
@@ -2185,96 +2185,125 @@ def _get_archived_session_ids() -> set:
     except Exception:
         return set()
 
-def _extract_learnings_preview(session_id: str, source: str) -> dict:
-    """LLM-powered session analysis — replaces old flush preview."""
-    # First get the basic preview data
+def _extract_learnings_preview(session_id: str, source: str, force: bool = False) -> dict:
+    """LLM-powered session analysis — persists results in DB."""
+    # Check cache first (unless force refresh)
+    if not force:
+        try:
+            conn = _db_conn()
+            row = conn.execute("SELECT learnings, backend_used, extracted_at FROM session_learnings WHERE session_id=?", (session_id,)).fetchone()
+            conn.close()
+            if row and row[0]:
+                destinations = _list_learning_destinations()
+                return {
+                    "ok": True, "learnings": row[0], "llm_used": True,
+                    "backend_used": row[1] or "", "cached": True,
+                    "raw_summary": "", "destinations": destinations,
+                    "session_id": session_id, "source": source,
+                    "first_user_msg": "", "extracted_at": row[2],
+                }
+        except Exception:
+            pass
+
+    # Try to get basic preview data (may fail for some sources — that's OK)
     preview = _flush_preview(session_id, source)
     if not preview.get("ok"):
-        return preview
+        preview = {"ok": True, "summary": "", "first_user_msg": ""}
 
     # Build transcript from session JSONL
     transcript = ""
-    jsonl_file = None
-    if source == "claude":
-        claude_dir = Path.home() / ".claude" / "projects" / "-home-lobster"
-        jsonl_file = claude_dir / f"{session_id}.jsonl"
-    elif source == "openclaw":
-        jsonl_file = OPENCLAW_STATE_DIR / "agents" / "main" / "sessions" / f"{session_id}.jsonl"
-    elif source == "gemini":
-        gemini_dir = Path.home() / ".gemini" / "sessions"
-        jsonl_file = gemini_dir / f"{session_id}.jsonl"
 
-    if jsonl_file and jsonl_file.exists():
-        try:
-            with open(jsonl_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    try:
-                        entry = json.loads(line)
-                    except Exception:
-                        continue
-                    etype = entry.get("type", "")
-                    role = ""
-                    text = ""
-                    if etype == "user":
-                        role = "USER"
-                        msg = entry.get("message", {})
-                        content = msg.get("content", "")
-                        if isinstance(content, list):
-                            for block in content:
-                                if isinstance(block, dict) and block.get("type") == "text":
-                                    text = block.get("text", "")
+    def _extract_text_from_content(content):
+        """Pull text from content (string, list of blocks, or dict)."""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    return block.get("text", "")
+                if isinstance(block, dict) and block.get("text"):
+                    return block.get("text", "")
+                if isinstance(block, str):
+                    return block
+        return ""
+
+    if source == "gemini":
+        # Gemini stores JSON files in ~/.gemini/tmp/*/chats/*.json
+        gemini_tmp = Path.home() / ".gemini" / "tmp"
+        if gemini_tmp.exists():
+            for json_file in gemini_tmp.rglob("chats/*.json"):
+                try:
+                    data = json.loads(json_file.read_text(encoding="utf-8"))
+                    if data.get("sessionId") == session_id:
+                        for msg in data.get("messages", []):
+                            mtype = msg.get("type", "")
+                            role = "USER" if mtype == "user" else ("ASSISTANT" if mtype == "model" else "")
+                            text = _extract_text_from_content(msg.get("content", []))
+                            if role and text:
+                                transcript += f"\n{role}: {text[:400]}\n"
+                                if len(transcript) > 3000:
                                     break
-                                elif isinstance(block, str):
-                                    text = block
-                                    break
-                        elif isinstance(content, str):
-                            text = content
-                    elif etype == "assistant":
-                        role = "ASSISTANT"
-                        msg = entry.get("message", {})
-                        content = msg.get("content", "")
-                        if isinstance(content, list):
-                            for block in content:
-                                if isinstance(block, dict) and block.get("type") == "text":
-                                    text = block.get("text", "")
-                                    break
-                        elif isinstance(content, str):
-                            text = content
-                    elif etype == "message":
-                        msg_obj = entry.get("message", {})
-                        role = msg_obj.get("role", "").upper()
-                        content = msg_obj.get("content", [])
-                        if isinstance(content, list):
-                            for block in content:
-                                if isinstance(block, dict) and block.get("type") == "text":
-                                    text = block.get("text", "")
-                                    break
-                        elif isinstance(content, str):
-                            text = content
-                    if role and text:
-                        transcript += f"\n{role}: {text[:400]}\n"
-                        if len(transcript) > 3000:
-                            transcript += "\n[...truncated...]\n"
-                            break
-        except Exception as e:
-            log.debug("Transcript extraction error: %s", e)
+                        break
+                except Exception:
+                    continue
+    else:
+        # Claude and OpenClaw use JSONL files
+        jsonl_file = None
+        if source == "claude":
+            claude_dir = Path.home() / ".claude" / "projects" / "-home-lobster"
+            jsonl_file = claude_dir / f"{session_id}.jsonl"
+        elif source == "openclaw":
+            jsonl_file = OPENCLAW_STATE_DIR / "agents" / "main" / "sessions" / f"{session_id}.jsonl"
+
+        if jsonl_file and jsonl_file.exists():
+            try:
+                with open(jsonl_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        try:
+                            entry = json.loads(line)
+                        except Exception:
+                            continue
+                        etype = entry.get("type", "")
+                        role = ""
+                        text = ""
+                        if etype == "user":
+                            role = "USER"
+                            text = _extract_text_from_content(entry.get("message", {}).get("content", ""))
+                        elif etype == "assistant":
+                            role = "ASSISTANT"
+                            text = _extract_text_from_content(entry.get("message", {}).get("content", ""))
+                        elif etype == "message":
+                            msg_obj = entry.get("message", {})
+                            role = msg_obj.get("role", "").upper()
+                            text = _extract_text_from_content(msg_obj.get("content", []))
+                        if role and text:
+                            transcript += f"\n{role}: {text[:400]}\n"
+                            if len(transcript) > 3000:
+                                transcript += "\n[...truncated...]\n"
+                                break
+            except Exception as e:
+                log.debug("Transcript extraction error: %s", e)
 
     # LLM analysis — use the session's own backend, fall back through chain
     learnings = ""
     llm_used = False
     if transcript.strip():
         prompt = (
-            "Analyze this AI session transcript. Extract:\n"
-            "- Key decisions made\n"
-            "- Patterns discovered\n"
-            "- Bugs fixed and root causes\n"
-            "- Architecture insights\n"
-            "Format as concise markdown sections. Skip empty sections.\n\n"
-            "TRANSCRIPT:\n" + transcript
+            "Extract learnings from this session as bullet points ready to append to a memory file.\n"
+            "Rules:\n"
+            "- Each bullet is one clear, actionable insight\n"
+            "- Start each with '- ' (markdown list)\n"
+            "- Be specific: include file names, function names, config keys\n"
+            "- No headers, no sections, no preamble — just the bullets\n"
+            "- Skip trivial items. Only things worth remembering.\n"
+            "- Max 8 bullets\n\n"
+            + transcript
         )
-        # Fast backends first — gemini CLI is fastest, then openclaw gateway, then ollama local
-        # Never use claude/codex here — they spawn slow CLI subprocesses
-        for backend in ["gemini", "openclaw", "ollama"]:
+        # Try all available backends — API-based first, then CLI-based
+        _api_backends = [bk for bk, info in PROVIDER_REGISTRY.items() if info.get("type") in ("api", "gateway")]
+        _cli_backends = [bk for bk, info in PROVIDER_REGISTRY.items() if info.get("type") == "cli"]
+        _local_backends = [bk for bk, info in PROVIDER_REGISTRY.items() if info.get("type") == "local"]
+        for backend in _api_backends + _cli_backends + _local_backends:
             if backend not in PROVIDER_REGISTRY:
                 continue
             try:
@@ -2287,6 +2316,20 @@ def _extract_learnings_preview(session_id: str, source: str) -> dict:
                 log.debug("LLM extract [%s] error: %s", backend, e)
                 continue
 
+    # Persist to DB if we got learnings
+    backend_used = ""
+    if learnings:
+        try:
+            conn = _db_conn()
+            conn.execute(
+                "INSERT OR REPLACE INTO session_learnings (session_id, source, learnings, backend_used) VALUES (?,?,?,?)",
+                (session_id, source, learnings, backend_used)
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            log.debug("Failed to persist learnings: %s", e)
+
     # Get destinations
     destinations = _list_learning_destinations()
 
@@ -2294,6 +2337,7 @@ def _extract_learnings_preview(session_id: str, source: str) -> dict:
         "ok": True,
         "learnings": learnings,
         "llm_used": llm_used,
+        "cached": False,
         "raw_summary": preview.get("summary", ""),
         "destinations": destinations,
         "session_id": session_id,
@@ -2303,47 +2347,15 @@ def _extract_learnings_preview(session_id: str, source: str) -> dict:
 
 
 def _list_learning_destinations() -> list:
-    """Scan for save targets — agent memory, project lessons, global."""
+    """Scan for save targets — global first, then project, then agent MEMORY.md."""
     destinations = []
 
-    # Build persona name lookup from DB
-    persona_names = {}
-    try:
-        conn = _db_conn()
-        for row in conn.execute("SELECT id, name, avatar FROM personas").fetchall():
-            persona_names[row[0]] = {"name": row[1], "avatar": row[2] or ""}
-        conn.close()
-    except Exception:
-        pass
-
-    # Agent group: each persona's MEMORY.md + memory/ subdir
-    try:
-        if PERSONAS_DIR.exists():
-            for persona_dir in sorted(PERSONAS_DIR.iterdir()):
-                if not persona_dir.is_dir():
-                    continue
-                pid = persona_dir.name
-                info = persona_names.get(pid, {})
-                display = info.get("name", pid)
-                avatar = info.get("avatar", "")
-                prefix = f"{avatar} {display}".strip() if avatar else display
-                mem_file = persona_dir / "MEMORY.md"
-                destinations.append({
-                    "path": str(mem_file),
-                    "label": f"{prefix} — MEMORY.md",
-                    "group": "agent"
-                })
-                mem_subdir = persona_dir / "memory"
-                if mem_subdir.exists():
-                    for mf in sorted(mem_subdir.iterdir()):
-                        if mf.is_file() and mf.suffix in (".md", ".txt"):
-                            destinations.append({
-                                "path": str(mf),
-                                "label": f"{prefix} — memory/{mf.name}",
-                                "group": "agent"
-                            })
-    except Exception as e:
-        log.debug("Persona scan error: %s", e)
+    # Global group (first — most common target)
+    destinations.append({
+        "path": str(MEMORY_DIR / "session_learnings.md"),
+        "label": "Global — session_learnings.md",
+        "group": "global"
+    })
 
     # Project group: tasks/lessons.md in workspace
     try:
@@ -2363,12 +2375,33 @@ def _list_learning_destinations() -> list:
     except Exception as e:
         log.debug("Project scan error: %s", e)
 
-    # Global group
-    destinations.append({
-        "path": str(MEMORY_DIR / "session_learnings.md"),
-        "label": "Global — session_learnings.md",
-        "group": "global"
-    })
+    # Agent group: each persona's MEMORY.md only (no daily logs)
+    persona_names = {}
+    try:
+        conn = _db_conn()
+        for row in conn.execute("SELECT id, name, avatar FROM personas ORDER BY sort_order, name").fetchall():
+            persona_names[row[0]] = {"name": row[1], "avatar": row[2] or ""}
+        conn.close()
+    except Exception:
+        pass
+
+    try:
+        if PERSONAS_DIR.exists():
+            for pid, info in persona_names.items():
+                persona_dir = PERSONAS_DIR / pid
+                if not persona_dir.is_dir():
+                    continue
+                display = info.get("name", pid)
+                avatar = info.get("avatar", "")
+                prefix = f"{avatar} {display}".strip() if avatar else display
+                mem_file = persona_dir / "MEMORY.md"
+                destinations.append({
+                    "path": str(mem_file),
+                    "label": f"{prefix} — MEMORY.md",
+                    "group": "agent"
+                })
+    except Exception as e:
+        log.debug("Persona scan error: %s", e)
 
     return destinations
 
@@ -4532,6 +4565,16 @@ def _init_trace_tables():
     )
     """)
 
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS session_learnings (
+        session_id TEXT PRIMARY KEY,
+        source TEXT NOT NULL DEFAULT '',
+        learnings TEXT NOT NULL DEFAULT '',
+        backend_used TEXT DEFAULT '',
+        extracted_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+    )
+    """)
+
     # Migration: add sort_order to personas if missing
     try:
         cols = [r[1] for r in conn.execute("PRAGMA table_info(personas)").fetchall()]
@@ -5146,28 +5189,7 @@ async function doLogin() {
   </div>
 </div>
 
-    <!-- Extract Learnings modal -->
-    <div id="learn-wizard-overlay" class="flush-wizard-overlay" style="display:none" onclick="if(event.target===this)closeLearnWizard()">
-      <div class="flush-wizard">
-        <h3>Extract Learnings</h3>
-        <div class="flush-wizard-section">
-          <div class="flush-wizard-label">Session metadata</div>
-          <div id="learn-wiz-meta" class="flush-wizard-preview" style="max-height:80px"></div>
-        </div>
-        <div class="flush-wizard-section">
-          <div class="flush-wizard-label">Learnings <span id="learn-wiz-status" style="font-size:10px;color:var(--accent);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
-          <textarea id="learn-wiz-editor" class="flush-wizard-editor" style="min-height:200px"></textarea>
-        </div>
-        <div class="flush-wizard-section">
-          <div class="flush-wizard-label">Save to</div>
-          <select id="learn-wiz-dest" style="width:100%;padding:8px 12px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);box-sizing:border-box"></select>
-        </div>
-        <div class="flush-wizard-actions">
-          <button class="btn btn-ghost" onclick="closeLearnWizard()">Cancel</button>
-          <button class="btn btn-primary" id="learn-wiz-save" onclick="saveLearn()" disabled>Save learnings</button>
-        </div>
-      </div>
-    </div>
+
 
 
 <!-- Keyboard shortcuts overlay -->
@@ -5612,9 +5634,10 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .flush-wizard-impact span { display:flex; flex-direction:column; gap:2px; }
 .flush-wizard-impact strong { font-size:11px; color:var(--text); }
 .flush-wizard-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
-.model-sparkline { display:inline-block;vertical-align:middle;margin-left:8px; }
 .persona-card[draggable] { cursor:grab; }
 .persona-card[draggable]:active { cursor:grabbing; }
+.persona-wizard-overlay { position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.4);z-index:999; }
+.persona-wizard-modal { position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:480px;max-height:80vh;background:var(--surface);border-radius:12px;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.25);z-index:1000;overflow:hidden;display:flex;flex-direction:column; }
 .learn-spinner { display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:learn-spin .6s linear infinite;vertical-align:middle;margin-right:4px; }
 @keyframes learn-spin { to { transform:rotate(360deg); } }
 #orch-chain-viewer { overflow-x:auto;padding:12px 0; }
@@ -6657,7 +6680,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .emoji-grid .emoji-btn.selected { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, var(--bg)); }
 @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
-/* Memory tab v6 — compact layout (stripped in v0.27.28, kept: .mem-section-label, .mem-age-badge, .mem-coord-*) */
+/* Memory tab v6 — compact layout (stripped in v0.27.29, kept: .mem-section-label, .mem-age-badge, .mem-coord-*) */
     /* Model list rows (replaces dropdown) */
     .model-list-rows { display:flex;flex-direction:column;gap:1px; }
     .model-list-row { display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;cursor:pointer;transition:.12s;font-size:12px;color:var(--text2); }
@@ -7102,7 +7125,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.28</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.29</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7306,7 +7329,8 @@ select.settings-input { padding-right: 26px; }
     </div>
 
     <!-- Onboarding Wizard (hidden) -->
-    <div id="persona-wizard" style="display:none">
+    <div id="persona-wizard-overlay" class="persona-wizard-overlay" onclick="closePersonaWizard()" style="display:none"></div>
+    <div id="persona-wizard" class="persona-wizard-modal" style="display:none">
       <div class="persona-detail-header">
         <span class="persona-detail-avatar">&#10024;</span>
         <div>
@@ -8256,7 +8280,8 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.27.28', date:'2026-03-05', notes:['Extract Learnings: LLM-powered session analysis replaces flush wizard','Session archive: dismiss sessions without writing (📦 button)','Destination picker: save learnings to agent memory, project, or global','Dispatch chain SVG visualization with animated edges','Session archive with confirmation dialog','Model health sparklines (24h trend bars) on model cards'] },
+  { ver:'v0.27.29', date:'2026-03-05', notes:['Smart Learnings: extracted insights persist in DB (no re-analysis)','Update Learnings button: batch-extract all sessions in one click','Learnings displayed inline on session cards with save button','Removed per-session Learn wizard modal'] },
+  { ver:'v0.27.28', date:'2026-03-05', notes:['Extract Learnings: LLM-powered session analysis replaces flush wizard','Session archive: dismiss sessions without writing (📦 button)','Destination picker: save learnings to agent memory, project, or global','Dispatch chain SVG visualization with animated edges','Session archive with confirmation dialog','Agent drag-and-drop reorder on Agents tab'] },
   { ver:'v0.27.27', date:'2026-03-05', notes:['Fix: model selection (showToast→toast)','Fix: Resume button leads to overview (not blank chat)','Fix: session summary counts thinking/tool_use turns','Session rename: pencil icon on inline cards, editable names persist','Backend version probing: /api/models/versions endpoint','Model cards show version badge with update indicator','Update modal shows install command for outdated backends'] },
   { ver:'v0.27.26', date:'2026-03-05', notes:['Models tab redesign: model list replaces dropdown selector','Inline expandable sessions on model cards (no more slide-out for sessions)','Memory tab removed entirely','Coordination files moved to Projects tab as Shared Files section','Live Trace button on working models opens slide-out panel'] },
   { ver:'v0.27.25', date:'2026-03-05', notes:['Sessions moved from Memory tab into Model Activity slide-out panel','Source filter on /api/sessions endpoint (?source=claude|openclaw|gemini)','New /api/sessions/<id>/summary endpoint returns last 10 turns','Session cards with Summary/Flush/Chat actions per model backend','Chat button injects session as context and switches to Chat tab','Memory tab cleaned: sessions section, filter bar, flush history removed'] },
@@ -11354,7 +11379,8 @@ function _showUpdateModal(backend, version) {
   modal.innerHTML = '<div style="background:var(--raised);border:1px solid var(--border);border-radius:10px;padding:24px;max-width:400px;width:90%">'
     + '<div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px">Update ' + escHtml(backend) + ' to v' + escHtml(version) + '</div>'
     + '<div style="font-size:12px;color:var(--text2);margin-bottom:16px">Run this command to update:</div>'
-    + '<code style="display:block;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;color:var(--accent);word-break:break-all">' + escHtml(cmd) + '</code>'
+    + '<div style="position:relative"><code style="display:block;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 36px 10px 10px;font-size:12px;color:var(--accent);word-break:break-all">' + escHtml(cmd) + '</code>'
+    + '<button class="btn btn-ghost" style="position:absolute;top:6px;right:6px;font-size:10px;padding:2px 6px" onclick="navigator.clipboard.writeText(\'' + cmd.replace(/'/g, "\\'") + '\');toast(\'Copied\',\'ok\')">Copy</button></div>'
     + '<div style="margin-top:16px;text-align:right"><button class="btn btn-ghost" style="font-size:12px" onclick="this.closest(\u0027div[style*=fixed]\u0027).remove()">Close</button></div>'
     + '</div>';
   document.body.appendChild(modal);
@@ -11417,7 +11443,15 @@ async function _loadInlineSessions(source, backend) {
     var archParam = _showArchivedSessions ? '&show_archived=1' : '';
     var resp = await api('/api/sessions?source=' + encodeURIComponent(source) + archParam);
     if (resp && resp.sessions) {
-      _renderInlineSessions(resp.sessions, source, container);
+      // Add Update Learnings button at top
+      var bar = document.createElement('div');
+      bar.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:4px';
+      bar.innerHTML = '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="_extractAllLearnings(\'' + escHtml(source) + '\')">Update Learnings</button>';
+      container.innerHTML = '';
+      container.appendChild(bar);
+      var listDiv = document.createElement('div');
+      container.appendChild(listDiv);
+      _renderInlineSessions(resp.sessions, source, listDiv);
     } else {
       container.innerHTML = '<div style="padding:8px;font-size:11px;color:var(--text3)">No sessions</div>';
     }
@@ -11453,7 +11487,16 @@ function _renderInlineSessions(sessions, source, container) {
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_renameSession(this,\'' + sid + '\',\'' + ssrc + '\')">✏</button>'
-        + '</div></div>';
+        + '</div>'
+        + (s.learnings ? '<div class="sess-learnings-inline" style="margin-top:3px;font-size:10px;color:var(--text3);max-height:0;overflow:hidden;transition:max-height .2s" data-sid="' + sid + '">'
+          + '<div style="white-space:pre-wrap;line-height:1.5">' + escHtml(s.learnings) + '</div>'
+          + '<div style="display:flex;gap:4px;margin-top:3px">'
+          + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_saveLearnInline(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
+          + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">\u21bb</button>'
+          + '</div></div>'
+          + '<button class="btn btn-ghost" style="font-size:9px;padding:0 4px;margin-top:2px" onclick="_toggleLearnInline(this,\'' + sid + '\')">' + (s.learnings ? '\u25b8 learnings' : '') + '</button>'
+          : '')
+        + '</div>';
     }).join('')
     + (sessions.length > 20 ? '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:4px">Showing 20 of ' + sessions.length + '</div>' : '')
     + '</div>';
@@ -11464,6 +11507,15 @@ var _showArchivedSessions = false;
 async function _loadActivitySessions(source) {
   var el = document.getElementById('ma-sessions-list');
   if (!el) return;
+  // Add Update Learnings button if not present
+  var hdr = el.parentElement.querySelector('.extract-all-bar');
+  if (!hdr) {
+    hdr = document.createElement('div');
+    hdr.className = 'extract-all-bar';
+    hdr.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:4px 0';
+    hdr.innerHTML = '<button id="extract-all-btn" class="btn btn-ghost" style="font-size:10px;padding:3px 10px" onclick="_extractAllLearnings(\'' + escHtml(source) + '\')">Update Learnings</button>';
+    el.parentElement.insertBefore(hdr, el);
+  }
   try {
     var resp = await api('/api/sessions?source=' + encodeURIComponent(source));
     if (resp && resp.sessions) {
@@ -11503,10 +11555,18 @@ function _renderActivitySessions(sessions, source) {
       + (sizeStr ? '<span>\u2022</span><span>' + sizeStr + '</span>' : '')
       + '</div>'
       + '<div class="ma-session-actions">'
-      + '<button class="btn btn-ghost" onclick="openLearnWizard(\'' + sid + '\',\'' + sname + '\',\'' + ssrc + '\')">Learn</button>'
       + '<button class="btn btn-ghost" onclick="archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
       + '<button class="btn btn-ghost" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
-      + '</div></div>';
+      + '</div>'
+      + (s.learnings ? '<div class="sess-learnings-inline" style="margin-top:4px;font-size:10px;color:var(--text3);max-height:0;overflow:hidden;transition:max-height .2s" data-sid="' + sid + '">'
+        + '<div style="white-space:pre-wrap;line-height:1.5">' + escHtml(s.learnings) + '</div>'
+        + '<div style="display:flex;gap:4px;margin-top:3px">'
+        + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_saveLearnInline(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
+        + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">\u21bb</button>'
+        + '</div></div>'
+        + '<button class="btn btn-ghost" style="font-size:9px;padding:0 4px;margin-top:2px" onclick="_toggleLearnInline(this,\'' + sid + '\')">' + (s.learnings ? '\u25b8 learnings' : '') + '</button>'
+        : '')
+      + '</div>';
   }).join('')
   + (sessions.length > 30 ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">Showing 30 of ' + sessions.length + '</div>' : '');
 }
@@ -11591,109 +11651,121 @@ async function _maSessionChat(sessionId, source, name) {
   }
 }
 
-var _flushWizData = null;
+// ── Smart Learnings: inline functions ──
 
-var _learnWizData = null;
-
-async function openLearnWizard(sessionId, name, source) {
-  var overlay = document.getElementById('learn-wizard-overlay');
-  var meta = document.getElementById('learn-wiz-meta');
-  var editor = document.getElementById('learn-wiz-editor');
-  var dest = document.getElementById('learn-wiz-dest');
-  var status = document.getElementById('learn-wiz-status');
-  var saveBtn = document.getElementById('learn-wiz-save');
-  if (!overlay) return;
-  overlay.style.display = 'flex';
-  meta.innerHTML = '<span class="learn-spinner"></span> Loading session\u2026';
-  editor.value = '';
-  editor.disabled = true;
-  editor.placeholder = '';
-  saveBtn.disabled = true;
-  if (status) status.innerHTML = '<span class="learn-spinner"></span> Analyzing with AI\u2026';
-  // Elapsed timer so user sees progress
-  var _learnStart = Date.now();
-  var _learnTimer = setInterval(function() {
-    var elapsed = Math.round((Date.now() - _learnStart) / 1000);
-    if (status) status.innerHTML = '<span class="learn-spinner"></span> Analyzing with AI\u2026 ' + elapsed + 's';
-  }, 1000);
-
-  var resp;
-  try {
-    resp = await api('/api/sessions/' + encodeURIComponent(sessionId) + '/extract-learnings', { source: source }, 60000);
-  } catch(e) {
-    resp = null;
-  }
-  clearInterval(_learnTimer);
-  if (!resp || !resp.ok) {
-    meta.textContent = (resp && resp.error) || 'Failed to extract learnings';
-    if (status) status.textContent = '';
-    editor.disabled = false;
-    editor.placeholder = 'Analysis failed. You can write learnings manually here.';
-    return;
-  }
-  _learnWizData = resp;
-  meta.textContent = resp.raw_summary || '(session metadata)';
-  editor.disabled = false;
-  editor.value = resp.learnings || '';
-  var elapsed = Math.round((Date.now() - _learnStart) / 1000);
-  if (status) status.textContent = resp.llm_used ? 'Done in ' + elapsed + 's' : '';
-
-  // Populate destinations
-  dest.innerHTML = '';
-  var groups = {};
-  (resp.destinations || []).forEach(function(d) {
-    var g = d.group || 'other';
-    if (!groups[g]) groups[g] = [];
-    groups[g].push(d);
-  });
-  ['agent', 'project', 'global'].forEach(function(g) {
-    if (!groups[g]) return;
-    var optgroup = document.createElement('optgroup');
-    optgroup.label = g.charAt(0).toUpperCase() + g.slice(1);
-    groups[g].forEach(function(d) {
-      var opt = document.createElement('option');
-      opt.value = d.path;
-      opt.textContent = d.label;
-      optgroup.appendChild(opt);
-    });
-    dest.appendChild(optgroup);
-  });
-  saveBtn.disabled = false;
-}
-
-// Legacy aliases
-function openFlushWizard(sid, name, src) { openLearnWizard(sid, name, src); }
-function closeFlushWizard() { closeLearnWizard(); }
-
-async function saveLearn() {
-  if (!_learnWizData) return;
-  var editor = document.getElementById('learn-wiz-editor');
-  var dest = document.getElementById('learn-wiz-dest');
-  var saveBtn = document.getElementById('learn-wiz-save');
-  saveBtn.disabled = true;
-  saveBtn.textContent = 'Saving\u2026';
-  var res = await api('/api/sessions/' + encodeURIComponent(_learnWizData.session_id) + '/save-learnings', {
-    learnings: editor.value.trim(),
-    destination: dest.value,
-    source: _learnWizData.source,
-  });
-  if (res && res.ok) {
-    toast('Learnings saved to ' + (res.path || dest.value).split('/').pop());
-    closeLearnWizard();
+function _toggleLearnInline(btn, sid) {
+  var el = document.querySelector('.sess-learnings-inline[data-sid="' + sid + '"]');
+  if (!el) return;
+  if (el.style.maxHeight && el.style.maxHeight !== '0px') {
+    el.style.maxHeight = '0';
+    btn.textContent = '\u25b8 learnings';
   } else {
-    toast((res && res.error) || 'Save failed', 'err');
-    saveBtn.disabled = false;
-    saveBtn.textContent = 'Save learnings';
+    el.style.maxHeight = el.scrollHeight + 20 + 'px';
+    btn.textContent = '\u25be learnings';
   }
 }
 
-function closeLearnWizard() {
-  var overlay = document.getElementById('learn-wizard-overlay');
-  if (overlay) overlay.style.display = 'none';
-  _learnWizData = null;
-  var saveBtn = document.getElementById('learn-wiz-save');
-  if (saveBtn) { saveBtn.textContent = 'Save learnings'; saveBtn.disabled = false; }
+var _learnDestCache = null;
+async function _saveLearnInline(btn, sid, source) {
+  // Toggle destination picker
+  var existing = btn.parentElement.querySelector('.learn-dest-picker');
+  if (existing) { existing.remove(); return; }
+  // Load destinations if not cached
+  if (!_learnDestCache) {
+    try {
+      var r = await api('/api/sessions/destinations');
+      _learnDestCache = (r && r.destinations) || [];
+    } catch(e) { _learnDestCache = []; }
+  }
+  // Get learnings text
+  var container = btn.closest('.sess-learnings-inline');
+  var text = container ? container.querySelector('div').textContent : '';
+  // Build inline picker
+  var picker = document.createElement('div');
+  picker.className = 'learn-dest-picker';
+  picker.style.cssText = 'display:flex;gap:4px;align-items:center;margin-top:3px';
+  var sel = document.createElement('select');
+  sel.style.cssText = 'font-size:10px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text);flex:1';
+  _learnDestCache.forEach(function(d) {
+    var opt = document.createElement('option');
+    opt.value = d.path;
+    opt.textContent = d.label;
+    sel.appendChild(opt);
+  });
+  var saveBtn = document.createElement('button');
+  saveBtn.className = 'btn btn-primary';
+  saveBtn.style.cssText = 'font-size:9px;padding:2px 8px';
+  saveBtn.textContent = 'Save';
+  saveBtn.onclick = async function() {
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving\u2026';
+    var res = await api('/api/sessions/' + encodeURIComponent(sid) + '/save-learnings', {
+      learnings: text, destination: sel.value, source: source
+    });
+    if (res && res.ok) {
+      toast('Saved to ' + (res.path || sel.value).split('/').pop());
+      picker.remove();
+    } else {
+      toast((res && res.error) || 'Failed', 'err');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save';
+    }
+  };
+  picker.appendChild(sel);
+  picker.appendChild(saveBtn);
+  btn.parentElement.appendChild(picker);
 }
+
+async function _reextractLearn(sid, source) {
+  var el = document.querySelector('.sess-learnings-inline[data-sid="' + sid + '"]');
+  if (!el) return;
+  var textDiv = el.querySelector('div');
+  var old = textDiv.textContent;
+  textDiv.innerHTML = '<span class="learn-spinner"></span> Re-analyzing\u2026';
+  try {
+    var resp = await api('/api/sessions/' + encodeURIComponent(sid) + '/extract-learnings', { source: source, force: true }, 60000);
+    if (resp && resp.ok && resp.learnings) {
+      textDiv.textContent = resp.learnings;
+      el.style.maxHeight = el.scrollHeight + 20 + 'px';
+      toast('Learnings refreshed');
+    } else {
+      textDiv.textContent = old;
+      toast('Re-extract failed', 'err');
+    }
+  } catch(e) {
+    textDiv.textContent = old;
+    toast('Re-extract failed', 'err');
+  }
+}
+
+var _extractAllRunning = false;
+async function _extractAllLearnings(source) {
+  if (_extractAllRunning) { toast('Already running', 'err'); return; }
+  _extractAllRunning = true;
+  var btn = document.getElementById('extract-all-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="learn-spinner"></span> Extracting\u2026'; }
+  try {
+    var resp = await api('/api/sessions/extract-all', { source: source || '' }, 300000);
+    if (resp && resp.ok) {
+      toast('Extracted ' + resp.extracted + ' sessions (' + resp.skipped + ' cached, ' + resp.errors + ' errors)');
+      // Reload sessions to show new learnings
+      if (typeof _loadActivitySessions === 'function') _loadActivitySessions(source);
+    } else {
+      toast((resp && resp.error) || 'Batch extract failed', 'err');
+    }
+  } catch(e) {
+    toast('Batch extract failed', 'err');
+  }
+  _extractAllRunning = false;
+  if (btn) { btn.disabled = false; btn.textContent = 'Update Learnings'; }
+}
+
+// Legacy aliases (no-ops)
+function openLearnWizard() {}
+function closeLearnWizard() {}
+function openFlushWizard() {}
+function closeFlushWizard() {}
+function saveLearn() {}
 
 async function archiveSession(sessionId, source) {
   if (!confirm('Archive this session? It will be hidden from the default list.')) return;
@@ -14540,15 +14612,32 @@ function _elapsedStr(startTs) {
 async function loadModels() {
   _preloadSessionCounts();
   try {
-    var [data, act, avail, vers] = await Promise.all([
+    var [data, act, avail] = await Promise.all([
       api('/api/providers'),
       api('/api/models/activity'),
       api('/api/models/available'),
-      api('/api/models/versions'),
     ]);
     _modelActivityData = (act && act.activity) ? act.activity : {};
     _modelAvailableData = (avail && avail.backends) ? avail.backends : {};
-    window._modelVersions = (vers && vers.versions) ? vers.versions : {};
+    // Versions loaded separately — slower probe, shouldn't block card render
+    fetch('/api/models/versions', {credentials:'same-origin'})
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(vers) {
+        window._modelVersions = (vers && vers.versions) ? vers.versions : {};
+        // Populate version badge placeholders
+        Object.keys(window._modelVersions).forEach(function(bk) {
+          var vd = window._modelVersions[bk];
+          if (!vd || !vd.version) return;
+          var el = document.getElementById('ver-badge-' + bk);
+          if (!el) return;
+          var html = '<span style="font-size:10px;color:var(--text3);font-family:monospace">v' + escHtml(vd.version) + '</span>';
+          if (vd.update_available) {
+            html += ' <span style="font-size:10px;color:#f59e0b;cursor:pointer" onclick="_showUpdateModal(\'' + bk + '\',\'' + escHtml(vd.update_available) + '\')">'
+              + '\u26a0 v' + escHtml(vd.update_available) + ' available</span>';
+          }
+          el.innerHTML = html;
+        });
+      }).catch(function() {});
     _renderModelsSummary(data);
     _renderModelCards(data, _modelActivityData);
     _connectModelSSE();
@@ -14643,7 +14732,7 @@ function _renderModelCards(data, act) {
         + '<div class="model-inline-sessions" id="inline-sess-' + escHtml(p.id) + '" style="display:none"></div>'
         + '</div>';
     }
-    // Live Trace button (only when working)
+    // Live Trace button (only when actively dispatching)
     var liveTraceBtn = '';
     if (activeRuns.length > 0) {
       liveTraceBtn = '<div style="margin-top:4px"><button class="btn btn-ghost" style="font-size:10px;width:100%;color:var(--accent)" onclick="_openModelActivity(\'' + escHtml(p.id) + '\')">Live Trace</button></div>';
@@ -14687,39 +14776,19 @@ function _renderModelCards(data, act) {
       + _statusBadge
       + '</div>'
       + '<div class="model-card-type">' + escHtml(p.label || p.id) + ' · ' + escHtml(p.type || 'unknown') + '</div>'
-      + (function() {
-          var vd = (window._modelVersions || {})[p.id];
-          if (!vd || !vd.version) return '';
-          var badge = '<div style="font-size:10px;color:var(--text3);margin-bottom:6px;font-family:monospace">v' + escHtml(vd.version) + '</div>';
-          if (vd.update_available) {
-            badge += '<div style="font-size:10px;color:#f59e0b;margin-bottom:6px;cursor:pointer" onclick="_showUpdateModal(\'' + escHtml(p.id) + '\',\'' + escHtml(vd.update_available) + '\')">'
-              + '\u26a0 Update: v' + escHtml(vd.update_available) + ' available</div>';
-          }
-          return badge;
-        })()
+      + '<div class="model-ver-badge" id="ver-badge-' + escHtml(p.id) + '"></div>'
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
       + (tags ? '<div class="model-card-tags">' + tags + '</div>' : '')
       + agentSection
       + _selHtml
       + '<div class="model-card-divider"></div>'
       + statsHtml
-      + '<div class="model-sparkline" id="sparkline-' + escHtml(p.id) + '" title="Activity over last 24 hours"></div>'
+      + ''
       + sessionsBtn
       + liveTraceBtn
       + '</div>';
   }).join('');
 
-  // Load sparklines for each model card (silent — no error toasts)
-  data.providers.forEach(function(p) {
-    fetch('/api/visualizations/sparkline?backend=' + encodeURIComponent(p.id))
-      .then(function(r) { return r.ok ? r.json() : null; })
-      .then(function(res) {
-        if (res && res.svg) {
-          var el = document.getElementById('sparkline-' + p.id);
-          if (el) el.innerHTML = res.svg;
-        }
-      }).catch(function() {});
-  });
 
   // Start elapsed timers for working models
   document.querySelectorAll('.model-elapsed').forEach(function(el) {
@@ -15299,6 +15368,7 @@ async function selectPersona(id) {
   // Close other panels
   document.getElementById('rules-editor').style.display = 'none';
   document.getElementById('persona-wizard').style.display = 'none';
+  document.getElementById('persona-wizard-overlay').style.display = 'none';
   // Fetch full persona data
   try {
     const r = await api('/api/personas/' + id);
@@ -15545,7 +15615,7 @@ async function sleepPersona(id) {
 async function openRulesEditor() {
   document.getElementById('rules-editor').style.display = 'flex';
   closePersonaDetail();
-  document.getElementById('persona-wizard').style.display = 'none';
+  closePersonaWizard();
   const r = await api('/api/personas/rules');
   if (r.ok) {
     document.getElementById('rules-editor-textarea').value = r.rules || '';
@@ -15567,7 +15637,8 @@ async function saveRules() {
 
 // ── Onboarding Wizard ──
 function openPersonaWizard() {
-  document.getElementById('persona-wizard').style.display = 'block';
+  document.getElementById('persona-wizard-overlay').style.display = 'block';
+  document.getElementById('persona-wizard').style.display = 'flex';
   document.getElementById('persona-detail').style.display = 'none';
   document.getElementById('rules-editor').style.display = 'none';
   _wizCurrentStep = 1;
@@ -15588,6 +15659,7 @@ function openPersonaWizard() {
 
 function closePersonaWizard() {
   document.getElementById('persona-wizard').style.display = 'none';
+  document.getElementById('persona-wizard-overlay').style.display = 'none';
 }
 
 function wizSelectEmoji(btn, emoji) {
@@ -16161,12 +16233,27 @@ function closeConfigPanel() {
   if (main) main.classList.remove('config-open');
 }
 
-// Close config panel on Escape
+// Global Escape key — close any open panel or modal (innermost first)
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') {
-    const cp = document.getElementById('configPanel');
-    if (cp && cp.classList.contains('open')) { closeConfigPanel(); e.stopPropagation(); }
-  }
+  if (e.key !== 'Escape') return;
+  // Wizard modal (highest z-index)
+  var wiz = document.getElementById('persona-wizard');
+  if (wiz && wiz.style.display !== 'none') { closePersonaWizard(); e.stopPropagation(); return; }
+  // Persona detail slide-out
+  var pd = document.getElementById('persona-detail');
+  if (pd && pd.classList.contains('open')) { closePersonaDetail(); e.stopPropagation(); return; }
+  // Model activity slide-out
+  var ma = document.getElementById('model-activity-panel');
+  if (ma && ma.classList.contains('open')) { _closeModelActivity(); e.stopPropagation(); return; }
+  // Config panel slide-out
+  var cp = document.getElementById('configPanel');
+  if (cp && cp.classList.contains('open')) { closeConfigPanel(); e.stopPropagation(); return; }
+  // File preview panel
+  var pp = document.getElementById('previewPanel');
+  if (pp && pp.classList.contains('open')) { closePreview(); e.stopPropagation(); return; }
+  // Rules editor
+  var re = document.getElementById('rules-editor');
+  if (re && re.style.display !== 'none' && re.style.display !== '') { closeRulesEditor(); e.stopPropagation(); return; }
 }, true);
 
 // S7: Project config editor (uses existing config slide-out panel)
@@ -19435,28 +19522,7 @@ init();
   </div>
 </div>
 
-    <!-- Extract Learnings modal (duplicate for second HTML section) -->
-    <div id="learn-wizard-overlay" class="flush-wizard-overlay" style="display:none" onclick="if(event.target===this)closeLearnWizard()">
-      <div class="flush-wizard">
-        <h3>Extract Learnings</h3>
-        <div class="flush-wizard-section">
-          <div class="flush-wizard-label">Session metadata</div>
-          <div id="learn-wiz-meta" class="flush-wizard-preview" style="max-height:80px"></div>
-        </div>
-        <div class="flush-wizard-section">
-          <div class="flush-wizard-label">Learnings <span id="learn-wiz-status" style="font-size:10px;color:var(--accent);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
-          <textarea id="learn-wiz-editor" class="flush-wizard-editor" style="min-height:200px"></textarea>
-        </div>
-        <div class="flush-wizard-section">
-          <div class="flush-wizard-label">Save to</div>
-          <select id="learn-wiz-dest" style="width:100%;padding:8px 12px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);box-sizing:border-box"></select>
-        </div>
-        <div class="flush-wizard-actions">
-          <button class="btn btn-ghost" onclick="closeLearnWizard()">Cancel</button>
-          <button class="btn btn-primary" id="learn-wiz-save" onclick="saveLearn()" disabled>Save learnings</button>
-        </div>
-      </div>
-    </div>
+
 
 
 <!-- Keyboard shortcuts overlay -->
@@ -19814,46 +19880,6 @@ def _svg_escape(text: str) -> str:
     return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
-def _build_sparkline_svg(backend: str) -> str:
-    """Model health sparkline — 12 bars for last 24h (2-hour buckets)."""
-    import time as _t
-    now = _t.time()
-    try:
-        conn = _db_conn()
-        rows = conn.execute(
-            "SELECT created_at, status FROM agent_messages WHERE to_agent=? AND created_at>? ORDER BY created_at",
-            (backend, now - 86400)
-        ).fetchall()
-        conn.close()
-    except Exception:
-        return ""
-    if not rows:
-        return ""
-
-    buckets = [{"ok": 0, "fail": 0} for _ in range(12)]
-    for created_at, status in rows:
-        idx = min(11, int((now - created_at) / 7200))
-        idx = 11 - idx  # newest on right
-        if status == "failed":
-            buckets[idx]["fail"] += 1
-        else:
-            buckets[idx]["ok"] += 1
-
-    max_count = max((b["ok"] + b["fail"]) for b in buckets) or 1
-    bars = ""
-    for i, b in enumerate(buckets):
-        total = b["ok"] + b["fail"]
-        h = max(2, int((total / max_count) * 18))
-        color = "#ef4444" if b["fail"] > b["ok"] else "#22c55e"
-        x = i * 5
-        bars += f'<rect x="{x}" y="{20 - h}" width="4" height="{h}" rx="1" fill="{color}" opacity="0.8"/>'
-
-    total_ok = sum(b["ok"] for b in buckets)
-    total_fail = sum(b["fail"] for b in buckets)
-    tip = f"{total_ok + total_fail} requests in 24h"
-    if total_fail:
-        tip += f" ({total_fail} failed)"
-    return f'<svg width="60" height="20" viewBox="0 0 60 20" xmlns="http://www.w3.org/2000/svg" style="cursor:help"><title>{tip}</title>{bars}</svg>'
 
 
 
@@ -21471,7 +21497,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.28"})
+            self.reply_json({"v": "0.27.29"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -21558,7 +21584,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.28"
+                health["porter_version"] = "0.27.29"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -22763,6 +22789,18 @@ class Handler(BaseHTTPRequestHandler):
             if not show_archived:
                 all_sessions = [s for s in all_sessions if not s["archived"]]
             all_sessions.sort(key=lambda s: s.get("first_ts", ""), reverse=True)
+            # Attach cached learnings
+            try:
+                conn = _db_conn()
+                learn_rows = conn.execute("SELECT session_id, learnings, extracted_at FROM session_learnings").fetchall()
+                conn.close()
+                learn_map = {r[0]: {"learnings": r[1], "learnings_at": r[2]} for r in learn_rows}
+            except Exception:
+                learn_map = {}
+            for s in all_sessions:
+                ldata = learn_map.get(s.get("id", ""))
+                s["learnings"] = ldata["learnings"] if ldata else None
+                s["learnings_at"] = ldata["learnings_at"] if ldata else None
             self.reply_json({"ok": True, "sessions": all_sessions, "count": len(all_sessions)})
 
         # ── Session summary (GET /api/sessions/<id>/summary?source=) ─────────
@@ -22778,15 +22816,6 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── Memory tab: Memory overview (GET) ─────────────────────────────────
         # ── Visualization endpoints (GET) ─────────────────────────────────────
-        elif parsed.path == "/api/visualizations/sparkline":
-            if not self.auth_check(redirect=False): return
-            backend = qs.get("backend", [""])[0]
-            if not backend:
-                self.reply_json({"ok": False, "error": "backend param required"}, 400); return
-            svg = _build_sparkline_svg(backend)
-            self.reply_json({"ok": True, "svg": svg})
-
-
         elif parsed.path == "/api/visualizations/dispatch-chain":
             if not self.auth_check(redirect=False): return
             chain_id = qs.get("chain_id", [""])[0]
@@ -23001,7 +23030,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.28'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.29'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -25409,8 +25438,49 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": "Missing session_id"}, 400); return
             data = self.read_json_body()
             source = str(data.get("source", "")).strip()
-            result = _extract_learnings_preview(session_id, source)
+            force = bool(data.get("force", False))
+            result = _extract_learnings_preview(session_id, source, force=force)
             self.reply_json(result)
+
+        # ── Batch extract all learnings (POST) ────────────────────────────
+        elif parsed.path == "/api/sessions/extract-all":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            source_filter = str(data.get("source", "")).strip().lower()
+            loaders = {"openclaw": _load_session_summaries, "claude": _load_claude_session_summaries, "gemini": _load_gemini_session_summaries}
+            if source_filter and source_filter in loaders:
+                all_sessions = loaders[source_filter]()
+            else:
+                all_sessions = _load_session_summaries() + _load_claude_session_summaries() + _load_gemini_session_summaries()
+            # Filter out archived
+            archived_ids = _get_archived_session_ids()
+            all_sessions = [s for s in all_sessions if s.get("id", "") not in archived_ids]
+            # Check which already have learnings
+            try:
+                conn = _db_conn()
+                existing = {r[0] for r in conn.execute("SELECT session_id FROM session_learnings").fetchall()}
+                conn.close()
+            except Exception:
+                existing = set()
+            total = len(all_sessions)
+            extracted = 0
+            skipped = 0
+            errors = 0
+            for s in all_sessions:
+                sid = s.get("id", "")
+                ssrc = s.get("source", source_filter or "unknown")
+                if sid in existing:
+                    skipped += 1
+                    continue
+                try:
+                    result = _extract_learnings_preview(sid, ssrc)
+                    if result.get("ok") and result.get("learnings"):
+                        extracted += 1
+                    else:
+                        errors += 1
+                except Exception:
+                    errors += 1
+            self.reply_json({"ok": True, "total": total, "extracted": extracted, "skipped": skipped, "errors": errors})
 
         # ── Save learnings to file (POST) ─────────────────────────────────────
         elif parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/save-learnings"):
@@ -25444,7 +25514,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
         elif parsed.path == "/api/personas/reorder":
             if not self.auth_check(redirect=False): return
             try:
-                body = self.json_body()
+                body = self.read_json_body()
                 order = body.get("order", [])  # list of persona IDs in new order
                 if not order or not isinstance(order, list):
                     self.reply_json({"ok": False, "error": "order list required"}, 400)
@@ -26763,7 +26833,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.28 ready (localhost only)")
+    print(f"\n  Porter v0.27.29 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
