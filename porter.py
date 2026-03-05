@@ -1598,6 +1598,7 @@ def _load_claude_session_summaries() -> list:
             assistant_msgs = 0
             first_ts = ""
             last_ts = ""
+            first_user_text = ""
 
             with open(jsonl_file, "r", encoding="utf-8") as f:
                 for line in f:
@@ -1614,12 +1615,28 @@ def _load_claude_session_summaries() -> list:
                         last_ts = ts
                     if etype == "user":
                         user_msgs += 1
+                        if not first_user_text:
+                            msg = entry.get("message", {})
+                            text_candidate = ""
+                            if isinstance(msg, dict):
+                                content = msg.get("content", "")
+                                if isinstance(content, list):
+                                    text_candidate = " ".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
+                                elif isinstance(content, str):
+                                    text_candidate = content
+                            elif isinstance(msg, str):
+                                text_candidate = msg
+                            text_candidate = text_candidate.strip()[:80].replace("\n", " ")
+                            # Skip tool interrupts and empty messages
+                            if text_candidate and not text_candidate.startswith("[Request interrupted") and not text_candidate.startswith("[Tool"):
+                                first_user_text = text_candidate
                     elif etype == "assistant":
                         assistant_msgs += 1
 
+            session_name = first_user_text or f"Session {session_id[:8]}"
             summaries.append({
                 "id": session_id,
-                "name": "Claude session",
+                "name": session_name,
                 "source": "claude",
                 "file": jsonl_file.name,
                 "first_ts": first_ts,
@@ -11174,6 +11191,24 @@ function _memAgeBadge(ts) {
 
 
 var _maSessionsData = [];
+var _maSessionCounts = {}; // {source: {count: N}}
+
+async function _preloadSessionCounts() {
+  ['claude','openclaw','gemini'].forEach(async function(src) {
+    try {
+      var resp = await api('/api/sessions?source=' + src);
+      if (resp && resp.ok !== false) {
+        _maSessionCounts[src] = { count: resp.count || 0 };
+        // Update button label if visible
+        var btn = document.querySelector('[data-model-id="' + src + '"] .btn-ghost');
+        if (btn && btn.textContent.match(/session/i)) {
+          var c = resp.count || 0;
+          btn.textContent = c + ' session' + (c !== 1 ? 's' : '');
+        }
+      }
+    } catch(e) { /* ignore */ }
+  });
+}
 
 async function _loadActivitySessions(source) {
   var el = document.getElementById('ma-sessions-list');
@@ -11196,19 +11231,22 @@ function _renderActivitySessions(sessions, source) {
     el.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text3);font-size:12px">No sessions found</div>';
     return;
   }
-  var shown = sessions.slice(0, 20);
+  var shown = sessions.slice(0, 30);
   el.innerHTML = shown.map(function(s) {
     var ageBadge = _memAgeBadge(s.last_ts || s.first_ts);
     var sizeKb = s.size_kb || 0;
     var sizeStr = sizeKb > 1024 ? (sizeKb / 1024).toFixed(1) + ' MB' : (sizeKb > 0 ? sizeKb.toFixed(0) + ' KB' : '');
     var sid = escHtml(s.id);
+    var shortId = sid.substring(0, 8);
     var sname = escHtml(s.name || s.id.substring(0, 12));
     var ssrc = escHtml(s.source || source);
+    var date = s.first_ts ? new Date(s.first_ts).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
     return '<div class="ma-session-card" data-session-name="' + sname.toLowerCase() + '" data-session-id="' + sid.toLowerCase() + '">'
       + '<div class="ma-session-hdr">'
-      + '<span class="ma-session-name">' + sname + '</span>'
+      + '<span class="ma-session-name" title="' + sid + '">' + sname + '</span>'
       + ageBadge
       + '</div>'
+      + '<div style="font-size:10px;color:var(--text3);font-family:monospace;margin-bottom:4px">' + shortId + (date ? ' \u00b7 ' + date : '') + '</div>'
       + '<div class="ma-session-meta">'
       + '<span>' + (s.messages || 0) + ' msgs</span>'
       + (sizeStr ? '<span>\u2022</span><span>' + sizeStr + '</span>' : '')
@@ -11216,10 +11254,10 @@ function _renderActivitySessions(sessions, source) {
       + '<div class="ma-session-actions">'
       + '<button class="btn btn-ghost" onclick="_maSessionSummary(\'' + sid + '\',\'' + ssrc + '\')">Summary</button>'
       + '<button class="btn btn-ghost" onclick="openFlushWizard(\'' + sid + '\',\'' + sname + '\',\'' + ssrc + '\')">Flush</button>'
-      + '<button class="btn btn-ghost" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Chat</button>'
+      + '<button class="btn btn-ghost" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
       + '</div></div>';
   }).join('')
-  + (sessions.length > 20 ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">Showing 20 of ' + sessions.length + '</div>' : '');
+  + (sessions.length > 30 ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">Showing 30 of ' + sessions.length + '</div>' : '');
 }
 
 function _maFilterSessions(query) {
@@ -14262,6 +14300,7 @@ function _elapsedStr(startTs) {
 }
 
 async function loadModels() {
+  _preloadSessionCounts();
   try {
     var [data, act, avail] = await Promise.all([
       api('/api/providers'),
@@ -14357,25 +14396,15 @@ function _renderModelCards(data, act) {
       statsHtml = '<div class="model-card-stats">24h: No dispatches</div>';
     }
 
-    // Recent runs
-    var recentHtml = '';
-    if (recent.length > 0) {
-      var runs = recent.slice(0, 3).map(function(r) {
-        var rdot = r.status === 'complete' ? '#22c55e' : (r.status === 'failed' ? '#ef4444' : 'var(--accent)');
-        var icon = r.status === 'failed' ? '✗' : '●';
-        var dur = r.duration_ms ? _formatDuration(r.duration_ms) : '';
-        var ago = _relativeTime(r.created_at);
-        return '<div class="model-card-run">'
-          + '<span class="model-card-run-dot" style="background:' + rdot + '"></span>'
-          + '<span class="model-card-run-preview">' + escHtml((r.preview || '').substring(0, 50)) + '</span>'
-          + '<span class="model-card-run-meta">' + dur + (ago ? '  ' + ago : '') + '</span>'
-          + '</div>';
-      }).join('');
-      recentHtml = '<div class="model-card-recent"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:4px;font-weight:600">Recent</div>' + runs + '</div>';
+    // Session count button (replaces recent runs)
+    var _maSourceMap2 = {claude:'claude', openclaw:'openclaw', gemini:'gemini'};
+    var _maCardSource = _maSourceMap2[p.id] || null;
+    var sessionsBtn = '';
+    if (_maCardSource) {
+      var _cachedCount = ((_maSessionCounts || {})[_maCardSource] || {}).count;
+      var countLabel = typeof _cachedCount === 'number' ? _cachedCount + ' session' + (_cachedCount !== 1 ? 's' : '') : 'Sessions';
+      sessionsBtn = '<div style="margin-top:8px"><button class="btn btn-ghost" style="font-size:11px;width:100%" onclick="_openModelActivity(\'' + escHtml(p.id) + '\')">' + countLabel + '</button></div>';
     }
-
-    // Activity button
-    var activityBtn = '<div style="margin-top:8px"><button class="btn btn-ghost" style="font-size:11px;width:100%" onclick="_openModelActivity(\'' + escHtml(p.id) + '\')">Sessions</button></div>';
 
     // Model selector: show active model name as card title
     var _avBk = (_modelAvailableData || {})[p.id] || {};
@@ -14406,8 +14435,7 @@ function _renderModelCards(data, act) {
       + '<div class="model-card-divider"></div>'
       + activityHtml
       + statsHtml
-      + (recentHtml ? '<div class="model-card-divider"></div>' + recentHtml : '')
-      + activityBtn
+      + sessionsBtn
       + '</div>';
   }).join('');
 
