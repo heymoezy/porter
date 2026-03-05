@@ -12877,12 +12877,13 @@ function chatSend() {
         var lines = ['**System Status**\n'];
         if (h.cpu_percent !== undefined) lines.push('CPU: **' + h.cpu_percent + '%**');
         if (h.mem_used_mb) lines.push('Memory: **' + Math.round(h.mem_used_mb) + ' MB** / ' + Math.round(h.mem_total_mb || 0) + ' MB');
-        if (h.disk_used_gb) lines.push('Disk: **' + h.disk_used_gb + ' GB** / ' + h.disk_total_gb + ' GB');
+        if (h.disk_used_gb) lines.push('Disk: **' + Math.round(h.disk_used_gb * 10) / 10 + ' GB** / ' + Math.round(h.disk_total_gb * 10) / 10 + ' GB');
         if (h.services) {
           lines.push('\n**Services**');
           h.services.forEach(function(s) {
-            var icon = s.status === 'running' || s.status === 'ok' ? '\u2705' : '\u274c';
-            lines.push(icon + ' ' + s.name + (s.version ? ' v' + s.version : ''));
+            var icon = (s.status === 'running' || s.status === 'ok' || s.status === 'up') ? '\u2705' : '\u274c';
+            var detail = s.detail ? ' — ' + s.detail : '';
+            lines.push(icon + ' ' + s.name + detail);
           });
         }
         _chatMessages[_chatMessages.length-1].content = lines.join('\n');
