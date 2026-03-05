@@ -15128,21 +15128,20 @@ function _ctxToggle(event, type) {
       dd.innerHTML += projHtml;
     });
   } else if (type === 'model') {
-    var models = [{ v:'', label:'Auto', sub:'best available' }];
     var _ctxAvail = _modelAvailableData || {};
+    var gateways = {openclaw:'OpenClaw Gateway',claude:'Claude CLI',gemini:'Gemini CLI',codex:'Codex CLI',ollama:'Ollama Local'};
+    html += '<div class="chat-ctx-opt' + (!_chatModel ? ' selected' : '') + '" onclick="_ctxPick(event,\'model\',\'\')">Auto (best available)</div>';
+    html += '<div class="chat-ctx-divider"></div>';
     ['openclaw','claude','gemini','codex','ollama'].forEach(function(bk) {
       var bkData = _ctxAvail[bk] || {};
       var resolved = bkData.resolved || '';
       var bkModels = bkData.models || [];
-      var friendly = resolved;
-      bkModels.forEach(function(m) { if (m.id === resolved) friendly = m.name; });
-      var bkLabel = bk.charAt(0).toUpperCase() + bk.slice(1);
-      models.push({ v: bk, label: friendly || bkLabel, sub: bkLabel + (friendly ? '' : '') });
-    });
-    models.forEach(function(m) {
-      html += '<div class="chat-ctx-opt' + (_chatModel === m.v ? ' selected' : '') + '" onclick="_ctxPick(event,\'model\',\'' + m.v + '\')" style="flex-direction:column;align-items:flex-start;gap:1px">'
-        + '<span>' + escHtml(m.label) + '</span>'
-        + '<span style="font-size:9px;color:var(--text3)">' + escHtml(m.sub) + '</span>'
+      var modelName = resolved;
+      bkModels.forEach(function(m) { if (m.id === resolved && m.name !== 'Auto') modelName = m.name; });
+      var gateway = gateways[bk] || bk;
+      html += '<div class="chat-ctx-opt' + (_chatModel === bk ? ' selected' : '') + '" onclick="_ctxPick(event,\'model\',\'' + bk + '\')" style="flex-direction:column;align-items:flex-start;gap:1px;padding:6px 10px">'
+        + '<span style="font-weight:500">' + escHtml(gateway) + '</span>'
+        + (modelName ? '<span style="font-size:9px;color:var(--text3)">' + escHtml(modelName) + '</span>' : '')
         + '</div>';
     });
   }
