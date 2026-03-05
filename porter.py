@@ -11268,22 +11268,38 @@ async function _maSessionSummary(sessionId, source) {
   }
 }
 
-function _maSessionChat(sessionId, source, name) {
-  // Close the activity panel
-  var overlay = document.getElementById('model-activity-overlay');
-  var panel = document.getElementById('model-activity-panel');
-  if (overlay) overlay.classList.remove('open');
-  if (panel) panel.classList.remove('open');
-  // Switch to Chat tab
-  switchModule('chat');
-  // Inject session as context
-  _chatContextFiles.push({
-    path: 'session://' + source + '/' + sessionId,
-    name: (name || sessionId.substring(0, 12)) + ' (' + source + ' session)',
-    content: 'Session ID: ' + sessionId + '\nSource: ' + source + '\nPlease review this session and continue the conversation.'
-  });
-  renderContextBar();
-  toast('Session added as chat context');
+async function _maSessionChat(sessionId, source, name) {
+  // Fetch actual session turns
+  toast('Loading session...');
+  try {
+    var resp = await api('/api/sessions/' + encodeURIComponent(sessionId) + '/summary?source=' + encodeURIComponent(source));
+    var content = '';
+    if (resp && resp.ok && resp.turns && resp.turns.length) {
+      content = resp.turns.map(function(t) { return t.role.toUpperCase() + ': ' + t.text; }).join('\n\n');
+      if (resp.total_turns > resp.turns.length) {
+        content = '(showing last ' + resp.turns.length + ' of ' + resp.total_turns + ' turns)\n\n' + content;
+      }
+    } else {
+      content = 'Session: ' + sessionId + ' (' + source + ')';
+    }
+    // Close the activity panel
+    var overlay = document.getElementById('model-activity-overlay');
+    var panel = document.getElementById('model-activity-panel');
+    if (overlay) overlay.classList.remove('open');
+    if (panel) panel.classList.remove('open');
+    // Switch to Chat tab
+    switchModule('chat');
+    // Inject session content as context
+    _chatContextFiles.push({
+      path: 'session://' + source + '/' + sessionId,
+      name: (name || sessionId.substring(0, 12)) + ' (' + source + ')',
+      content: content
+    });
+    renderContextBar();
+    toast('Session loaded — continue the conversation');
+  } catch(e) {
+    toast('Failed to load session', 'err');
+  }
 }
 
 var _flushWizData = null;
@@ -14359,7 +14375,7 @@ function _renderModelCards(data, act) {
     }
 
     // Activity button
-    var activityBtn = '<div style="margin-top:8px"><button class="btn btn-ghost" style="font-size:11px;width:100%" onclick="_openModelActivity(\'' + escHtml(p.id) + '\')">Activity</button></div>';
+    var activityBtn = '<div style="margin-top:8px"><button class="btn btn-ghost" style="font-size:11px;width:100%" onclick="_openModelActivity(\'' + escHtml(p.id) + '\')">Sessions</button></div>';
 
     // Model selector: show active model name as card title
     var _avBk = (_modelAvailableData || {})[p.id] || {};
@@ -14370,7 +14386,7 @@ function _renderModelCards(data, act) {
     _avModels.forEach(function(m) { if (m.id === _avResolved) _resolvedName = m.name; });
     if (!_resolvedName) _resolvedName = _avResolved || (p.label || p.id);
     // Build model dropdown
-    var _selHtml = '<div class="model-card-selector"><select class="model-select" onchange="_selectModel(this)" data-backend="' + escHtml(p.id) + '">';
+    var _selHtml = '<div class="model-card-selector"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Active model via gateway</div><select class="model-select" onchange="_selectModel(this)" data-backend="' + escHtml(p.id) + '">';
     _avModels.forEach(function(m) {
       var sel = m.id === _avActive ? ' selected' : '';
       _selHtml += '<option value="' + escHtml(m.id) + '"' + sel + '>' + escHtml(m.name) + (m.default ? ' (default)' : '') + '</option>';
@@ -14476,7 +14492,7 @@ function _openModelActivity(backend) {
       + '</div>';
   }
 
-  body.innerHTML = traceContent + statsContent + runsContent + sessionsContent;
+  body.innerHTML = sessionsContent + traceContent + statsContent + runsContent;
 
   // Load sessions async
   if (maSource) {
