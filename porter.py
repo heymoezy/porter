@@ -11691,56 +11691,56 @@ async function _showSessionLearnings(btn, sid, source) {
     btn.textContent = '\u25be Learnings';
   }
   el.style.maxHeight = el.scrollHeight + 30 + 'px';
+  _populateLearnDests();
 }
 
 var _learnDestCache = null;
-async function _saveLearnInline(btn, sid, source) {
-  var existing = btn.parentElement.querySelector('.learn-dest-picker');
-  if (existing) { existing.remove(); return; }
-  if (!_learnDestCache) {
-    try {
-      var r = await api('/api/sessions/destinations');
-      _learnDestCache = (r && r.destinations) || [];
-    } catch(e) { _learnDestCache = []; }
-  }
-  var container = btn.closest('.sess-learnings-inline');
-  var text = container ? (container.querySelector('.sess-learn-text').value || container.querySelector('.sess-learn-text').textContent || '') : '';
-  var picker = document.createElement('div');
-  picker.className = 'learn-dest-picker';
-  picker.style.cssText = 'display:flex;gap:4px;align-items:center;margin-top:3px';
-  var sel = document.createElement('select');
-  sel.style.cssText = 'font-size:10px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text);flex:1';
-  _learnDestCache.forEach(function(d) {
-    var opt = document.createElement('option');
-    opt.value = d.path;
-    opt.textContent = d.label;
-    sel.appendChild(opt);
+async function _populateLearnDests() {
+  if (_learnDestCache) return;
+  try {
+    var r = await api('/api/sessions/destinations');
+    _learnDestCache = (r && r.destinations) || [];
+  } catch(e) { _learnDestCache = []; }
+  // Populate all destination selects on the page
+  document.querySelectorAll('.sess-learn-dest').forEach(function(sel) {
+    if (sel.options.length > 0) return;
+    _learnDestCache.forEach(function(d) {
+      var opt = document.createElement('option');
+      opt.value = d.path;
+      opt.textContent = d.label;
+      sel.appendChild(opt);
+    });
   });
-  var saveBtn = document.createElement('button');
-  saveBtn.className = 'btn btn-primary';
-  saveBtn.style.cssText = 'font-size:9px;padding:2px 8px';
-  saveBtn.textContent = 'Save';
-  saveBtn.onclick = async function() {
-    saveBtn.disabled = true;
-    saveBtn.textContent = 'Saving\u2026';
+}
+async function _saveLearnDirect(btn, sid, source) {
+  var container = btn.closest('.sess-learnings-inline');
+  if (!container) return;
+  var textEl = container.querySelector('.sess-learn-text');
+  var destEl = container.querySelector('.sess-learn-dest');
+  var text = (textEl.value || textEl.textContent || '').trim();
+  var dest = destEl ? destEl.value : '';
+  if (!text) { toast('No learnings to save', 'err'); return; }
+  if (!dest) { toast('Select a destination', 'err'); return; }
+  btn.disabled = true;
+  btn.textContent = 'Saving\u2026';
+  try {
     var res = await api('/api/sessions/' + encodeURIComponent(sid) + '/save-learnings', {
-      learnings: text, destination: sel.value, source: source
+      learnings: text, destination: dest, source: source
     });
     if (res && res.ok) {
-      toast('Saved to ' + (res.path || sel.value).split('/').pop());
-      picker.remove();
+      toast('Saved to ' + (res.path || dest).split('/').pop());
+      btn.textContent = 'Saved \u2713';
+      setTimeout(function() { btn.textContent = 'Save'; btn.disabled = false; }, 2000);
     } else {
       toast((res && res.error) || 'Failed', 'err');
-      saveBtn.disabled = false;
-      saveBtn.textContent = 'Save';
+      btn.disabled = false;
+      btn.textContent = 'Save';
     }
-  };
-  picker.appendChild(sel);
-  picker.appendChild(saveBtn);
-  btn.parentElement.appendChild(picker);
-  // Expand parent to fit picker
-  var learnEl = btn.closest('.sess-learnings-inline');
-  if (learnEl) learnEl.style.maxHeight = learnEl.scrollHeight + 60 + 'px';
+  } catch(e) {
+    toast('Save failed', 'err');
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  }
 }
 
 async function _reextractLearn(sid, source) {
