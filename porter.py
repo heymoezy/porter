@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.24 — Model Activity Slide-Out Pane"""
+"""Porter v0.27.25 — Model Activity Slide-Out Pane"""
 
 
 
@@ -1685,6 +1685,103 @@ def _load_gemini_session_summaries() -> list:
         except Exception as e:
             log.debug("Gemini session parse error: %s", e)
     return sessions
+
+
+def _session_summary(session_id: str, source: str) -> dict:
+    """Return last 10 turns of a session for the summary modal."""
+    turns = []
+    try:
+        if source == "claude":
+            fpath = Path.home() / ".claude" / "projects" / "-home-lobster" / f"{session_id}.jsonl"
+            if not fpath.exists():
+                return {"ok": False, "error": "Session file not found"}
+            with open(fpath, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        entry = json.loads(line)
+                    except Exception:
+                        continue
+                    etype = entry.get("type", "")
+                    if etype == "user":
+                        msg = entry.get("message", {})
+                        if isinstance(msg, dict):
+                            content = msg.get("content", "")
+                            if isinstance(content, list):
+                                text = " ".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
+                            else:
+                                text = str(content)
+                        else:
+                            text = str(msg)
+                        if text.strip():
+                            turns.append({"role": "user", "text": text.strip()[:500]})
+                    elif etype == "assistant":
+                        msg = entry.get("message", {})
+                        if isinstance(msg, dict):
+                            content = msg.get("content", "")
+                            if isinstance(content, list):
+                                text = " ".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
+                            else:
+                                text = str(content)
+                        else:
+                            text = str(msg)
+                        if text.strip():
+                            turns.append({"role": "assistant", "text": text.strip()[:500]})
+
+        elif source == "openclaw":
+            fpath = Path.home() / ".openclaw" / "agents" / "main" / "sessions" / f"{session_id}.jsonl"
+            if not fpath.exists():
+                return {"ok": False, "error": "Session file not found"}
+            with open(fpath, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        entry = json.loads(line)
+                    except Exception:
+                        continue
+                    role = entry.get("role", "")
+                    text = entry.get("content", "")
+                    if isinstance(text, list):
+                        text = " ".join(b.get("text", "") for b in text if isinstance(b, dict))
+                    if role in ("user", "assistant") and str(text).strip():
+                        turns.append({"role": role, "text": str(text).strip()[:500]})
+
+        elif source == "gemini":
+            chat_dirs = Path.home() / ".gemini" / "tmp"
+            if not chat_dirs.exists():
+                return {"ok": False, "error": "Gemini sessions dir not found"}
+            found = False
+            for json_file in chat_dirs.rglob("chats/*.json"):
+                try:
+                    data = json.loads(json_file.read_text(encoding="utf-8"))
+                    sid = data.get("sessionId", json_file.stem)
+                    if sid != session_id:
+                        continue
+                    found = True
+                    for m in data.get("messages", []):
+                        role = m.get("role", "user")
+                        content = m.get("content", [])
+                        text = ""
+                        if isinstance(content, list):
+                            for block in content:
+                                if isinstance(block, dict) and block.get("text"):
+                                    text += block["text"] + " "
+                        elif isinstance(content, str):
+                            text = content
+                        if text.strip():
+                            turns.append({"role": role, "text": text.strip()[:500]})
+                    break
+                except Exception:
+                    continue
+            if not found:
+                return {"ok": False, "error": "Gemini session not found"}
+        else:
+            return {"ok": False, "error": f"Unknown source: {source}"}
+
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    total = len(turns)
+    last_10 = turns[-10:] if len(turns) > 10 else turns
+    return {"ok": True, "session_id": session_id, "source": source, "turns": last_10, "total_turns": total}
 
 
 def _log_flush_history(agent: str, session_id: str, destination: str, bytes_written: int):
@@ -6192,6 +6289,21 @@ body.density-compact .file-name { padding: 6px 0; }
 .ma-run-dot { width:6px;height:6px;border-radius:50%;flex-shrink:0; }
 .ma-run-preview { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2); }
 .ma-run-meta { color:var(--text3);white-space:nowrap;font-size:11px; }
+.ma-session-search { width:100%;padding:6px 10px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);margin-bottom:8px;box-sizing:border-box; }
+.ma-session-search::placeholder { color:var(--text3); }
+.ma-session-card { padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);margin-bottom:6px;font-size:12px; }
+.ma-session-card:hover { border-color:var(--border2); }
+.ma-session-hdr { display:flex;align-items:center;gap:6px;margin-bottom:4px; }
+.ma-session-name { font-weight:500;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.ma-session-meta { display:flex;flex-wrap:wrap;gap:6px;font-size:11px;color:var(--text3); }
+.ma-session-actions { display:flex;gap:4px;margin-top:6px; }
+.ma-session-actions button { font-size:10px;padding:2px 8px; }
+.ma-summary-modal { position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10010;display:flex;align-items:center;justify-content:center; }
+.ma-summary-box { background:var(--bg);border:1px solid var(--border);border-radius:12px;width:520px;max-height:80vh;overflow-y:auto;padding:20px; }
+.ma-summary-turn { padding:8px 12px;margin-bottom:4px;border-radius:6px;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word; }
+.ma-summary-turn.user { background:color-mix(in srgb, var(--accent) 10%, transparent);border-left:3px solid var(--accent); }
+.ma-summary-turn.assistant { background:var(--surface2);border-left:3px solid #22c55e; }
+.ma-summary-role { font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text3);margin-bottom:2px; }
 .model-card-activity .pulse-dot { width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse-dot .8s ease-in-out infinite alternate; }
 .model-card-selector { margin-top:8px; }
 .model-select { width:100%;padding:6px 10px;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;cursor:pointer;outline:none; }
@@ -6291,30 +6403,15 @@ body.density-compact .file-name { padding: 6px 0; }
 .mem-coord-item .coord-name { font-weight:500;color:var(--text); }
 .mem-coord-item .coord-desc { color:var(--text3);flex:1; }
 .mem-coord-item .coord-size { color:var(--text3);font-size:11px; }
-.mem-session-summary-card { padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);margin-bottom:8px; }
-.mem-session-summary-card .summary-line { display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0; }
-.mem-session-summary-card .summary-total { font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px; }
-.mem-session-summary-card .summary-hint { font-size:11px;color:var(--text3);line-height:1.5;margin-top:6px;padding-top:6px;border-top:1px solid var(--border); }
+
 /* Nav group label */
 .mnav-group-label { font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;padding:12px 8px 4px;pointer-events:none;user-select:none; }
-/* Kept from v5: filter bar, sessions, flush */
-.mem-filter-bar { display:flex; gap:2px; margin-bottom:10px; }
-.mem-filter-btn { padding:4px 12px; font-size:12px; border-radius:6px; border:1px solid var(--border); background:none; color:var(--text3); cursor:pointer; transition:.12s; }
-.mem-filter-btn:hover { background:var(--raised); color:var(--text); }
-.mem-filter-btn.active { background:var(--raised); color:var(--text); border-color:var(--border2); }
-.mem-session-search { width:100%;padding:6px 10px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);margin-bottom:8px;box-sizing:border-box; }
-.mem-session-search::placeholder { color:var(--text3); }
+
 .mem-age-badge { display:inline-block;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600; }
 .mem-age-fresh { background:color-mix(in srgb, #22c55e 15%, transparent);color:#22c55e; }
 .mem-age-warm { background:color-mix(in srgb, #d97706 15%, transparent);color:#d97706; }
 .mem-age-stale { background:color-mix(in srgb, #ef4444 15%, transparent);color:#ef4444; }
-.mem-flush-banner { display:flex;align-items:center;gap:8px;padding:8px 12px;background:color-mix(in srgb, #d97706 10%, transparent);border:1px solid color-mix(in srgb, #d97706 30%, transparent);border-radius:6px;font-size:12px;color:#d97706;margin-bottom:10px; }
-.mem-flush-banner button { font-size:11px;padding:3px 10px;background:none;border:1px solid #d97706;color:#d97706;border-radius:4px;cursor:pointer; }
-.mem-flush-banner button:hover { background:#d97706;color:#fff; }
-.mem-flush-history { margin-top:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden; }
-.mem-flush-history-hdr { padding:8px 12px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;background:var(--surface2);border-bottom:1px solid var(--border); }
-.mem-flush-history-row { display:flex;gap:8px;padding:6px 12px;font-size:11px;color:var(--text2);border-bottom:1px solid var(--border); }
-.mem-flush-history-row:last-child { border-bottom:none; }
+
 .mem-export-bar { display:flex;gap:6px;align-items:center; }
 /* Config panel memory editing */
 .mem-cfg-files { display:flex;flex-direction:column;gap:2px;margin-top:8px; }
@@ -6747,7 +6844,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.24</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.25</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7449,7 +7546,7 @@ select.settings-input { padding-right: 26px; }
       </div>
       <div id="mem-flow-body" class="mem-flow-diagram">
         <div class="mem-flow-nodes">
-          <div class="mem-flow-node"><div class="mem-flow-node-label">Sessions</div><div class="mem-flow-node-desc">per-agent logs</div></div>
+          <div class="mem-flow-node"><div class="mem-flow-node-label">Activity</div><div class="mem-flow-node-desc">model panels</div></div>
           <div class="mem-flow-arrow">→ flush →</div>
           <div class="mem-flow-node mem-flow-node-primary"><div class="mem-flow-node-label">MEMORY.md</div><div class="mem-flow-node-desc">persistent</div></div>
           <div class="mem-flow-arrow">↔</div>
@@ -7471,19 +7568,7 @@ select.settings-input { padding-right: 26px; }
       <div id="mem-coord" class="mem-coord-rail"></div>
     </div>
 
-    <!-- Sessions -->
-    <div style="margin-top:16px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <div class="mem-section-label" style="margin:0">Sessions</div>
-        <button class="btn btn-ghost" style="font-size:10px;padding:2px 8px;margin-left:auto" id="mem-bulk-flush-btn" onclick="memBulkFlush()">Flush All</button>
-      </div>
-      <input type="text" class="mem-session-search" id="mem-session-search" placeholder="Search sessions..." oninput="memSearchSessions(this.value)">
-      <div id="mem-flush-banner"></div>
-      <div id="mem-session-summary"></div>
-      <div id="mem-filter-bar" class="mem-filter-bar"></div>
-      <div id="mem-sessions-list"></div>
-      <div id="mem-flush-history"></div>
-    </div>
+
   </div>
 
   <!-- settings panel
@@ -7952,6 +8037,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.25', date:'2026-03-05', notes:['Sessions moved from Memory tab into Model Activity slide-out panel','Source filter on /api/sessions endpoint (?source=claude|openclaw|gemini)','New /api/sessions/<id>/summary endpoint returns last 10 turns','Session cards with Summary/Flush/Chat actions per model backend','Chat button injects session as context and switches to Chat tab','Memory tab cleaned: sessions section, filter bar, flush history removed'] },
   { ver:'v0.27.24', date:'2026-03-04', notes:['Model Activity slide-out pane replaces inline trace toggles','Activity button on each model card opens 520px right panel','Panel shows: live trace, 24h stats (runs/success/avg), recent runs','SSE chunks stream into panel in real-time when dispatch active','Stale in_progress runs older than 10min auto-marked as failed','Removed: inline trace toggle, trace polling per-card'] },
   { ver:'v0.27.23', date:'2026-03-04', notes:['Model Selector: per-backend model switching with dropdown','New: /api/models/available endpoint for model catalog per backend','New: /api/models/select POST endpoint to persist active model choice','Cards show active model name (Opus 4.6) with backend as subtitle','Chat selector shows resolved model names with backend label','Dispatch and streaming handlers use user-selected active models'] },
   { ver:'v0.27.22', date:'2026-03-04', notes:['Models Tab v2.1: live activity status, 24h stats, recent runs, and streaming trace','New: /api/models/activity endpoint for per-backend stats from agent_messages','New: /api/models/<backend>/trace endpoint for live streaming chunks','bridge:chunk SSE events emitted during all streaming handlers','Elapsed timer + relative timestamps + expandable trace panel'] },
@@ -10922,8 +11008,7 @@ function renderCapabilities(caps) {
 // Memory tab v6 — compact layout
 let _memViewerPath = '';
 let _memViewerEditing = false;
-let _memSessionFilter = 'all';
-let _memSessionsData = [];
+
 let _memOverview = null;
 let _memAgentStatus = {};
 let _memFlowCollapsed = false;
@@ -11022,7 +11107,6 @@ async function loadMemory() {
   } catch(e) {
     console.error('loadMemory failed:', e);
   }
-  loadMemorySessions();
 }
 
 function renderMemSilos(models) {
@@ -11078,86 +11162,6 @@ function renderMemCoord(overview) {
   el.innerHTML = html;
 }
 
-function renderMemSessionSummary(sessions, models) {
-  var el = document.getElementById('mem-session-summary');
-  if (!el) return;
-  if (!sessions.length) { el.innerHTML = ''; return; }
-  var now = Date.now();
-  var bySrc = {};
-  sessions.forEach(function(s) {
-    var src = s.source || 'unknown';
-    if (!bySrc[src]) bySrc[src] = { count: 0, stale: 0 };
-    bySrc[src].count++;
-    if (s.last_ts) {
-      var ageH = (now - new Date(s.last_ts).getTime()) / 3600000;
-      if (ageH > 24) bySrc[src].stale++;
-    }
-  });
-  var srcCount = Object.keys(bySrc).length;
-  var html = '<div class="mem-session-summary-card">';
-  html += '<div class="summary-total">' + sessions.length + ' session' + (sessions.length !== 1 ? 's' : '') + ' across ' + srcCount + ' agent' + (srcCount !== 1 ? 's' : '') + '</div>';
-  var srcColors = {claude:'#d97706',openclaw:'#059669',gemini:'#2563eb'};
-  Object.keys(bySrc).forEach(function(src) {
-    var s = bySrc[src];
-    var c = srcColors[src] || 'var(--text3)';
-    html += '<div class="summary-line">';
-    html += '<span style="width:8px;height:8px;border-radius:50%;background:' + c + ';flex-shrink:0"></span>';
-    html += '<span style="font-weight:500;color:var(--text);min-width:70px">' + src.charAt(0).toUpperCase() + src.slice(1) + '</span>';
-    html += '<span>' + s.count + ' session' + (s.count !== 1 ? 's' : '') + '</span>';
-    if (s.stale > 0) html += '<span style="color:var(--text3)">(' + s.stale + ' &gt; 24h old)</span>';
-    var canFlush = src === 'claude' || src === 'openclaw' || src === 'gemini';
-    if (canFlush && s.count > 0) html += '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px;margin-left:auto" onclick="filterMemSessions(\'' + src + '\')">View</button>';
-    html += '</div>';
-  });
-  html += '<div class="summary-hint">\u2139 Sessions are conversation logs. Flush extracts key learnings into persistent memory. Old sessions are safe to clear.</div>';
-  html += '</div>';
-  el.innerHTML = html;
-}
-
-async function loadMemorySessions() {
-  var el = document.getElementById('mem-sessions-list');
-  if (!el) return;
-  el.innerHTML = '<div class="loading-indicator" style="padding:8px">Loading sessions</div>';
-  try {
-    var resp = await api('/api/sessions');
-    if (resp && resp.sessions) {
-      _memSessionsData = resp.sessions;
-      renderMemSessionSummary(resp.sessions, _memOverview ? _memOverview.models : []);
-      renderMemFilterBar(resp.sessions);
-      renderMemorySessions(resp.sessions);
-    }
-  } catch(e) {
-    el.innerHTML = '<div style="color:var(--err);font-size:12px">Failed to load sessions</div>';
-  }
-}
-
-function renderMemFilterBar(sessions) {
-  var bar = document.getElementById('mem-filter-bar');
-  if (!bar) return;
-  var counts = {};
-  sessions.forEach(function(s) { var src = s.source || 'unknown'; counts[src] = (counts[src] || 0) + 1; });
-  var html = '<button class="mem-filter-btn' + (_memSessionFilter === 'all' ? ' active' : '') + '" onclick="filterMemSessions(\'all\')">All (' + sessions.length + ')</button>';
-  ['claude','openclaw','gemini'].forEach(function(src) {
-    if (counts[src]) html += '<button class="mem-filter-btn' + (_memSessionFilter === src ? ' active' : '') + '" onclick="filterMemSessions(\'' + src + '\')">' + src.charAt(0).toUpperCase() + src.slice(1) + ' (' + counts[src] + ')</button>';
-  });
-  Object.keys(counts).forEach(function(src) {
-    if (['claude','openclaw','gemini','unknown'].indexOf(src) === -1) html += '<button class="mem-filter-btn' + (_memSessionFilter === src ? ' active' : '') + '" onclick="filterMemSessions(\'' + src + '\')">' + escHtml(src) + ' (' + counts[src] + ')</button>';
-  });
-  bar.innerHTML = html;
-}
-
-function filterMemSessions(source) {
-  _memSessionFilter = source;
-  renderMemFilterBar(_memSessionsData);
-  renderMemorySessions(_memSessionsData);
-}
-
-var _memSearchQuery = '';
-function memSearchSessions(query) {
-  _memSearchQuery = query.toLowerCase().trim();
-  renderMemorySessions(_memSessionsData);
-}
-
 function _memAgeBadge(ts) {
   if (!ts) return '';
   var ageMs = Date.now() - new Date(ts).getTime();
@@ -11167,122 +11171,119 @@ function _memAgeBadge(ts) {
   return '<span class="mem-age-badge mem-age-stale">' + Math.round(ageH / 24) + 'd</span>';
 }
 
-function _memAutoFlushBanner(sessions) {
-  var banner = document.getElementById('mem-flush-banner');
-  if (!banner) return;
-  var staleCount = 0;
-  var now = Date.now();
-  sessions.forEach(function(s) {
-    if (s.last_ts) {
-      var ageH = (now - new Date(s.last_ts).getTime()) / 3600000;
-      if (ageH > 24 && !s.flushed) staleCount++;
+
+
+var _maSessionsData = [];
+
+async function _loadActivitySessions(source) {
+  var el = document.getElementById('ma-sessions-list');
+  if (!el) return;
+  try {
+    var resp = await api('/api/sessions?source=' + encodeURIComponent(source));
+    if (resp && resp.sessions) {
+      _maSessionsData = resp.sessions;
+      _renderActivitySessions(resp.sessions, source);
     }
-  });
-  if (staleCount > 0) {
-    banner.innerHTML = '<div class="mem-flush-banner"><span>' + staleCount + ' session' + (staleCount > 1 ? 's' : '') + ' older than 24h \u2014 consider flushing</span><button onclick="memBulkFlush()">Flush All</button></div>';
-  } else {
-    banner.innerHTML = '';
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--err);font-size:12px">Failed to load sessions</div>';
   }
 }
 
-async function memBulkFlush() {
-  var flushable = _memSessionsData.filter(function(s) { return s.source === 'claude' || s.source === 'openclaw'; });
-  if (!flushable.length) { toast('No flushable sessions', 'err'); return; }
-  var flushOk = await porterConfirm('Flush Sessions', 'Flush ' + flushable.length + ' sessions to long-term memory?', { confirmLabel:'Flush' });
-  if (!flushOk) return;
-  var done = 0, errors = 0;
-  flushable.forEach(function(s) {
-    api('/api/memory/flush-preview', { session_id: s.id, source: s.source }).then(function(preview) {
-      if (!preview || !preview.ok) { errors++; return; }
-      api('/api/memory/flush', {
-        session_id: s.id, source: s.source,
-        summary: preview.summary, destination: preview.destination
-      }).then(function(res) {
-        if (res && res.ok) done++; else errors++;
-        if (done + errors >= flushable.length) {
-          toast('Flushed ' + done + ' sessions' + (errors ? ' (' + errors + ' errors)' : ''));
-          loadMemory();
-        }
-      });
-    });
-  });
-}
-
-function memLoadFlushHistory() {
-  var el = document.getElementById('mem-flush-history');
+function _renderActivitySessions(sessions, source) {
+  var el = document.getElementById('ma-sessions-list');
   if (!el) return;
-  api('/api/memory/flush-history').then(function(resp) {
-    if (!resp || !resp.ok || !resp.history || !resp.history.length) { el.innerHTML = ''; return; }
-    var html = '<div class="mem-flush-history"><div class="mem-flush-history-hdr">Recent Flushes</div>';
-    resp.history.forEach(function(h) {
-      var ts = h.timestamp ? new Date(h.timestamp).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '?';
-      var dest = (h.destination || '').split('/').pop();
-      html += '<div class="mem-flush-history-row">'
-        + '<span style="min-width:80px">' + escHtml(h.agent) + '</span>'
-        + '<span style="min-width:110px">' + ts + '</span>'
-        + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(dest) + '</span>'
-        + '<span>' + _memSize(h.bytes_written || 0) + '</span>'
-        + '</div>';
-    });
-    html += '</div>';
-    el.innerHTML = html;
-  });
-}
-
-function renderMemorySessions(sessions) {
-  var el = document.getElementById('mem-sessions-list');
-  if (!el) return;
-  var filtered = _memSessionFilter === 'all' ? sessions : sessions.filter(function(s) { return s.source === _memSessionFilter; });
-  if (_memSearchQuery) {
-    filtered = filtered.filter(function(s) {
-      return (s.name || '').toLowerCase().indexOf(_memSearchQuery) >= 0
-        || (s.id || '').toLowerCase().indexOf(_memSearchQuery) >= 0
-        || (s.source || '').toLowerCase().indexOf(_memSearchQuery) >= 0
-        || (s.model || '').toLowerCase().indexOf(_memSearchQuery) >= 0;
-    });
-  }
-  _memAutoFlushBanner(sessions);
-  if (!filtered.length) {
-    el.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text3);font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">No sessions found.</div>';
+  if (!sessions.length) {
+    el.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text3);font-size:12px">No sessions found</div>';
     return;
   }
-  var shown = filtered.slice(0, 30);
-  el.innerHTML = '<div style="display:flex;flex-direction:column;gap:6px">' + shown.map(function(s) {
-    var date = s.first_ts ? new Date(s.first_ts).toLocaleDateString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '?';
-    var srcLabel = s.source || 'unknown';
+  var shown = sessions.slice(0, 20);
+  el.innerHTML = shown.map(function(s) {
     var ageBadge = _memAgeBadge(s.last_ts || s.first_ts);
-    var durStr = '';
-    if (s.first_ts && s.last_ts) {
-      var durMin = Math.round((new Date(s.last_ts) - new Date(s.first_ts)) / 60000);
-      if (durMin > 0) durStr = durMin + 'min';
-    }
     var sizeKb = s.size_kb || 0;
     var sizeStr = sizeKb > 1024 ? (sizeKb / 1024).toFixed(1) + ' MB' : (sizeKb > 0 ? sizeKb.toFixed(0) + ' KB' : '');
-    var tokens = (s.total_input_tokens || 0) + (s.total_output_tokens || 0);
-    var tokStr = tokens > 1000 ? Math.round(tokens/1000) + 'K tok' : '';
-    var canFlush = s.source === 'claude' || s.source === 'openclaw' || s.source === 'gemini';
-    var srcColors = {claude:'#d97706',openclaw:'#059669',gemini:'#2563eb'};
-    var srcColor = srcColors[s.source] || 'var(--border)';
-    return '<div class="orch-card" style="padding:10px 14px;border-left:3px solid ' + srcColor + '">'
-      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
-      + '<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:var(--border2);color:var(--text)">' + escHtml(srcLabel) + '</span>'
-      + '<span style="font-weight:500;font-size:13px;color:var(--text)">' + escHtml(s.name || s.id.substring(0,12)) + '</span>'
+    var sid = escHtml(s.id);
+    var sname = escHtml(s.name || s.id.substring(0, 12));
+    var ssrc = escHtml(s.source || source);
+    return '<div class="ma-session-card" data-session-name="' + sname.toLowerCase() + '" data-session-id="' + sid.toLowerCase() + '">'
+      + '<div class="ma-session-hdr">'
+      + '<span class="ma-session-name">' + sname + '</span>'
       + ageBadge
-      + '<span style="font-size:11px;color:var(--text3);margin-left:auto">' + escHtml(date) + '</span>'
       + '</div>'
-      + '<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:11px;color:var(--text3)">'
-      + '<span>' + s.messages + ' msgs</span>'
+      + '<div class="ma-session-meta">'
+      + '<span>' + (s.messages || 0) + ' msgs</span>'
       + (sizeStr ? '<span>\u2022</span><span>' + sizeStr + '</span>' : '')
-      + (durStr ? '<span>\u2022</span><span>' + durStr + '</span>' : '')
-      + (tokStr ? '<span>\u2022</span><span>' + tokStr + '</span>' : '')
-      + (s.model ? '<span>\u2022</span><span>' + escHtml(s.model) + '</span>' : '')
-      + (s.tool_calls ? '<span>\u2022</span><span>' + s.tool_calls + ' tool calls</span>' : '')
       + '</div>'
-      + (canFlush ? '<div style="margin-top:6px"><button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="openFlushWizard(\'' + escHtml(s.id) + '\',\'' + escHtml(s.name || s.id.substring(0,12)) + '\',\'' + escHtml(s.source) + '\')">Flush \u25b6</button></div>' : '')
+      + '<div class="ma-session-actions">'
+      + '<button class="btn btn-ghost" onclick="_maSessionSummary(\'' + sid + '\',\'' + ssrc + '\')">Summary</button>'
+      + '<button class="btn btn-ghost" onclick="openFlushWizard(\'' + sid + '\',\'' + sname + '\',\'' + ssrc + '\')">Flush</button>'
+      + '<button class="btn btn-ghost" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Chat</button>'
+      + '</div></div>';
+  }).join('')
+  + (sessions.length > 20 ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">Showing 20 of ' + sessions.length + '</div>' : '');
+}
+
+function _maFilterSessions(query) {
+  var q = query.toLowerCase().trim();
+  var cards = document.querySelectorAll('#ma-sessions-list .ma-session-card');
+  cards.forEach(function(card) {
+    var name = card.getAttribute('data-session-name') || '';
+    var id = card.getAttribute('data-session-id') || '';
+    card.style.display = (name.indexOf(q) >= 0 || id.indexOf(q) >= 0) ? '' : 'none';
+  });
+}
+
+async function _maSessionSummary(sessionId, source) {
+  // Show loading modal
+  var modal = document.createElement('div');
+  modal.className = 'ma-summary-modal';
+  modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = '<div class="ma-summary-box"><div class="loading-indicator" style="padding:20px">Loading summary...</div></div>';
+  document.body.appendChild(modal);
+  try {
+    var resp = await api('/api/sessions/' + encodeURIComponent(sessionId) + '/summary?source=' + encodeURIComponent(source));
+    var box = modal.querySelector('.ma-summary-box');
+    if (!resp || !resp.ok) {
+      box.innerHTML = '<div style="color:var(--err);padding:12px">' + escHtml(resp ? resp.error || 'Failed' : 'Failed') + '</div>'
+        + '<div style="text-align:right;margin-top:12px"><button class="btn btn-ghost" onclick="this.closest(\'.ma-summary-modal\').remove()">Close</button></div>';
+      return;
+    }
+    var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
+      + '<span style="font-weight:600;font-size:14px;color:var(--text)">Session Summary</span>'
+      + '<span style="font-size:11px;color:var(--text3)">' + resp.total_turns + ' total turns</span>'
+      + '<button class="btn btn-ghost" style="margin-left:auto;font-size:11px" onclick="this.closest(\'.ma-summary-modal\').remove()">Close</button>'
       + '</div>';
-  }).join('') + '</div>'
-  + (filtered.length > 30 ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">Showing 30 of ' + filtered.length + ' sessions</div>' : '');
-  memLoadFlushHistory();
+    if (resp.total_turns > 10) {
+      html += '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Showing last 10 of ' + resp.total_turns + ' turns</div>';
+    }
+    (resp.turns || []).forEach(function(t) {
+      html += '<div class="ma-summary-turn ' + t.role + '">'
+        + '<div class="ma-summary-role">' + t.role + '</div>'
+        + escHtml(t.text)
+        + '</div>';
+    });
+    box.innerHTML = html;
+  } catch(e) {
+    modal.remove();
+    toast('Failed to load summary', 'err');
+  }
+}
+
+function _maSessionChat(sessionId, source, name) {
+  // Close the activity panel
+  var overlay = document.getElementById('model-activity-overlay');
+  var panel = document.getElementById('model-activity-panel');
+  if (overlay) overlay.classList.remove('open');
+  if (panel) panel.classList.remove('open');
+  // Switch to Chat tab
+  switchModule('chat');
+  // Inject session as context
+  _chatContextFiles.push({
+    path: 'session://' + source + '/' + sessionId,
+    name: (name || sessionId.substring(0, 12)) + ' (' + source + ' session)',
+    content: 'Session ID: ' + sessionId + '\nSource: ' + source + '\nPlease review this session and continue the conversation.'
+  });
+  renderContextBar();
+  toast('Session added as chat context');
 }
 
 var _flushWizData = null;
@@ -14463,7 +14464,24 @@ function _openModelActivity(backend) {
       + '<div class="ma-section-title">Recent Runs</div>' + runs + '</div>';
   }
 
-  body.innerHTML = traceContent + statsContent + runsContent;
+  // Sessions section (only for stateful backends)
+  var _maSourceMap = {claude:'claude', openclaw:'openclaw', gemini:'gemini'};
+  var sessionsContent = '';
+  var maSource = _maSourceMap[backend] || null;
+  if (maSource) {
+    sessionsContent = '<div class="ma-section">'
+      + '<div class="ma-section-title">Sessions</div>'
+      + '<input type="text" class="ma-session-search" placeholder="Search sessions..." oninput="_maFilterSessions(this.value)">'
+      + '<div id="ma-sessions-list"><div class="loading-indicator" style="padding:8px">Loading sessions</div></div>'
+      + '</div>';
+  }
+
+  body.innerHTML = traceContent + statsContent + runsContent + sessionsContent;
+
+  // Load sessions async
+  if (maSource) {
+    _loadActivitySessions(maSource);
+  }
 
   overlay.classList.add('open');
   panel.classList.add('open');
@@ -21022,7 +21040,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.24"
+                health["porter_version"] = "0.27.25"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -22205,16 +22223,28 @@ class Handler(BaseHTTPRequestHandler):
             summaries = _load_session_summaries()
             self.reply_json({"ok": True, "sessions": summaries, "count": len(summaries)})
 
-        # ── Memory tab: All sessions (GET) ────────────────────────────────────
+        # ── Sessions (GET, optional ?source=) ────────────────────────────────
         elif parsed.path == "/api/sessions":
             if not self.auth_check(redirect=False): return
-            oc_sessions = _load_session_summaries()
-            claude_sessions = _load_claude_session_summaries()
-            gemini_sessions = _load_gemini_session_summaries()
-            all_sessions = oc_sessions + claude_sessions + gemini_sessions
-            # Sort by first_ts descending (most recent first)
+            source_filter = qs.get("source", [""])[0].lower()
+            loaders = {"openclaw": _load_session_summaries, "claude": _load_claude_session_summaries, "gemini": _load_gemini_session_summaries}
+            if source_filter and source_filter in loaders:
+                all_sessions = loaders[source_filter]()
+            else:
+                all_sessions = _load_session_summaries() + _load_claude_session_summaries() + _load_gemini_session_summaries()
             all_sessions.sort(key=lambda s: s.get("first_ts", ""), reverse=True)
             self.reply_json({"ok": True, "sessions": all_sessions, "count": len(all_sessions)})
+
+        # ── Session summary (GET /api/sessions/<id>/summary?source=) ─────────
+        elif parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/summary"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.split("/")
+            session_id = parts[3] if len(parts) >= 5 else ""
+            source = qs.get("source", [""])[0].lower()
+            if not session_id or not source:
+                self.reply_json({"ok": False, "error": "session_id and source required"}, 400); return
+            result = _session_summary(session_id, source)
+            self.reply_json(result)
 
         # ── Memory tab: Memory overview (GET) ─────────────────────────────────
         elif parsed.path == "/api/memory/overview":
@@ -22424,7 +22454,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.24'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.25'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -26077,7 +26107,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.24 ready (localhost only)")
+    print(f"\n  Porter v0.27.25 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
