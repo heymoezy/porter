@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.27 — Model Activity Slide-Out Pane"""
+"""Porter v0.27.28 — Model Activity Slide-Out Pane"""
 
 
 import email
@@ -2151,6 +2151,208 @@ def _flush_preview(session_id: str, source: str) -> dict:
         "session_id": session_id,
     }
 
+def _archive_session(session_id: str, source: str) -> dict:
+    """Archive a session (hide from default listing)."""
+    try:
+        conn = _db_conn()
+        conn.execute("INSERT OR REPLACE INTO session_archive (session_id, source) VALUES (?,?)",
+                     (session_id, source))
+        conn.commit()
+        conn.close()
+        return {"ok": True, "session_id": session_id}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+def _unarchive_session(session_id: str) -> dict:
+    """Unarchive a session."""
+    try:
+        conn = _db_conn()
+        conn.execute("DELETE FROM session_archive WHERE session_id=?", (session_id,))
+        conn.commit()
+        conn.close()
+        return {"ok": True, "session_id": session_id}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+def _get_archived_session_ids() -> set:
+    """Get set of archived session IDs."""
+    try:
+        conn = _db_conn()
+        rows = conn.execute("SELECT session_id FROM session_archive").fetchall()
+        conn.close()
+        return {r[0] for r in rows}
+    except Exception:
+        return set()
+
+def _extract_learnings_preview(session_id: str, source: str) -> dict:
+    """LLM-powered session analysis — replaces old flush preview."""
+    # First get the basic preview data
+    preview = _flush_preview(session_id, source)
+    if not preview.get("ok"):
+        return preview
+
+    # Build transcript from session JSONL
+    transcript = ""
+    jsonl_file = None
+    if source == "claude":
+        claude_dir = Path.home() / ".claude" / "projects" / "-home-lobster"
+        jsonl_file = claude_dir / f"{session_id}.jsonl"
+    elif source == "openclaw":
+        jsonl_file = OPENCLAW_STATE_DIR / "agents" / "main" / "sessions" / f"{session_id}.jsonl"
+    elif source == "gemini":
+        gemini_dir = Path.home() / ".gemini" / "sessions"
+        jsonl_file = gemini_dir / f"{session_id}.jsonl"
+
+    if jsonl_file and jsonl_file.exists():
+        try:
+            with open(jsonl_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        entry = json.loads(line)
+                    except Exception:
+                        continue
+                    etype = entry.get("type", "")
+                    role = ""
+                    text = ""
+                    if etype == "user":
+                        role = "USER"
+                        msg = entry.get("message", {})
+                        content = msg.get("content", "")
+                        if isinstance(content, list):
+                            for block in content:
+                                if isinstance(block, dict) and block.get("type") == "text":
+                                    text = block.get("text", "")
+                                    break
+                                elif isinstance(block, str):
+                                    text = block
+                                    break
+                        elif isinstance(content, str):
+                            text = content
+                    elif etype == "assistant":
+                        role = "ASSISTANT"
+                        msg = entry.get("message", {})
+                        content = msg.get("content", "")
+                        if isinstance(content, list):
+                            for block in content:
+                                if isinstance(block, dict) and block.get("type") == "text":
+                                    text = block.get("text", "")
+                                    break
+                        elif isinstance(content, str):
+                            text = content
+                    elif etype == "message":
+                        msg_obj = entry.get("message", {})
+                        role = msg_obj.get("role", "").upper()
+                        content = msg_obj.get("content", [])
+                        if isinstance(content, list):
+                            for block in content:
+                                if isinstance(block, dict) and block.get("type") == "text":
+                                    text = block.get("text", "")
+                                    break
+                        elif isinstance(content, str):
+                            text = content
+                    if role and text:
+                        transcript += f"\n{role}: {text[:800]}\n"
+                        if len(transcript) > 8000:
+                            transcript += "\n[...transcript truncated...]\n"
+                            break
+        except Exception as e:
+            log.debug("Transcript extraction error: %s", e)
+
+    # Try LLM analysis
+    learnings = ""
+    llm_used = False
+    if transcript.strip():
+        try:
+            backend, model = _smart_route("analyze session transcript extract learnings")
+            if backend:
+                prompt = (
+                    "Analyze this AI session transcript. Extract:\n"
+                    "- Key decisions made\n"
+                    "- Patterns discovered\n"
+                    "- Bugs fixed and root causes\n"
+                    "- Architecture insights\n"
+                    "Format as concise markdown sections. Skip empty sections.\n\n"
+                    "TRANSCRIPT:\n" + transcript
+                )
+                result = dispatch_agent(prompt, backend, model=model, timeout=60)
+                if result.get("ok") or result.get("text"):
+                    learnings = result.get("text", "").strip()
+                    llm_used = True
+        except Exception as e:
+            log.debug("LLM extract error: %s", e)
+
+    if not learnings:
+        learnings = preview.get("summary", "(No LLM available for analysis — showing metadata only)")
+
+    # Get destinations
+    destinations = _list_learning_destinations()
+
+    return {
+        "ok": True,
+        "learnings": learnings,
+        "llm_used": llm_used,
+        "raw_summary": preview.get("summary", ""),
+        "destinations": destinations,
+        "session_id": session_id,
+        "source": source,
+        "first_user_msg": preview.get("first_user_msg", ""),
+    }
+
+
+def _list_learning_destinations() -> list:
+    """Scan for save targets — agent memory, project lessons, global."""
+    destinations = []
+
+    # Agent group: each persona's MEMORY.md + memory/ subdir
+    try:
+        if PERSONAS_DIR.exists():
+            for persona_dir in sorted(PERSONAS_DIR.iterdir()):
+                if not persona_dir.is_dir():
+                    continue
+                name = persona_dir.name
+                mem_file = persona_dir / "MEMORY.md"
+                destinations.append({
+                    "path": str(mem_file),
+                    "label": f"{name} — MEMORY.md",
+                    "group": "agent"
+                })
+                mem_subdir = persona_dir / "memory"
+                if mem_subdir.exists():
+                    for mf in sorted(mem_subdir.iterdir()):
+                        if mf.is_file() and mf.suffix in (".md", ".txt"):
+                            destinations.append({
+                                "path": str(mf),
+                                "label": f"{name} — memory/{mf.name}",
+                                "group": "agent"
+                            })
+    except Exception as e:
+        log.debug("Persona scan error: %s", e)
+
+    # Project group: tasks/lessons.md files
+    try:
+        projects = _config.get("projects", [])
+        for proj in projects:
+            proj_dir = Path(proj.get("path", ""))
+            if proj_dir.exists():
+                lessons = proj_dir / "tasks" / "lessons.md"
+                destinations.append({
+                    "path": str(lessons),
+                    "label": f"{proj.get('name', proj_dir.name)} — lessons.md",
+                    "group": "project"
+                })
+    except Exception as e:
+        log.debug("Project scan error: %s", e)
+
+    # Global group
+    destinations.append({
+        "path": str(MEMORY_DIR / "session_learnings.md"),
+        "label": "Global — session_learnings.md",
+        "group": "global"
+    })
+
+    return destinations
+
+
 def _flush_session_to_memory(session_id: str, project_id: str = None) -> dict:
     """Extract key learnings from a session and append to project MEMORY.md.
 
@@ -4301,6 +4503,14 @@ def _init_trace_tables():
     CREATE INDEX IF NOT EXISTS idx_td_day ON telemetry_daily(day_ts);
     CREATE INDEX IF NOT EXISTS idx_td_agent ON telemetry_daily(agent_id);
     """)
+
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS session_archive (
+        session_id TEXT PRIMARY KEY,
+        source TEXT NOT NULL DEFAULT '',
+        archived_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+    )
+    """)
     conn.close()
 
 _init_trace_tables()
@@ -4906,29 +5116,25 @@ async function doLogin() {
   </div>
 </div>
 
-    <!-- Flush wizard modal -->
-    <div id="flush-wizard-overlay" class="flush-wizard-overlay" style="display:none" onclick="if(event.target===this)closeFlushWizard()">
+    <!-- Extract Learnings modal -->
+    <div id="learn-wizard-overlay" class="flush-wizard-overlay" style="display:none" onclick="if(event.target===this)closeLearnWizard()">
       <div class="flush-wizard">
-        <h3>Flush to Long-Term Memory</h3>
+        <h3>Extract Learnings</h3>
         <div class="flush-wizard-section">
-          <div class="flush-wizard-label">What will be saved</div>
-          <div id="flush-wiz-preview" class="flush-wizard-preview"></div>
+          <div class="flush-wizard-label">Session metadata</div>
+          <div id="learn-wiz-meta" class="flush-wizard-preview" style="max-height:80px"></div>
         </div>
         <div class="flush-wizard-section">
-          <div class="flush-wizard-label">Edit summary (optional)</div>
-          <textarea id="flush-wiz-editor" class="flush-wizard-editor"></textarea>
+          <div class="flush-wizard-label">Learnings <span id="learn-wiz-status" style="font-size:10px;color:var(--accent);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
+          <textarea id="learn-wiz-editor" class="flush-wizard-editor" style="min-height:200px"></textarea>
         </div>
         <div class="flush-wizard-section">
-          <div class="flush-wizard-label">Destination</div>
-          <input id="flush-wiz-dest" type="text" style="width:100%;padding:8px 12px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);box-sizing:border-box;font-family:monospace" readonly>
-        </div>
-        <div class="flush-wizard-section">
-          <div class="flush-wizard-label">Impact</div>
-          <div id="flush-wiz-impact" class="flush-wizard-impact"></div>
+          <div class="flush-wizard-label">Save to</div>
+          <select id="learn-wiz-dest" style="width:100%;padding:8px 12px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);box-sizing:border-box"></select>
         </div>
         <div class="flush-wizard-actions">
-          <button class="btn btn-ghost" onclick="closeFlushWizard()">Cancel</button>
-          <button class="btn btn-primary" id="flush-wiz-commit" onclick="commitFlush()">Commit to memory</button>
+          <button class="btn btn-ghost" onclick="closeLearnWizard()">Cancel</button>
+          <button class="btn btn-primary" id="learn-wiz-save" onclick="saveLearn()" disabled>Save learnings</button>
         </div>
       </div>
     </div>
@@ -5376,6 +5582,9 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .flush-wizard-impact span { display:flex; flex-direction:column; gap:2px; }
 .flush-wizard-impact strong { font-size:11px; color:var(--text); }
 .flush-wizard-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+.model-sparkline { display:inline-block;vertical-align:middle;margin-left:8px; }
+.agent-map-node:hover { opacity:0.8;cursor:pointer; }
+#orch-chain-viewer { overflow-x:auto;padding:12px 0; }
 
 
 /* Chat context injection */
@@ -6415,7 +6624,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .emoji-grid .emoji-btn.selected { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, var(--bg)); }
 @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
-/* Memory tab v6 — compact layout (stripped in v0.27.27, kept: .mem-section-label, .mem-age-badge, .mem-coord-*) */
+/* Memory tab v6 — compact layout (stripped in v0.27.28, kept: .mem-section-label, .mem-age-badge, .mem-coord-*) */
     /* Model list rows (replaces dropdown) */
     .model-list-rows { display:flex;flex-direction:column;gap:1px; }
     .model-list-row { display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;cursor:pointer;transition:.12s;font-size:12px;color:var(--text2); }
@@ -6860,7 +7069,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.27</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.28</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8014,6 +8223,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.28', date:'2026-03-05', notes:['Extract Learnings: LLM-powered session analysis replaces flush wizard','Session archive: dismiss sessions without writing (📦 button)','Destination picker: save learnings to agent memory, project, or global','Dispatch chain SVG visualization with animated edges','Agent relationship map (radial SVG) in Models tab','Model health sparklines (24h trend bars) on model cards'] },
   { ver:'v0.27.27', date:'2026-03-05', notes:['Fix: model selection (showToast→toast)','Fix: Resume button leads to overview (not blank chat)','Fix: session summary counts thinking/tool_use turns','Session rename: pencil icon on inline cards, editable names persist','Backend version probing: /api/models/versions endpoint','Model cards show version badge with update indicator','Update modal shows install command for outdated backends'] },
   { ver:'v0.27.26', date:'2026-03-05', notes:['Models tab redesign: model list replaces dropdown selector','Inline expandable sessions on model cards (no more slide-out for sessions)','Memory tab removed entirely','Coordination files moved to Projects tab as Shared Files section','Live Trace button on working models opens slide-out panel'] },
   { ver:'v0.27.25', date:'2026-03-05', notes:['Sessions moved from Memory tab into Model Activity slide-out panel','Source filter on /api/sessions endpoint (?source=claude|openclaw|gemini)','New /api/sessions/<id>/summary endpoint returns last 10 turns','Session cards with Summary/Flush/Chat actions per model backend','Chat button injects session as context and switches to Chat tab','Memory tab cleaned: sessions section, filter bar, flush history removed'] },
@@ -11167,7 +11377,8 @@ async function _loadInlineSessions(source, backend) {
   var container = document.getElementById('inline-sess-' + backend);
   if (!container) return;
   try {
-    var resp = await api('/api/sessions?source=' + encodeURIComponent(source));
+    var archParam = _showArchivedSessions ? '&show_archived=1' : '';
+    var resp = await api('/api/sessions?source=' + encodeURIComponent(source) + archParam);
     if (resp && resp.sessions) {
       _renderInlineSessions(resp.sessions, source, container);
     } else {
@@ -11202,7 +11413,8 @@ function _renderInlineSessions(sessions, source, container) {
         + '</div>'
         + '<div style="display:flex;gap:4px;margin-top:3px">'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_maSessionSummary(\'' + sid + '\',\'' + ssrc + '\')">Summary</button>'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="openFlushWizard(\'' + sid + '\',\'' + sname + '\',\'' + ssrc + '\')">Flush</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="openLearnWizard(\'' + sid + '\',\'' + sname + '\',\'' + ssrc + '\')">Learn</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="archiveSession(\'' + sid + '\',\'' + ssrc + '\')">\ud83d\udce6</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_renameSession(this,\'' + sid + '\',\'' + ssrc + '\')">✏</button>'
         + '</div></div>';
@@ -11210,6 +11422,8 @@ function _renderInlineSessions(sessions, source, container) {
     + (sessions.length > 20 ? '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:4px">Showing 20 of ' + sessions.length + '</div>' : '')
     + '</div>';
 }
+
+var _showArchivedSessions = false;
 
 async function _loadActivitySessions(source) {
   var el = document.getElementById('ma-sessions-list');
@@ -11254,7 +11468,8 @@ function _renderActivitySessions(sessions, source) {
       + '</div>'
       + '<div class="ma-session-actions">'
       + '<button class="btn btn-ghost" onclick="_maSessionSummary(\'' + sid + '\',\'' + ssrc + '\')">Summary</button>'
-      + '<button class="btn btn-ghost" onclick="openFlushWizard(\'' + sid + '\',\'' + sname + '\',\'' + ssrc + '\')">Flush</button>'
+      + '<button class="btn btn-ghost" onclick="openLearnWizard(\'' + sid + '\',\'' + sname + '\',\'' + ssrc + '\')">Learn</button>'
+      + '<button class="btn btn-ghost" onclick="archiveSession(\'' + sid + '\',\'' + ssrc + '\')">\ud83d\udce6</button>'
       + '<button class="btn btn-ghost" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
       + '</div></div>';
   }).join('')
@@ -11343,53 +11558,99 @@ async function _maSessionChat(sessionId, source, name) {
 
 var _flushWizData = null;
 
-async function openFlushWizard(sessionId, name, source) {
-  var overlay = document.getElementById('flush-wizard-overlay');
-  var preview = document.getElementById('flush-wiz-preview');
-  var editor = document.getElementById('flush-wiz-editor');
-  var dest = document.getElementById('flush-wiz-dest');
-  var impact = document.getElementById('flush-wiz-impact');
-  var commitBtn = document.getElementById('flush-wiz-commit');
+var _learnWizData = null;
+
+async function openLearnWizard(sessionId, name, source) {
+  var overlay = document.getElementById('learn-wizard-overlay');
+  var meta = document.getElementById('learn-wiz-meta');
+  var editor = document.getElementById('learn-wiz-editor');
+  var dest = document.getElementById('learn-wiz-dest');
+  var status = document.getElementById('learn-wiz-status');
+  var saveBtn = document.getElementById('learn-wiz-save');
   if (!overlay) return;
   overlay.style.display = 'flex';
-  preview.textContent = 'Loading preview\u2026';
+  meta.textContent = 'Loading\u2026';
   editor.value = '';
-  commitBtn.disabled = true;
-  var resp = await api('/api/memory/flush-preview', { session_id: sessionId, source: source });
-  if (!resp || !resp.ok) { preview.textContent = (resp && resp.error) || 'Failed to load preview'; return; }
-  _flushWizData = resp;
-  preview.textContent = resp.summary;
-  editor.value = resp.summary;
-  dest.value = resp.destination;
-  var destSize = resp.dest_exists ? _memSize(resp.dest_size_bytes) : '(new file)';
-  var addBytes = _memSize(resp.summary_bytes);
-  var newSize = resp.dest_exists ? _memSize(resp.dest_size_bytes + resp.summary_bytes) : addBytes;
-  impact.innerHTML = '<span><strong>Current file</strong> ' + destSize + '</span><span><strong>Adding</strong> ' + addBytes + '</span><span><strong>After flush</strong> ' + newSize + '</span>';
-  commitBtn.disabled = false;
-}
+  saveBtn.disabled = true;
+  if (status) status.textContent = '(analyzing\u2026)';
 
-async function commitFlush() {
-  if (!_flushWizData) return;
-  var editor = document.getElementById('flush-wiz-editor');
-  var commitBtn = document.getElementById('flush-wiz-commit');
-  commitBtn.disabled = true;
-  commitBtn.textContent = 'Flushing\u2026';
-  var res = await api('/api/memory/flush', {
-    session_id: _flushWizData.session_id,
-    source: _flushWizData.source,
-    summary: editor.value.trim(),
-    destination: document.getElementById('flush-wiz-dest').value.trim(),
+  var resp = await api('/api/sessions/' + encodeURIComponent(sessionId) + '/extract-learnings', { source: source });
+  if (!resp || !resp.ok) {
+    meta.textContent = (resp && resp.error) || 'Failed to extract';
+    if (status) status.textContent = '';
+    return;
+  }
+  _learnWizData = resp;
+  meta.textContent = resp.raw_summary || '(session metadata)';
+  editor.value = resp.learnings || '';
+  if (status) status.textContent = resp.llm_used ? '(LLM analyzed)' : '(metadata only)';
+
+  // Populate destinations
+  dest.innerHTML = '';
+  var groups = {};
+  (resp.destinations || []).forEach(function(d) {
+    var g = d.group || 'other';
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(d);
   });
-  if (res && res.ok) { toast('Flushed to memory'); closeFlushWizard(); loadMemory(); }
-  else { toast((res && res.error) || 'Flush failed', 'err'); commitBtn.disabled = false; commitBtn.textContent = 'Commit to memory'; }
+  ['agent', 'project', 'global'].forEach(function(g) {
+    if (!groups[g]) return;
+    var optgroup = document.createElement('optgroup');
+    optgroup.label = g.charAt(0).toUpperCase() + g.slice(1);
+    groups[g].forEach(function(d) {
+      var opt = document.createElement('option');
+      opt.value = d.path;
+      opt.textContent = d.label;
+      optgroup.appendChild(opt);
+    });
+    dest.appendChild(optgroup);
+  });
+  saveBtn.disabled = false;
 }
 
-function closeFlushWizard() {
-  var overlay = document.getElementById('flush-wizard-overlay');
+// Legacy aliases
+function openFlushWizard(sid, name, src) { openLearnWizard(sid, name, src); }
+function closeFlushWizard() { closeLearnWizard(); }
+
+async function saveLearn() {
+  if (!_learnWizData) return;
+  var editor = document.getElementById('learn-wiz-editor');
+  var dest = document.getElementById('learn-wiz-dest');
+  var saveBtn = document.getElementById('learn-wiz-save');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving\u2026';
+  var res = await api('/api/sessions/' + encodeURIComponent(_learnWizData.session_id) + '/save-learnings', {
+    learnings: editor.value.trim(),
+    destination: dest.value,
+    source: _learnWizData.source,
+  });
+  if (res && res.ok) {
+    toast('Learnings saved to ' + (res.path || dest.value).split('/').pop());
+    closeLearnWizard();
+  } else {
+    toast((res && res.error) || 'Save failed', 'err');
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save learnings';
+  }
+}
+
+function closeLearnWizard() {
+  var overlay = document.getElementById('learn-wizard-overlay');
   if (overlay) overlay.style.display = 'none';
-  _flushWizData = null;
-  var commitBtn = document.getElementById('flush-wiz-commit');
-  if (commitBtn) { commitBtn.textContent = 'Commit to memory'; commitBtn.disabled = false; }
+  _learnWizData = null;
+  var saveBtn = document.getElementById('learn-wiz-save');
+  if (saveBtn) { saveBtn.textContent = 'Save learnings'; saveBtn.disabled = false; }
+}
+
+async function archiveSession(sessionId, source) {
+  var res = await api('/api/sessions/' + encodeURIComponent(sessionId) + '/archive', { source: source });
+  if (res && res.ok) {
+    toast('Session archived');
+    var cards = document.querySelectorAll('.ma-session-card[data-session-id="' + sessionId.toLowerCase() + '"]');
+    cards.forEach(function(c) { c.style.display = 'none'; });
+  } else {
+    toast((res && res.error) || 'Archive failed', 'err');
+  }
 }
 
 
@@ -11469,7 +11730,7 @@ async function _memCfgQuickAdd(agentId) {
   } catch(e) { toast('Error: ' + e.message, 'err'); }
 }
 
-// ── Keyboard Shortcuts (memory module removed in v0.27.27) ──
+// ── Keyboard Shortcuts (memory module removed in v0.27.28) ──
 
 
 // Backward compat wrappers
@@ -13935,6 +14196,24 @@ async function loadAgents() {
   window._localModels = (localData && localData.models) || [];
   renderOrchestration(data.agents || [], data.ai_providers || []);
   renderAgents(data.agents || []);
+  // Load agent relationship map
+  api('/api/visualizations/agent-map').then(function(res) {
+    if (res && res.svg) {
+      var target = document.getElementById('orch-agent-map');
+      if (!target) {
+        var modelsModule = document.getElementById('models-module');
+        if (modelsModule) {
+          var mapDiv = document.createElement('div');
+          mapDiv.id = 'orch-agent-map';
+          mapDiv.style.cssText = 'text-align:center;margin:16px 0;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px';
+          mapDiv.innerHTML = '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Agent Relationship Map</div>' + res.svg;
+          modelsModule.insertBefore(mapDiv, modelsModule.querySelector('#models-grid'));
+        }
+      } else {
+        target.innerHTML = '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Agent Relationship Map</div>' + res.svg;
+      }
+    }
+  });
   loadUsage();
   // Fire-and-forget: auto-refresh usage from live APIs
   autoRefreshUsage();
@@ -14391,6 +14670,18 @@ function _renderModelCards(data, act) {
       + liveTraceBtn
       + '</div>';
   }).join('');
+
+  // Load sparklines for each model card
+  data.providers.forEach(function(p) {
+    api('/api/visualizations/sparkline?backend=' + encodeURIComponent(p.id)).then(function(res) {
+      if (res && res.svg) {
+        var card = document.querySelector('.model-card[data-model-id="' + p.id + '"] .model-card-stats');
+        if (card) {
+          card.insertAdjacentHTML('afterend', '<div class="model-sparkline">' + res.svg + '</div>');
+        }
+      }
+    });
+  });
 
   // Start elapsed timers for working models
   document.querySelectorAll('.model-elapsed').forEach(function(el) {
@@ -19055,29 +19346,25 @@ init();
   </div>
 </div>
 
-    <!-- Flush wizard modal -->
-    <div id="flush-wizard-overlay" class="flush-wizard-overlay" style="display:none" onclick="if(event.target===this)closeFlushWizard()">
+    <!-- Extract Learnings modal (duplicate for second HTML section) -->
+    <div id="learn-wizard-overlay" class="flush-wizard-overlay" style="display:none" onclick="if(event.target===this)closeLearnWizard()">
       <div class="flush-wizard">
-        <h3>Flush to Long-Term Memory</h3>
+        <h3>Extract Learnings</h3>
         <div class="flush-wizard-section">
-          <div class="flush-wizard-label">What will be saved</div>
-          <div id="flush-wiz-preview" class="flush-wizard-preview"></div>
+          <div class="flush-wizard-label">Session metadata</div>
+          <div id="learn-wiz-meta" class="flush-wizard-preview" style="max-height:80px"></div>
         </div>
         <div class="flush-wizard-section">
-          <div class="flush-wizard-label">Edit summary (optional)</div>
-          <textarea id="flush-wiz-editor" class="flush-wizard-editor"></textarea>
+          <div class="flush-wizard-label">Learnings <span id="learn-wiz-status" style="font-size:10px;color:var(--accent);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
+          <textarea id="learn-wiz-editor" class="flush-wizard-editor" style="min-height:200px"></textarea>
         </div>
         <div class="flush-wizard-section">
-          <div class="flush-wizard-label">Destination</div>
-          <input id="flush-wiz-dest" type="text" style="width:100%;padding:8px 12px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);box-sizing:border-box;font-family:monospace" readonly>
-        </div>
-        <div class="flush-wizard-section">
-          <div class="flush-wizard-label">Impact</div>
-          <div id="flush-wiz-impact" class="flush-wizard-impact"></div>
+          <div class="flush-wizard-label">Save to</div>
+          <select id="learn-wiz-dest" style="width:100%;padding:8px 12px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);box-sizing:border-box"></select>
         </div>
         <div class="flush-wizard-actions">
-          <button class="btn btn-ghost" onclick="closeFlushWizard()">Cancel</button>
-          <button class="btn btn-primary" id="flush-wiz-commit" onclick="commitFlush()">Commit to memory</button>
+          <button class="btn btn-ghost" onclick="closeLearnWizard()">Cancel</button>
+          <button class="btn btn-primary" id="learn-wiz-save" onclick="saveLearn()" disabled>Save learnings</button>
         </div>
       </div>
     </div>
@@ -19432,6 +19719,168 @@ def _dispatch_ollama(message, model=None, timeout=120):
         "duration_ms": int(data.get("total_duration", 0) / 1e6),  # ns → ms
         "tokens": {"total": data.get("eval_count", 0)},
     }
+
+def _svg_escape(text: str) -> str:
+    """Escape text for safe SVG embedding."""
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _build_sparkline_svg(backend: str) -> str:
+    """Model health sparkline — 12 bars for last 24h (2-hour buckets)."""
+    import time as _t
+    now = _t.time()
+    try:
+        conn = _db_conn()
+        rows = conn.execute(
+            "SELECT created_at, status FROM agent_messages WHERE to_agent=? AND created_at>? ORDER BY created_at",
+            (backend, now - 86400)
+        ).fetchall()
+        conn.close()
+    except Exception:
+        return ""
+    if not rows:
+        return ""
+
+    buckets = [{"ok": 0, "fail": 0} for _ in range(12)]
+    for created_at, status in rows:
+        idx = min(11, int((now - created_at) / 7200))
+        idx = 11 - idx  # newest on right
+        if status == "failed":
+            buckets[idx]["fail"] += 1
+        else:
+            buckets[idx]["ok"] += 1
+
+    max_count = max((b["ok"] + b["fail"]) for b in buckets) or 1
+    bars = ""
+    for i, b in enumerate(buckets):
+        total = b["ok"] + b["fail"]
+        h = max(2, int((total / max_count) * 18))
+        color = "#ef4444" if b["fail"] > b["ok"] else "#22c55e"
+        x = i * 5
+        bars += f'<rect x="{x}" y="{20 - h}" width="4" height="{h}" rx="1" fill="{color}" opacity="0.8"/>'
+
+    return f'<svg width="60" height="20" viewBox="0 0 60 20" xmlns="http://www.w3.org/2000/svg">{bars}</svg>'
+
+
+def _build_agent_map_svg() -> str:
+    """Radial agent relationship map — central Porter hub + persona nodes."""
+    import math, time as _t
+    now = _t.time()
+    # Get personas
+    try:
+        personas = _persona_list()
+    except Exception:
+        personas = []
+    if not personas:
+        return '<svg width="400" height="400" xmlns="http://www.w3.org/2000/svg"><text x="200" y="200" text-anchor="middle" fill="#888" font-size="14">No agents registered</text></svg>'
+
+    # Get dispatch counts per agent (7 days)
+    dispatch_map = {}
+    try:
+        conn = _db_conn()
+        rows = conn.execute(
+            "SELECT to_agent, COUNT(*), SUM(CASE WHEN status='complete' THEN 1 ELSE 0 END) "
+            "FROM agent_messages WHERE created_at>? GROUP BY to_agent",
+            (now - 604800,)
+        ).fetchall()
+        conn.close()
+        for agent, count, ok_count in rows:
+            dispatch_map[agent.lower()] = {"count": count, "ok": ok_count or 0}
+    except Exception:
+        pass
+
+    group_colors = {
+        "orchestrator": "#ef4444", "strategy": "#6366f1", "creative": "#ec4899",
+        "technical": "#06b6d4", "operations": "#f59e0b"
+    }
+
+    cx, cy = 200, 200
+    r = 150
+    n = len(personas)
+    svg_nodes = ""
+    svg_lines = ""
+
+    for i, p in enumerate(personas):
+        angle = (2 * math.pi * i / n) - math.pi / 2
+        px = cx + r * math.cos(angle)
+        py = cy + r * math.sin(angle)
+
+        name = _svg_escape(p.get("name", "?")[:10])
+        avatar = _svg_escape(p.get("avatar", "🤖"))
+        group = (p.get("group", "") or "").lower()
+        node_color = group_colors.get(group, "#888")
+
+        # Line thickness from dispatch count
+        key = (p.get("name", "") or "").lower()
+        stats = dispatch_map.get(key, {"count": 0, "ok": 0})
+        count = stats["count"]
+        ok_rate = stats["ok"] / count if count > 0 else 1.0
+        thickness = max(1, min(6, int(math.log(count + 1, 2))))
+        # Line color: hsl from red (0) to green (120) based on success rate
+        hue = int(ok_rate * 120)
+        line_color = f"hsl({hue}, 70%, 50%)"
+
+        svg_lines += f'<line x1="{cx}" y1="{cy}" x2="{px:.0f}" y2="{py:.0f}" stroke="{line_color}" stroke-width="{thickness}" opacity="0.6"/>'
+        svg_nodes += f'<circle cx="{px:.0f}" cy="{py:.0f}" r="22" fill="{node_color}" opacity="0.15" class="agent-map-node"/>'
+        svg_nodes += f'<circle cx="{px:.0f}" cy="{py:.0f}" r="22" fill="none" stroke="{node_color}" stroke-width="2" class="agent-map-node"/>'
+        svg_nodes += f'<text x="{px:.0f}" y="{py - 4:.0f}" text-anchor="middle" font-size="14">{avatar}</text>'
+        svg_nodes += f'<text x="{px:.0f}" y="{py + 12:.0f}" text-anchor="middle" fill="{node_color}" font-size="9" font-weight="600">{name}</text>'
+
+    # Central hub
+    hub = f'<circle cx="{cx}" cy="{cy}" r="30" fill="var(--accent, #3b82f6)" opacity="0.15"/>'
+    hub += f'<circle cx="{cx}" cy="{cy}" r="30" fill="none" stroke="var(--accent, #3b82f6)" stroke-width="2.5"/>'
+    hub += f'<text x="{cx}" y="{cy - 4}" text-anchor="middle" font-size="16">🦞</text>'
+    hub += f'<text x="{cx}" y="{cy + 14}" text-anchor="middle" fill="var(--accent, #3b82f6)" font-size="10" font-weight="700">PORTER</text>'
+
+    return (f'<svg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">'
+            f'{svg_lines}{hub}{svg_nodes}</svg>')
+
+
+def _build_dispatch_chain_svg(chain_id: str) -> str:
+    """Left-to-right chain diagram for a dispatch chain."""
+    try:
+        conn = _db_conn()
+        rows = conn.execute(
+            "SELECT from_agent, to_agent, status, duration_ms FROM agent_messages "
+            "WHERE chain_id=? ORDER BY step_num",
+            (chain_id,)
+        ).fetchall()
+        conn.close()
+    except Exception:
+        return ""
+    if not rows:
+        return '<svg width="200" height="50" xmlns="http://www.w3.org/2000/svg"><text x="100" y="30" text-anchor="middle" fill="#888" font-size="12">No steps found</text></svg>'
+
+    group_colors = {
+        "orchestrator": "#ef4444", "strategy": "#6366f1", "creative": "#ec4899",
+        "technical": "#06b6d4", "operations": "#f59e0b"
+    }
+
+    w = max(400, len(rows) * 160 + 40)
+    h = 60
+    nodes = ""
+    edges = ""
+
+    for i, (from_a, to_a, status, dur) in enumerate(rows):
+        x = 20 + i * 150
+        y = 12
+        color = "#22c55e" if status == "complete" else "#ef4444" if status == "failed" else "#f59e0b"
+        label = _svg_escape(to_a[:12])
+
+        # Node rect
+        nodes += f'<rect x="{x}" y="{y}" width="120" height="36" rx="8" fill="{color}" opacity="0.15" stroke="{color}" stroke-width="1.5"/>'
+        nodes += f'<text x="{x + 60}" y="{y + 22}" text-anchor="middle" fill="{color}" font-size="11" font-weight="600">{label}</text>'
+
+        # Status dot
+        dot_color = "#22c55e" if status == "complete" else "#ef4444" if status == "failed" else "#f59e0b"
+        nodes += f'<circle cx="{x + 110}" cy="{y + 8}" r="4" fill="{dot_color}" opacity="0.8"/>'
+
+        # Edge to next node
+        if i < len(rows) - 1:
+            edges += f'<line x1="{x + 120}" y1="{y + 18}" x2="{x + 150}" y2="{y + 18}" stroke="var(--border2, #555)" stroke-width="1.5" stroke-dasharray="4,3"><animate attributeName="stroke-dashoffset" from="7" to="0" dur="0.8s" repeatCount="indefinite"/></line>'
+
+    return f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg">{edges}{nodes}</svg>'
+
 
 PROVIDER_REGISTRY = {
     "openclaw": {"dispatch": _dispatch_openclaw, "probe": _probe_openclaw, "type": "gateway", "label": "OpenClaw"},
@@ -21001,7 +21450,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.27"})
+            self.reply_json({"v": "0.27.28"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -21088,7 +21537,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.26"
+                health["porter_version"] = "0.27.28"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -22280,11 +22729,18 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/sessions":
             if not self.auth_check(redirect=False): return
             source_filter = qs.get("source", [""])[0].lower()
+            show_archived = qs.get("show_archived", [""])[0] == "1"
             loaders = {"openclaw": _load_session_summaries, "claude": _load_claude_session_summaries, "gemini": _load_gemini_session_summaries}
             if source_filter and source_filter in loaders:
                 all_sessions = loaders[source_filter]()
             else:
                 all_sessions = _load_session_summaries() + _load_claude_session_summaries() + _load_gemini_session_summaries()
+            # Tag archived sessions and filter if needed
+            archived_ids = _get_archived_session_ids()
+            for s in all_sessions:
+                s["archived"] = s.get("id", "") in archived_ids
+            if not show_archived:
+                all_sessions = [s for s in all_sessions if not s["archived"]]
             all_sessions.sort(key=lambda s: s.get("first_ts", ""), reverse=True)
             self.reply_json({"ok": True, "sessions": all_sessions, "count": len(all_sessions)})
 
@@ -22506,7 +22962,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.27'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.28'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -24884,6 +25340,95 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             status = 200 if result.get("ok") else 400
             self.reply_json(result, status)
 
+        # ── Visualization endpoints (GET) ─────────────────────────────────────
+        elif parsed.path == "/api/visualizations/sparkline":
+            if not self.auth_check(redirect=False): return
+            backend = qs.get("backend", [""])[0]
+            if not backend:
+                self.reply_json({"ok": False, "error": "backend param required"}, 400); return
+            svg = _build_sparkline_svg(backend)
+            self.reply_json({"ok": True, "svg": svg})
+
+        elif parsed.path == "/api/visualizations/agent-map":
+            if not self.auth_check(redirect=False): return
+            svg = _build_agent_map_svg()
+            self.reply_json({"ok": True, "svg": svg})
+
+        elif parsed.path == "/api/visualizations/dispatch-chain":
+            if not self.auth_check(redirect=False): return
+            chain_id = qs.get("chain_id", [""])[0]
+            if not chain_id:
+                self.reply_json({"ok": False, "error": "chain_id param required"}, 400); return
+            svg = _build_dispatch_chain_svg(chain_id)
+            self.reply_json({"ok": True, "svg": svg})
+
+        # ── Session archive/unarchive (POST) ──────────────────────────────────
+        elif parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/archive"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.split("/")
+            session_id = parts[3] if len(parts) >= 5 else ""
+            if not session_id:
+                self.reply_json({"ok": False, "error": "Missing session_id"}, 400); return
+            data = self.read_json_body()
+            source = str(data.get("source", "")).strip()
+            result = _archive_session(session_id, source)
+            self.reply_json(result)
+
+        elif parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/unarchive"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.split("/")
+            session_id = parts[3] if len(parts) >= 5 else ""
+            if not session_id:
+                self.reply_json({"ok": False, "error": "Missing session_id"}, 400); return
+            result = _unarchive_session(session_id)
+            self.reply_json(result)
+
+        # ── Extract learnings (POST) ──────────────────────────────────────────
+        elif parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/extract-learnings"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.split("/")
+            session_id = parts[3] if len(parts) >= 5 else ""
+            if not session_id:
+                self.reply_json({"ok": False, "error": "Missing session_id"}, 400); return
+            data = self.read_json_body()
+            source = str(data.get("source", "")).strip()
+            result = _extract_learnings_preview(session_id, source)
+            self.reply_json(result)
+
+        # ── Save learnings to file (POST) ─────────────────────────────────────
+        elif parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/save-learnings"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.split("/")
+            session_id = parts[3] if len(parts) >= 5 else ""
+            data = self.read_json_body()
+            learnings = data.get("learnings", "").strip()
+            destination = data.get("destination", "").strip()
+            source = data.get("source", "").strip()
+            if not learnings or not destination:
+                self.reply_json({"ok": False, "error": "learnings and destination required"}, 400); return
+            try:
+                import time as _time_mod
+                dest_path = Path(destination)
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+                mode = "a" if dest_path.exists() else "w"
+                header = ""
+                if mode == "w":
+                    header = "# Session Learnings\n\nAuto-extracted insights from AI sessions.\n"
+                date_str = _time_mod.strftime("%Y-%m-%d %H:%M", _time_mod.localtime())
+                with open(dest_path, mode, encoding="utf-8") as f:
+                    if header: f.write(header)
+                    f.write(f"\n---\n## {date_str} ({source or 'unknown'})\n\n{learnings}\n")
+                _log_flush_history(source or "unknown", session_id, str(dest_path), len(learnings.encode("utf-8")))
+                self.reply_json({"ok": True, "path": str(dest_path), "bytes": len(learnings.encode("utf-8"))})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
+
+        # ── Learning destinations (GET) ───────────────────────────────────────
+        elif parsed.path == "/api/sessions/destinations":
+            if not self.auth_check(redirect=False): return
+            destinations = _list_learning_destinations()
+            self.reply_json({"ok": True, "destinations": destinations})
+
         # ── Memory tab: Write memory file (POST) ─────────────────────────────
         elif parsed.path == "/api/memory/write":
             if not self.auth_check(redirect=False): return
@@ -26183,7 +26728,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.27 ready (localhost only)")
+    print(f"\n  Porter v0.27.28 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
