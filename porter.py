@@ -286,7 +286,8 @@ def _db_init():
             agent_group TEXT DEFAULT '',
             created_at TEXT NOT NULL,
             last_active TEXT,
-            config TEXT DEFAULT '{}'
+            config TEXT DEFAULT '{}',
+            sort_order INTEGER DEFAULT 50
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_personas_status ON personas(status)")
@@ -2251,38 +2252,40 @@ def _extract_learnings_preview(session_id: str, source: str) -> dict:
                         elif isinstance(content, str):
                             text = content
                     if role and text:
-                        transcript += f"\n{role}: {text[:800]}\n"
-                        if len(transcript) > 8000:
-                            transcript += "\n[...transcript truncated...]\n"
+                        transcript += f"\n{role}: {text[:400]}\n"
+                        if len(transcript) > 3000:
+                            transcript += "\n[...truncated...]\n"
                             break
         except Exception as e:
             log.debug("Transcript extraction error: %s", e)
 
-    # Try LLM analysis
+    # LLM analysis — use the session's own backend, fall back through chain
     learnings = ""
     llm_used = False
     if transcript.strip():
-        try:
-            backend, model = _smart_route("analyze session transcript extract learnings")
-            if backend:
-                prompt = (
-                    "Analyze this AI session transcript. Extract:\n"
-                    "- Key decisions made\n"
-                    "- Patterns discovered\n"
-                    "- Bugs fixed and root causes\n"
-                    "- Architecture insights\n"
-                    "Format as concise markdown sections. Skip empty sections.\n\n"
-                    "TRANSCRIPT:\n" + transcript
-                )
-                result = dispatch_agent(prompt, backend, model=model, timeout=60)
-                if result.get("ok") or result.get("text"):
-                    learnings = result.get("text", "").strip()
+        prompt = (
+            "Analyze this AI session transcript. Extract:\n"
+            "- Key decisions made\n"
+            "- Patterns discovered\n"
+            "- Bugs fixed and root causes\n"
+            "- Architecture insights\n"
+            "Format as concise markdown sections. Skip empty sections.\n\n"
+            "TRANSCRIPT:\n" + transcript
+        )
+        # Fast backends first — gemini CLI is fastest, then openclaw gateway, then ollama local
+        # Never use claude/codex here — they spawn slow CLI subprocesses
+        for backend in ["gemini", "openclaw", "ollama"]:
+            if backend not in PROVIDER_REGISTRY:
+                continue
+            try:
+                result = dispatch_agent(prompt, backend, timeout=45)
+                if result.get("text", "").strip():
+                    learnings = result["text"].strip()
                     llm_used = True
-        except Exception as e:
-            log.debug("LLM extract error: %s", e)
-
-    if not learnings:
-        learnings = preview.get("summary", "(No LLM available for analysis — showing metadata only)")
+                    break
+            except Exception as e:
+                log.debug("LLM extract [%s] error: %s", backend, e)
+                continue
 
     # Get destinations
     destinations = _list_learning_destinations()
@@ -2303,17 +2306,31 @@ def _list_learning_destinations() -> list:
     """Scan for save targets — agent memory, project lessons, global."""
     destinations = []
 
+    # Build persona name lookup from DB
+    persona_names = {}
+    try:
+        conn = _db_conn()
+        for row in conn.execute("SELECT id, name, avatar FROM personas").fetchall():
+            persona_names[row[0]] = {"name": row[1], "avatar": row[2] or ""}
+        conn.close()
+    except Exception:
+        pass
+
     # Agent group: each persona's MEMORY.md + memory/ subdir
     try:
         if PERSONAS_DIR.exists():
             for persona_dir in sorted(PERSONAS_DIR.iterdir()):
                 if not persona_dir.is_dir():
                     continue
-                name = persona_dir.name
+                pid = persona_dir.name
+                info = persona_names.get(pid, {})
+                display = info.get("name", pid)
+                avatar = info.get("avatar", "")
+                prefix = f"{avatar} {display}".strip() if avatar else display
                 mem_file = persona_dir / "MEMORY.md"
                 destinations.append({
                     "path": str(mem_file),
-                    "label": f"{name} — MEMORY.md",
+                    "label": f"{prefix} — MEMORY.md",
                     "group": "agent"
                 })
                 mem_subdir = persona_dir / "memory"
@@ -2322,24 +2339,27 @@ def _list_learning_destinations() -> list:
                         if mf.is_file() and mf.suffix in (".md", ".txt"):
                             destinations.append({
                                 "path": str(mf),
-                                "label": f"{name} — memory/{mf.name}",
+                                "label": f"{prefix} — memory/{mf.name}",
                                 "group": "agent"
                             })
     except Exception as e:
         log.debug("Persona scan error: %s", e)
 
-    # Project group: tasks/lessons.md files
+    # Project group: tasks/lessons.md in workspace
     try:
         projects = _config.get("projects", [])
         for proj in projects:
-            proj_dir = Path(proj.get("path", ""))
-            if proj_dir.exists():
-                lessons = proj_dir / "tasks" / "lessons.md"
-                destinations.append({
-                    "path": str(lessons),
-                    "label": f"{proj.get('name', proj_dir.name)} — lessons.md",
-                    "group": "project"
-                })
+            proj_name = proj.get("name", "Unknown")
+            proj_id = proj.get("id", "")
+            proj_dir = AGENT_WORKSPACE_DIR / "projects" / proj_id
+            if not proj_dir.exists():
+                proj_dir.mkdir(parents=True, exist_ok=True)
+            lessons = proj_dir / "tasks" / "lessons.md"
+            destinations.append({
+                "path": str(lessons),
+                "label": f"{proj_name} — lessons.md",
+                "group": "project"
+            })
     except Exception as e:
         log.debug("Project scan error: %s", e)
 
@@ -4511,6 +4531,16 @@ def _init_trace_tables():
         archived_at REAL NOT NULL DEFAULT (strftime('%s','now'))
     )
     """)
+
+    # Migration: add sort_order to personas if missing
+    try:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(personas)").fetchall()]
+        if "sort_order" not in cols:
+            conn.execute("ALTER TABLE personas ADD COLUMN sort_order INTEGER DEFAULT 50")
+            conn.commit()
+    except Exception:
+        pass
+
     conn.close()
 
 _init_trace_tables()
@@ -5583,7 +5613,10 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .flush-wizard-impact strong { font-size:11px; color:var(--text); }
 .flush-wizard-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
 .model-sparkline { display:inline-block;vertical-align:middle;margin-left:8px; }
-.agent-map-node:hover { opacity:0.8;cursor:pointer; }
+.persona-card[draggable] { cursor:grab; }
+.persona-card[draggable]:active { cursor:grabbing; }
+.learn-spinner { display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:learn-spin .6s linear infinite;vertical-align:middle;margin-right:4px; }
+@keyframes learn-spin { to { transform:rotate(360deg); } }
 #orch-chain-viewer { overflow-x:auto;padding:12px 0; }
 
 
@@ -8223,7 +8256,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.27.28', date:'2026-03-05', notes:['Extract Learnings: LLM-powered session analysis replaces flush wizard','Session archive: dismiss sessions without writing (📦 button)','Destination picker: save learnings to agent memory, project, or global','Dispatch chain SVG visualization with animated edges','Agent relationship map (radial SVG) in Models tab','Model health sparklines (24h trend bars) on model cards'] },
+  { ver:'v0.27.28', date:'2026-03-05', notes:['Extract Learnings: LLM-powered session analysis replaces flush wizard','Session archive: dismiss sessions without writing (📦 button)','Destination picker: save learnings to agent memory, project, or global','Dispatch chain SVG visualization with animated edges','Session archive with confirmation dialog','Model health sparklines (24h trend bars) on model cards'] },
   { ver:'v0.27.27', date:'2026-03-05', notes:['Fix: model selection (showToast→toast)','Fix: Resume button leads to overview (not blank chat)','Fix: session summary counts thinking/tool_use turns','Session rename: pencil icon on inline cards, editable names persist','Backend version probing: /api/models/versions endpoint','Model cards show version badge with update indicator','Update modal shows install command for outdated backends'] },
   { ver:'v0.27.26', date:'2026-03-05', notes:['Models tab redesign: model list replaces dropdown selector','Inline expandable sessions on model cards (no more slide-out for sessions)','Memory tab removed entirely','Coordination files moved to Projects tab as Shared Files section','Live Trace button on working models opens slide-out panel'] },
   { ver:'v0.27.25', date:'2026-03-05', notes:['Sessions moved from Memory tab into Model Activity slide-out panel','Source filter on /api/sessions endpoint (?source=claude|openclaw|gemini)','New /api/sessions/<id>/summary endpoint returns last 10 turns','Session cards with Summary/Flush/Chat actions per model backend','Chat button injects session as context and switches to Chat tab','Memory tab cleaned: sessions section, filter bar, flush history removed'] },
@@ -11329,10 +11362,12 @@ function _showUpdateModal(backend, version) {
 }
 
 function _renameSession(btn, sessionId, source) {
-  var card = btn.closest('.inline-sess-card');
+  var card = btn.closest('.inline-sess-card') || btn.closest('.ma-session-card') || btn.closest('[data-session-id]');
   if (!card) return;
-  var nameEl = card.querySelector('span[style*="font-weight:500"]');
-  if (!nameEl) return;
+  // Find the name span — look for the data attribute first, fall back to style query
+  var nameEl = card.querySelector('.sess-name-label');
+  if (!nameEl) nameEl = card.querySelector('span[style*="font-weight:500"]');
+  if (!nameEl || nameEl.tagName === 'INPUT') return;
   var oldName = nameEl.textContent;
   var input = document.createElement('input');
   input.type = 'text';
@@ -11341,36 +11376,38 @@ function _renameSession(btn, sessionId, source) {
   nameEl.replaceWith(input);
   input.focus();
   input.select();
+  var saved = false;
   function save() {
+    if (saved) return;
+    saved = true;
     var newName = input.value.trim();
     if (!newName || newName === oldName) {
-      var span = document.createElement('span');
-      span.style.cssText = 'font-size:11px;font-weight:500;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-      span.textContent = oldName;
-      input.replaceWith(span);
+      _replaceInputWithSpan(input, oldName);
       return;
     }
     api('/api/sessions/' + encodeURIComponent(sessionId) + '/rename', {name: newName}).then(function(res) {
-      var span = document.createElement('span');
-      span.style.cssText = 'font-size:11px;font-weight:500;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
       if (res && res.ok) {
-        span.textContent = newName;
+        _replaceInputWithSpan(input, newName);
         toast('Session renamed');
       } else {
-        span.textContent = oldName;
+        _replaceInputWithSpan(input, oldName);
         toast('Rename failed', 'err');
       }
-      input.replaceWith(span);
     }).catch(function() {
-      var span = document.createElement('span');
-      span.style.cssText = 'font-size:11px;font-weight:500;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-      span.textContent = oldName;
-      input.replaceWith(span);
+      _replaceInputWithSpan(input, oldName);
       toast('Rename failed', 'err');
     });
   }
   input.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); save(); } if (e.key === 'Escape') { input.value = oldName; save(); } });
   input.addEventListener('blur', save);
+}
+function _replaceInputWithSpan(input, text) {
+  if (!input.parentNode) return;
+  var span = document.createElement('span');
+  span.className = 'sess-name-label';
+  span.style.cssText = 'font-size:11px;font-weight:500;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+  span.textContent = text;
+  input.replaceWith(span);
 }
 
 async function _loadInlineSessions(source, backend) {
@@ -11404,7 +11441,7 @@ function _renderInlineSessions(sessions, source, container) {
       var ssrc = escHtml(s.source || source);
       return '<div class="inline-sess-card">'
         + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
-        + '<span style="font-size:11px;font-weight:500;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sname + '</span>'
+        + '<span class="sess-name-label" style="font-size:11px;font-weight:500;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sname + '</span>'
         + ageBadge
         + '</div>'
         + '<div style="display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text3)">'
@@ -11412,9 +11449,8 @@ function _renderInlineSessions(sessions, source, container) {
         + '<span>' + (s.messages || 0) + ' msgs</span>'
         + '</div>'
         + '<div style="display:flex;gap:4px;margin-top:3px">'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_maSessionSummary(\'' + sid + '\',\'' + ssrc + '\')">Summary</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="openLearnWizard(\'' + sid + '\',\'' + sname + '\',\'' + ssrc + '\')">Learn</button>'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="archiveSession(\'' + sid + '\',\'' + ssrc + '\')">\ud83d\udce6</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_renameSession(this,\'' + sid + '\',\'' + ssrc + '\')">✏</button>'
         + '</div></div>';
@@ -11458,7 +11494,7 @@ function _renderActivitySessions(sessions, source) {
     var date = s.first_ts ? new Date(s.first_ts).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
     return '<div class="ma-session-card" data-session-name="' + sname.toLowerCase() + '" data-session-id="' + sid.toLowerCase() + '">'
       + '<div class="ma-session-hdr">'
-      + '<span class="ma-session-name" title="' + sid + '">' + sname + '</span>'
+      + '<span class="ma-session-name sess-name-label" title="' + sid + '">' + sname + '</span>'
       + ageBadge
       + '</div>'
       + '<div style="font-size:10px;color:var(--text3);font-family:monospace;margin-bottom:4px">' + shortId + (date ? ' \u00b7 ' + date : '') + '</div>'
@@ -11467,9 +11503,8 @@ function _renderActivitySessions(sessions, source) {
       + (sizeStr ? '<span>\u2022</span><span>' + sizeStr + '</span>' : '')
       + '</div>'
       + '<div class="ma-session-actions">'
-      + '<button class="btn btn-ghost" onclick="_maSessionSummary(\'' + sid + '\',\'' + ssrc + '\')">Summary</button>'
       + '<button class="btn btn-ghost" onclick="openLearnWizard(\'' + sid + '\',\'' + sname + '\',\'' + ssrc + '\')">Learn</button>'
-      + '<button class="btn btn-ghost" onclick="archiveSession(\'' + sid + '\',\'' + ssrc + '\')">\ud83d\udce6</button>'
+      + '<button class="btn btn-ghost" onclick="archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
       + '<button class="btn btn-ghost" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
       + '</div></div>';
   }).join('')
@@ -11569,21 +11604,39 @@ async function openLearnWizard(sessionId, name, source) {
   var saveBtn = document.getElementById('learn-wiz-save');
   if (!overlay) return;
   overlay.style.display = 'flex';
-  meta.textContent = 'Loading\u2026';
+  meta.innerHTML = '<span class="learn-spinner"></span> Loading session\u2026';
   editor.value = '';
+  editor.disabled = true;
+  editor.placeholder = '';
   saveBtn.disabled = true;
-  if (status) status.textContent = '(analyzing\u2026)';
+  if (status) status.innerHTML = '<span class="learn-spinner"></span> Analyzing with AI\u2026';
+  // Elapsed timer so user sees progress
+  var _learnStart = Date.now();
+  var _learnTimer = setInterval(function() {
+    var elapsed = Math.round((Date.now() - _learnStart) / 1000);
+    if (status) status.innerHTML = '<span class="learn-spinner"></span> Analyzing with AI\u2026 ' + elapsed + 's';
+  }, 1000);
 
-  var resp = await api('/api/sessions/' + encodeURIComponent(sessionId) + '/extract-learnings', { source: source });
+  var resp;
+  try {
+    resp = await api('/api/sessions/' + encodeURIComponent(sessionId) + '/extract-learnings', { source: source }, 60000);
+  } catch(e) {
+    resp = null;
+  }
+  clearInterval(_learnTimer);
   if (!resp || !resp.ok) {
-    meta.textContent = (resp && resp.error) || 'Failed to extract';
+    meta.textContent = (resp && resp.error) || 'Failed to extract learnings';
     if (status) status.textContent = '';
+    editor.disabled = false;
+    editor.placeholder = 'Analysis failed. You can write learnings manually here.';
     return;
   }
   _learnWizData = resp;
   meta.textContent = resp.raw_summary || '(session metadata)';
+  editor.disabled = false;
   editor.value = resp.learnings || '';
-  if (status) status.textContent = resp.llm_used ? '(LLM analyzed)' : '(metadata only)';
+  var elapsed = Math.round((Date.now() - _learnStart) / 1000);
+  if (status) status.textContent = resp.llm_used ? 'Done in ' + elapsed + 's' : '';
 
   // Populate destinations
   dest.innerHTML = '';
@@ -11643,6 +11696,7 @@ function closeLearnWizard() {
 }
 
 async function archiveSession(sessionId, source) {
+  if (!confirm('Archive this session? It will be hidden from the default list.')) return;
   var res = await api('/api/sessions/' + encodeURIComponent(sessionId) + '/archive', { source: source });
   if (res && res.ok) {
     toast('Session archived');
@@ -14196,24 +14250,6 @@ async function loadAgents() {
   window._localModels = (localData && localData.models) || [];
   renderOrchestration(data.agents || [], data.ai_providers || []);
   renderAgents(data.agents || []);
-  // Load agent relationship map
-  api('/api/visualizations/agent-map').then(function(res) {
-    if (res && res.svg) {
-      var target = document.getElementById('orch-agent-map');
-      if (!target) {
-        var modelsModule = document.getElementById('models-module');
-        if (modelsModule) {
-          var mapDiv = document.createElement('div');
-          mapDiv.id = 'orch-agent-map';
-          mapDiv.style.cssText = 'text-align:center;margin:16px 0;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px';
-          mapDiv.innerHTML = '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Agent Relationship Map</div>' + res.svg;
-          modelsModule.insertBefore(mapDiv, modelsModule.querySelector('#models-grid'));
-        }
-      } else {
-        target.innerHTML = '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Agent Relationship Map</div>' + res.svg;
-      }
-    }
-  });
   loadUsage();
   // Fire-and-forget: auto-refresh usage from live APIs
   autoRefreshUsage();
@@ -14588,8 +14624,9 @@ function _renderModelCards(data, act) {
     var statsHtml = '';
     if (stats.total > 0) {
       var pct = stats.total > 0 ? Math.round((stats.complete / stats.total) * 100) : 0;
-      statsHtml = '<div class="model-card-stats">24h: ' + stats.total + ' runs · ' + pct + '%'
-        + (stats.avg_ms > 0 ? ' · avg ' + _formatDuration(stats.avg_ms) : '')
+      statsHtml = '<div class="model-card-stats">' + stats.total + ' requests today'
+        + (stats.complete < stats.total ? ' · ' + (stats.total - stats.complete) + ' failed' : '')
+        + (stats.avg_ms > 0 ? ' · ' + _formatDuration(stats.avg_ms) + ' avg response' : '')
         + '</div>';
     }
 
@@ -14666,21 +14703,22 @@ function _renderModelCards(data, act) {
       + _selHtml
       + '<div class="model-card-divider"></div>'
       + statsHtml
+      + '<div class="model-sparkline" id="sparkline-' + escHtml(p.id) + '" title="Activity over last 24 hours"></div>'
       + sessionsBtn
       + liveTraceBtn
       + '</div>';
   }).join('');
 
-  // Load sparklines for each model card
+  // Load sparklines for each model card (silent — no error toasts)
   data.providers.forEach(function(p) {
-    api('/api/visualizations/sparkline?backend=' + encodeURIComponent(p.id)).then(function(res) {
-      if (res && res.svg) {
-        var card = document.querySelector('.model-card[data-model-id="' + p.id + '"] .model-card-stats');
-        if (card) {
-          card.insertAdjacentHTML('afterend', '<div class="model-sparkline">' + res.svg + '</div>');
+    fetch('/api/visualizations/sparkline?backend=' + encodeURIComponent(p.id))
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(res) {
+        if (res && res.svg) {
+          var el = document.getElementById('sparkline-' + p.id);
+          if (el) el.innerHTML = res.svg;
         }
-      }
-    });
+      }).catch(function() {});
   });
 
   // Start elapsed timers for working models
@@ -15172,10 +15210,11 @@ function renderPersonaOrg() {
     return;
   }
   const groupColors = { Orchestrator:'#ef4444', Strategy:'#6366f1', Creative:'#ec4899', Technical:'#06b6d4', Operations:'#f59e0b' };
-  // Sort: Orchestrator first, then by group
+  // Sort by sort_order (lower first), then by name
   var sorted = _personas.slice().sort(function(a, b) {
-    if (a.agent_group === 'Orchestrator' && b.agent_group !== 'Orchestrator') return -1;
-    if (b.agent_group === 'Orchestrator' && a.agent_group !== 'Orchestrator') return 1;
+    var oa = typeof a.sort_order === 'number' ? a.sort_order : 50;
+    var ob = typeof b.sort_order === 'number' ? b.sort_order : 50;
+    if (oa !== ob) return oa - ob;
     return (a.name || '').localeCompare(b.name || '');
   });
   row.innerHTML = sorted.map(function(p) {
@@ -15186,7 +15225,7 @@ function renderPersonaOrg() {
     var grp = p.agent_group || '';
     var grpColor = groupColors[grp] || 'var(--text3)';
     var grpBadge = grp ? '<div style="font-size:9px;padding:1px 6px;border-radius:3px;background:' + grpColor + '20;color:' + grpColor + ';font-weight:600;margin-top:4px;letter-spacing:.3px">' + grp + '</div>' : '';
-    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + '" onclick="selectPersona(\'' + p.id + '\')">'
+    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + '" draggable="true" data-persona-id="' + p.id + '" ondragstart="_pDragStart(event)" ondragover="_pDragOver(event)" ondrop="_pDrop(event)" ondragend="_pDragEnd(event)" onclick="selectPersona(\'' + p.id + '\')">'
       + '<div class="persona-card-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
       + '<div class="persona-card-role">' + escHtml(p.role || 'General') + '</div>'
@@ -15198,6 +15237,56 @@ function renderPersonaOrg() {
   }).join('');
 }
 
+
+// ── Drag-and-drop reorder for persona cards ──
+var _pDragId = null;
+function _pDragStart(e) {
+  _pDragId = e.currentTarget.dataset.personaId;
+  e.currentTarget.style.opacity = '0.4';
+  e.dataTransfer.effectAllowed = 'move';
+}
+function _pDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  var card = e.currentTarget;
+  card.style.borderLeft = '3px solid var(--accent)';
+}
+function _pDragEnd(e) {
+  _pDragId = null;
+  document.querySelectorAll('.persona-card').forEach(function(c) {
+    c.style.opacity = '1';
+    c.style.borderLeft = '';
+  });
+}
+function _pDrop(e) {
+  e.preventDefault();
+  var targetId = e.currentTarget.dataset.personaId;
+  if (!_pDragId || _pDragId === targetId) { _pDragEnd(e); return; }
+  // Reorder in _personas array
+  var sorted = _personas.slice().sort(function(a, b) {
+    var oa = typeof a.sort_order === 'number' ? a.sort_order : 50;
+    var ob = typeof b.sort_order === 'number' ? b.sort_order : 50;
+    if (oa !== ob) return oa - ob;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+  var ids = sorted.map(function(p) { return p.id; });
+  var fromIdx = ids.indexOf(_pDragId);
+  var toIdx = ids.indexOf(targetId);
+  if (fromIdx < 0 || toIdx < 0) { _pDragEnd(e); return; }
+  ids.splice(fromIdx, 1);
+  ids.splice(toIdx, 0, _pDragId);
+  // Update sort_order in _personas
+  ids.forEach(function(id, i) {
+    var p = _personas.find(function(x) { return x.id === id; });
+    if (p) p.sort_order = i;
+  });
+  _pDragEnd(e);
+  renderPersonaOrg();
+  // Persist to backend
+  api('/api/personas/reorder', { order: ids }).then(function(r) {
+    if (r && r.ok) toast('Agent order saved', 'ok');
+  });
+}
 
 async function selectPersona(id) {
   _selectedPersonaId = id;
@@ -19759,81 +19848,13 @@ def _build_sparkline_svg(backend: str) -> str:
         x = i * 5
         bars += f'<rect x="{x}" y="{20 - h}" width="4" height="{h}" rx="1" fill="{color}" opacity="0.8"/>'
 
-    return f'<svg width="60" height="20" viewBox="0 0 60 20" xmlns="http://www.w3.org/2000/svg">{bars}</svg>'
+    total_ok = sum(b["ok"] for b in buckets)
+    total_fail = sum(b["fail"] for b in buckets)
+    tip = f"{total_ok + total_fail} requests in 24h"
+    if total_fail:
+        tip += f" ({total_fail} failed)"
+    return f'<svg width="60" height="20" viewBox="0 0 60 20" xmlns="http://www.w3.org/2000/svg" style="cursor:help"><title>{tip}</title>{bars}</svg>'
 
-
-def _build_agent_map_svg() -> str:
-    """Radial agent relationship map — central Porter hub + persona nodes."""
-    import math, time as _t
-    now = _t.time()
-    # Get personas
-    try:
-        personas = _persona_list()
-    except Exception:
-        personas = []
-    if not personas:
-        return '<svg width="400" height="400" xmlns="http://www.w3.org/2000/svg"><text x="200" y="200" text-anchor="middle" fill="#888" font-size="14">No agents registered</text></svg>'
-
-    # Get dispatch counts per agent (7 days)
-    dispatch_map = {}
-    try:
-        conn = _db_conn()
-        rows = conn.execute(
-            "SELECT to_agent, COUNT(*), SUM(CASE WHEN status='complete' THEN 1 ELSE 0 END) "
-            "FROM agent_messages WHERE created_at>? GROUP BY to_agent",
-            (now - 604800,)
-        ).fetchall()
-        conn.close()
-        for agent, count, ok_count in rows:
-            dispatch_map[agent.lower()] = {"count": count, "ok": ok_count or 0}
-    except Exception:
-        pass
-
-    group_colors = {
-        "orchestrator": "#ef4444", "strategy": "#6366f1", "creative": "#ec4899",
-        "technical": "#06b6d4", "operations": "#f59e0b"
-    }
-
-    cx, cy = 200, 200
-    r = 150
-    n = len(personas)
-    svg_nodes = ""
-    svg_lines = ""
-
-    for i, p in enumerate(personas):
-        angle = (2 * math.pi * i / n) - math.pi / 2
-        px = cx + r * math.cos(angle)
-        py = cy + r * math.sin(angle)
-
-        name = _svg_escape(p.get("name", "?")[:10])
-        avatar = _svg_escape(p.get("avatar", "🤖"))
-        group = (p.get("group", "") or "").lower()
-        node_color = group_colors.get(group, "#888")
-
-        # Line thickness from dispatch count
-        key = (p.get("name", "") or "").lower()
-        stats = dispatch_map.get(key, {"count": 0, "ok": 0})
-        count = stats["count"]
-        ok_rate = stats["ok"] / count if count > 0 else 1.0
-        thickness = max(1, min(6, int(math.log(count + 1, 2))))
-        # Line color: hsl from red (0) to green (120) based on success rate
-        hue = int(ok_rate * 120)
-        line_color = f"hsl({hue}, 70%, 50%)"
-
-        svg_lines += f'<line x1="{cx}" y1="{cy}" x2="{px:.0f}" y2="{py:.0f}" stroke="{line_color}" stroke-width="{thickness}" opacity="0.6"/>'
-        svg_nodes += f'<circle cx="{px:.0f}" cy="{py:.0f}" r="22" fill="{node_color}" opacity="0.15" class="agent-map-node"/>'
-        svg_nodes += f'<circle cx="{px:.0f}" cy="{py:.0f}" r="22" fill="none" stroke="{node_color}" stroke-width="2" class="agent-map-node"/>'
-        svg_nodes += f'<text x="{px:.0f}" y="{py - 4:.0f}" text-anchor="middle" font-size="14">{avatar}</text>'
-        svg_nodes += f'<text x="{px:.0f}" y="{py + 12:.0f}" text-anchor="middle" fill="{node_color}" font-size="9" font-weight="600">{name}</text>'
-
-    # Central hub
-    hub = f'<circle cx="{cx}" cy="{cy}" r="30" fill="var(--accent, #3b82f6)" opacity="0.15"/>'
-    hub += f'<circle cx="{cx}" cy="{cy}" r="30" fill="none" stroke="var(--accent, #3b82f6)" stroke-width="2.5"/>'
-    hub += f'<text x="{cx}" y="{cy - 4}" text-anchor="middle" font-size="16">🦞</text>'
-    hub += f'<text x="{cx}" y="{cy + 14}" text-anchor="middle" fill="var(--accent, #3b82f6)" font-size="10" font-weight="700">PORTER</text>'
-
-    return (f'<svg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">'
-            f'{svg_lines}{hub}{svg_nodes}</svg>')
 
 
 def _build_dispatch_chain_svg(chain_id: str) -> str:
@@ -20179,7 +20200,7 @@ def _persona_list():
     """List all personas from SQLite."""
     try:
         conn = _db_conn()
-        rows = conn.execute("SELECT * FROM personas ORDER BY created_at").fetchall()
+        rows = conn.execute("SELECT * FROM personas ORDER BY sort_order, created_at").fetchall()
         conn.close()
         return [dict(r) for r in rows]
     except Exception as e:
@@ -22756,6 +22777,24 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json(result)
 
         # ── Memory tab: Memory overview (GET) ─────────────────────────────────
+        # ── Visualization endpoints (GET) ─────────────────────────────────────
+        elif parsed.path == "/api/visualizations/sparkline":
+            if not self.auth_check(redirect=False): return
+            backend = qs.get("backend", [""])[0]
+            if not backend:
+                self.reply_json({"ok": False, "error": "backend param required"}, 400); return
+            svg = _build_sparkline_svg(backend)
+            self.reply_json({"ok": True, "svg": svg})
+
+
+        elif parsed.path == "/api/visualizations/dispatch-chain":
+            if not self.auth_check(redirect=False): return
+            chain_id = qs.get("chain_id", [""])[0]
+            if not chain_id:
+                self.reply_json({"ok": False, "error": "chain_id param required"}, 400); return
+            svg = _build_dispatch_chain_svg(chain_id)
+            self.reply_json({"ok": True, "svg": svg})
+
         elif parsed.path == "/api/memory/overview":
             if not self.auth_check(redirect=False): return
             overview = _get_memory_overview()
@@ -25340,28 +25379,6 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             status = 200 if result.get("ok") else 400
             self.reply_json(result, status)
 
-        # ── Visualization endpoints (GET) ─────────────────────────────────────
-        elif parsed.path == "/api/visualizations/sparkline":
-            if not self.auth_check(redirect=False): return
-            backend = qs.get("backend", [""])[0]
-            if not backend:
-                self.reply_json({"ok": False, "error": "backend param required"}, 400); return
-            svg = _build_sparkline_svg(backend)
-            self.reply_json({"ok": True, "svg": svg})
-
-        elif parsed.path == "/api/visualizations/agent-map":
-            if not self.auth_check(redirect=False): return
-            svg = _build_agent_map_svg()
-            self.reply_json({"ok": True, "svg": svg})
-
-        elif parsed.path == "/api/visualizations/dispatch-chain":
-            if not self.auth_check(redirect=False): return
-            chain_id = qs.get("chain_id", [""])[0]
-            if not chain_id:
-                self.reply_json({"ok": False, "error": "chain_id param required"}, 400); return
-            svg = _build_dispatch_chain_svg(chain_id)
-            self.reply_json({"ok": True, "svg": svg})
-
         # ── Session archive/unarchive (POST) ──────────────────────────────────
         elif parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/archive"):
             if not self.auth_check(redirect=False): return
@@ -25420,6 +25437,24 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     f.write(f"\n---\n## {date_str} ({source or 'unknown'})\n\n{learnings}\n")
                 _log_flush_history(source or "unknown", session_id, str(dest_path), len(learnings.encode("utf-8")))
                 self.reply_json({"ok": True, "path": str(dest_path), "bytes": len(learnings.encode("utf-8"))})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
+
+        # ── Agent reorder ─────────────────────────────────────────────────────
+        elif parsed.path == "/api/personas/reorder":
+            if not self.auth_check(redirect=False): return
+            try:
+                body = self.json_body()
+                order = body.get("order", [])  # list of persona IDs in new order
+                if not order or not isinstance(order, list):
+                    self.reply_json({"ok": False, "error": "order list required"}, 400)
+                    return
+                conn = _db_conn()
+                for idx, pid in enumerate(order):
+                    conn.execute("UPDATE personas SET sort_order=? WHERE id=?", (idx, pid))
+                conn.commit()
+                conn.close()
+                self.reply_json({"ok": True})
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
