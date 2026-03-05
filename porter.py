@@ -11444,7 +11444,7 @@ async function _loadInlineSessions(source, backend) {
       // Add Update Learnings button at top
       var bar = document.createElement('div');
       bar.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:4px';
-      bar.innerHTML = '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="_extractAllLearnings(\'' + escHtml(source) + '\')">Update Learnings</button>';
+      bar.innerHTML = '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="event.stopPropagation();_extractAllLearnings(\'' + escHtml(source) + '\')">Update Learnings</button>';
       container.innerHTML = '';
       container.appendChild(bar);
       var listDiv = document.createElement('div');
@@ -11481,16 +11481,17 @@ function _renderInlineSessions(sessions, source, container) {
         + '<span>' + (s.messages || 0) + ' msgs</span>'
         + '</div>'
         + '<div style="display:flex;gap:4px;margin-top:3px">'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_showSessionLearnings(this,\'' + sid + '\',\'' + ssrc + '\')">' + (s.learnings ? '\u25be Learnings' : 'Learnings') + '</button>'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="_renameSession(this,\'' + sid + '\',\'' + ssrc + '\')">\u270f</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_showSessionLearnings(this,\'' + sid + '\',\'' + ssrc + '\')">' + (s.learnings ? '\u25be Learnings' : 'Learnings') + '</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_renameSession(this,\'' + sid + '\',\'' + ssrc + '\')">\u270f</button>'
         + '</div>'
         + '<div class="sess-learnings-inline" style="margin-top:3px;font-size:10px;color:var(--text3);' + (s.learnings ? '' : 'display:none;') + 'overflow:visible" data-sid="' + sid + '">'
         + '<textarea class="sess-learn-text" onclick="event.stopPropagation()" style="width:100%;min-height:40px;resize:none;overflow:hidden;line-height:1.5;font-size:10px;font-family:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px;box-sizing:border-box">' + (s.learnings ? escHtml(s.learnings) : '') + '</textarea>'
-        + '<div style="display:flex;gap:4px;margin-top:3px">'
-        + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_saveLearnInline(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
-        + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">\u21bb</button>'
+        + '<div style="display:flex;gap:4px;margin-top:4px;align-items:center">'
+        + '<select class="sess-learn-dest" onclick="event.stopPropagation()" style="flex:1;font-size:10px;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text)"></select>'
+        + '<button class="btn btn-primary" style="font-size:9px;padding:2px 8px;white-space:nowrap" onclick="event.stopPropagation();_saveLearnDirect(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
+        + '<button class="btn btn-ghost" style="font-size:9px;padding:2px 5px" onclick="event.stopPropagation();_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">↻</button>'
         + '</div></div>'
         + '</div>';
     }).join('')
@@ -11509,7 +11510,7 @@ async function _loadActivitySessions(source) {
     hdr = document.createElement('div');
     hdr.className = 'extract-all-bar';
     hdr.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:4px 0';
-    hdr.innerHTML = '<button id="extract-all-btn" class="btn btn-ghost" style="font-size:10px;padding:3px 10px" onclick="_extractAllLearnings(\'' + escHtml(source) + '\')">Update Learnings</button>';
+    hdr.innerHTML = '<button id="extract-all-btn" class="btn btn-ghost" style="font-size:10px;padding:3px 10px" onclick="event.stopPropagation();_extractAllLearnings(\'' + escHtml(source) + '\')">Update Learnings</button>';
     el.parentElement.insertBefore(hdr, el);
   }
   try {
@@ -11551,15 +11552,16 @@ function _renderActivitySessions(sessions, source) {
       + (sizeStr ? '<span>\u2022</span><span>' + sizeStr + '</span>' : '')
       + '</div>'
       + '<div class="ma-session-actions">'
-      + '<button class="btn btn-ghost" onclick="_showSessionLearnings(this,\'' + sid + '\',\'' + ssrc + '\')">' + (s.learnings ? '\u25be Learnings' : 'Learnings') + '</button>'
-      + '<button class="btn btn-ghost" onclick="archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
-      + '<button class="btn btn-ghost" onclick="_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
+      + '<button class="btn btn-ghost" onclick="event.stopPropagation();_showSessionLearnings(this,\'' + sid + '\',\'' + ssrc + '\')">' + (s.learnings ? '\u25be Learnings' : 'Learnings') + '</button>'
+      + '<button class="btn btn-ghost" onclick="event.stopPropagation();archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
+      + '<button class="btn btn-ghost" onclick="event.stopPropagation();_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
       + '</div>'
       + '<div class="sess-learnings-inline" style="margin-top:4px;font-size:10px;color:var(--text3);' + (s.learnings ? '' : 'display:none;') + 'overflow:visible" data-sid="' + sid + '">'
       + '<textarea class="sess-learn-text" onclick="event.stopPropagation()" style="width:100%;min-height:40px;resize:none;overflow:hidden;line-height:1.5;font-size:10px;font-family:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px;box-sizing:border-box">' + (s.learnings ? escHtml(s.learnings) : '') + '</textarea>'
-      + '<div style="display:flex;gap:4px;margin-top:3px">'
-      + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_saveLearnInline(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
-      + '<button class="btn btn-ghost" style="font-size:9px;padding:1px 5px" onclick="_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">\u21bb</button>'
+      + '<div style="display:flex;gap:4px;margin-top:4px;align-items:center">'
+      + '<select class="sess-learn-dest" onclick="event.stopPropagation()" style="flex:1;font-size:10px;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text)"></select>'
+      + '<button class="btn btn-primary" style="font-size:9px;padding:2px 8px;white-space:nowrap" onclick="event.stopPropagation();_saveLearnDirect(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
+      + '<button class="btn btn-ghost" style="font-size:9px;padding:2px 5px" onclick="event.stopPropagation();_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">↻</button>'
       + '</div></div>'
       + '</div>';
   }).join('')
@@ -11650,11 +11652,11 @@ async function _maSessionChat(sessionId, source, name) {
 
 function _autoSizeTextarea(ta) {
   if (!ta) return;
-  ta.style.height = 'auto';
-  ta.style.height = ta.scrollHeight + 'px';
-  // Also resize parent container
-  var parent = ta.closest('.sess-learnings-inline');
-  if (parent) parent.style.maxHeight = 'none';
+  ta.style.overflow = 'auto';
+  ta.style.height = '0';
+  var h = Math.max(ta.scrollHeight, 40);
+  ta.style.height = h + 'px';
+  ta.style.overflow = 'hidden';
 }
 // Auto-resize on input
 document.addEventListener('input', function(e) {
@@ -11775,16 +11777,19 @@ async function _reextractLearn(sid, source) {
     textDiv.disabled = false;
     if (resp && resp.ok && resp.learnings) {
       textDiv.value = resp.learnings;
-      el.style.maxHeight = el.scrollHeight + 30 + 'px';
+      _autoSizeTextarea(textDiv);
+      el.style.maxHeight = 'none';
       toast('Learnings refreshed');
     } else {
       textDiv.value = old;
+      _autoSizeTextarea(textDiv);
       toast('Re-extract failed', 'err');
     }
   } catch(e) {
     clearInterval(_timer);
     textDiv.disabled = false;
     textDiv.value = old;
+    _autoSizeTextarea(textDiv);
     toast('Re-extract failed', 'err');
   }
 }
@@ -11833,7 +11838,7 @@ async function _extractAllLearnings(source) {
         var el = document.querySelector('.sess-learnings-inline[data-sid="' + sid + '"]');
         if (el) {
           var ta = el.querySelector('.sess-learn-text');
-          if (ta) ta.value = resp.learnings;
+          if (ta) { ta.value = resp.learnings; _autoSizeTextarea(ta); }
         }
         if (learnBtn) learnBtn.textContent = '\u25be Learnings';
       } else {
@@ -20068,7 +20073,7 @@ _backend_version_cache = {"data": None, "ts": 0}
 
 KNOWN_LATEST = {
     "openclaw": "2026.3.2",
-    "ollama": "0.6.2",
+    "ollama": "0.17.6",
 }
 
 def _probe_backend_versions():
@@ -20119,7 +20124,7 @@ def _probe_backend_versions():
     try:
         import subprocess
         result = subprocess.run(["codex", "--version"], capture_output=True, text=True, timeout=5)
-        ver = result.stdout.strip()
+        ver = result.stdout.strip().split()[-1] if result.stdout.strip() else ""
         if ver:
             versions["codex"] = {"version": ver, "detected": True}
         else:
