@@ -23226,7 +23226,7 @@ class Handler(BaseHTTPRequestHandler):
                     else:
                         import subprocess as _sp
                         _cl_active = _get_active_model("claude")
-                        _cl_cmd = [cl_bin, "-p", "--output-format", "stream-json"]
+                        _cl_cmd = [cl_bin, "-p", "--verbose", "--output-format", "stream-json"]
                         if _cl_active and _cl_active != "auto":
                             _cl_cmd.extend(["--model", _cl_active])
                         _cl_cmd.append(prompt)
