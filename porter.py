@@ -16301,25 +16301,59 @@ async function _editCortexMem(id, btn) {
   var textEl = card.querySelector('.cx-fact-text');
   if (!textEl) return;
   var oldText = textEl.textContent;
-  var input = document.createElement('input');
-  input.type = 'text';
-  input.value = oldText;
-  input.style.cssText = 'width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--accent);border-radius:6px;background:var(--bg);color:var(--text);outline:none';
-  input.onclick = function(e) { e.stopPropagation(); };
-  textEl.replaceWith(input);
-  input.focus();
-  input.select();
-  async function _save() {
-    var nv = input.value.trim();
-    if (!nv || nv === oldText) { var sp = document.createElement('div'); sp.className = 'cx-fact-text'; sp.style.cssText = 'font-size:13px;color:var(--text);line-height:1.5'; sp.textContent = oldText; input.replaceWith(sp); return; }
+  var scopeEl = card.querySelector('[data-scope]') || card;
+  var currentScope = card.getAttribute('data-scope') || 'global';
+
+  // Build modal
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.15s';
+  var modal = document.createElement('div');
+  modal.style.cssText = 'background:var(--raised);border:1px solid var(--border2);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:24px;width:520px;max-width:90vw;max-height:80vh;overflow-y:auto';
+  modal.innerHTML = '<div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:16px">Edit Memory</div>'
+    + '<label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Fact</label>'
+    + '<textarea id="cx-edit-fact" style="width:100%;min-height:80px;font-size:13px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);resize:vertical;font-family:inherit;line-height:1.5;outline:none;box-sizing:border-box" onfocus="this.style.borderColor=\'var(--accent)\'" onblur="this.style.borderColor=\'var(--border)\'">' + escHtml(oldText) + '</textarea>'
+    + '<div style="display:flex;gap:12px;margin-top:12px">'
+    + '<label style="font-size:12px;color:var(--text3);flex:1">'
+    + 'Scope'
+    + '<select id="cx-edit-scope" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)">'
+    + '<option value="global"' + (currentScope === 'global' ? ' selected' : '') + '>Global</option>'
+    + '<option value="agent"' + (currentScope === 'agent' ? ' selected' : '') + '>Agent</option>'
+    + '<option value="project"' + (currentScope === 'project' ? ' selected' : '') + '>Project</option>'
+    + '</select></label>'
+    + '</div>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">'
+    + '<button class="btn btn-ghost" id="cx-edit-cancel" style="padding:8px 20px;font-size:13px;border-radius:8px">Cancel</button>'
+    + '<button class="btn" id="cx-edit-save" style="padding:8px 24px;font-size:13px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer">Save</button>'
+    + '</div>';
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  var textarea = document.getElementById('cx-edit-fact');
+  if (textarea) { textarea.focus(); textarea.setSelectionRange(textarea.value.length, textarea.value.length); }
+
+  // Close handlers
+  function _close() { overlay.style.opacity = '0'; setTimeout(function() { overlay.remove(); }, 150); }
+  overlay.onclick = function(e) { if (e.target === overlay) _close(); };
+  document.getElementById('cx-edit-cancel').onclick = _close;
+  document.addEventListener('keydown', function _esc(e) { if (e.key === 'Escape') { _close(); document.removeEventListener('keydown', _esc); } });
+
+  // Save handler
+  document.getElementById('cx-edit-save').onclick = async function() {
+    var newText = textarea.value.trim();
+    var newScope = document.getElementById('cx-edit-scope').value;
+    if (!newText) { toast('Fact cannot be empty', 'warn'); return; }
+    this.disabled = true;
+    this.textContent = 'Saving...';
     try {
-      var r = await api('/api/cortex/memories/' + id + '/update', { fact: nv });
-      var sp = document.createElement('div'); sp.className = 'cx-fact-text'; sp.style.cssText = 'font-size:13px;color:var(--text);line-height:1.5'; sp.textContent = (r && r.ok) ? nv : oldText; input.replaceWith(sp);
-      if (r && r.ok) toast('Updated');
-    } catch(e) { var sp = document.createElement('div'); sp.className = 'cx-fact-text'; sp.style.cssText = 'font-size:13px;color:var(--text);line-height:1.5'; sp.textContent = oldText; input.replaceWith(sp); }
-  }
-  input.onkeydown = function(e) { if (e.key === 'Enter') { e.preventDefault(); _save(); } if (e.key === 'Escape') { var sp = document.createElement('div'); sp.className = 'cx-fact-text'; sp.style.cssText = 'font-size:13px;color:var(--text);line-height:1.5'; sp.textContent = oldText; input.replaceWith(sp); } };
-  input.onblur = _save;
+      var r = await api('/api/cortex/memories/' + id + '/update', { fact: newText, scope: newScope });
+      if (r && r.ok) {
+        if (textEl) textEl.textContent = newText;
+        if (card) card.setAttribute('data-scope', newScope);
+        toast('Memory updated');
+        _close();
+      } else { toast('Save failed', 'err'); this.disabled = false; this.textContent = 'Save'; }
+    } catch(e) { toast('Save failed', 'err'); this.disabled = false; this.textContent = 'Save'; }
+  };
 }
 
 async function _saveCortexConfig2() {
@@ -16348,40 +16382,50 @@ function _resetGraphZoom() { _graphZoom = {x: 0, y: 0, scale: 1}; _drawGraph(); 
 async function _initMemoryGraph() {
   var canvas = document.getElementById('cx-graph-canvas');
   if (!canvas) return;
-  // Size canvas to actual container
+  // Use CSS pixel dimensions (no DPI scaling — let CSS handle it)
   var container = canvas.parentElement;
-  if (container) {
-    canvas.width = container.clientWidth * (window.devicePixelRatio || 1);
-    canvas.height = container.clientHeight * (window.devicePixelRatio || 1);
-    canvas.style.width = container.clientWidth + 'px';
-    canvas.style.height = container.clientHeight + 'px';
-  }
+  var w = container ? container.clientWidth : 700;
+  var h = container ? container.clientHeight : 400;
+  if (w < 100) w = 700;
+  if (h < 100) h = 400;
+  canvas.width = w;
+  canvas.height = h;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
   // Fetch graph data
   try {
     var data = await api('/api/cortex/graph');
-    if (!data || !data.nodes) return;
+    if (!data || !data.nodes || !data.nodes.length) {
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text3').trim() || '#888';
+      ctx.font = '14px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('No graph data — dispatch to an agent first', w/2, h/2);
+      return;
+    }
     _graphNodes = data.nodes;
     _graphEdges = data.edges;
-    // Initialize positions
-    var cx = canvas.width / 2, cy = canvas.height / 2;
+    // Initialize positions in a circle
+    var cx = w / 2, cy = h / 2;
     _graphNodes.forEach(function(n, i) {
-      var angle = (2 * Math.PI * i) / _graphNodes.length;
-      var radius = 150 + Math.random() * 50;
+      var angle = (2 * Math.PI * i) / _graphNodes.length - Math.PI/2;
+      var radius = Math.min(w, h) * 0.3 + Math.random() * 30;
       n.x = cx + Math.cos(angle) * radius;
       n.y = cy + Math.sin(angle) * radius;
       n.vx = 0;
       n.vy = 0;
     });
-    // Setup interaction
+    // Center the cortex hub
+    if (_graphNodes[0]) { _graphNodes[0].x = cx; _graphNodes[0].y = cy; }
     _setupGraphInteraction(canvas);
-    // Run simulation
     _runGraphSimulation(canvas);
   } catch(e) {
+    console.debug('Graph init error:', e);
     var ctx = canvas.getContext('2d');
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text3') || '#888';
+    ctx.fillStyle = '#888';
     ctx.font = '13px system-ui';
     ctx.textAlign = 'center';
-    ctx.fillText('Could not load memory graph', canvas.width/2, canvas.height/2);
+    ctx.fillText('Could not load memory graph: ' + e.message, w/2, h/2);
   }
 }
 
@@ -16425,6 +16469,7 @@ function _setupGraphInteraction(canvas) {
 }
 
 function _runGraphSimulation(canvas) {
+  if (_graphAnim) cancelAnimationFrame(_graphAnim);
   var iterations = 0;
   function tick() {
     var alpha = Math.max(0.01, 1 - iterations / 200);
@@ -16466,9 +16511,9 @@ function _runGraphSimulation(canvas) {
     });
     _drawGraph();
     iterations++;
-    if (iterations < 200) _graphAnim = requestAnimationFrame(tick);
+    // Keep animating: physics for 200 frames, then just particles
+    _graphAnim = requestAnimationFrame(tick);
   }
-  if (_graphAnim) cancelAnimationFrame(_graphAnim);
   tick();
 }
 
@@ -16477,100 +16522,92 @@ function _drawGraph() {
   if (!canvas) return;
   var ctx = canvas.getContext('2d');
   var w = canvas.width, h = canvas.height;
-  // Get theme colors
   var cs = getComputedStyle(document.documentElement);
-  var bg = cs.getPropertyValue('--bg2').trim() || '#1a1a2e';
-  var border = cs.getPropertyValue('--border').trim() || '#333';
+  var bgColor = cs.getPropertyValue('--bg2').trim() || '#111';
   var textColor = cs.getPropertyValue('--text').trim() || '#eee';
-  var text3 = cs.getPropertyValue('--text3').trim() || '#888';
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = bg;
+  ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, w, h);
   ctx.save();
   ctx.translate(_graphZoom.x, _graphZoom.y);
   ctx.scale(_graphZoom.scale, _graphZoom.scale);
   var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80', cortex:'#8b5cf6'};
-  // Draw edges with animated glow
   var time = Date.now() / 1000;
+
+  // Draw edges
   _graphEdges.forEach(function(e) {
     var a = _graphNodes[e.source], b = _graphNodes[e.target];
     if (!a || !b) return;
-    var weight = Math.min(6, Math.max(1, (e.weight || 1)));
-    var pulse = 0.4 + 0.3 * Math.sin(time * 2 + e.source);
+    var weight = Math.min(5, Math.max(0.5, (e.weight || 1) * 0.8));
+    var pulse = 0.3 + 0.2 * Math.sin(time * 1.5 + (e.source || 0));
+    var midX = (a.x + b.x) / 2 + (a.y - b.y) * 0.08;
+    var midY = (a.y + b.y) / 2 + (b.x - a.x) * 0.08;
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
-    // Curved edges
-    var midX = (a.x + b.x) / 2 + (a.y - b.y) * 0.1;
-    var midY = (a.y + b.y) / 2 + (b.x - a.x) * 0.1;
     ctx.quadraticCurveTo(midX, midY, b.x, b.y);
     ctx.strokeStyle = 'rgba(139,92,246,' + pulse + ')';
     ctx.lineWidth = weight;
     ctx.stroke();
-    // Animated particle
-    var t = (time * 0.3 + e.source * 0.5) % 1;
+    // Animated particle along edge
+    var t = (time * 0.25 + (e.source || 0) * 0.4) % 1;
     var px = (1-t)*(1-t)*a.x + 2*(1-t)*t*midX + t*t*b.x;
     var py = (1-t)*(1-t)*a.y + 2*(1-t)*t*midY + t*t*b.y;
     ctx.beginPath();
-    ctx.arc(px, py, 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(139,92,246,0.9)';
+    ctx.arc(px, py, 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(139,92,246,0.8)';
     ctx.fill();
   });
+
   // Draw nodes
   _graphNodes.forEach(function(n) {
     var color = scopeColors[n.type] || '#8b5cf6';
+    var r = parseInt(color.slice(1,3),16)||139, g = parseInt(color.slice(3,5),16)||92, bl = parseInt(color.slice(5,7),16)||246;
     var radius = n.radius || 20;
-    // Glow
-    var glow = ctx.createRadialGradient(n.x, n.y, radius * 0.3, n.x, n.y, radius * 2);
-    glow.addColorStop(0, color.replace(')', ',0.2)').replace('rgb', 'rgba'));
-    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    // Outer glow
+    var grad = ctx.createRadialGradient(n.x, n.y, radius*0.5, n.x, n.y, radius*2.5);
+    grad.addColorStop(0, 'rgba('+r+','+g+','+bl+',0.15)');
+    grad.addColorStop(1, 'rgba('+r+','+g+','+bl+',0)');
     ctx.beginPath();
-    ctx.arc(n.x, n.y, radius * 2, 0, Math.PI * 2);
-    ctx.fillStyle = glow;
+    ctx.arc(n.x, n.y, radius * 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
     ctx.fill();
-    // Node circle
+    // Node fill
     ctx.beginPath();
     ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = color.replace(')', ',0.15)').replace('#', '');
-    // Handle hex colors
-    if (color.startsWith('#')) {
-      var r = parseInt(color.slice(1,3),16), g = parseInt(color.slice(3,5),16), bl = parseInt(color.slice(5,7),16);
-      ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + bl + ',0.15)';
-    }
+    ctx.fillStyle = 'rgba('+r+','+g+','+bl+',0.12)';
     ctx.fill();
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.stroke();
-    // Emoji or icon
+    // Emoji
     if (n.emoji) {
-      ctx.font = (radius * 0.8) + 'px system-ui';
+      ctx.font = Math.round(radius * 0.8) + 'px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      ctx.fillStyle = textColor;
       ctx.fillText(n.emoji, n.x, n.y);
     }
-    // Label
+    // Label below
     ctx.font = '11px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillStyle = textColor;
-    ctx.fillText(n.label || '', n.x, n.y + radius + 4);
-    // Count badge
+    ctx.fillText(n.label || '', n.x, n.y + radius + 6);
+    // Count badge (top-right)
     if (n.count > 0) {
+      var bx = n.x + radius * 0.65, by = n.y - radius * 0.65;
+      ctx.beginPath();
+      ctx.arc(bx, by, 9, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
       ctx.font = 'bold 9px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      var bx = n.x + radius * 0.7, by = n.y - radius * 0.7;
-      ctx.beginPath();
-      ctx.arc(bx, by, 8, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
       ctx.fillStyle = '#fff';
-      ctx.fillText(n.count, bx, by);
+      ctx.fillText(n.count > 99 ? '99+' : n.count, bx, by);
     }
   });
   ctx.restore();
-  // Keep animating for particles
-  if (_graphAnim === null || _graphAnim === undefined) return;
-  requestAnimationFrame(function() { _drawGraph(); });
 }
 
 async function _selectModelFromList(el, backend, modelId) {
@@ -27646,8 +27683,13 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": "Empty fact"}, 400); return
             try:
                 conn = _db_conn()
-                conn.execute("UPDATE cortex_memories SET fact=?, keywords=?, updated_at=strftime('%s','now') WHERE id=?",
-                             (new_fact, ",".join(_cortex_tokenize(new_fact)), mem_id))
+                new_scope = str(data.get("scope", "")).strip()
+                if new_scope and new_scope in ("global", "agent", "project"):
+                    conn.execute("UPDATE cortex_memories SET fact=?, scope=?, keywords=?, updated_at=strftime('%s','now') WHERE id=?",
+                                 (new_fact, new_scope, ",".join(_cortex_tokenize(new_fact)), mem_id))
+                else:
+                    conn.execute("UPDATE cortex_memories SET fact=?, keywords=?, updated_at=strftime('%s','now') WHERE id=?",
+                                 (new_fact, ",".join(_cortex_tokenize(new_fact)), mem_id))
                 conn.commit()
                 conn.close()
                 self.reply_json({"ok": True, "id": mem_id, "fact": new_fact})
