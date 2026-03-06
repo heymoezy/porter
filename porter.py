@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.36 — Cortex Overhaul: Main Nav + Memory Routing + Graph"""
+"""Porter v0.27.37 — Cortex UX Polish + Agent/Skills Architecture"""
 
 
 import email
@@ -985,6 +985,14 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
         log.info("Cortex extracted %d facts from dispatch (%s)", inserted, persona_id or backend)
         mlog.emit("info", "cortex", "cortex.extract", f"Extracted {inserted} facts",
                    persona_id=persona_id, backend=backend)
+        # Broadcast cortex update to all SSE clients
+        try:
+            conn2 = _db_conn()
+            total_unrouted = conn2.execute("SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL AND (routed_to IS NULL OR routed_to='')").fetchone()[0]
+            conn2.close()
+            _emit_event("cortex:update", {"new_facts": inserted, "total_unrouted": total_unrouted, "persona_id": persona_id, "backend": backend})
+        except Exception:
+            pass
 
 def _cortex_inject_context(message, persona_id="", project_id=""):
     """Inject relevant memories before a persona dispatch. Pure SQL + keyword matching, no LLM."""
@@ -1972,6 +1980,47 @@ def _detect_local_models() -> list:
     return models
 
 
+def _load_porter_chat_sessions() -> list:
+    """Load Porter's own chat sessions from the chats table."""
+    try:
+        conn = _db_conn()
+        rows = conn.execute(
+            "SELECT c.id, c.title, c.model_id, c.created_at, c.updated_at, "
+            "(SELECT COUNT(*) FROM chat_messages WHERE chat_id=c.id) as msg_count "
+            "FROM chats c ORDER BY c.updated_at DESC LIMIT 100"
+        ).fetchall()
+        conn.close()
+        sessions = []
+        for r in rows:
+            backend = r[2] or "unknown"
+            if "qwen" in backend.lower() or "ollama" in backend.lower():
+                source_label = "ollama"
+            elif "codex" in backend.lower():
+                source_label = "codex"
+            else:
+                source_label = "porter"
+            sessions.append({
+                "id": r[0],
+                "title": r[1] or "Untitled Chat",
+                "model": r[2] or "unknown",
+                "source": source_label,
+                "first_ts": _epoch_to_iso(r[3]) if r[3] else "",
+                "last_ts": _epoch_to_iso(r[4]) if r[4] else "",
+                "messages": r[5] or 0,
+                "turns": r[5] or 0,
+            })
+        return sessions
+    except Exception:
+        return []
+
+def _epoch_to_iso(ts):
+    """Convert epoch timestamp to ISO string."""
+    try:
+        import datetime
+        return datetime.datetime.fromtimestamp(ts).isoformat()
+    except Exception:
+        return ""
+
 def _load_session_summaries() -> list:
     """Read OpenClaw session .jsonl files and extract metadata summaries."""
     oc_dir = OPENCLAW_STATE_DIR
@@ -2704,13 +2753,18 @@ def _delete_session_file(session_id: str, source: str) -> dict:
     # Also archive it (in case file delete didn't work, still hide it)
     _archive_session(session_id, source)
 
-    # Remove learnings
+    # Remove learnings + cascade cortex memories
     try:
         conn = _db_conn()
         conn.execute("DELETE FROM session_learnings WHERE session_id=?", (session_id,))
         conn.execute("DELETE FROM session_custom_names WHERE session_id=?", (session_id,))
+        # Cascade: delete cortex memories linked to this session (any source_type)
+        conn.execute("DELETE FROM cortex_memories WHERE source_id=?", (session_id,))
         conn.commit()
+        # Broadcast badge update
+        total_unrouted = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL AND (routed_to IS NULL OR routed_to='')").fetchone()[0]
         conn.close()
+        _emit_event("cortex:update", {"new_facts": 0, "total_unrouted": total_unrouted, "action": "cascade_delete"})
     except Exception:
         pass
 
@@ -5175,6 +5229,16 @@ def _init_trace_tables():
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_scope ON cortex_memories(scope, scope_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_active ON cortex_memories(consolidated_into)")
+
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS persona_skills (
+        persona_id TEXT NOT NULL,
+        skill_name TEXT NOT NULL,
+        enabled INTEGER DEFAULT 1,
+        assigned_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+        PRIMARY KEY (persona_id, skill_name)
+    )
+    """)
 
     conn.execute("""
     CREATE TABLE IF NOT EXISTS session_archive (
@@ -7758,7 +7822,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.36</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.37</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8418,7 +8482,9 @@ select.settings-input { padding-right: 26px; }
         <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border)">
           <div style="font-size:13px;font-weight:600;color:var(--text)">Memory Map</div>
           <div style="flex:1"></div>
-          <button class="btn btn-ghost" onclick="_resetGraphZoom()" style="font-size:10px;padding:2px 8px">Reset</button>
+          <button class="btn btn-ghost" onclick="_graphZoomIn()" style="font-size:10px;padding:2px 8px" title="Zoom in">+</button>
+          <button class="btn btn-ghost" onclick="_graphZoomOut()" style="font-size:10px;padding:2px 8px" title="Zoom out">&minus;</button>
+          <button class="btn btn-ghost" onclick="_fitGraphToView()" style="font-size:10px;padding:2px 8px" title="Fit to view">Fit</button>
         </div>
         <div style="flex:1;position:relative;overflow:hidden">
           <canvas id="cx-graph-canvas" width="700" height="500" style="width:100%;height:100%;cursor:grab"></canvas>
@@ -8428,7 +8494,7 @@ select.settings-input { padding-right: 26px; }
           <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#fbbf24;margin-right:3px"></span>Project</span>
           <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;margin-right:3px"></span>Global</span>
           <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#8b5cf6;margin-right:3px"></span>Cortex</span>
-          <span style="margin-left:auto">Drag nodes &#x2022; Scroll to zoom</span>
+          <span style="margin-left:auto">Drag to pin &#x2022; Double-click to unpin &#x2022; Scroll to zoom</span>
         </div>
       </div>
       <!-- Inbox sidebar (right) -->
@@ -8443,6 +8509,10 @@ select.settings-input { padding-right: 26px; }
             <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('project',this)" style="font-size:9px;padding:2px 6px">Project</button>
             <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('global',this)" style="font-size:9px;padding:2px 6px">Global</button>
           </div>
+          <label style="display:flex;align-items:center;gap:3px;font-size:9px;color:var(--text3);cursor:pointer" title="Show already-routed facts">
+            <input type="checkbox" id="cx-show-routed" onchange="_toggleShowRouted(this.checked)" style="width:12px;height:12px">
+            Routed
+          </label>
         </div>
         <div id="cx-memory-list" style="flex:1;overflow-y:auto">
           <div style="padding:20px;text-align:center;font-size:12px;color:var(--text3)">Loading...</div>
@@ -9078,6 +9148,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.37', date:'2026-03-06', notes:['Memory Map: drag persistence (double-click to unpin), auto-center, zoom controls','Memory Map: particles reflect real data flow (idle edges static)','Cortex inbox: filters to unrouted facts, counter matches inbox count','Cortex counter: auto-updates via SSE after every extraction','Session delete cascades to cortex inbox entries','Agent skills: per-agent skill assignment in Config tab'] },
   { ver:'v0.27.36', date:'2026-03-06', notes:['Cortex promoted to main nav with unrouted memory counter badge','Memory Inbox: review, route to agent/global, dismiss, or edit extracted facts','Interactive Memory Map: force-directed graph with animated data flow particles','Per-fact routing: push to agent MEMORY.md or global config, fact leaves inbox','Config view: auto-extract, auto-route, consolidation interval, injection limits','GET /api/cortex/graph + POST /api/cortex/memories/<id>/route endpoints'] },
   { ver:'v0.27.35', date:'2026-03-06', notes:['Session Memory: renamed Learnings \u2192 Memory, restored per-session viewer with edit/save/re-extract','Chat auto-routing fix \u2014 server-side smart routing decides model priority','Porter context awareness \u2014 models in general chat know they operate within Porter','All backends (Claude, Codex, Ollama) now reachable via auto-route fallback chain'] },
   { ver:'v0.27.34', date:'2026-03-06', notes:['Models tab: removed static agent assignments from model cards','Session delete: permanently remove sessions (not just archive)','Model priority order: GPT-5.4 \u2192 Claude \u2192 Codex \u2192 Gemini \u2192 Ollama','GPT-5.4 now default for OpenClaw backend','Dispatch context: all persona .md files loaded in full (SOUL, IDENTITY, ROLE_CARD, MEMORY, RULES)','Removed arbitrary truncation on persona files (was cutting 66% of SOUL.md)','20KB safety cap per file prevents accidental context blowup'] },
@@ -10884,6 +10955,32 @@ function switchModule(name) {
       renderChatMessages(); populateChatModels(); populateChatRoutes(); loadPersonas();
       // Update Cortex nav badge on page load
       api('/api/cortex/stats').then(function(s) { if (s && s.unrouted) _updateCortexBadge(s.unrouted); }).catch(function() {});
+      // Connect SSE for real-time cortex badge updates
+      if (!window._cortexEvtSrc) {
+        window._cortexEvtSrc = new EventSource('/api/events');
+        window._cortexEvtSrc.onmessage = function(e) {
+          try {
+            var d = JSON.parse(e.data);
+            if (d.type === 'cortex:update' && d.data) {
+              _updateCortexBadge(d.data.total_unrouted || 0);
+              // If on Cortex tab, refresh inbox
+              var cxMod = document.getElementById('cortex-module');
+              if (cxMod && cxMod.classList.contains('active')) {
+                var showRouted = document.getElementById('cx-show-routed');
+                var url = '/api/cortex/memories' + (showRouted && showRouted.checked ? '' : '?routed=false');
+                api(url).then(function(mems) {
+                  if (mems && mems.memories) {
+                    _cortexMemories = mems.memories;
+                    _renderCortexMemories(_cortexMemories);
+                    var countEl = document.getElementById('cx-inbox-count');
+                    if (countEl) countEl.textContent = _cortexMemories.length + ' fact' + (_cortexMemories.length !== 1 ? 's' : '');
+                  }
+                }).catch(function(){});
+              }
+            }
+          } catch(ex) {}
+        };
+      }
       if (window._personaRefreshTimer) clearInterval(window._personaRefreshTimer);
       window._personaRefreshTimer = setInterval(function() {
         if (document.getElementById('overview-module') && document.getElementById('overview-module').classList.contains('active')) loadPersonas();
@@ -16070,7 +16167,7 @@ async function _loadCortexTab() {
   } catch(e) {}
   // Load memories
   try {
-    var mems = await api('/api/cortex/memories');
+    var mems = await api('/api/cortex/memories?routed=false');
     _cortexMemories = (mems && mems.memories) || [];
     _renderCortexMemories(_cortexMemories);
     var countEl = document.getElementById('cx-inbox-count');
@@ -16088,6 +16185,17 @@ function _updateCortexBadge(count) {
   if (!badge) return;
   if (count > 0) { badge.textContent = count > 99 ? '99+' : count; badge.style.display = ''; }
   else { badge.style.display = 'none'; }
+}
+
+async function _toggleShowRouted(show) {
+  var url = '/api/cortex/memories' + (show ? '' : '?routed=false');
+  try {
+    var mems = await api(url);
+    _cortexMemories = (mems && mems.memories) || [];
+    _renderCortexMemories(_cortexMemories);
+    var countEl = document.getElementById('cx-inbox-count');
+    if (countEl) countEl.textContent = _cortexMemories.length + ' fact' + (_cortexMemories.length !== 1 ? 's' : '');
+  } catch(e) {}
 }
 
 function _renderCortexMemories(memories) {
@@ -16249,6 +16357,15 @@ async function _routeCortexMem(id, btn) {
       card.style.overflow = 'hidden';
       setTimeout(function() { card.remove(); }, 400);
       toast('Routed to ' + (r.destination || scope));
+      // Pulse the relevant edge on the graph
+      if (_graphEdges && _graphEdges.length) {
+        _graphEdges.forEach(function(edge) {
+          var targetNode = _graphNodes[edge.target];
+          if (targetNode && (targetNode.id === scope + ':' + scopeId || targetNode.type === scope)) {
+            edge.lastActivity = Date.now();
+          }
+        });
+      }
       // Update badge count
       var badge = document.getElementById('cortex-nav-badge');
       if (badge && badge.style.display !== 'none') {
@@ -16377,7 +16494,31 @@ var _graphAnim = null;
 var _graphDrag = null;
 var _graphZoom = {x: 0, y: 0, scale: 1};
 
-function _resetGraphZoom() { _graphZoom = {x: 0, y: 0, scale: 1}; _drawGraph(); }
+function _resetGraphZoom() { _fitGraphToView(); }
+function _fitGraphToView() {
+  var canvas = document.getElementById('cx-graph-canvas');
+  if (!canvas || !_graphNodes.length) { _graphZoom = {x: 0, y: 0, scale: 1}; _drawGraph(); return; }
+  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  _graphNodes.forEach(function(n) {
+    var r = n.radius || 20;
+    if (n.x - r < minX) minX = n.x - r;
+    if (n.y - r < minY) minY = n.y - r;
+    if (n.x + r > maxX) maxX = n.x + r;
+    if (n.y + r > maxY) maxY = n.y + r;
+  });
+  var gw = maxX - minX || 1, gh = maxY - minY || 1;
+  var padding = 0.2;
+  var scaleX = canvas.width * (1 - padding * 2) / gw;
+  var scaleY = canvas.height * (1 - padding * 2) / gh;
+  var scale = Math.min(scaleX, scaleY, 2);
+  var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  _graphZoom.scale = scale;
+  _graphZoom.x = canvas.width / 2 - cx * scale;
+  _graphZoom.y = canvas.height / 2 - cy * scale;
+  _drawGraph();
+}
+function _graphZoomIn() { _graphZoom.scale = Math.min(3, _graphZoom.scale * 1.2); _drawGraph(); }
+function _graphZoomOut() { _graphZoom.scale = Math.max(0.3, _graphZoom.scale / 1.2); _drawGraph(); }
 
 async function _initMemoryGraph() {
   var canvas = document.getElementById('cx-graph-canvas');
@@ -16458,13 +16599,22 @@ function _setupGraphInteraction(canvas) {
       _drawGraph();
     }
   };
-  canvas.onmouseup = function() { if (dragging) { dragging.fixed = false; dragging = null; canvas.style.cursor = 'grab'; } panning = false; };
-  canvas.onmouseleave = function() { if (dragging) { dragging.fixed = false; dragging = null; } panning = false; };
+  canvas.onmouseup = function() { if (dragging) { dragging.fixed = true; dragging = null; canvas.style.cursor = 'grab'; } panning = false; };
+  canvas.onmouseleave = function() { if (dragging) { dragging.fixed = true; dragging = null; } panning = false; };
   canvas.onwheel = function(e) {
     e.preventDefault();
     var delta = e.deltaY > 0 ? 0.92 : 1.08;
     _graphZoom.scale = Math.max(0.3, Math.min(3, _graphZoom.scale * delta));
     _drawGraph();
+  };
+  canvas.ondblclick = function(e) {
+    var rect = canvas.getBoundingClientRect();
+    var mx = (e.clientX - rect.left) / _graphZoom.scale - _graphZoom.x / _graphZoom.scale;
+    var my = (e.clientY - rect.top) / _graphZoom.scale - _graphZoom.y / _graphZoom.scale;
+    _graphNodes.forEach(function(n) {
+      var dx = mx - n.x, dy = my - n.y;
+      if (Math.sqrt(dx*dx + dy*dy) < (n.radius || 20)) { n.fixed = false; toast('Node unpinned'); }
+    });
   };
 }
 
@@ -16511,7 +16661,8 @@ function _runGraphSimulation(canvas) {
     });
     _drawGraph();
     iterations++;
-    // Keep animating: physics for 200 frames, then just particles
+    // Auto-center after initial layout settles
+    if (iterations === 180) _fitGraphToView();
     _graphAnim = requestAnimationFrame(tick);
   }
   tick();
@@ -16548,14 +16699,18 @@ function _drawGraph() {
     ctx.strokeStyle = 'rgba(139,92,246,' + pulse + ')';
     ctx.lineWidth = weight;
     ctx.stroke();
-    // Animated particle along edge
-    var t = (time * 0.25 + (e.source || 0) * 0.4) % 1;
-    var px = (1-t)*(1-t)*a.x + 2*(1-t)*t*midX + t*t*b.x;
-    var py = (1-t)*(1-t)*a.y + 2*(1-t)*t*midY + t*t*b.y;
-    ctx.beginPath();
-    ctx.arc(px, py, 2, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(139,92,246,0.8)';
-    ctx.fill();
+    // Animated particle — only on active edges (lastActivity within 60s)
+    if (e.lastActivity && (Date.now() - e.lastActivity) < 60000) {
+      var elapsed = (Date.now() - e.lastActivity) / 1000;
+      var fadeOut = Math.max(0, 1 - elapsed / 60);
+      var t = (time * 0.5 + (e.source || 0) * 0.3) % 1;
+      var px = (1-t)*(1-t)*a.x + 2*(1-t)*t*midX + t*t*b.x;
+      var py = (1-t)*(1-t)*a.y + 2*(1-t)*t*midY + t*t*b.y;
+      ctx.beginPath();
+      ctx.arc(px, py, 3, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(139,92,246,' + (0.9 * fadeOut) + ')';
+      ctx.fill();
+    }
   });
 
   // Draw nodes
@@ -17485,8 +17640,55 @@ function switchPdTab(tab) {
       <div style="margin-top:16px;display:flex;gap:8px">
         <button class="btn btn-ghost" onclick="wakePersona('${p.id}')" style="font-size:12px">Wake</button>
         <button class="btn btn-ghost" onclick="sleepPersona('${p.id}')" style="font-size:12px">Sleep</button>
+      </div>
+      <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px">
+        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">Assigned Skills</div>
+        <div id="pd-skills-list" style="font-size:12px;color:var(--text3)">Loading skills...</div>
       </div>`;
+    // Load skills for this persona
+    _loadPersonaSkills(p.id);
   }
+}
+
+async function _loadPersonaSkills(pid) {
+  var container = document.getElementById('pd-skills-list');
+  if (!container) return;
+  try {
+    var [assigned, available] = await Promise.all([
+      api('/api/personas/' + pid + '/skills'),
+      api('/api/openclaw/skills?action=list').catch(function() { return {skills:[]}; })
+    ]);
+    var assignedNames = ((assigned && assigned.skills) || []).map(function(s) { return s.name; });
+    var allSkills = (available && available.skills) || [];
+    if (!allSkills.length) {
+      container.innerHTML = '<div style="font-size:11px;color:var(--text3)">No skills available</div>';
+      return;
+    }
+    var html = '<div style="display:flex;flex-direction:column;gap:4px">';
+    allSkills.forEach(function(sk) {
+      var name = sk.name || sk.id || sk;
+      var checked = assignedNames.indexOf(name) >= 0 ? 'checked' : '';
+      html += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text2)">';
+      html += '<input type="checkbox" ' + checked + ' onchange="_togglePersonaSkill(\'' + pid + '\',\'' + name + '\',this.checked)" style="width:14px;height:14px">';
+      html += name + '</label>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+  } catch(e) {
+    container.innerHTML = '<div style="font-size:11px;color:var(--text3)">Could not load skills</div>';
+  }
+}
+
+async function _togglePersonaSkill(pid, skillName, enabled) {
+  // Get current skills, toggle, then save
+  try {
+    var current = await api('/api/personas/' + pid + '/skills');
+    var skills = ((current && current.skills) || []).map(function(s) { return s.name; });
+    if (enabled && skills.indexOf(skillName) < 0) skills.push(skillName);
+    else if (!enabled) skills = skills.filter(function(s) { return s !== skillName; });
+    await api('/api/personas/' + pid + '/skills', {action: 'set', skills: skills});
+    toast(enabled ? 'Skill assigned' : 'Skill removed');
+  } catch(e) { toast('Failed to update skills', 'err'); }
 }
 
 function switchFileTab(btn, key) {
@@ -23464,6 +23666,14 @@ class Handler(BaseHTTPRequestHandler):
             personas = _persona_list()
             self.reply_json({"ok": True, "personas": personas})
 
+        elif re.match(r'^/api/personas/[^/]+/skills$', parsed.path):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path.split("/")[3]
+            conn = _db_conn()
+            rows = conn.execute("SELECT skill_name, enabled FROM persona_skills WHERE persona_id=?", (pid,)).fetchall()
+            conn.close()
+            self.reply_json({"ok": True, "skills": [{"name": r[0], "enabled": bool(r[1])} for r in rows]})
+
         elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/memory"):
             if not self.auth_check(redirect=False): return
             pid = parsed.path.split("/")[3]
@@ -23604,7 +23814,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.36"
+                health["porter_version"] = "0.27.37"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -24048,11 +24258,16 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             scope = qs.get("scope", [""])[0].strip()
             scope_id = qs.get("scope_id", [""])[0].strip()
+            routed_filter = qs.get("routed", [""])[0].strip().lower()
             limit_n = min(200, max(10, int(qs.get("limit", ["50"])[0])))
             offset_n = max(0, int(qs.get("offset", ["0"])[0]))
             conn = _db_conn()
             where_parts = ["consolidated_into IS NULL"]
             params = []
+            if routed_filter == "false":
+                where_parts.append("(routed_to IS NULL OR routed_to='')")
+            elif routed_filter == "true":
+                where_parts.append("routed_to IS NOT NULL AND routed_to!=''")
             if scope:
                 where_parts.append("scope=?")
                 params.append(scope)
@@ -24965,11 +25180,11 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             source_filter = qs.get("source", [""])[0].lower()
             show_archived = qs.get("show_archived", [""])[0] == "1"
-            loaders = {"openclaw": _load_session_summaries, "claude": _load_claude_session_summaries, "gemini": _load_gemini_session_summaries}
+            loaders = {"openclaw": _load_session_summaries, "claude": _load_claude_session_summaries, "gemini": _load_gemini_session_summaries, "porter": _load_porter_chat_sessions}
             if source_filter and source_filter in loaders:
                 all_sessions = loaders[source_filter]()
             else:
-                all_sessions = _load_session_summaries() + _load_claude_session_summaries() + _load_gemini_session_summaries()
+                all_sessions = _load_session_summaries() + _load_claude_session_summaries() + _load_gemini_session_summaries() + _load_porter_chat_sessions()
             # Tag archived sessions and filter if needed
             archived_ids = _get_archived_session_ids()
             for s in all_sessions:
@@ -25218,7 +25433,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.36'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.37'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -27283,6 +27498,29 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.reply_json({"ok": False, "error": "Persona not found"}, 404)
 
+        elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/skills"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.strip("/").split("/")
+            pid = parts[2] if len(parts) >= 4 else ""
+            if not pid:
+                self.reply_json({"ok": False, "error": "Missing persona ID"}, 400); return
+            data = self.read_json_body()
+            action = data.get("action", "set")
+            conn = _db_conn()
+            if action == "set":
+                skills = data.get("skills", [])
+                conn.execute("DELETE FROM persona_skills WHERE persona_id=?", (pid,))
+                for sk in skills:
+                    conn.execute("INSERT OR REPLACE INTO persona_skills (persona_id, skill_name, enabled) VALUES (?,?,1)", (pid, sk))
+                conn.commit()
+                conn.close()
+                self.reply_json({"ok": True, "skills": skills})
+            else:
+                rows = conn.execute("SELECT skill_name, enabled FROM persona_skills WHERE persona_id=?", (pid,)).fetchall()
+                conn.close()
+                self.reply_json({"ok": True, "skills": [{"name": r[0], "enabled": bool(r[1])} for r in rows]})
+            return
+
         elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/heartbeat"):
             # GET or POST heartbeat config for a persona
             if not self.auth_check(redirect=False): return
@@ -29238,7 +29476,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.36 ready (localhost only)")
+    print(f"\n  Porter v0.27.37 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
