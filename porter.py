@@ -24124,7 +24124,7 @@ class Handler(BaseHTTPRequestHandler):
                 # Always connect cortex to global
                 edges.append({"source": 0, "target": 1, "weight": max(1, min(6, gc))})
                 # Agent nodes (always show all agents)
-                personas = conn.execute("SELECT id, name, emoji FROM personas").fetchall()
+                personas = conn.execute("SELECT id, name, avatar FROM personas").fetchall()
                 for idx, p in enumerate(personas):
                     pid, pname, pemoji = p[0], p[1], p[2] or "\u2699"
                     ac = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='agent' AND scope_id=? AND consolidated_into IS NULL", (pid,)).fetchone()[0]
