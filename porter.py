@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.31 — API Keys & Version Probing"""
+"""Porter v0.27.32 — Google Workspace CLI Integration"""
 
 
 import email
@@ -539,6 +539,18 @@ def _check_brave_search() -> dict:
         return {"ok": True, "version": "API key configured"}
     return {"ok": False, "version": None}
 
+
+def _check_gws_cli() -> dict:
+    """Check gws CLI: binary + auth status."""
+    r = _cap_check_bin("gws")
+    if r["ok"]:
+        token_path = Path.home() / ".config" / "gws" / "token.json"
+        if token_path.exists():
+            r["version"] = (r["version"] or "") + " (authenticated)"
+        else:
+            r["version"] = (r["version"] or "") + " (not authenticated)"
+    return r
+
 CAPABILITIES: list = [
     {"id": "node",        "label": "Node.js",
      "install": "https://nodejs.org",
@@ -600,7 +612,166 @@ CAPABILITIES: list = [
      "install": "https://brave.com/search/api/",
      "features": ["Web search", "Real-time results"],
      "check": lambda: _check_brave_search()},
+    {"id": "gws",          "label": "Google Workspace CLI",
+     "install": "npm install -g @googleworkspace/cli",
+     "features": ["Gmail", "Drive", "Calendar", "Sheets", "Docs", "MCP server"],
+     "check": lambda: _check_gws_cli()},
 ]
+
+
+
+# ── Google Workspace CLI helpers ──────────────────────────────────────────────
+
+_GWS_ALLOWED_SERVICES = frozenset([
+    "admin", "calendar", "chat", "classroom", "docs", "drive", "forms",
+    "gmail", "groups", "keep", "meet", "people", "sheets", "sites",
+    "slides", "tasks", "vault",
+])
+
+_gws_services_cache: dict = {"data": None, "ts": 0}
+
+
+def _gws_resolve_bin() -> str | None:
+    """Find the gws binary."""
+    import shutil as _sh
+    p = _sh.which("gws")
+    if p:
+        return p
+    for d in (str(Path.home() / ".npm-global" / "bin"), str(Path.home() / ".local" / "bin"), "/usr/local/bin"):
+        c = Path(d) / "gws"
+        if c.exists():
+            return str(c)
+    return None
+
+
+def _gws_status() -> dict:
+    """Get gws installation status, auth state, and accounts."""
+    gws_bin = _gws_resolve_bin()
+    result = {"ok": True, "installed": gws_bin is not None, "version": "", "authenticated": False, "accounts": [], "granted_services": []}
+    if not gws_bin:
+        result["ok"] = False
+        return result
+    # Version
+    try:
+        r = subprocess.run([gws_bin, "--version"], capture_output=True, text=True, timeout=5)
+        result["version"] = (r.stdout or r.stderr or "").strip().split("\n")[0][:80]
+    except Exception:
+        pass
+    # Auth: check token file
+    config_dir = Path.home() / ".config" / "gws"
+    token_path = config_dir / "token.json"
+    result["authenticated"] = token_path.exists()
+    # Accounts
+    accounts_path = config_dir / "accounts.json"
+    if accounts_path.exists():
+        try:
+            accts = json.loads(accounts_path.read_text(encoding="utf-8"))
+            if isinstance(accts, list):
+                result["accounts"] = accts
+            elif isinstance(accts, dict):
+                result["accounts"] = [accts]
+        except Exception:
+            pass
+    # Granted services
+    grants_path = config_dir / "granted_services.json"
+    if grants_path.exists():
+        try:
+            grants = json.loads(grants_path.read_text(encoding="utf-8"))
+            if isinstance(grants, list):
+                result["granted_services"] = grants
+        except Exception:
+            pass
+    return result
+
+
+def _gws_exec(service: str, resource: str, method: str, params: dict | None = None, json_body: dict | None = None, timeout: int = 30) -> dict:
+    """Execute a gws CLI command and return parsed JSON."""
+    gws_bin = _gws_resolve_bin()
+    if not gws_bin:
+        return {"ok": False, "error": "gws CLI not installed. Run: npm install -g @googleworkspace/cli"}
+    if service not in _GWS_ALLOWED_SERVICES:
+        return {"ok": False, "error": f"Service '{service}' not allowed. Allowed: {', '.join(sorted(_GWS_ALLOWED_SERVICES))}"}
+    # Sanitize resource and method — alphanumeric, dots, hyphens only
+    import re as _re
+    if not _re.match(r'^[a-zA-Z0-9._-]+$', resource):
+        return {"ok": False, "error": "Invalid resource name"}
+    if not _re.match(r'^[a-zA-Z0-9_-]+$', method):
+        return {"ok": False, "error": "Invalid method name"}
+    timeout = min(max(timeout, 5), 120)
+    cmd = [gws_bin, service, resource, method]
+    if params:
+        cmd.extend(["--params", json.dumps(params)])
+    if json_body:
+        cmd.extend(["--body", json.dumps(json_body)])
+    cmd.append("--json")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 5,
+                           env={**os.environ, "NO_COLOR": "1"}, cwd=str(Path.home()))
+        if r.returncode != 0:
+            err = (r.stderr or r.stdout or "").strip()[:500]
+            return {"ok": False, "error": f"gws exited {r.returncode}: {err}"}
+        # Parse JSON output
+        out = (r.stdout or "").strip()
+        if out:
+            try:
+                parsed = json.loads(out)
+                return {"ok": True, "result": parsed}
+            except json.JSONDecodeError:
+                return {"ok": True, "result": out[:5000]}
+        return {"ok": True, "result": None}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": f"gws command timed out after {timeout}s"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:500]}
+
+
+def _gws_exec_helper(helper: str, args: dict, timeout: int = 30) -> dict:
+    """Execute a gws helper/shortcut command."""
+    gws_bin = _gws_resolve_bin()
+    if not gws_bin:
+        return {"ok": False, "error": "gws CLI not installed. Run: npm install -g @googleworkspace/cli"}
+    timeout = min(max(timeout, 5), 120)
+    # Map helpers to gws commands
+    _helpers = {
+        "gmail-send": lambda a: [gws_bin, "gmail", "+send", "--to", a.get("to", ""), "--subject", a.get("subject", ""), "--body", a.get("body", "")],
+        "calendar-agenda": lambda a: [gws_bin, "calendar", "+agenda"],
+        "drive-list": lambda a: [gws_bin, "drive", "files", "list", "--params", json.dumps({"pageSize": a.get("pageSize", 10)})],
+        "gmail-unread": lambda a: [gws_bin, "gmail", "users.messages", "list", "--params", json.dumps({"userId": "me", "q": "is:unread", "maxResults": a.get("maxResults", 10)})],
+        "sheets-read": lambda a: [gws_bin, "sheets", "+read", "--spreadsheet-id", a.get("spreadsheetId", ""), "--range", a.get("range", "A1:Z100")],
+    }
+    builder = _helpers.get(helper)
+    if not builder:
+        return {"ok": False, "error": f"Unknown helper: {helper}. Available: {', '.join(sorted(_helpers.keys()))}"}
+    cmd = builder(args)
+    cmd.append("--json")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 5,
+                           env={**os.environ, "NO_COLOR": "1"}, cwd=str(Path.home()))
+        if r.returncode != 0:
+            err = (r.stderr or r.stdout or "").strip()[:500]
+            return {"ok": False, "error": f"gws exited {r.returncode}: {err}"}
+        out = (r.stdout or "").strip()
+        if out:
+            try:
+                return {"ok": True, "result": json.loads(out)}
+            except json.JSONDecodeError:
+                return {"ok": True, "result": out[:5000]}
+        return {"ok": True, "result": None}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": f"gws command timed out after {timeout}s"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:500]}
+
+
+def _gws_list_services() -> dict:
+    """List available gws services (cached 5 minutes)."""
+    now = time.time()
+    if _gws_services_cache["data"] and (now - _gws_services_cache["ts"]) < 300:
+        return _gws_services_cache["data"]
+    result = {"ok": True, "services": sorted(_GWS_ALLOWED_SERVICES)}
+    _gws_services_cache["data"] = result
+    _gws_services_cache["ts"] = now
+    return result
 
 
 def _run_cap_checks(force: bool = False):
@@ -7146,7 +7317,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.31</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.32</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7593,7 +7764,11 @@ select.settings-input { padding-right: 26px; }
     <div class="module-intro">Connected services and tools available to Porter and its agents.</div>
 
     <!-- S8: Integrations section (from OpenClaw) -->
-    <div id="integrations-section" style="margin-bottom:16px">
+    <div id="gws-section" style="margin-bottom:16px;display:none">
+    <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px;padding:0 4px">Google Workspace</div>
+    <div id="gws-panel" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px"></div>
+  </div>
+  <div id="integrations-section" style="margin-bottom:16px">
       <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px;padding:0 4px">Integrations</div>
       <div id="integrations-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"></div>
     </div>
@@ -8320,6 +8495,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.32', date:'2026-03-06', notes:['Google Workspace CLI: full integration (Gmail, Drive, Calendar, Sheets, Docs + 14 services)','/workspace and /gws chat commands for direct Workspace operations','POST /api/gws/exec endpoint for programmatic Workspace access','Auto-detect gws installation, auth status, and granted services','Workspace quick actions panel in Extensions tab'] },
   { ver:'v0.27.31', date:'2026-03-06', notes:['API Keys: save-once / delete-only pattern for all service keys','API Keys tab: Brave, OpenAI, Anthropic, Google AI in one place','Fix: version probing for Gemini CLI, OpenClaw, Codex, Claude (PATH resolution)'] },
   { ver:'v0.27.30', date:'2026-03-06', notes:['Brave Search: native web search integration (no OpenClaw dependency)','/search chat command for quick web lookups','web_search tool available to all LLM backends via dispatch','API key management in Settings tab'] },
   { ver:'v0.27.29', date:'2026-03-05', notes:['Smart Learnings: extracted insights persist in DB (no re-analysis)','Update Learnings button: batch-extract all sessions in one click','Learnings displayed inline on session cards with save button','Removed per-session Learn wizard modal'] },
@@ -11175,7 +11351,54 @@ async function cpAction(path, action) {
 }
 
 // ── Capabilities / System module ──────────────────────────────────────────
-async function loadCapabilities() {
+async function renderGwsPanel() {
+  var section = document.getElementById('gws-section');
+  var panel = document.getElementById('gws-panel');
+  if (!section || !panel) return;
+  api('/api/gws/status').then(function(s) {
+    if (!s || !s.installed) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+    var h = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
+    h += '<div style="font-size:15px;font-weight:600;color:var(--text1)">Google Workspace</div>';
+    h += '<div style="font-size:11px;color:var(--text3)">' + (s.version || '') + '</div></div>';
+    // Auth status
+    if (s.authenticated) {
+      h += '<div style="font-size:12px;color:var(--green);margin-bottom:8px">\u2705 Authenticated</div>';
+    } else {
+      h += '<div style="font-size:12px;color:var(--red);margin-bottom:8px">\u274c Not authenticated</div>';
+      h += '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Run: <code>gws auth setup && gws auth login</code></div>';
+    }
+    // Accounts
+    if (s.accounts && s.accounts.length) {
+      h += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Account: <strong>' + (s.accounts[0].email || s.accounts[0].account || 'configured') + '</strong></div>';
+    }
+    // Services grid
+    var svcs = s.granted_services && s.granted_services.length ? s.granted_services : ['drive','gmail','calendar','sheets','docs','chat','tasks','forms','slides','meet','keep','admin','people','vault'];
+    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">Services</div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">';
+    var svcIcons = {drive:'\ud83d\udcc1',gmail:'\ud83d\udce7',calendar:'\ud83d\udcc5',sheets:'\ud83d\udcca',docs:'\ud83d\udcdd',chat:'\ud83d\udcac',tasks:'\u2705',forms:'\ud83d\udccb',slides:'\ud83c\udfa8',meet:'\ud83c\udfa5',keep:'\ud83d\udccc',admin:'\u2699\ufe0f',people:'\ud83d\udc65',vault:'\ud83d\udd12'};
+    svcs.forEach(function(svc) {
+      var icon = svcIcons[svc] || '\u2022';
+      h += '<span style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;color:var(--text2)">' + icon + ' ' + svc + '</span>';
+    });
+    h += '</div>';
+    // Quick actions
+    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);margin:8px 0 6px;text-transform:uppercase;letter-spacing:0.5px">Quick Actions</div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    var actions = [
+      {label:'\ud83d\udce7 Unread', cmd:'/workspace gmail unread'},
+      {label:'\ud83d\udcc1 Files', cmd:'/workspace drive list'},
+      {label:'\ud83d\udcc5 Today', cmd:'/workspace calendar today'},
+    ];
+    actions.forEach(function(a) {
+      h += '<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="document.querySelector(\'.chat-input\').value=\'' + a.cmd + '\';document.querySelector(\'.chat-input\').focus()">' + a.label + '</button>';
+    });
+    h += '</div>';
+    panel.innerHTML = h;
+  }).catch(function() { section.style.display = 'none'; });
+}
+
+function loadCapabilities() {
   const el = document.getElementById('capabilities-list');
   if (!el) return;
   el.innerHTML = '<div class="loading-indicator">Checking capabilities</div>';
@@ -11189,6 +11412,7 @@ async function loadCapabilities() {
       const capData = await capResp.json();
       window._lastCapabilities = capData.capabilities || [];
       renderCapabilities(capData.capabilities || []);
+  renderGwsPanel();
     }
     if (intResp.ok) {
       const intData = await intResp.json();
@@ -12792,6 +13016,8 @@ var _defaultSlashCmds = [
   {cmd: '/models', desc: 'List models'},
   {cmd: '/version', desc: 'Porter version'},
   {cmd: '/search', desc: 'Web search (Brave)'},
+  {cmd: '/workspace', desc: 'Google Workspace'},
+  {cmd: '/gws', desc: 'Google Workspace (alias)'},
 ];
 
 var _defaultAtTargets = [
@@ -13048,7 +13274,8 @@ function chatSend() {
         '`/version` — Porter version\n' +
         '`/clear` — Clear chat history\n' +
         '`/flush` — Flush to memory\n' +
-        '`/search <query>` — Web search (Brave)\n\n' +
+        '`/search <query>` — Web search (Brave)\n' +
+        '`/workspace <service> <action>` — Google Workspace\n\n' +
         '**Direct routing**\n' +
         '`@claude <msg>` `@openclaw <msg>` `@gemini <msg>` `@codex <msg>` `@ollama <msg>`', model: 'porter' });
       renderChatMessages();
@@ -13163,6 +13390,96 @@ function chatSend() {
         _chatMessages[_chatMessages.length-1].content = 'Flush endpoint not available.';
         renderChatMessages();
       });
+      return;
+    }
+
+    if (cmd === '/workspace' || cmd === '/gws') {
+      var gwsArgs = text.substring(cmd.length).trim();
+      if (!gwsArgs || gwsArgs === 'setup') {
+        // Setup / status check
+        _chatMessages.push({ role: 'assistant', content: '_Checking Google Workspace status..._', model: 'porter' });
+        renderChatMessages();
+        api('/api/gws/status').then(function(s) {
+          if (!s) { _chatMessages[_chatMessages.length-1].content = 'Failed to check gws status.'; renderChatMessages(); return; }
+          var lines = ['**Google Workspace CLI**\n'];
+          if (!s.installed) {
+            lines.push('\u274c **Not installed**');
+            lines.push('\nInstall: `npm install -g @googleworkspace/cli`');
+            lines.push('Then: `gws auth setup && gws auth login`');
+          } else {
+            lines.push('\u2705 Installed: ' + (s.version || 'unknown'));
+            lines.push(s.authenticated ? '\u2705 Authenticated' : '\u274c Not authenticated — run `gws auth setup && gws auth login`');
+            if (s.accounts && s.accounts.length) {
+              lines.push('\n**Accounts**');
+              s.accounts.forEach(function(a) {
+                lines.push('- ' + (a.email || a.account || JSON.stringify(a)) + (a.default ? ' (default)' : ''));
+              });
+            }
+            if (s.granted_services && s.granted_services.length) {
+              lines.push('\n**Services:** ' + s.granted_services.join(', '));
+            }
+          }
+          _chatMessages[_chatMessages.length-1].content = lines.join('\n');
+          renderChatMessages();
+        });
+        return;
+      }
+      // Shortcut commands
+      var _gwsShortcuts = {
+        'drive list':     {service:'drive', resource:'files', method:'list', params:{pageSize:10}},
+        'gmail unread':   {service:'gmail', resource:'users.messages', method:'list', params:{userId:'me', q:'is:unread', maxResults:10}},
+        'calendar today': {helper:'calendar-agenda', args:{}},
+        'sheets read':    null  // needs ID
+      };
+      var shortcut = _gwsShortcuts[gwsArgs.toLowerCase()];
+      if (shortcut) {
+        _chatMessages.push({ role: 'assistant', content: '_Executing: gws ' + gwsArgs + '..._', model: 'porter' });
+        renderChatMessages();
+        api('/api/gws/exec', shortcut, 35000).then(function(r) {
+          if (!r) { _chatMessages[_chatMessages.length-1].content = 'gws request failed.'; renderChatMessages(); return; }
+          if (r.ok) {
+            var result = r.result;
+            var display = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+            if (display.length > 3000) display = display.substring(0, 3000) + '\n... (truncated)';
+            _chatMessages[_chatMessages.length-1].content = '**gws ' + gwsArgs + '**\n\n```json\n' + display + '\n```';
+          } else {
+            _chatMessages[_chatMessages.length-1].content = '**Error:** ' + (r.error || 'Unknown error');
+          }
+          renderChatMessages();
+        });
+        return;
+      }
+      // Pass-through: parse as service resource method
+      var parts = gwsArgs.split(/\s+/);
+      if (parts.length >= 2) {
+        var payload = {service: parts[0], resource: parts[1], method: parts[2] || 'list'};
+        if (parts.length > 3) {
+          try { payload.params = JSON.parse(parts.slice(3).join(' ')); } catch(e) {}
+        }
+        _chatMessages.push({ role: 'assistant', content: '_Executing: gws ' + gwsArgs + '..._', model: 'porter' });
+        renderChatMessages();
+        api('/api/gws/exec', payload, 35000).then(function(r) {
+          if (!r) { _chatMessages[_chatMessages.length-1].content = 'gws request failed.'; renderChatMessages(); return; }
+          if (r.ok) {
+            var result = r.result;
+            var display = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+            if (display.length > 3000) display = display.substring(0, 3000) + '\n... (truncated)';
+            _chatMessages[_chatMessages.length-1].content = '**gws ' + gwsArgs + '**\n\n```json\n' + display + '\n```';
+          } else {
+            _chatMessages[_chatMessages.length-1].content = '**Error:** ' + (r.error || 'Unknown error');
+          }
+          renderChatMessages();
+        });
+        return;
+      }
+      // Fallback: show usage
+      _chatMessages.push({ role: 'assistant', content: '**Usage:** `/workspace <service> <action>`\n\n' +
+        '`/workspace drive list` — Recent files\n' +
+        '`/workspace gmail unread` — Unread emails\n' +
+        '`/workspace calendar today` — Today\u2019s events\n' +
+        '`/workspace setup` — Check installation\n' +
+        '`/gws` — Alias for /workspace', model: 'porter' });
+      renderChatMessages();
       return;
     }
 
@@ -20174,6 +20491,16 @@ def _build_dispatch_chain_svg(chain_id: str) -> str:
     return f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg">{edges}{nodes}</svg>'
 
 
+GWS_TOOLS_PROMPT = """You have access to Google Workspace via the `gws` CLI tool. Available operations:
+- gws drive files list --params '{"pageSize": N}' — list Drive files
+- gws gmail users.messages list --params '{"userId":"me","q":"is:unread"}' — list emails
+- gws gmail +send --to EMAIL --subject SUBJ --body BODY — send email
+- gws calendar +agenda — today's calendar events
+- gws sheets +read --spreadsheet-id ID --range RANGE — read spreadsheet
+- gws docs documents get --params '{"documentId":"ID"}' — read a doc
+When you need to perform a Workspace action, output a ```gws code block and Porter will execute it."""
+
+
 PROVIDER_REGISTRY = {
     "openclaw": {"dispatch": _dispatch_openclaw, "probe": _probe_openclaw, "type": "gateway", "label": "OpenClaw"},
     "claude":   {"dispatch": _dispatch_claude,   "probe": _probe_claude,   "type": "cli",     "label": "Claude Code"},
@@ -20266,6 +20593,9 @@ def _probe_backend_versions():
 
     # Codex
     versions["codex"] = _cli_version("codex", lambda out: out.split()[-1] if out else "")
+
+    # Google Workspace CLI
+    versions["gws"] = _cli_version("gws")
 
     # Check for updates
     for bk, latest in KNOWN_LATEST.items():
@@ -21739,7 +22069,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.31"})
+            self.reply_json({"v": "0.27.32"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -21826,7 +22156,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.31"
+                health["porter_version"] = "0.27.32"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -23045,6 +23375,42 @@ class Handler(BaseHTTPRequestHandler):
             skills = _load_openclaw_skills()
             self.reply_json({"ok": True, "skills": skills, "count": len(skills)})
 
+        # ── GWS: status (GET) ────────────────────────────────────────────────
+        elif parsed.path == "/api/gws/status":
+            if not self.auth_check(redirect=False): return
+            self.reply_json(_gws_status())
+
+        # ── GWS: services (GET) ──────────────────────────────────────────────
+        elif parsed.path == "/api/gws/services":
+            if not self.auth_check(redirect=False): return
+            self.reply_json(_gws_list_services())
+
+        # ── GWS: skills (GET) ────────────────────────────────────────────────
+        elif parsed.path == "/api/gws/skills":
+            if not self.auth_check(redirect=False): return
+            gws_skills = []
+            oc_dir = Path.home() / ".openclaw"
+            for pattern_dir in [oc_dir / "skills"]:
+                if pattern_dir.exists():
+                    for sd in sorted(pattern_dir.iterdir()):
+                        if sd.is_dir() and sd.name.startswith("gws-"):
+                            skill_md = sd / "SKILL.md"
+                            meta = {"id": sd.name, "name": sd.name, "description": "", "path": str(sd)}
+                            if skill_md.exists():
+                                try:
+                                    raw = skill_md.read_text(encoding="utf-8")
+                                    if raw.startswith("---"):
+                                        parts = raw.split("---", 2)
+                                        if len(parts) >= 3:
+                                            for line in parts[1].strip().split("\n"):
+                                                line = line.strip()
+                                                if line.startswith("name:"): meta["name"] = line[5:].strip().strip('"').strip("'")
+                                                elif line.startswith("description:"): meta["description"] = line[12:].strip().strip('"').strip("'")
+                                except Exception:
+                                    pass
+                            gws_skills.append(meta)
+            self.reply_json({"ok": True, "skills": gws_skills, "count": len(gws_skills)})
+
         # ── S10: OpenClaw cron (GET) ────────────────────────────────────────────
         elif parsed.path == "/api/openclaw/cron":
             if not self.auth_check(redirect=False): return
@@ -23315,7 +23681,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.31'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.32'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -26086,6 +26452,32 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             result = dispatch_agent(message, backend, model=model, timeout=timeout_s)
             self.reply_json(result, 200 if result.get("ok") else 500)
 
+        # ── GWS: exec (POST) ─────────────────────────────────────────────────
+        elif parsed.path == "/api/gws/exec":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            if not data:
+                self.reply_json({"ok": False, "error": "JSON body required"}, 400)
+                return
+            # Helper mode
+            helper = data.get("helper", "").strip()
+            if helper:
+                result = _gws_exec_helper(helper, data.get("args", {}), timeout=min(int(data.get("timeout", 30)), 120))
+                self.reply_json(result, 200 if result.get("ok") else 500)
+                return
+            # Standard mode
+            service = data.get("service", "").strip()
+            resource = data.get("resource", "").strip()
+            method = data.get("method", "").strip()
+            if not service or not resource or not method:
+                self.reply_json({"ok": False, "error": "service, resource, and method are required"}, 400)
+                return
+            params = data.get("params")
+            json_body = data.get("json_body")
+            timeout_s = min(int(data.get("timeout", 30)), 120)
+            result = _gws_exec(service, resource, method, params=params, json_body=json_body, timeout=timeout_s)
+            self.reply_json(result, 200 if result.get("ok") else 500)
+
         elif parsed.path == "/api/skill/invoke":
             # Legacy endpoint — routes through agnostic dispatcher
             if not self.auth_check(redirect=False): return
@@ -27170,7 +27562,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.31 ready (localhost only)")
+    print(f"\n  Porter v0.27.32 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

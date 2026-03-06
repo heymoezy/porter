@@ -313,6 +313,74 @@ test.describe('Nav regression — all tabs render content', () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// NAV BAR REGRESSION — ensure sidebar nav structure is never broken
+// ═══════════════════════════════════════════════════════════════════════════════
+
+test.describe('Nav bar structure', () => {
+  test.beforeEach(async ({ page }) => {
+    await login(page);
+  });
+
+  const expectedNavItems = [
+    'Chat', 'Agents', 'Projects', 'Workflows',
+    'Locations', 'Files', 'Models', 'Extensions', 'Skills', 'Logs', 'Settings'
+  ];
+
+  test('sidebar contains all expected nav buttons', async ({ page }) => {
+    const navButtons = await page.evaluate(() => {
+      const btns = document.querySelectorAll('.sidebar nav button');
+      return Array.from(btns).map(b => b.textContent.trim());
+    });
+    for (const item of expectedNavItems) {
+      expect(navButtons, `Nav should contain "${item}"`).toContain(item);
+    }
+  });
+
+  test('sidebar is visible after login', async ({ page }) => {
+    const sidebarVisible = await isVisible(page, '.sidebar');
+    expect(sidebarVisible).toBe(true);
+  });
+
+  test('nav group labels are present', async ({ page }) => {
+    const groups = await page.evaluate(() => {
+      const labels = document.querySelectorAll('.sidebar nav .nav-group-label, .sidebar nav .group-label');
+      if (labels.length > 0) return Array.from(labels).map(l => l.textContent.trim());
+      // Fallback: check for text nodes that act as group separators
+      const allChildren = document.querySelectorAll('.sidebar nav > *');
+      return Array.from(allChildren)
+        .filter(el => !el.matches('button') && el.textContent.trim())
+        .map(el => el.textContent.trim());
+    });
+    expect(groups.length).toBeGreaterThanOrEqual(3);
+  });
+
+  test('clicking each nav item does not cause JS errors', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', err => errors.push(err.message));
+    const navButtons = await page.$$('.sidebar nav button');
+    for (const btn of navButtons) {
+      await btn.click();
+      await page.waitForTimeout(300);
+    }
+    expect(errors.length, `JS errors during nav clicks: ${errors.join('; ')}`).toBe(0);
+  });
+
+  test('version badge shows in sidebar', async ({ page }) => {
+    const versionText = await page.evaluate(() => {
+      const els = document.querySelectorAll('.sidebar *');
+      for (const el of els) {
+        if (el.textContent.includes('PORTER v') && el.children.length === 0) {
+          return el.textContent.trim();
+        }
+      }
+      return null;
+    });
+    expect(versionText).not.toBeNull();
+    expect(versionText).toMatch(/PORTER v\d+\.\d+\.\d+/);
+  });
+});
+
 test.describe('Screenshot baseline', () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
