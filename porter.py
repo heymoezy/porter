@@ -8398,12 +8398,8 @@ select.settings-input { padding-right: 26px; }
     <div class="module-hdr">
       <span class="module-title">Cortex</span>
       <div style="flex:1"></div>
-      <div style="display:flex;gap:4px">
-        <button class="btn btn-ghost cx-view-btn active" id="cx-view-inbox" onclick="_switchCortexView('inbox')" style="font-size:11px;padding:3px 10px;border-radius:4px">Inbox</button>
-        <button class="btn btn-ghost cx-view-btn" id="cx-view-graph" onclick="_switchCortexView('graph')" style="font-size:11px;padding:3px 10px;border-radius:4px">Memory Map</button>
-        <button class="btn btn-ghost cx-view-btn" id="cx-view-config" onclick="_switchCortexView('config')" style="font-size:11px;padding:3px 10px;border-radius:4px">Config</button>
-      </div>
-      <button class="btn btn-ghost" style="margin-left:8px" onclick="_loadCortexTab()">&#8635;</button>
+      <button class="btn btn-ghost cx-view-btn" id="cx-view-config-btn" onclick="_switchCortexView('config')" style="font-size:11px;padding:3px 10px;border-radius:4px">Config</button>
+      <button class="btn btn-ghost" style="margin-left:4px" onclick="_loadCortexTab()">&#8635;</button>
     </div>
 
     <!-- Stats bar -->
@@ -8415,45 +8411,46 @@ select.settings-input { padding-right: 26px; }
       <span style="margin-left:auto"><span id="cx-status2" style="font-weight:600;color:var(--green,#4ade80)">—</span></span>
     </div>
 
-    <!-- INBOX VIEW -->
-    <div id="cx-inbox-view" style="padding:16px 28px 28px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-        <div style="font-size:14px;font-weight:600;color:var(--text)">Memory Inbox</div>
-        <div style="font-size:12px;color:var(--text3)">— review, route, or dismiss extracted facts</div>
-        <div style="flex:1"></div>
-        <div style="display:flex;gap:4px">
-          <button class="btn btn-ghost cx-scope-filter active" onclick="_filterCortexScope('all',this)" style="font-size:11px;padding:3px 10px">All</button>
-          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('agent',this)" style="font-size:11px;padding:3px 10px">Agent</button>
-          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('project',this)" style="font-size:11px;padding:3px 10px">Project</button>
-          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('global',this)" style="font-size:11px;padding:3px 10px">Global</button>
+    <!-- MAIN VIEW: Graph + Side Inbox -->
+    <div id="cx-main-view" style="display:flex;height:calc(100vh - 180px);overflow:hidden">
+      <!-- Graph (left, takes most space) -->
+      <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border)">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">Memory Map</div>
+          <div style="flex:1"></div>
+          <button class="btn btn-ghost" onclick="_resetGraphZoom()" style="font-size:10px;padding:2px 8px">Reset</button>
+        </div>
+        <div style="flex:1;position:relative;overflow:hidden">
+          <canvas id="cx-graph-canvas" width="700" height="500" style="width:100%;height:100%;cursor:grab"></canvas>
+        </div>
+        <div style="display:flex;gap:12px;padding:6px 16px;border-top:1px solid var(--border);font-size:10px;color:var(--text3)">
+          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22d3ee;margin-right:3px"></span>Agent</span>
+          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#fbbf24;margin-right:3px"></span>Project</span>
+          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;margin-right:3px"></span>Global</span>
+          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#8b5cf6;margin-right:3px"></span>Cortex</span>
+          <span style="margin-left:auto">Drag nodes &#x2022; Scroll to zoom</span>
         </div>
       </div>
-      <div id="cx-memory-list" style="border:1px solid var(--border);border-radius:8px;background:var(--bg2);overflow:hidden">
-        <div style="padding:20px;text-align:center;font-size:13px;color:var(--text3)">Loading...</div>
+      <!-- Inbox sidebar (right) -->
+      <div id="cx-inbox-sidebar" style="width:340px;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg2)">
+        <div style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">Inbox</div>
+          <span id="cx-inbox-count" style="font-size:10px;color:var(--text3)"></span>
+          <div style="flex:1"></div>
+          <div style="display:flex;gap:2px">
+            <button class="btn btn-ghost cx-scope-filter active" onclick="_filterCortexScope('all',this)" style="font-size:9px;padding:2px 6px">All</button>
+            <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('agent',this)" style="font-size:9px;padding:2px 6px">Agent</button>
+            <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('project',this)" style="font-size:9px;padding:2px 6px">Project</button>
+            <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('global',this)" style="font-size:9px;padding:2px 6px">Global</button>
+          </div>
+        </div>
+        <div id="cx-memory-list" style="flex:1;overflow-y:auto">
+          <div style="padding:20px;text-align:center;font-size:12px;color:var(--text3)">Loading...</div>
+        </div>
       </div>
     </div>
 
-    <!-- GRAPH VIEW -->
-    <div id="cx-graph-view" style="display:none;padding:16px 28px 28px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-        <div style="font-size:14px;font-weight:600;color:var(--text)">Memory Map</div>
-        <div style="font-size:12px;color:var(--text3)">— how memory files connect across agents and projects</div>
-        <div style="flex:1"></div>
-        <button class="btn btn-ghost" onclick="_resetGraphZoom()" style="font-size:11px">Reset Zoom</button>
-      </div>
-      <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--bg2);position:relative">
-        <canvas id="cx-graph-canvas" width="900" height="520" style="width:100%;height:520px;cursor:grab"></canvas>
-      </div>
-      <div id="cx-graph-legend" style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--text3)">
-        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22d3ee;margin-right:4px"></span>Agent</span>
-        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#fbbf24;margin-right:4px"></span>Project</span>
-        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#4ade80;margin-right:4px"></span>Global</span>
-        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);margin-right:4px"></span>Cortex</span>
-        <span style="margin-left:auto;font-size:10px">Line thickness = memory count</span>
-      </div>
-    </div>
-
-    <!-- CONFIG VIEW -->
+    <!-- CONFIG VIEW (hidden by default) -->
     <div id="cx-config-view" style="display:none;padding:16px 28px 28px">
       <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:16px">Cortex Configuration</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:600px">
@@ -16026,14 +16023,15 @@ async function loadModels() {
 }
 
 function _switchCortexView(view) {
-  ['inbox', 'graph', 'config'].forEach(function(v) {
-    var el = document.getElementById('cx-' + v + '-view');
-    if (el) el.style.display = v === view ? '' : 'none';
-  });
-  document.querySelectorAll('.cx-view-btn').forEach(function(b) { b.classList.remove('active'); });
-  var btn = document.getElementById('cx-view-' + view);
-  if (btn) btn.classList.add('active');
-  if (view === 'graph') _initMemoryGraph();
+  var mainView = document.getElementById('cx-main-view');
+  var configView = document.getElementById('cx-config-view');
+  if (view === 'config') {
+    if (mainView) mainView.style.display = 'none';
+    if (configView) configView.style.display = '';
+  } else {
+    if (mainView) mainView.style.display = '';
+    if (configView) configView.style.display = 'none';
+  }
 }
 
 var _cortexMemories = [];
@@ -16075,10 +16073,14 @@ async function _loadCortexTab() {
     var mems = await api('/api/cortex/memories');
     _cortexMemories = (mems && mems.memories) || [];
     _renderCortexMemories(_cortexMemories);
+    var countEl = document.getElementById('cx-inbox-count');
+    if (countEl) countEl.textContent = _cortexMemories.length + ' fact' + (_cortexMemories.length !== 1 ? 's' : '');
   } catch(e) {
     var el = document.getElementById('cx-memory-list');
-    if (el) el.innerHTML = '<div style="padding:20px;text-align:center;font-size:13px;color:var(--err)">Failed to load memories</div>';
+    if (el) el.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--err)">Failed to load memories</div>';
   }
+  // Always init the graph
+  _initMemoryGraph();
 }
 
 function _updateCortexBadge(count) {
@@ -16312,6 +16314,14 @@ function _resetGraphZoom() { _graphZoom = {x: 0, y: 0, scale: 1}; _drawGraph(); 
 async function _initMemoryGraph() {
   var canvas = document.getElementById('cx-graph-canvas');
   if (!canvas) return;
+  // Size canvas to actual container
+  var container = canvas.parentElement;
+  if (container) {
+    canvas.width = container.clientWidth * (window.devicePixelRatio || 1);
+    canvas.height = container.clientHeight * (window.devicePixelRatio || 1);
+    canvas.style.width = container.clientWidth + 'px';
+    canvas.style.height = container.clientHeight + 'px';
+  }
   // Fetch graph data
   try {
     var data = await api('/api/cortex/graph');
@@ -24017,6 +24027,7 @@ class Handler(BaseHTTPRequestHandler):
                 "SELECT scope, COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL GROUP BY scope"
             ).fetchall():
                 by_scope[row[0]] = row[1]
+            unrouted = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL AND (routed_to IS NULL OR routed_to='')").fetchone()[0]
             conn.close()
             self.reply_json({
                 "ok": True,
@@ -24024,9 +24035,47 @@ class Handler(BaseHTTPRequestHandler):
                 "total_merged": total_merged,
                 "last_24h": last_24h,
                 "by_scope": by_scope,
-                "unrouted": conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL AND (routed_to IS NULL OR routed_to='')").fetchone()[0],
-                    "enabled": _config.get("preferences", {}).get("cortex_enabled", True)
+                "unrouted": unrouted,
+                "enabled": _config.get("preferences", {}).get("cortex_enabled", True)
             })
+
+        elif parsed.path == "/api/cortex/graph":
+            if not self.auth_check(redirect=False): return
+            try:
+                conn = _db_conn()
+                nodes = []
+                edges = []
+                # Cortex hub node (always present)
+                nodes.append({"id": "cortex", "label": "Cortex", "type": "cortex", "emoji": "\U0001f9e0", "radius": 32, "count": 0})
+                # Global node (always present)
+                gc = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='global' AND consolidated_into IS NULL").fetchone()[0]
+                nodes.append({"id": "global", "label": "Global Memory", "type": "global", "emoji": "\U0001f310", "radius": 22 + min(8, gc), "count": gc})
+                # Always connect cortex to global
+                edges.append({"source": 0, "target": 1, "weight": max(1, min(6, gc))})
+                # Agent nodes (always show all agents)
+                personas = conn.execute("SELECT id, name, emoji FROM personas").fetchall()
+                for idx, p in enumerate(personas):
+                    pid, pname, pemoji = p[0], p[1], p[2] or "\u2699"
+                    ac = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='agent' AND scope_id=? AND consolidated_into IS NULL", (pid,)).fetchone()[0]
+                    node_idx = len(nodes)
+                    nodes.append({"id": "agent:" + pid, "label": pname, "type": "agent", "emoji": pemoji, "radius": 18 + min(8, ac), "count": ac})
+                    # Always connect agents to cortex hub
+                    edges.append({"source": 0, "target": node_idx, "weight": max(1, min(6, ac))})
+                    # Connect agents to global
+                    edges.append({"source": 1, "target": node_idx, "weight": 1})
+                # Project nodes (only if they have memories)
+                projects = conn.execute("SELECT DISTINCT scope_id FROM cortex_memories WHERE scope='project' AND consolidated_into IS NULL AND scope_id != ''").fetchall()
+                for proj in projects:
+                    proj_id = proj[0]
+                    pc = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='project' AND scope_id=? AND consolidated_into IS NULL", (proj_id,)).fetchone()[0]
+                    node_idx = len(nodes)
+                    nodes.append({"id": "project:" + proj_id, "label": proj_id[:20], "type": "project", "emoji": "\U0001f4c1", "radius": 18 + min(8, pc), "count": pc})
+                    edges.append({"source": 0, "target": node_idx, "weight": max(1, min(6, pc))})
+                conn.close()
+                nodes[0]["count"] = sum(n.get("count", 0) for n in nodes[1:])
+                self.reply_json({"nodes": nodes, "edges": edges})
+            except Exception as e:
+                self.reply_json({"nodes": [], "edges": [], "error": str(e)})
 
         elif parsed.path == "/api/trace/task-board":
             if not self.auth_check(redirect=False): return
@@ -27549,49 +27598,6 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             force = bool(data.get("force", False))
             result = _extract_learnings_preview(session_id, source, force=force)
             self.reply_json(result)
-
-        # ── Cortex memory graph data (GET) ────────────────────────
-        elif parsed.path == "/api/cortex/graph":
-            if not self.auth_check(redirect=False): return
-            try:
-                conn = _db_conn()
-                # Build nodes: Cortex hub + each agent + global
-                nodes = []
-                edges = []
-                # Cortex hub node
-                nodes.append({"id": "cortex", "label": "Cortex", "type": "cortex", "emoji": "\U0001f9e0", "radius": 30, "count": 0})
-                # Global node
-                gc = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='global' AND consolidated_into IS NULL").fetchone()[0]
-                nodes.append({"id": "global", "label": "Global Memory", "type": "global", "emoji": "\U0001f310", "radius": 22, "count": gc})
-                if gc > 0:
-                    edges.append({"source": 0, "target": 1, "weight": min(6, gc)})
-                # Agent nodes
-                personas = conn.execute("SELECT id, name, emoji FROM personas").fetchall()
-                for idx, p in enumerate(personas):
-                    pid, pname, pemoji = p[0], p[1], p[2] or "\u2699"
-                    ac = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='agent' AND scope_id=? AND consolidated_into IS NULL", (pid,)).fetchone()[0]
-                    node_idx = len(nodes)
-                    nodes.append({"id": "agent:" + pid, "label": pname, "type": "agent", "emoji": pemoji, "radius": 18 + min(8, ac), "count": ac})
-                    if ac > 0:
-                        edges.append({"source": 0, "target": node_idx, "weight": min(6, ac)})
-                    # Check if agent has connections to global
-                    if gc > 0 and ac > 0:
-                        edges.append({"source": 1, "target": node_idx, "weight": 1})
-                # Project nodes
-                projects = conn.execute("SELECT DISTINCT scope_id FROM cortex_memories WHERE scope='project' AND consolidated_into IS NULL AND scope_id != ''").fetchall()
-                for proj in projects:
-                    proj_id = proj[0]
-                    pc = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='project' AND scope_id=? AND consolidated_into IS NULL", (proj_id,)).fetchone()[0]
-                    node_idx = len(nodes)
-                    nodes.append({"id": "project:" + proj_id, "label": proj_id[:20], "type": "project", "emoji": "\U0001f4c1", "radius": 18 + min(8, pc), "count": pc})
-                    if pc > 0:
-                        edges.append({"source": 0, "target": node_idx, "weight": min(6, pc)})
-                conn.close()
-                # Set Cortex hub count to total
-                nodes[0]["count"] = sum(n.get("count", 0) for n in nodes[1:])
-                self.reply_json({"nodes": nodes, "edges": edges})
-            except Exception as e:
-                self.reply_json({"nodes": [], "edges": [], "error": str(e)})
 
         # ── Update individual cortex memory (POST) ─────────────────────────
         elif parsed.path.startswith("/api/cortex/memories/") and parsed.path.endswith("/update"):
