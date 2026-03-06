@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.33 — Google Workspace CLI Integration"""
+"""Porter v0.27.34 — Google Workspace CLI Integration"""
 
 
 import email
@@ -2681,6 +2681,49 @@ def _unarchive_session(session_id: str) -> dict:
         return {"ok": True, "session_id": session_id}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+def _delete_session_file(session_id: str, source: str) -> dict:
+    """Permanently delete a session file + archive entry + learnings."""
+    import os
+    deleted_file = False
+    # Resolve session file path by source
+    paths_to_try = []
+    if source == "openclaw":
+        oc_sessions = OPENCLAW_STATE_DIR / "agents" / "main" / "sessions"
+        paths_to_try.append(oc_sessions / f"{session_id}.jsonl")
+    elif source == "claude":
+        claude_dir = Path.home() / ".claude" / "projects"
+        # Claude sessions are nested — search for the JSONL
+        for p in claude_dir.rglob(f"{session_id}.jsonl"):
+            paths_to_try.append(p)
+    elif source == "gemini":
+        gemini_dir = Path.home() / ".gemini" / "history"
+        for p in gemini_dir.rglob(f"*{session_id}*"):
+            paths_to_try.append(p)
+
+    for fpath in paths_to_try:
+        if fpath.exists():
+            try:
+                os.remove(fpath)
+                deleted_file = True
+                log.info("Deleted session file: %s", fpath)
+            except Exception as e:
+                log.warning("Failed to delete session file %s: %s", fpath, e)
+
+    # Also archive it (in case file delete didn't work, still hide it)
+    _archive_session(session_id, source)
+
+    # Remove learnings
+    try:
+        conn = _db_conn()
+        conn.execute("DELETE FROM session_learnings WHERE session_id=?", (session_id,))
+        conn.execute("DELETE FROM session_custom_names WHERE session_id=?", (session_id,))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+    return {"ok": True, "session_id": session_id, "file_deleted": deleted_file}
 
 def _get_archived_session_ids() -> set:
     """Get set of archived session IDs."""
@@ -7085,9 +7128,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .model-card-desc { font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px; }
 .model-card-tags { display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px; }
 .model-card-tag { font-size:11px;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,var(--accent) 12%,var(--bg));color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border)); }
-.model-card-agents-label { font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px;font-weight:600; }
-.model-card-agents { display:flex;flex-wrap:wrap;gap:5px; }
-.model-card-agent { display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text2); }
+
 .model-card-divider { border-top:1px solid var(--border);margin:10px 0;padding-top:10px; }
 .model-card-activity { display:flex;align-items:center;gap:8px;font-size:12px; }
 .model-card-activity.working { color:var(--accent);font-weight:500; }
@@ -7654,7 +7695,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.33</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.34</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8883,6 +8924,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.34', date:'2026-03-06', notes:['Models tab: removed static agent assignments from model cards','Session delete: permanently remove sessions (not just archive)','Model priority order: GPT-5.4 \u2192 Claude \u2192 Codex \u2192 Gemini \u2192 Ollama','GPT-5.4 now default for OpenClaw backend','Dispatch context: all persona .md files loaded in full (SOUL, IDENTITY, ROLE_CARD, MEMORY, RULES)','Removed arbitrary truncation on persona files (was cutting 66% of SOUL.md)','20KB safety cap per file prevents accidental context blowup'] },
   { ver:'v0.27.33', date:'2026-03-06', notes:['Porter Cortex: auto-memory system (extract \u2192 route \u2192 inject \u2192 consolidate)','Agents auto-learn from every dispatch \u2014 zero-click memory','Context injection: relevant memories prepended before each agent dispatch','Memory consolidation: background dedup prevents unbounded growth','Latest models: GPT-5.4, Claude Opus 4.6, Gemini 2.5 Pro in Models tab','GET /api/cortex/memories + /api/cortex/stats endpoints'] },
   { ver:'v0.27.32', date:'2026-03-06', notes:['Google Workspace CLI: full integration (Gmail, Drive, Calendar, Sheets, Docs + 14 services)','/workspace and /gws chat commands for direct Workspace operations','POST /api/gws/exec endpoint for programmatic Workspace access','Auto-detect gws installation, auth status, and granted services','Workspace quick actions panel in Extensions tab'] },
   { ver:'v0.27.31', date:'2026-03-06', notes:['API Keys: save-once / delete-only pattern for all service keys','API Keys tab: Brave, OpenAI, Anthropic, Google AI in one place','Fix: version probing for Gemini CLI, OpenClaw, Codex, Claude (PATH resolution)'] },
@@ -12141,6 +12183,7 @@ function _renderInlineSessions(sessions, source, container) {
         + '<div style="display:flex;gap:4px;margin-top:3px">'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_showSessionLearnings(this,\'' + sid + '\',\'' + ssrc + '\')">' + (s.learnings ? '\u25be Learnings' : 'Learnings') + '</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px;color:var(--red,#f87171)" onclick="event.stopPropagation();deleteSession(\'' + sid + '\',\'' + ssrc + '\')">Delete</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_renameSession(this,\'' + sid + '\',\'' + ssrc + '\')">\u270f</button>'
         + '</div>'
@@ -12537,6 +12580,13 @@ function closeLearnWizard() {}
 function openFlushWizard() {}
 function closeFlushWizard() {}
 function saveLearn() {}
+
+async function deleteSession(sessionId, source) {
+  if (!confirm('Permanently delete this session? This cannot be undone.')) return;
+  var r = await api('/api/sessions/' + sessionId + '/delete', { source: source });
+  if (r && r.ok) { toast('Session deleted'); loadModels(); }
+  else { toast('Delete failed', 'err'); }
+}
 
 async function archiveSession(sessionId, source) {
   if (!confirm('Archive this session? It will be hidden from the default list.')) return;
@@ -15685,12 +15735,7 @@ function _renderModelCards(data, act) {
     var tags = (p.best_for || []).map(function(t) {
       return '<span class="model-card-tag">' + escHtml(t) + '</span>';
     }).join('');
-    var agents = (p.agents || []).map(function(a) {
-      return '<span class="model-card-agent">' + (a.avatar || '🤖') + ' ' + escHtml(a.name) + '</span>';
-    }).join('');
-    var agentSection = agents
-      ? '<div class="model-card-agents-label">Agents</div><div class="model-card-agents">' + agents + '</div>'
-      : '<div style="font-size:11px;color:var(--text3);font-style:italic">No agents assigned</div>';
+
 
     // Activity data
     var ba = (act || {})[p.id] || {};
@@ -15768,7 +15813,6 @@ function _renderModelCards(data, act) {
       + '<div class="model-ver-badge" id="ver-badge-' + escHtml(p.id) + '"></div>'
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
       + (tags ? '<div class="model-card-tags">' + tags + '</div>' : '')
-      + agentSection
       + _selHtml
       + '<div class="model-card-divider"></div>'
       + statsHtml
@@ -20943,28 +20987,28 @@ When you need to perform a Workspace action, output a ```gws code block and Port
 PROVIDER_REGISTRY = {
     "openclaw": {"dispatch": _dispatch_openclaw, "probe": _probe_openclaw, "type": "gateway", "label": "OpenClaw"},
     "claude":   {"dispatch": _dispatch_claude,   "probe": _probe_claude,   "type": "cli",     "label": "Claude Code"},
-    "gemini":   {"dispatch": _dispatch_gemini,   "probe": _probe_gemini,   "type": "cli",     "label": "Gemini"},
     "codex":    {"dispatch": _dispatch_codex,    "probe": _probe_codex,    "type": "cli",     "label": "Codex"},
+    "gemini":   {"dispatch": _dispatch_gemini,   "probe": _probe_gemini,   "type": "cli",     "label": "Gemini"},
     "ollama":   {"dispatch": _dispatch_ollama,   "probe": _probe_ollama,   "type": "local",   "label": "Ollama"},
 }
 AGENT_DISPATCHERS = {k: v["dispatch"] for k, v in PROVIDER_REGISTRY.items()}
 
 MODEL_METADATA = {
     "openclaw": {
-        "description": "Multi-model gateway routing to GPT-5.3 Codex and others.",
-        "best_for": ["code generation", "task execution", "automation"],
+        "description": "Multi-model gateway — routes to GPT-5.4 and other OpenAI models.",
+        "best_for": ["reasoning", "code generation", "automation"],
     },
     "claude": {
-        "description": "Advanced reasoning and code generation via Anthropic CLI.",
-        "best_for": ["analysis", "code", "planning", "writing"],
-    },
-    "gemini": {
-        "description": "Google's multimodal model for research and content.",
-        "best_for": ["research", "summarization", "multimodal"],
+        "description": "Deep reasoning, architecture, and security analysis via Anthropic CLI.",
+        "best_for": ["analysis", "architecture", "planning", "writing"],
     },
     "codex": {
-        "description": "OpenAI Codex CLI for code-focused tasks.",
+        "description": "Agentic coding — long-running tasks with tool use via OpenAI CLI.",
         "best_for": ["code generation", "refactoring", "debugging"],
+    },
+    "gemini": {
+        "description": "Extended context (1M tokens), multimodal research via Google CLI.",
+        "best_for": ["research", "summarization", "multimodal"],
     },
     "ollama": {
         "description": "Local model inference via Ollama. No data leaves the machine.",
@@ -21050,8 +21094,8 @@ def _probe_backend_versions():
 
 AVAILABLE_MODELS = {
     "openclaw": [
-        {"id": "gpt-5.3-codex", "name": "GPT-5.3 Codex", "default": True},
-        {"id": "gpt-5.4", "name": "GPT-5.4"},
+        {"id": "gpt-5.4", "name": "GPT-5.4", "default": True},
+        {"id": "gpt-5.3-codex", "name": "GPT-5.3 Codex"},
         {"id": "o3-pro", "name": "o3 Pro"},
     ],
     "claude":   [
@@ -21059,14 +21103,14 @@ AVAILABLE_MODELS = {
         {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
         {"id": "claude-haiku-4-5", "name": "Claude Haiku 4.5"},
     ],
-    "gemini":   [
-        {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "default": True},
-        {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash"},
-    ],
     "codex":    [
         {"id": "gpt-5.4", "name": "GPT-5.4", "default": True},
         {"id": "gpt-5.4-thinking", "name": "GPT-5.4 Thinking"},
         {"id": "o3-pro", "name": "o3 Pro"},
+    ],
+    "gemini":   [
+        {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "default": True},
+        {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash"},
     ],
     "ollama":   [],  # Runtime-detected via /api/tags
 }
@@ -21480,37 +21524,54 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     if not persona:
         return {"ok": False, "error": f"Persona not found: {persona_id}", "run_id": run_id}
 
-    # Load SOUL.md + RULES.md for persona context
-    soul = _persona_get_soul(persona_id)
-    rules = ''
-    _rules_path = PERSONAS_DIR / 'RULES.md'
-    if _rules_path.exists():
+    # Load all persona .md files + global RULES.md for dispatch context
+    # Safety cap per file: 20KB (prevents accidental mega-files from blowing context)
+    _CTX_FILE_CAP = 20_000
+    def _read_persona_file(path):
         try:
-            rules = _rules_path.read_text().strip()
+            if path.exists():
+                content = path.read_text().strip()
+                return content[:_CTX_FILE_CAP] if content else ''
         except Exception:
-            rules = ''
+            pass
+        return ''
+
+    pdir = PERSONAS_DIR / persona_id
+    soul = _read_persona_file(pdir / 'SOUL.md')
+    identity = _read_persona_file(pdir / 'IDENTITY.md')
+    role_card = _read_persona_file(pdir / 'ROLE_CARD.md')
+    agent_memory = _read_persona_file(pdir / 'MEMORY.md')
+    rules = _read_persona_file(PERSONAS_DIR / 'RULES.md')
+
     pname = persona.get('name', 'Agent')
     prole = persona.get('role', '')
-    # Build context suffix: identity + global rules
+
+    # Build context suffix — full files, structured sections
     _ctx_parts = []
-    if soul.strip():
-        _ctx_parts.append(f"Identity: {soul.strip()[:600]}")
+    if soul:
+        _ctx_parts.append(f"Identity:\n{soul}")
+    if identity:
+        _ctx_parts.append(f"About:\n{identity}")
+    if role_card:
+        _ctx_parts.append(f"Role:\n{role_card}")
+    if agent_memory:
+        _ctx_parts.append(f"Agent memory:\n{agent_memory}")
     if rules:
-        _ctx_parts.append(f"Global rules: {rules[:400]}")
-    _ctx_suffix = ' | '.join(_ctx_parts) if _ctx_parts else ''
+        _ctx_parts.append(f"Global rules:\n{rules}")
+    _ctx_suffix = '\n\n'.join(_ctx_parts) if _ctx_parts else ''
 
     # Cortex: inject relevant memories into context
     _cortex_context = _cortex_inject_context(message, persona_id=persona_id)
     if _cortex_context:
         _ctx_parts.append(_cortex_context)
-        _ctx_suffix = ' | '.join(_ctx_parts) if _ctx_parts else ''
+        _ctx_suffix = '\n\n'.join(_ctx_parts) if _ctx_parts else ''
 
     # Personality mode: conversational, includes identity context
     if personality_mode:
         _role_hint = f" Your role is {prole}." if prole else ""
-        augmented_message = f"{message}\n\n(You are {pname}.{_role_hint} Respond in first person. Be conversational. Never mention which AI model or backend you run on — that is infrastructure, not identity. {_ctx_suffix})"
+        augmented_message = f"{message}\n\n(You are {pname}.{_role_hint} Respond in first person. Be conversational. Never mention which AI model or backend you run on — that is infrastructure, not identity.)\n\n{_ctx_suffix}"
     elif _ctx_suffix:
-        augmented_message = f"{message}\n\n(Respond as {pname}. Never mention which AI model you run on. {_ctx_suffix})"
+        augmented_message = f"{message}\n\n(Respond as {pname}. Never mention which AI model you run on.)\n\n{_ctx_suffix}"
     else:
         augmented_message = message
 
@@ -22529,7 +22590,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.33"})
+            self.reply_json({"v": "0.27.34"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -22616,7 +22677,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.33"
+                health["porter_version"] = "0.27.34"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -22699,20 +22760,6 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/providers":
             if not self.auth_check(redirect=False): return
-            # Build persona-to-backend map
-            _pmap = {}
-            try:
-                _pconn = _db_conn()
-                _prows = _pconn.execute(
-                    "SELECT id, name, avatar, preferred_backend FROM personas "
-                    "WHERE preferred_backend IS NOT NULL AND preferred_backend != ''"
-                ).fetchall()
-                for _pr in _prows:
-                    _bk = _pr[3]
-                    if _bk not in _pmap: _pmap[_bk] = []
-                    _pmap[_bk].append({"id": _pr[0], "name": _pr[1], "avatar": _pr[2] or ""})
-            except Exception:
-                pass
             providers = []
             for name, info in PROVIDER_REGISTRY.items():
                 _meta = MODEL_METADATA.get(name, {})
@@ -22723,7 +22770,6 @@ class Handler(BaseHTTPRequestHandler):
                     "label": info["label"],
                     "description": _meta.get("description", ""),
                     "best_for": _meta.get("best_for", []),
-                    "agents": _pmap.get(name, []),
                 })
             self.reply_json({"ok": True, "providers": providers})
 
@@ -24205,7 +24251,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.33'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.34'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -26613,6 +26659,17 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             result = _unarchive_session(session_id)
             self.reply_json(result)
 
+        elif parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/delete"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.split("/")
+            session_id = parts[3] if len(parts) >= 5 else ""
+            if not session_id:
+                self.reply_json({"ok": False, "error": "Missing session_id"}, 400); return
+            data = self.read_json_body()
+            source = str(data.get("source", "")).strip()
+            result = _delete_session_file(session_id, source)
+            self.reply_json(result)
+
         # ── Extract learnings (POST) ──────────────────────────────────────────
         elif parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/extract-learnings"):
             if not self.auth_check(redirect=False): return
@@ -28117,7 +28174,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.33 ready (localhost only)")
+    print(f"\n  Porter v0.27.34 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
