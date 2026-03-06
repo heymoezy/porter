@@ -16109,14 +16109,14 @@ function _renderCortexMemories(memories) {
     var routeBar = '';
     if (!isRouted) {
       routeBar = '<div class="cx-route-bar">'
-        + '<select class="cx-route-scope" data-mid="' + m.id + '" style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)" onchange="_updateRouteTarget(this)">'
-        + '<option value="global">Global</option>';
-      _cortexAgents.forEach(function(a) {
-        routeBar += '<option value="agent:' + a.id + '">' + (a.emoji || '') + ' ' + escHtml(a.name) + '</option>';
-      });
-      routeBar += '</select>'
-        + '<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;border:1px solid var(--accent);border-radius:4px;color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)" onclick="_routeCortexMem(' + m.id + ',this)">Push</button>'
-        + '<button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;color:var(--text3)" onclick="_dismissCortexMem(' + m.id + ',this)">Dismiss</button>'
+        + '<div class="cx-route-picker" data-mid="' + m.id + '" data-value="global" style="position:relative">'
+        + '<button class="btn btn-ghost" onclick="_toggleRoutePicker(this)" style="font-size:12px;padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);display:flex;align-items:center;gap:6px;min-width:120px">'
+        + '<span class="cx-pick-label">\ud83c\udf10 Global</span>'
+        + '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:auto;opacity:.5"><polyline points="6 9 12 15 18 9"/></svg>'
+        + '</button>'
+        + '</div>'
+        + '<button class="btn btn-ghost" style="font-size:12px;padding:4px 14px;border:1px solid var(--accent);border-radius:6px;color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)" onclick="_routeCortexMem(' + m.id + ',this)">Push</button>'
+        + '<button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--text3)" onclick="_dismissCortexMem(' + m.id + ',this)">Dismiss</button>'
         + '</div>';
     }
     html += '<div class="cx-mem-card cx-mem-row" data-scope="' + sc + '" data-id="' + m.id + '">'
@@ -16144,20 +16144,59 @@ function _filterCortexScope(scope, btn) {
   });
 }
 
-function _updateRouteTarget(sel) {
-  // Update scope badge visually when user changes the route target
-  var card = sel.closest('.cx-mem-card');
-  if (!card) return;
-  var val = sel.value;
-  var scope = val.startsWith('agent:') ? 'agent' : 'global';
-  card.setAttribute('data-scope', scope);
+function _toggleRoutePicker(triggerBtn) {
+  // Close any existing picker
+  document.querySelectorAll('.cx-route-menu').forEach(function(m) { m.remove(); });
+  var picker = triggerBtn.closest('.cx-route-picker');
+  if (!picker) return;
+  var rect = triggerBtn.getBoundingClientRect();
+  var menu = document.createElement('div');
+  menu.className = 'cx-route-menu';
+  menu.style.cssText = 'position:fixed;z-index:200;background:var(--raised);border:1px solid var(--border2);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.5);min-width:180px;max-height:300px;overflow-y:auto;padding:4px 0;'
+    + 'left:' + rect.left + 'px;top:' + (rect.bottom + 4) + 'px';
+  // Global option
+  var globalItem = document.createElement('div');
+  globalItem.className = 'dropdown-item';
+  globalItem.innerHTML = '<span style="font-size:14px">\ud83c\udf10</span> Global';
+  globalItem.onclick = function() { _selectRouteTarget(picker, 'global', '\ud83c\udf10 Global'); menu.remove(); };
+  menu.appendChild(globalItem);
+  // Agent options
+  if (_cortexAgents.length) {
+    var sep = document.createElement('div');
+    sep.className = 'dropdown-sep';
+    menu.appendChild(sep);
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'padding:4px 14px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px';
+    hdr.textContent = 'Agents';
+    menu.appendChild(hdr);
+    _cortexAgents.forEach(function(a) {
+      var item = document.createElement('div');
+      item.className = 'dropdown-item';
+      item.innerHTML = '<span style="font-size:14px">' + (a.emoji || '\u2699') + '</span> ' + escHtml(a.name);
+      item.onclick = function() { _selectRouteTarget(picker, 'agent:' + a.id, (a.emoji || '\u2699') + ' ' + a.name); menu.remove(); };
+      menu.appendChild(item);
+    });
+  }
+  document.body.appendChild(menu);
+  // Close on click outside
+  setTimeout(function() {
+    document.addEventListener('click', function _close(e) {
+      if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', _close); }
+    });
+  }, 10);
+}
+
+function _selectRouteTarget(picker, value, label) {
+  picker.setAttribute('data-value', value);
+  var lbl = picker.querySelector('.cx-pick-label');
+  if (lbl) lbl.textContent = label;
 }
 
 async function _routeCortexMem(id, btn) {
   var card = btn.closest('.cx-mem-card');
   if (!card) return;
-  var sel = card.querySelector('.cx-route-scope');
-  var target = sel ? sel.value : 'global';
+  var picker = card.querySelector('.cx-route-picker');
+  var target = picker ? picker.getAttribute('data-value') : 'global';
   var scope = 'global';
   var scopeId = '';
   if (target.startsWith('agent:')) { scope = 'agent'; scopeId = target.split(':')[1]; }
