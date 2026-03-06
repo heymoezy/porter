@@ -16126,7 +16126,9 @@ function _renderCortexMemories(memories) {
       + '<div style="display:flex;align-items:center;gap:8px">'
       + '<span style="font-size:10px;font-weight:600;color:' + scColor + ';text-transform:uppercase;background:color-mix(in srgb,' + scColor + ' 12%,transparent);padding:2px 8px;border-radius:4px;letter-spacing:0.5px">' + sc + '</span>'
       + impBar
-      + '<span style="font-size:11px;color:var(--text3)">' + (m.source_type === 'session' ? 'session' : 'dispatch') + '</span>'
+      + (m.source_type === 'session' && m.source_id
+        ? '<a href="#" onclick="event.preventDefault();event.stopPropagation();_openCortexSession(\'' + escHtml(m.source_id) + '\')" style="font-size:10px;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:3px" title="Open session"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>session</a>'
+        : '<span style="font-size:10px;color:var(--text3)">' + (m.source_type || 'dispatch') + '</span>')
       + routeStatus
       + '<div style="flex:1"></div>'
       + '<button class="btn btn-ghost" style="font-size:12px;padding:0 6px" onclick="event.stopPropagation();_editCortexMem(' + m.id + ',this)" title="Edit">\u270f\ufe0e</button>'
@@ -16137,6 +16139,38 @@ function _renderCortexMemories(memories) {
       + '</div>';
   });
   el.innerHTML = html;
+}
+
+function _openCortexSession(sessionId) {
+  // Navigate to Models tab and expand the session
+  switchModule('models');
+  // After a brief delay for models to load, find and highlight the session
+  setTimeout(function() {
+    // Look for inline session cards that contain this session ID
+    var cards = document.querySelectorAll('.inline-sess-card');
+    var found = false;
+    cards.forEach(function(c) {
+      if (c.innerHTML.indexOf(sessionId) >= 0 || c.innerHTML.indexOf(sessionId.substring(0,8)) >= 0) {
+        c.scrollIntoView({behavior: 'smooth', block: 'center'});
+        c.style.transition = 'box-shadow 0.3s';
+        c.style.boxShadow = '0 0 0 2px var(--accent)';
+        setTimeout(function() { c.style.boxShadow = ''; }, 3000);
+        found = true;
+      }
+    });
+    if (!found) {
+      // Try data-session-id attribute
+      var el = document.querySelector('[data-session-id="' + sessionId.toLowerCase() + '"]');
+      if (el) {
+        el.scrollIntoView({behavior: 'smooth', block: 'center'});
+        el.style.transition = 'box-shadow 0.3s';
+        el.style.boxShadow = '0 0 0 2px var(--accent)';
+        setTimeout(function() { el.style.boxShadow = ''; }, 3000);
+      } else {
+        toast('Session not visible — expand the model card first');
+      }
+    }
+  }, 800);
 }
 
 function _filterCortexScope(scope, btn) {
