@@ -2744,13 +2744,20 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
             row = conn.execute("SELECT learnings, backend_used, extracted_at FROM session_learnings WHERE session_id=?", (session_id,)).fetchone()
             conn.close()
             if row and row[0]:
-                destinations = _list_learning_destinations()
+                # Also fetch structured facts from cortex_memories
+                _cached_facts = []
+                try:
+                    _cf_rows = conn.execute(
+                        "SELECT id, fact, scope, importance FROM cortex_memories WHERE source_type='session' AND source_id=? AND consolidated_into IS NULL ORDER BY id",
+                        (session_id,)
+                    ).fetchall()
+                    _cached_facts = [{"id": r[0], "fact": r[1], "scope": r[2], "importance": r[3]} for r in _cf_rows]
+                except Exception:
+                    pass
                 return {
-                    "ok": True, "learnings": row[0], "llm_used": True,
-                    "backend_used": row[1] or "", "cached": True,
-                    "raw_summary": "", "destinations": destinations,
+                    "ok": True, "learnings": row[0], "facts": _cached_facts,
+                    "llm_used": True, "cached": True,
                     "session_id": session_id, "source": source,
-                    "first_user_msg": "", "extracted_at": row[2],
                 }
         except Exception:
             pass
@@ -2834,19 +2841,25 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
             except Exception as e:
                 log.debug("Transcript extraction error: %s", e)
 
-    # LLM analysis — use the session's own backend, fall back through chain
+    # LLM analysis — structured extraction with scoped facts
     learnings = ""
+    structured_facts = []
     llm_used = False
     if transcript.strip():
         prompt = (
-            "Extract learnings from this session as bullet points ready to append to a memory file.\n"
+            "Extract learnings from this session as structured JSON.\n"
+            "Categorize each fact by scope:\n"
+            "- agent: facts about a specific agent\'s behavior, preferences, or performance\n"
+            "- project: facts about a specific project, codebase, or task\n"
+            "- global: universally useful knowledge, patterns, or user preferences\n\n"
+            "Return ONLY valid JSON:\n"
+            '{"facts": [{"text": "concise actionable insight", "scope": "agent|project|global", "importance": 1-10}]}\n\n'
             "Rules:\n"
-            "- Each bullet is one clear, actionable insight\n"
-            "- Start each with '- ' (markdown list)\n"
             "- Be specific: include file names, function names, config keys\n"
-            "- No headers, no sections, no preamble — just the bullets\n"
             "- Skip trivial items. Only things worth remembering.\n"
-            "- Max 8 bullets\n\n"
+            "- Max 10 facts\n"
+            "- importance: 1=trivial, 5=moderate, 10=critical\n"
+            "- Return ONLY the JSON object, no markdown fences, no explanation\n\n"
             + transcript
         )
         # Try all available backends — API-based first, then CLI-based
@@ -2859,15 +2872,28 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
             try:
                 result = dispatch_agent(prompt, backend, timeout=45)
                 if result.get("text", "").strip():
-                    learnings = result["text"].strip()
+                    raw = result["text"].strip()
                     llm_used = True
+                    # Try to parse as JSON for structured facts
+                    parsed_json = _parse_cortex_json(raw)
+                    if parsed_json and "facts" in parsed_json:
+                        structured_facts = parsed_json["facts"][:10]
+                        # Build human-readable learnings text as fallback
+                        _scope_labels = {"agent": "\U0001f916 Agent", "project": "\U0001f4c1 Project", "global": "\U0001f310 Global"}
+                        learnings = "\n".join(
+                            f"[{_scope_labels.get(f.get('scope','global'), '\U0001f310 Global')}] {f.get('text','')}"
+                            for f in structured_facts if f.get("text")
+                        )
+                    else:
+                        learnings = raw
                     break
             except Exception as e:
                 log.debug("LLM extract [%s] error: %s", backend, e)
                 continue
 
-    # Persist to DB if we got learnings
+    # Persist to DB — both session_learnings (legacy) and cortex_memories (structured)
     backend_used = ""
+    cortex_ids = []
     if learnings:
         try:
             conn = _db_conn()
@@ -2880,19 +2906,47 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
         except Exception as e:
             log.debug("Failed to persist learnings: %s", e)
 
-    # Get destinations
-    destinations = _list_learning_destinations()
+    # Store structured facts in cortex_memories
+    if structured_facts:
+        try:
+            conn = _db_conn()
+            # Clear old session-linked facts before re-inserting
+            conn.execute("DELETE FROM cortex_memories WHERE source_type='session' AND source_id=?", (session_id,))
+            for fact_obj in structured_facts:
+                fact_text = str(fact_obj.get("text", "")).strip()
+                if not fact_text or len(fact_text) < 5:
+                    continue
+                scope = fact_obj.get("scope", "global")
+                if scope not in ("global", "agent", "project"):
+                    scope = "global"
+                importance = max(1, min(10, int(fact_obj.get("importance", 5))))
+                keywords = ",".join(_cortex_tokenize(fact_text))
+                conn.execute(
+                    """INSERT INTO cortex_memories (fact, scope, scope_id, source_type, source_id,
+                       importance, keywords, routed_to)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (fact_text, scope, "", "session", session_id,
+                     importance, keywords, "")
+                )
+            conn.commit()
+            # Get the IDs we just inserted
+            rows = conn.execute(
+                "SELECT id, fact, scope, importance FROM cortex_memories WHERE source_type='session' AND source_id=? ORDER BY id",
+                (session_id,)
+            ).fetchall()
+            cortex_ids = [{"id": r[0], "fact": r[1], "scope": r[2], "importance": r[3]} for r in rows]
+            conn.close()
+        except Exception as e:
+            log.debug("Failed to store cortex facts: %s", e)
 
     return {
         "ok": True,
         "learnings": learnings,
+        "facts": cortex_ids,
         "llm_used": llm_used,
         "cached": False,
-        "raw_summary": preview.get("summary", ""),
-        "destinations": destinations,
         "session_id": session_id,
         "source": source,
-        "first_user_msg": preview.get("first_user_msg", ""),
     }
 
 
@@ -12183,13 +12237,7 @@ function _renderInlineSessions(sessions, source, container) {
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_renameSession(this,\'' + sid + '\',\'' + ssrc + '\')">\u270f</button>'
         + '</div>'
-        + '<div class="sess-learnings-inline" style="margin-top:3px;font-size:10px;color:var(--text3);display:none;overflow:visible" data-sid="' + sid + '">'
-        + '<textarea class="sess-learn-text" onclick="event.stopPropagation()" style="width:100%;min-height:60px;resize:vertical;overflow:auto;line-height:1.5;font-size:10px;font-family:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px;box-sizing:border-box">' + (s.learnings ? escHtml(s.learnings) : '') + '</textarea>'
-        + '<div style="display:flex;gap:4px;margin-top:4px;align-items:center">'
-        + '<select class="sess-learn-dest" onclick="event.stopPropagation()" style="flex:1;font-size:10px;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text)"></select>'
-        + '<button class="btn btn-primary" style="font-size:9px;padding:2px 8px;white-space:nowrap" onclick="event.stopPropagation();_saveLearnDirect(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
-        + '<button class="btn btn-ghost" style="font-size:9px;padding:2px 5px" onclick="event.stopPropagation();_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">\u21bb</button>'
-        + '</div></div>'
+        + '<div class="sess-learnings-inline" style="margin-top:3px;display:none;overflow:visible" data-sid="' + sid + '"></div>'
         + '</div>';
     }).join('')
     + (sessions.length > 20 ? '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:4px">Showing 20 of ' + sessions.length + '</div>' : '')
@@ -12246,13 +12294,7 @@ function _renderActivitySessions(sessions, source) {
       + '<button class="btn btn-ghost" onclick="event.stopPropagation();archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
       + '<button class="btn btn-ghost" onclick="event.stopPropagation();_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
       + '</div>'
-      + '<div class="sess-learnings-inline" style="margin-top:4px;font-size:10px;color:var(--text3);display:none;overflow:visible" data-sid="' + sid + '">'
-      + '<textarea class="sess-learn-text" onclick="event.stopPropagation()" style="width:100%;min-height:60px;resize:vertical;overflow:auto;line-height:1.5;font-size:10px;font-family:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px;box-sizing:border-box">' + (s.learnings ? escHtml(s.learnings) : '') + '</textarea>'
-      + '<div style="display:flex;gap:4px;margin-top:4px;align-items:center">'
-      + '<select class="sess-learn-dest" onclick="event.stopPropagation()" style="flex:1;font-size:10px;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text)"></select>'
-      + '<button class="btn btn-primary" style="font-size:9px;padding:2px 8px;white-space:nowrap" onclick="event.stopPropagation();_saveLearnDirect(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
-      + '<button class="btn btn-ghost" style="font-size:9px;padding:2px 5px" onclick="event.stopPropagation();_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">\u21bb</button>'
-      + '</div></div>'
+      + '<div class="sess-learnings-inline" style="margin-top:4px;display:none;overflow:visible" data-sid="' + sid + '"></div>'
       + '</div>';
   }).join('')
   + (sessions.length > 30 ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">Showing 30 of ' + sessions.length + '</div>' : '');
@@ -12359,48 +12401,103 @@ document.addEventListener('input', function(e) {
 async function _showSessionLearnings(btn, sid, source) {
   var el = document.querySelector('.sess-learnings-inline[data-sid="' + sid + '"]');
   if (!el) return;
-  // If already visible, toggle closed
   if (el.style.display !== 'none') {
     el.style.display = 'none';
-    btn.textContent = 'Learnings';
+    btn.textContent = 'Memory';
     return;
   }
-  // Show the container
   el.style.display = '';
-  el.style.maxHeight = 'none';
-  var textDiv = el.querySelector('.sess-learn-text');
-  // If no learnings yet, extract them
-  if (!(textDiv.value || textDiv.textContent || '').trim()) {
-    textDiv.value = 'Extracting learnings\u2026';
-    textDiv.disabled = true;
-    el.style.maxHeight = '60px';
-    var _start = Date.now();
-    var _timer = setInterval(function() {
-      var s = Math.round((Date.now() - _start) / 1000);
-      textDiv.value = 'Extracting learnings\u2026 ' + s + 's';
-    }, 1000);
-    try {
-      var resp = await api('/api/sessions/' + encodeURIComponent(sid) + '/extract-learnings', { source: source }, 60000);
-      clearInterval(_timer);
-      textDiv.disabled = false;
-      if (resp && resp.ok && resp.learnings) {
-        textDiv.value = resp.learnings;
-        btn.textContent = '\u25be Learnings';
-        if (resp.cached) toast('Loaded cached learnings');
-      } else {
-        textDiv.value = (resp && resp.error) || 'No learnings extracted';
-      }
-    } catch(e) {
-      clearInterval(_timer);
-      textDiv.disabled = false;
-      textDiv.value = 'Extraction failed';
+  btn.textContent = '\u25be Memory';
+  // Check if already loaded
+  if (el.querySelector('.mem-facts-list')) return;
+  el.innerHTML = '<div style="padding:6px;font-size:10px;color:var(--text3)">Extracting\u2026 <span class="mem-timer">0s</span></div>';
+  var _start = Date.now();
+  var _timer = setInterval(function() {
+    var t = el.querySelector('.mem-timer');
+    if (t) t.textContent = Math.round((Date.now() - _start) / 1000) + 's';
+  }, 1000);
+  try {
+    var resp = await api('/api/sessions/' + encodeURIComponent(sid) + '/extract-learnings', { source: source }, 60000);
+    clearInterval(_timer);
+    if (resp && resp.ok && resp.facts && resp.facts.length > 0) {
+      _renderMemoryFacts(el, resp.facts, sid, source);
+      if (resp.cached) toast('Loaded cached memory');
+    } else if (resp && resp.ok && resp.learnings) {
+      el.innerHTML = '<div style="font-size:10px;color:var(--text3);white-space:pre-wrap;padding:4px">' + escHtml(resp.learnings) + '</div>'
+        + '<button class="btn btn-ghost" style="font-size:9px;margin-top:4px" onclick="event.stopPropagation();_reextractMemory(\'' + sid + '\',\'' + source + '\')">\u21bb Re-extract</button>';
+    } else {
+      el.innerHTML = '<div style="font-size:10px;color:var(--text3);padding:4px">No learnings extracted</div>';
     }
-  } else {
-    btn.textContent = '\u25be Learnings';
+  } catch(e) {
+    clearInterval(_timer);
+    el.innerHTML = '<div style="font-size:10px;color:var(--err);padding:4px">Extraction failed</div>';
   }
-  el.style.maxHeight = 'none';
-  _autoSizeTextarea(el.querySelector('.sess-learn-text'));
-  _populateLearnDests();
+}
+
+function _renderMemoryFacts(container, facts, sid, source) {
+  var scopeOrder = ['agent', 'project', 'global'];
+  var scopeLabels = {agent: '\U0001f916 Agent', project: '\U0001f4c1 Project', global: '\U0001f310 Global'};
+  var scopeColors = {agent: 'var(--cyan,#22d3ee)', project: 'var(--amber,#fbbf24)', global: 'var(--green,#4ade80)'};
+  var grouped = {};
+  facts.forEach(function(f) {
+    var sc = f.scope || 'global';
+    if (!grouped[sc]) grouped[sc] = [];
+    grouped[sc].push(f);
+  });
+  var html = '<div class="mem-facts-list" style="display:flex;flex-direction:column;gap:4px;padding:4px 0">';
+  scopeOrder.forEach(function(scope) {
+    if (!grouped[scope] || !grouped[scope].length) return;
+    html += '<div style="font-size:9px;font-weight:600;color:' + (scopeColors[scope] || 'var(--text3)') + ';text-transform:uppercase;letter-spacing:0.5px;margin-top:2px">' + (scopeLabels[scope] || scope) + '</div>';
+    grouped[scope].forEach(function(f) {
+      var imp = f.importance || 5;
+      var impDots = imp >= 8 ? ' \u25cf\u25cf\u25cf' : (imp >= 5 ? ' \u25cf\u25cf' : ' \u25cf');
+      html += '<div class="mem-fact-row" data-id="' + f.id + '" style="display:flex;align-items:flex-start;gap:4px;font-size:10px;line-height:1.4;padding:3px 0;border-bottom:1px solid var(--border)">'
+        + '<span style="flex:1;color:var(--text)">' + escHtml(f.fact) + '</span>'
+        + '<span style="font-size:8px;color:var(--text3);white-space:nowrap" title="Importance ' + imp + '/10">' + impDots + '</span>'
+        + '<button class="btn btn-ghost" style="font-size:9px;padding:0 4px;color:var(--red,#f87171);flex-shrink:0" onclick="event.stopPropagation();_deleteMemoryFact(' + f.id + ',this)" title="Delete">\u00d7</button>'
+        + '</div>';
+    });
+  });
+  html += '</div>';
+  html += '<button class="btn btn-ghost" style="font-size:9px;padding:2px 6px;margin-top:4px" onclick="event.stopPropagation();_reextractMemory(\'' + sid + '\',\'' + source + '\')">\u21bb Re-extract</button>';
+  container.innerHTML = html;
+}
+
+async function _deleteMemoryFact(factId, btn) {
+  var ok = await porterConfirm('Delete Memory', 'Remove this fact from memory?', {confirmLabel: 'Delete', danger: true});
+  if (!ok) return;
+  btn.disabled = true;
+  try {
+    var resp = await api('/api/cortex/memories/' + factId + '/delete', {});
+    if (resp && resp.ok) {
+      var row = btn.closest('.mem-fact-row');
+      if (row) { row.style.opacity = '0'; setTimeout(function() { row.remove(); }, 200); }
+      toast('Memory deleted');
+    } else {
+      toast('Delete failed', 'err');
+      btn.disabled = false;
+    }
+  } catch(e) {
+    toast('Delete failed', 'err');
+    btn.disabled = false;
+  }
+}
+
+async function _reextractMemory(sid, source) {
+  var el = document.querySelector('.sess-learnings-inline[data-sid="' + sid + '"]');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:6px;font-size:10px;color:var(--text3)">Re-extracting\u2026</div>';
+  try {
+    var resp = await api('/api/sessions/' + encodeURIComponent(sid) + '/extract-learnings', { source: source, force: true }, 60000);
+    if (resp && resp.ok && resp.facts && resp.facts.length > 0) {
+      _renderMemoryFacts(el, resp.facts, sid, source);
+      toast('Memory refreshed');
+    } else {
+      el.innerHTML = '<div style="font-size:10px;color:var(--text3);padding:4px">No facts extracted</div>';
+    }
+  } catch(e) {
+    el.innerHTML = '<div style="font-size:10px;color:var(--err);padding:4px">Re-extraction failed</div>';
+  }
 }
 
 var _learnDestCache = null;
@@ -12569,8 +12666,9 @@ function openFlushWizard() {}
 function closeFlushWizard() {}
 function saveLearn() {}
 
-async function deleteSession(sessionId, source) {
-  if (!confirm('Permanently delete this session? This cannot be undone.')) return;
+async async function deleteSession(sessionId, source) {
+  var _delOk = await porterConfirm('Delete Session', 'Permanently delete this session? This cannot be undone.', {confirmLabel: 'Delete', danger: true});
+  if (!_delOk) return;
   var r = await api('/api/sessions/' + sessionId + '/delete', { source: source });
   if (r && r.ok) { toast('Session deleted'); loadModels(); }
   else { toast('Delete failed', 'err'); }
@@ -12808,7 +12906,8 @@ function saveApiKey() {
   }).catch(function(e) { toast('Error: ' + e.message, 'err'); });
 }
 function deleteApiKey(id) {
-  if (!confirm('Delete this API key?')) return;
+  var _delOk = await porterConfirm('Delete API Key', 'Delete this API key?', {confirmLabel: 'Delete', danger: true});
+  if (!_delOk) return;
   var payload = {};
   payload[id] = '';
   fetch('/api/config/apikeys', {
@@ -26685,6 +26784,22 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             force = bool(data.get("force", False))
             result = _extract_learnings_preview(session_id, source, force=force)
             self.reply_json(result)
+
+        # ── Delete individual cortex memory (POST) ─────────────────────────
+        elif parsed.path.startswith("/api/cortex/memories/") and parsed.path.endswith("/delete"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.split("/")
+            mem_id = parts[4] if len(parts) >= 6 else ""
+            if not mem_id:
+                self.reply_json({"ok": False, "error": "Missing memory ID"}, 400); return
+            try:
+                conn = _db_conn()
+                conn.execute("DELETE FROM cortex_memories WHERE id=?", (mem_id,))
+                conn.commit()
+                conn.close()
+                self.reply_json({"ok": True, "deleted": mem_id})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
 
         # ── Batch extract all learnings (POST) ────────────────────────────
         elif parsed.path == "/api/sessions/extract-all":
