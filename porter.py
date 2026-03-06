@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.34 — Google Workspace CLI Integration"""
+"""Porter v0.27.35 — Google Workspace CLI Integration"""
 
 
 import email
@@ -7695,7 +7695,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.34</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.35</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8924,6 +8924,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.35', date:'2026-03-06', notes:['Stripped manual Learnings UI (replaced by Cortex auto-memory)','Chat auto-routing fix \u2014 server-side smart routing decides model priority','Porter context awareness \u2014 models in general chat know they operate within Porter','All backends (Claude, Codex, Ollama) now reachable via auto-route fallback chain'] },
   { ver:'v0.27.34', date:'2026-03-06', notes:['Models tab: removed static agent assignments from model cards','Session delete: permanently remove sessions (not just archive)','Model priority order: GPT-5.4 \u2192 Claude \u2192 Codex \u2192 Gemini \u2192 Ollama','GPT-5.4 now default for OpenClaw backend','Dispatch context: all persona .md files loaded in full (SOUL, IDENTITY, ROLE_CARD, MEMORY, RULES)','Removed arbitrary truncation on persona files (was cutting 66% of SOUL.md)','20KB safety cap per file prevents accidental context blowup'] },
   { ver:'v0.27.33', date:'2026-03-06', notes:['Porter Cortex: auto-memory system (extract \u2192 route \u2192 inject \u2192 consolidate)','Agents auto-learn from every dispatch \u2014 zero-click memory','Context injection: relevant memories prepended before each agent dispatch','Memory consolidation: background dedup prevents unbounded growth','Latest models: GPT-5.4, Claude Opus 4.6, Gemini 2.5 Pro in Models tab','GET /api/cortex/memories + /api/cortex/stats endpoints'] },
   { ver:'v0.27.32', date:'2026-03-06', notes:['Google Workspace CLI: full integration (Gmail, Drive, Calendar, Sheets, Docs + 14 services)','/workspace and /gws chat commands for direct Workspace operations','POST /api/gws/exec endpoint for programmatic Workspace access','Auto-detect gws installation, auth status, and granted services','Workspace quick actions panel in Extensions tab'] },
@@ -12140,12 +12141,7 @@ async function _loadInlineSessions(source, backend) {
     var archParam = _showArchivedSessions ? '&show_archived=1' : '';
     var resp = await api('/api/sessions?source=' + encodeURIComponent(source) + archParam);
     if (resp && resp.sessions) {
-      // Add Update Learnings button at top
-      var bar = document.createElement('div');
-      bar.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:4px';
-      bar.innerHTML = '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="event.stopPropagation();_extractAllLearnings(\'' + escHtml(source) + '\')">Update Learnings</button>';
       container.innerHTML = '';
-      container.appendChild(bar);
       var listDiv = document.createElement('div');
       container.appendChild(listDiv);
       _renderInlineSessions(resp.sessions, source, listDiv);
@@ -12181,19 +12177,11 @@ function _renderInlineSessions(sessions, source, container) {
         + '<span>' + (s.messages || 0) + ' msgs</span>'
         + '</div>'
         + '<div style="display:flex;gap:4px;margin-top:3px">'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_showSessionLearnings(this,\'' + sid + '\',\'' + ssrc + '\')">' + (s.learnings ? '\u25be Learnings' : 'Learnings') + '</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px;color:var(--red,#f87171)" onclick="event.stopPropagation();deleteSession(\'' + sid + '\',\'' + ssrc + '\')">Delete</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_renameSession(this,\'' + sid + '\',\'' + ssrc + '\')">\u270f</button>'
         + '</div>'
-        + '<div class="sess-learnings-inline" style="margin-top:3px;font-size:10px;color:var(--text3);' + (s.learnings ? '' : 'display:none;') + 'overflow:visible" data-sid="' + sid + '">'
-        + '<textarea class="sess-learn-text" onclick="event.stopPropagation()" style="width:100%;min-height:60px;resize:vertical;overflow:auto;line-height:1.5;font-size:10px;font-family:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px;box-sizing:border-box">' + (s.learnings ? escHtml(s.learnings) : '') + '</textarea>'
-        + '<div style="display:flex;gap:4px;margin-top:4px;align-items:center">'
-        + '<select class="sess-learn-dest" onclick="event.stopPropagation()" style="flex:1;font-size:10px;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text)"></select>'
-        + '<button class="btn btn-primary" style="font-size:9px;padding:2px 8px;white-space:nowrap" onclick="event.stopPropagation();_saveLearnDirect(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
-        + '<button class="btn btn-ghost" style="font-size:9px;padding:2px 5px" onclick="event.stopPropagation();_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">↻</button>'
-        + '</div></div>'
         + '</div>';
     }).join('')
     + (sessions.length > 20 ? '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:4px">Showing 20 of ' + sessions.length + '</div>' : '')
@@ -12205,15 +12193,7 @@ var _showArchivedSessions = false;
 async function _loadActivitySessions(source) {
   var el = document.getElementById('ma-sessions-list');
   if (!el) return;
-  // Add Update Learnings button if not present
-  var hdr = el.parentElement.querySelector('.extract-all-bar');
-  if (!hdr) {
-    hdr = document.createElement('div');
-    hdr.className = 'extract-all-bar';
-    hdr.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:4px 0';
-    hdr.innerHTML = '<button id="extract-all-btn" class="btn btn-ghost" style="font-size:10px;padding:3px 10px" onclick="event.stopPropagation();_extractAllLearnings(\'' + escHtml(source) + '\')">Update Learnings</button>';
-    el.parentElement.insertBefore(hdr, el);
-  }
+
   try {
     var resp = await api('/api/sessions?source=' + encodeURIComponent(source));
     if (resp && resp.sessions) {
@@ -12254,17 +12234,9 @@ function _renderActivitySessions(sessions, source) {
       + (sizeStr ? '<span>\u2022</span><span>' + sizeStr + '</span>' : '')
       + '</div>'
       + '<div class="ma-session-actions">'
-      + '<button class="btn btn-ghost" onclick="event.stopPropagation();_showSessionLearnings(this,\'' + sid + '\',\'' + ssrc + '\')">' + (s.learnings ? '\u25be Learnings' : 'Learnings') + '</button>'
       + '<button class="btn btn-ghost" onclick="event.stopPropagation();archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
       + '<button class="btn btn-ghost" onclick="event.stopPropagation();_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
       + '</div>'
-      + '<div class="sess-learnings-inline" style="margin-top:4px;font-size:10px;color:var(--text3);' + (s.learnings ? '' : 'display:none;') + 'overflow:visible" data-sid="' + sid + '">'
-      + '<textarea class="sess-learn-text" onclick="event.stopPropagation()" style="width:100%;min-height:60px;resize:vertical;overflow:auto;line-height:1.5;font-size:10px;font-family:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px;box-sizing:border-box">' + (s.learnings ? escHtml(s.learnings) : '') + '</textarea>'
-      + '<div style="display:flex;gap:4px;margin-top:4px;align-items:center">'
-      + '<select class="sess-learn-dest" onclick="event.stopPropagation()" style="flex:1;font-size:10px;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text)"></select>'
-      + '<button class="btn btn-primary" style="font-size:9px;padding:2px 8px;white-space:nowrap" onclick="event.stopPropagation();_saveLearnDirect(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
-      + '<button class="btn btn-ghost" style="font-size:9px;padding:2px 5px" onclick="event.stopPropagation();_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">↻</button>'
-      + '</div></div>'
       + '</div>';
   }).join('')
   + (sessions.length > 30 ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">Showing 30 of ' + sessions.length + '</div>' : '');
@@ -13705,22 +13677,17 @@ function chatSend() {
   if (!input) return;
   const text = input.value.trim();
   if (!text || _chatStreaming) return;
-  // Resolve model: context bar _chatModel > chat-model select > fallback
+  // Resolve model: context bar _chatModel > explicit selection > auto-route
   var _backendMap = {openclaw:'openclaw-gateway',gemini:'gemini-cli-auto',codex:'codex-cli',claude:'claude-cli',ollama:'ollama-local'};
   var _bval = window._chatModel || '';
-  var sel = document.getElementById('chat-model');
   var modelId = '';
   if (_bval && _backendMap[_bval]) {
     modelId = _backendMap[_bval];
-  } else if (sel && sel.value) {
-    modelId = sel.value;
+  } else if (!_bval) {
+    // Auto mode: let server-side smart routing decide (walks priority fallback chain)
+    modelId = 'auto';
   } else {
-    // Fallback: pick first enabled from chat-model, or default to openclaw
-    if (sel && sel.options.length > 0) {
-      var _first = Array.from(sel.options).find(function(o) { return !o.disabled && o.value; });
-      if (_first) modelId = _first.value;
-    }
-    if (!modelId) modelId = 'openclaw-gateway';
+    modelId = 'auto';
   }
 
   // Check for /commands — handle built-ins locally, route rest to OpenClaw
@@ -16085,7 +16052,7 @@ function buildChatCtxSelectors() {
 
     var agentLabel = _chatAgent ? _chatAgent.avatar + ' ' + _chatAgent.name : 'No Agent';
     var projectLabel = _chatProject ? (_chatProject.id === '_personality' ? '🎭 Personality' : '📁 ' + _chatProject.name) : 'General';
-    var modelLabel = _chatModel ? _chatModel.charAt(0).toUpperCase() + _chatModel.slice(1) : 'Model';
+    var modelLabel = _chatModel ? _chatModel.charAt(0).toUpperCase() + _chatModel.slice(1) : 'Auto';
 
     el.innerHTML = ''
       + '<div class="chat-ctx-sel' + (_chatAgent ? ' active' : '') + '" onclick="_ctxToggle(event,\'agent\')">'
@@ -22590,7 +22557,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.34"})
+            self.reply_json({"v": "0.27.35"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -22677,7 +22644,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.34"
+                health["porter_version"] = "0.27.35"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -24251,7 +24218,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.34'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.35'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -24288,11 +24255,18 @@ class Handler(BaseHTTPRequestHandler):
                     _route_backend, _route_model = _smart_route(prompt_analyzed)
                     log.info("Smart route: %s → %s", prompt_analyzed[:40], _route_backend)
 
-                    # Apply routing decision
+                    # Apply routing decision — map backend to chat model ID
                     if _route_backend == "openclaw":
                         qs["model"] = ["openclaw-gateway"]
+                    elif _route_backend == "claude":
+                        qs["model"] = ["claude-cli"]
+                    elif _route_backend == "codex":
+                        qs["model"] = ["codex-cli"]
                     elif _route_backend == "gemini":
                         qs["model"] = ["gemini-cli-auto"]
+                    elif _route_backend == "ollama":
+                        _ol_m = _get_active_model("ollama") or "qwen2.5-coder:1.5b"
+                        qs["model"] = [f"local-ollama-{_ol_m}"]
 
             model_id = qs.get("model", [""])[0]
             prompt = unquote(qs.get("prompt", [""])[0])
@@ -24300,6 +24274,19 @@ class Handler(BaseHTTPRequestHandler):
             if not model_id or not prompt:
                 self.reply_json({"error": "model and prompt required"}, 400)
                 return
+
+            # Porter context: tell models they're operating within Porter
+            _persona_name_param = qs.get("persona_name", [""])[0]
+            if not _persona_name_param:
+                # General chat (no persona) — inject Porter awareness
+                _porter_ctx = (
+                    "[System context: You are responding within Porter, an AI orchestration platform. "
+                    "Porter manages multiple AI backends (OpenClaw/GPT, Claude, Gemini, Codex, Ollama), "
+                    "agent personas with memory files, Porter Cortex (auto-memory system), "
+                    "file management, project workflows, and dispatch routing. "
+                    "Be helpful and concise. If the user asks about Porter features, explain them knowledgeably.]\n\n"
+                )
+                prompt = _porter_ctx + prompt
 
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -28174,7 +28161,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.34 ready (localhost only)")
+    print(f"\n  Porter v0.27.35 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
