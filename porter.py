@@ -7194,6 +7194,10 @@ body.density-compact .file-name { padding: 6px 0; }
 .model-card-run-preview { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .model-card-run-meta { color:var(--text3);white-space:nowrap; }
 /* ── Model Activity Slide-Out Panel ── */
+.models-subtab { background:transparent !important; color:var(--text3); border:1px solid transparent; }
+.models-subtab.active { background:var(--surface) !important; color:var(--text); border-color:var(--border); }
+.models-subtab:hover:not(.active) { color:var(--text2); }
+.cx-scope-filter.active { background:var(--surface) !important; color:var(--text); border:1px solid var(--border); }
 .model-activity-overlay { position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.3);z-index:899;opacity:0;transition:opacity .2s;pointer-events:none; }
 .model-activity-overlay.open { opacity:1;pointer-events:auto; }
 .model-activity-panel { position:fixed;top:0;right:0;width:520px;height:100vh;z-index:900;background:var(--surface);border-left:1px solid var(--border);box-shadow:-4px 0 20px rgba(0,0,0,.12);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .2s ease; }
@@ -8370,12 +8374,72 @@ select.settings-input { padding-right: 26px; }
   <div id="models-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Models</span>
+      <div style="display:flex;gap:2px;margin-left:12px">
+        <button class="btn btn-ghost models-subtab active" id="mst-backends" onclick="_switchModelsTab('backends')" style="font-size:11px;padding:3px 10px;border-radius:4px">Backends</button>
+        <button class="btn btn-ghost models-subtab" id="mst-cortex" onclick="_switchModelsTab('cortex')" style="font-size:11px;padding:3px 10px;border-radius:4px">Cortex</button>
+      </div>
+      <div style="flex:1"></div>
       <button class="btn btn-ghost" onclick="loadModels()">&#8635; Refresh</button>
     </div>
-    <div class="module-intro">AI backends available to Porter. Each persona routes through one of these.</div>
-    <div id="models-summary" style="margin:12px 0 16px;font-size:13px;color:var(--text2)"></div>
-    <div id="models-grid" class="models-grid">
-      <div class="loading-indicator">Loading models...</div>
+    <!-- Backends sub-tab -->
+    <div id="models-backends-tab">
+      <div class="module-intro">AI backends available to Porter. Each persona routes through one of these.</div>
+      <div id="models-summary" style="margin:12px 0 16px;font-size:13px;color:var(--text2)"></div>
+      <div id="models-grid" class="models-grid">
+        <div class="loading-indicator">Loading models...</div>
+      </div>
+    </div>
+    <!-- Cortex sub-tab -->
+    <div id="models-cortex-tab" style="display:none;padding:0 28px 28px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <div style="font-size:15px;font-weight:600;color:var(--text)">Porter Cortex</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px">Auto-memory — agents learn from every dispatch</div>
+        </div>
+        <button class="btn btn-ghost" style="font-size:11px" onclick="_loadCortexTab()">&#8635; Refresh</button>
+      </div>
+      <div id="cx-stats-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:var(--accent)" id="cx-total2">—</div>
+          <div style="font-size:10px;color:var(--text3)">Active</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:var(--text2)" id="cx-merged2">—</div>
+          <div style="font-size:10px;color:var(--text3)">Merged</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:var(--text2)" id="cx-24h2">—</div>
+          <div style="font-size:10px;color:var(--text3)">Last 24h</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:var(--green,#4ade80)" id="cx-status2">—</div>
+          <div style="font-size:10px;color:var(--text3)">Status</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer">
+          <input type="checkbox" id="cx-toggle2" onchange="_saveCortexConfig2()" checked> Enabled
+        </label>
+        <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px">
+          Min response: <input type="number" id="cx-min2" value="100" min="20" max="1000" style="width:60px;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
+        </label>
+        <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px">
+          Max facts: <input type="number" id="cx-max2" value="8" min="1" max="20" style="width:50px;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
+        </label>
+        <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px">
+          Inject limit: <input type="number" id="cx-inject2" value="5" min="1" max="20" style="width:50px;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
+        </label>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Memory Browser</div>
+      <div style="display:flex;gap:4px;margin-bottom:8px">
+        <button class="btn btn-ghost cx-scope-filter active" onclick="_filterCortexScope('all',this)" style="font-size:10px;padding:2px 8px">All</button>
+        <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('agent',this)" style="font-size:10px;padding:2px 8px">Agent</button>
+        <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('project',this)" style="font-size:10px;padding:2px 8px">Project</button>
+        <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('global',this)" style="font-size:10px;padding:2px 8px">Global</button>
+      </div>
+      <div id="cx-memory-list" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg2)">
+        <div style="padding:12px;text-align:center;font-size:11px;color:var(--text3)">Loading...</div>
+      </div>
     </div>
   </div>
 
@@ -8472,10 +8536,7 @@ select.settings-input { padding-right: 26px; }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
         API Keys
       </button>
-      <button class="settings-nav-item" id="snav-cortex" onclick="switchSettingsTab('cortex')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 014 4v1a3 3 0 013 3v1a2 2 0 012 2v2a2 2 0 01-2 2h-1a3 3 0 01-3 3v1a4 4 0 01-8 0v-1a3 3 0 01-3-3H3a2 2 0 01-2-2v-2a2 2 0 012-2v-1a3 3 0 013-3V6a4 4 0 014-4z"/></svg>
-        Cortex
-      </button>
+
       <div style="flex:1"></div>
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
@@ -15829,6 +15890,131 @@ async function loadModels() {
     _renderModelCards(data, _modelActivityData);
     _connectModelSSE();
   } catch(e) { console.debug('loadModels:', e); }
+}
+
+function _switchModelsTab(tab) {
+  document.getElementById('models-backends-tab').style.display = tab === 'backends' ? '' : 'none';
+  document.getElementById('models-cortex-tab').style.display = tab === 'cortex' ? '' : 'none';
+  document.querySelectorAll('.models-subtab').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('mst-' + tab).classList.add('active');
+  if (tab === 'cortex') _loadCortexTab();
+}
+
+var _cortexMemories = [];
+async function _loadCortexTab() {
+  // Load stats
+  try {
+    var stats = await api('/api/cortex/stats');
+    if (stats) {
+      var t = document.getElementById('cx-total2'); if (t) t.textContent = stats.total_active || 0;
+      var m = document.getElementById('cx-merged2'); if (m) m.textContent = stats.total_merged || 0;
+      var h = document.getElementById('cx-24h2'); if (h) h.textContent = stats.last_24h || 0;
+      var s = document.getElementById('cx-status2'); if (s) { s.textContent = stats.enabled ? 'ON' : 'OFF'; s.style.color = stats.enabled ? 'var(--green,#4ade80)' : 'var(--red,#f87171)'; }
+      var tog = document.getElementById('cx-toggle2'); if (tog) tog.checked = stats.enabled !== false;
+    }
+  } catch(e) {}
+  // Load config
+  try {
+    var prefs = window._currentPrefs || {};
+    var m2 = document.getElementById('cx-min2'); if (m2) m2.value = prefs.cortex_min_response_len || 100;
+    var mx = document.getElementById('cx-max2'); if (mx) mx.value = prefs.cortex_max_facts || 8;
+    var ij = document.getElementById('cx-inject2'); if (ij) ij.value = prefs.cortex_inject_limit || 5;
+  } catch(e) {}
+  // Load memories
+  try {
+    var mems = await api('/api/cortex/memories');
+    _cortexMemories = (mems && mems.memories) || [];
+    _renderCortexMemories(_cortexMemories);
+  } catch(e) {
+    document.getElementById('cx-memory-list').innerHTML = '<div style="padding:12px;text-align:center;font-size:11px;color:var(--err)">Failed to load</div>';
+  }
+}
+
+function _renderCortexMemories(memories) {
+  var el = document.getElementById('cx-memory-list');
+  if (!el) return;
+  if (!memories.length) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;font-size:11px;color:var(--text3)">No memories yet. Dispatch to an agent to start building memory.</div>';
+    return;
+  }
+  var scopeColors = {agent:'var(--cyan,#22d3ee)', project:'var(--amber,#fbbf24)', global:'var(--green,#4ade80)'};
+  var html = '';
+  memories.forEach(function(m) {
+    var sc = m.scope || 'global';
+    var scColor = scopeColors[sc] || 'var(--text3)';
+    var imp = m.importance || 5;
+    var age = m.created_at ? _memAgeBadge(m.created_at) : '';
+    html += '<div class="cx-mem-row" data-scope="' + sc + '" style="display:flex;align-items:flex-start;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:11px">'
+      + '<span style="font-size:9px;font-weight:600;color:' + scColor + ';text-transform:uppercase;min-width:48px;flex-shrink:0;padding-top:1px">' + sc + '</span>'
+      + '<span style="flex:1;color:var(--text);line-height:1.4">' + escHtml(m.fact || '') + '</span>'
+      + '<span style="font-size:9px;color:var(--text3);white-space:nowrap;flex-shrink:0">' + (m.source_type === 'session' ? 'session' : 'dispatch') + '</span>'
+      + '<button class="btn btn-ghost" style="font-size:9px;padding:0 4px;flex-shrink:0" onclick="event.stopPropagation();_editCortexMem(' + m.id + ',this)" title="Edit">\u270f</button>'
+      + '<button class="btn btn-ghost" style="font-size:9px;padding:0 4px;color:var(--red,#f87171);flex-shrink:0" onclick="event.stopPropagation();_deleteCortexMem(' + m.id + ',this)" title="Delete">\u00d7</button>'
+      + '</div>';
+  });
+  el.innerHTML = html;
+}
+
+function _filterCortexScope(scope, btn) {
+  document.querySelectorAll('.cx-scope-filter').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  var rows = document.querySelectorAll('.cx-mem-row');
+  rows.forEach(function(r) {
+    r.style.display = (scope === 'all' || r.getAttribute('data-scope') === scope) ? '' : 'none';
+  });
+}
+
+async function _deleteCortexMem(id, btn) {
+  var ok = await porterConfirm('Delete Memory', 'Remove this fact?', {confirmLabel: 'Delete', danger: true});
+  if (!ok) return;
+  btn.disabled = true;
+  try {
+    var r = await api('/api/cortex/memories/' + id + '/delete', {});
+    if (r && r.ok) {
+      var row = btn.closest('.cx-mem-row');
+      if (row) { row.style.transition = 'opacity 0.2s'; row.style.opacity = '0'; setTimeout(function() { row.remove(); }, 250); }
+      toast('Memory deleted');
+    } else { toast('Failed', 'err'); btn.disabled = false; }
+  } catch(e) { toast('Failed', 'err'); btn.disabled = false; }
+}
+
+async function _editCortexMem(id, btn) {
+  var row = btn.closest('.cx-mem-row');
+  if (!row) return;
+  var textEl = row.querySelectorAll('span')[1];
+  if (!textEl) return;
+  var oldText = textEl.textContent;
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.value = oldText;
+  input.style.cssText = 'flex:1;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--text)';
+  input.onclick = function(e) { e.stopPropagation(); };
+  textEl.replaceWith(input);
+  input.focus();
+  input.select();
+  async function _save() {
+    var nv = input.value.trim();
+    if (!nv || nv === oldText) { var sp = document.createElement('span'); sp.style.cssText = 'flex:1;color:var(--text);line-height:1.4'; sp.textContent = oldText; input.replaceWith(sp); return; }
+    try {
+      var r = await api('/api/cortex/memories/' + id + '/update', { fact: nv });
+      var sp = document.createElement('span'); sp.style.cssText = 'flex:1;color:var(--text);line-height:1.4'; sp.textContent = (r && r.ok) ? nv : oldText; input.replaceWith(sp);
+      if (r && r.ok) toast('Updated');
+    } catch(e) { var sp = document.createElement('span'); sp.style.cssText = 'flex:1;color:var(--text);line-height:1.4'; sp.textContent = oldText; input.replaceWith(sp); }
+  }
+  input.onkeydown = function(e) { if (e.key === 'Enter') { e.preventDefault(); _save(); } if (e.key === 'Escape') { var sp = document.createElement('span'); sp.style.cssText = 'flex:1;color:var(--text);line-height:1.4'; sp.textContent = oldText; input.replaceWith(sp); } };
+  input.onblur = _save;
+}
+
+async function _saveCortexConfig2() {
+  var payload = {
+    cortex_enabled: document.getElementById('cx-toggle2').checked,
+    cortex_min_response_len: parseInt(document.getElementById('cx-min2').value) || 100,
+    cortex_max_facts: parseInt(document.getElementById('cx-max2').value) || 8,
+    cortex_inject_limit: parseInt(document.getElementById('cx-inject2').value) || 5,
+  };
+  var r = await api('/api/cortex/config', payload);
+  if (r && r.ok) toast('Cortex config saved');
+  else toast('Save failed', 'err');
 }
 
 async function _selectModelFromList(el, backend, modelId) {
