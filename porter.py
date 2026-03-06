@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.35 — Google Workspace CLI Integration"""
+"""Porter v0.27.36 — Cortex Overhaul: Main Nav + Memory Routing + Graph"""
 
 
 import email
@@ -7186,6 +7186,13 @@ body.density-compact .file-name { padding: 6px 0; }
 .model-card-run-meta { color:var(--text3);white-space:nowrap; }
 /* ── Model Activity Slide-Out Panel ── */
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+.cx-view-btn { background:transparent !important; color:var(--text3); border:1px solid transparent; }
+.cx-view-btn.active { background:var(--surface) !important; color:var(--text); border-color:var(--border); }
+.cx-view-btn:hover:not(.active) { color:var(--text2); }
+.cx-mem-card { display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-bottom:1px solid var(--border);transition:background 0.15s,opacity 0.3s; }
+.cx-mem-card:hover { background:color-mix(in srgb,var(--accent) 5%,transparent); }
+.cx-mem-card:last-child { border-bottom:none; }
+.cx-route-bar { display:flex;align-items:center;gap:6px;margin-top:4px;padding-top:6px;border-top:1px dashed var(--border); }
 .models-subtab { background:transparent !important; color:var(--text3); border:1px solid transparent; }
 .models-subtab.active { background:var(--surface) !important; color:var(--text); border-color:var(--border); }
 .models-subtab:hover:not(.active) { color:var(--text2); }
@@ -7710,6 +7717,11 @@ select.settings-input { padding-right: 26px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
       <span class="mnav-label">Skills</span>
     </button>
+    <button class="mnav-item" id="mnav-cortex" onclick="switchModule('cortex')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+      <span class="mnav-label">Cortex</span>
+      <span id="cortex-nav-badge" class="mnav-badge" style="display:none;background:var(--accent);color:#fff;font-size:9px;min-width:16px;height:16px;border-radius:8px;text-align:center;line-height:16px;padding:0 4px;margin-left:auto;font-weight:600"></span>
+    </button>
     <button class="mnav-item" id="mnav-admin" onclick="switchModule('admin')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       <span class="mnav-label">Logs</span>
@@ -7745,7 +7757,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.35</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.36</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8366,10 +8378,7 @@ select.settings-input { padding-right: 26px; }
   <div id="models-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Models</span>
-      <div style="display:flex;gap:2px;margin-left:12px">
-        <button class="btn btn-ghost models-subtab active" id="mst-backends" onclick="_switchModelsTab('backends')" style="font-size:11px;padding:3px 10px;border-radius:4px">Backends</button>
-        <button class="btn btn-ghost models-subtab" id="mst-cortex" onclick="_switchModelsTab('cortex')" style="font-size:11px;padding:3px 10px;border-radius:4px">Cortex</button>
-      </div>
+
       <div style="flex:1"></div>
       <button class="btn btn-ghost" onclick="loadModels()">&#8635; Refresh</button>
     </div>
@@ -8381,56 +8390,96 @@ select.settings-input { padding-right: 26px; }
         <div class="loading-indicator">Loading models...</div>
       </div>
     </div>
-    <!-- Cortex sub-tab -->
-    <div id="models-cortex-tab" style="display:none;padding:0 28px 28px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <div>
-          <div style="font-size:15px;font-weight:600;color:var(--text)">Porter Cortex</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:2px">Auto-memory — agents learn from every dispatch</div>
-        </div>
-        <button class="btn btn-ghost" style="font-size:11px" onclick="_loadCortexTab()">&#8635; Refresh</button>
+
+  </div>
+
+  <div id="cortex-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Cortex</span>
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-ghost cx-view-btn active" id="cx-view-inbox" onclick="_switchCortexView('inbox')" style="font-size:11px;padding:3px 10px;border-radius:4px">Inbox</button>
+        <button class="btn btn-ghost cx-view-btn" id="cx-view-graph" onclick="_switchCortexView('graph')" style="font-size:11px;padding:3px 10px;border-radius:4px">Memory Map</button>
+        <button class="btn btn-ghost cx-view-btn" id="cx-view-config" onclick="_switchCortexView('config')" style="font-size:11px;padding:3px 10px;border-radius:4px">Config</button>
       </div>
-      <div id="cx-stats-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:var(--accent)" id="cx-total2">—</div>
-          <div style="font-size:10px;color:var(--text3)">Active</div>
-        </div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:var(--text2)" id="cx-merged2">—</div>
-          <div style="font-size:10px;color:var(--text3)">Merged</div>
-        </div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:var(--text2)" id="cx-24h2">—</div>
-          <div style="font-size:10px;color:var(--text3)">Last 24h</div>
-        </div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:var(--green,#4ade80)" id="cx-status2">—</div>
-          <div style="font-size:10px;color:var(--text3)">Status</div>
+      <button class="btn btn-ghost" style="margin-left:8px" onclick="_loadCortexTab()">&#8635;</button>
+    </div>
+
+    <!-- Stats bar -->
+    <div id="cx-stats-bar" style="display:flex;gap:12px;padding:8px 28px;background:var(--surface);border-bottom:1px solid var(--border);font-size:13px">
+      <span style="color:var(--text2)">Active: <strong id="cx-total2" style="color:var(--accent)">—</strong></span>
+      <span style="color:var(--text3)">Merged: <strong id="cx-merged2">—</strong></span>
+      <span style="color:var(--text3)">24h: <strong id="cx-24h2">—</strong></span>
+      <span id="cx-unrouted-stat" style="color:var(--amber,#fbbf24);display:none">Unrouted: <strong id="cx-unrouted2">0</strong></span>
+      <span style="margin-left:auto"><span id="cx-status2" style="font-weight:600;color:var(--green,#4ade80)">—</span></span>
+    </div>
+
+    <!-- INBOX VIEW -->
+    <div id="cx-inbox-view" style="padding:16px 28px 28px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <div style="font-size:14px;font-weight:600;color:var(--text)">Memory Inbox</div>
+        <div style="font-size:12px;color:var(--text3)">— review, route, or dismiss extracted facts</div>
+        <div style="flex:1"></div>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-ghost cx-scope-filter active" onclick="_filterCortexScope('all',this)" style="font-size:11px;padding:3px 10px">All</button>
+          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('agent',this)" style="font-size:11px;padding:3px 10px">Agent</button>
+          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('project',this)" style="font-size:11px;padding:3px 10px">Project</button>
+          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('global',this)" style="font-size:11px;padding:3px 10px">Global</button>
         </div>
       </div>
-      <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap">
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer">
-          <input type="checkbox" id="cx-toggle2" onchange="_saveCortexConfig2()" checked> Enabled
-        </label>
-        <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px">
-          Min response: <input type="number" id="cx-min2" value="100" min="20" max="1000" style="width:60px;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
-        </label>
-        <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px">
-          Max facts: <input type="number" id="cx-max2" value="8" min="1" max="20" style="width:50px;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
-        </label>
-        <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px">
-          Inject limit: <input type="number" id="cx-inject2" value="5" min="1" max="20" style="width:50px;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
-        </label>
+      <div id="cx-memory-list" style="border:1px solid var(--border);border-radius:8px;background:var(--bg2);overflow:hidden">
+        <div style="padding:20px;text-align:center;font-size:13px;color:var(--text3)">Loading...</div>
       </div>
-      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Memory Browser</div>
-      <div style="display:flex;gap:4px;margin-bottom:8px">
-        <button class="btn btn-ghost cx-scope-filter active" onclick="_filterCortexScope('all',this)" style="font-size:10px;padding:2px 8px">All</button>
-        <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('agent',this)" style="font-size:10px;padding:2px 8px">Agent</button>
-        <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('project',this)" style="font-size:10px;padding:2px 8px">Project</button>
-        <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('global',this)" style="font-size:10px;padding:2px 8px">Global</button>
+    </div>
+
+    <!-- GRAPH VIEW -->
+    <div id="cx-graph-view" style="display:none;padding:16px 28px 28px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <div style="font-size:14px;font-weight:600;color:var(--text)">Memory Map</div>
+        <div style="font-size:12px;color:var(--text3)">— how memory files connect across agents and projects</div>
+        <div style="flex:1"></div>
+        <button class="btn btn-ghost" onclick="_resetGraphZoom()" style="font-size:11px">Reset Zoom</button>
       </div>
-      <div id="cx-memory-list" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg2)">
-        <div style="padding:12px;text-align:center;font-size:11px;color:var(--text3)">Loading...</div>
+      <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--bg2);position:relative">
+        <canvas id="cx-graph-canvas" width="900" height="520" style="width:100%;height:520px;cursor:grab"></canvas>
+      </div>
+      <div id="cx-graph-legend" style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--text3)">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22d3ee;margin-right:4px"></span>Agent</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#fbbf24;margin-right:4px"></span>Project</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#4ade80;margin-right:4px"></span>Global</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);margin-right:4px"></span>Cortex</span>
+        <span style="margin-left:auto;font-size:10px">Line thickness = memory count</span>
+      </div>
+    </div>
+
+    <!-- CONFIG VIEW -->
+    <div id="cx-config-view" style="display:none;padding:16px 28px 28px">
+      <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:16px">Cortex Configuration</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:600px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer">
+          <input type="checkbox" id="cx-toggle2" onchange="_saveCortexConfig2()" checked>
+          <span>Auto-extract enabled</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer">
+          <input type="checkbox" id="cx-auto-route" onchange="_saveCortexConfig2()" checked>
+          <span>Auto-route to files</span>
+        </label>
+        <label style="font-size:13px;color:var(--text2)">
+          Min response length
+          <input type="number" id="cx-min2" value="100" min="20" max="1000" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
+        </label>
+        <label style="font-size:13px;color:var(--text2)">
+          Max facts per extraction
+          <input type="number" id="cx-max2" value="8" min="1" max="20" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
+        </label>
+        <label style="font-size:13px;color:var(--text2)">
+          Context injection limit
+          <input type="number" id="cx-inject2" value="5" min="1" max="20" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
+        </label>
+        <label style="font-size:13px;color:var(--text2)">
+          Consolidation interval (hours)
+          <input type="number" id="cx-consol2" value="6" min="1" max="48" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
+        </label>
       </div>
     </div>
   </div>
@@ -9031,6 +9080,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.36', date:'2026-03-06', notes:['Cortex promoted to main nav with unrouted memory counter badge','Memory Inbox: review, route to agent/global, dismiss, or edit extracted facts','Interactive Memory Map: force-directed graph with animated data flow particles','Per-fact routing: push to agent MEMORY.md or global config, fact leaves inbox','Config view: auto-extract, auto-route, consolidation interval, injection limits','GET /api/cortex/graph + POST /api/cortex/memories/<id>/route endpoints'] },
   { ver:'v0.27.35', date:'2026-03-06', notes:['Session Memory: renamed Learnings \u2192 Memory, restored per-session viewer with edit/save/re-extract','Chat auto-routing fix \u2014 server-side smart routing decides model priority','Porter context awareness \u2014 models in general chat know they operate within Porter','All backends (Claude, Codex, Ollama) now reachable via auto-route fallback chain'] },
   { ver:'v0.27.34', date:'2026-03-06', notes:['Models tab: removed static agent assignments from model cards','Session delete: permanently remove sessions (not just archive)','Model priority order: GPT-5.4 \u2192 Claude \u2192 Codex \u2192 Gemini \u2192 Ollama','GPT-5.4 now default for OpenClaw backend','Dispatch context: all persona .md files loaded in full (SOUL, IDENTITY, ROLE_CARD, MEMORY, RULES)','Removed arbitrary truncation on persona files (was cutting 66% of SOUL.md)','20KB safety cap per file prevents accidental context blowup'] },
   { ver:'v0.27.33', date:'2026-03-06', notes:['Porter Cortex: auto-memory system (extract \u2192 route \u2192 inject \u2192 consolidate)','Agents auto-learn from every dispatch \u2014 zero-click memory','Context injection: relevant memories prepended before each agent dispatch','Memory consolidation: background dedup prevents unbounded growth','Latest models: GPT-5.4, Claude Opus 4.6, Gemini 2.5 Pro in Models tab','GET /api/cortex/memories + /api/cortex/stats endpoints'] },
@@ -10834,6 +10884,8 @@ function switchModule(name) {
   const loaders = {
     overview: function() {
       renderChatMessages(); populateChatModels(); populateChatRoutes(); loadPersonas();
+      // Update Cortex nav badge on page load
+      api('/api/cortex/stats').then(function(s) { if (s && s.unrouted) _updateCortexBadge(s.unrouted); }).catch(function() {});
       if (window._personaRefreshTimer) clearInterval(window._personaRefreshTimer);
       window._personaRefreshTimer = setInterval(function() {
         if (document.getElementById('overview-module') && document.getElementById('overview-module').classList.contains('active')) loadPersonas();
@@ -10841,7 +10893,7 @@ function switchModule(name) {
       }, 30000);
     }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); }, projects: loadProjects, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
-    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, workflows: function() { loadWorkflows(); loadBuildStatus(); }, settings: syncSettingsUI,
+    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, cortex: _loadCortexTab, workflows: function() { loadWorkflows(); loadBuildStatus(); }, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -15972,16 +16024,25 @@ async function loadModels() {
   } catch(e) { console.debug('loadModels:', e); }
 }
 
-function _switchModelsTab(tab) {
-  document.getElementById('models-backends-tab').style.display = tab === 'backends' ? '' : 'none';
-  document.getElementById('models-cortex-tab').style.display = tab === 'cortex' ? '' : 'none';
-  document.querySelectorAll('.models-subtab').forEach(function(b) { b.classList.remove('active'); });
-  document.getElementById('mst-' + tab).classList.add('active');
-  if (tab === 'cortex') _loadCortexTab();
+function _switchCortexView(view) {
+  ['inbox', 'graph', 'config'].forEach(function(v) {
+    var el = document.getElementById('cx-' + v + '-view');
+    if (el) el.style.display = v === view ? '' : 'none';
+  });
+  document.querySelectorAll('.cx-view-btn').forEach(function(b) { b.classList.remove('active'); });
+  var btn = document.getElementById('cx-view-' + view);
+  if (btn) btn.classList.add('active');
+  if (view === 'graph') _initMemoryGraph();
 }
 
 var _cortexMemories = [];
+var _cortexAgents = [];
 async function _loadCortexTab() {
+  // Load agents list for routing dropdowns
+  try {
+    var aData = await api('/api/personas');
+    _cortexAgents = (aData && aData.personas) || [];
+  } catch(e) { _cortexAgents = []; }
   // Load stats
   try {
     var stats = await api('/api/cortex/stats');
@@ -15989,8 +16050,14 @@ async function _loadCortexTab() {
       var t = document.getElementById('cx-total2'); if (t) t.textContent = stats.total_active || 0;
       var m = document.getElementById('cx-merged2'); if (m) m.textContent = stats.total_merged || 0;
       var h = document.getElementById('cx-24h2'); if (h) h.textContent = stats.last_24h || 0;
-      var s = document.getElementById('cx-status2'); if (s) { s.textContent = stats.enabled ? 'ON' : 'OFF'; s.style.color = stats.enabled ? 'var(--green,#4ade80)' : 'var(--red,#f87171)'; }
+      var st = document.getElementById('cx-status2'); if (st) { st.textContent = stats.enabled ? 'ON' : 'OFF'; st.style.color = stats.enabled ? 'var(--green,#4ade80)' : 'var(--red,#f87171)'; }
       var tog = document.getElementById('cx-toggle2'); if (tog) tog.checked = stats.enabled !== false;
+      // Unrouted count
+      var unrouted = stats.unrouted || 0;
+      var unEl = document.getElementById('cx-unrouted2'); if (unEl) unEl.textContent = unrouted;
+      var unStat = document.getElementById('cx-unrouted-stat'); if (unStat) unStat.style.display = unrouted > 0 ? '' : 'none';
+      // Nav badge
+      _updateCortexBadge(unrouted);
     }
   } catch(e) {}
   // Load config
@@ -15999,6 +16066,8 @@ async function _loadCortexTab() {
     var m2 = document.getElementById('cx-min2'); if (m2) m2.value = prefs.cortex_min_response_len || 100;
     var mx = document.getElementById('cx-max2'); if (mx) mx.value = prefs.cortex_max_facts || 8;
     var ij = document.getElementById('cx-inject2'); if (ij) ij.value = prefs.cortex_inject_limit || 5;
+    var ar = document.getElementById('cx-auto-route'); if (ar) ar.checked = prefs.cortex_auto_route !== false;
+    var co = document.getElementById('cx-consol2'); if (co) co.value = prefs.cortex_consolidate_hours || 6;
   } catch(e) {}
   // Load memories
   try {
@@ -16006,30 +16075,62 @@ async function _loadCortexTab() {
     _cortexMemories = (mems && mems.memories) || [];
     _renderCortexMemories(_cortexMemories);
   } catch(e) {
-    document.getElementById('cx-memory-list').innerHTML = '<div style="padding:12px;text-align:center;font-size:11px;color:var(--err)">Failed to load</div>';
+    var el = document.getElementById('cx-memory-list');
+    if (el) el.innerHTML = '<div style="padding:20px;text-align:center;font-size:13px;color:var(--err)">Failed to load memories</div>';
   }
+}
+
+function _updateCortexBadge(count) {
+  var badge = document.getElementById('cortex-nav-badge');
+  if (!badge) return;
+  if (count > 0) { badge.textContent = count > 99 ? '99+' : count; badge.style.display = ''; }
+  else { badge.style.display = 'none'; }
 }
 
 function _renderCortexMemories(memories) {
   var el = document.getElementById('cx-memory-list');
   if (!el) return;
   if (!memories.length) {
-    el.innerHTML = '<div style="padding:20px;text-align:center;font-size:11px;color:var(--text3)">No memories yet. Dispatch to an agent to start building memory.</div>';
+    el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text3)"><div style="font-size:28px;margin-bottom:8px">\u2728</div><div style="font-size:13px">No memories yet</div><div style="font-size:12px;margin-top:4px">Dispatch to an agent to start building memory</div></div>';
     return;
   }
-  var scopeColors = {agent:'var(--cyan,#22d3ee)', project:'var(--amber,#fbbf24)', global:'var(--green,#4ade80)'};
+  var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80'};
   var html = '';
   memories.forEach(function(m) {
     var sc = m.scope || 'global';
     var scColor = scopeColors[sc] || 'var(--text3)';
     var imp = m.importance || 5;
-    var age = m.created_at ? _memAgeBadge(m.created_at) : '';
-    html += '<div class="cx-mem-row" data-scope="' + sc + '" style="display:flex;align-items:flex-start;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:11px">'
-      + '<span style="font-size:9px;font-weight:600;color:' + scColor + ';text-transform:uppercase;min-width:48px;flex-shrink:0;padding-top:1px">' + sc + '</span>'
-      + '<span style="flex:1;color:var(--text);line-height:1.4">' + escHtml(m.fact || '') + '</span>'
-      + '<span style="font-size:9px;color:var(--text3);white-space:nowrap;flex-shrink:0">' + (m.source_type === 'session' ? 'session' : 'dispatch') + '</span>'
-      + '<button class="btn btn-ghost" style="font-size:9px;padding:0 4px;flex-shrink:0" onclick="event.stopPropagation();_editCortexMem(' + m.id + ',this)" title="Edit">\u270f</button>'
-      + '<button class="btn btn-ghost" style="font-size:9px;padding:0 4px;color:var(--red,#f87171);flex-shrink:0" onclick="event.stopPropagation();_deleteCortexMem(' + m.id + ',this)" title="Delete">\u00d7</button>'
+    var impBar = '<span style="display:inline-flex;gap:1px;margin-left:4px" title="Importance ' + imp + '/10">';
+    for (var i = 0; i < 5; i++) { impBar += '<span style="width:4px;height:10px;border-radius:1px;background:' + (i < Math.ceil(imp/2) ? 'var(--accent)' : 'var(--border)') + '"></span>'; }
+    impBar += '</span>';
+    var isRouted = m.routed_to && m.routed_to.length > 0;
+    var routeStatus = isRouted ? '<span style="font-size:10px;color:var(--green,#4ade80)">\u2713 routed</span>' : '';
+    // Build routing bar for unrouted items
+    var routeBar = '';
+    if (!isRouted) {
+      routeBar = '<div class="cx-route-bar">'
+        + '<select class="cx-route-scope" data-mid="' + m.id + '" style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)" onchange="_updateRouteTarget(this)">'
+        + '<option value="global">Global</option>';
+      _cortexAgents.forEach(function(a) {
+        routeBar += '<option value="agent:' + a.id + '">' + (a.emoji || '') + ' ' + escHtml(a.name) + '</option>';
+      });
+      routeBar += '</select>'
+        + '<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;border:1px solid var(--accent);border-radius:4px;color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)" onclick="_routeCortexMem(' + m.id + ',this)">Push</button>'
+        + '<button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;color:var(--text3)" onclick="_dismissCortexMem(' + m.id + ',this)">Dismiss</button>'
+        + '</div>';
+    }
+    html += '<div class="cx-mem-card cx-mem-row" data-scope="' + sc + '" data-id="' + m.id + '">'
+      + '<div style="display:flex;align-items:center;gap:8px">'
+      + '<span style="font-size:10px;font-weight:600;color:' + scColor + ';text-transform:uppercase;background:color-mix(in srgb,' + scColor + ' 12%,transparent);padding:2px 8px;border-radius:4px;letter-spacing:0.5px">' + sc + '</span>'
+      + impBar
+      + '<span style="font-size:11px;color:var(--text3)">' + (m.source_type === 'session' ? 'session' : 'dispatch') + '</span>'
+      + routeStatus
+      + '<div style="flex:1"></div>'
+      + '<button class="btn btn-ghost" style="font-size:12px;padding:0 6px" onclick="event.stopPropagation();_editCortexMem(' + m.id + ',this)" title="Edit">\u270f\ufe0e</button>'
+      + '<button class="btn btn-ghost" style="font-size:12px;padding:0 6px;color:var(--red,#f87171)" onclick="event.stopPropagation();_deleteCortexMem(' + m.id + ',this)" title="Delete">\u00d7</button>'
+      + '</div>'
+      + '<div class="cx-fact-text" style="font-size:13px;color:var(--text);line-height:1.5">' + escHtml(m.fact || '') + '</div>'
+      + routeBar
       + '</div>';
   });
   el.innerHTML = html;
@@ -16038,50 +16139,110 @@ function _renderCortexMemories(memories) {
 function _filterCortexScope(scope, btn) {
   document.querySelectorAll('.cx-scope-filter').forEach(function(b) { b.classList.remove('active'); });
   btn.classList.add('active');
-  var rows = document.querySelectorAll('.cx-mem-row');
-  rows.forEach(function(r) {
+  document.querySelectorAll('.cx-mem-row').forEach(function(r) {
     r.style.display = (scope === 'all' || r.getAttribute('data-scope') === scope) ? '' : 'none';
   });
 }
 
+function _updateRouteTarget(sel) {
+  // Update scope badge visually when user changes the route target
+  var card = sel.closest('.cx-mem-card');
+  if (!card) return;
+  var val = sel.value;
+  var scope = val.startsWith('agent:') ? 'agent' : 'global';
+  card.setAttribute('data-scope', scope);
+}
+
+async function _routeCortexMem(id, btn) {
+  var card = btn.closest('.cx-mem-card');
+  if (!card) return;
+  var sel = card.querySelector('.cx-route-scope');
+  var target = sel ? sel.value : 'global';
+  var scope = 'global';
+  var scopeId = '';
+  if (target.startsWith('agent:')) { scope = 'agent'; scopeId = target.split(':')[1]; }
+  btn.disabled = true;
+  btn.textContent = 'Pushing...';
+  try {
+    var r = await api('/api/cortex/memories/' + id + '/route', { scope: scope, scope_id: scopeId });
+    if (r && r.ok) {
+      card.style.transition = 'opacity 0.3s, max-height 0.4s, padding 0.3s, margin 0.3s';
+      card.style.opacity = '0';
+      card.style.maxHeight = '0';
+      card.style.padding = '0 14px';
+      card.style.overflow = 'hidden';
+      setTimeout(function() { card.remove(); }, 400);
+      toast('Routed to ' + (r.destination || scope));
+      // Update badge count
+      var badge = document.getElementById('cortex-nav-badge');
+      if (badge && badge.style.display !== 'none') {
+        var c = parseInt(badge.textContent) - 1;
+        _updateCortexBadge(Math.max(0, c));
+      }
+    } else { toast(r && r.error || 'Route failed', 'err'); btn.disabled = false; btn.textContent = 'Push'; }
+  } catch(e) { toast('Route failed', 'err'); btn.disabled = false; btn.textContent = 'Push'; }
+}
+
+async function _dismissCortexMem(id, btn) {
+  var card = btn.closest('.cx-mem-card');
+  if (!card) return;
+  // Mark as routed_to='dismissed' so it leaves the inbox
+  try {
+    var r = await api('/api/cortex/memories/' + id + '/route', { scope: 'dismissed', scope_id: '' });
+    if (r && r.ok) {
+      card.style.transition = 'opacity 0.3s, max-height 0.4s';
+      card.style.opacity = '0';
+      card.style.maxHeight = '0';
+      card.style.overflow = 'hidden';
+      setTimeout(function() { card.remove(); }, 400);
+      toast('Dismissed');
+      var badge = document.getElementById('cortex-nav-badge');
+      if (badge && badge.style.display !== 'none') {
+        var c = parseInt(badge.textContent) - 1;
+        _updateCortexBadge(Math.max(0, c));
+      }
+    }
+  } catch(e) { toast('Failed', 'err'); }
+}
+
 async function _deleteCortexMem(id, btn) {
-  var ok = await porterConfirm('Delete Memory', 'Remove this fact?', {confirmLabel: 'Delete', danger: true});
+  var ok = await porterConfirm('Delete Memory', 'Permanently remove this fact?', {confirmLabel: 'Delete', danger: true});
   if (!ok) return;
   btn.disabled = true;
   try {
     var r = await api('/api/cortex/memories/' + id + '/delete', {});
     if (r && r.ok) {
-      var row = btn.closest('.cx-mem-row');
-      if (row) { row.style.transition = 'opacity 0.2s'; row.style.opacity = '0'; setTimeout(function() { row.remove(); }, 250); }
-      toast('Memory deleted');
+      var card = btn.closest('.cx-mem-card');
+      if (card) { card.style.transition = 'opacity 0.2s'; card.style.opacity = '0'; setTimeout(function() { card.remove(); }, 250); }
+      toast('Deleted');
     } else { toast('Failed', 'err'); btn.disabled = false; }
   } catch(e) { toast('Failed', 'err'); btn.disabled = false; }
 }
 
 async function _editCortexMem(id, btn) {
-  var row = btn.closest('.cx-mem-row');
-  if (!row) return;
-  var textEl = row.querySelectorAll('span')[1];
+  var card = btn.closest('.cx-mem-card');
+  if (!card) return;
+  var textEl = card.querySelector('.cx-fact-text');
   if (!textEl) return;
   var oldText = textEl.textContent;
   var input = document.createElement('input');
   input.type = 'text';
   input.value = oldText;
-  input.style.cssText = 'flex:1;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--text)';
+  input.style.cssText = 'width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--accent);border-radius:6px;background:var(--bg);color:var(--text);outline:none';
   input.onclick = function(e) { e.stopPropagation(); };
   textEl.replaceWith(input);
   input.focus();
   input.select();
   async function _save() {
     var nv = input.value.trim();
-    if (!nv || nv === oldText) { var sp = document.createElement('span'); sp.style.cssText = 'flex:1;color:var(--text);line-height:1.4'; sp.textContent = oldText; input.replaceWith(sp); return; }
+    if (!nv || nv === oldText) { var sp = document.createElement('div'); sp.className = 'cx-fact-text'; sp.style.cssText = 'font-size:13px;color:var(--text);line-height:1.5'; sp.textContent = oldText; input.replaceWith(sp); return; }
     try {
       var r = await api('/api/cortex/memories/' + id + '/update', { fact: nv });
-      var sp = document.createElement('span'); sp.style.cssText = 'flex:1;color:var(--text);line-height:1.4'; sp.textContent = (r && r.ok) ? nv : oldText; input.replaceWith(sp);
+      var sp = document.createElement('div'); sp.className = 'cx-fact-text'; sp.style.cssText = 'font-size:13px;color:var(--text);line-height:1.5'; sp.textContent = (r && r.ok) ? nv : oldText; input.replaceWith(sp);
       if (r && r.ok) toast('Updated');
-    } catch(e) { var sp = document.createElement('span'); sp.style.cssText = 'flex:1;color:var(--text);line-height:1.4'; sp.textContent = oldText; input.replaceWith(sp); }
+    } catch(e) { var sp = document.createElement('div'); sp.className = 'cx-fact-text'; sp.style.cssText = 'font-size:13px;color:var(--text);line-height:1.5'; sp.textContent = oldText; input.replaceWith(sp); }
   }
-  input.onkeydown = function(e) { if (e.key === 'Enter') { e.preventDefault(); _save(); } if (e.key === 'Escape') { var sp = document.createElement('span'); sp.style.cssText = 'flex:1;color:var(--text);line-height:1.4'; sp.textContent = oldText; input.replaceWith(sp); } };
+  input.onkeydown = function(e) { if (e.key === 'Enter') { e.preventDefault(); _save(); } if (e.key === 'Escape') { var sp = document.createElement('div'); sp.className = 'cx-fact-text'; sp.style.cssText = 'font-size:13px;color:var(--text);line-height:1.5'; sp.textContent = oldText; input.replaceWith(sp); } };
   input.onblur = _save;
 }
 
@@ -16091,10 +16252,241 @@ async function _saveCortexConfig2() {
     cortex_min_response_len: parseInt(document.getElementById('cx-min2').value) || 100,
     cortex_max_facts: parseInt(document.getElementById('cx-max2').value) || 8,
     cortex_inject_limit: parseInt(document.getElementById('cx-inject2').value) || 5,
+    cortex_consolidate_hours: parseInt((document.getElementById('cx-consol2') || {}).value) || 6,
+    cortex_auto_route: (document.getElementById('cx-auto-route') || {}).checked !== false,
   };
   var r = await api('/api/cortex/config', payload);
   if (r && r.ok) toast('Cortex config saved');
   else toast('Save failed', 'err');
+}
+
+// ── Memory Graph — Force-directed visualization ──
+var _graphNodes = [];
+var _graphEdges = [];
+var _graphAnim = null;
+var _graphDrag = null;
+var _graphZoom = {x: 0, y: 0, scale: 1};
+
+function _resetGraphZoom() { _graphZoom = {x: 0, y: 0, scale: 1}; _drawGraph(); }
+
+async function _initMemoryGraph() {
+  var canvas = document.getElementById('cx-graph-canvas');
+  if (!canvas) return;
+  // Fetch graph data
+  try {
+    var data = await api('/api/cortex/graph');
+    if (!data || !data.nodes) return;
+    _graphNodes = data.nodes;
+    _graphEdges = data.edges;
+    // Initialize positions
+    var cx = canvas.width / 2, cy = canvas.height / 2;
+    _graphNodes.forEach(function(n, i) {
+      var angle = (2 * Math.PI * i) / _graphNodes.length;
+      var radius = 150 + Math.random() * 50;
+      n.x = cx + Math.cos(angle) * radius;
+      n.y = cy + Math.sin(angle) * radius;
+      n.vx = 0;
+      n.vy = 0;
+    });
+    // Setup interaction
+    _setupGraphInteraction(canvas);
+    // Run simulation
+    _runGraphSimulation(canvas);
+  } catch(e) {
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text3') || '#888';
+    ctx.font = '13px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('Could not load memory graph', canvas.width/2, canvas.height/2);
+  }
+}
+
+function _setupGraphInteraction(canvas) {
+  var dragging = null;
+  var panning = false;
+  var panStart = {x:0, y:0};
+  canvas.onmousedown = function(e) {
+    var rect = canvas.getBoundingClientRect();
+    var mx = (e.clientX - rect.left) / _graphZoom.scale - _graphZoom.x / _graphZoom.scale;
+    var my = (e.clientY - rect.top) / _graphZoom.scale - _graphZoom.y / _graphZoom.scale;
+    // Check if clicking a node
+    var hit = null;
+    _graphNodes.forEach(function(n) {
+      var dx = mx - n.x, dy = my - n.y;
+      if (Math.sqrt(dx*dx + dy*dy) < (n.radius || 20)) hit = n;
+    });
+    if (hit) { dragging = hit; hit.fixed = true; canvas.style.cursor = 'grabbing'; }
+    else { panning = true; panStart = {x: e.clientX - _graphZoom.x, y: e.clientY - _graphZoom.y}; }
+  };
+  canvas.onmousemove = function(e) {
+    var rect = canvas.getBoundingClientRect();
+    if (dragging) {
+      dragging.x = (e.clientX - rect.left - _graphZoom.x) / _graphZoom.scale;
+      dragging.y = (e.clientY - rect.top - _graphZoom.y) / _graphZoom.scale;
+      _drawGraph();
+    } else if (panning) {
+      _graphZoom.x = e.clientX - panStart.x;
+      _graphZoom.y = e.clientY - panStart.y;
+      _drawGraph();
+    }
+  };
+  canvas.onmouseup = function() { if (dragging) { dragging.fixed = false; dragging = null; canvas.style.cursor = 'grab'; } panning = false; };
+  canvas.onmouseleave = function() { if (dragging) { dragging.fixed = false; dragging = null; } panning = false; };
+  canvas.onwheel = function(e) {
+    e.preventDefault();
+    var delta = e.deltaY > 0 ? 0.92 : 1.08;
+    _graphZoom.scale = Math.max(0.3, Math.min(3, _graphZoom.scale * delta));
+    _drawGraph();
+  };
+}
+
+function _runGraphSimulation(canvas) {
+  var iterations = 0;
+  function tick() {
+    var alpha = Math.max(0.01, 1 - iterations / 200);
+    // Repulsion between nodes
+    for (var i = 0; i < _graphNodes.length; i++) {
+      for (var j = i + 1; j < _graphNodes.length; j++) {
+        var a = _graphNodes[i], b = _graphNodes[j];
+        var dx = b.x - a.x, dy = b.y - a.y;
+        var dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        var force = 3000 / (dist * dist);
+        var fx = dx / dist * force * alpha;
+        var fy = dy / dist * force * alpha;
+        if (!a.fixed) { a.vx -= fx; a.vy -= fy; }
+        if (!b.fixed) { b.vx += fx; b.vy += fy; }
+      }
+    }
+    // Attraction along edges
+    _graphEdges.forEach(function(e) {
+      var a = _graphNodes[e.source], b = _graphNodes[e.target];
+      if (!a || !b) return;
+      var dx = b.x - a.x, dy = b.y - a.y;
+      var dist = Math.sqrt(dx*dx + dy*dy) || 1;
+      var force = (dist - 120) * 0.02 * alpha;
+      var fx = dx / dist * force;
+      var fy = dy / dist * force;
+      if (!a.fixed) { a.vx += fx; a.vy += fy; }
+      if (!b.fixed) { b.vx -= fx; b.vy -= fy; }
+    });
+    // Center gravity
+    var cx = canvas.width / 2, cy = canvas.height / 2;
+    _graphNodes.forEach(function(n) {
+      if (n.fixed) return;
+      n.vx += (cx - n.x) * 0.001 * alpha;
+      n.vy += (cy - n.y) * 0.001 * alpha;
+      n.vx *= 0.85;
+      n.vy *= 0.85;
+      n.x += n.vx;
+      n.y += n.vy;
+    });
+    _drawGraph();
+    iterations++;
+    if (iterations < 200) _graphAnim = requestAnimationFrame(tick);
+  }
+  if (_graphAnim) cancelAnimationFrame(_graphAnim);
+  tick();
+}
+
+function _drawGraph() {
+  var canvas = document.getElementById('cx-graph-canvas');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var w = canvas.width, h = canvas.height;
+  // Get theme colors
+  var cs = getComputedStyle(document.documentElement);
+  var bg = cs.getPropertyValue('--bg2').trim() || '#1a1a2e';
+  var border = cs.getPropertyValue('--border').trim() || '#333';
+  var textColor = cs.getPropertyValue('--text').trim() || '#eee';
+  var text3 = cs.getPropertyValue('--text3').trim() || '#888';
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+  ctx.save();
+  ctx.translate(_graphZoom.x, _graphZoom.y);
+  ctx.scale(_graphZoom.scale, _graphZoom.scale);
+  var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80', cortex:'#8b5cf6'};
+  // Draw edges with animated glow
+  var time = Date.now() / 1000;
+  _graphEdges.forEach(function(e) {
+    var a = _graphNodes[e.source], b = _graphNodes[e.target];
+    if (!a || !b) return;
+    var weight = Math.min(6, Math.max(1, (e.weight || 1)));
+    var pulse = 0.4 + 0.3 * Math.sin(time * 2 + e.source);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    // Curved edges
+    var midX = (a.x + b.x) / 2 + (a.y - b.y) * 0.1;
+    var midY = (a.y + b.y) / 2 + (b.x - a.x) * 0.1;
+    ctx.quadraticCurveTo(midX, midY, b.x, b.y);
+    ctx.strokeStyle = 'rgba(139,92,246,' + pulse + ')';
+    ctx.lineWidth = weight;
+    ctx.stroke();
+    // Animated particle
+    var t = (time * 0.3 + e.source * 0.5) % 1;
+    var px = (1-t)*(1-t)*a.x + 2*(1-t)*t*midX + t*t*b.x;
+    var py = (1-t)*(1-t)*a.y + 2*(1-t)*t*midY + t*t*b.y;
+    ctx.beginPath();
+    ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(139,92,246,0.9)';
+    ctx.fill();
+  });
+  // Draw nodes
+  _graphNodes.forEach(function(n) {
+    var color = scopeColors[n.type] || '#8b5cf6';
+    var radius = n.radius || 20;
+    // Glow
+    var glow = ctx.createRadialGradient(n.x, n.y, radius * 0.3, n.x, n.y, radius * 2);
+    glow.addColorStop(0, color.replace(')', ',0.2)').replace('rgb', 'rgba'));
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, radius * 2, 0, Math.PI * 2);
+    ctx.fillStyle = glow;
+    ctx.fill();
+    // Node circle
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = color.replace(')', ',0.15)').replace('#', '');
+    // Handle hex colors
+    if (color.startsWith('#')) {
+      var r = parseInt(color.slice(1,3),16), g = parseInt(color.slice(3,5),16), bl = parseInt(color.slice(5,7),16);
+      ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + bl + ',0.15)';
+    }
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Emoji or icon
+    if (n.emoji) {
+      ctx.font = (radius * 0.8) + 'px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n.emoji, n.x, n.y);
+    }
+    // Label
+    ctx.font = '11px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = textColor;
+    ctx.fillText(n.label || '', n.x, n.y + radius + 4);
+    // Count badge
+    if (n.count > 0) {
+      ctx.font = 'bold 9px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      var bx = n.x + radius * 0.7, by = n.y - radius * 0.7;
+      ctx.beginPath();
+      ctx.arc(bx, by, 8, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillText(n.count, bx, by);
+    }
+  });
+  ctx.restore();
+  // Keep animating for particles
+  if (_graphAnim === null || _graphAnim === undefined) return;
+  requestAnimationFrame(function() { _drawGraph(); });
 }
 
 async function _selectModelFromList(el, backend, modelId) {
@@ -23004,7 +23396,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.35"})
+            self.reply_json({"v": "0.27.36"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -23091,7 +23483,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.35"
+                health["porter_version"] = "0.27.36"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -23592,7 +23984,8 @@ class Handler(BaseHTTPRequestHandler):
                 "total_merged": total_merged,
                 "last_24h": last_24h,
                 "by_scope": by_scope,
-                "enabled": _config.get("preferences", {}).get("cortex_enabled", True)
+                "unrouted": conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL AND (routed_to IS NULL OR routed_to='')").fetchone()[0],
+                    "enabled": _config.get("preferences", {}).get("cortex_enabled", True)
             })
 
         elif parsed.path == "/api/trace/task-board":
@@ -24665,7 +25058,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.35'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.36'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -27117,6 +27510,49 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             result = _extract_learnings_preview(session_id, source, force=force)
             self.reply_json(result)
 
+        # ── Cortex memory graph data (GET) ────────────────────────
+        elif parsed.path == "/api/cortex/graph":
+            if not self.auth_check(redirect=False): return
+            try:
+                conn = _db_conn()
+                # Build nodes: Cortex hub + each agent + global
+                nodes = []
+                edges = []
+                # Cortex hub node
+                nodes.append({"id": "cortex", "label": "Cortex", "type": "cortex", "emoji": "\U0001f9e0", "radius": 30, "count": 0})
+                # Global node
+                gc = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='global' AND consolidated_into IS NULL").fetchone()[0]
+                nodes.append({"id": "global", "label": "Global Memory", "type": "global", "emoji": "\U0001f310", "radius": 22, "count": gc})
+                if gc > 0:
+                    edges.append({"source": 0, "target": 1, "weight": min(6, gc)})
+                # Agent nodes
+                personas = conn.execute("SELECT id, name, emoji FROM personas").fetchall()
+                for idx, p in enumerate(personas):
+                    pid, pname, pemoji = p[0], p[1], p[2] or "\u2699"
+                    ac = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='agent' AND scope_id=? AND consolidated_into IS NULL", (pid,)).fetchone()[0]
+                    node_idx = len(nodes)
+                    nodes.append({"id": "agent:" + pid, "label": pname, "type": "agent", "emoji": pemoji, "radius": 18 + min(8, ac), "count": ac})
+                    if ac > 0:
+                        edges.append({"source": 0, "target": node_idx, "weight": min(6, ac)})
+                    # Check if agent has connections to global
+                    if gc > 0 and ac > 0:
+                        edges.append({"source": 1, "target": node_idx, "weight": 1})
+                # Project nodes
+                projects = conn.execute("SELECT DISTINCT scope_id FROM cortex_memories WHERE scope='project' AND consolidated_into IS NULL AND scope_id != ''").fetchall()
+                for proj in projects:
+                    proj_id = proj[0]
+                    pc = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='project' AND scope_id=? AND consolidated_into IS NULL", (proj_id,)).fetchone()[0]
+                    node_idx = len(nodes)
+                    nodes.append({"id": "project:" + proj_id, "label": proj_id[:20], "type": "project", "emoji": "\U0001f4c1", "radius": 18 + min(8, pc), "count": pc})
+                    if pc > 0:
+                        edges.append({"source": 0, "target": node_idx, "weight": min(6, pc)})
+                conn.close()
+                # Set Cortex hub count to total
+                nodes[0]["count"] = sum(n.get("count", 0) for n in nodes[1:])
+                self.reply_json({"nodes": nodes, "edges": edges})
+            except Exception as e:
+                self.reply_json({"nodes": [], "edges": [], "error": str(e)})
+
         # ── Update individual cortex memory (POST) ─────────────────────────
         elif parsed.path.startswith("/api/cortex/memories/") and parsed.path.endswith("/update"):
             if not self.auth_check(redirect=False): return
@@ -27135,6 +27571,41 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 conn.commit()
                 conn.close()
                 self.reply_json({"ok": True, "id": mem_id, "fact": new_fact})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
+
+        # ── Route cortex memory to destination (POST) ─────────────────────
+        elif parsed.path.startswith("/api/cortex/memories/") and parsed.path.endswith("/route"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.split("/")
+            mem_id = parts[4] if len(parts) >= 6 else ""
+            if not mem_id:
+                self.reply_json({"ok": False, "error": "Missing memory ID"}, 400); return
+            data = self.read_json_body()
+            scope = str(data.get("scope", "global")).strip()
+            scope_id = str(data.get("scope_id", "")).strip()
+            try:
+                conn = _db_conn()
+                row = conn.execute("SELECT fact, scope, scope_id FROM cortex_memories WHERE id=?", (mem_id,)).fetchone()
+                if not row:
+                    conn.close()
+                    self.reply_json({"ok": False, "error": "Memory not found"}, 404); return
+                fact_text = row[0]
+                dest_str = ""
+                if scope != "dismissed":
+                    new_scope = scope if scope != row[1] else row[1]
+                    new_scope_id = scope_id if scope_id else row[2]
+                    dest = _cortex_resolve_destination(new_scope, new_scope_id)
+                    dest_str = str(dest) if dest else ""
+                    if dest:
+                        _cortex_append_to_file(dest, fact_text)
+                else:
+                    dest_str = "dismissed"
+                conn.execute("UPDATE cortex_memories SET routed_to=?, scope=?, scope_id=?, updated_at=strftime('%s','now') WHERE id=?",
+                             (dest_str, scope if scope != "dismissed" else row[1], scope_id or row[2], mem_id))
+                conn.commit()
+                conn.close()
+                self.reply_json({"ok": True, "id": mem_id, "destination": dest_str})
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
@@ -28645,7 +29116,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.35 ready (localhost only)")
+    print(f"\n  Porter v0.27.36 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
