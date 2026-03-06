@@ -12767,7 +12767,7 @@ async function populateChatModels() {
   var _ocName = (chatAvail.openclaw || {}).resolved || 'GPT-5.3 Codex';
   var _clName = (chatAvail.claude || {}).resolved || 'claude-opus-4-6';
   var _gmName = (chatAvail.gemini || {}).resolved || 'gemini-2.5-pro';
-  var _cdName = (chatAvail.codex || {}).resolved || 'gpt-5.1';
+  var _cdName = (chatAvail.codex || {}).resolved || 'gpt-5.4';
   // Lookup friendly names
   function _friendlyModel(bkData, resolved) {
     if (!bkData || !bkData.models) return resolved;
@@ -14962,6 +14962,7 @@ function renderInfraCards(providers, agents) {
 
 const MODEL_OPTIMIZED = {
   'gpt-5.3-codex':    'Agentic coding, long-running tasks, tool use',
+    'gpt-5.4':          'Most capable — reasoning, computer use, 1M context',
   'codex':            'Agentic coding, long-running tasks, tool use',
   'claude-opus-4-6':  'Deep reasoning, security audits, architecture',
   'claude-sonnet-4-6':'Implementation, debugging, tool calling',
@@ -20362,7 +20363,7 @@ def _dispatch_codex(message, model=None, timeout=120):
     cdx_bin = _resolve_cli("codex")
     if not cdx_bin:
         return {"ok": False, "error": "Codex CLI not found. Install: npm i -g @openai/codex"}
-    codex_model = (model or os.environ.get("PORTER_CODEX_MODEL", "").strip() or "gpt-5.1")
+    codex_model = (model or os.environ.get("PORTER_CODEX_MODEL", "").strip() or "gpt-5.4")
     cmd = [cdx_bin, "exec", "--ephemeral", "--json", "--skip-git-repo-check", "-m", codex_model, message]
     log.info("Agent bridge [codex]: model=%s msg=%s", codex_model, message[:80])
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env(), cwd=str(Path.home()))
@@ -20623,7 +20624,7 @@ AVAILABLE_MODELS = {
         {"id": "gemini-2.5-flash", "name": "2.5 Flash"},
     ],
     "codex":    [
-        {"id": "gpt-5.1", "name": "GPT-5.1", "default": True},
+        {"id": "gpt-5.4", "name": "GPT-5.4", "default": True}, {"id": "gpt-5.1", "name": "GPT-5.1"},
         {"id": "o3", "name": "o3"},
     ],
     "ollama":   [],  # Runtime-detected via /api/tags
@@ -23941,7 +23942,7 @@ class Handler(BaseHTTPRequestHandler):
                         self.wfile.flush()
                     else:
                         import subprocess as _sp
-                        codex_model = os.environ.get("PORTER_CODEX_MODEL", "").strip() or _get_active_model("codex") or "gpt-5.1"
+                        codex_model = os.environ.get("PORTER_CODEX_MODEL", "").strip() or _get_active_model("codex") or "gpt-5.4"
                         _cdx_cmd = [cdx_bin, "exec", "--ephemeral", "--json", "--skip-git-repo-check", "-m", codex_model, prompt]
                         _proc = _sp.Popen(_cdx_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env(), cwd=str(Path.home()))
                         for _line in iter(_proc.stdout.readline, ''):
