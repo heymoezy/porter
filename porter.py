@@ -6687,7 +6687,7 @@ body.density-compact .file-name { padding: 6px 0; }
     .model-list-dot { width:6px;height:6px;border-radius:50%;flex-shrink:0;border:1px solid var(--border); }
     .model-list-name { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
     /* Inline session cards */
-    .inline-sess-card { padding:6px 8px;border:1px solid var(--border);border-radius:5px;background:var(--raised);transition:border-color .12s; }
+    .inline-sess-card { padding:6px 8px 10px;border:1px solid var(--border);border-radius:5px;background:var(--raised);transition:border-color .12s;overflow:visible; }
     .inline-sess-card:hover { border-color:var(--accent); }
 .mem-section-label { font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px; }
 
@@ -15075,14 +15075,18 @@ function _handleModelResponse(data) {
     var traceBox = document.getElementById('ma-trace');
     if (traceBox && traceBox.textContent === 'Streaming...') { traceBox.className = 'ma-trace-box empty'; traceBox.textContent = 'Dispatch complete'; }
   }
-  // Refresh activity data after a short delay
+  // Refresh activity — update status in-place instead of full re-render
   setTimeout(function() {
     api('/api/models/activity').then(function(act) {
       if (act && act.activity) {
         _modelActivityData = act.activity;
-        api('/api/providers').then(function(pdata) {
-          _renderModelCards(pdata, _modelActivityData);
-        });
+        // Only do a full re-render if no inline sessions are expanded
+        var anyExpanded = Object.keys(_inlineSessionsExpanded).some(function(k) { return _inlineSessionsExpanded[k]; });
+        if (!anyExpanded) {
+          api('/api/providers').then(function(pdata) {
+            _renderModelCards(pdata, _modelActivityData);
+          });
+        }
       }
     });
   }, 500);
