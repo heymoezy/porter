@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.30 — Brave Search"""
+"""Porter v0.27.31 — API Keys & Version Probing"""
 
 
 import email
@@ -6701,7 +6701,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .emoji-grid .emoji-btn.selected { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, var(--bg)); }
 @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
-/* Memory tab v6 — compact layout (stripped in v0.27.30, kept: .mem-section-label, .mem-age-badge, .mem-coord-*) */
+/* Memory tab v6 — compact layout (stripped in v0.27.31, kept: .mem-section-label, .mem-age-badge, .mem-coord-*) */
     /* Model list rows (replaces dropdown) */
     .model-list-rows { display:flex;flex-direction:column;gap:1px; }
     .model-list-row { display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;cursor:pointer;transition:.12s;font-size:12px;color:var(--text2); }
@@ -7146,7 +7146,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.30</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.31</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8130,22 +8130,16 @@ select.settings-input { padding-right: 26px; }
       <!-- API Keys page -->
       <div class="settings-page" id="spage-apikeys">
         <div class="settings-page-title">API Keys</div>
-        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">Manage API keys for external services. Keys are stored in porter_config.json.</div>
-        <div class="settings-field">
-          <label>Brave Search API Key</label>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input type="password" class="settings-input" id="sa-brave-key" placeholder="BSA..." style="flex:1;font-family:monospace">
-            <button class="btn btn-ghost btn-sm" onclick="toggleBraveKeyVis()" id="brave-key-toggle" title="Show/hide" style="padding:6px 8px;min-width:auto">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">Manage API keys for external services. Once saved, keys can only be deleted and re-added.</div>
+        <div id="apikeys-list"></div>
+        <div id="apikey-add-form" style="display:none;margin-top:16px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px" id="apikey-add-title">Add key</div>
+          <input type="text" class="settings-input" id="apikey-add-value" placeholder="Paste API key..." style="font-family:monospace;margin-bottom:10px">
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" onclick="saveApiKey()">Save</button>
+            <button class="btn btn-ghost btn-sm" onclick="cancelApiKeyAdd()">Cancel</button>
           </div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">Get a key at <a href="https://brave.com/search/api/" target="_blank" style="color:var(--accent)">brave.com/search/api</a>. Also checks <code>BRAVE_API_KEY</code> env var.</div>
         </div>
-        <div class="settings-save-row" style="gap:8px">
-          <button class="btn btn-primary" onclick="saveBraveKey()">Save</button>
-          <button class="btn btn-ghost" onclick="testBraveKey()">Test</button>
-        </div>
-        <div id="brave-test-result" style="margin-top:12px;font-size:12px;display:none"></div>
       </div>
       <!-- Task Operations page -->
       <div class="settings-page" id="spage-tasks">
@@ -8326,6 +8320,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.31', date:'2026-03-06', notes:['API Keys: save-once / delete-only pattern for all service keys','API Keys tab: Brave, OpenAI, Anthropic, Google AI in one place','Fix: version probing for Gemini CLI, OpenClaw, Codex, Claude (PATH resolution)'] },
   { ver:'v0.27.30', date:'2026-03-06', notes:['Brave Search: native web search integration (no OpenClaw dependency)','/search chat command for quick web lookups','web_search tool available to all LLM backends via dispatch','API key management in Settings tab'] },
   { ver:'v0.27.29', date:'2026-03-05', notes:['Smart Learnings: extracted insights persist in DB (no re-analysis)','Update Learnings button: batch-extract all sessions in one click','Learnings displayed inline on session cards with save button','Removed per-session Learn wizard modal'] },
   { ver:'v0.27.28', date:'2026-03-05', notes:['Extract Learnings: LLM-powered session analysis replaces flush wizard','Session archive: dismiss sessions without writing (📦 button)','Destination picker: save learnings to agent memory, project, or global','Dispatch chain SVG visualization with animated edges','Session archive with confirmation dialog','Agent drag-and-drop reorder on Agents tab'] },
@@ -12053,53 +12048,86 @@ function switchSettingsTab(tab) {
     populateChangelog();
     setTimeout(populateChangelog, 0);
   }
-  if (tab === 'apikeys') { loadBraveKey(); }
+  if (tab === 'apikeys') { loadApiKeys(); }
 }
 
 
 
-// ── API Keys (Brave Search) ──────────────────────────────────────────────
-function toggleBraveKeyVis() {
-  var inp = document.getElementById('sa-brave-key');
-  if (!inp) return;
-  inp.type = inp.type === 'password' ? 'text' : 'password';
-}
-function loadBraveKey() {
+// ── API Keys ─────────────────────────────────────────────────────────────
+var _apiKeyDefs = [
+  {id:'brave_search', label:'Brave Search', hint:'Web search API', url:'https://brave.com/search/api/', envVar:'BRAVE_API_KEY'},
+  {id:'openai', label:'OpenAI', hint:'GPT models', url:'https://platform.openai.com/api-keys', envVar:'OPENAI_API_KEY'},
+  {id:'anthropic', label:'Anthropic', hint:'Claude models', url:'https://console.anthropic.com/settings/keys', envVar:'ANTHROPIC_API_KEY'},
+  {id:'google_ai', label:'Google AI', hint:'Gemini models', url:'https://aistudio.google.com/apikey', envVar:'GOOGLE_API_KEY'},
+];
+var _apiKeyAddTarget = null;
+function loadApiKeys() {
+  var el = document.getElementById('apikeys-list');
+  if (!el) return;
   fetch('/api/config/summary', {credentials:'same-origin'}).then(r=>r.json()).then(function(d) {
-    if (d && d.api_keys && d.api_keys.brave_search) {
-      var inp = document.getElementById('sa-brave-key');
-      if (inp) inp.placeholder = d.api_keys.brave_search || 'BSA...';
-    }
-  }).catch(function(){});
+    var saved = (d && d.api_keys) ? d.api_keys : {};
+    var html = '';
+    _apiKeyDefs.forEach(function(def) {
+      var hasKey = saved[def.id] && saved[def.id] !== '';
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border)">';
+      html += '<div style="flex:1;min-width:0">';
+      html += '<div style="font-size:13px;font-weight:600;color:var(--text)">' + escHtml(def.label) + '</div>';
+      html += '<div style="font-size:11px;color:var(--text3)">' + escHtml(def.hint);
+      if (def.envVar) html += ' &middot; env: <code>' + escHtml(def.envVar) + '</code>';
+      html += '</div>';
+      html += '</div>';
+      if (hasKey) {
+        html += '<span style="font-family:monospace;font-size:12px;color:var(--text2);background:var(--raised);padding:3px 8px;border-radius:4px;border:1px solid var(--border)">' + escHtml(saved[def.id]) + '</span>';
+        html += '<button class="btn btn-ghost btn-sm" style="color:#ef4444;min-width:auto;padding:4px 10px" onclick="deleteApiKey(\'' + def.id + '\')">Delete</button>';
+      } else {
+        html += '<button class="btn btn-ghost btn-sm" style="min-width:auto;padding:4px 10px" onclick="showApiKeyAdd(\'' + def.id + '\',\'' + escHtml(def.label) + '\',\'' + escHtml(def.url) + '\')">Add</button>';
+      }
+      html += '</div>';
+    });
+    el.innerHTML = html;
+  }).catch(function() { el.innerHTML = '<div style="color:var(--text3);font-size:13px">Failed to load keys.</div>'; });
 }
-function saveBraveKey() {
-  var key = (document.getElementById('sa-brave-key') || {}).value || '';
+function showApiKeyAdd(id, label, url) {
+  _apiKeyAddTarget = id;
+  var form = document.getElementById('apikey-add-form');
+  var title = document.getElementById('apikey-add-title');
+  var inp = document.getElementById('apikey-add-value');
+  if (form) form.style.display = 'block';
+  if (title) title.innerHTML = 'Add ' + label + ' key &middot; <a href="' + url + '" target="_blank" style="color:var(--accent);font-weight:400;font-size:12px">Get key</a>';
+  if (inp) { inp.value = ''; inp.focus(); }
+}
+function cancelApiKeyAdd() {
+  _apiKeyAddTarget = null;
+  var form = document.getElementById('apikey-add-form');
+  if (form) form.style.display = 'none';
+}
+function saveApiKey() {
+  if (!_apiKeyAddTarget) return;
+  var val = (document.getElementById('apikey-add-value') || {}).value || '';
+  if (!val.trim()) { toast('Key cannot be empty', 'err'); return; }
+  var payload = {};
+  payload[_apiKeyAddTarget] = val.trim();
   fetch('/api/config/apikeys', {
     method: 'POST', credentials: 'same-origin',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({brave_search: key})
+    body: JSON.stringify(payload)
   }).then(r=>r.json()).then(function(d) {
-    if (d.ok) toast('API key saved');
+    if (d.ok) { toast('Key saved'); cancelApiKeyAdd(); loadApiKeys(); }
     else toast(d.error || 'Save failed', 'err');
   }).catch(function(e) { toast('Error: ' + e.message, 'err'); });
 }
-function testBraveKey() {
-  var el = document.getElementById('brave-test-result');
-  if (el) { el.style.display = 'block'; el.innerHTML = '<span style="color:var(--text3)">Testing...</span>'; }
-  fetch('/api/search/brave', {
+function deleteApiKey(id) {
+  if (!confirm('Delete this API key?')) return;
+  var payload = {};
+  payload[id] = '';
+  fetch('/api/config/apikeys', {
     method: 'POST', credentials: 'same-origin',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({q: 'test', count: 1})
+    body: JSON.stringify(payload)
   }).then(r=>r.json()).then(function(d) {
-    if (!el) return;
-    if (d.ok) {
-      el.innerHTML = '<span style="color:#059669">\u2705 Key works! Got ' + (d.results||[]).length + ' result(s).</span>';
-    } else {
-      el.innerHTML = '<span style="color:#ef4444">\u274c ' + (d.error || 'Test failed') + '</span>';
-    }
-  }).catch(function(e) {
-    if (el) el.innerHTML = '<span style="color:#ef4444">\u274c ' + e.message + '</span>';
-  });
+    if (d.ok) { toast('Key deleted'); loadApiKeys(); }
+    else toast(d.error || 'Delete failed', 'err');
+  }).catch(function(e) { toast('Error: ' + e.message, 'err'); });
 }
 
 // ── Markdown renderer (inline, no deps) ──────────────────────────────────
@@ -20195,15 +20223,30 @@ def _probe_backend_versions():
 
     versions = {}
 
+    def _resolve_bin(name):
+        """Find binary via shutil.which + common user-local paths."""
+        p = shutil.which(name)
+        if p: return p
+        for d in (str(Path.home() / ".npm-global" / "bin"), str(Path.home() / ".local" / "bin"), "/usr/local/bin"):
+            c = Path(d) / name
+            if c.exists(): return str(c)
+        return None
+
+    def _cli_version(name, parse_fn=None):
+        """Run binary --version, return version string or empty."""
+        path = _resolve_bin(name)
+        if not path:
+            return {"version": "", "detected": False}
+        try:
+            result = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5)
+            out = (result.stdout or result.stderr or "").strip()
+            ver = parse_fn(out) if parse_fn else out.split()[-1] if out else ""
+            return {"version": ver, "detected": True} if ver else {"version": "", "detected": False}
+        except Exception:
+            return {"version": "", "detected": False}
+
     # OpenClaw
-    try:
-        import subprocess
-        result = subprocess.run(["openclaw", "--version"], capture_output=True, text=True, timeout=5)
-        ver = result.stdout.strip().split()[-1] if result.stdout.strip() else ""
-        if ver:
-            versions["openclaw"] = {"version": ver, "detected": True}
-    except Exception:
-        versions["openclaw"] = {"version": "", "detected": False}
+    versions["openclaw"] = _cli_version("openclaw")
 
     # Ollama
     try:
@@ -20215,32 +20258,14 @@ def _probe_backend_versions():
     except Exception:
         versions["ollama"] = {"version": "", "detected": False}
 
-    # Claude — hardcoded API version
-    versions["claude"] = {"version": "2023-06-01", "detected": True}
+    # Claude CLI — "2.1.70 (Claude Code)" → extract version number
+    versions["claude"] = _cli_version("claude", lambda out: out.split()[0] if out else "")
 
     # Gemini
-    try:
-        import subprocess
-        result = subprocess.run(["gemini", "--version"], capture_output=True, text=True, timeout=5)
-        ver = result.stdout.strip().split()[-1] if result.stdout.strip() else result.stdout.strip()
-        if ver:
-            versions["gemini"] = {"version": ver, "detected": True}
-        else:
-            versions["gemini"] = {"version": "", "detected": False}
-    except Exception:
-        versions["gemini"] = {"version": "", "detected": False}
+    versions["gemini"] = _cli_version("gemini")
 
     # Codex
-    try:
-        import subprocess
-        result = subprocess.run(["codex", "--version"], capture_output=True, text=True, timeout=5)
-        ver = result.stdout.strip().split()[-1] if result.stdout.strip() else ""
-        if ver:
-            versions["codex"] = {"version": ver, "detected": True}
-        else:
-            versions["codex"] = {"version": "", "detected": False}
-    except Exception:
-        versions["codex"] = {"version": "", "detected": False}
+    versions["codex"] = _cli_version("codex", lambda out: out.split()[-1] if out else "")
 
     # Check for updates
     for bk, latest in KNOWN_LATEST.items():
@@ -21714,7 +21739,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.30"})
+            self.reply_json({"v": "0.27.31"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -21801,7 +21826,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.30"
+                health["porter_version"] = "0.27.31"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -23290,7 +23315,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.30'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.31'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -26178,7 +26203,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
             keys = _config.setdefault("api_keys", {})
-            allowed_keys = {"brave_search"}
+            allowed_keys = {"brave_search", "openai", "anthropic", "google_ai"}
             for k, v in data.items():
                 if k in allowed_keys:
                     keys[k] = v
@@ -27145,7 +27170,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.30 ready (localhost only)")
+    print(f"\n  Porter v0.27.31 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
