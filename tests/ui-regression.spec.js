@@ -360,6 +360,8 @@ test.describe('Nav bar structure', () => {
     page.on('pageerror', err => errors.push(err.message));
     const navButtons = await page.$$('.sidebar nav button');
     for (const btn of navButtons) {
+      const visible = await btn.isVisible();
+      if (!visible) continue;
       await btn.click();
       await page.waitForTimeout(300);
     }

@@ -11398,7 +11398,7 @@ async function renderGwsPanel() {
   }).catch(function() { section.style.display = 'none'; });
 }
 
-function loadCapabilities() {
+async function loadCapabilities() {
   const el = document.getElementById('capabilities-list');
   if (!el) return;
   el.innerHTML = '<div class="loading-indicator">Checking capabilities</div>';
@@ -12003,7 +12003,9 @@ async function _populateLearnDests() {
       _learnDestCache = (r && r.destinations) || [];
     } catch(e) { _learnDestCache = []; }
   }
-  _fillLearnSelects();
+  if (_learnDestCache && _learnDestCache.length) _fillLearnSelects();
+  // Retry once if selects are still empty (race condition guard)
+  setTimeout(function() { _fillLearnSelects(); }, 500);
 }
 async function _saveLearnDirect(btn, sid, source) {
   var container = btn.closest('.sess-learnings-inline');
