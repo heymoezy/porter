@@ -12232,7 +12232,6 @@ function _renderInlineSessions(sessions, source, container) {
         + '</div>'
         + '<div style="display:flex;gap:4px;margin-top:3px">'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_showSessionLearnings(this,\'' + sid + '\',\'' + ssrc + '\')">' + (s.learnings ? '\u25be Memory' : 'Memory') + '</button>'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px;color:var(--red,#f87171)" onclick="event.stopPropagation();deleteSession(\'' + sid + '\',\'' + ssrc + '\')">Delete</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_renameSession(this,\'' + sid + '\',\'' + ssrc + '\')">\u270f</button>'
@@ -12291,7 +12290,6 @@ function _renderActivitySessions(sessions, source) {
       + '</div>'
       + '<div class="ma-session-actions">'
       + '<button class="btn btn-ghost" onclick="event.stopPropagation();_showSessionLearnings(this,\'' + sid + '\',\'' + ssrc + '\')">' + (s.learnings ? '\u25be Memory' : 'Memory') + '</button>'
-      + '<button class="btn btn-ghost" onclick="event.stopPropagation();archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
       + '<button class="btn btn-ghost" onclick="event.stopPropagation();_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
       + '</div>'
       + '<div class="sess-learnings-inline" style="margin-top:4px;display:none;overflow:visible" data-sid="' + sid + '"></div>'
@@ -12454,6 +12452,7 @@ function _renderMemoryFacts(container, facts, sid, source) {
       html += '<div class="mem-fact-row" data-id="' + f.id + '" style="display:flex;align-items:flex-start;gap:4px;font-size:10px;line-height:1.4;padding:3px 0;border-bottom:1px solid var(--border)">'
         + '<span style="flex:1;color:var(--text)">' + escHtml(f.fact) + '</span>'
         + '<span style="font-size:8px;color:var(--text3);white-space:nowrap" title="Importance ' + imp + '/10">' + impDots + '</span>'
+        + '<button class="btn btn-ghost" style="font-size:9px;padding:0 4px;flex-shrink:0" onclick="event.stopPropagation();_editMemoryFact(' + f.id + ',this)" title="Edit">\u270f</button>'
         + '<button class="btn btn-ghost" style="font-size:9px;padding:0 4px;color:var(--red,#f87171);flex-shrink:0" onclick="event.stopPropagation();_deleteMemoryFact(' + f.id + ',this)" title="Delete">\u00d7</button>'
         + '</div>';
     });
@@ -12481,6 +12480,49 @@ async function _deleteMemoryFact(factId, btn) {
     toast('Delete failed', 'err');
     btn.disabled = false;
   }
+}
+
+async function _editMemoryFact(factId, btn) {
+  var row = btn.closest('.mem-fact-row');
+  if (!row) return;
+  var textEl = row.querySelector('span');
+  if (!textEl) return;
+  var oldText = textEl.textContent;
+  // Inline edit: replace text with input
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.value = oldText;
+  input.style.cssText = 'flex:1;font-size:10px;padding:2px 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg2);color:var(--text)';
+  input.onclick = function(e) { e.stopPropagation(); };
+  textEl.replaceWith(input);
+  input.focus();
+  input.select();
+  // Save on Enter or blur
+  async function _save() {
+    var newText = input.value.trim();
+    if (!newText || newText === oldText) {
+      var sp = document.createElement('span');
+      sp.style.cssText = 'flex:1;color:var(--text)';
+      sp.textContent = oldText;
+      input.replaceWith(sp);
+      return;
+    }
+    try {
+      var resp = await api('/api/cortex/memories/' + factId + '/update', { fact: newText });
+      var sp = document.createElement('span');
+      sp.style.cssText = 'flex:1;color:var(--text)';
+      sp.textContent = (resp && resp.ok) ? newText : oldText;
+      input.replaceWith(sp);
+      if (resp && resp.ok) toast('Memory updated');
+    } catch(e) {
+      var sp = document.createElement('span');
+      sp.style.cssText = 'flex:1;color:var(--text)';
+      sp.textContent = oldText;
+      input.replaceWith(sp);
+    }
+  }
+  input.onkeydown = function(e) { if (e.key === 'Enter') { e.preventDefault(); _save(); } if (e.key === 'Escape') { var sp = document.createElement('span'); sp.style.cssText = 'flex:1;color:var(--text)'; sp.textContent = oldText; input.replaceWith(sp); } };
+  input.onblur = _save;
 }
 
 async function _reextractMemory(sid, source) {
@@ -12670,8 +12712,32 @@ async function deleteSession(sessionId, source) {
   var _delOk = await porterConfirm('Delete Session', 'Permanently delete this session? This cannot be undone.', {confirmLabel: 'Delete', danger: true});
   if (!_delOk) return;
   var r = await api('/api/sessions/' + sessionId + '/delete', { source: source });
-  if (r && r.ok) { toast('Session deleted'); loadModels(); }
-  else { toast('Delete failed', 'err'); }
+  if (r && r.ok) {
+    toast('Session deleted');
+    // Animate removal — fade out the card
+    var cards = document.querySelectorAll('[data-session-id="' + sessionId.toLowerCase() + '"]');
+    var inlineCards = document.querySelectorAll('.inline-sess-card');
+    inlineCards.forEach(function(c) {
+      if (c.innerHTML.indexOf(sessionId) >= 0 || c.innerHTML.indexOf(sessionId.substring(0,8)) >= 0) {
+        c.style.transition = 'opacity 0.3s, max-height 0.3s, margin 0.3s, padding 0.3s';
+        c.style.opacity = '0';
+        c.style.maxHeight = '0';
+        c.style.overflow = 'hidden';
+        c.style.margin = '0';
+        c.style.padding = '0';
+        setTimeout(function() { c.remove(); }, 350);
+      }
+    });
+    cards.forEach(function(c) {
+      c.style.transition = 'opacity 0.3s, max-height 0.3s, margin 0.3s, padding 0.3s';
+      c.style.opacity = '0';
+      c.style.maxHeight = '0';
+      c.style.overflow = 'hidden';
+      c.style.margin = '0';
+      c.style.padding = '0';
+      setTimeout(function() { c.remove(); }, 350);
+    });
+  } else { toast('Delete failed', 'err'); }
 }
 
 async function archiveSession(sessionId, source) {
@@ -13342,10 +13408,10 @@ async function populateChatModels() {
   var _clLabel = _friendlyModel(chatAvail.claude, _clName) + ' (Claude)';
   var _gmLabel = _friendlyModel(chatAvail.gemini, _gmName) + ' (Gemini)';
   var _cdLabel = _friendlyModel(chatAvail.codex, _cdName) + ' (Codex)';
-  addCloudModel('openclaw-gateway', _ocLabel, openclawUp);
+  addCloudModel('codex-cli', _cdLabel, codexUp);
   addCloudModel('claude-cli', _clLabel, claudeUp);
   addCloudModel('gemini-cli-auto', _gmLabel, geminiUp);
-  addCloudModel('codex-cli', _cdLabel, codexUp);
+  addCloudModel('openclaw-gateway', _ocLabel, openclawUp);
 
   // Ollama models (already fetched in parallel above)
   if (localModelsData && localModelsData.models) {
@@ -21067,10 +21133,10 @@ When you need to perform a Workspace action, output a ```gws code block and Port
 
 
 PROVIDER_REGISTRY = {
-    "openclaw": {"dispatch": _dispatch_openclaw, "probe": _probe_openclaw, "type": "gateway", "label": "OpenClaw"},
-    "claude":   {"dispatch": _dispatch_claude,   "probe": _probe_claude,   "type": "cli",     "label": "Claude Code"},
     "codex":    {"dispatch": _dispatch_codex,    "probe": _probe_codex,    "type": "cli",     "label": "Codex"},
+    "claude":   {"dispatch": _dispatch_claude,   "probe": _probe_claude,   "type": "cli",     "label": "Claude Code"},
     "gemini":   {"dispatch": _dispatch_gemini,   "probe": _probe_gemini,   "type": "cli",     "label": "Gemini"},
+    "openclaw": {"dispatch": _dispatch_openclaw, "probe": _probe_openclaw, "type": "gateway", "label": "OpenClaw"},
     "ollama":   {"dispatch": _dispatch_ollama,   "probe": _probe_ollama,   "type": "local",   "label": "Ollama"},
 }
 AGENT_DISPATCHERS = {k: v["dispatch"] for k, v in PROVIDER_REGISTRY.items()}
@@ -21285,7 +21351,7 @@ def _ranked_route():
     return None
 
 
-_DEFAULT_FALLBACK_CHAIN = ["openclaw", "gemini", "claude", "codex", "ollama"]
+_DEFAULT_FALLBACK_CHAIN = ["codex", "claude", "gemini", "openclaw", "ollama"]
 
 def _resolve_with_fallback(preferred, message=""):
     """Try preferred backend; if unavailable, walk fallback chain.
@@ -21335,7 +21401,7 @@ def _smart_route(message):
                      r'\.py\b', r'\.js\b', r'\.ts\b', r'\.html\b', r'\.css\b', r'\.json\b',
                      r'\bapi\b', r'\bendpoint\b', r'\bdatabase\b', r'\bquery\b', r'\bsql\b']
     if any(_re.search(p, msg) for p in code_patterns):
-        return _resolve_with_fallback("openclaw", message)
+        return _resolve_with_fallback("codex", message)
 
     # Quick factual / research → Gemini (fast, good at factual)
     quick_signals = ['what is', 'who is', 'when did', 'how many', 'define ',
@@ -21347,8 +21413,8 @@ def _smart_route(message):
     if len(msg) < 20:
         return _resolve_with_fallback("gemini", message)
 
-    # Default → OpenClaw
-    return _resolve_with_fallback("openclaw", message)
+    # Default → Codex CLI (primary chat model)
+    return _resolve_with_fallback("codex", message)
 
 
 # ── Persona Layer ──────────────────────────────────────────────────────────
@@ -26784,6 +26850,27 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             force = bool(data.get("force", False))
             result = _extract_learnings_preview(session_id, source, force=force)
             self.reply_json(result)
+
+        # ── Update individual cortex memory (POST) ─────────────────────────
+        elif parsed.path.startswith("/api/cortex/memories/") and parsed.path.endswith("/update"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.split("/")
+            mem_id = parts[4] if len(parts) >= 6 else ""
+            if not mem_id:
+                self.reply_json({"ok": False, "error": "Missing memory ID"}, 400); return
+            data = self.read_json_body()
+            new_fact = str(data.get("fact", "")).strip()
+            if not new_fact:
+                self.reply_json({"ok": False, "error": "Empty fact"}, 400); return
+            try:
+                conn = _db_conn()
+                conn.execute("UPDATE cortex_memories SET fact=?, keywords=?, updated_at=strftime('%s','now') WHERE id=?",
+                             (new_fact, ",".join(_cortex_tokenize(new_fact)), mem_id))
+                conn.commit()
+                conn.close()
+                self.reply_json({"ok": True, "id": mem_id, "fact": new_fact})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
 
         # ── Delete individual cortex memory (POST) ─────────────────────────
         elif parsed.path.startswith("/api/cortex/memories/") and parsed.path.endswith("/delete"):
