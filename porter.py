@@ -12436,7 +12436,7 @@ async function _showSessionLearnings(btn, sid, source) {
 
 function _renderMemoryFacts(container, facts, sid, source) {
   var scopeOrder = ['agent', 'project', 'global'];
-  var scopeLabels = {agent: '\U0001f916 Agent', project: '\U0001f4c1 Project', global: '\U0001f310 Global'};
+  var scopeLabels = {agent: '\ud83e\udd16 Agent', project: '\ud83d\udcc1 Project', global: '\ud83c\udf10 Global'};
   var scopeColors = {agent: 'var(--cyan,#22d3ee)', project: 'var(--amber,#fbbf24)', global: 'var(--green,#4ade80)'};
   var grouped = {};
   facts.forEach(function(f) {
@@ -12666,7 +12666,7 @@ function openFlushWizard() {}
 function closeFlushWizard() {}
 function saveLearn() {}
 
-async async function deleteSession(sessionId, source) {
+async function deleteSession(sessionId, source) {
   var _delOk = await porterConfirm('Delete Session', 'Permanently delete this session? This cannot be undone.', {confirmLabel: 'Delete', danger: true});
   if (!_delOk) return;
   var r = await api('/api/sessions/' + sessionId + '/delete', { source: source });
@@ -12905,7 +12905,7 @@ function saveApiKey() {
     else toast(d.error || 'Save failed', 'err');
   }).catch(function(e) { toast('Error: ' + e.message, 'err'); });
 }
-function deleteApiKey(id) {
+async function deleteApiKey(id) {
   var _delOk = await porterConfirm('Delete API Key', 'Delete this API key?', {confirmLabel: 'Delete', danger: true});
   if (!_delOk) return;
   var payload = {};
