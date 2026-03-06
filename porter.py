@@ -8924,7 +8924,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.27.35', date:'2026-03-06', notes:['Stripped manual Learnings UI (replaced by Cortex auto-memory)','Chat auto-routing fix \u2014 server-side smart routing decides model priority','Porter context awareness \u2014 models in general chat know they operate within Porter','All backends (Claude, Codex, Ollama) now reachable via auto-route fallback chain'] },
+  { ver:'v0.27.35', date:'2026-03-06', notes:['Session Memory: renamed Learnings \u2192 Memory, restored per-session viewer with edit/save/re-extract','Chat auto-routing fix \u2014 server-side smart routing decides model priority','Porter context awareness \u2014 models in general chat know they operate within Porter','All backends (Claude, Codex, Ollama) now reachable via auto-route fallback chain'] },
   { ver:'v0.27.34', date:'2026-03-06', notes:['Models tab: removed static agent assignments from model cards','Session delete: permanently remove sessions (not just archive)','Model priority order: GPT-5.4 \u2192 Claude \u2192 Codex \u2192 Gemini \u2192 Ollama','GPT-5.4 now default for OpenClaw backend','Dispatch context: all persona .md files loaded in full (SOUL, IDENTITY, ROLE_CARD, MEMORY, RULES)','Removed arbitrary truncation on persona files (was cutting 66% of SOUL.md)','20KB safety cap per file prevents accidental context blowup'] },
   { ver:'v0.27.33', date:'2026-03-06', notes:['Porter Cortex: auto-memory system (extract \u2192 route \u2192 inject \u2192 consolidate)','Agents auto-learn from every dispatch \u2014 zero-click memory','Context injection: relevant memories prepended before each agent dispatch','Memory consolidation: background dedup prevents unbounded growth','Latest models: GPT-5.4, Claude Opus 4.6, Gemini 2.5 Pro in Models tab','GET /api/cortex/memories + /api/cortex/stats endpoints'] },
   { ver:'v0.27.32', date:'2026-03-06', notes:['Google Workspace CLI: full integration (Gmail, Drive, Calendar, Sheets, Docs + 14 services)','/workspace and /gws chat commands for direct Workspace operations','POST /api/gws/exec endpoint for programmatic Workspace access','Auto-detect gws installation, auth status, and granted services','Workspace quick actions panel in Extensions tab'] },
@@ -12177,11 +12177,19 @@ function _renderInlineSessions(sessions, source, container) {
         + '<span>' + (s.messages || 0) + ' msgs</span>'
         + '</div>'
         + '<div style="display:flex;gap:4px;margin-top:3px">'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_showSessionLearnings(this,\'' + sid + '\',\'' + ssrc + '\')">' + (s.learnings ? '\u25be Memory' : 'Memory') + '</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px;color:var(--red,#f87171)" onclick="event.stopPropagation();deleteSession(\'' + sid + '\',\'' + ssrc + '\')">Delete</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_renameSession(this,\'' + sid + '\',\'' + ssrc + '\')">\u270f</button>'
         + '</div>'
+        + '<div class="sess-learnings-inline" style="margin-top:3px;font-size:10px;color:var(--text3);display:none;overflow:visible" data-sid="' + sid + '">'
+        + '<textarea class="sess-learn-text" onclick="event.stopPropagation()" style="width:100%;min-height:60px;resize:vertical;overflow:auto;line-height:1.5;font-size:10px;font-family:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px;box-sizing:border-box">' + (s.learnings ? escHtml(s.learnings) : '') + '</textarea>'
+        + '<div style="display:flex;gap:4px;margin-top:4px;align-items:center">'
+        + '<select class="sess-learn-dest" onclick="event.stopPropagation()" style="flex:1;font-size:10px;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text)"></select>'
+        + '<button class="btn btn-primary" style="font-size:9px;padding:2px 8px;white-space:nowrap" onclick="event.stopPropagation();_saveLearnDirect(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
+        + '<button class="btn btn-ghost" style="font-size:9px;padding:2px 5px" onclick="event.stopPropagation();_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">\u21bb</button>'
+        + '</div></div>'
         + '</div>';
     }).join('')
     + (sessions.length > 20 ? '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:4px">Showing 20 of ' + sessions.length + '</div>' : '')
@@ -12234,9 +12242,17 @@ function _renderActivitySessions(sessions, source) {
       + (sizeStr ? '<span>\u2022</span><span>' + sizeStr + '</span>' : '')
       + '</div>'
       + '<div class="ma-session-actions">'
+      + '<button class="btn btn-ghost" onclick="event.stopPropagation();_showSessionLearnings(this,\'' + sid + '\',\'' + ssrc + '\')">' + (s.learnings ? '\u25be Memory' : 'Memory') + '</button>'
       + '<button class="btn btn-ghost" onclick="event.stopPropagation();archiveSession(\'' + sid + '\',\'' + ssrc + '\')">Archive</button>'
       + '<button class="btn btn-ghost" onclick="event.stopPropagation();_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
       + '</div>'
+      + '<div class="sess-learnings-inline" style="margin-top:4px;font-size:10px;color:var(--text3);display:none;overflow:visible" data-sid="' + sid + '">'
+      + '<textarea class="sess-learn-text" onclick="event.stopPropagation()" style="width:100%;min-height:60px;resize:vertical;overflow:auto;line-height:1.5;font-size:10px;font-family:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px;box-sizing:border-box">' + (s.learnings ? escHtml(s.learnings) : '') + '</textarea>'
+      + '<div style="display:flex;gap:4px;margin-top:4px;align-items:center">'
+      + '<select class="sess-learn-dest" onclick="event.stopPropagation()" style="flex:1;font-size:10px;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text)"></select>'
+      + '<button class="btn btn-primary" style="font-size:9px;padding:2px 8px;white-space:nowrap" onclick="event.stopPropagation();_saveLearnDirect(this,\'' + sid + '\',\'' + ssrc + '\')">Save</button>'
+      + '<button class="btn btn-ghost" style="font-size:9px;padding:2px 5px" onclick="event.stopPropagation();_reextractLearn(\'' + sid + '\',\'' + ssrc + '\')">\u21bb</button>'
+      + '</div></div>'
       + '</div>';
   }).join('')
   + (sessions.length > 30 ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">Showing 30 of ' + sessions.length + '</div>' : '');
