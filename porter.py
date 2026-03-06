@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.32 — Google Workspace CLI Integration"""
+"""Porter v0.27.33 — Google Workspace CLI Integration"""
 
 
 import email
@@ -96,6 +96,12 @@ DEFAULT_PREFERENCES: dict = {
     "density":             "normal",
     "editor_font_size":    12,
     "policy_preset":       "balanced",
+    "cortex_enabled":           True,
+    "cortex_min_response_len":  100,
+    "cortex_max_facts":         8,
+    "cortex_inject_limit":      5,
+    "cortex_consolidate_hours": 6,
+    "cortex_auto_route":        True,
 }
 DEFAULT_AGENT_FLEET: dict = {
     "channel": "stable",
@@ -772,6 +778,318 @@ def _gws_list_services() -> dict:
     _gws_services_cache["data"] = result
     _gws_services_cache["ts"] = now
     return result
+
+
+# ── Porter Cortex — Auto-Memory System ────────────────────────────────────
+
+_CORTEX_STOP_WORDS = frozenset(
+    "a an the is are was were be been being have has had do does did will would "
+    "shall should may might can could must need ought i me my we our you your he "
+    "she it they them his her its their this that these those am in on at to for "
+    "of with from by as into through during before after above below between out "
+    "up down off over under again further then once here there when where why how "
+    "all each every both few more most other some such no nor not only own same so "
+    "than too very just about also back even still well much now much also".split()
+)
+_CORTEX_EXTRACT_GUARD = threading.local()
+
+def _cortex_tokenize(text):
+    """Extract meaningful keywords from text, removing stop words."""
+    words = re.findall(r'[a-z0-9_]+', text.lower())
+    return set(w for w in words if len(w) > 2 and w not in _CORTEX_STOP_WORDS)
+
+def _jaccard_similarity(kw_a, kw_b):
+    """Set overlap ratio between two keyword sets."""
+    if not kw_a or not kw_b:
+        return 0.0
+    intersection = kw_a & kw_b
+    union = kw_a | kw_b
+    return len(intersection) / len(union) if union else 0.0
+
+def _cortex_relevance_score(query_kw, stored_kw, importance=5):
+    """Jaccard similarity weighted by importance."""
+    return _jaccard_similarity(query_kw, stored_kw) * (importance / 10.0)
+
+def _parse_cortex_json(text):
+    """Extract JSON from LLM response — handles code fences."""
+    if not text:
+        return None
+    # Try code fence first
+    m = re.search(r'```(?:json)?\s*([\s\S]*?)```', text)
+    if m:
+        text = m.group(1).strip()
+    # Try bare JSON
+    start = text.find('{')
+    if start == -1:
+        return None
+    depth = 0
+    end = start
+    for i, c in enumerate(text[start:], start):
+        if c == '{': depth += 1
+        elif c == '}': depth -= 1
+        if depth == 0:
+            end = i + 1
+            break
+    try:
+        return json.loads(text[start:end])
+    except Exception:
+        return None
+
+def _is_duplicate(new_fact, existing_facts):
+    """Check if a fact is a duplicate (keyword overlap > 0.6)."""
+    new_kw = _cortex_tokenize(new_fact)
+    for ef in existing_facts:
+        if _jaccard_similarity(new_kw, _cortex_tokenize(ef)) > 0.6:
+            return True
+    return False
+
+def _cortex_resolve_destination(scope, scope_id):
+    """Map scope to a file path for persistent storage."""
+    if scope == "agent" and scope_id:
+        p = PERSONAS_DIR / scope_id
+        if not p.exists():
+            # Try finding by name
+            try:
+                conn = _db_conn()
+                row = conn.execute("SELECT id FROM personas WHERE name=?", (scope_id,)).fetchone()
+                conn.close()
+                if row:
+                    p = PERSONAS_DIR / row[0]
+            except Exception:
+                pass
+        return p / "MEMORY.md" if p.exists() else None
+    elif scope == "project" and scope_id:
+        project_dir = _DATA_DIR / "projects" / scope_id
+        if project_dir.exists():
+            return project_dir / "MEMORY.md"
+        return None
+    else:
+        # Global scope
+        return MEMORY_DIR / "cortex_global.md"
+
+def _cortex_append_to_file(path, fact_text):
+    """Append a fact as a markdown bullet to a file."""
+    try:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = path.read_text() if path.exists() else ""
+        if fact_text.strip() in existing:
+            return False  # Already present
+        with open(path, "a") as f:
+            f.write(f"\n- {fact_text.strip()}\n")
+        return True
+    except Exception as e:
+        log.debug("Cortex append failed: %s", e)
+        return False
+
+def _cortex_extract_and_route(message, response_text, persona_id="", backend=""):
+    """Extract facts from a dispatch response and route to memory. Runs in background thread."""
+    # Guard against circular extraction
+    if getattr(_CORTEX_EXTRACT_GUARD, 'active', False):
+        return
+    _CORTEX_EXTRACT_GUARD.active = True
+    try:
+        _cortex_extract_and_route_inner(message, response_text, persona_id, backend)
+    finally:
+        _CORTEX_EXTRACT_GUARD.active = False
+
+def _cortex_extract_and_route_inner(message, response_text, persona_id="", backend=""):
+    """Inner extraction logic."""
+    prefs = _config.get("preferences", {})
+    if not prefs.get("cortex_enabled", True):
+        return
+    min_len = prefs.get("cortex_min_response_len", 100)
+    max_facts = prefs.get("cortex_max_facts", 8)
+    if len(response_text) < min_len:
+        return
+
+    # Build extraction prompt
+    extract_prompt = (
+        "You are a memory extraction system. Analyze this conversation and extract "
+        "key facts worth remembering for future interactions.\n\n"
+        f"USER MESSAGE:\n{message[:1000]}\n\n"
+        f"RESPONSE:\n{response_text[:2000]}\n\n"
+        "Return a JSON object with this structure:\n"
+        '{"facts": [{"text": "concise fact", "scope": "global|agent|project", '
+        '"importance": 1-10, "keywords": "comma,separated,keywords"}]}\n\n'
+        f"Rules:\n- Max {max_facts} facts\n- Skip trivial/obvious information\n"
+        "- scope=agent for agent-specific behavior\n"
+        "- scope=project for project-specific info\n"
+        "- scope=global for universally useful knowledge\n"
+        "- importance: 1=trivial, 5=moderate, 10=critical\n"
+        "Return ONLY valid JSON, no explanation."
+    )
+
+    # Try extraction via dispatch (reuse existing backends)
+    try:
+        result = dispatch_agent(extract_prompt, backend or "openclaw", timeout=30)
+        if not result.get("ok"):
+            # Fallback: try other backends
+            for fb in ["gemini", "claude", "ollama"]:
+                if fb != backend:
+                    result = dispatch_agent(extract_prompt, fb, timeout=30)
+                    if result.get("ok"):
+                        break
+        if not result.get("ok"):
+            return
+    except Exception as e:
+        log.debug("Cortex extraction dispatch failed: %s", e)
+        return
+
+    parsed = _parse_cortex_json(result.get("text", ""))
+    if not parsed or "facts" not in parsed:
+        return
+
+    # Load existing facts to check for duplicates
+    try:
+        conn = _db_conn()
+        existing_rows = conn.execute(
+            "SELECT fact FROM cortex_memories WHERE consolidated_into IS NULL"
+        ).fetchall()
+        existing_facts = [r[0] for r in existing_rows]
+        conn.close()
+    except Exception:
+        existing_facts = []
+
+    inserted = 0
+    for fact_obj in parsed["facts"][:max_facts]:
+        fact_text = str(fact_obj.get("text", "")).strip()
+        if not fact_text or len(fact_text) < 10:
+            continue
+        scope = fact_obj.get("scope", "global")
+        if scope not in ("global", "agent", "project"):
+            scope = "global"
+        importance = max(1, min(10, int(fact_obj.get("importance", 5))))
+        keywords = str(fact_obj.get("keywords", ""))
+
+        # Duplicate check
+        if _is_duplicate(fact_text, existing_facts):
+            continue
+
+        # Resolve destination and append
+        scope_id = persona_id if scope == "agent" else ""
+        dest = _cortex_resolve_destination(scope, scope_id)
+        routed_to = str(dest) if dest else ""
+        if dest and prefs.get("cortex_auto_route", True):
+            _cortex_append_to_file(dest, fact_text)
+
+        # Insert into DB
+        try:
+            conn = _db_conn()
+            conn.execute(
+                """INSERT INTO cortex_memories (fact, scope, scope_id, source_type, source_id,
+                   importance, keywords, routed_to)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (fact_text, scope, scope_id, "dispatch", persona_id or backend,
+                 importance, keywords, routed_to)
+            )
+            conn.commit()
+            conn.close()
+            existing_facts.append(fact_text)
+            inserted += 1
+        except Exception as e:
+            log.debug("Cortex DB insert failed: %s", e)
+
+    if inserted:
+        log.info("Cortex extracted %d facts from dispatch (%s)", inserted, persona_id or backend)
+        mlog.emit("info", "cortex", "cortex.extract", f"Extracted {inserted} facts",
+                   persona_id=persona_id, backend=backend)
+
+def _cortex_inject_context(message, persona_id="", project_id=""):
+    """Inject relevant memories before a persona dispatch. Pure SQL + keyword matching, no LLM."""
+    prefs = _config.get("preferences", {})
+    if not prefs.get("cortex_enabled", True):
+        return ""
+    inject_limit = prefs.get("cortex_inject_limit", 5)
+
+    query_kw = _cortex_tokenize(message)
+    if not query_kw:
+        return ""
+
+    try:
+        conn = _db_conn()
+        rows = conn.execute(
+            "SELECT id, fact, scope, scope_id, importance, keywords FROM cortex_memories "
+            "WHERE consolidated_into IS NULL ORDER BY created_at DESC LIMIT 200"
+        ).fetchall()
+        conn.close()
+    except Exception:
+        return ""
+
+    if not rows:
+        return ""
+
+    # Score each memory — prioritize by scope relevance
+    scored = []
+    for row in rows:
+        rid, fact, scope, scope_id, importance, kw_str = row
+        stored_kw = set(k.strip() for k in kw_str.split(",") if k.strip()) if kw_str else _cortex_tokenize(fact)
+        base_score = _cortex_relevance_score(query_kw, stored_kw, importance)
+        # Scope bonus: agent > project > global
+        if scope == "agent" and scope_id == persona_id:
+            base_score *= 1.5
+        elif scope == "project" and scope_id == project_id:
+            base_score *= 1.3
+        if base_score > 0.05:
+            scored.append((base_score, fact))
+
+    if not scored:
+        return ""
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = scored[:inject_limit]
+    facts = [f"- {s[1]}" for s in top]
+    return "Relevant memories:\n" + "\n".join(facts)
+
+def _cortex_consolidate_loop():
+    """Background daemon: periodically merge similar memories."""
+    import time as _t
+    while True:
+        prefs = _config.get("preferences", {})
+        hours = max(1, prefs.get("cortex_consolidate_hours", 6))
+        _t.sleep(hours * 3600)
+        if not prefs.get("cortex_enabled", True):
+            continue
+        try:
+            conn = _db_conn()
+            rows = conn.execute(
+                "SELECT id, fact, scope, scope_id, importance, keywords FROM cortex_memories "
+                "WHERE consolidated_into IS NULL"
+            ).fetchall()
+
+            # Group by scope
+            groups = {}
+            for row in rows:
+                key = (row[2], row[3])  # scope, scope_id
+                groups.setdefault(key, []).append(row)
+
+            merged_count = 0
+            for key, members in groups.items():
+                if len(members) < 2:
+                    continue
+                # Compare all pairs
+                for i in range(len(members)):
+                    for j in range(i + 1, len(members)):
+                        kw_i = _cortex_tokenize(members[i][1])
+                        kw_j = _cortex_tokenize(members[j][1])
+                        if _jaccard_similarity(kw_i, kw_j) > 0.5:
+                            # Keep the one with higher importance
+                            keep = members[i] if members[i][4] >= members[j][4] else members[j]
+                            discard = members[j] if keep == members[i] else members[i]
+                            conn.execute(
+                                "UPDATE cortex_memories SET consolidated_into=?, updated_at=strftime('%s','now') WHERE id=?",
+                                (keep[0], discard[0])
+                            )
+                            merged_count += 1
+
+            if merged_count:
+                conn.commit()
+                log.info("Cortex consolidated %d memories", merged_count)
+                mlog.emit("info", "cortex", "cortex.consolidate", f"Merged {merged_count} memories")
+            conn.close()
+        except Exception as e:
+            log.debug("Cortex consolidation error: %s", e)
+
 
 
 def _run_cap_checks(force: bool = False):
@@ -4752,6 +5070,25 @@ def _init_trace_tables():
     """)
 
     conn.execute("""
+    CREATE TABLE IF NOT EXISTS cortex_memories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fact TEXT NOT NULL,
+        scope TEXT NOT NULL DEFAULT 'global',
+        scope_id TEXT DEFAULT '',
+        source_type TEXT DEFAULT 'dispatch',
+        source_id TEXT DEFAULT '',
+        importance INTEGER DEFAULT 5,
+        keywords TEXT DEFAULT '',
+        routed_to TEXT DEFAULT '',
+        consolidated_into INTEGER DEFAULT NULL,
+        created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+        updated_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+    );
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_scope ON cortex_memories(scope, scope_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_active ON cortex_memories(consolidated_into)")
+
+    conn.execute("""
     CREATE TABLE IF NOT EXISTS session_archive (
         session_id TEXT PRIMARY KEY,
         source TEXT NOT NULL DEFAULT '',
@@ -7317,7 +7654,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.32</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.33</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8040,6 +8377,10 @@ select.settings-input { padding-right: 26px; }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
         API Keys
       </button>
+      <button class="settings-nav-item" id="snav-cortex" onclick="switchSettingsTab('cortex')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 014 4v1a3 3 0 013 3v1a2 2 0 012 2v2a2 2 0 01-2 2h-1a3 3 0 01-3 3v1a4 4 0 01-8 0v-1a3 3 0 01-3-3H3a2 2 0 01-2-2v-2a2 2 0 012-2v-1a3 3 0 013-3V6a4 4 0 014-4z"/></svg>
+        Cortex
+      </button>
       <div style="flex:1"></div>
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
@@ -8370,6 +8711,53 @@ select.settings-input { padding-right: 26px; }
       </div>
 
     </div><!-- /settings-content -->
+      <!-- Cortex page -->
+      <div class="settings-page" id="spage-cortex">
+        <div class="settings-page-title">Porter Cortex</div>
+        <p style="color:var(--text3);font-size:12px;margin-bottom:16px">Auto-memory system — agents learn from every dispatch</p>
+        <div id="cortex-stats" style="margin-bottom:20px">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:20px;font-weight:700;color:var(--accent)" id="cx-total">—</div>
+              <div style="font-size:10px;color:var(--text3)">Active</div>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:20px;font-weight:700;color:var(--text2)" id="cx-merged">—</div>
+              <div style="font-size:10px;color:var(--text3)">Merged</div>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:20px;font-weight:700;color:var(--text2)" id="cx-24h">—</div>
+              <div style="font-size:10px;color:var(--text3)">Last 24h</div>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:20px;font-weight:700" id="cx-enabled" style="color:var(--green)">—</div>
+              <div style="font-size:10px;color:var(--text3)">Status</div>
+            </div>
+          </div>
+        </div>
+        <div class="settings-field">
+          <label>Enabled</label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="cx-toggle" onchange="saveCortexConfig()" checked>
+            <span style="font-size:12px;color:var(--text3)">Extract and route memories automatically</span>
+          </label>
+        </div>
+        <div class="settings-field">
+          <label>Min response length</label>
+          <input type="number" class="settings-input" id="cx-min-len" value="100" min="20" max="1000" style="width:120px" onchange="saveCortexConfig()">
+          <span style="font-size:11px;color:var(--text3);margin-top:4px;display:block">Responses shorter than this are skipped</span>
+        </div>
+        <div class="settings-field">
+          <label>Max facts per extraction</label>
+          <input type="number" class="settings-input" id="cx-max-facts" value="8" min="1" max="20" style="width:120px" onchange="saveCortexConfig()">
+        </div>
+        <div class="settings-field">
+          <label>Inject limit</label>
+          <input type="number" class="settings-input" id="cx-inject-limit" value="5" min="1" max="20" style="width:120px" onchange="saveCortexConfig()">
+          <span style="font-size:11px;color:var(--text3);margin-top:4px;display:block">Max memories injected per dispatch</span>
+        </div>
+      </div>
+
   </div><!-- /settingsPanel -->
 
 
@@ -8495,6 +8883,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.33', date:'2026-03-06', notes:['Porter Cortex: auto-memory system (extract \u2192 route \u2192 inject \u2192 consolidate)','Agents auto-learn from every dispatch \u2014 zero-click memory','Context injection: relevant memories prepended before each agent dispatch','Memory consolidation: background dedup prevents unbounded growth','Latest models: GPT-5.4, Claude Opus 4.6, Gemini 2.5 Pro in Models tab','GET /api/cortex/memories + /api/cortex/stats endpoints'] },
   { ver:'v0.27.32', date:'2026-03-06', notes:['Google Workspace CLI: full integration (Gmail, Drive, Calendar, Sheets, Docs + 14 services)','/workspace and /gws chat commands for direct Workspace operations','POST /api/gws/exec endpoint for programmatic Workspace access','Auto-detect gws installation, auth status, and granted services','Workspace quick actions panel in Extensions tab'] },
   { ver:'v0.27.31', date:'2026-03-06', notes:['API Keys: save-once / delete-only pattern for all service keys','API Keys tab: Brave, OpenAI, Anthropic, Google AI in one place','Fix: version probing for Gemini CLI, OpenClaw, Codex, Claude (PATH resolution)'] },
   { ver:'v0.27.30', date:'2026-03-06', notes:['Brave Search: native web search integration (no OpenClaw dependency)','/search chat command for quick web lookups','web_search tool available to all LLM backends via dispatch','API key management in Settings tab'] },
@@ -12275,6 +12664,44 @@ function switchSettingsTab(tab) {
     setTimeout(populateChangelog, 0);
   }
   if (tab === 'apikeys') { loadApiKeys(); }
+  if (tab === 'cortex') { loadCortexStats(); }
+}
+
+function loadCortexStats() {
+  fetch('/api/cortex/stats', {credentials:'same-origin'}).then(r=>r.json()).then(function(d) {
+    if (!d.ok) return;
+    var el = function(id) { return document.getElementById(id); };
+    if (el('cx-total')) el('cx-total').textContent = d.total_active || 0;
+    if (el('cx-merged')) el('cx-merged').textContent = d.total_merged || 0;
+    if (el('cx-24h')) el('cx-24h').textContent = d.last_24h || 0;
+    if (el('cx-enabled')) { el('cx-enabled').textContent = d.enabled ? 'ON' : 'OFF'; el('cx-enabled').style.color = d.enabled ? 'var(--green, #4ade80)' : 'var(--red, #f87171)'; }
+    if (el('cx-toggle')) el('cx-toggle').checked = d.enabled;
+  }).catch(function(){});
+  // Load current config values
+  fetch('/api/config/summary', {credentials:'same-origin'}).then(r=>r.json()).then(function(d) {
+    var p = (d && d.preferences) ? d.preferences : {};
+    var el = function(id) { return document.getElementById(id); };
+    if (el('cx-toggle') && p.cortex_enabled !== undefined) el('cx-toggle').checked = p.cortex_enabled;
+    if (el('cx-min-len') && p.cortex_min_response_len) el('cx-min-len').value = p.cortex_min_response_len;
+    if (el('cx-max-facts') && p.cortex_max_facts) el('cx-max-facts').value = p.cortex_max_facts;
+    if (el('cx-inject-limit') && p.cortex_inject_limit) el('cx-inject-limit').value = p.cortex_inject_limit;
+  }).catch(function(){});
+}
+
+function saveCortexConfig() {
+  var el = function(id) { return document.getElementById(id); };
+  var data = {
+    cortex_enabled: el('cx-toggle') ? el('cx-toggle').checked : true,
+    cortex_min_response_len: el('cx-min-len') ? parseInt(el('cx-min-len').value) || 100 : 100,
+    cortex_max_facts: el('cx-max-facts') ? parseInt(el('cx-max-facts').value) || 8 : 8,
+    cortex_inject_limit: el('cx-inject-limit') ? parseInt(el('cx-inject-limit').value) || 5 : 5,
+  };
+  fetch('/api/cortex/config', {method:'POST', credentials:'same-origin',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
+  }).then(r=>r.json()).then(function(d) {
+    if (d.ok) toast('Cortex settings saved');
+    loadCortexStats();
+  }).catch(function(){ toast('Failed to save Cortex config', 'err'); });
 }
 
 
@@ -14962,11 +15389,15 @@ function renderInfraCards(providers, agents) {
 
 const MODEL_OPTIMIZED = {
   'gpt-5.3-codex':    'Agentic coding, long-running tasks, tool use',
-    'gpt-5.4':          'Most capable — reasoning, computer use, 1M context',
+  'gpt-5.4':          'Most capable — reasoning, computer use, 1M context',
+  'gpt-5.4-thinking': 'Deep reasoning, chain-of-thought, complex analysis',
+  'o3-pro':           'Advanced reasoning, math, science, competition-grade',
   'codex':            'Agentic coding, long-running tasks, tool use',
   'claude-opus-4-6':  'Deep reasoning, security audits, architecture',
   'claude-sonnet-4-6':'Implementation, debugging, tool calling',
+  'claude-haiku-4-5': 'Fast responses, classification, simple tasks',
   'gemini-2.5-pro':   'Research, extended context (1M tokens), multimodal',
+  'gemini-2.5-flash': 'Fast inference, cost-efficient, large context',
 };
 
 function _modelOptLine(modelId) {
@@ -14981,10 +15412,15 @@ function _modelOptLine(modelId) {
 function _modelDisplayName(modelId) {
   if (!modelId) return 'Unknown';
   const mid = modelId.toLowerCase();
-  if (mid.includes('codex') || mid.includes('gpt-5')) return 'GPT-5.3 Codex';
+  if (mid.includes('o3-pro') || mid.includes('o3_pro')) return 'o3 Pro';
+  if (mid.includes('gpt-5.4-thinking')) return 'GPT-5.4 Thinking';
+  if (mid.includes('gpt-5.4')) return 'GPT-5.4';
+  if (mid.includes('codex') || mid.includes('gpt-5.3')) return 'GPT-5.3 Codex';
   if (mid.includes('opus')) return 'Claude Opus 4.6';
   if (mid.includes('sonnet')) return 'Claude Sonnet 4.6';
-  if (mid.includes('gemini')) return 'Gemini';
+  if (mid.includes('haiku')) return 'Claude Haiku 4.5';
+  if (mid.includes('gemini-2.5-flash') || mid.includes('flash')) return 'Gemini 2.5 Flash';
+  if (mid.includes('gemini')) return 'Gemini 2.5 Pro';
   return modelId;
 }
 
@@ -20613,19 +21049,24 @@ def _probe_backend_versions():
 
 
 AVAILABLE_MODELS = {
-    "openclaw": [{"id": "gpt-5.3-codex", "name": "GPT-5.3 Codex", "default": True}],
+    "openclaw": [
+        {"id": "gpt-5.3-codex", "name": "GPT-5.3 Codex", "default": True},
+        {"id": "gpt-5.4", "name": "GPT-5.4"},
+        {"id": "o3-pro", "name": "o3 Pro"},
+    ],
     "claude":   [
-        {"id": "claude-opus-4-6", "name": "Opus 4.6", "default": True},
-        {"id": "claude-sonnet-4-6", "name": "Sonnet 4.6"},
-        {"id": "claude-haiku-4-5", "name": "Haiku 4.5"},
+        {"id": "claude-opus-4-6", "name": "Claude Opus 4.6", "default": True},
+        {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
+        {"id": "claude-haiku-4-5", "name": "Claude Haiku 4.5"},
     ],
     "gemini":   [
-        {"id": "gemini-2.5-pro", "name": "2.5 Pro", "default": True},
-        {"id": "gemini-2.5-flash", "name": "2.5 Flash"},
+        {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "default": True},
+        {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash"},
     ],
     "codex":    [
-        {"id": "gpt-5.4", "name": "GPT-5.4", "default": True}, {"id": "gpt-5.1", "name": "GPT-5.1"},
-        {"id": "o3", "name": "o3"},
+        {"id": "gpt-5.4", "name": "GPT-5.4", "default": True},
+        {"id": "gpt-5.4-thinking", "name": "GPT-5.4 Thinking"},
+        {"id": "o3-pro", "name": "o3 Pro"},
     ],
     "ollama":   [],  # Runtime-detected via /api/tags
 }
@@ -21058,6 +21499,12 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
         _ctx_parts.append(f"Global rules: {rules[:400]}")
     _ctx_suffix = ' | '.join(_ctx_parts) if _ctx_parts else ''
 
+    # Cortex: inject relevant memories into context
+    _cortex_context = _cortex_inject_context(message, persona_id=persona_id)
+    if _cortex_context:
+        _ctx_parts.append(_cortex_context)
+        _ctx_suffix = ' | '.join(_ctx_parts) if _ctx_parts else ''
+
     # Personality mode: conversational, includes identity context
     if personality_mode:
         _role_hint = f" Your role is {prole}." if prole else ""
@@ -21165,6 +21612,16 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
         conn.close()
     except Exception:
         pass
+
+    # Cortex: extract facts from this dispatch in background
+    if result.get("ok") and result.get("text"):
+        _cortex_msg = message
+        _cortex_resp = result.get("text", "")
+        _cortex_pid = persona_id
+        _cortex_be = backend
+        def _cortex_bg():
+            _cortex_extract_and_route(_cortex_msg, _cortex_resp, _cortex_pid, _cortex_be)
+        threading.Thread(target=_cortex_bg, name="cortex-extract", daemon=True).start()
 
     result["persona_id"] = persona_id
     return result
@@ -22072,7 +22529,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.32"})
+            self.reply_json({"v": "0.27.33"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -22159,7 +22616,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.32"
+                health["porter_version"] = "0.27.33"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -22613,6 +23070,70 @@ class Handler(BaseHTTPRequestHandler):
 
             data = [{col_names[i]: row[i] for i in range(len(col_names))} for row in rows]
             self.reply_json({"ok": True, "rollups": data, "level": level, "count": len(data)})
+
+        elif parsed.path == "/api/cortex/memories":
+            if not self.auth_check(redirect=False): return
+            scope = qs.get("scope", [""])[0].strip()
+            scope_id = qs.get("scope_id", [""])[0].strip()
+            limit_n = min(200, max(10, int(qs.get("limit", ["50"])[0])))
+            offset_n = max(0, int(qs.get("offset", ["0"])[0]))
+            conn = _db_conn()
+            where_parts = ["consolidated_into IS NULL"]
+            params = []
+            if scope:
+                where_parts.append("scope=?")
+                params.append(scope)
+            if scope_id:
+                where_parts.append("scope_id=?")
+                params.append(scope_id)
+            where = " AND ".join(where_parts)
+            rows = conn.execute(
+                f"SELECT id, fact, scope, scope_id, source_type, source_id, importance, keywords, "
+                f"routed_to, created_at, updated_at FROM cortex_memories WHERE {where} "
+                f"ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                params + [limit_n, offset_n]
+            ).fetchall()
+            total = conn.execute(f"SELECT COUNT(*) FROM cortex_memories WHERE {where}", params).fetchone()[0]
+            conn.close()
+            memories = []
+            for r in rows:
+                memories.append({
+                    "id": r[0], "fact": r[1], "scope": r[2], "scope_id": r[3],
+                    "source_type": r[4], "source_id": r[5], "importance": r[6],
+                    "keywords": r[7], "routed_to": r[8],
+                    "created_at": r[9], "updated_at": r[10]
+                })
+            self.reply_json({"ok": True, "memories": memories, "total": total,
+                             "limit": limit_n, "offset": offset_n})
+
+        elif parsed.path == "/api/cortex/stats":
+            if not self.auth_check(redirect=False): return
+            import time as _t
+            conn = _db_conn()
+            total_active = conn.execute(
+                "SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL"
+            ).fetchone()[0]
+            total_merged = conn.execute(
+                "SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NOT NULL"
+            ).fetchone()[0]
+            last_24h = conn.execute(
+                "SELECT COUNT(*) FROM cortex_memories WHERE created_at > ?",
+                (_t.time() - 86400,)
+            ).fetchone()[0]
+            by_scope = {}
+            for row in conn.execute(
+                "SELECT scope, COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL GROUP BY scope"
+            ).fetchall():
+                by_scope[row[0]] = row[1]
+            conn.close()
+            self.reply_json({
+                "ok": True,
+                "total_active": total_active,
+                "total_merged": total_merged,
+                "last_24h": last_24h,
+                "by_scope": by_scope,
+                "enabled": _config.get("preferences", {}).get("cortex_enabled", True)
+            })
 
         elif parsed.path == "/api/trace/task-board":
             if not self.auth_check(redirect=False): return
@@ -23684,7 +24205,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.32'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.33'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -24009,6 +24530,15 @@ class Handler(BaseHTTPRequestHandler):
                     _raw_text = unquote(qs.get("raw_text", [""])[0]) or prompt
                     _save_chat_message(chat_id, model_id, _raw_text, full_response,
                                        project_id=_stream_project, persona_name=_stream_persona)
+
+                # Cortex: extract facts from chat response in background
+                if full_response and len(full_response) >= _config.get("preferences", {}).get("cortex_min_response_len", 100):
+                    _cx_prompt = prompt
+                    _cx_resp = full_response
+                    _cx_be = _stream_backend
+                    def _cx_bg():
+                        _cortex_extract_and_route(_cx_prompt, _cx_resp, backend=_cx_be)
+                    threading.Thread(target=_cx_bg, name="cortex-chat-extract", daemon=True).start()
 
             except Exception as e:
                 log.error("Chat stream error: %s", e)
@@ -26594,6 +27124,26 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
 
 
         # ── API keys management ───────────────────────────────────────────
+        elif parsed.path == "/api/cortex/config":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            if "preferences" not in _config:
+                _config["preferences"] = {}
+            cortex_keys = ["cortex_enabled", "cortex_min_response_len", "cortex_max_facts",
+                           "cortex_inject_limit", "cortex_consolidate_hours", "cortex_auto_route"]
+            updated = {}
+            for k in cortex_keys:
+                if k in data:
+                    val = data[k]
+                    if k == "cortex_enabled" or k == "cortex_auto_route":
+                        val = bool(val)
+                    else:
+                        val = max(1, int(val))
+                    _config["preferences"][k] = val
+                    updated[k] = val
+            save_config(_config)
+            self.reply_json({"ok": True, "updated": updated})
+
         elif parsed.path == "/api/config/apikeys":
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
@@ -27561,11 +28111,13 @@ if __name__ == "__main__":
     _hb_thread.start()
     _rollup_thread = threading.Thread(target=_telemetry_rollup_loop, name="porter-rollup", daemon=True)
     _rollup_thread.start()
+    _cortex_thread = threading.Thread(target=_cortex_consolidate_loop, name="porter-cortex", daemon=True)
+    _cortex_thread.start()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.32 ready (localhost only)")
+    print(f"\n  Porter v0.27.33 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
