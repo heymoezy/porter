@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.29 — Smart Learnings"""
+"""Porter v0.27.30 — Brave Search"""
 
 
 import email
@@ -525,6 +525,20 @@ AI_PROVIDERS: list = [
      "check": lambda: _cap_check_bin("gemini")},
 ]
 
+
+def _check_brave_search() -> dict:
+    """Check if Brave Search API key is configured (env or config)."""
+    key = os.environ.get("BRAVE_API_KEY", "")
+    if not key:
+        try:
+            cfg = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
+            key = cfg.get("api_keys", {}).get("brave_search", "")
+        except Exception:
+            pass
+    if key:
+        return {"ok": True, "version": "API key configured"}
+    return {"ok": False, "version": None}
+
 CAPABILITIES: list = [
     {"id": "node",        "label": "Node.js",
      "install": "https://nodejs.org",
@@ -582,6 +596,10 @@ CAPABILITIES: list = [
      "install": "npm install -g vite",
      "features": ["Frontend build tool"],
      "check": lambda: _cap_check_npx_pkg("vite")},
+    {"id": "brave_search", "label": "Brave Search",
+     "install": "https://brave.com/search/api/",
+     "features": ["Web search", "Real-time results"],
+     "check": lambda: _check_brave_search()},
 ]
 
 
@@ -3329,6 +3347,11 @@ def load_config() -> dict:
         if k not in prefs:
             prefs[k] = v
             changed = True
+
+    # ── api_keys ──
+    if "api_keys" not in cfg:
+        cfg["api_keys"] = {}
+        changed = True
 
     # ── fleet lifecycle config ──
     fleet = cfg.setdefault("agent_fleet", {})
@@ -6678,7 +6701,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .emoji-grid .emoji-btn.selected { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, var(--bg)); }
 @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
-/* Memory tab v6 — compact layout (stripped in v0.27.29, kept: .mem-section-label, .mem-age-badge, .mem-coord-*) */
+/* Memory tab v6 — compact layout (stripped in v0.27.30, kept: .mem-section-label, .mem-age-badge, .mem-coord-*) */
     /* Model list rows (replaces dropdown) */
     .model-list-rows { display:flex;flex-direction:column;gap:1px; }
     .model-list-row { display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;cursor:pointer;transition:.12s;font-size:12px;color:var(--text2); }
@@ -7123,7 +7146,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.29</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.30</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -7838,6 +7861,10 @@ select.settings-input { padding-right: 26px; }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
         Billing
       </button>
+      <button class="settings-nav-item" id="snav-apikeys" onclick="switchSettingsTab('apikeys')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+        API Keys
+      </button>
       <div style="flex:1"></div>
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
@@ -8099,6 +8126,27 @@ select.settings-input { padding-right: 26px; }
         </div>
       </div>
 
+
+      <!-- API Keys page -->
+      <div class="settings-page" id="spage-apikeys">
+        <div class="settings-page-title">API Keys</div>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">Manage API keys for external services. Keys are stored in porter_config.json.</div>
+        <div class="settings-field">
+          <label>Brave Search API Key</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="password" class="settings-input" id="sa-brave-key" placeholder="BSA..." style="flex:1;font-family:monospace">
+            <button class="btn btn-ghost btn-sm" onclick="toggleBraveKeyVis()" id="brave-key-toggle" title="Show/hide" style="padding:6px 8px;min-width:auto">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">Get a key at <a href="https://brave.com/search/api/" target="_blank" style="color:var(--accent)">brave.com/search/api</a>. Also checks <code>BRAVE_API_KEY</code> env var.</div>
+        </div>
+        <div class="settings-save-row" style="gap:8px">
+          <button class="btn btn-primary" onclick="saveBraveKey()">Save</button>
+          <button class="btn btn-ghost" onclick="testBraveKey()">Test</button>
+        </div>
+        <div id="brave-test-result" style="margin-top:12px;font-size:12px;display:none"></div>
+      </div>
       <!-- Task Operations page -->
       <div class="settings-page" id="spage-tasks">
         <div class="sp-header">
@@ -8278,6 +8326,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.30', date:'2026-03-06', notes:['Brave Search: native web search integration (no OpenClaw dependency)','/search chat command for quick web lookups','web_search tool available to all LLM backends via dispatch','API key management in Settings tab'] },
   { ver:'v0.27.29', date:'2026-03-05', notes:['Smart Learnings: extracted insights persist in DB (no re-analysis)','Update Learnings button: batch-extract all sessions in one click','Learnings displayed inline on session cards with save button','Removed per-session Learn wizard modal'] },
   { ver:'v0.27.28', date:'2026-03-05', notes:['Extract Learnings: LLM-powered session analysis replaces flush wizard','Session archive: dismiss sessions without writing (📦 button)','Destination picker: save learnings to agent memory, project, or global','Dispatch chain SVG visualization with animated edges','Session archive with confirmation dialog','Agent drag-and-drop reorder on Agents tab'] },
   { ver:'v0.27.27', date:'2026-03-05', notes:['Fix: model selection (showToast→toast)','Fix: Resume button leads to overview (not blank chat)','Fix: session summary counts thinking/tool_use turns','Session rename: pencil icon on inline cards, editable names persist','Backend version probing: /api/models/versions endpoint','Model cards show version badge with update indicator','Update modal shows install command for outdated backends'] },
@@ -12004,8 +12053,54 @@ function switchSettingsTab(tab) {
     populateChangelog();
     setTimeout(populateChangelog, 0);
   }
+  if (tab === 'apikeys') { loadBraveKey(); }
 }
 
+
+
+// ── API Keys (Brave Search) ──────────────────────────────────────────────
+function toggleBraveKeyVis() {
+  var inp = document.getElementById('sa-brave-key');
+  if (!inp) return;
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+function loadBraveKey() {
+  fetch('/api/config/summary', {credentials:'same-origin'}).then(r=>r.json()).then(function(d) {
+    if (d && d.api_keys && d.api_keys.brave_search) {
+      var inp = document.getElementById('sa-brave-key');
+      if (inp) inp.placeholder = d.api_keys.brave_search || 'BSA...';
+    }
+  }).catch(function(){});
+}
+function saveBraveKey() {
+  var key = (document.getElementById('sa-brave-key') || {}).value || '';
+  fetch('/api/config/apikeys', {
+    method: 'POST', credentials: 'same-origin',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({brave_search: key})
+  }).then(r=>r.json()).then(function(d) {
+    if (d.ok) toast('API key saved');
+    else toast(d.error || 'Save failed', 'err');
+  }).catch(function(e) { toast('Error: ' + e.message, 'err'); });
+}
+function testBraveKey() {
+  var el = document.getElementById('brave-test-result');
+  if (el) { el.style.display = 'block'; el.innerHTML = '<span style="color:var(--text3)">Testing...</span>'; }
+  fetch('/api/search/brave', {
+    method: 'POST', credentials: 'same-origin',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({q: 'test', count: 1})
+  }).then(r=>r.json()).then(function(d) {
+    if (!el) return;
+    if (d.ok) {
+      el.innerHTML = '<span style="color:#059669">\u2705 Key works! Got ' + (d.results||[]).length + ' result(s).</span>';
+    } else {
+      el.innerHTML = '<span style="color:#ef4444">\u274c ' + (d.error || 'Test failed') + '</span>';
+    }
+  }).catch(function(e) {
+    if (el) el.innerHTML = '<span style="color:#ef4444">\u274c ' + e.message + '</span>';
+  });
+}
 
 // ── Markdown renderer (inline, no deps) ──────────────────────────────────
 function _renderMarkdown(md) {
@@ -12668,6 +12763,7 @@ var _defaultSlashCmds = [
   {cmd: '/clear', desc: 'Clear messages'},
   {cmd: '/models', desc: 'List models'},
   {cmd: '/version', desc: 'Porter version'},
+  {cmd: '/search', desc: 'Web search (Brave)'},
 ];
 
 var _defaultAtTargets = [
@@ -12923,7 +13019,8 @@ function chatSend() {
         '`/status` — System health\n' +
         '`/version` — Porter version\n' +
         '`/clear` — Clear chat history\n' +
-        '`/flush` — Flush to memory\n\n' +
+        '`/flush` — Flush to memory\n' +
+        '`/search <query>` — Web search (Brave)\n\n' +
         '**Direct routing**\n' +
         '`@claude <msg>` `@openclaw <msg>` `@gemini <msg>` `@codex <msg>` `@ollama <msg>`', model: 'porter' });
       renderChatMessages();
@@ -21617,7 +21714,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.29"})
+            self.reply_json({"v": "0.27.30"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -21704,7 +21801,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.29"
+                health["porter_version"] = "0.27.30"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -22264,6 +22361,10 @@ class Handler(BaseHTTPRequestHandler):
                     "heartbeat_ttl_max":  HEARTBEAT_TTL_MAX,
                     "heartbeat_ttl_def":  HEARTBEAT_TTL_DEF,
                 },
+                "api_keys": {
+                    k: (v[:4] + "..." + v[-4:] if len(v) > 8 else "****") if v else ""
+                    for k, v in _config.get("api_keys", {}).items()
+                },
             })
 
         elif parsed.path == "/api/config/export":
@@ -22289,6 +22390,45 @@ class Handler(BaseHTTPRequestHandler):
             _reload_config_and_tasks()
             self.reply_json({"ok": True, "message": "Config and task registry reloaded from disk"})
 
+
+        # ── Brave Search ──────────────────────────────────────────────────
+        elif parsed.path == "/api/search/brave":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            query = str(data.get("q", "")).strip()
+            count = min(int(data.get("count", 5)), 20)
+            if not query:
+                self.reply_json({"ok": False, "error": "q required"}, 400); return
+            # Resolve API key: config first, then env
+            api_key = _config.get("api_keys", {}).get("brave_search", "")
+            if not api_key:
+                api_key = os.environ.get("BRAVE_API_KEY", "")
+            if not api_key:
+                self.reply_json({"ok": False, "error": "Brave API key not configured. Set it in Settings > API Keys or BRAVE_API_KEY env var."}, 400)
+                return
+            try:
+                import urllib.request, urllib.parse
+                url = "https://api.search.brave.com/res/v1/web/search?" + urllib.parse.urlencode({"q": query, "count": count})
+                req = urllib.request.Request(url, headers={
+                    "X-Subscription-Token": api_key,
+                    "Accept": "application/json",
+                }, method="GET")
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    raw = json.loads(resp.read())
+                results = []
+                for item in raw.get("web", {}).get("results", []):
+                    results.append({
+                        "title": item.get("title", ""),
+                        "url": item.get("url", ""),
+                        "description": item.get("description", ""),
+                        "age": item.get("age", ""),
+                    })
+                self.reply_json({"ok": True, "results": results, "query": query})
+            except urllib.error.HTTPError as he:
+                body = he.read().decode("utf-8", errors="replace")[:200]
+                self.reply_json({"ok": False, "error": f"Brave API error ({he.code}): {body}"}, 502)
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)[:300]}, 502)
 
         # ── preferences ───────────────────────────────────────────────────
         elif parsed.path == "/api/preferences":
@@ -23150,7 +23290,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.29'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.30'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -25975,6 +26115,45 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
 
+        # ── Brave Search ──────────────────────────────────────────────────
+        elif parsed.path == "/api/search/brave":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            query = str(data.get("q", "")).strip()
+            count = min(int(data.get("count", 5)), 20)
+            if not query:
+                self.reply_json({"ok": False, "error": "q required"}, 400); return
+            # Resolve API key: config first, then env
+            api_key = _config.get("api_keys", {}).get("brave_search", "")
+            if not api_key:
+                api_key = os.environ.get("BRAVE_API_KEY", "")
+            if not api_key:
+                self.reply_json({"ok": False, "error": "Brave API key not configured. Set it in Settings > API Keys or BRAVE_API_KEY env var."}, 400)
+                return
+            try:
+                import urllib.request, urllib.parse
+                url = "https://api.search.brave.com/res/v1/web/search?" + urllib.parse.urlencode({"q": query, "count": count})
+                req = urllib.request.Request(url, headers={
+                    "X-Subscription-Token": api_key,
+                    "Accept": "application/json",
+                }, method="GET")
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    raw = json.loads(resp.read())
+                results = []
+                for item in raw.get("web", {}).get("results", []):
+                    results.append({
+                        "title": item.get("title", ""),
+                        "url": item.get("url", ""),
+                        "description": item.get("description", ""),
+                        "age": item.get("age", ""),
+                    })
+                self.reply_json({"ok": True, "results": results, "query": query})
+            except urllib.error.HTTPError as he:
+                body = he.read().decode("utf-8", errors="replace")[:200]
+                self.reply_json({"ok": False, "error": f"Brave API error ({he.code}): {body}"}, 502)
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)[:300]}, 502)
+
         # ── preferences ────────────────────────────────────────────────────
         elif parsed.path == "/api/preferences":
             if not self.auth_check(redirect=False): return
@@ -25992,6 +26171,19 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     prefs[k] = v
             save_config(_config)
             self.reply_json({"ok": True, "preferences": prefs})
+
+
+        # ── API keys management ───────────────────────────────────────────
+        elif parsed.path == "/api/config/apikeys":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            keys = _config.setdefault("api_keys", {})
+            allowed_keys = {"brave_search"}
+            for k, v in data.items():
+                if k in allowed_keys:
+                    keys[k] = v
+            save_config(_config)
+            self.reply_json({"ok": True, "api_keys": keys})
 
         # ── permissions check ──────────────────────────────────────────────
         elif parsed.path == "/api/permissions/check":
@@ -26953,7 +27145,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.29 ready (localhost only)")
+    print(f"\n  Porter v0.27.30 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
