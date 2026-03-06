@@ -582,10 +582,7 @@ CAPABILITIES: list = [
      "install": "https://git-scm.com",
      "features": ["Version control", "Porter self-update"],
      "check": lambda: _cap_check_bin("git")},
-    {"id": "ollama",      "label": "Ollama",
-     "install": "https://ollama.com",
-     "features": ["Local LLM inference", "Model management"],
-     "check": lambda: _cap_check_http("http://127.0.0.1:11434/")},
+
     {"id": "ffmpeg",      "label": "FFmpeg",
      "install": "https://ffmpeg.org",
      "features": ["Audio/video processing", "Format conversion"],
@@ -594,14 +591,8 @@ CAPABILITIES: list = [
      "install": "https://wkhtmltopdf.org",
      "features": ["HTML to PDF rendering"],
      "check": lambda: _cap_check_bin("wkhtmltopdf")},
-    {"id": "codex_cli",   "label": "Codex CLI",
-     "install": "npm install -g @openai/codex",
-     "features": ["AI code generation", "Autonomous tasks"],
-     "check": lambda: _cap_check_bin("codex")},
-    {"id": "claude_cli",  "label": "Claude CLI",
-     "install": "npm install -g @anthropic-ai/claude-code",
-     "features": ["AI code generation", "File editing"],
-     "check": lambda: _cap_check_bin("claude")},
+
+
     {"id": "tailwindcss", "label": "Tailwind CSS",
      "install": "npm install -g tailwindcss",
      "features": ["Utility CSS framework"],
@@ -7194,6 +7185,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .model-card-run-preview { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .model-card-run-meta { color:var(--text3);white-space:nowrap; }
 /* ── Model Activity Slide-Out Panel ── */
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
 .models-subtab { background:transparent !important; color:var(--text3); border:1px solid transparent; }
 .models-subtab.active { background:var(--surface) !important; color:var(--text); border-color:var(--border); }
 .models-subtab:hover:not(.active) { color:var(--text2); }
@@ -11047,16 +11039,83 @@ async function loadChainRuns() {
 
 
 async function loadSkills() {
-  // Reuse the skills loading from loadWorkflows
+  var grid = document.getElementById('wf-skills-grid');
+  var countEl = document.getElementById('wf-skills-count');
+  // Show skeleton placeholders immediately
+  if (grid) grid.innerHTML = _skillSkeletons(8);
+  if (countEl) countEl.textContent = 'loading...';
+
   try {
-    const data = await api('/api/openclaw/skills');
+    var data = await api('/api/openclaw/skills');
     if (data && data.skills) {
       _wfSkills = data.skills;
-      renderWorkflowSkills();
+      // Render progressively — batch 6 at a time for visual effect
+      var skills = _wfShowAll ? _wfSkills : _wfSkills.filter(function(s) { return s.installed || s.manual; });
+      if (grid) grid.innerHTML = '';
+      var batchSize = 6;
+      for (var i = 0; i < skills.length; i += batchSize) {
+        var batch = skills.slice(i, i + batchSize);
+        _appendSkillBatch(grid, batch);
+        if (i + batchSize < skills.length) {
+          await new Promise(function(r) { setTimeout(r, 50); });
+        }
+      }
+      if (countEl) countEl.textContent = skills.length + ' skill' + (skills.length !== 1 ? 's' : '');
+      if (!skills.length && grid) {
+        grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--text3);font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">'
+          + (_wfShowAll ? 'No skills match your filter.' : 'No installed skills found. Click "Show all" to see available skills.')
+          + '</div>';
+      }
     }
   } catch(e) {
+    if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--text3);font-size:12px">Could not load skills</div>';
     console.debug('loadSkills:', e);
   }
+}
+
+function _skillSkeletons(n) {
+  var html = '';
+  for (var i = 0; i < n; i++) {
+    html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);animation:pulse 1.5s ease-in-out infinite">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+      + '<div style="width:20px;height:20px;background:var(--border);border-radius:4px"></div>'
+      + '<div style="height:13px;width:' + (60 + Math.random()*60) + 'px;background:var(--border);border-radius:3px"></div>'
+      + '</div>'
+      + '<div style="height:10px;width:' + (80 + Math.random()*80) + 'px;background:var(--border);border-radius:3px;opacity:.6"></div>'
+      + '</div>';
+  }
+  return html;
+}
+
+function _appendSkillBatch(grid, skills) {
+  if (!grid) return;
+  skills.forEach(function(sk) {
+    var card = document.createElement('div');
+    card.className = 'wf-skill-card';
+    card.style.opacity = '0';
+    card.style.transition = 'opacity 0.2s';
+    var emoji = sk.emoji || '\u2699';
+    var name = escHtml(sk.name);
+    var desc = escHtml(sk.description ? (sk.description.length > 80 ? sk.description.substring(0, 77) + '...' : sk.description) : 'No description');
+    var installed = sk.installed;
+    var manual = sk.manual;
+    var badge = !installed ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--raised);color:var(--text3);margin-left:auto">not installed</span>'
+      : manual ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);margin-left:auto">manual</span>'
+      : '';
+    var removeBtn = (installed || manual) ? '<button class="btn-xs" style="font-size:10px;padding:1px 6px;border:1px solid var(--border2);border-radius:3px;background:none;color:var(--text3);cursor:pointer;margin-left:4px" onclick="event.stopPropagation();removeSkill(\'' + escHtml(sk.id) + '\',\'' + name + '\')">' + '\u00d7</button>' : '';
+    var installBtn = (!installed && !manual) ? '<button class="btn-xs" style="font-size:10px;padding:2px 8px;border:1px solid var(--accent);border-radius:4px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);cursor:pointer;margin-left:4px" onclick="event.stopPropagation();installSkill(\'' + escHtml(sk.id || sk.name) + '\',\'' + name + '\')">' + (sk.eligible !== false ? 'Install' : 'Setup') + '</button>' : '';
+    card.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+      + '<span style="font-size:16px">' + emoji + '</span>'
+      + '<span style="font-weight:500;font-size:13px;color:var(--text)">' + name + '</span>'
+      + badge + installBtn + removeBtn
+      + '</div>'
+      + '<div style="font-size:11px;color:var(--text3);line-height:1.4">' + desc + '</div>'
+      + (sk.requires && sk.requires.length ? '<div style="font-size:10px;color:var(--text3);margin-top:4px">Requires: ' + sk.requires.join(', ') + '</div>' : '')
+      + (sk.missing && sk.missing.bins && sk.missing.bins.length ? '<div style="font-size:10px;color:var(--danger,#ef4444);margin-top:3px">Missing: ' + sk.missing.bins.join(', ') + '</div>' : '');
+    if (!installed && !manual) { card.style.borderColor = 'var(--border2)'; card.style.opacity = '0'; }
+    grid.appendChild(card);
+    requestAnimationFrame(function() { card.style.opacity = installed || manual ? '1' : '0.7'; });
+  });
 }
 
 async function loadWorkflows() {
@@ -11946,29 +12005,50 @@ async function renderGwsPanel() {
 }
 
 async function loadCapabilities() {
-  const el = document.getElementById('capabilities-list');
-  if (!el) return;
-  el.innerHTML = '<div class="loading-indicator">Checking capabilities</div>';
-  try {
-    // Load capabilities and integrations in parallel
-    const [capResp, intResp] = await Promise.all([
-      fetch('/api/capabilities?force=1'),
-      fetch('/api/integrations'),
-    ]);
-    if (capResp.ok) {
-      const capData = await capResp.json();
-      window._lastCapabilities = capData.capabilities || [];
-      renderCapabilities(capData.capabilities || []);
-  renderGwsPanel();
-    }
-    if (intResp.ok) {
-      const intData = await intResp.json();
-      renderIntegrations(intData);
-    }
+  var toolsEl = document.getElementById('capabilities-list');
+  var intEl = document.getElementById('integrations-list');
+  // Show skeleton placeholders immediately
+  if (toolsEl) toolsEl.innerHTML = _capSkeletons(6);
+  if (intEl) intEl.innerHTML = _capSkeletons(3);
 
-  } catch(e) {
-    el.innerHTML = '<div style="color:var(--err);font-size:13px">Could not load capabilities: ' + e.message + '</div>';
+  // Fire both requests independently — render each as it arrives
+  fetch('/api/integrations', {credentials:'same-origin'})
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) { if (d) renderIntegrations(d); })
+    .catch(function() { if (intEl) intEl.innerHTML = '<div style="font-size:12px;color:var(--text3)">Could not load integrations</div>'; });
+
+  // Capabilities: first show cached (fast), then force refresh
+  fetch('/api/capabilities', {credentials:'same-origin'})
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      if (d && d.capabilities) {
+        window._lastCapabilities = d.capabilities;
+        renderCapabilities(d.capabilities);
+        renderGwsPanel();
+      }
+      // Now force-refresh in background (updates versions, detects new tools)
+      return fetch('/api/capabilities?force=1', {credentials:'same-origin'});
+    })
+    .then(function(r) { return r && r.ok ? r.json() : null; })
+    .then(function(d) {
+      if (d && d.capabilities) {
+        window._lastCapabilities = d.capabilities;
+        renderCapabilities(d.capabilities);
+        renderGwsPanel();
+      }
+    })
+    .catch(function(e) { if (toolsEl) toolsEl.innerHTML = '<div style="color:var(--err);font-size:13px">Could not load: ' + e.message + '</div>'; });
+}
+
+function _capSkeletons(n) {
+  var html = '';
+  for (var i = 0; i < n; i++) {
+    html += '<div style="padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);animation:pulse 1.5s ease-in-out infinite">'
+      + '<div style="height:14px;width:' + (60 + Math.random()*80) + 'px;background:var(--border);border-radius:3px;margin-bottom:6px"></div>'
+      + '<div style="height:10px;width:' + (100 + Math.random()*60) + 'px;background:var(--border);border-radius:3px;opacity:.6"></div>'
+      + '</div>';
   }
+  return html;
 }
 
 
