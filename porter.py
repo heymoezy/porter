@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.13 — UI Polish Batch"""
+"""Porter v0.28.14 — UI Polish Batch"""
 
 
 import email
@@ -8447,7 +8447,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.13</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.14</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9701,6 +9701,7 @@ async function api(url, body, timeout_ms = 15000) {
 const CHANGELOG = [
   { ver:'v0.28.12', date:'2026-03-07', notes:['System prompt restructured: clean === delimited sections (SOUL/ROLE_CARD/RULES/MEMORY), structured framing rules','Removed Cortex 99+ nav badge (no-op kept for SSE compat)','Memory map resize fix: redraws + fits graph after window resize','Lock button on memory map: prevents layout changes on resize, circle-click filtering still works in locked mode','Removed IDENTITY.md from context (redundant with SOUL.md)'] },
   { ver:'v0.28.13', date:'2026-03-07', notes:['Inbox: fixed text overflow (word-break)','Inbox: click-to-filter now works (agent: prefix stripped)','Inbox: renamed Memories → Inbox','Graph: removed 99+ count cap on nodes','Cortex Config: added Back button'] },
+  { ver:'v0.28.14', date:'2026-03-07', notes:['Graph lock now prevents node dragging and panning (click-to-filter still works)'] },
   { ver:'v0.28.11', date:'2026-03-07', notes:['Workflow Registry: 6 system workflows exposed as monitorable, configurable cards','GET /api/workflows + POST trigger/toggle/config endpoints','Daemons instrumented: cortex, hygiene, cap-checks, heartbeat, rollup, memory extraction','Workflows tab redesigned: live status, run history, pause/resume, config editing, manual trigger','Projects tab replaced with Coming Soon placeholder (backend preserved)','Agent persona files: quality MEMORY.md + ROLE_CARD.md for all 9 agents with conflict detection','Dead code removed: runBuild, chain builder, heartbeat editor, old workflow skills UI'] },
   { ver:'v0.28.10', date:'2026-03-07', notes:['UI Polish Batch — visual refinements across tabs'] },
   { ver:'v0.28.9', date:'2026-03-07', notes:['Memory map resize fix, context budget improvements, history trimmer for dispatch'] },
@@ -16510,6 +16511,7 @@ function _setupGraphInteraction(canvas) {
   var dragging = null;
   var panning = false;
   var panStart = {x:0, y:0};
+  var _clickedNode = null;  // track click target for filter (even when locked)
   canvas.onmousedown = function(e) {
     var rect = canvas.getBoundingClientRect();
     var mx = (e.clientX - rect.left) / _graphZoom.scale - _graphZoom.x / _graphZoom.scale;
@@ -16520,6 +16522,8 @@ function _setupGraphInteraction(canvas) {
       var dx = mx - n.x, dy = my - n.y;
       if (Math.sqrt(dx*dx + dy*dy) < (n.radius || 20)) hit = n;
     });
+    _clickedNode = hit;
+    if (window._cxGraphLocked) return;  // locked: no drag/pan, but click filter in mouseup
     if (hit) { dragging = hit; hit.fixed = true; canvas.style.cursor = 'grabbing'; }
     else { panning = true; panStart = {x: e.clientX - _graphZoom.x, y: e.clientY - _graphZoom.y}; }
   };
@@ -16529,7 +16533,7 @@ function _setupGraphInteraction(canvas) {
       dragging.x = (e.clientX - rect.left - _graphZoom.x) / _graphZoom.scale;
       dragging.y = (e.clientY - rect.top - _graphZoom.y) / _graphZoom.scale;
       _drawGraph();
-    } else if (panning) {
+    } else if (panning && !window._cxGraphLocked) {
       _graphZoom.x = e.clientX - panStart.x;
       _graphZoom.y = e.clientY - panStart.y;
       _drawGraph();
@@ -16562,10 +16566,11 @@ function _setupGraphInteraction(canvas) {
     }
   };
   canvas.onmouseup = function() {
-    if (dragging) {
-      var n = dragging;
-      dragging.fixed = true; _saveGraphPositions(); dragging = null; canvas.style.cursor = 'grab';
-      // v0.28.13 — Click node to filter memory list (strip type prefix from node ID)
+    var n = dragging || _clickedNode;
+    _clickedNode = null;
+    if (n) {
+      if (dragging) { dragging.fixed = true; _saveGraphPositions(); dragging = null; canvas.style.cursor = 'grab'; }
+      // v0.28.14 — Click node to filter memory list (works when locked too)
       var _nid = (n.id || '').replace(/^(agent|project):/, '');
       if (n.type === 'agent' && _nid) {
         var f1 = (_cortexMemories || []).filter(function(m) { return m.scope === 'agent' && m.scope_id === _nid; });
@@ -23896,7 +23901,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.13"})
+            self.reply_json({"v": "0.28.14"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24058,7 +24063,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.13"
+                health["porter_version"] = "0.28.14"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25814,7 +25819,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.13'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.14'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30016,7 +30021,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.13 ready (localhost only)")
+    print(f"\n  Porter v0.28.14 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
