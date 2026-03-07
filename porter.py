@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.1 — Cortex Memory Browser"""
+"""Porter v0.28.2 — Cortex Session Distill"""
 
 
 import email
@@ -834,44 +834,42 @@ def _is_duplicate(new_fact, existing_facts):
             return True
     return False
 
-def _cortex_resolve_destination(scope, scope_id):
-    """Map scope to a file path for persistent storage."""
-    if scope == "agent" and scope_id:
-        p = PERSONAS_DIR / scope_id
-        if not p.exists():
-            # Try finding by name
-            try:
-                conn = _db_conn()
-                row = conn.execute("SELECT id FROM personas WHERE name=?", (scope_id,)).fetchone()
-                conn.close()
-                if row:
-                    p = PERSONAS_DIR / row[0]
-            except Exception:
-                pass
-        return p / "MEMORY.md" if p.exists() else None
-    elif scope == "project" and scope_id:
-        project_dir = _DATA_DIR / "projects" / scope_id
-        if project_dir.exists():
-            return project_dir / "MEMORY.md"
-        return None
-    else:
-        # Global scope
-        return MEMORY_DIR / "cortex_global.md"
+def _cortex_distill_session(session_id, task_desc, model_info, msg_count, outcome="completed", project_id="", scope="global"):
+    """Distill a session into an episodic memory in Cortex DB.
 
-def _cortex_append_to_file(path, fact_text):
-    """Append a fact as a markdown bullet to a file."""
+    v0.28.2 — sessions become episodic memories instead of MEMORY.md writes.
+    """
+    import datetime
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    fact = f"Session {date_str}: {task_desc[:200]} | {model_info} | {msg_count} msgs | {outcome}"
+    scope_val = "project" if project_id else scope
+    scope_id = project_id if project_id else ""
+    keywords = ",".join(_cortex_tokenize(task_desc))
+
     try:
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        existing = path.read_text() if path.exists() else ""
-        if fact_text.strip() in existing:
-            return False  # Already present
-        with open(path, "a") as f:
-            f.write(f"\n- {fact_text.strip()}\n")
-        return True
+        conn = _db_conn()
+        # Check for duplicate session
+        existing = conn.execute(
+            "SELECT id FROM cortex_memories WHERE source_id=? AND memory_type='episodic'",
+            (session_id,)
+        ).fetchone()
+        if existing:
+            conn.close()
+            return {"ok": True, "action": "already_distilled", "id": existing[0]}
+        conn.execute(
+            """INSERT INTO cortex_memories (fact, scope, scope_id, source_type, source_id,
+               importance, keywords, routed_to, memory_type, status, confidence)
+               VALUES (?, ?, ?, 'session', ?, 6, ?, '', 'episodic', 'active', 0.6)""",
+            (fact, scope_val, scope_id, session_id, keywords)
+        )
+        conn.commit()
+        mem_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        log.info("Cortex distilled session %s into episodic memory #%d", session_id[:12], mem_id)
+        return {"ok": True, "action": "distilled", "id": mem_id, "fact": fact}
     except Exception as e:
-        log.debug("Cortex append failed: %s", e)
-        return False
+        log.debug("Cortex distill failed: %s", e)
+        return {"ok": False, "error": str(e)}
 
 def _cortex_extract_and_route(message, response_text, persona_id="", backend=""):
     """Extract facts from a dispatch response and route to memory. Runs in background thread."""
@@ -1059,7 +1057,22 @@ def _cortex_inject_context(message, persona_id="", project_id=""):
         pass
 
     facts = [f"- {s[1]}" for s in top]
-    return "Relevant memories:\n" + "\n".join(facts)
+    result = "Relevant memories:\n" + "\n".join(facts)
+
+    # v0.28.2 — inject recent episodic memories (max 2)
+    try:
+        conn3 = _db_conn()
+        episodic = conn3.execute(
+            "SELECT fact FROM cortex_memories WHERE memory_type='episodic' AND status='active' "
+            "ORDER BY created_at DESC LIMIT 2"
+        ).fetchall()
+        conn3.close()
+        if episodic:
+            result += "\n\nRecent sessions:\n" + "\n".join(f"- {e[0]}" for e in episodic)
+    except Exception:
+        pass
+
+    return result
 
 def _cortex_consolidate_loop():
     """Background daemon: periodically merge similar memories."""
@@ -1073,14 +1086,14 @@ def _cortex_consolidate_loop():
         try:
             conn = _db_conn()
             rows = conn.execute(
-                "SELECT id, fact, scope, scope_id, importance, keywords FROM cortex_memories "
-                "WHERE consolidated_into IS NULL"
+                "SELECT id, fact, scope, scope_id, importance, keywords, memory_type FROM cortex_memories "
+                "WHERE consolidated_into IS NULL AND status='active'"
             ).fetchall()
 
-            # Group by scope
+            # Group by scope + memory_type (only merge within same type)
             groups = {}
             for row in rows:
-                key = (row[2], row[3])  # scope, scope_id
+                key = (row[2], row[3], row[6] or "semantic")  # scope, scope_id, memory_type
                 groups.setdefault(key, []).append(row)
 
             merged_count = 0
@@ -3179,20 +3192,12 @@ def _flush_session_to_memory(session_id: str, project_id: str = None) -> dict:
         # Fall back to Porter's own memory dir
         target_path = MEMORY_DIR / "session_flushes.md"
 
-    target_path.parent.mkdir(parents=True, exist_ok=True)
+    # v0.28.2 — distill session into Cortex DB as episodic memory
+    model_info = f"{provider}/{model}" if model else "unknown"
+    task_desc = first_user_msg if first_user_msg else "(no task description)"
+    distill_result = _cortex_distill_session(session_id, task_desc, model_info, msg_count, project_id=project_id or "")
 
-    # Append (don't overwrite)
-    mode = "a" if target_path.exists() else "w"
-    header = ""
-    if mode == "w":
-        header = "# Session Memory Flushes\n\nAuto-generated summaries from OpenClaw session logs.\n"
-
-    with open(target_path, mode, encoding="utf-8") as f:
-        if header:
-            f.write(header)
-        f.write(summary)
-
-    return {"ok": True, "message": f"Session flushed to {target_path}", "path": str(target_path)}
+    return {"ok": True, "message": "Session distilled to Cortex memory", "distilled": distill_result}
 
 
 def _flush_claude_session(session_id: str) -> dict:
@@ -3269,20 +3274,11 @@ def _flush_claude_session(session_id: str) -> dict:
 - **Task:** {first_user_msg if first_user_msg else '(no user message found)'}
 """
 
-    target_path = MEMORY_DIR / "session_flushes.md"
-    target_path.parent.mkdir(parents=True, exist_ok=True)
+    # v0.28.2 — distill session into Cortex DB as episodic memory
+    task_desc = first_user_msg if first_user_msg else "(no task description)"
+    distill_result = _cortex_distill_session(session_id, task_desc, "Claude Code", msg_count)
 
-    mode = "a" if target_path.exists() else "w"
-    header = ""
-    if mode == "w":
-        header = "# Session Memory Flushes\n\nAuto-generated summaries from AI session logs.\n"
-
-    with open(target_path, mode, encoding="utf-8") as f:
-        if header:
-            f.write(header)
-        f.write(summary)
-
-    return {"ok": True, "message": f"Session flushed to {target_path}", "path": str(target_path)}
+    return {"ok": True, "message": "Session distilled to Cortex memory", "distilled": distill_result}
 
 
 def _flush_gemini_session(session_id: str) -> dict:
@@ -3324,11 +3320,10 @@ def _flush_gemini_session(session_id: str) -> dict:
         summary += f"- **Session:** `{session_id[:12]}...`\n"
         if first_msg:
             summary += f"- **Topic:** {first_msg}\n"
-        dest = home / ".gemini" / "GEMINI.md"
-        mode = "a" if dest.exists() else "w"
-        with open(dest, mode, encoding="utf-8") as f:
-            f.write(summary)
-        return {"ok": True, "path": str(dest), "bytes": len(summary.encode("utf-8"))}
+        # v0.28.2 — distill session into Cortex DB as episodic memory
+        task_desc = first_msg if first_msg else "(no task description)"
+        distill_result = _cortex_distill_session(session_id, task_desc, "Gemini CLI", msg_count)
+        return {"ok": True, "distilled": distill_result}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -7860,7 +7855,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.1</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.2</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9190,6 +9185,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.28.2', date:'2026-03-07', notes:['Cortex Session Distill: session flush creates episodic memory in DB instead of MEMORY.md writes','New _cortex_distill_session(): inserts memory_type=episodic row with session summary','OpenClaw/Claude/Gemini flush all route through distill','Injection: separate episodic block (max 2 recent sessions)','Consolidation: only merges within same memory_type','Removed: _cortex_resolve_destination and _cortex_append_to_file (dead code)'] },
   { ver:'v0.28.1', date:'2026-03-07', notes:['Cortex Memory Browser: sidebar renamed Inbox→Memories','Cards: status dot (green/gray) + type pill (fact/session) + Archive/Restore buttons','Removed: route bar, Push/Dismiss, route picker, routed checkbox, auto-route config','Filter tabs: All/Facts/Sessions by memory_type','Graph: hub node renamed Inbox→Cortex with brain emoji','API: POST .../route replaced by POST .../status (active/archived)','API: GET memories supports ?memory_type= and ?status= filters','API: GET memories returns memory_type, status, confidence, use_count'] },
   { ver:'v0.28.0', date:'2026-03-07', notes:['Cortex Memory Refactor P1: Auto-accept — facts store silently, no inbox backlog','Schema: 6 new lifecycle columns (memory_type, status, confidence, superseded_by_id, last_used_at, use_count)','Injection: new scoring formula (0.4*keyword + 0.25*importance + 0.2*recency + 0.15*use_freq)','Injection: usage tracking (last_used_at + use_count updated on inject)','Stats: new_1h replaces unrouted count','Nav badge: shows new-in-last-hour instead of inbox count'] },
   { ver:'v0.27.45', date:'2026-03-07', notes:['Memory Map: Fit button uses tighter padding (8% vs 20%), min scale 0.5','Memory Map: new Center button (reset zoom to 1x, center on graph)','Memory Map: hover tooltip shows agent role','Graph API includes role field for agent nodes'] },
@@ -23867,7 +23863,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.1"})
+            self.reply_json({"v": "0.28.2"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -23954,7 +23950,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.1"
+                health["porter_version"] = "0.28.2"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25613,7 +25609,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.1'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.2'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29642,7 +29638,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.1 ready (localhost only)")
+    print(f"\n  Porter v0.28.2 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
