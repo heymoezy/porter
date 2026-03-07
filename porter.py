@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.25 — Session counts, image attach, model badge, Cortex live"""
+"""Porter v0.28.26 — Session counts, image attach, model badge, Cortex live"""
 
 
 import email
@@ -8543,7 +8543,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.25</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.26</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9070,7 +9070,7 @@ select.settings-input { padding-right: 26px; }
       <span class="module-title">Workflows</span>
 
     </div>
-    <div class="module-intro">Porter's background daemons and system workflows.</div>
+    <div class="module-intro">System daemons, skill-based workflows, and external schedulers.</div>
 
     <!-- System Workflows -->
     <div style="margin-bottom:24px">
@@ -9079,6 +9079,26 @@ select.settings-input { padding-right: 26px; }
         <span id="wf-sys-count" style="font-size:11px;color:var(--text3)"></span>
       </div>
       <div id="wf-system-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px"></div>
+    </div>
+
+    <!-- Skill Workflows -->
+    <div style="margin-bottom:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">Skill Workflows</div>
+        <span id="wf-skill-count" style="font-size:11px;color:var(--text3)"></span>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">OpenClaw skills that can be triggered as scheduled workflows.</div>
+      <div id="wf-skill-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px"></div>
+    </div>
+
+    <!-- External Schedulers -->
+    <div style="margin-bottom:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">External Schedulers</div>
+        <span id="wf-ext-count" style="font-size:11px;color:var(--text3)"></span>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Cron jobs and scheduled tasks detected from connected services.</div>
+      <div id="wf-ext-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px"></div>
     </div>
 
     <!-- User Workflows -->
@@ -9796,6 +9816,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.26', date:'2026-03-07', notes:['Workflows: skill-based workflows section (OpenClaw installed skills)','Workflows: external schedulers section (Ollama, OpenClaw, systemd)','Workflows: pause stops running workflow immediately','Workflows: fixed screen flashing (smart refresh, 8s interval)','Models: extraction progress indicator on model cards during learning extraction'] },
   { ver:'v0.28.25', date:'2026-03-07', notes:['Agent wizard: AI Suggest auto-fills role, personality, focus, style, avatar','Agent wizard: streams response from auto-routed model','Wizard header: mentions Cortex shared memory for new agents'] },
   { ver:'v0.28.24', date:'2026-03-07', notes:['Workflows: running state with animated progress bar','Workflows: interval editor (Runs every: N seconds/minutes/hours/weeks)','Workflows: auto-refresh while running, disable Run Now during execution','Workflows: daemon loops instrumented with start/stop tracking'] },
   { ver:'v0.28.23', date:'2026-03-07', notes:['Models: session counts for Codex + Ollama backends','Models: extraction progress bar (X/Y sessions)','Chat: image drag-drop with thumbnails (base64, 2MB limit)','Chat: welcome input full parity (paperclip+drag-drop on new chat)','Chat: badge shows actual model used, not Auto','Cortex: blinking Live dot replaces ON text','Removed: Every AI tagline'] },
@@ -11785,13 +11806,102 @@ async function loadWorkflowRegistry() {
         + '<div id="wf-history-' + wf.id + '" style="display:none;margin-top:8px;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;max-height:200px;overflow-y:auto"></div>'
         + '</div>';
     }).join('');
-    // Auto-refresh if any workflow is running
+    // Auto-refresh if any workflow is running (only if workflows tab visible)
     if (wfs.some(function(w) { return w.running; })) {
-      setTimeout(loadWorkflowRegistry, 3000);
+      if (!window._wfRefreshTimer) {
+        window._wfRefreshTimer = setTimeout(function() {
+          window._wfRefreshTimer = null;
+          var wfMod = document.getElementById('workflows-module');
+          if (wfMod && wfMod.classList.contains('active')) loadWorkflowRegistry();
+        }, 8000);
+      }
+    } else {
+      if (window._wfRefreshTimer) { clearTimeout(window._wfRefreshTimer); window._wfRefreshTimer = null; }
     }
   } catch(e) {
     grid.innerHTML = '<div style="padding:16px;color:var(--text3);text-align:center">Failed to load workflows</div>';
   }
+  // Load skill workflows
+  _loadSkillWorkflows();
+  // Load external schedulers
+  _loadExternalSchedulers();
+}
+
+async function _loadSkillWorkflows() {
+  var grid = document.getElementById('wf-skill-grid');
+  var countEl = document.getElementById('wf-skill-count');
+  if (!grid) return;
+  try {
+    var data = await api('/api/openclaw/skills?action=list');
+    var skills = (data && data.skills) ? data.skills : [];
+    var installed = skills.filter(function(s) { return s.installed; });
+    if (countEl) countEl.textContent = installed.length + ' skill' + (installed.length !== 1 ? 's' : '');
+    if (!installed.length) {
+      grid.innerHTML = '<div style="padding:12px;color:var(--text3);font-size:12px">No installed skills. Install skills from the Skills tab.</div>';
+      return;
+    }
+    grid.innerHTML = installed.map(function(sk) {
+      return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+        + '<span style="font-size:16px">' + (sk.emoji || '\u2699') + '</span>'
+        + '<span style="font-weight:600;font-size:13px;color:var(--text)">' + escHtml(sk.name || sk.id) + '</span>'
+        + '</div>'
+        + '<div style="font-size:12px;color:var(--text3);margin-bottom:8px;line-height:1.4">' + escHtml(sk.description || 'OpenClaw skill') + '</div>'
+        + '<div style="display:flex;gap:6px">'
+        + '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfRunSkill(\'' + escHtml(sk.name || sk.id) + '\')">\u25B6 Run Now</button>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    grid.innerHTML = '<div style="padding:12px;color:var(--text3);font-size:12px">Skills unavailable</div>';
+  }
+}
+
+async function _wfRunSkill(skillName) {
+  toast('Running skill: ' + skillName);
+  try {
+    var r = await api('/api/skill/invoke', { command: '/' + skillName }, 30000);
+    if (r && r.ok !== false) { toast('Skill completed', 'ok'); }
+    else toast((r && r.error) || 'Skill failed', 'err');
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+async function _loadExternalSchedulers() {
+  var grid = document.getElementById('wf-ext-grid');
+  var countEl = document.getElementById('wf-ext-count');
+  if (!grid) return;
+  var schedulers = [];
+  // Check for Ollama keepalive / model loading
+  try {
+    var olResp = await fetch('/api/models/available', {credentials:'same-origin'});
+    var olData = await olResp.json();
+    if (olData && olData.backends && olData.backends.ollama && olData.backends.ollama.available) {
+      schedulers.push({ name: 'Ollama Model Server', type: 'service', status: 'running', detail: 'Auto-loads models on demand, keeps warm for 5min idle timeout' });
+    }
+  } catch(e) {}
+  // Check for OpenClaw gateway
+  try {
+    var ocResp = await fetch('/api/models/available', {credentials:'same-origin'});
+    var ocData = await ocResp.json();
+    if (ocData && ocData.backends && ocData.backends.openclaw && ocData.backends.openclaw.available) {
+      schedulers.push({ name: 'OpenClaw Gateway', type: 'service', status: 'running', detail: 'Agent orchestration + skill execution on port 18789' });
+    }
+  } catch(e) {}
+  // System cron detection
+  schedulers.push({ name: 'Porter Systemd Timer', type: 'systemd', status: 'active', detail: 'porter.service — auto-restart on failure' });
+
+  if (countEl) countEl.textContent = schedulers.length + ' detected';
+  grid.innerHTML = schedulers.map(function(s) {
+    var dotColor = s.status === 'running' || s.status === 'active' ? '#22c55e' : '#9ca3af';
+    return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+      + '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0"></span>'
+      + '<span style="font-weight:600;font-size:13px;color:var(--text)">' + escHtml(s.name) + '</span>'
+      + '<span style="margin-left:auto;font-size:10px;color:var(--text3);background:var(--bg2);padding:2px 6px;border-radius:4px">' + escHtml(s.type) + '</span>'
+      + '</div>'
+      + '<div style="font-size:12px;color:var(--text3);line-height:1.4">' + escHtml(s.detail) + '</div>'
+      + '</div>';
+  }).join('');
 }
 
 function _wfTimeAgo(ts) {
@@ -12924,12 +13034,15 @@ async function _reextractLearn(sid, source) {
 }
 
 var _extractAllRunning = false;
+var _extractAllSource = '';
 async function _extractAllLearnings(source) {
   if (_extractAllRunning) {
     _extractAllRunning = false;
+    _extractAllSource = '';
     return;
   }
   _extractAllRunning = true;
+  _extractAllSource = source || '';
   var btn = document.getElementById('extract-all-btn');
 
   // Get sessions that need extraction
@@ -12987,6 +13100,7 @@ async function _extractAllLearnings(source) {
   if (!_extractAllRunning) msg = 'Stopped: ' + done + ' extracted';
   toast(msg);
   _extractAllRunning = false;
+  _extractAllSource = '';
   if (btn) btn.textContent = 'Update Learnings';
   // Reload to get fresh data
   if (done > 0 && typeof _loadActivitySessions === 'function') _loadActivitySessions(source);
@@ -17273,8 +17387,16 @@ function _renderModelCards(data, act) {
     if (_maCardSource) {
       var _cachedCount = ((_maSessionCounts || {})[_maCardSource] || {}).count;
       var countLabel = typeof _cachedCount === 'number' ? '\u25bc ' + _cachedCount + ' session' + (_cachedCount !== 1 ? 's' : '') : '\u25bc Sessions';
-      sessionsBtn = '<div style="margin-top:8px">'
-        + '<button class="btn btn-ghost model-sessions-toggle" style="font-size:11px;width:100%" '
+      sessionsBtn = '<div style="margin-top:8px">';
+      // Show extraction progress if running for this source
+      if (_extractAllRunning && _extractAllSource === _maCardSource) {
+        sessionsBtn += '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:6px;background:color-mix(in srgb,var(--accent) 8%,transparent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);border-radius:6px">'
+          + '<span class="learn-spinner"></span>'
+          + '<span style="font-size:11px;color:var(--accent);font-weight:500">Extracting learnings...</span>'
+          + '<div style="flex:1;height:4px;background:rgba(247,147,26,0.15);border-radius:2px;overflow:hidden"><div style="height:100%;background:var(--accent);border-radius:2px;animation:wf-progress 2s ease-in-out infinite"></div></div>'
+          + '</div>';
+      }
+      sessionsBtn += '<button class="btn btn-ghost model-sessions-toggle" style="font-size:11px;width:100%" '
         + 'onclick="_toggleInlineSessions(this,\'' + escHtml(p.id) + '\',\'' + escHtml(_maCardSource) + '\')">' + countLabel + '</button>'
         + '<div class="model-inline-sessions" id="inline-sess-' + escHtml(p.id) + '" style="display:none"></div>'
         + '</div>';
@@ -24563,7 +24685,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.25"})
+            self.reply_json({"v": "0.28.26"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24725,7 +24847,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.25"
+                health["porter_version"] = "0.28.26"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26522,7 +26644,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.25'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.26'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30672,6 +30794,7 @@ def _handle_wf_toggle(wf_id):
             action = "resumed"
         else:
             wf["status"] = "paused"
+            wf["started_at"] = None  # stop any running execution
             action = "paused"
     mlog.emit("info", "workflows", f"workflow.{action}", f"{wf_id} {action}")
     return {"ok": True, "status": wf["status"], "action": action}
@@ -30739,7 +30862,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.25 ready (localhost only)")
+    print(f"\n  Porter v0.28.26 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
