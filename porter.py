@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.17 — UI Polish Batch"""
+"""Porter v0.28.18 — UI Polish Batch"""
 
 
 import email
@@ -8452,7 +8452,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.17</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.18</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8611,6 +8611,7 @@ select.settings-input { padding-right: 26px; }
           <div id="pd-role" class="persona-detail-role"></div>
         </div>
         <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="_showSystemPrompt(window._selectedPersona && window._selectedPersona.id)" style="font-size:11px">System Prompt</button>
           <button class="btn btn-ghost" onclick="deletePersona()" style="color:#ef4444;font-size:11px">Delete</button>
           <button class="btn btn-ghost" onclick="closePersonaDetail()">Close</button>
         </div>
@@ -9710,6 +9711,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.18', date:'2026-03-07', notes:['System Prompt viewer: shows the full initial prompt Porter sends each agent','GET /api/persona/<id>/system-prompt endpoint','System Prompt button in agent slide-out panel header','Removed Last Dispatch from Models tab'] },
   { ver:'v0.28.11', date:'2026-03-07', notes:['Workflow Registry: 6 system workflows exposed as monitorable, configurable cards','GET /api/workflows + POST trigger/toggle/config endpoints','Daemons instrumented: cortex, hygiene, cap-checks, heartbeat, rollup, memory extraction','Workflows tab redesigned: live status, run history, pause/resume, config editing, manual trigger','Projects tab replaced with Coming Soon placeholder (backend preserved)','Agent persona files: quality MEMORY.md + ROLE_CARD.md for all 9 agents with conflict detection','Dead code removed: runBuild, chain builder, heartbeat editor, old workflow skills UI'] },
   { ver:'v0.28.10', date:'2026-03-07', notes:['UI Polish Batch — visual refinements across tabs'] },
   { ver:'v0.28.9', date:'2026-03-07', notes:['Memory map resize fix, context budget improvements, history trimmer for dispatch'] },
@@ -12185,34 +12187,28 @@ async function _preloadSessionCounts() {
 var _inlineSessionsExpanded = {};
 
 
-async function _showLastPrompt(backend) {
+async function _showSystemPrompt(personaId) {
   try {
-    var resp = await api('/api/admin/dispatch-log?backend=' + backend + '&limit=1');
-    if (!resp || !resp.dispatches || !resp.dispatches.length) {
-      toast('No dispatches found for ' + backend); return;
-    }
-    var d = resp.dispatches[0];
-    var prompt = d.prompt || '(empty)';
+    var resp = await api('/api/persona/' + personaId + '/system-prompt');
+    if (!resp || !resp.ok) { toast(resp ? resp.error : 'Failed', 'err'); return; }
     var overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
     overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
     var modal = document.createElement('div');
     modal.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:20px;max-width:700px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
     modal.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
-      + '<div style="font-size:14px;font-weight:600;color:var(--text)">Last Dispatch → ' + escHtml(backend) + '</div>'
+      + '<div style="font-size:14px;font-weight:600;color:var(--text)">System Prompt \u2014 ' + escHtml(resp.persona) + '</div>'
       + '<div style="flex:1"></div>'
-      + '<span style="font-size:10px;color:var(--text3)">' + (d.prompt_len || 0) + ' chars</span>'
-      + '<span style="font-size:10px;color:var(--text3)">' + (d.duration_ms || 0) + 'ms</span>'
-      + '<span style="font-size:10px;color:' + (d.status === 'complete' ? 'var(--green,#4ade80)' : '#ef4444') + '">' + (d.status || '?') + '</span>'
+      + '<span style="font-size:10px;color:var(--text3)">' + (resp.length || 0) + ' chars</span>'
       + '<button class="btn btn-ghost" onclick="this.closest(\'div\').parentElement.parentElement.remove()" style="font-size:14px;padding:2px 8px">\u00d7</button>'
       + '</div>'
-      + '<pre style="font-size:11px;line-height:1.5;color:var(--text2);background:var(--bg2);padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word;max-height:60vh;overflow-y:auto;border:1px solid var(--border)">' + escHtml(prompt) + '</pre>'
+      + '<pre style="font-size:11px;line-height:1.5;color:var(--text2);background:var(--bg2);padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word;max-height:60vh;overflow-y:auto;border:1px solid var(--border)">' + escHtml(resp.prompt) + '</pre>'
       + '<div style="margin-top:8px;display:flex;gap:8px">'
-      + '<button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(this.parentElement.previousElementSibling.textContent);toast(\'Copied\')">Copy prompt</button>'
+      + '<button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(this.parentElement.previousElementSibling.textContent);toast(\'Copied\')">Copy</button>'
       + '</div>';
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
-  } catch(e) { toast('Failed to load prompt', 'err'); }
+  } catch(e) { toast('Failed to load system prompt', 'err'); }
 }
 
 function _toggleInlineSessions(btn, backend, source) {
@@ -16957,7 +16953,7 @@ function _renderModelCards(data, act) {
     if (activeRuns.length > 0) {
       liveTraceBtn = '<div style="margin-top:4px"><button class="btn btn-ghost" style="font-size:10px;width:100%;color:var(--accent)" onclick="_openModelActivity(\'' + escHtml(p.id) + '\')">Live Trace</button></div>';
     }
-    var lastPromptBtn = '<div style="margin-top:4px"><button class="btn btn-ghost" style="font-size:10px;width:100%;color:var(--text3)" onclick="_showLastPrompt(\'' + escHtml(p.id) + '\')">Last Dispatch</button></div>';
+    var lastPromptBtn = '';
 
     // Model selector: show active model name as card title
     var _avBk = (_modelAvailableData || {})[p.id] || {};
@@ -23948,7 +23944,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.17"})
+            self.reply_json({"v": "0.28.18"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24110,7 +24106,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.17"
+                health["porter_version"] = "0.28.18"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25866,7 +25862,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.17'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.18'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30068,7 +30064,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.17 ready (localhost only)")
+    print(f"\n  Porter v0.28.18 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
