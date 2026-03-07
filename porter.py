@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.2 — Cortex Session Distill"""
+"""Porter v0.28.3 — Cortex Staleness + Lifecycle"""
 
 
 import email
@@ -954,9 +954,32 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
         importance = max(1, min(10, int(fact_obj.get("importance", 5))))
         keywords = str(fact_obj.get("keywords", ""))
 
-        # Duplicate check
+        # Duplicate check + supersession (v0.28.3)
         if _is_duplicate(fact_text, existing_facts):
             continue
+
+        # Supersession: Jaccard 0.6-0.8 → supersede older if new is higher importance
+        new_kw = _cortex_tokenize(fact_text)
+        try:
+            conn_ss = _db_conn()
+            candidates = conn_ss.execute(
+                "SELECT id, fact, importance, keywords FROM cortex_memories "
+                "WHERE status='active' AND consolidated_into IS NULL AND memory_type='semantic' "
+                "ORDER BY created_at DESC LIMIT 100"
+            ).fetchall()
+            for cand in candidates:
+                cand_kw = set(k.strip() for k in cand[3].split(",") if k.strip()) if cand[3] else _cortex_tokenize(cand[1])
+                sim = _jaccard_similarity(new_kw, cand_kw)
+                if 0.6 <= sim < 0.8 and importance >= cand[2]:
+                    # Supersede the older fact
+                    conn_ss.execute(
+                        "UPDATE cortex_memories SET status='archived', superseded_by_id=NULL, "
+                        "updated_at=strftime('%s','now') WHERE id=?", (cand[0],))
+                    conn_ss.commit()
+                    break  # Only supersede one per new fact
+            conn_ss.close()
+        except Exception:
+            pass
 
         # v0.28.0 — auto-accept: store directly, no file routing
         scope_id = persona_id if scope == "agent" else ""
@@ -1115,10 +1138,42 @@ def _cortex_consolidate_loop():
                             )
                             merged_count += 1
 
-            if merged_count:
+            # v0.28.3 — Staleness: auto-archive old unused memories
+            archive_days = prefs.get("cortex_archive_days", 60)
+            min_use = prefs.get("cortex_min_use_count", 3)
+            now = _t.time()
+            archive_threshold = now - (archive_days * 86400)
+            quick_archive_threshold = now - (7 * 86400)
+            archived_count = 0
+
+            # Rule 1: last_used_at > N days AND use_count < M → archived
+            stale = conn.execute(
+                "SELECT id FROM cortex_memories WHERE status='active' AND consolidated_into IS NULL "
+                "AND last_used_at IS NOT NULL AND last_used_at < ? AND use_count < ?",
+                (archive_threshold, min_use)
+            ).fetchall()
+            for row in stale:
+                conn.execute("UPDATE cortex_memories SET status='archived', updated_at=strftime('%s','now') WHERE id=?", (row[0],))
+                archived_count += 1
+
+            # Rule 2: importance <= 2 AND use_count == 0 AND age > 7 days → archived
+            low_imp = conn.execute(
+                "SELECT id FROM cortex_memories WHERE status='active' AND consolidated_into IS NULL "
+                "AND importance <= 2 AND use_count = 0 AND created_at < ?",
+                (quick_archive_threshold,)
+            ).fetchall()
+            for row in low_imp:
+                conn.execute("UPDATE cortex_memories SET status='archived', updated_at=strftime('%s','now') WHERE id=?", (row[0],))
+                archived_count += 1
+
+            if merged_count or archived_count:
                 conn.commit()
-                log.info("Cortex consolidated %d memories", merged_count)
-                mlog.emit("info", "cortex", "cortex.consolidate", f"Merged {merged_count} memories")
+                if merged_count:
+                    log.info("Cortex consolidated %d memories", merged_count)
+                    mlog.emit("info", "cortex", "cortex.consolidate", f"Merged {merged_count} memories")
+                if archived_count:
+                    log.info("Cortex auto-archived %d stale memories", archived_count)
+                    mlog.emit("info", "cortex", "cortex.staleness", f"Auto-archived {archived_count} stale memories")
             conn.close()
         except Exception as e:
             log.debug("Cortex consolidation error: %s", e)
@@ -7855,7 +7910,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.2</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.3</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8506,9 +8561,8 @@ select.settings-input { padding-right: 26px; }
 
     <!-- Stats bar -->
     <div id="cx-stats-bar" style="display:flex;gap:12px;padding:8px 28px;background:var(--surface);border-bottom:1px solid var(--border);font-size:13px">
-      <span style="color:var(--text2)">Memories: <strong id="cx-total2" style="color:var(--accent)">—</strong></span>
+      <span style="color:var(--text2)">Active: <strong id="cx-total2" style="color:var(--accent)">—</strong></span>
       <span style="color:var(--text3)">New today: <strong id="cx-24h2">—</strong></span>
-      <span style="color:var(--text3)">New (1h): <strong id="cx-new1h2">0</strong></span>
       <span style="margin-left:auto"><span id="cx-status2" style="font-weight:600;color:var(--green,#4ade80)">—</span></span>
     </div>
 
@@ -8584,6 +8638,14 @@ select.settings-input { padding-right: 26px; }
         <label style="font-size:13px;color:var(--text2)">
           Consolidation interval (hours)
           <input type="number" id="cx-consol2" value="6" min="1" max="48" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
+        </label>
+        <label style="font-size:13px;color:var(--text2)">
+          Auto-archive after (days)
+          <input type="number" id="cx-archive-days" value="60" min="7" max="365" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
+        </label>
+        <label style="font-size:13px;color:var(--text2)">
+          Min uses before archive
+          <input type="number" id="cx-min-use" value="3" min="0" max="50" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
         </label>
       </div>
     </div>
@@ -9185,6 +9247,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.28.3', date:'2026-03-07', notes:['Cortex Staleness + Lifecycle: memories self-maintain via auto-archive rules','Staleness: unused facts (>60d, <3 uses) auto-archived in consolidation loop','Staleness: low-importance facts (<=2, 0 uses, >7d) auto-archived','Supersession: new facts with Jaccard 0.6-0.8 overlap supersede older lower-importance facts','Config: archive threshold days + min use count settings','Stats: active count + archived count in API response','Stats bar: Active: X | New today: X'] },
   { ver:'v0.28.2', date:'2026-03-07', notes:['Cortex Session Distill: session flush creates episodic memory in DB instead of MEMORY.md writes','New _cortex_distill_session(): inserts memory_type=episodic row with session summary','OpenClaw/Claude/Gemini flush all route through distill','Injection: separate episodic block (max 2 recent sessions)','Consolidation: only merges within same memory_type','Removed: _cortex_resolve_destination and _cortex_append_to_file (dead code)'] },
   { ver:'v0.28.1', date:'2026-03-07', notes:['Cortex Memory Browser: sidebar renamed Inbox→Memories','Cards: status dot (green/gray) + type pill (fact/session) + Archive/Restore buttons','Removed: route bar, Push/Dismiss, route picker, routed checkbox, auto-route config','Filter tabs: All/Facts/Sessions by memory_type','Graph: hub node renamed Inbox→Cortex with brain emoji','API: POST .../route replaced by POST .../status (active/archived)','API: GET memories supports ?memory_type= and ?status= filters','API: GET memories returns memory_type, status, confidence, use_count'] },
   { ver:'v0.28.0', date:'2026-03-07', notes:['Cortex Memory Refactor P1: Auto-accept — facts store silently, no inbox backlog','Schema: 6 new lifecycle columns (memory_type, status, confidence, superseded_by_id, last_used_at, use_count)','Injection: new scoring formula (0.4*keyword + 0.25*importance + 0.2*recency + 0.15*use_freq)','Injection: usage tracking (last_used_at + use_count updated on inject)','Stats: new_1h replaces unrouted count','Nav badge: shows new-in-last-hour instead of inbox count'] },
@@ -16471,7 +16534,8 @@ async function _saveCortexConfig2() {
     cortex_max_facts: parseInt(document.getElementById('cx-max2').value) || 8,
     cortex_inject_limit: parseInt(document.getElementById('cx-inject2').value) || 5,
     cortex_consolidate_hours: parseInt((document.getElementById('cx-consol2') || {}).value) || 6,
-
+    cortex_archive_days: parseInt((document.getElementById('cx-archive-days') || {}).value) || 60,
+    cortex_min_use_count: parseInt((document.getElementById('cx-min-use') || {}).value) || 3,
   };
   var r = await api('/api/cortex/config', payload);
   if (r && r.ok) toast('Cortex config saved');
@@ -23863,7 +23927,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.2"})
+            self.reply_json({"v": "0.28.3"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -23950,7 +24014,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.2"
+                health["porter_version"] = "0.28.3"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -24455,6 +24519,7 @@ class Handler(BaseHTTPRequestHandler):
             ).fetchall():
                 by_scope[row[0]] = row[1]
             new_1h = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='active' AND created_at > ?", (_t.time() - 3600,)).fetchone()[0]
+            archived = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='archived'").fetchone()[0]
             conn.close()
             self.reply_json({
                 "ok": True,
@@ -24463,6 +24528,7 @@ class Handler(BaseHTTPRequestHandler):
                 "last_24h": last_24h,
                 "by_scope": by_scope,
                 "new_1h": new_1h,
+                "archived": archived,
                 "enabled": _config.get("preferences", {}).get("cortex_enabled", True)
             })
 
@@ -25609,7 +25675,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.2'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.3'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -28651,7 +28717,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             if "preferences" not in _config:
                 _config["preferences"] = {}
             cortex_keys = ["cortex_enabled", "cortex_min_response_len", "cortex_max_facts",
-                           "cortex_inject_limit", "cortex_consolidate_hours"]
+                           "cortex_inject_limit", "cortex_consolidate_hours",
+                           "cortex_archive_days", "cortex_min_use_count"]
             updated = {}
             for k in cortex_keys:
                 if k in data:
@@ -29638,7 +29705,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.2 ready (localhost only)")
+    print(f"\n  Porter v0.28.3 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
