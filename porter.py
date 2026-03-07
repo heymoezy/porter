@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.6 — Ship Command & Validator"""
+"""Porter v0.28.7 — Streaming Token Reveal"""
 
 
 import email
@@ -8036,7 +8036,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.6</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.7</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9373,6 +9373,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.28.7', date:'2026-03-07', notes:['Streaming token reveal — typewriter-style animation for chat responses','Token buffer with adaptive chunk sizing (4/10/18 chars based on buffer depth)','16ms drain interval for smooth 60fps rendering','Graceful finish: pending-done flag waits for buffer drain before closing stream','Reset on stop/error/new-send for clean state management'] },
   { ver:'v0.28.6', date:'2026-03-07', notes:['/ship chat command — validate version consistency + trigger release pipeline','GET /api/ship/validate — checks all 6 version strings match, syntax compiles, uncommitted changes','Ship gate: pre-commit validation prevents mismatched versions','Autocomplete + help text updated'] },
   { ver:'v0.28.5', date:'2026-03-07', notes:['Mermaid diagram rendering in chat — ```mermaid fenced blocks render as SVG diagrams','Mermaid CDN loaded via ES module (jsdelivr)','CSS: .chat-mermaid container with dark theme styling','_renderMermaidDiagrams() with dedup (data-mermaid-rendered flag)','Render hook in renderChatMessages() for both full repaints and streaming updates'] },
   { ver:'v0.28.4', date:'2026-03-07', notes:['Chat Intelligence: 5 patterns from agentchattr research','Loop Guard: auto-pause after 4 agent-to-agent hops, human message resets','Cursor-Based Reads: GET /api/chat/read — agents get only NEW messages since last read','Escalating Empty-Read Warnings: 3-tier warnings to stop agent polling loops','Rules Epoch Tracking: version counter on RULES.md changes, stale agent detection, GET /api/rules/epoch','Job Proposals: agents use [proposal] tag, human Accept/Dismiss, GET/POST /api/jobs/proposals','Presentation: polished ChatGPT-style output formatting instructions for all dispatch paths'] },
@@ -13654,6 +13655,7 @@ function _updateStopBtn(active) {
 function chatStop() {
   if (_chatEventSource) { _chatEventSource.close(); _chatEventSource = null; }
   _chatStreaming = false;
+  _resetChatStreamReveal();
   var thinkEl = document.getElementById('chat-thinking');
   if (thinkEl) thinkEl.remove();
   if (_chatMessages.length > 0) {
@@ -13881,6 +13883,60 @@ function _loadChatMessages() {
 
 let _chatStreaming = false;
 let _chatEventSource = null;
+let _chatStreamRevealBuffer = '';
+let _chatStreamRevealTimer = null;
+let _chatStreamPendingDone = false;
+let _chatStreamTargetIdx = -1;
+
+function _resetChatStreamReveal() {
+  _chatStreamRevealBuffer = '';
+  _chatStreamPendingDone = false;
+  _chatStreamTargetIdx = -1;
+  if (_chatStreamRevealTimer) {
+    clearTimeout(_chatStreamRevealTimer);
+    _chatStreamRevealTimer = null;
+  }
+}
+
+function _finishChatStreamReveal(evtSource, assistantIdx, modelId) {
+  if (_chatMessages[assistantIdx] && !_chatMessages[assistantIdx].model) {
+    _chatMessages[assistantIdx].model = modelId;
+  }
+  _chatStreaming = false;
+  if (evtSource) evtSource.close();
+  if (_chatEventSource === evtSource) _chatEventSource = null;
+  _resetChatStreamReveal();
+  renderChatMessages();
+}
+
+function _drainChatStreamReveal(evtSource, assistantIdx, modelId) {
+  if (assistantIdx < 0 || !_chatMessages[assistantIdx]) {
+    _resetChatStreamReveal();
+    return;
+  }
+  if (!_chatStreamRevealBuffer.length) {
+    _chatStreamRevealTimer = null;
+    if (_chatStreamPendingDone) _finishChatStreamReveal(evtSource, assistantIdx, modelId);
+    return;
+  }
+  var take = _chatStreamRevealBuffer.length > 160 ? 18 : (_chatStreamRevealBuffer.length > 60 ? 10 : 4);
+  _chatMessages[assistantIdx].content += _chatStreamRevealBuffer.slice(0, take);
+  _chatStreamRevealBuffer = _chatStreamRevealBuffer.slice(take);
+  renderChatMessages(true);
+  _chatStreamRevealTimer = setTimeout(function() {
+    _drainChatStreamReveal(evtSource, assistantIdx, modelId);
+  }, 16);
+}
+
+function _queueChatStreamReveal(token, evtSource, assistantIdx, modelId) {
+  if (!token) return;
+  if (_chatStreamTargetIdx !== assistantIdx) {
+    _resetChatStreamReveal();
+    _chatStreamTargetIdx = assistantIdx;
+  }
+  _chatStreamRevealBuffer += token;
+  if (!_chatStreamRevealTimer) _drainChatStreamReveal(evtSource, assistantIdx, modelId);
+}
 
 function _chatModelChanged() {
   // No send button to toggle — model selected via dropdown
@@ -14855,6 +14911,8 @@ function chatSend() {
   if (msgEl) { msgEl.insertAdjacentHTML('beforeend', thinkHtml); msgEl.scrollTop = msgEl.scrollHeight; }
   _chatMessages.push({ role: 'assistant', content: '', model: modelId });
   _updateStopBtn(true);
+  _resetChatStreamReveal();
+  _chatStreamTargetIdx = _chatMessages.length - 1;
 
   var _streamProject = (_chatProject && _chatProject.id && _chatProject.id !== '_personality') ? _chatProject.id : '';
   var _streamPersona = _chatAgent ? (_chatAgent.name || '') : '';
@@ -14876,23 +14934,25 @@ function chatSend() {
     try {
       const data = JSON.parse(e.data);
       if (data.error) {
+        _resetChatStreamReveal();
         _chatMessages[assistantIdx].content = data.error;
         _chatMessages[assistantIdx].role = 'error';
         _chatStreaming = false;
         evtSource.close();
+        if (_chatEventSource === evtSource) _chatEventSource = null;
         renderChatMessages();
         return;
       }
       if (data.done) {
-              if (!_chatMessages[assistantIdx].model) _chatMessages[assistantIdx].model = modelId;
-        _chatStreaming = false;
-        evtSource.close();
-        renderChatMessages();
+        if (_chatStreamRevealBuffer.length || _chatStreamRevealTimer) {
+          _chatStreamPendingDone = true;
+        } else {
+          _finishChatStreamReveal(evtSource, assistantIdx, modelId);
+        }
         return;
       }
       if (data.token) {
-        _chatMessages[assistantIdx].content += data.token;
-        renderChatMessages();
+        _queueChatStreamReveal(data.token, evtSource, assistantIdx, modelId);
       }
     } catch(err) {}
   };
@@ -14900,6 +14960,8 @@ function chatSend() {
   evtSource.onerror = function() {
     _chatStreaming = false;
     evtSource.close();
+    if (_chatEventSource === evtSource) _chatEventSource = null;
+    _resetChatStreamReveal();
     if (!_chatMessages[assistantIdx].content) {
       _chatMessages[assistantIdx].content = 'Connection lost — model may be unavailable.';
       _chatMessages[assistantIdx].role = 'error';
@@ -24210,7 +24272,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.6"})
+            self.reply_json({"v": "0.28.7"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24372,7 +24434,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.6"
+                health["porter_version"] = "0.28.7"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26070,7 +26132,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.6'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.7'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30123,7 +30185,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.6 ready (localhost only)")
+    print(f"\n  Porter v0.28.7 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
