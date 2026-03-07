@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.19 — Agent Backend Config + Self-Test Workflow"""
+"""Porter v0.28.20 — UX Feedback Fixes"""
 
 
 import email
@@ -8471,7 +8471,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.19</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.20</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9224,10 +9224,7 @@ select.settings-input { padding-right: 26px; }
         Password
       </button>
 
-      <button class="settings-nav-item" id="snav-apikeys" onclick="switchSettingsTab('apikeys')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-        API Keys
-      </button>
+<!-- API Keys moved to Extensions tab -->
 
       <div style="flex:1"></div>
       <div style="padding:12px 16px;border-top:1px solid var(--border)">
@@ -9484,21 +9481,9 @@ select.settings-input { padding-right: 26px; }
 
 
       <!-- API Keys page -->
-      <div class="settings-page" id="spage-apikeys">
-        <div class="settings-page-title">API Keys</div>
-        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">Manage API keys for external services. Once saved, keys can only be deleted and re-added.</div>
-        <div id="apikeys-list"></div>
-        <div id="apikey-add-form" style="display:none;margin-top:16px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
-          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px" id="apikey-add-title">Add key</div>
-          <input type="text" class="settings-input" id="apikey-add-value" placeholder="Paste API key..." style="font-family:monospace;margin-bottom:10px">
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-primary btn-sm" onclick="saveApiKey()">Save</button>
-            <button class="btn btn-ghost btn-sm" onclick="cancelApiKeyAdd()">Cancel</button>
-          </div>
-        </div>
+      <div class="settings-page" id="spage-apikeys" style="display:none">
       </div>
-      <!-- Task Operations page -->
-      <div class="settings-page" id="spage-tasks">
+<div class="settings-page" id="spage-tasks">
         <div class="sp-header">
           <h2>Task Operations</h2>
           <button class="btn btn-sm btn-ghost" onclick="clearCompletedTasks()"
@@ -9729,6 +9714,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.20', date:'2026-03-07', notes:['Graph: scroll zoom blocked when locked','Workflow history: singular "run" when count is 1','Cortex: agent scope resolves persona ID to name','Cortex: scope tag truncation for long names','Removed API Keys from Settings (use Extensions)'] },
   { ver:'v0.28.19', date:'2026-03-07', notes:['Agent Config tab: editable backend + fallback chain','Agent Self-Test workflow: periodic benchmarks across backends','Graph lock ON by default, disables +/-/Fit/Center','Removed Memory tab from agent slide-out (use Cortex)','Cortex: scope shows agent name, counter says learnings, removed type pills','Inbox button cutoff fix'] },
   { ver:'v0.28.18', date:'2026-03-07', notes:['System Prompt viewer: shows the full initial prompt Porter sends each agent','GET /api/persona/<id>/system-prompt endpoint','System Prompt button in agent slide-out panel header','Removed Last Dispatch from Models tab'] },
   { ver:'v0.28.11', date:'2026-03-07', notes:['Workflow Registry: 6 system workflows exposed as monitorable, configurable cards','GET /api/workflows + POST trigger/toggle/config endpoints','Daemons instrumented: cortex, hygiene, cap-checks, heartbeat, rollup, memory extraction','Workflows tab redesigned: live status, run history, pause/resume, config editing, manual trigger','Projects tab replaced with Coming Soon placeholder (backend preserved)','Agent persona files: quality MEMORY.md + ROLE_CARD.md for all 9 agents with conflict detection','Dead code removed: runBuild, chain builder, heartbeat editor, old workflow skills UI'] },
@@ -11747,7 +11733,7 @@ function _wfShowHistory(id) {
       el.innerHTML = '<div style="font-size:12px;color:var(--text3);text-align:center;padding:8px">No history yet</div>';
       return;
     }
-    el.innerHTML = '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px">Last ' + wf.history.length + ' runs</div>'
+    el.innerHTML = '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px">Last ' + wf.history.length + ' run' + (wf.history.length !== 1 ? 's' : '') + '</div>'
       + wf.history.slice().reverse().map(function(h) {
         var ts = h.ts ? new Date(h.ts * 1000).toLocaleTimeString() : '';
         var dot = h.ok ? '#22c55e' : '#ef4444';
@@ -16219,7 +16205,14 @@ function _renderCortexMemories(memories) {
     html += '<div class="cx-mem-card cx-mem-row" data-scope="' + sc + '" data-id="' + m.id + '" data-type="' + memType + '" data-status="' + memStatus + '" style="padding:8px 10px">'
       + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
       + statusDot
-      + '<span style="font-size:10px;font-weight:600;color:' + scColor + ';text-transform:uppercase;background:color-mix(in srgb,' + scColor + ' 12%,transparent);padding:2px 8px;border-radius:4px;letter-spacing:0.5px">' + (sc === 'agent' && m.scope_id ? m.scope_id : sc) + '</span>'
+      + (function() {
+        var label = sc;
+        if (sc === 'agent' && m.scope_id) {
+          var found = (window._personas || []).find(function(pp) { return pp.id === m.scope_id; });
+          label = found ? found.name : m.scope_id.substring(0, 8);
+        }
+        return '<span style="font-size:10px;font-weight:600;color:' + scColor + ';text-transform:uppercase;background:color-mix(in srgb,' + scColor + ' 12%,transparent);padding:2px 8px;border-radius:4px;letter-spacing:0.5px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle">' + escHtml(label) + '</span>';
+      })()
       + impBar
       + (m.source_type === 'session' && m.source_id
         ? '<a href="#" onclick="event.preventDefault();event.stopPropagation();_openCortexSession(\'' + escHtml(m.source_id) + '\')" style="font-size:10px;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:3px" title="Open session"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>session</a>'
@@ -16679,6 +16672,7 @@ function _setupGraphInteraction(canvas) {
   canvas.onmouseleave = function() { if (dragging) { dragging.fixed = true; dragging = null; } panning = false; var tip = document.getElementById('cx-graph-tooltip'); if (tip) tip.style.display = 'none'; };
   canvas.onwheel = function(e) {
     e.preventDefault();
+    if (window._cxGraphLocked) return;
     var delta = e.deltaY > 0 ? 0.92 : 1.08;
     _graphZoom.scale = Math.max(0.3, Math.min(3, _graphZoom.scale * delta));
     _drawGraph();
@@ -24133,7 +24127,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.19"})
+            self.reply_json({"v": "0.28.20"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24295,7 +24289,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.19"
+                health["porter_version"] = "0.28.20"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26075,7 +26069,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.19'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.20'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30279,7 +30273,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.19 ready (localhost only)")
+    print(f"\n  Porter v0.28.20 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
