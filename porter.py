@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.37 — Cortex UX Polish + Agent/Skills Architecture"""
+"""Porter v0.27.38 — Cortex UX Polish + Agent/Skills Architecture"""
 
 
 import email
@@ -7822,7 +7822,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.37</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.38</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8481,6 +8481,12 @@ select.settings-input { padding-right: 26px; }
       <div style="flex:1;display:flex;flex-direction:column;min-width:0">
         <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border)">
           <div style="font-size:13px;font-weight:600;color:var(--text)">Memory Map</div>
+          <div style="display:flex;gap:2px;margin-left:12px">
+            <button class="btn btn-ghost gf-btn active" onclick="_graphFilterScope('all',this)" style="font-size:9px;padding:2px 6px">All</button>
+            <button class="btn btn-ghost gf-btn" onclick="_graphFilterScope('agent',this)" style="font-size:9px;padding:2px 6px">Agent</button>
+            <button class="btn btn-ghost gf-btn" onclick="_graphFilterScope('project',this)" style="font-size:9px;padding:2px 6px">Project</button>
+            <button class="btn btn-ghost gf-btn" onclick="_graphFilterScope('global',this)" style="font-size:9px;padding:2px 6px">Global</button>
+          </div>
           <div style="flex:1"></div>
           <button class="btn btn-ghost" onclick="_graphZoomIn()" style="font-size:10px;padding:2px 8px" title="Zoom in">+</button>
           <button class="btn btn-ghost" onclick="_graphZoomOut()" style="font-size:10px;padding:2px 8px" title="Zoom out">&minus;</button>
@@ -8488,12 +8494,13 @@ select.settings-input { padding-right: 26px; }
         </div>
         <div style="flex:1;position:relative;overflow:hidden">
           <canvas id="cx-graph-canvas" width="700" height="500" style="width:100%;height:100%;cursor:grab"></canvas>
+          <div id="cx-graph-tooltip" style="display:none;position:absolute;pointer-events:none;background:var(--bg3,#1a1a2e);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:12px;color:var(--text);box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;max-width:220px"></div>
         </div>
         <div style="display:flex;gap:12px;padding:6px 16px;border-top:1px solid var(--border);font-size:10px;color:var(--text3)">
           <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22d3ee;margin-right:3px"></span>Agent</span>
-          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#fbbf24;margin-right:3px"></span>Project</span>
-          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;margin-right:3px"></span>Global</span>
-          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#8b5cf6;margin-right:3px"></span>Cortex</span>
+          <span><span style="display:inline-block;width:10px;height:8px;border-radius:2px;background:#fbbf24;margin-right:3px"></span>Project</span>
+          <span><svg width="10" height="10" viewBox="0 0 10 10" style="margin-right:3px;vertical-align:middle"><polygon points="5,0.5 9.3,2.75 9.3,7.25 5,9.5 0.7,7.25 0.7,2.75" fill="#4ade80"/></svg>Global</span>
+          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#8b5cf6;margin-right:3px"></span>Inbox</span>
           <span style="margin-left:auto">Drag to pin &#x2022; Double-click to unpin &#x2022; Scroll to zoom</span>
         </div>
       </div>
@@ -9148,6 +9155,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.38', date:'2026-03-07', notes:['Memory Map: edges connect at node borders (not centers)','Memory Map: distinct shapes per type (circles=agents, hexagons=global, rounded rects=projects)','Memory Map: scope filter buttons (All/Agent/Project/Global) with fade effect','Memory Map: hover tooltips show node details','Memory Map: hub renamed from Cortex to Inbox for clarity','Memory Map: agent-to-agent edges based on shared project work'] },
   { ver:'v0.27.37', date:'2026-03-06', notes:['Memory Map: drag persistence (double-click to unpin), auto-center, zoom controls','Memory Map: particles reflect real data flow (idle edges static)','Cortex inbox: filters to unrouted facts, counter matches inbox count','Cortex counter: auto-updates via SSE after every extraction','Session delete cascades to cortex inbox entries','Agent skills: per-agent skill assignment in Config tab'] },
   { ver:'v0.27.36', date:'2026-03-06', notes:['Cortex promoted to main nav with unrouted memory counter badge','Memory Inbox: review, route to agent/global, dismiss, or edit extracted facts','Interactive Memory Map: force-directed graph with animated data flow particles','Per-fact routing: push to agent MEMORY.md or global config, fact leaves inbox','Config view: auto-extract, auto-route, consolidation interval, injection limits','GET /api/cortex/graph + POST /api/cortex/memories/<id>/route endpoints'] },
   { ver:'v0.27.35', date:'2026-03-06', notes:['Session Memory: renamed Learnings \u2192 Memory, restored per-session viewer with edit/save/re-extract','Chat auto-routing fix \u2014 server-side smart routing decides model priority','Porter context awareness \u2014 models in general chat know they operate within Porter','All backends (Claude, Codex, Ollama) now reachable via auto-route fallback chain'] },
@@ -16493,6 +16501,7 @@ var _graphEdges = [];
 var _graphAnim = null;
 var _graphDrag = null;
 var _graphZoom = {x: 0, y: 0, scale: 1};
+var _graphFilter = 'all';
 
 function _resetGraphZoom() { _fitGraphToView(); }
 function _fitGraphToView() {
@@ -16519,6 +16528,13 @@ function _fitGraphToView() {
 }
 function _graphZoomIn() { _graphZoom.scale = Math.min(3, _graphZoom.scale * 1.2); _drawGraph(); }
 function _graphZoomOut() { _graphZoom.scale = Math.max(0.3, _graphZoom.scale / 1.2); _drawGraph(); }
+function _graphFilterScope(scope, btn) {
+  _graphFilter = scope;
+  var toolbar = btn.parentElement;
+  toolbar.querySelectorAll('.gf-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  _drawGraph();
+}
 
 async function _initMemoryGraph() {
   var canvas = document.getElementById('cx-graph-canvas');
@@ -16597,10 +16613,36 @@ function _setupGraphInteraction(canvas) {
       _graphZoom.x = e.clientX - panStart.x;
       _graphZoom.y = e.clientY - panStart.y;
       _drawGraph();
+    } else {
+      // Hover tooltip
+      var mx = (e.clientX - rect.left - _graphZoom.x) / _graphZoom.scale;
+      var my = (e.clientY - rect.top - _graphZoom.y) / _graphZoom.scale;
+      var tip = document.getElementById('cx-graph-tooltip');
+      var hovered = null;
+      _graphNodes.forEach(function(n) {
+        var dx = mx - n.x, dy = my - n.y;
+        if (Math.sqrt(dx*dx + dy*dy) < (n.radius || 20)) hovered = n;
+      });
+      if (hovered && tip) {
+        var typeLabels = {cortex:'Inbox Hub', agent:'Agent', project:'Project', global:'Global'};
+        var typeColors = {cortex:'#8b5cf6', agent:'#22d3ee', project:'#fbbf24', global:'#4ade80'};
+        var html = '<div style="font-weight:600;margin-bottom:4px">' + (hovered.emoji || '') + ' ' + (hovered.label || '') + '</div>';
+        html += '<span style="display:inline-block;font-size:9px;padding:1px 6px;border-radius:3px;background:' + (typeColors[hovered.type]||'#666') + '20;color:' + (typeColors[hovered.type]||'#888') + ';border:1px solid ' + (typeColors[hovered.type]||'#666') + '40">' + (typeLabels[hovered.type]||hovered.type) + '</span>';
+        html += '<div style="margin-top:4px;font-size:11px;color:var(--text3)">' + (hovered.count || 0) + ' memories</div>';
+        if (hovered.backend) html += '<div style="font-size:10px;color:var(--text3)">Backend: ' + hovered.backend + '</div>';
+        tip.innerHTML = html;
+        tip.style.display = 'block';
+        tip.style.left = (e.clientX - rect.left + 12) + 'px';
+        tip.style.top = (e.clientY - rect.top - 10) + 'px';
+        canvas.style.cursor = 'pointer';
+      } else if (tip) {
+        tip.style.display = 'none';
+        if (!dragging) canvas.style.cursor = 'grab';
+      }
     }
   };
   canvas.onmouseup = function() { if (dragging) { dragging.fixed = true; dragging = null; canvas.style.cursor = 'grab'; } panning = false; };
-  canvas.onmouseleave = function() { if (dragging) { dragging.fixed = true; dragging = null; } panning = false; };
+  canvas.onmouseleave = function() { if (dragging) { dragging.fixed = true; dragging = null; } panning = false; var tip = document.getElementById('cx-graph-tooltip'); if (tip) tip.style.display = 'none'; };
   canvas.onwheel = function(e) {
     e.preventDefault();
     var delta = e.deltaY > 0 ? 0.92 : 1.08;
@@ -16685,27 +16727,45 @@ function _drawGraph() {
   var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80', cortex:'#8b5cf6'};
   var time = Date.now() / 1000;
 
-  // Draw edges
+  // Draw edges (border-to-border)
   _graphEdges.forEach(function(e) {
     var a = _graphNodes[e.source], b = _graphNodes[e.target];
     if (!a || !b) return;
     var weight = Math.min(5, Math.max(0.5, (e.weight || 1) * 0.8));
-    var pulse = 0.3 + 0.2 * Math.sin(time * 1.5 + (e.source || 0));
-    var midX = (a.x + b.x) / 2 + (a.y - b.y) * 0.08;
-    var midY = (a.y + b.y) / 2 + (b.x - a.x) * 0.08;
+    var isCollab = e.type === 'collab';
+    // Filter opacity
+    var edgeOpacity = 1;
+    if (_graphFilter && _graphFilter !== 'all') {
+      var aMatch = a.type === _graphFilter || a.type === 'cortex';
+      var bMatch = b.type === _graphFilter || b.type === 'cortex';
+      if (!aMatch && !bMatch) edgeOpacity = 0.08;
+      else if (!aMatch || !bMatch) edgeOpacity = 0.25;
+    }
+    var pulse = (0.3 + 0.2 * Math.sin(time * 1.5 + (e.source || 0))) * edgeOpacity;
+    // Calculate border intersection points
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var dist = Math.sqrt(dx*dx + dy*dy) || 1;
+    var rA = a.radius || 20, rB = b.radius || 20;
+    var ax = a.x + (dx / dist) * rA, ay = a.y + (dy / dist) * rA;
+    var bx = b.x - (dx / dist) * rB, by = b.y - (dy / dist) * rB;
+    var midX = (ax + bx) / 2 + (ay - by) * 0.08;
+    var midY = (ay + by) / 2 + (bx - ax) * 0.08;
     ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.quadraticCurveTo(midX, midY, b.x, b.y);
-    ctx.strokeStyle = 'rgba(139,92,246,' + pulse + ')';
+    ctx.moveTo(ax, ay);
+    ctx.quadraticCurveTo(midX, midY, bx, by);
+    var edgeColor = isCollab ? 'rgba(34,211,238,' + pulse + ')' : 'rgba(139,92,246,' + pulse + ')';
+    ctx.strokeStyle = edgeColor;
     ctx.lineWidth = weight;
+    if (isCollab) { ctx.setLineDash([4, 4]); }
     ctx.stroke();
+    if (isCollab) { ctx.setLineDash([]); }
     // Animated particle — only on active edges (lastActivity within 60s)
     if (e.lastActivity && (Date.now() - e.lastActivity) < 60000) {
       var elapsed = (Date.now() - e.lastActivity) / 1000;
-      var fadeOut = Math.max(0, 1 - elapsed / 60);
+      var fadeOut = Math.max(0, 1 - elapsed / 60) * edgeOpacity;
       var t = (time * 0.5 + (e.source || 0) * 0.3) % 1;
-      var px = (1-t)*(1-t)*a.x + 2*(1-t)*t*midX + t*t*b.x;
-      var py = (1-t)*(1-t)*a.y + 2*(1-t)*t*midY + t*t*b.y;
+      var px = (1-t)*(1-t)*ax + 2*(1-t)*t*midX + t*t*bx;
+      var py = (1-t)*(1-t)*ay + 2*(1-t)*t*midY + t*t*by;
       ctx.beginPath();
       ctx.arc(px, py, 3, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(139,92,246,' + (0.9 * fadeOut) + ')';
@@ -16713,11 +16773,17 @@ function _drawGraph() {
     }
   });
 
-  // Draw nodes
+  // Draw nodes (distinct shapes per type)
   _graphNodes.forEach(function(n) {
     var color = scopeColors[n.type] || '#8b5cf6';
     var r = parseInt(color.slice(1,3),16)||139, g = parseInt(color.slice(3,5),16)||92, bl = parseInt(color.slice(5,7),16)||246;
     var radius = n.radius || 20;
+    // Filter opacity
+    var nodeOpacity = 1;
+    if (_graphFilter && _graphFilter !== 'all') {
+      nodeOpacity = (n.type === _graphFilter || n.type === 'cortex') ? 1 : 0.15;
+    }
+    ctx.globalAlpha = nodeOpacity;
     // Outer glow
     var grad = ctx.createRadialGradient(n.x, n.y, radius*0.5, n.x, n.y, radius*2.5);
     grad.addColorStop(0, 'rgba('+r+','+g+','+bl+',0.15)');
@@ -16726,14 +16792,60 @@ function _drawGraph() {
     ctx.arc(n.x, n.y, radius * 2.5, 0, Math.PI * 2);
     ctx.fillStyle = grad;
     ctx.fill();
-    // Node fill
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba('+r+','+g+','+bl+',0.12)';
-    ctx.fill();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.stroke();
+
+    // Shape depends on type
+    if (n.type === 'project') {
+      // Rounded rectangle
+      var rw = radius * 1.8, rh = radius * 1.4, rx = n.x - rw/2, ry = n.y - rh/2, cr = 6;
+      ctx.beginPath();
+      ctx.moveTo(rx + cr, ry);
+      ctx.lineTo(rx + rw - cr, ry);
+      ctx.arcTo(rx + rw, ry, rx + rw, ry + cr, cr);
+      ctx.lineTo(rx + rw, ry + rh - cr);
+      ctx.arcTo(rx + rw, ry + rh, rx + rw - cr, ry + rh, cr);
+      ctx.lineTo(rx + cr, ry + rh);
+      ctx.arcTo(rx, ry + rh, rx, ry + rh - cr, cr);
+      ctx.lineTo(rx, ry + cr);
+      ctx.arcTo(rx, ry, rx + cr, ry, cr);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba('+r+','+g+','+bl+',0.12)';
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else if (n.type === 'global') {
+      // Hexagon
+      ctx.beginPath();
+      for (var hi = 0; hi < 6; hi++) {
+        var ha = Math.PI / 3 * hi - Math.PI / 6;
+        var hx = n.x + radius * Math.cos(ha), hy = n.y + radius * Math.sin(ha);
+        if (hi === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba('+r+','+g+','+bl+',0.12)';
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      // Circle (agent + cortex/inbox hub)
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba('+r+','+g+','+bl+',0.12)';
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Cortex/inbox hub: pulsing ring
+      if (n.type === 'cortex') {
+        var pulseR = radius + 4 + 3 * Math.sin(time * 2);
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, pulseR, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba('+r+','+g+','+bl+',0.3)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
     // Emoji
     if (n.emoji) {
       ctx.font = Math.round(radius * 0.8) + 'px system-ui';
@@ -16761,6 +16873,7 @@ function _drawGraph() {
       ctx.fillStyle = '#fff';
       ctx.fillText(n.count > 99 ? '99+' : n.count, bx, by);
     }
+    ctx.globalAlpha = 1;
   });
   ctx.restore();
 }
@@ -23727,7 +23840,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.36"})
+            self.reply_json({"v": "0.27.38"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -23814,7 +23927,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.37"
+                health["porter_version"] = "0.27.38"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -24332,12 +24445,14 @@ class Handler(BaseHTTPRequestHandler):
                 nodes = []
                 edges = []
                 # Cortex hub node (always present)
-                nodes.append({"id": "cortex", "label": "Cortex", "type": "cortex", "emoji": "\U0001f9e0", "radius": 32, "count": 0})
+                nodes.append({"id": "inbox", "label": "Inbox", "type": "cortex", "emoji": "\U0001f4e5", "radius": 32, "count": 0})
                 # Global node (always present)
                 gc = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='global' AND consolidated_into IS NULL").fetchone()[0]
-                nodes.append({"id": "global", "label": "Global Memory", "type": "global", "emoji": "\U0001f310", "radius": 22 + min(8, gc), "count": gc})
-                # Always connect cortex to global
-                edges.append({"source": 0, "target": 1, "weight": max(1, min(6, gc))})
+                global_node_idx = -1
+                if gc > 0:
+                    global_node_idx = len(nodes)
+                    nodes.append({"id": "global", "label": "Global", "type": "global", "emoji": "\U0001f310", "radius": 18 + min(8, gc), "count": gc})
+                    edges.append({"source": 0, "target": global_node_idx, "weight": max(1, min(6, gc))})
                 # Agent nodes (always show all agents)
                 personas = conn.execute("SELECT id, name, avatar FROM personas").fetchall()
                 for idx, p in enumerate(personas):
@@ -24347,8 +24462,9 @@ class Handler(BaseHTTPRequestHandler):
                     nodes.append({"id": "agent:" + pid, "label": pname, "type": "agent", "emoji": pemoji, "radius": 18 + min(8, ac), "count": ac})
                     # Always connect agents to cortex hub
                     edges.append({"source": 0, "target": node_idx, "weight": max(1, min(6, ac))})
-                    # Connect agents to global
-                    edges.append({"source": 1, "target": node_idx, "weight": 1})
+                    # Connect agents to global if global exists
+                    if global_node_idx >= 0:
+                        edges.append({"source": global_node_idx, "target": node_idx, "weight": 1})
                 # Project nodes (only if they have memories)
                 projects = conn.execute("SELECT DISTINCT scope_id FROM cortex_memories WHERE scope='project' AND consolidated_into IS NULL AND scope_id != ''").fetchall()
                 for proj in projects:
@@ -24357,8 +24473,40 @@ class Handler(BaseHTTPRequestHandler):
                     node_idx = len(nodes)
                     nodes.append({"id": "project:" + proj_id, "label": proj_id[:20], "type": "project", "emoji": "\U0001f4c1", "radius": 18 + min(8, pc), "count": pc})
                     edges.append({"source": 0, "target": node_idx, "weight": max(1, min(6, pc))})
+                # Agent-to-agent edges (shared project scope)
+                agent_indices = {}
+                for ni, nd in enumerate(nodes):
+                    if nd["id"].startswith("agent:"):
+                        agent_indices[nd["id"].split(":", 1)[1]] = ni
+                # Agent→project edges
+                project_indices = {}
+                for ni, nd in enumerate(nodes):
+                    if nd["id"].startswith("project:"):
+                        project_indices[nd["id"].split(":", 1)[1]] = ni
+                if agent_indices and project_indices:
+                    for aid, aidx in agent_indices.items():
+                        for pid, pidx in project_indices.items():
+                            shared = conn.execute(
+                                "SELECT COUNT(*) FROM cortex_memories WHERE scope='project' AND scope_id=? AND consolidated_into IS NULL",
+                                (pid,)
+                            ).fetchone()[0]
+                            if shared > 0:
+                                edges.append({"source": aidx, "target": pidx, "weight": max(1, min(4, shared))})
+                # Agent-to-agent edges (agents sharing a project)
+                agent_ids = list(agent_indices.keys())
+                for i in range(len(agent_ids)):
+                    for j in range(i + 1, len(agent_ids)):
+                        a1, a2 = agent_ids[i], agent_ids[j]
+                        # Check if both agents have memories in any common project
+                        shared_projects = conn.execute(
+                            "SELECT COUNT(DISTINCT scope_id) FROM cortex_memories WHERE scope='project' AND consolidated_into IS NULL AND scope_id IN (SELECT DISTINCT scope_id FROM cortex_memories WHERE scope='project' AND consolidated_into IS NULL)",
+                        ).fetchone()[0]
+                        if shared_projects > 0:
+                            edges.append({"source": agent_indices[a1], "target": agent_indices[a2], "weight": min(3, shared_projects), "type": "collab"})
                 conn.close()
-                nodes[0]["count"] = sum(n.get("count", 0) for n in nodes[1:])
+                # Hub count = unrouted facts
+                uc = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL AND scope='agent' AND scope_id=''").fetchone()[0]
+                nodes[0]["count"] = uc
                 self.reply_json({"nodes": nodes, "edges": edges})
             except Exception as e:
                 self.reply_json({"nodes": [], "edges": [], "error": str(e)})
@@ -25433,7 +25581,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.37'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.38'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29476,7 +29624,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.37 ready (localhost only)")
+    print(f"\n  Porter v0.27.38 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
