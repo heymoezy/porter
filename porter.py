@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.22 — Chat Files + Self-Heal + UX"""
+"""Porter v0.28.23 — Session counts, image attach, model badge, Cortex live"""
 
 
 import email
@@ -8076,6 +8076,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .emoji-grid .emoji-btn:hover { border-color:var(--accent); }
 .emoji-grid .emoji-btn.selected { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, var(--bg)); }
 @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+@keyframes cx-blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 @keyframes cx-shimmer { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }
 
 /* Memory tab v6 — compact layout (stripped in v0.27.31, kept: .mem-section-label, .mem-age-badge, .mem-coord-*) */
@@ -8529,7 +8530,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.22</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.23</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8612,7 +8613,7 @@ select.settings-input { padding-right: 26px; }
       <div id="chat-main">
         <div id="chat-messages" class="chat-messages welcome-state">
           <div class="chat-welcome">
-            <div class="chat-welcome-sub">⚡ One prompt. Every AI. Zero friction.</div>
+            <div class="chat-welcome-sub"></div>
             <div class="chat-welcome-input-wrap">
               <div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>
               <div style="display:flex;align-items:flex-end;gap:4px;width:100%" ondragover="_chatDragOver(event)" ondrop="_chatDrop(event)" ondragleave="_chatDragLeave(event)" ondragenter="_chatDragEnter(event)">
@@ -9090,6 +9091,7 @@ select.settings-input { padding-right: 26px; }
     <div id="models-backends-tab">
       <div class="module-intro">AI backends available to Porter. Each persona routes through one of these.</div>
       <div id="models-summary" style="margin:12px 0 16px;font-size:13px;color:var(--text2)"></div>
+      <div id="extraction-progress-bar" style="margin:0 0 12px;padding:0"></div>
       <div id="models-grid" class="models-grid">
         <div class="loading-indicator">Loading models...</div>
       </div>
@@ -9779,6 +9781,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.23', date:'2026-03-07', notes:['Models: session counts for Codex + Ollama backends','Models: extraction progress bar (X/Y sessions)','Chat: image drag-drop with thumbnails (base64, 2MB limit)','Chat: welcome input full parity (paperclip+drag-drop on new chat)','Chat: badge shows actual model used, not Auto','Cortex: blinking Live dot replaces ON text','Removed: Every AI tagline'] },
   { ver:'v0.28.22', date:'2026-03-07', notes:['Memory map: zoom/pan persists across sessions','Chat: paperclip button + drag-drop file attachment','Chat history: restores agent/model/project context','Learnings: extraction uses preferred name (not "the user")','Learnings: date/time stamps on each card','Workflows: interval dropdown selector (persists)','Error Self-Heal workflow: detects recurring errors, auto-remediation','Fixed: _ptime import in hygiene, _load_config in eval loop'] },
   { ver:'v0.28.21', date:'2026-03-07', notes:['Timezone: Porter-styled select dropdown, persists across sessions','Cortex: agent scope resolves persona ID to name (pre-fetches persona map)'] },
   { ver:'v0.28.20', date:'2026-03-07', notes:['Graph: scroll zoom blocked when locked','Workflow history: singular "run" when count is 1','Cortex: agent scope resolves persona ID to name','Cortex: scope tag truncation for long names','Removed API Keys from Settings (use Extensions)'] },
@@ -12263,7 +12266,7 @@ var _maSessionsData = [];
 var _maSessionCounts = {}; // {source: {count: N}}
 
 async function _preloadSessionCounts() {
-  ['claude','openclaw','gemini'].forEach(async function(src) {
+  ['claude','openclaw','gemini','codex','ollama'].forEach(async function(src) {
     try {
       var resp = await api('/api/sessions?source=' + src);
       if (resp && resp.ok !== false) {
@@ -12277,6 +12280,29 @@ async function _preloadSessionCounts() {
       }
     } catch(e) { /* ignore */ }
   });
+  setTimeout(_updateExtractionProgress, 1500);
+}
+
+async function _updateExtractionProgress() {
+  try {
+    var total = 0;
+    for (var src in _maSessionCounts) {
+      var c = _maSessionCounts[src];
+      if (c && c.count) total += c.count;
+    }
+    var resp = await api('/api/cortex/stats');
+    var extracted = (resp && resp.total_active) ? resp.total_active : 0;
+    var bar = document.getElementById('extraction-progress-bar');
+    if (!bar) return;
+    var pct = total > 0 ? Math.min(100, Math.round(extracted / total * 100)) : 0;
+    bar.innerHTML = '<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text3)">'
+      + '<span>Memory extraction:</span>'
+      + '<div style="flex:1;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden;min-width:80px">'
+      + '<div style="height:100%;width:' + pct + '%;background:var(--accent);border-radius:3px;transition:width 0.3s"></div>'
+      + '</div>'
+      + '<span>' + extracted + '/' + total + ' sessions (' + pct + '%)</span>'
+      + '</div>';
+  } catch(e) {}
 }
 
 var _inlineSessionsExpanded = {};
@@ -13742,10 +13768,17 @@ function renderChatMessages(streamUpdate) {
     // Centered welcome state
     el.classList.add('welcome-state');
     el.innerHTML = '<div class="chat-welcome">'
-      + '<div class="chat-welcome-sub">⚡ One prompt. Every AI. Zero friction.</div>'
+      + '<div class="chat-welcome-sub"></div>'
       + '<div class="chat-welcome-input-wrap">'
-      + '<textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)"></textarea>'
+      + '<div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>'
+      + '<div style="display:flex;align-items:flex-end;gap:4px;width:100%" ondragover="_chatDragOver(event)" ondrop="_chatDrop(event)" ondragleave="_chatDragLeave(event)" ondragenter="_chatDragEnter(event)">'
+      + '<button class="chat-attach-btn" onclick="toggleChatFilePicker()" title="Attach file">&#x1f4ce;</button>'
+      + '<textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)" style="flex:1"></textarea>'
+      + '</div>'
+      + '<div id="chat-file-picker-welcome" class="chat-file-picker" style="display:none"></div>'
+      + '<div id="chat-drop-zone-welcome" class="chat-drop-zone" style="display:none">Drop files here</div>'
       + '<div id="chat-at-ind-welcome" class="chat-at-indicator"></div>'
+      + '<div id="chat-persona-bar" class="chat-persona-bar"></div>'
       + '<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option></select>'
       + '<div class="chat-welcome-meta">'
       + '<div id="chat-ctx-selectors" class="chat-ctx-selectors" style="margin:0"></div>'
@@ -14547,7 +14580,11 @@ function chatSend() {
   if (_chatContextFiles.length) {
     let ctx = '';
     _chatContextFiles.forEach(function(f) {
-      ctx += '\n--- File: ' + f.name + ' ---\n' + f.content + '\n--- End ' + f.name + ' ---\n';
+      if (f.isImage) {
+        ctx += '\n--- File: ' + f.name + ' (image attached) ---\n[Image: ' + f.name + ', type: ' + (f.mimeType || 'image') + ']\n--- End ' + f.name + ' ---\n';
+      } else {
+        ctx += '\n--- File: ' + f.name + ' ---\n' + f.content + '\n--- End ' + f.name + ' ---\n';
+      }
     });
     fullPrompt = 'Context files:\n' + ctx + '\nUser message:\n' + text;
   }
@@ -14603,10 +14640,12 @@ function chatSend() {
         return;
       }
       if (data.done) {
+        var resolvedModel = data.model_used || modelId;
         if (_chatStreamRevealBuffer.length || _chatStreamRevealTimer) {
           _chatStreamPendingDone = true;
+          modelId = resolvedModel;
         } else {
-          _finishChatStreamReveal(evtSource, assistantIdx, modelId);
+          _finishChatStreamReveal(evtSource, assistantIdx, resolvedModel);
         }
         return;
       }
@@ -14759,6 +14798,13 @@ function renderContextBar() {
   if (!_chatContextFiles.length) { bar.style.display = 'none'; return; }
   bar.style.display = 'flex';
   bar.innerHTML = _chatContextFiles.map(function(f, i) {
+    if (f.isImage && f.content) {
+      return '<span class="chat-ctx-chip" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px 3px 3px">'
+        + '<img src="' + f.content + '" style="width:28px;height:28px;object-fit:cover;border-radius:4px;border:1px solid var(--border)" />'
+        + '<span style="font-size:11px">' + escHtml(f.name) + '</span>'
+        + '<button onclick="removeChatContext(' + i + ')" title="Remove">&times;</button>'
+        + '</span>';
+    }
     return '<span class="chat-ctx-chip">'
       + '&#128196; ' + escHtml(f.name)
       + '<button onclick="removeChatContext(' + i + ')" title="Remove">&times;</button>'
@@ -14878,33 +14924,31 @@ function _chatDrop(e) {
 }
 
 function _attachLocalFile(file) {
-  // Read file as text (for text files) or base64 (for others)
   var textExts = ['md','txt','py','js','ts','json','yaml','yml','toml','cfg','ini','sh','css','html','xml','csv','log','sql','env','jsx','tsx','go','rs','java','rb','php','c','cpp','h'];
   var ext = (file.name || '').split('.').pop().toLowerCase();
   var isText = textExts.indexOf(ext) >= 0 || file.type.startsWith('text/');
-  if (file.size > 500000) {
-    toast('File too large (max 500KB for chat attachment)', 'err');
+  var isImage = file.type.startsWith('image/') || ['png','jpg','jpeg','gif','webp','svg','bmp','ico'].indexOf(ext) >= 0;
+  if (isImage) {
+    if (file.size > 2000000) { toast('Image too large (max 2MB)', 'err'); return; }
+    var reader = new FileReader();
+    reader.onload = function() {
+      _chatContextFiles.push({ path: 'local/' + file.name, name: file.name, content: reader.result, isImage: true, mimeType: file.type });
+      renderContextBar();
+      toast('Attached: ' + file.name);
+    };
+    reader.readAsDataURL(file);
     return;
   }
+  if (file.size > 500000) { toast('File too large (max 500KB)', 'err'); return; }
   var reader = new FileReader();
   reader.onload = function() {
     var content = reader.result;
-    if (!isText && typeof content !== 'string') {
-      content = '[Binary file: ' + file.name + ' (' + file.size + ' bytes)]';
-    }
-    // Truncate content for context
-    if (typeof content === 'string' && content.length > 8000) {
-      content = content.substring(0, 8000) + '\n... (truncated)';
-    }
+    if (typeof content === 'string' && content.length > 8000) content = content.substring(0, 8000) + '\n... (truncated)';
     _chatContextFiles.push({ path: 'local/' + file.name, name: file.name, content: content });
     renderContextBar();
     toast('Attached: ' + file.name);
   };
-  if (isText) {
-    reader.readAsText(file);
-  } else {
-    reader.readAsText(file);  // try text first, binary will show garbled but that's OK
-  }
+  reader.readAsText(file);
 }
 
 
@@ -16291,7 +16335,7 @@ async function _loadCortexTab() {
     if (stats) {
       var t = document.getElementById('cx-total2'); if (t) t.textContent = stats.total_active || 0;
       var h = document.getElementById('cx-24h2'); if (h) h.textContent = stats.last_24h || 0;
-      var st = document.getElementById('cx-status2'); if (st) { st.textContent = stats.enabled ? 'ON' : 'OFF'; st.style.color = stats.enabled ? 'var(--green,#4ade80)' : 'var(--red,#f87171)'; }
+      var st = document.getElementById('cx-status2'); if (st) { st.innerHTML = stats.enabled ? '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:var(--green,#4ade80);animation:cx-blink 1.5s ease-in-out infinite"></span>Live</span>' : '<span style="color:var(--red,#f87171)">Off</span>'; }
       var tog = document.getElementById('cx-toggle2'); if (tog) tog.checked = stats.enabled !== false;
       // Unrouted count
       var new1h = stats.new_1h || 0;
@@ -24393,7 +24437,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.22"})
+            self.reply_json({"v": "0.28.23"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24555,7 +24599,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.22"
+                health["porter_version"] = "0.28.23"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26352,7 +26396,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.22'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.23'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -26707,7 +26751,7 @@ class Handler(BaseHTTPRequestHandler):
                 _emit_event("bridge:response", {"run_id": _stream_run_id, "backend": _stream_backend, "ok": True, "duration_ms": _chat_dur_pre, "source": "chat"})
 
                 # Signal done
-                self.wfile.write(f"data: {json.dumps({'done': True, 'full_response': full_response})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'done': True, 'full_response': full_response, 'model_used': _stream_backend})}\n\n".encode())
                 self.wfile.flush()
                 _chat_dur = int((__import__("time").time() - _chat_stream_start) * 1000)
                 mlog.emit("info", "chat", "chat.stream.complete", f"Chat done: {model_id} ({_chat_dur}ms)",
@@ -30564,7 +30608,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.22 ready (localhost only)")
+    print(f"\n  Porter v0.28.23 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
