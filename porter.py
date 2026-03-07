@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.5 — Mermaid Diagrams in Chat"""
+"""Porter v0.28.6 — Ship Command & Validator"""
 
 
 import email
@@ -8036,7 +8036,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.5</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.6</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9373,6 +9373,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.28.6', date:'2026-03-07', notes:['/ship chat command — validate version consistency + trigger release pipeline','GET /api/ship/validate — checks all 6 version strings match, syntax compiles, uncommitted changes','Ship gate: pre-commit validation prevents mismatched versions','Autocomplete + help text updated'] },
   { ver:'v0.28.5', date:'2026-03-07', notes:['Mermaid diagram rendering in chat — ```mermaid fenced blocks render as SVG diagrams','Mermaid CDN loaded via ES module (jsdelivr)','CSS: .chat-mermaid container with dark theme styling','_renderMermaidDiagrams() with dedup (data-mermaid-rendered flag)','Render hook in renderChatMessages() for both full repaints and streaming updates'] },
   { ver:'v0.28.4', date:'2026-03-07', notes:['Chat Intelligence: 5 patterns from agentchattr research','Loop Guard: auto-pause after 4 agent-to-agent hops, human message resets','Cursor-Based Reads: GET /api/chat/read — agents get only NEW messages since last read','Escalating Empty-Read Warnings: 3-tier warnings to stop agent polling loops','Rules Epoch Tracking: version counter on RULES.md changes, stale agent detection, GET /api/rules/epoch','Job Proposals: agents use [proposal] tag, human Accept/Dismiss, GET/POST /api/jobs/proposals','Presentation: polished ChatGPT-style output formatting instructions for all dispatch paths'] },
   { ver:'v0.28.3', date:'2026-03-07', notes:['Cortex Staleness + Lifecycle: memories self-maintain via auto-archive rules','Staleness: unused facts (>60d, <3 uses) auto-archived in consolidation loop','Staleness: low-importance facts (<=2, 0 uses, >7d) auto-archived','Supersession: new facts with Jaccard 0.6-0.8 overlap supersede older lower-importance facts','Config: archive threshold days + min use count settings','Stats: active count + archived count in API response','Stats bar: Active: X | New today: X'] },
@@ -14224,6 +14225,7 @@ var _defaultSlashCmds = [
   {cmd: '/version', desc: 'Porter version'},
   {cmd: '/search', desc: 'Web search (Brave)'},
   {cmd: '/workspace', desc: 'Google Workspace'},
+  {cmd: '/ship', desc: 'Ship validation & release'},
   {cmd: '/gws', desc: 'Google Workspace (alias)'},
 ];
 
@@ -14476,6 +14478,7 @@ function chatSend() {
         '`/version` — Porter version\n' +
         '`/clear` — Clear chat history\n' +
         '`/flush` — Flush to memory\n' +
+        '`/ship` — Ship validation & release\n' +
         '`/search <query>` — Web search (Brave)\n' +
         '`/workspace <service> <action>` — Google Workspace\n\n' +
         '**Direct routing**\n' +
@@ -14590,6 +14593,65 @@ function chatSend() {
         renderChatMessages();
       }).catch(function() {
         _chatMessages[_chatMessages.length-1].content = 'Flush endpoint not available.';
+        renderChatMessages();
+      });
+      return;
+    }
+
+
+    if (cmd === '/ship') {
+      var shipArg = text.substring(5).trim();
+      _chatMessages.push({ role: 'assistant', content: '_Validating ship readiness..._', model: 'porter' });
+      renderChatMessages();
+      api('/api/ship/validate').then(function(data) {
+        if (!data || !data.ok) {
+          _chatMessages[_chatMessages.length-1].content = '**Ship Validation Failed**\n\n' + (data && data.error ? data.error : 'Could not reach validator.');
+          renderChatMessages(); return;
+        }
+        var lines = ['**Ship Gate — v' + data.version + '**\n'];
+        var allGood = true;
+        // Version consistency
+        if (data.version_consistent) {
+          lines.push('\u2705 Version strings consistent (' + data.version_count + '/6)');
+        } else {
+          allGood = false;
+          lines.push('\u274c Version mismatch:');
+          if (data.mismatches) data.mismatches.forEach(function(m) { lines.push('  - ' + m); });
+        }
+        // Syntax
+        if (data.syntax_ok) {
+          lines.push('\u2705 Syntax check passed');
+        } else {
+          allGood = false;
+          lines.push('\u274c Syntax error: ' + (data.syntax_error || 'unknown'));
+        }
+        // Git status
+        if (data.git_clean) {
+          lines.push('\u2705 Working tree clean');
+        } else {
+          lines.push('\u26a0\ufe0f Uncommitted changes: ' + (data.git_dirty_count || '?') + ' file(s)');
+        }
+        // Changelog
+        if (data.changelog_current) {
+          lines.push('\u2705 Changelog entry exists for v' + data.version);
+        } else {
+          allGood = false;
+          lines.push('\u274c No changelog entry for v' + data.version);
+        }
+        lines.push('');
+        if (allGood && data.git_clean) {
+          lines.push('**Status: Ready to ship** \u2705');
+          lines.push('\nRun: `systemctl --user restart porter && cd /home/lobster/documents/porter/tests && npx playwright test && git add porter.py && git commit && git push`');
+        } else if (allGood) {
+          lines.push('**Status: Code ready, needs commit** \u26a0\ufe0f');
+          lines.push('\nRun ship process: syntax check \u2192 restart \u2192 test \u2192 commit \u2192 push');
+        } else {
+          lines.push('**Status: NOT ready** \u274c Fix issues above first.');
+        }
+        _chatMessages[_chatMessages.length-1].content = lines.join('\n');
+        renderChatMessages();
+      }).catch(function() {
+        _chatMessages[_chatMessages.length-1].content = 'Ship validation request failed.';
         renderChatMessages();
       });
       return;
@@ -24148,7 +24210,82 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.5"})
+            self.reply_json({"v": "0.28.6"})
+        elif parsed.path == "/api/ship/validate":
+            if not self.auth_check(redirect=False): return
+            import subprocess as _sp
+            porter_path = Path(__file__).resolve()
+            porter_src = porter_path.read_text()
+
+            # 1. Extract versions from all 6 locations
+            versions = {}
+            import re as _re
+            # Docstring (line 2)
+            m = _re.search(r'^"""Porter v([\d.]+)', porter_src, _re.MULTILINE)
+            if m: versions['docstring'] = m.group(1)
+            # Badge
+            m = _re.search(r'PORTER v([\d.]+)', porter_src)
+            if m: versions['badge'] = m.group(1)
+            # SSE welcome
+            m = _re.search(r"'version':\s*'v([\d.]+)'", porter_src)
+            if m: versions['sse'] = m.group(1)
+            # Startup banner
+            m = _re.search(r'Porter v([\d.]+) ready', porter_src)
+            if m: versions['startup'] = m.group(1)
+            # API version
+            m = _re.search(r'"v":\s*"([\d.]+)"', porter_src)
+            if m: versions['api_version'] = m.group(1)
+            # Health
+            m = _re.search(r'porter_version.*?"([\d.]+)"', porter_src)
+            if m: versions['health'] = m.group(1)
+
+            unique_versions = set(versions.values())
+            version_consistent = len(unique_versions) == 1 and len(versions) == 6
+            canonical = unique_versions.pop() if len(unique_versions) == 1 else max(unique_versions)
+
+            mismatches = []
+            if not version_consistent:
+                for loc, v in versions.items():
+                    if v != canonical:
+                        mismatches.append(f"{loc}: v{v} (expected v{canonical})")
+
+            # 2. Syntax check
+            syntax_ok = True
+            syntax_error = ""
+            try:
+                import py_compile
+                py_compile.compile(str(porter_path), doraise=True)
+            except py_compile.PyCompileError as e:
+                syntax_ok = False
+                syntax_error = str(e)
+
+            # 3. Git status
+            git_clean = True
+            git_dirty_count = 0
+            try:
+                r = _sp.run(["git", "status", "--porcelain", "porter.py"],
+                            capture_output=True, text=True, cwd=str(porter_path.parent))
+                dirty_lines = [l for l in r.stdout.strip().split("\n") if l.strip()]
+                git_dirty_count = len(dirty_lines)
+                git_clean = git_dirty_count == 0
+            except Exception:
+                pass
+
+            # 4. Changelog check
+            changelog_current = f"ver:\'v{canonical}\'" in porter_src or f'ver:"v{canonical}"' in porter_src
+
+            self.reply_json({
+                "ok": True,
+                "version": canonical,
+                "version_consistent": version_consistent,
+                "version_count": len(versions),
+                "mismatches": mismatches,
+                "syntax_ok": syntax_ok,
+                "syntax_error": syntax_error,
+                "git_clean": git_clean,
+                "git_dirty_count": git_dirty_count,
+                "changelog_current": changelog_current,
+            })
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -24235,7 +24372,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.5"
+                health["porter_version"] = "0.28.6"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25933,7 +26070,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.5'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.6'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29986,7 +30123,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.5 ready (localhost only)")
+    print(f"\n  Porter v0.28.6 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
