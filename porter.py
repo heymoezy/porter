@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.23 — Session counts, image attach, model badge, Cortex live"""
+"""Porter v0.28.24 — Session counts, image attach, model badge, Cortex live"""
 
 
 import email
@@ -141,6 +141,14 @@ def _wf_register(wf_id, name, description, wf_type="system", interval="", interv
             "last_duration_s": 0, "history": [], "started_at": None,
         }
 
+def _wf_start_run(wf_id):
+    """Mark a workflow as currently running."""
+    import time as _t
+    with _wf_lock:
+        wf = _wf_registry.get(wf_id)
+        if wf:
+            wf["started_at"] = _t.time()
+
 def _wf_record_run(wf_id, success=True, result=None, error=None, duration_s=0):
     """Record a workflow run in the registry."""
     import time as _t
@@ -148,6 +156,7 @@ def _wf_record_run(wf_id, success=True, result=None, error=None, duration_s=0):
         wf = _wf_registry.get(wf_id)
         if not wf:
             return
+        wf["started_at"] = None  # clear running state
         now = _t.time()
         wf["last_run"] = now
         wf["run_count"] += 1
@@ -4338,6 +4347,7 @@ def _cap_checks_loop():
         _wf_registry["capability_checks"]["started_at"] = _ct.time()
     while True:
         if _wf_is_enabled("capability_checks"):
+            _wf_start_run("capability_checks")
             _t0 = _ct.time()
             try:
                 _run_cap_checks(force=True)
@@ -4355,6 +4365,7 @@ def _heartbeat_loop():
         if not _wf_is_enabled("heartbeat"):
             _htime.sleep(60)
             continue
+        _wf_start_run("heartbeat")
         _t0 = _htime.time()
         try:
             _heartbeat_tick()
@@ -6121,6 +6132,7 @@ def _telemetry_rollup_loop():
         _t.sleep(3600)  # Run every hour
         if not _wf_is_enabled("telemetry_rollup"):
             continue
+        _wf_start_run("telemetry_rollup")
         _t0 = _t.time()
         try:
             _rollup_hourly()
@@ -8076,6 +8088,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .emoji-grid .emoji-btn:hover { border-color:var(--accent); }
 .emoji-grid .emoji-btn.selected { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, var(--bg)); }
 @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+@keyframes wf-progress { 0%{width:5%;margin-left:0} 50%{width:40%;margin-left:30%} 100%{width:5%;margin-left:95%} }
 @keyframes cx-blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 @keyframes cx-shimmer { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }
 
@@ -8530,7 +8543,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.23</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.24</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9781,6 +9794,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.24', date:'2026-03-07', notes:['Workflows: running state with animated progress bar','Workflows: interval editor (Runs every: N seconds/minutes/hours/weeks)','Workflows: auto-refresh while running, disable Run Now during execution','Workflows: daemon loops instrumented with start/stop tracking'] },
   { ver:'v0.28.23', date:'2026-03-07', notes:['Models: session counts for Codex + Ollama backends','Models: extraction progress bar (X/Y sessions)','Chat: image drag-drop with thumbnails (base64, 2MB limit)','Chat: welcome input full parity (paperclip+drag-drop on new chat)','Chat: badge shows actual model used, not Auto','Cortex: blinking Live dot replaces ON text','Removed: Every AI tagline'] },
   { ver:'v0.28.22', date:'2026-03-07', notes:['Memory map: zoom/pan persists across sessions','Chat: paperclip button + drag-drop file attachment','Chat history: restores agent/model/project context','Learnings: extraction uses preferred name (not "the user")','Learnings: date/time stamps on each card','Workflows: interval dropdown selector (persists)','Error Self-Heal workflow: detects recurring errors, auto-remediation','Fixed: _ptime import in hygiene, _load_config in eval loop'] },
   { ver:'v0.28.21', date:'2026-03-07', notes:['Timezone: Porter-styled select dropdown, persists across sessions','Cortex: agent scope resolves persona ID to name (pre-fetches persona map)'] },
@@ -11698,36 +11712,60 @@ async function loadWorkflowRegistry() {
     var wfs = data.workflows;
     if (countEl) countEl.textContent = wfs.length + ' workflow' + (wfs.length !== 1 ? 's' : '');
     grid.innerHTML = wfs.map(function(wf) {
-      var dotColor = wf.status === 'active' ? '#22c55e' : wf.status === 'paused' ? '#9ca3af' : '#ef4444';
+      var dotColor = wf.running ? '#3b82f6' : wf.status === 'active' ? '#22c55e' : wf.status === 'paused' ? '#9ca3af' : '#ef4444';
+      var dotAnim = wf.running ? ';animation:cx-blink 1s ease-in-out infinite' : '';
       var lastRun = wf.last_run ? _wfTimeAgo(wf.last_run) : 'never';
       var nextRun = wf.next_run ? _wfTimeAgo(wf.next_run) : (wf.interval === 'per-response' ? 'per-response' : '\u2014');
       var durStr = wf.last_duration_s ? wf.last_duration_s.toFixed(2) + 's' : '\u2014';
       var errBanner = wf.last_error ? '<div style="margin-top:8px;padding:6px 8px;background:color-mix(in srgb,#ef4444 8%,transparent);border:1px solid color-mix(in srgb,#ef4444 20%,transparent);border-radius:6px;font-size:11px;color:#ef4444;word-break:break-word">' + escHtml(wf.last_error) + '</div>' : '';
       var toggleLabel = wf.status === 'paused' ? 'Resume' : 'Pause';
+      // Running indicator
+      var runningBar = '';
+      if (wf.running) {
+        runningBar = '<div style="margin:8px 0;padding:6px 8px;background:color-mix(in srgb,#3b82f6 8%,transparent);border:1px solid color-mix(in srgb,#3b82f6 20%,transparent);border-radius:6px;display:flex;align-items:center;gap:8px">'
+          + '<span class="learn-spinner"></span>'
+          + '<span style="font-size:11px;color:#3b82f6;font-weight:500">Running' + (wf.running_for_s ? ' (' + Math.round(wf.running_for_s) + 's)' : '') + '</span>'
+          + '<div style="flex:1;height:4px;background:rgba(59,130,246,0.15);border-radius:2px;overflow:hidden"><div style="height:100%;background:#3b82f6;border-radius:2px;animation:wf-progress 2s ease-in-out infinite"></div></div>'
+          + '</div>';
+      }
+      // Interval editor: "Runs every:" + input + unit dropdown
+      var intervalEditor = '';
+      if (wf.interval !== 'per-response') {
+        var parsed = _wfParseInterval(wf.interval_s || wf.interval);
+        intervalEditor = '<div style="display:flex;align-items:center;gap:6px;margin-left:auto;font-size:11px;color:var(--text3)">'
+          + 'Runs every '
+          + '<input type="number" class="settings-input" id="wf-intval-' + wf.id + '" value="' + parsed.val + '" min="1" style="width:48px;font-size:11px;padding:2px 4px;text-align:center;border-radius:4px">'
+          + '<select class="settings-input" id="wf-intunit-' + wf.id + '" style="font-size:11px;padding:2px 4px;border-radius:4px">'
+          + '<option value="s"' + (parsed.unit === 's' ? ' selected' : '') + '>seconds</option>'
+          + '<option value="m"' + (parsed.unit === 'm' ? ' selected' : '') + '>minutes</option>'
+          + '<option value="h"' + (parsed.unit === 'h' ? ' selected' : '') + '>hours</option>'
+          + '<option value="w"' + (parsed.unit === 'w' ? ' selected' : '') + '>weeks</option>'
+          + '</select>'
+          + '<button class="btn btn-ghost" style="font-size:10px;padding:2px 6px" onclick="_wfSaveInterval(\'' + wf.id + '\')">Save</button>'
+          + '</div>';
+      } else {
+        intervalEditor = '<span style="margin-left:auto;font-size:11px;color:var(--text3)">per-response</span>';
+      }
       return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
-        + '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0"></span>'
+        + '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0' + dotAnim + '"></span>'
         + '<span style="font-weight:600;font-size:13px;color:var(--text)">' + escHtml(wf.name) + '</span>'
-        + '<select class="settings-input wf-interval-sel" data-wf="' + wf.id + '" onchange="_wfSetInterval(this)" style="font-size:10px;padding:1px 4px;margin-left:auto;max-width:100px;border-radius:4px">'
-        + (function() {
-            var opts = [{v:'per-response',l:'per-response'},{v:'30s',l:'30s'},{v:'1m',l:'1 min'},{v:'5m',l:'5 min'},{v:'15m',l:'15 min'},{v:'30m',l:'30 min'},{v:'1h',l:'1 hour'},{v:'6h',l:'6 hours'},{v:'12h',l:'12 hours'},{v:'24h',l:'24 hours'},{v:'168h',l:'weekly'}];
-            return opts.map(function(o) { return '<option value="' + o.v + '"' + (wf.interval === o.v ? ' selected' : '') + '>' + o.l + '</option>'; }).join('');
-          })()
-        + '</select>'
+        + intervalEditor
         + '</div>'
         + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.4">' + escHtml(wf.description) + '</div>'
+        + runningBar
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:11px;margin-bottom:10px">'
         + '<div style="color:var(--text3)">Last run: <span style="color:var(--text2)">' + lastRun + '</span></div>'
         + '<div style="color:var(--text3)">Next run: <span style="color:var(--text2)">' + nextRun + '</span></div>'
         + '<div style="color:var(--text3)">Runs: <span style="color:var(--text2)">' + (wf.run_count || 0) + '</span></div>'
         + '<div style="color:var(--text3)">Errors: <span style="color:' + (wf.error_count ? '#ef4444' : 'var(--text2)') + '">' + (wf.error_count || 0) + '</span></div>'
         + '<div style="color:var(--text3)">Duration: <span style="color:var(--text2)">' + durStr + '</span></div>'
-        + '<div style="color:var(--text3)">Status: <span style="color:var(--text2)">' + escHtml(wf.status) + '</span></div>'
+        + '<div style="color:var(--text3)">Status: <span style="color:var(--text2)">' + (wf.running ? 'running' : escHtml(wf.status)) + '</span></div>'
         + '</div>'
         + errBanner
         + '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
         + '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfToggle(\'' + wf.id + '\')">' + toggleLabel + '</button>'
-        + '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfTrigger(\'' + wf.id + '\')">\u25B6 Run Now</button>'
+        + (wf.running ? '<button class="btn btn-ghost" style="font-size:11px;color:#3b82f6" disabled>Running...</button>' : '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfTrigger(\'' + wf.id + '\')">\u25B6 Run Now</button>')
         + (wf.config_keys && wf.config_keys.length ? '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfShowConfig(\'' + wf.id + '\')">\u2699 Config</button>' : '')
         + '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfShowHistory(\'' + wf.id + '\')">History</button>'
         + '</div>'
@@ -11744,6 +11782,10 @@ async function loadWorkflowRegistry() {
         + '<div id="wf-history-' + wf.id + '" style="display:none;margin-top:8px;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;max-height:200px;overflow-y:auto"></div>'
         + '</div>';
     }).join('');
+    // Auto-refresh if any workflow is running
+    if (wfs.some(function(w) { return w.running; })) {
+      setTimeout(loadWorkflowRegistry, 3000);
+    }
   } catch(e) {
     grid.innerHTML = '<div style="padding:16px;color:var(--text3);text-align:center">Failed to load workflows</div>';
   }
@@ -11801,15 +11843,30 @@ async function _wfSaveConfig(id) {
   } catch(e) { toast('Error: ' + e.message, 'err'); }
 }
 
-async function _wfSetInterval(sel) {
-  var id = sel.getAttribute('data-wf');
-  var interval = sel.value;
-  // Map interval string to seconds
-  var map = {'per-response':0,'30s':30,'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'6h':21600,'12h':43200,'24h':86400,'168h':604800};
-  var secs = map[interval] || 0;
+function _wfParseInterval(intervalInput) {
+  // Parse interval_s (seconds) or string like "30s", "5m", "6h", "168h"
+  var s = typeof intervalInput === 'number' ? intervalInput : parseInt(intervalInput) || 0;
+  if (typeof intervalInput === 'string' && intervalInput.endsWith('h')) s = parseInt(intervalInput) * 3600;
+  else if (typeof intervalInput === 'string' && intervalInput.endsWith('m')) s = parseInt(intervalInput) * 60;
+  else if (typeof intervalInput === 'string' && intervalInput.endsWith('s')) s = parseInt(intervalInput);
+  if (s >= 604800 && s % 604800 === 0) return { val: Math.round(s / 604800), unit: 'w' };
+  if (s >= 3600 && s % 3600 === 0) return { val: Math.round(s / 3600), unit: 'h' };
+  if (s >= 60 && s % 60 === 0) return { val: Math.round(s / 60), unit: 'm' };
+  return { val: s || 1, unit: 's' };
+}
+
+async function _wfSaveInterval(id) {
+  var valEl = document.getElementById('wf-intval-' + id);
+  var unitEl = document.getElementById('wf-intunit-' + id);
+  if (!valEl || !unitEl) return;
+  var val = parseInt(valEl.value) || 1;
+  var unit = unitEl.value;
+  var mult = { s: 1, m: 60, h: 3600, w: 604800 };
+  var secs = val * (mult[unit] || 1);
+  var label = val + unit;
   try {
-    var r = await api('/api/workflows/' + id + '/interval', { interval: interval, interval_s: secs });
-    if (r && r.ok) { toast('Interval updated', 'ok'); }
+    var r = await api('/api/workflows/' + id + '/interval', { interval: label, interval_s: secs });
+    if (r && r.ok) { toast('Interval: every ' + val + ' ' + {s:'seconds',m:'minutes',h:'hours',w:'weeks'}[unit], 'ok'); loadWorkflowRegistry(); }
     else toast((r && r.error) || 'Update failed', 'err');
   } catch(e) { toast('Error: ' + e.message, 'err'); }
 }
@@ -24437,7 +24494,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.23"})
+            self.reply_json({"v": "0.28.24"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24599,7 +24656,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.23"
+                health["porter_version"] = "0.28.24"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26396,7 +26453,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.23'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.24'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30496,6 +30553,10 @@ def _handle_wf_list():
     with _wf_lock:
         for wf_id, wf in _wf_registry.items():
             entry = dict(wf)
+            entry["running"] = bool(wf.get("started_at"))
+            if wf.get("started_at"):
+                import time as _rwt
+                entry["running_for_s"] = round(_rwt.time() - wf["started_at"], 1)
             # Resolve current config values
             entry["config"] = {}
             for key in wf.get("config_keys", []):
@@ -30521,6 +30582,7 @@ def _handle_wf_trigger(wf_id):
         return {"ok": False, "error": "No runner for this workflow"}, 400
     import time as _trig_t
     def _bg_run():
+        _wf_start_run(wf_id)
         _t0 = _trig_t.time()
         try:
             result = runner()
@@ -30608,7 +30670,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.23 ready (localhost only)")
+    print(f"\n  Porter v0.28.24 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
