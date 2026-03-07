@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.18 — UI Polish Batch"""
+"""Porter v0.28.19 — Agent Backend Config + Self-Test Workflow"""
 
 
 import email
@@ -198,6 +198,11 @@ _wf_register("memory_extraction", "Memory Extraction",
     "Extracts facts from chat responses into cortex memory",
     interval="per-response", interval_s=0,
     config_keys=["cortex_enabled", "cortex_min_response_len"])
+
+_wf_register("agent_backend_eval", "Agent Backend Eval",
+    "Cycles through agents testing each backend for response quality and speed",
+    interval="168h", interval_s=604800,
+    config_keys=["agent_eval_enabled", "agent_eval_interval_hours"])
 
 DEFAULT_AGENT_FLEET: dict = {
     "channel": "stable",
@@ -5856,6 +5861,20 @@ def _init_trace_tables():
     )
     """)
 
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS agent_eval_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        persona_id TEXT NOT NULL,
+        backend TEXT NOT NULL,
+        score INTEGER DEFAULT 0,
+        latency_ms INTEGER DEFAULT 0,
+        response_len INTEGER DEFAULT 0,
+        passed INTEGER DEFAULT 0,
+        created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+    )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_aer_pid ON agent_eval_results(persona_id)")
+
     # Migration: add sort_order to personas if missing
     try:
         cols = [r[1] for r in conn.execute("PRAGMA table_info(personas)").fetchall()]
@@ -8452,7 +8471,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.18</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.19</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8618,7 +8637,6 @@ select.settings-input { padding-right: 26px; }
       </div>
       <div class="persona-detail-tabs">
         <button class="pd-tab active" onclick="switchPdTab('identity')">Identity</button>
-        <button class="pd-tab" onclick="switchPdTab('memory')">Memory</button>
         <button class="pd-tab" onclick="switchPdTab('activity')">Activity</button>
         <button class="pd-tab" onclick="switchPdTab('skills')">Skills</button>
         <button class="pd-tab" onclick="switchPdTab('config')">Config</button>
@@ -9048,7 +9066,7 @@ select.settings-input { padding-right: 26px; }
           <button class="btn btn-ghost" onclick="_graphZoomOut()" style="font-size:10px;padding:2px 8px" title="Zoom out">&minus;</button>
           <button class="btn btn-ghost" onclick="_fitGraphToView()" style="font-size:10px;padding:2px 8px" title="Fit to view">Fit</button>
           <button class="btn btn-ghost" onclick="_centerGraph()" style="font-size:10px;padding:2px 8px" title="Center (reset zoom)">Center</button>
-          <button id="cx-lock-btn" class="btn btn-ghost" onclick="_toggleGraphLock()" style="font-size:10px;padding:2px 8px" title="Lock layout (prevent resize)">&#x1f513;</button>
+          <button id="cx-lock-btn" class="btn btn-ghost" onclick="_toggleGraphLock()" style="font-size:10px;padding:2px 8px" title="Unlock layout">&#x1f512;</button>
         </div>
         <div style="flex:1;position:relative;overflow:hidden">
           <canvas id="cx-graph-canvas" width="700" height="500" style="width:100%;height:100%;cursor:grab"></canvas>
@@ -9711,6 +9729,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.19', date:'2026-03-07', notes:['Agent Config tab: editable backend + fallback chain','Agent Self-Test workflow: periodic benchmarks across backends','Graph lock ON by default, disables +/-/Fit/Center','Removed Memory tab from agent slide-out (use Cortex)','Cortex: scope shows agent name, counter says learnings, removed type pills','Inbox button cutoff fix'] },
   { ver:'v0.28.18', date:'2026-03-07', notes:['System Prompt viewer: shows the full initial prompt Porter sends each agent','GET /api/persona/<id>/system-prompt endpoint','System Prompt button in agent slide-out panel header','Removed Last Dispatch from Models tab'] },
   { ver:'v0.28.11', date:'2026-03-07', notes:['Workflow Registry: 6 system workflows exposed as monitorable, configurable cards','GET /api/workflows + POST trigger/toggle/config endpoints','Daemons instrumented: cortex, hygiene, cap-checks, heartbeat, rollup, memory extraction','Workflows tab redesigned: live status, run history, pause/resume, config editing, manual trigger','Projects tab replaced with Coming Soon placeholder (backend preserved)','Agent persona files: quality MEMORY.md + ROLE_CARD.md for all 9 agents with conflict detection','Dead code removed: runBuild, chain builder, heartbeat editor, old workflow skills UI'] },
   { ver:'v0.28.10', date:'2026-03-07', notes:['UI Polish Batch — visual refinements across tabs'] },
@@ -11584,7 +11603,7 @@ function switchModule(name) {
                     _cortexMemories = mems.memories;
                     _renderCortexMemories(_cortexMemories);
                     var countEl = document.getElementById('cx-inbox-count');
-                    if (countEl) countEl.textContent = _cortexMemories.length + ' fact' + (_cortexMemories.length !== 1 ? 's' : '');
+                    if (countEl) { countEl.textContent = _cortexMemories.length + ' learning' + (_cortexMemories.length !== 1 ? 's' : ''); countEl.style.display = ''; }
                   }
                 }).catch(function(){});
               }
@@ -16152,7 +16171,22 @@ async function _loadCortexTab() {
     if (el) el.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--err)">Failed to load memories</div>';
   }
   // Always init the graph (defer to let layout settle)
-  requestAnimationFrame(function() { setTimeout(function() { _initMemoryGraph(); }, 50); });
+  requestAnimationFrame(function() { setTimeout(function() {
+    _initMemoryGraph();
+    // Init graph as locked
+    window._cxGraphLocked = true;
+    var lockBtn = document.getElementById('cx-lock-btn');
+    if (lockBtn) { lockBtn.innerHTML = '\u{1f512}'; lockBtn.style.color = 'var(--accent)'; lockBtn.title = 'Unlock layout'; }
+    // Gray out graph controls
+    document.querySelectorAll('#cx-graph-canvas').forEach(function(c) {
+      var toolbar = c.closest('div').previousElementSibling;
+      if (!toolbar) return;
+      toolbar.querySelectorAll('button').forEach(function(b) {
+        if (b.id === 'cx-lock-btn' || b.classList.contains('gf-btn')) return;
+        b.style.opacity = '0.4'; b.style.pointerEvents = 'none';
+      });
+    });
+  }, 50); });
 }
 
 function _updateCortexBadge(count) {
@@ -16181,23 +16215,21 @@ function _renderCortexMemories(memories) {
     impBar += '</span>';
     // Status dot (green=active, gray=archived)
     var statusDot = '<span style="width:6px;height:6px;border-radius:50%;background:' + (memStatus === 'active' ? 'var(--green,#4ade80)' : '#666') + ';display:inline-block" title="' + memStatus + '"></span>';
-    // Type pill
-    var typePill = '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:color-mix(in srgb,' + (memType === 'episodic' ? '#a78bfa' : 'var(--accent)') + ' 15%,transparent);color:' + (memType === 'episodic' ? '#a78bfa' : 'var(--accent)') + '">' + (memType === 'episodic' ? 'session' : 'learned') + '</span>';
-    html += '<div class="cx-mem-card cx-mem-row" data-scope="' + sc + '" data-id="' + m.id + '" data-type="' + memType + '" data-status="' + memStatus + '">'
-      + '<div style="display:flex;align-items:center;gap:6px">'
+    // Type pill removed — redundant with scope tag
+    html += '<div class="cx-mem-card cx-mem-row" data-scope="' + sc + '" data-id="' + m.id + '" data-type="' + memType + '" data-status="' + memStatus + '" style="padding:8px 10px">'
+      + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
       + statusDot
-      + '<span style="font-size:10px;font-weight:600;color:' + scColor + ';text-transform:uppercase;background:color-mix(in srgb,' + scColor + ' 12%,transparent);padding:2px 8px;border-radius:4px;letter-spacing:0.5px">' + sc + '</span>'
+      + '<span style="font-size:10px;font-weight:600;color:' + scColor + ';text-transform:uppercase;background:color-mix(in srgb,' + scColor + ' 12%,transparent);padding:2px 8px;border-radius:4px;letter-spacing:0.5px">' + (sc === 'agent' && m.scope_id ? m.scope_id : sc) + '</span>'
       + impBar
-      + typePill
       + (m.source_type === 'session' && m.source_id
         ? '<a href="#" onclick="event.preventDefault();event.stopPropagation();_openCortexSession(\'' + escHtml(m.source_id) + '\')" style="font-size:10px;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:3px" title="Open session"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>session</a>'
-        : '<span style="font-size:10px;color:var(--text3)">' + (m.source_type || 'dispatch') + '</span>')
+        : '')
       + '<div style="flex:1"></div>'
       + (memStatus === 'active'
         ? '<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px;color:var(--text3)" onclick="event.stopPropagation();_archiveCortexMem(' + m.id + ',this)" title="Archive">Archive</button>'
         : '<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px;color:var(--green,#4ade80)" onclick="event.stopPropagation();_restoreCortexMem(' + m.id + ',this)" title="Restore">Restore</button>')
       + '<button class="btn btn-ghost" style="font-size:14px;padding:4px 10px" onclick="event.stopPropagation();_editCortexMem(' + m.id + ',this)" title="Edit">\u270f\ufe0e</button>'
-      + '<button class="btn btn-ghost" style="font-size:14px;padding:4px 10px;color:var(--red,#f87171)" onclick="event.stopPropagation();_deleteCortexMem(' + m.id + ',this)" title="Delete">\u00d7</button>'
+      + '<button class="btn btn-ghost" style="font-size:14px;padding:4px 8px;color:var(--red,#f87171);flex-shrink:0" onclick="event.stopPropagation();_deleteCortexMem(' + m.id + ',this)" title="Delete">\u00d7</button>'
       + '</div>'
       + '<div class="cx-fact-text" style="font-size:13px;color:var(--text);line-height:1.5;cursor:pointer;word-break:break-word;overflow-wrap:break-word" onclick="_editCortexMem(' + m.id + ',this)" title="Click to edit">' + escHtml(m.fact || '') + '</div>'
       + '</div>';
@@ -16396,6 +16428,7 @@ function _loadGraphPositions() {
 
 function _resetGraphZoom() { _fitGraphToView(); }
 function _fitGraphToView() {
+  if (window._cxGraphLocked) return;
   var canvas = document.getElementById('cx-graph-canvas');
   if (!canvas || !_graphNodes.length) { _graphZoom = {x: 0, y: 0, scale: 1}; _drawGraph(); return; }
   var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -16419,6 +16452,7 @@ function _fitGraphToView() {
   _drawGraph();
 }
 function _centerGraph() {
+  if (window._cxGraphLocked) return;
   var canvas = document.getElementById('cx-graph-canvas');
   if (!canvas || !_graphNodes.length) return;
   var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -16429,8 +16463,8 @@ function _centerGraph() {
   _graphZoom.y = canvas.height / 2 - cy;
   _drawGraph();
 }
-function _graphZoomIn() { _graphZoom.scale = Math.min(3, _graphZoom.scale * 1.2); _drawGraph(); }
-function _graphZoomOut() { _graphZoom.scale = Math.max(0.3, _graphZoom.scale / 1.2); _drawGraph(); }
+function _graphZoomIn() { if (window._cxGraphLocked) return; _graphZoom.scale = Math.min(3, _graphZoom.scale * 1.2); _drawGraph(); }
+function _graphZoomOut() { if (window._cxGraphLocked) return; _graphZoom.scale = Math.max(0.3, _graphZoom.scale / 1.2); _drawGraph(); }
 function _toggleGraphLock() {
   window._cxGraphLocked = !window._cxGraphLocked;
   var btn = document.getElementById('cx-lock-btn');
@@ -16452,6 +16486,17 @@ function _toggleGraphLock() {
       c.parentElement.style.flex = '1';
     }
   }
+  // Gray out graph controls when locked
+  document.querySelectorAll('#cx-graph-canvas').forEach(function(c) {
+    var toolbar = c.closest('div').previousElementSibling;
+    if (!toolbar) return;
+    toolbar.querySelectorAll('button').forEach(function(b) {
+      if (b.id === 'cx-lock-btn') return;
+      if (b.classList.contains('gf-btn')) return;  // keep filter buttons active
+      b.style.opacity = window._cxGraphLocked ? '0.4' : '';
+      b.style.pointerEvents = window._cxGraphLocked ? 'none' : '';
+    });
+  });
   toast(window._cxGraphLocked ? 'Graph locked' : 'Graph unlocked');
 }
 function _graphFilterScope(scope, btn) {
@@ -17679,35 +17724,12 @@ function switchPdTab(tab) {
       + '  <input class="settings-input" id="pd-edit-name" value="' + escHtml(p.name) + '"></div>'
       + '<div class="settings-field"><label>Role</label>'
       + '  <input class="settings-input" id="pd-edit-role" value="' + escHtml(p.role || '') + '"></div>'
-      + '<div class="settings-field"><label>Backend</label>'
-      + '  <select class="settings-input" id="pd-edit-backend">'
-      + '    <option value="">Auto-route</option>'
-      +      Object.keys(window._providerRegistry || {openclaw:1,claude:1,gemini:1,codex:1,ollama:1}).map(k =>
-              '<option value="' + k + '"' + (p.preferred_backend === k ? ' selected' : '') + '>' + k + '</option>'
-            ).join('')
-      + '  </select></div>'
+
       + '<div class="settings-field"><label>Avatar</label>'
       + '  <input class="settings-input" id="pd-edit-avatar" value="' + (p.avatar || '\u{1F916}') + '" style="width:60px"></div>'
       + '</div>'
       + '<div style="margin-top:8px"><button class="btn btn-ghost" onclick="savePersonaMeta()" style="font-size:11px">Save Settings</button></div>'
       + '</div>';
-  } else if (tab === 'memory') {
-    content.innerHTML = '<div class="loading-indicator">Loading memory...</div>';
-    api('/api/personas/' + p.id + '/memory').then(r => {
-      if (!r.ok) { content.innerHTML = '<div style="color:var(--text3)">Failed to load memory.</div>'; return; }
-      let html = '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">MEMORY.md</div>';
-      html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:monospace;font-size:12px;white-space:pre-wrap;max-height:200px;overflow-y:auto;color:var(--text2)">' + escHtml(r.memory_md || '(empty)') + '</div>';
-      if (r.daily_logs && r.daily_logs.length) {
-        html += '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Daily Logs</div>';
-        r.daily_logs.forEach(dl => {
-          html += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px">' + escHtml(dl.date) + '</div>';
-          html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;white-space:pre-wrap;max-height:150px;overflow-y:auto;color:var(--text2)">' + escHtml(dl.content || '(empty)') + '</div></div>';
-        });
-      } else {
-        html += '<div style="color:var(--text3);font-size:12px;margin-top:12px">No daily logs yet. Dispatch a message to this persona to start logging.</div>';
-      }
-      content.innerHTML = html;
-    });
   } else if (tab === 'activity') {
     content.innerHTML = '<div class="loading-indicator">Loading activity...</div>';
     api('/api/bridge/runs?persona_id=' + p.id + '&limit=20').then(r => {
@@ -17738,27 +17760,45 @@ function switchPdTab(tab) {
   } else if (tab === 'config') {
     let fb = [];
     try { fb = JSON.parse(p.fallback_backends || '[]'); } catch(e){}
-    let cfg = {};
-    try { cfg = JSON.parse(p.config || '{}'); } catch(e){}
-    content.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="settings-field"><label>Preferred Backend</label>
-          <div style="font-size:13px;color:var(--text)">${escHtml(p.preferred_backend || 'Auto-route')}</div></div>
-        <div class="settings-field"><label>Status</label>
-          <div style="font-size:13px;color:var(--text)">${escHtml(p.status || 'idle')}</div></div>
-        <div class="settings-field"><label>Fallback Backends</label>
-          <div style="font-size:13px;color:var(--text)">${fb.length ? fb.join(', ') : 'None'}</div></div>
-        <div class="settings-field"><label>Soul Hash</label>
-          <div style="font-size:13px;color:var(--text2);font-family:monospace">${escHtml(p.soul_hash || 'none')}</div></div>
-        <div class="settings-field"><label>Created</label>
-          <div style="font-size:13px;color:var(--text2)">${escHtml(p.created_at || '?')}</div></div>
-        <div class="settings-field"><label>Last Active</label>
-          <div style="font-size:13px;color:var(--text2)">${p.last_active ? new Date(p.last_active * 1000).toLocaleString() : 'Never'}</div></div>
-      </div>
-      <div style="margin-top:16px;display:flex;gap:8px">
-        <button class="btn btn-ghost" onclick="wakePersona('${p.id}')" style="font-size:12px">Wake</button>
-        <button class="btn btn-ghost" onclick="sleepPersona('${p.id}')" style="font-size:12px">Sleep</button>
-      </div>`;
+    var backends = Object.keys(window._providerRegistry || {openclaw:1,claude:1,gemini:1,codex:1,ollama:1});
+    content.innerHTML = '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Routing</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+      + '<div class="settings-field"><label>Preferred Backend</label>'
+      + '  <select class="settings-input" id="pd-cfg-backend">'
+      + '    <option value="">Auto-route</option>'
+      + backends.map(k => '<option value="' + k + '"' + (p.preferred_backend === k ? ' selected' : '') + '>' + k + '</option>').join('')
+      + '  </select></div>'
+      + '<div class="settings-field"><label>Fallback Chain</label>'
+      + '  <div id="pd-cfg-fallbacks" style="display:flex;flex-direction:column;gap:4px">'
+      + backends.map(k => '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" value="' + k + '"' + (fb.includes(k) ? ' checked' : '') + '> ' + k + '</label>').join('')
+      + '  </div></div>'
+      + '</div>'
+      + '<div style="margin-top:10px"><button class="btn btn-ghost" onclick="_saveAgentConfig()" style="font-size:11px">Save Routing</button></div>'
+      + '<div style="margin-top:20px;padding-top:12px;border-top:1px solid var(--border)">'
+      + '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Info</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+      + '<div class="settings-field"><label>Status</label>'
+      + '  <div style="font-size:13px;color:var(--text)">' + escHtml(p.status || 'idle') + '</div></div>'
+      + '<div class="settings-field"><label>Soul Hash</label>'
+      + '  <div style="font-size:13px;color:var(--text2);font-family:monospace">' + escHtml(p.soul_hash || 'none') + '</div></div>'
+      + '<div class="settings-field"><label>Created</label>'
+      + '  <div style="font-size:13px;color:var(--text2)">' + escHtml(p.created_at || '?') + '</div></div>'
+      + '<div class="settings-field"><label>Last Active</label>'
+      + '  <div style="font-size:13px;color:var(--text2)">' + (p.last_active ? new Date(p.last_active * 1000).toLocaleString() : 'Never') + '</div></div>'
+      + '</div>'
+      + '<div style="margin-top:12px;display:flex;gap:8px">'
+      + '  <button class="btn btn-ghost" onclick="wakePersona(\'' + p.id + '\')" style="font-size:12px">Wake</button>'
+      + '  <button class="btn btn-ghost" onclick="sleepPersona(\'' + p.id + '\')" style="font-size:12px">Sleep</button>'
+      + '</div></div>'
+      + '<div id="pd-eval-results" style="margin-top:20px;padding-top:12px;border-top:1px solid var(--border);display:none">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
+      + '  <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Self-Test Results</div>'
+      + '  <button class="btn btn-ghost" onclick="_runAgentEval(\'' + p.id + '\')" style="font-size:10px;padding:2px 8px">Run Test</button>'
+      + '</div>'
+      + '<div id="pd-eval-table"></div>'
+      + '</div>';
+    // Load eval results
+    _loadAgentEvalResults(p.id);
   }
 }
 
@@ -17862,7 +17902,7 @@ async function savePersonaMeta() {
   const data = {
     name: document.getElementById('pd-edit-name').value,
     role: document.getElementById('pd-edit-role').value,
-    preferred_backend: document.getElementById('pd-edit-backend').value,
+    preferred_backend: (document.getElementById('pd-cfg-backend') || {}).value || '',
     avatar: document.getElementById('pd-edit-avatar').value,
   };
   const r = await api('/api/personas/' + p.id, data);
@@ -17872,6 +17912,65 @@ async function savePersonaMeta() {
     // Re-select to refresh detail
     setTimeout(() => selectPersona(p.id), 300);
   }
+}
+
+async function _saveAgentConfig() {
+  const p = window._selectedPersona;
+  if (!p) return;
+  var backend = document.getElementById('pd-cfg-backend').value;
+  var fallbacks = [];
+  document.querySelectorAll('#pd-cfg-fallbacks input[type=checkbox]:checked').forEach(function(cb) {
+    fallbacks.push(cb.value);
+  });
+  const r = await api('/api/personas/' + p.id, {
+    preferred_backend: backend,
+    fallback_backends: fallbacks
+  });
+  if (r && r.ok) {
+    _showToast('Routing saved');
+    loadPersonas();
+    setTimeout(() => selectPersona(p.id), 300);
+  } else {
+    _showToast('Failed to save routing');
+  }
+}
+
+async function _loadAgentEvalResults(pid) {
+  var container = document.getElementById('pd-eval-results');
+  var table = document.getElementById('pd-eval-table');
+  if (!container || !table) return;
+  try {
+    var r = await api('/api/agents/eval-results?persona_id=' + pid);
+    if (!r || !r.results || !r.results.length) { container.style.display = 'none'; return; }
+    container.style.display = '';
+    var best = r.results.reduce(function(a, b) { return (a.score || 0) > (b.score || 0) ? a : b; });
+    var html = '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+    html += '<tr style="color:var(--text3);font-size:10px;text-transform:uppercase"><th style="text-align:left;padding:4px 8px">Backend</th><th style="text-align:right;padding:4px 8px">Score</th><th style="text-align:right;padding:4px 8px">Latency</th><th style="text-align:right;padding:4px 8px">Tested</th></tr>';
+    r.results.forEach(function(row) {
+      var isBest = row.backend === best.backend && row.score === best.score;
+      html += '<tr style="' + (isBest ? 'background:color-mix(in srgb,var(--accent) 10%,transparent)' : '') + '">'
+        + '<td style="padding:4px 8px;color:var(--text)">' + escHtml(row.backend) + (isBest ? ' \u2605' : '') + '</td>'
+        + '<td style="padding:4px 8px;text-align:right;color:var(--text2)">' + (row.score || 0) + '/100</td>'
+        + '<td style="padding:4px 8px;text-align:right;color:var(--text2)">' + (row.latency_ms || 0) + 'ms</td>'
+        + '<td style="padding:4px 8px;text-align:right;color:var(--text3)">' + (row.tested_at ? new Date(row.tested_at * 1000).toLocaleDateString() : '?') + '</td>'
+        + '</tr>';
+    });
+    html += '</table>';
+    table.innerHTML = html;
+  } catch(e) { container.style.display = 'none'; }
+}
+
+async function _runAgentEval(pid) {
+  _showToast('Running self-test...');
+  try {
+    var r = await api('/api/agents/eval-run', { persona_id: pid });
+    if (r && r.ok) {
+      _showToast('Self-test complete — score: ' + (r.best_score || '?'));
+      _loadAgentEvalResults(pid);
+    } else {
+      _showToast('Self-test failed: ' + (r.error || 'unknown'));
+    }
+  } catch(e) { _showToast('Self-test error'); }
 }
 
 async function deletePersona() {
@@ -23028,6 +23127,96 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     return result
 
 
+# ── Agent Backend Eval (v0.28.19) ──────────────────────────────────────
+
+_eval_agent_idx = 0
+
+def _agent_eval_prompt(persona):
+    name = persona.get("name", "Agent")
+    role = persona.get("role", "general assistant")
+    return f"Respond in 2 sentences as {name}. What is your primary role and how do you approach problems? (Role: {role})"
+
+def _agent_eval_score(response, persona, latency_s):
+    score = 0
+    if latency_s < 3: score += 30
+    elif latency_s < 8: score += 20
+    elif latency_s < 15: score += 10
+    rlen = len(response) if response else 0
+    if 50 <= rlen <= 500: score += 20
+    elif rlen > 0: score += max(0, 20 - abs(rlen - 275) // 25)
+    name = persona.get("name", "").lower()
+    role = persona.get("role", "").lower()
+    rl = response.lower() if response else ""
+    if name and name in rl: score += 15
+    if role:
+        role_words = [w for w in role.split() if len(w) > 3]
+        matches = sum(1 for w in role_words if w in rl)
+        score += min(15, matches * 5)
+    if response and not response.startswith("Error") and 20 < rlen < 2000:
+        score += 20
+    elif response and rlen > 0:
+        score += 10
+    return min(100, score)
+
+def _agent_eval_once():
+    global _eval_agent_idx
+    import time as _et
+    try:
+        conn = _db_conn()
+        personas = conn.execute("SELECT id, name, role, avatar, preferred_backend FROM personas ORDER BY sort_order, name").fetchall()
+        if not personas:
+            return {"ok": False, "error": "No agents"}
+        cols = [d[0] for d in conn.description]
+        idx = _eval_agent_idx % len(personas)
+        _eval_agent_idx = idx + 1
+        p = dict(zip(cols, personas[idx]))
+        results = []
+        prompt = _agent_eval_prompt(p)
+        for bk in PROVIDER_REGISTRY:
+            if not _probe_provider(bk):
+                continue
+            t0 = _et.time()
+            try:
+                resp = dispatch_agent(prompt, bk, timeout=30)
+                lat = _et.time() - t0
+                rtxt = resp if isinstance(resp, str) else str(resp)
+            except Exception as e:
+                lat = _et.time() - t0
+                rtxt = f"Error: {e}"
+            sc = _agent_eval_score(rtxt, p, lat)
+            ms = int(lat * 1000)
+            passed = 1 if sc >= 40 else 0
+            conn.execute(
+                "INSERT INTO agent_eval_results (persona_id,backend,score,latency_ms,response_len,passed,created_at) VALUES (?,?,?,?,?,?,?)",
+                (p["id"], bk, sc, ms, len(rtxt or ""), passed, _et.time()))
+            results.append({"backend": bk, "score": sc, "latency_ms": ms, "passed": bool(passed)})
+        conn.commit()
+        best = max(results, key=lambda r: r["score"]) if results else {}
+        log.info("Agent eval: %s — best=%s (score=%d)", p["name"], best.get("backend","?"), best.get("score",0))
+        _wf_record_run("agent_backend_eval", success=True, result=f"{p['name']}: best={best.get('backend','?')} score={best.get('score',0)}")
+        return {"ok": True, "persona": p["name"], "results": results, "best_score": best.get("score", 0)}
+    except Exception as e:
+        log.warning("Agent eval error: %s", e)
+        _wf_record_run("agent_backend_eval", success=False, error=str(e))
+        return {"ok": False, "error": str(e)}
+
+def _agent_eval_loop():
+    import time as _ael
+    _ael.sleep(300)
+    while True:
+        try:
+            cfg = _load_config()
+            if not cfg.get("agent_eval_enabled", False):
+                _ael.sleep(3600)
+                continue
+            interval_h = cfg.get("agent_eval_interval_hours", 168)
+            _agent_eval_once()
+            _ael.sleep(max(600, interval_h * 3600 / max(1, len(PROVIDER_REGISTRY))))
+        except Exception as e:
+            log.warning("Agent eval loop error: %s", e)
+            _ael.sleep(3600)
+
+
 def dispatch_agent(message, backend, model=None, timeout=120, run_id=None, chain_id=None, step_num=0):
     """Route a message to the specified backend and return normalized response."""
     import time as _dt
@@ -23944,7 +24133,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.18"})
+            self.reply_json({"v": "0.28.19"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24106,7 +24295,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.18"
+                health["porter_version"] = "0.28.19"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -24603,6 +24792,21 @@ class Handler(BaseHTTPRequestHandler):
 
             data = [{col_names[i]: row[i] for i in range(len(col_names))} for row in rows]
             self.reply_json({"ok": True, "rollups": data, "level": level, "count": len(data)})
+
+        elif parsed.path == "/api/agents/eval-results":
+            if not self.auth_check(redirect=False): return
+            pid = qs.get("persona_id", [""])[0]
+            conn = _db_conn()
+            rows = conn.execute(
+                """SELECT backend, score, latency_ms, response_len, passed, created_at as tested_at
+                   FROM agent_eval_results WHERE persona_id=?
+                   AND id IN (SELECT MAX(id) FROM agent_eval_results WHERE persona_id=? GROUP BY backend)
+                   ORDER BY score DESC""",
+                (pid, pid)
+            ).fetchall()
+            cols = [d[0] for d in conn.description] if rows else []
+            results = [dict(zip(cols, r)) for r in rows]
+            self.reply_json({"ok": True, "results": results})
 
         elif parsed.path == "/api/cortex/memories":
             if not self.auth_check(redirect=False): return
@@ -25799,6 +26003,15 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
+        elif parsed.path == "/api/agents/eval-run":
+            if not self.auth_check(redirect=False): return
+            data = self._read_json()
+            pid = data.get("persona_id", "") if data else ""
+            if not pid:
+                self.reply_json({"ok": False, "error": "persona_id required"}, 400); return
+            result = _agent_eval_once()
+            self.reply_json(result)
+
         elif parsed.path == "/api/bridge/runs":
             if not self.auth_check_cap("orch_read"): return
             try:
@@ -25862,7 +26075,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.18'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.19'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30060,11 +30273,13 @@ if __name__ == "__main__":
     _cortex_thread.start()
     _hygiene_thread = threading.Thread(target=_context_hygiene_loop, name="porter-hygiene", daemon=True)
     _hygiene_thread.start()
+    _eval_thread = threading.Thread(target=_agent_eval_loop, name="porter-eval", daemon=True)
+    _eval_thread.start()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.18 ready (localhost only)")
+    print(f"\n  Porter v0.28.19 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
