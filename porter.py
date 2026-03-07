@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.20 — UX Feedback Fixes"""
+"""Porter v0.28.21 — Timezone Fix + Cortex Names"""
 
 
 import email
@@ -8471,7 +8471,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.20</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.21</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9273,11 +9273,8 @@ select.settings-input { padding-right: 26px; }
         </div>
         <div class="settings-field">
           <label>Timezone</label>
-          <input type="text" class="settings-input" id="sa-timezone" list="tz-datalist"
-            placeholder="Search timezones... (e.g. Singapore, EST, UTC+8)"
-            autocomplete="off">
-          <datalist id="tz-datalist"></datalist>
-          <div style="font-size:11px;color:var(--text3);margin-top:3px">Type to search. Controls how Porter displays dates and times.</div>
+          <select class="settings-input" id="sa-timezone" style="max-width:340px"></select>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">Controls how Porter displays dates and times.</div>
         </div>
         <div class="settings-save-row">
           <button class="btn btn-primary" onclick="saveAccount()">Save changes</button>
@@ -9714,6 +9711,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.21', date:'2026-03-07', notes:['Timezone: Porter-styled select dropdown, persists across sessions','Cortex: agent scope resolves persona ID to name (pre-fetches persona map)'] },
   { ver:'v0.28.20', date:'2026-03-07', notes:['Graph: scroll zoom blocked when locked','Workflow history: singular "run" when count is 1','Cortex: agent scope resolves persona ID to name','Cortex: scope tag truncation for long names','Removed API Keys from Settings (use Extensions)'] },
   { ver:'v0.28.19', date:'2026-03-07', notes:['Agent Config tab: editable backend + fallback chain','Agent Self-Test workflow: periodic benchmarks across backends','Graph lock ON by default, disables +/-/Fit/Center','Removed Memory tab from agent slide-out (use Cortex)','Cortex: scope shows agent name, counter says learnings, removed type pills','Inbox button cutoff fix'] },
   { ver:'v0.28.18', date:'2026-03-07', notes:['System Prompt viewer: shows the full initial prompt Porter sends each agent','GET /api/persona/<id>/system-prompt endpoint','System Prompt button in agent slide-out panel header','Removed Last Dispatch from Models tab'] },
@@ -11200,10 +11198,16 @@ function _porterTz() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-function populateTimezones() {
+async function populateTimezones() {
   const sel = document.getElementById('sa-timezone');
-  const dl = document.getElementById('tz-datalist');
-  if (!sel || !dl || dl.options.length > 1) return;
+  if (!sel || sel.options.length > 1) return;
+  // Ensure prefs are loaded
+  if (!window._currentPrefs) {
+    try {
+      const data = await api('/api/preferences', {});
+      if (data && data.preferences) window._currentPrefs = data.preferences;
+    } catch(e) {}
+  }
   let zones = [];
   try { zones = Intl.supportedValuesOf('timeZone'); } catch(e) {
     zones = ['America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
@@ -11211,7 +11215,6 @@ function populateTimezones() {
       'Asia/Dubai','Asia/Kolkata','Asia/Bangkok','Asia/Singapore','Asia/Shanghai',
       'Asia/Tokyo','Asia/Seoul','Australia/Sydney','Pacific/Auckland','UTC'];
   }
-  // Build entries with UTC offset labels
   const now = new Date();
   const entries = zones.map(z => {
     try {
@@ -11219,14 +11222,12 @@ function populateTimezones() {
       const parts = fmt.formatToParts(now);
       const offsetPart = parts.find(p => p.type === 'timeZoneName');
       const offset = offsetPart ? offsetPart.value : '';
-      // Also get short name (EST, PST, etc)
       const fmtShort = new Intl.DateTimeFormat('en-US', { timeZone: z, timeZoneName: 'short' });
       const shortParts = fmtShort.formatToParts(now);
       const shortPart = shortParts.find(p => p.type === 'timeZoneName');
       const abbr = shortPart ? shortPart.value : '';
       const display = z.replace(/_/g, ' ');
-      const label = offset ? '(' + offset + ') ' + display + (abbr && abbr !== offset ? ' — ' + abbr : '') : display;
-      // Parse offset for sorting
+      const label = offset ? '(' + offset + ') ' + display + (abbr && abbr !== offset ? ' \u2014 ' + abbr : '') : display;
       let sortVal = 0;
       const m = (offset || '').match(/GMT([+-]?)(\d+)?:?(\d+)?/);
       if (m) { sortVal = (m[1]==='-'?-1:1) * ((parseInt(m[2]||'0',10)*60) + parseInt(m[3]||'0',10)); }
@@ -11236,17 +11237,19 @@ function populateTimezones() {
     }
   });
   entries.sort((a, b) => a.sortVal - b.sortVal || a.label.localeCompare(b.label));
+  // Add empty option
+  const blank = document.createElement('option');
+  blank.value = ''; blank.textContent = 'Select timezone...';
+  sel.appendChild(blank);
   entries.forEach(e => {
     const opt = document.createElement('option');
     opt.value = e.value;
-    opt.label = e.label;
-    dl.appendChild(opt);
+    opt.textContent = e.label;
+    sel.appendChild(opt);
   });
   // Set current value from prefs
-  try {
-    const tz = (window._currentPrefs || {}).timezone;
-    if (tz) sel.value = tz;
-  } catch(e) {}
+  const tz = (window._currentPrefs || {}).timezone;
+  if (tz) sel.value = tz;
 }
 
 function syncSettingsUI() {
@@ -16149,6 +16152,16 @@ async function _loadCortexTab() {
   try {
     var mems = await api('/api/cortex/memories?limit=200');
     _cortexMemories = (mems && mems.memories) || [];
+    // Ensure persona map is available for scope name resolution
+    if (!window._personaMap || Object.keys(window._personaMap).length === 0) {
+      try {
+        var pdata = await api('/api/personas');
+        if (pdata && pdata.personas) {
+          window._personaMap = {};
+          pdata.personas.forEach(function(p) { window._personaMap[p.id] = p.name; });
+        }
+      } catch(e) {}
+    }
     _renderCortexMemories(_cortexMemories);
     var countEl = document.getElementById('cx-inbox-count');
     if (countEl) countEl.textContent = _cortexMemories.length + ' fact' + (_cortexMemories.length !== 1 ? 's' : '');
@@ -16208,8 +16221,8 @@ function _renderCortexMemories(memories) {
       + (function() {
         var label = sc;
         if (sc === 'agent' && m.scope_id) {
-          var found = (window._personas || []).find(function(pp) { return pp.id === m.scope_id; });
-          label = found ? found.name : m.scope_id.substring(0, 8);
+          var pMap = window._personaMap || {};
+          label = pMap[m.scope_id] || m.scope_id.substring(0, 8);
         }
         return '<span style="font-size:10px;font-weight:600;color:' + scColor + ';text-transform:uppercase;background:color-mix(in srgb,' + scColor + ' 12%,transparent);padding:2px 8px;border-radius:4px;letter-spacing:0.5px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle">' + escHtml(label) + '</span>';
       })()
@@ -24127,7 +24140,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.20"})
+            self.reply_json({"v": "0.28.21"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24289,7 +24302,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.20"
+                health["porter_version"] = "0.28.21"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26069,7 +26082,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.20'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.21'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30273,7 +30286,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.20 ready (localhost only)")
+    print(f"\n  Porter v0.28.21 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
