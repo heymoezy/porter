@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.27 — Session counts, image attach, model badge, Cortex live"""
+"""Porter v0.28.28 — Session counts, image attach, model badge, Cortex live"""
 
 
 import email
@@ -8543,7 +8543,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.27</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.28</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9798,6 +9798,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.28', date:'2026-03-07', notes:['Fixed: extraction progress counts match model card session counts','Counts per-source (openclaw/claude/gemini/codex/ollama) excluding archived','No more phantom sessions in total'] },
   { ver:'v0.28.27', date:'2026-03-07', notes:['Models: extraction progress card with play button, correct session counts','Workflows: fixed screen flashing (lightweight refresh, no rebuild)','Workflows: removed skill/ext sections (system workflows only)','Workflows: wider interval input box','Fixed: heartbeat _db() → _db_conn() error','Fixed: cortex stats session counting (uses actual session loaders)'] },
   { ver:'v0.28.26', date:'2026-03-07', notes:['Workflows: skill-based workflows section (OpenClaw installed skills)','Workflows: external schedulers section (Ollama, OpenClaw, systemd)','Workflows: pause stops running workflow immediately','Workflows: fixed screen flashing (smart refresh, 8s interval)','Models: extraction progress indicator on model cards during learning extraction'] },
   { ver:'v0.28.25', date:'2026-03-07', notes:['Agent wizard: AI Suggest auto-fills role, personality, focus, style, avatar','Agent wizard: streams response from auto-routed model','Wizard header: mentions Cortex shared memory for new agents'] },
@@ -24739,7 +24740,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.27"})
+            self.reply_json({"v": "0.28.28"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24901,7 +24902,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.27"
+                health["porter_version"] = "0.28.28"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25517,17 +25518,25 @@ class Handler(BaseHTTPRequestHandler):
                 by_scope[row[0]] = row[1]
             new_1h = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='active' AND created_at > ?", (_t.time() - 3600,)).fetchone()[0]
             archived = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='archived'").fetchone()[0]
-            # Session extraction stats
+            # Session extraction stats — must match /api/sessions per-source counting
             sessions_total = 0
             sessions_extracted = 0
             try:
                 sessions_extracted = conn.execute("SELECT COUNT(*) FROM session_learnings").fetchone()[0]
-                _loaders = {"openclaw": _load_session_summaries, "claude": _load_claude_session_summaries, "gemini": _load_gemini_session_summaries}
-                for _ldr in _loaders.values():
-                    try: sessions_total += len(_ldr())
+                _archived = _get_archived_session_ids()
+                _src_loaders = {
+                    "openclaw": _load_session_summaries,
+                    "claude": _load_claude_session_summaries,
+                    "gemini": _load_gemini_session_summaries,
+                    "codex": lambda: [s for s in _load_porter_chat_sessions() if s.get("source") == "codex"],
+                    "ollama": lambda: [s for s in _load_porter_chat_sessions() if s.get("source") == "ollama"],
+                }
+                for _ldr in _src_loaders.values():
+                    try:
+                        _sess = _ldr()
+                        _sess = [s for s in _sess if s.get("id", "") not in _archived]
+                        sessions_total += len(_sess)
                     except Exception: pass
-                try: sessions_total += len(_load_porter_chat_sessions())
-                except Exception: pass
             except Exception:
                 pass
             conn.close()
@@ -26713,7 +26722,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.27'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.28'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30931,7 +30940,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.27 ready (localhost only)")
+    print(f"\n  Porter v0.28.28 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
