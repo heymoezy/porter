@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.10 — UI Polish Batch"""
+"""Porter v0.28.11 — UI Polish Batch"""
 
 
 import email
@@ -124,6 +124,80 @@ _hygiene_stats: dict = {
     "errors": [],
 }
 _HYGIENE_MERGED_MARKER = "(Merged into SOUL.md — see SOUL.md for full content)"
+
+# ── Workflow Registry ─────────────────────────────────────────────────────
+_wf_lock = threading.Lock()
+_wf_registry: dict = {}  # workflow_id -> workflow dict
+
+def _wf_register(wf_id, name, description, wf_type="system", interval="", interval_s=0, config_keys=None):
+    """Register a system workflow in the registry."""
+    with _wf_lock:
+        _wf_registry[wf_id] = {
+            "id": wf_id, "name": name, "description": description,
+            "type": wf_type, "status": "active", "interval": interval,
+            "interval_s": interval_s, "config_keys": config_keys or [],
+            "last_run": None, "next_run": None, "run_count": 0,
+            "error_count": 0, "last_error": None, "last_result": None,
+            "last_duration_s": 0, "history": [], "started_at": None,
+        }
+
+def _wf_record_run(wf_id, success=True, result=None, error=None, duration_s=0):
+    """Record a workflow run in the registry."""
+    import time as _t
+    with _wf_lock:
+        wf = _wf_registry.get(wf_id)
+        if not wf:
+            return
+        now = _t.time()
+        wf["last_run"] = now
+        wf["run_count"] += 1
+        wf["last_duration_s"] = round(duration_s, 3)
+        wf["last_result"] = result
+        if not success:
+            wf["error_count"] += 1
+            wf["last_error"] = str(error) if error else "Unknown error"
+            wf["status"] = "error"
+        elif wf["status"] == "error":
+            wf["status"] = "active"
+        if wf["interval_s"] > 0:
+            wf["next_run"] = now + wf["interval_s"]
+        entry = {"ts": now, "ok": success, "duration_s": round(duration_s, 3)}
+        if error:
+            entry["error"] = str(error)[:200]
+        if result:
+            entry["result"] = str(result)[:200]
+        wf["history"].append(entry)
+        if len(wf["history"]) > 20:
+            wf["history"] = wf["history"][-20:]
+
+def _wf_is_enabled(wf_id):
+    """Check if a workflow is active (not paused)."""
+    with _wf_lock:
+        wf = _wf_registry.get(wf_id)
+        return wf["status"] != "paused" if wf else True
+
+# Register 6 system workflows
+_wf_register("cortex_consolidation", "Cortex Consolidation",
+    "Merges similar memories and archives stale ones",
+    interval="6h", interval_s=6*3600,
+    config_keys=["cortex_consolidate_hours", "cortex_enabled"])
+_wf_register("context_hygiene", "Context Hygiene",
+    "Prunes old logs, caps soul files, archives stale memories",
+    interval="12h", interval_s=12*3600,
+    config_keys=["hygiene_interval_hours", "hygiene_enabled"])
+_wf_register("capability_checks", "Capability Checks",
+    "Detects available AI backends and tools",
+    interval="30s", interval_s=30)
+_wf_register("heartbeat", "Heartbeat",
+    "Periodic persona health check-ins",
+    interval="60s", interval_s=60)
+_wf_register("telemetry_rollup", "Telemetry Rollup",
+    "Aggregates agent telemetry hourly and daily",
+    interval="1h", interval_s=3600)
+_wf_register("memory_extraction", "Memory Extraction",
+    "Extracts facts from chat responses into cortex memory",
+    interval="per-response", interval_s=0,
+    config_keys=["cortex_enabled", "cortex_min_response_len"])
 
 DEFAULT_AGENT_FLEET: dict = {
     "channel": "stable",
@@ -997,12 +1071,18 @@ def _cortex_distill_session(session_id, task_desc, model_info, msg_count, outcom
 
 def _cortex_extract_and_route(message, response_text, persona_id="", backend=""):
     """Extract facts from a dispatch response and route to memory. Runs in background thread."""
+    import time as _ext_t
     # Guard against circular extraction
     if getattr(_CORTEX_EXTRACT_GUARD, 'active', False):
         return
     _CORTEX_EXTRACT_GUARD.active = True
+    _t0 = _ext_t.time()
     try:
         _cortex_extract_and_route_inner(message, response_text, persona_id, backend)
+        _wf_record_run("memory_extraction", success=True, duration_s=_ext_t.time()-_t0)
+    except Exception as _ext_e:
+        _wf_record_run("memory_extraction", success=False, error=_ext_e, duration_s=_ext_t.time()-_t0)
+        raise
     finally:
         _CORTEX_EXTRACT_GUARD.active = False
 
@@ -1221,86 +1301,105 @@ def _cortex_inject_context(message, persona_id="", project_id=""):
 
     return result
 
+def _cortex_consolidate_once():
+    """Run one cortex consolidation pass. Returns summary string."""
+    import time as _t
+    prefs = _config.get("preferences", {})
+    conn = _db_conn()
+    try:
+        rows = conn.execute(
+            "SELECT id, fact, scope, scope_id, importance, keywords, memory_type FROM cortex_memories "
+            "WHERE consolidated_into IS NULL AND status='active'"
+        ).fetchall()
+
+        # Group by scope + memory_type (only merge within same type)
+        groups = {}
+        for row in rows:
+            key = (row[2], row[3], row[6] or "semantic")  # scope, scope_id, memory_type
+            groups.setdefault(key, []).append(row)
+
+        merged_count = 0
+        for key, members in groups.items():
+            if len(members) < 2:
+                continue
+            # Compare all pairs
+            for i in range(len(members)):
+                for j in range(i + 1, len(members)):
+                    kw_i = _cortex_tokenize(members[i][1])
+                    kw_j = _cortex_tokenize(members[j][1])
+                    if _jaccard_similarity(kw_i, kw_j) > 0.5:
+                        # Keep the one with higher importance
+                        keep = members[i] if members[i][4] >= members[j][4] else members[j]
+                        discard = members[j] if keep == members[i] else members[i]
+                        conn.execute(
+                            "UPDATE cortex_memories SET consolidated_into=?, updated_at=strftime('%s','now') WHERE id=?",
+                            (keep[0], discard[0])
+                        )
+                        merged_count += 1
+
+        # v0.28.3 — Staleness: auto-archive old unused memories
+        archive_days = prefs.get("cortex_archive_days", 60)
+        min_use = prefs.get("cortex_min_use_count", 3)
+        now = _t.time()
+        archive_threshold = now - (archive_days * 86400)
+        quick_archive_threshold = now - (7 * 86400)
+        archived_count = 0
+
+        # Rule 1: last_used_at > N days AND use_count < M → archived
+        stale = conn.execute(
+            "SELECT id FROM cortex_memories WHERE status='active' AND consolidated_into IS NULL "
+            "AND last_used_at IS NOT NULL AND last_used_at < ? AND use_count < ?",
+            (archive_threshold, min_use)
+        ).fetchall()
+        for row in stale:
+            conn.execute("UPDATE cortex_memories SET status='archived', updated_at=strftime('%s','now') WHERE id=?", (row[0],))
+            archived_count += 1
+
+        # Rule 2: importance <= 2 AND use_count == 0 AND age > 7 days → archived
+        low_imp = conn.execute(
+            "SELECT id FROM cortex_memories WHERE status='active' AND consolidated_into IS NULL "
+            "AND importance <= 2 AND use_count = 0 AND created_at < ?",
+            (quick_archive_threshold,)
+        ).fetchall()
+        for row in low_imp:
+            conn.execute("UPDATE cortex_memories SET status='archived', updated_at=strftime('%s','now') WHERE id=?", (row[0],))
+            archived_count += 1
+
+        if merged_count or archived_count:
+            conn.commit()
+            if merged_count:
+                log.info("Cortex consolidated %d memories", merged_count)
+                mlog.emit("info", "cortex", "cortex.consolidate", f"Merged {merged_count} memories")
+            if archived_count:
+                log.info("Cortex auto-archived %d stale memories", archived_count)
+                mlog.emit("info", "cortex", "cortex.staleness", f"Auto-archived {archived_count} stale memories")
+        return f"merged={merged_count}, archived={archived_count}"
+    except Exception as e:
+        log.debug("Cortex consolidation error: %s", e)
+        raise
+    finally:
+        conn.close()
+
+
 def _cortex_consolidate_loop():
     """Background daemon: periodically merge similar memories."""
     import time as _t
+    with _wf_lock:
+        _wf_registry["cortex_consolidation"]["started_at"] = _t.time()
     while True:
         prefs = _config.get("preferences", {})
         hours = max(1, prefs.get("cortex_consolidate_hours", 6))
         _t.sleep(hours * 3600)
         if not prefs.get("cortex_enabled", True):
             continue
+        if not _wf_is_enabled("cortex_consolidation"):
+            continue
+        _t0 = _t.time()
         try:
-            conn = _db_conn()
-            rows = conn.execute(
-                "SELECT id, fact, scope, scope_id, importance, keywords, memory_type FROM cortex_memories "
-                "WHERE consolidated_into IS NULL AND status='active'"
-            ).fetchall()
-
-            # Group by scope + memory_type (only merge within same type)
-            groups = {}
-            for row in rows:
-                key = (row[2], row[3], row[6] or "semantic")  # scope, scope_id, memory_type
-                groups.setdefault(key, []).append(row)
-
-            merged_count = 0
-            for key, members in groups.items():
-                if len(members) < 2:
-                    continue
-                # Compare all pairs
-                for i in range(len(members)):
-                    for j in range(i + 1, len(members)):
-                        kw_i = _cortex_tokenize(members[i][1])
-                        kw_j = _cortex_tokenize(members[j][1])
-                        if _jaccard_similarity(kw_i, kw_j) > 0.5:
-                            # Keep the one with higher importance
-                            keep = members[i] if members[i][4] >= members[j][4] else members[j]
-                            discard = members[j] if keep == members[i] else members[i]
-                            conn.execute(
-                                "UPDATE cortex_memories SET consolidated_into=?, updated_at=strftime('%s','now') WHERE id=?",
-                                (keep[0], discard[0])
-                            )
-                            merged_count += 1
-
-            # v0.28.3 — Staleness: auto-archive old unused memories
-            archive_days = prefs.get("cortex_archive_days", 60)
-            min_use = prefs.get("cortex_min_use_count", 3)
-            now = _t.time()
-            archive_threshold = now - (archive_days * 86400)
-            quick_archive_threshold = now - (7 * 86400)
-            archived_count = 0
-
-            # Rule 1: last_used_at > N days AND use_count < M → archived
-            stale = conn.execute(
-                "SELECT id FROM cortex_memories WHERE status='active' AND consolidated_into IS NULL "
-                "AND last_used_at IS NOT NULL AND last_used_at < ? AND use_count < ?",
-                (archive_threshold, min_use)
-            ).fetchall()
-            for row in stale:
-                conn.execute("UPDATE cortex_memories SET status='archived', updated_at=strftime('%s','now') WHERE id=?", (row[0],))
-                archived_count += 1
-
-            # Rule 2: importance <= 2 AND use_count == 0 AND age > 7 days → archived
-            low_imp = conn.execute(
-                "SELECT id FROM cortex_memories WHERE status='active' AND consolidated_into IS NULL "
-                "AND importance <= 2 AND use_count = 0 AND created_at < ?",
-                (quick_archive_threshold,)
-            ).fetchall()
-            for row in low_imp:
-                conn.execute("UPDATE cortex_memories SET status='archived', updated_at=strftime('%s','now') WHERE id=?", (row[0],))
-                archived_count += 1
-
-            if merged_count or archived_count:
-                conn.commit()
-                if merged_count:
-                    log.info("Cortex consolidated %d memories", merged_count)
-                    mlog.emit("info", "cortex", "cortex.consolidate", f"Merged {merged_count} memories")
-                if archived_count:
-                    log.info("Cortex auto-archived %d stale memories", archived_count)
-                    mlog.emit("info", "cortex", "cortex.staleness", f"Auto-archived {archived_count} stale memories")
-            conn.close()
+            result = _cortex_consolidate_once()
+            _wf_record_run("cortex_consolidation", success=True, result=result, duration_s=_t.time()-_t0)
         except Exception as e:
-            log.debug("Cortex consolidation error: %s", e)
+            _wf_record_run("cortex_consolidation", success=False, error=e, duration_s=_t.time()-_t0)
 
 
 
@@ -1492,23 +1591,33 @@ def _hygiene_run():
 def _context_hygiene_loop():
     """Background daemon: run hygiene at configured interval."""
     import time as _t
+    with _wf_lock:
+        _wf_registry["context_hygiene"]["started_at"] = _t.time()
     # Initial delay — let Porter boot
     _t.sleep(60)
     # Run once on startup
     try:
+        _t0 = _t.time()
         _hygiene_run()
+        _wf_record_run("context_hygiene", success=True, result="startup run", duration_s=_t.time()-_t0)
     except Exception as e:
         log.warning("Hygiene startup run failed: %s", e)
+        _wf_record_run("context_hygiene", success=False, error=e)
     while True:
         prefs = _config.get("preferences", {})
         hours = max(1, prefs.get("hygiene_interval_hours", 12))
         _t.sleep(hours * 3600)
         if not prefs.get("hygiene_enabled", True):
             continue
+        if not _wf_is_enabled("context_hygiene"):
+            continue
+        _t0 = _t.time()
         try:
             _hygiene_run()
+            _wf_record_run("context_hygiene", success=True, duration_s=_t.time()-_t0)
         except Exception as e:
             log.warning("Hygiene loop error: %s", e)
+            _wf_record_run("context_hygiene", success=False, error=e, duration_s=_t.time()-_t0)
 
 
 def _build_context_suffix(persona_id, message=""):
@@ -1590,6 +1699,9 @@ def _run_cap_checks(force: bool = False):
             }
     _capabilities_cache.update(checked)
     _capabilities_cache_ts = time.time()
+    _wf_record_run("capability_checks", success=True,
+                    result=f"{sum(1 for v in checked.values() if v.get('ok'))}/{len(checked)} ok",
+                    duration_s=time.time()-_capabilities_cache_ts+0.001)
     try:
         (RUNTIME_DIR / "capabilities.json").write_text(
             json.dumps(list(checked.values()), indent=2)
@@ -4186,14 +4298,32 @@ def _run_heartbeat(persona_id, persona_name):
                   persona_id=persona_id, trace_id=_get_trace_id())
 
 
+def _cap_checks_loop():
+    """Background daemon: run capability checks every 30s."""
+    import time as _ct
+    with _wf_lock:
+        _wf_registry["capability_checks"]["started_at"] = _ct.time()
+    while True:
+        if _wf_is_enabled("capability_checks"):
+            _run_cap_checks(force=True)
+        _ct.sleep(30)
+
 def _heartbeat_loop():
     """Background daemon loop for persona heartbeats — ticks every 60s."""
     import time as _htime
+    with _wf_lock:
+        _wf_registry["heartbeat"]["started_at"] = _htime.time()
     while True:
+        if not _wf_is_enabled("heartbeat"):
+            _htime.sleep(60)
+            continue
+        _t0 = _htime.time()
         try:
             _heartbeat_tick()
+            _wf_record_run("heartbeat", success=True, duration_s=_htime.time()-_t0)
         except Exception as e:
             log.debug("Heartbeat loop error: %s", e)
+            _wf_record_run("heartbeat", success=False, error=e, duration_s=_htime.time()-_t0)
         _htime.sleep(60)
 
 
@@ -5933,16 +6063,23 @@ def _rollup_daily():
 def _telemetry_rollup_loop():
     """Background thread: runs hourly + daily rollups."""
     import time as _t
+    with _wf_lock:
+        _wf_registry["telemetry_rollup"]["started_at"] = _t.time()
     while True:
         _t.sleep(3600)  # Run every hour
+        if not _wf_is_enabled("telemetry_rollup"):
+            continue
+        _t0 = _t.time()
         try:
             _rollup_hourly()
             # Daily rollup at midnight-ish
             hour = int((_t.time() % 86400) / 3600)
             if hour == 0:
                 _rollup_daily()
+            _wf_record_run("telemetry_rollup", success=True, duration_s=_t.time()-_t0)
         except Exception as e:
             log.error("Telemetry rollup loop error: %s", e)
+            _wf_record_run("telemetry_rollup", success=False, error=e, duration_s=_t.time()-_t0)
 
 
 def _append_audit(action: str, target: str, actor: str,
@@ -8316,7 +8453,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.10</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.11</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8741,18 +8878,15 @@ select.settings-input { padding-right: 26px; }
   <div id="projects-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Projects</span>
-      <select id="proj-persona-filter" class="settings-input" style="font-size:11px;min-width:130px;margin-left:8px" onchange="filterProjectsByPersona(this.value)">
-        <option value="">All personas</option>
-      </select>
-      <span id="proj-refresh-indicator" style="font-size:11px;color:var(--text3);margin-left:auto"></span>
     </div>
-    <div class="module-intro">Active projects and their task backlogs.</div>
-    <div id="proj-content-projects"></div>
-
-    <!-- Shared Coordination Files (moved from Memory tab) -->
-    <div style="margin-top:16px">
-      <div class="mem-section-label">Shared Files</div>
-      <div id="proj-shared-files" class="mem-coord-rail"></div>
+    <div style="padding:64px 24px;text-align:center;color:var(--text3)">
+      <div style="font-size:48px;margin-bottom:16px;opacity:.4">&#128193;</div>
+      <div style="font-size:18px;font-weight:600;color:var(--text2);margin-bottom:8px">Coming Soon</div>
+      <div style="max-width:400px;margin:0 auto;line-height:1.6;font-size:13px">
+        Project management with task backlogs, agent assignments, sprint tracking, and governance workflows.
+        <br><br>
+        <span style="font-size:11px;color:var(--text3)">Backend API is ready &mdash; UI is being redesigned.</span>
+      </div>
     </div>
   </div>
 
@@ -8832,105 +8966,29 @@ select.settings-input { padding-right: 26px; }
   <div id="workflows-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Workflows</span>
-      <button class="btn btn-ghost" onclick="loadWorkflows()">&#8635; Refresh</button>
+      <button class="btn btn-ghost" onclick="loadWorkflowRegistry()">&#8635; Refresh</button>
     </div>
-    <div class="module-intro">Scheduled automations and cron jobs.</div>
+    <div class="module-intro">Porter's background daemons and system workflows.</div>
 
-    <!-- Build Workflow section -->
+    <!-- System Workflows -->
     <div style="margin-bottom:24px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">Build Workflow</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">System Workflows</div>
+        <span id="wf-sys-count" style="font-size:11px;color:var(--text3)"></span>
       </div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Dispatch a build task to an agent. Porter handles dispatch, tracking, and optionally commits + restarts.</div>
-        <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
-          <div style="flex:1;min-width:200px">
-            <label style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);display:block;margin-bottom:3px">Task</label>
-            <input type="text" id="build-task" class="settings-input" placeholder="Describe the build task..." style="width:100%">
-          </div>
-          <div>
-            <label style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);display:block;margin-bottom:3px">Agent</label>
-            <select id="build-backend" class="settings-input" style="min-width:100px">
-              <option value="">Auto</option>
-              <option value="openclaw">OpenClaw</option>
-              <option value="codex">Codex</option>
-              <option value="claude">Claude</option>
-              <option value="gemini">Gemini</option>
-            </select>
-          </div>
-          <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer">
-            <input type="checkbox" id="build-auto-commit"> Auto-commit
-          </label>
-          <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer">
-            <input type="checkbox" id="build-auto-restart"> Auto-restart
-          </label>
-          <button class="btn btn-primary" onclick="runBuild()" style="white-space:nowrap">Run</button>
-        </div>
-        <div id="build-runs" style="margin-top:12px;max-height:250px;overflow-y:auto"></div>
-      </div>
+      <div id="wf-system-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px"></div>
     </div>
 
-
-    <!-- Chain Builder section -->
-    <div style="margin-bottom:24px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">Chain Builder</div>
-        <button class="btn btn-ghost" style="font-size:11px" onclick="loadChainRuns()">&#8635; Runs</button>
-      </div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Build multi-step AI chains. Each step pipes its output to the next.</div>
-        <div id="chain-steps" style="margin-bottom:10px"></div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <button class="btn btn-ghost" onclick="addChainStep()" style="font-size:11px">+ Add Step</button>
-          <div style="flex:1;min-width:150px">
-            <input type="text" id="chain-input" class="settings-input" placeholder="Initial input for the chain..." style="width:100%">
-          </div>
-          <button class="btn btn-primary" onclick="runChain()" style="white-space:nowrap">Run Chain</button>
-        </div>
-        <div id="chain-runs" style="margin-top:12px;max-height:250px;overflow-y:auto"></div>
-      </div>
-    </div>
-
-
-    <!-- Heartbeats section (Phase E) -->
-    <div style="margin-bottom:24px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">Heartbeats</div>
-        <span style="font-size:11px;color:var(--text3)">Periodic persona check-ins</span>
-      </div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Each persona can have a heartbeat checklist. When the schedule fires, Porter dispatches the checklist to the persona.</div>
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-          <select id="hb-persona-sel" class="settings-input" style="font-size:12px;min-width:180px" onchange="loadHeartbeatConfig(this.value)">
-            <option value="">Select persona...</option>
-          </select>
-        </div>
-        <div id="hb-editor" style="display:none">
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-            <label style="font-size:11px;color:var(--text2)">Cron:</label>
-            <input id="hb-cron" class="settings-input" style="font-size:12px;width:120px" placeholder="0 9 * * *" title="5-field cron expression">
-            <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer">
-              <input type="checkbox" id="hb-enabled"> Enabled
-            </label>
-            <span id="hb-last" style="font-size:10px;color:var(--text3);margin-left:auto"></span>
-          </div>
-          <textarea id="hb-checklist" class="settings-input" style="font-size:12px;min-height:100px;width:100%;resize:vertical;font-family:monospace" placeholder="- [ ] Check system health
-- [ ] Review pending tasks
-- [ ] Update daily log"></textarea>
-          <div style="display:flex;gap:8px;margin-top:8px">
-            <button class="btn btn-primary" onclick="saveHeartbeatConfig()" style="font-size:12px">Save</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Automations / Cron section -->
+    <!-- User Workflows -->
     <div style="margin-bottom:16px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">Automations</div>
-        <span id="wf-cron-count" style="font-size:11px;color:var(--text3)"></span>
+        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">User Workflows</div>
       </div>
-      <div id="wf-cron-list"></div>
+      <div style="padding:32px;text-align:center;color:var(--text3);font-size:13px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">
+        <div style="font-size:24px;margin-bottom:8px;opacity:.5">&#128679;</div>
+        <div style="font-weight:500;color:var(--text2);margin-bottom:4px">Coming Soon</div>
+        <div>Custom user-defined workflows with triggers, conditions, and multi-step agent chains.</div>
+      </div>
     </div>
   </div>
 
@@ -9643,6 +9701,9 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.28.11', date:'2026-03-07', notes:['Workflow Registry: 6 system workflows exposed as monitorable, configurable cards','GET /api/workflows + POST trigger/toggle/config endpoints','Daemons instrumented: cortex, hygiene, cap-checks, heartbeat, rollup, memory extraction','Workflows tab redesigned: live status, run history, pause/resume, config editing, manual trigger','Projects tab replaced with Coming Soon placeholder (backend preserved)','Agent persona files: quality MEMORY.md + ROLE_CARD.md for all 9 agents with conflict detection','Dead code removed: runBuild, chain builder, heartbeat editor, old workflow skills UI'] },
+  { ver:'v0.28.10', date:'2026-03-07', notes:['UI Polish Batch — visual refinements across tabs'] },
+  { ver:'v0.28.9', date:'2026-03-07', notes:['Memory map resize fix, context budget improvements, history trimmer for dispatch'] },
   { ver:'v0.28.8', date:'2026-03-07', notes:['Fix: persona dispatch prompt capped at 6000 chars (prevents CLI timeout on long conversations)','Fix: conversation history trimmed to last 3 turns before dispatch','Fix: stale thinking indicator cleared on poll timeout/error — shows clear error message','Fix: poll loop detects failed status and shows error text instead of generic timeout','Dispatch timeout increased to 180s for Claude CLI (heavy persona context)'] },
   { ver:'v0.28.7', date:'2026-03-07', notes:['Streaming token reveal — typewriter-style animation for chat responses','Token buffer with adaptive chunk sizing (4/10/18 chars based on buffer depth)','16ms drain interval for smooth 60fps rendering','Graceful finish: pending-done flag waits for buffer drain before closing stream','Reset on stop/error/new-send for clean state management'] },
   { ver:'v0.28.6', date:'2026-03-07', notes:['/ship chat command — validate version consistency + trigger release pipeline','GET /api/ship/validate — checks all 6 version strings match, syntax compiles, uncommitted changes','Ship gate: pre-commit validation prevents mismatched versions','Autocomplete + help text updated'] },
@@ -11526,204 +11587,152 @@ function switchModule(name) {
         if (document.getElementById('overview-module') && document.getElementById('overview-module').classList.contains('active')) loadPersonas();
         else clearInterval(window._personaRefreshTimer);
       }, 30000);
-    }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); }, projects: loadProjects, admin: loadAdmin,
+    }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); }, projects: function() {}, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
-    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, cortex: _loadCortexTab, workflows: function() { loadWorkflows(); loadBuildStatus(); }, settings: syncSettingsUI,
+    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, cortex: _loadCortexTab, workflows: loadWorkflowRegistry, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
 
 
-// ── S10: Workflows — Skills browser + Automations ──────────────────────────
-let _wfSkills = [];
-let _wfShowAll = false;
+// ── S10: Workflow Registry UI ──────────────────────────────────────────────
 
-async function runBuild() {
-  const taskEl = document.getElementById('build-task');
-  const backendEl = document.getElementById('build-backend');
-  const autoCommit = document.getElementById('build-auto-commit');
-  const autoRestart = document.getElementById('build-auto-restart');
-  if (!taskEl || !taskEl.value.trim()) { toast('Enter a build task', 'warn'); return; }
-  const task = taskEl.value.trim();
-  taskEl.value = '';
-  toast('Starting build...', 'info');
+async function loadWorkflowRegistry() {
+  var grid = document.getElementById('wf-system-grid');
+  var countEl = document.getElementById('wf-sys-count');
+  if (!grid) return;
+  grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--text3);font-size:12px">Loading workflows...</div>';
   try {
-    const res = await api('/api/build/run', {
-      task: task,
-      backend: backendEl ? backendEl.value : '',
-      auto_commit: autoCommit ? autoCommit.checked : false,
-      auto_restart: autoRestart ? autoRestart.checked : false,
-    });
-    if (res && res.ok) {
-      toast('Build ' + res.build_id + ' started', 'ok');
-      setTimeout(loadBuildStatus, 2000);
-    } else {
-      toast((res && res.error) || 'Build failed', 'err');
-    }
-  } catch(e) { toast('Build error: ' + e.message, 'err'); }
-}
-
-async function loadBuildStatus() {
-  const el = document.getElementById('build-runs');
-  if (!el) return;
-  try {
-    const data = await api('/api/build/status');
-    if (!data || !data.builds || !data.builds.length) {
-      el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px 0">No recent builds</div>';
-      return;
-    }
-    el.innerHTML = data.builds.map(b => {
-      const st = b.status || 'pending';
-      const stColor = st === 'complete' ? '#22c55e' : st === 'failed' ? '#ef4444' : '#f59e0b';
-      const dur = b.duration_ms ? (b.duration_ms / 1000).toFixed(1) + 's' : '...';
-      const preview = escHtml((b.message || '').substring(0, 80));
-      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">'
-        + '<span style="width:6px;height:6px;border-radius:50%;background:' + stColor + ';flex-shrink:0"></span>'
-        + '<span style="color:var(--text2);min-width:50px">' + escHtml(b.to_agent || '') + '</span>'
-        + '<span style="color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + preview + '</span>'
-        + '<span style="color:var(--text3);min-width:35px;text-align:right">' + dur + '</span>'
+    var data = await api('/api/workflows');
+    if (!data || !data.workflows) { grid.innerHTML = '<div style="padding:16px;color:var(--text3);text-align:center">No workflows</div>'; return; }
+    var wfs = data.workflows;
+    if (countEl) countEl.textContent = wfs.length + ' workflow' + (wfs.length !== 1 ? 's' : '');
+    grid.innerHTML = wfs.map(function(wf) {
+      var dotColor = wf.status === 'active' ? '#22c55e' : wf.status === 'paused' ? '#9ca3af' : '#ef4444';
+      var lastRun = wf.last_run ? _wfTimeAgo(wf.last_run) : 'never';
+      var nextRun = wf.next_run ? _wfTimeAgo(wf.next_run) : (wf.interval === 'per-response' ? 'per-response' : '\u2014');
+      var durStr = wf.last_duration_s ? wf.last_duration_s.toFixed(2) + 's' : '\u2014';
+      var errBanner = wf.last_error ? '<div style="margin-top:8px;padding:6px 8px;background:color-mix(in srgb,#ef4444 8%,transparent);border:1px solid color-mix(in srgb,#ef4444 20%,transparent);border-radius:6px;font-size:11px;color:#ef4444;word-break:break-word">' + escHtml(wf.last_error) + '</div>' : '';
+      var toggleLabel = wf.status === 'paused' ? 'Resume' : 'Pause';
+      return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+        + '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0"></span>'
+        + '<span style="font-weight:600;font-size:13px;color:var(--text)">' + escHtml(wf.name) + '</span>'
+        + '<span style="font-size:10px;color:var(--text3);margin-left:auto;font-family:monospace">' + escHtml(wf.interval) + '</span>'
+        + '</div>'
+        + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.4">' + escHtml(wf.description) + '</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:11px;margin-bottom:10px">'
+        + '<div style="color:var(--text3)">Last run: <span style="color:var(--text2)">' + lastRun + '</span></div>'
+        + '<div style="color:var(--text3)">Next run: <span style="color:var(--text2)">' + nextRun + '</span></div>'
+        + '<div style="color:var(--text3)">Runs: <span style="color:var(--text2)">' + (wf.run_count || 0) + '</span></div>'
+        + '<div style="color:var(--text3)">Errors: <span style="color:' + (wf.error_count ? '#ef4444' : 'var(--text2)') + '">' + (wf.error_count || 0) + '</span></div>'
+        + '<div style="color:var(--text3)">Duration: <span style="color:var(--text2)">' + durStr + '</span></div>'
+        + '<div style="color:var(--text3)">Status: <span style="color:var(--text2)">' + escHtml(wf.status) + '</span></div>'
+        + '</div>'
+        + errBanner
+        + '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
+        + '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfToggle(\'' + wf.id + '\')">' + toggleLabel + '</button>'
+        + '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfTrigger(\'' + wf.id + '\')">\u25B6 Run Now</button>'
+        + (wf.config_keys && wf.config_keys.length ? '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfShowConfig(\'' + wf.id + '\')">\u2699 Config</button>' : '')
+        + '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfShowHistory(\'' + wf.id + '\')">History</button>'
+        + '</div>'
+        + '<div id="wf-config-' + wf.id + '" style="display:none;margin-top:8px;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px">'
+        + (wf.config_keys || []).map(function(k) {
+          var val = (wf.config && wf.config[k] != null) ? wf.config[k] : '';
+          return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px">'
+            + '<label style="min-width:140px;color:var(--text3)">' + escHtml(k) + '</label>'
+            + '<input class="settings-input wf-cfg-input" data-wf="' + wf.id + '" data-key="' + escHtml(k) + '" value="' + escHtml(String(val)) + '" style="flex:1;font-size:12px">'
+            + '</div>';
+        }).join('')
+        + '<button class="btn btn-primary" style="font-size:11px;margin-top:4px" onclick="_wfSaveConfig(\'' + wf.id + '\')">Save</button>'
+        + '</div>'
+        + '<div id="wf-history-' + wf.id + '" style="display:none;margin-top:8px;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;max-height:200px;overflow-y:auto"></div>'
         + '</div>';
     }).join('');
   } catch(e) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px 0">Failed to load builds</div>';
+    grid.innerHTML = '<div style="padding:16px;color:var(--text3);text-align:center">Failed to load workflows</div>';
   }
 }
 
-
-var _chainStepCount = 0;
-
-function addChainStep() {
-  _chainStepCount++;
-  var container = document.getElementById('chain-steps');
-  if (!container) return;
-  var div = document.createElement('div');
-  div.id = 'chain-step-' + _chainStepCount;
-  div.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px';
-  var stepNum = _chainStepCount;
-  div.innerHTML = '<span style="font-size:11px;font-weight:600;color:var(--text3);min-width:18px">' + stepNum + '</span>'
-    + '<select class="settings-input chain-backend" style="min-width:90px"><option value="openclaw">OpenClaw</option><option value="gemini">Gemini</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="ollama">Ollama</option></select>'
-    + '<input type="text" class="settings-input chain-prompt" placeholder="Prompt template ({input} = original, {previous} = last output)" style="flex:1">'
-    + '<button class="btn btn-ghost" style="font-size:11px;color:var(--err)" onclick="removeChainStep(' + stepNum + ')">×</button>';
-  container.appendChild(div);
+function _wfTimeAgo(ts) {
+  if (!ts) return '\u2014';
+  var now = Date.now() / 1000;
+  var diff = now - ts;
+  if (diff < 0) { return 'in ' + _wfFmtDur(-diff); }
+  return _wfFmtDur(diff) + ' ago';
 }
 
-function removeChainStep(num) {
-  var el = document.getElementById('chain-step-' + num);
-  if (el) el.remove();
+function _wfFmtDur(s) {
+  if (s < 60) return Math.round(s) + 's';
+  if (s < 3600) return Math.round(s / 60) + 'm';
+  if (s < 86400) return Math.round(s / 3600) + 'h';
+  return Math.round(s / 86400) + 'd';
 }
 
-function renderChainSteps() {
-  // Re-number visible steps
-  var container = document.getElementById('chain-steps');
-  if (!container) return;
-  var steps = container.children;
-  for (var i = 0; i < steps.length; i++) {
-    var span = steps[i].querySelector('span');
-    if (span) span.textContent = (i + 1);
-  }
-}
-
-async function runChain() {
-  var container = document.getElementById('chain-steps');
-  var inputEl = document.getElementById('chain-input');
-  if (!container || !inputEl) return;
-  var steps = [];
-  var stepEls = container.children;
-  for (var i = 0; i < stepEls.length; i++) {
-    var be = stepEls[i].querySelector('.chain-backend');
-    var pr = stepEls[i].querySelector('.chain-prompt');
-    if (be && pr && pr.value.trim()) {
-      var beVal = be.value;
-      if (beVal.startsWith('persona:')) {
-        steps.push({persona_id: beVal.slice(8), prompt: pr.value.trim()});
-      } else {
-        steps.push({backend: beVal, prompt: pr.value.trim()});
-      }
-    }
-  }
-  if (!steps.length) { toast('Add at least one step', 'warn'); return; }
-  var input = inputEl.value.trim();
-  if (!input) { toast('Enter initial input', 'warn'); return; }
-  toast('Starting chain (' + steps.length + ' steps)...', 'info');
+async function _wfToggle(id) {
   try {
-    var res = await api('/api/bridge/chain', {steps: steps, input: input, timeout_per_step: 120});
-    if (res && res.ok) {
-      toast('Chain ' + res.chain_id + ' started', 'ok');
-      setTimeout(loadChainRuns, 3000);
-    } else {
-      toast((res && res.error) || 'Chain failed to start', 'err');
-    }
-  } catch(e) { toast('Chain error: ' + e.message, 'err'); }
+    var r = await api('/api/workflows/' + id + '/toggle', {});
+    if (r && r.ok) { toast(id + ' ' + r.action, 'ok'); loadWorkflowRegistry(); }
+    else toast((r && r.error) || 'Toggle failed', 'err');
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
 }
 
-function populateHeartbeatPersonas() {
-  var sel = document.getElementById('hb-persona-sel');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">Select persona...</option>' +
-    (_personas || []).map(function(p) {
-      return '<option value="' + p.id + '">' + escHtml((p.avatar||'') + ' ' + p.name) + '</option>';
-    }).join('');
-}
-
-async function loadHeartbeatConfig(personaId) {
-  var editor = document.getElementById('hb-editor');
-  if (!personaId) { if (editor) editor.style.display = 'none'; return; }
-  if (editor) editor.style.display = 'block';
+async function _wfTrigger(id) {
   try {
-    var r = await api('/api/personas/' + personaId + '/heartbeat', {});
-    if (r && r.ok) {
-      document.getElementById('hb-cron').value = r.cron || '';
-      document.getElementById('hb-enabled').checked = !!r.enabled;
-      document.getElementById('hb-checklist').value = r.checklist || '';
-      document.getElementById('hb-last').textContent = r.last_heartbeat ? 'Last: ' + r.last_heartbeat : 'Never run';
-    }
-  } catch(e) { console.debug('loadHeartbeatConfig:', e); }
+    var r = await api('/api/workflows/' + id + '/trigger', {});
+    if (r && r.ok) { toast('Triggered ' + id, 'ok'); setTimeout(loadWorkflowRegistry, 2000); }
+    else toast((r && r.error) || 'Trigger failed', 'err');
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
 }
 
-async function saveHeartbeatConfig() {
-  var sel = document.getElementById('hb-persona-sel');
-  var personaId = sel ? sel.value : '';
-  if (!personaId) { toast('Select a persona first', 'warn'); return; }
-  var data = {
-    action: 'save',
-    cron: (document.getElementById('hb-cron').value || '').trim(),
-    enabled: document.getElementById('hb-enabled').checked,
-    checklist: (document.getElementById('hb-checklist').value || ''),
-  };
+function _wfShowConfig(id) {
+  var el = document.getElementById('wf-config-' + id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function _wfSaveConfig(id) {
+  var inputs = document.querySelectorAll('.wf-cfg-input[data-wf="' + id + '"]');
+  var body = {};
+  inputs.forEach(function(inp) {
+    var key = inp.getAttribute('data-key');
+    var val = inp.value;
+    var num = Number(val);
+    body[key] = (val !== '' && !isNaN(num)) ? num : (val === 'true' ? true : val === 'false' ? false : val);
+  });
   try {
-    var r = await api('/api/personas/' + personaId + '/heartbeat', data);
-    if (r && r.ok) toast('Heartbeat saved', 'ok');
+    var r = await api('/api/workflows/' + id + '/config', body);
+    if (r && r.ok) { toast('Config saved', 'ok'); loadWorkflowRegistry(); }
     else toast((r && r.error) || 'Save failed', 'err');
   } catch(e) { toast('Error: ' + e.message, 'err'); }
 }
 
-async function loadChainRuns() {
-  var el = document.getElementById('chain-runs');
+function _wfShowHistory(id) {
+  var el = document.getElementById('wf-history-' + id);
   if (!el) return;
-  try {
-    var data = await api('/api/bridge/chains');
-    if (!data || !data.chains || !data.chains.length) {
-      el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px 0">No chain runs yet</div>';
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  api('/api/workflows').then(function(data) {
+    if (!data || !data.workflows) return;
+    var wf = data.workflows.find(function(w) { return w.id === id; });
+    if (!wf || !wf.history || !wf.history.length) {
+      el.innerHTML = '<div style="font-size:12px;color:var(--text3);text-align:center;padding:8px">No history yet</div>';
       return;
     }
-    el.innerHTML = data.chains.map(function(c) {
-      var st = c.status || 'pending';
-      var stColor = st === 'complete' ? '#22c55e' : st === 'failed' ? '#ef4444' : '#f59e0b';
-      var dur = c.total_duration_ms ? (c.total_duration_ms / 1000).toFixed(1) + 's' : '...';
-      var tokens = c.total_tokens || 0;
-      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">'
-        + '<span style="width:6px;height:6px;border-radius:50%;background:' + stColor + ';flex-shrink:0"></span>'
-        + '<span style="color:var(--text2);min-width:80px;font-family:monospace;font-size:10px">' + escHtml(c.chain_id || '') + '</span>'
-        + '<span style="color:var(--text3)">' + (c.step_count || 0) + ' steps</span>'
-        + '<span style="color:var(--text3);margin-left:auto">' + dur + '</span>'
-        + (tokens ? '<span style="color:var(--text3);font-size:10px">' + tokens + ' tok</span>' : '')
-        + '</div>';
-    }).join('');
-  } catch(e) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px 0">Failed to load chains</div>';
-  }
+    el.innerHTML = '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px">Last ' + wf.history.length + ' runs</div>'
+      + wf.history.slice().reverse().map(function(h) {
+        var ts = h.ts ? new Date(h.ts * 1000).toLocaleTimeString() : '';
+        var dot = h.ok ? '#22c55e' : '#ef4444';
+        var dur = h.duration_s ? h.duration_s.toFixed(2) + 's' : '';
+        return '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:11px;border-bottom:1px solid var(--border)">'
+          + '<span style="width:5px;height:5px;border-radius:50%;background:' + dot + '"></span>'
+          + '<span style="color:var(--text3)">' + ts + '</span>'
+          + '<span style="color:var(--text2)">' + dur + '</span>'
+          + (h.error ? '<span style="color:#ef4444;margin-left:auto;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(h.error) + '</span>' : '')
+          + (h.result ? '<span style="color:var(--text3);margin-left:auto;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(h.result) + '</span>' : '')
+          + '</div>';
+      }).join('');
+  });
 }
-
 
 async function loadSkills() {
   var grid = document.getElementById('wf-skills-grid');
@@ -11805,126 +11814,9 @@ function _appendSkillBatch(grid, skills) {
   });
 }
 
-async function loadWorkflows() {
-  populateHeartbeatPersonas();
-  const [skillRes, cronRes] = await Promise.all([
-    api('/api/openclaw/skills'),
-    api('/api/openclaw/cron'),
-  ]);
 
-  // Skills
-  _wfSkills = (skillRes && skillRes.skills) || [];
-  const installed = _wfSkills.filter(function(sk) { return sk.installed; });
-  const countEl = document.getElementById('wf-skills-count');
-  if (countEl) countEl.textContent = installed.length + ' installed / ' + _wfSkills.length + ' total';
-  _renderFilteredSkills();
 
-  // Load chain runs
-  loadChainRuns();
 
-  // Cron / Automations
-  const jobs = (cronRes && cronRes.jobs) || [];
-  const runs = (cronRes && cronRes.runs) || [];
-  const cronCountEl = document.getElementById('wf-cron-count');
-  const cronListEl = document.getElementById('wf-cron-list');
-  if (cronCountEl) cronCountEl.textContent = jobs.length + ' job' + (jobs.length !== 1 ? 's' : '');
-  if (cronListEl) {
-    if (!jobs.length && !runs.length) {
-      cronListEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text3);font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">'
-        + '<div style="font-size:14px;margin-bottom:4px">No automations configured</div>'
-        + '<div>Automations combine skills into scheduled or triggered workflows.</div>'
-        + '<div style="margin-top:8px;color:var(--text3)">Configure cron jobs in OpenClaw to see them here.</div>'
-        + '</div>';
-    } else {
-      let html = '';
-      jobs.forEach(function(j) {
-        html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);margin-bottom:6px">'
-          + '<div style="display:flex;align-items:center;gap:8px">'
-          + '<span style="font-weight:500;font-size:13px;color:var(--text)">' + escHtml(j.name || j.id || 'Job') + '</span>'
-          + '<span style="font-size:11px;color:var(--text3);margin-left:auto">' + escHtml(j.schedule || '') + '</span>'
-          + '</div>'
-          + (j.description ? '<div style="font-size:12px;color:var(--text3);margin-top:4px">' + escHtml(j.description) + '</div>' : '')
-          + '</div>';
-      });
-      if (runs.length) {
-        html += '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px 4px">Recent runs</div>';
-        runs.forEach(function(r) {
-          var ts = r.modified ? new Date(r.modified * 1000).toLocaleString() : '';
-          var sizeKb = r.size ? (r.size / 1024).toFixed(1) + 'KB' : '';
-          html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);margin-bottom:4px;font-size:12px">'
-            + '<span style="color:var(--text2)">' + escHtml(r.id || 'run') + '</span>'
-            + '<span style="color:var(--text3);margin-left:auto">' + escHtml(ts) + '</span>'
-            + (sizeKb ? '<span style="color:var(--text3);font-size:10px">' + sizeKb + '</span>' : '')
-            + '</div>';
-        });
-      }
-      cronListEl.innerHTML = html;
-    }
-  }
-}
-
-function _renderFilteredSkills() {
-  const q = (document.getElementById('wf-skill-filter') || {}).value || '';
-  const lower = q.toLowerCase();
-  let filtered = _wfSkills;
-  if (!_wfShowAll) {
-    filtered = filtered.filter(function(sk) { return sk.installed; });
-  }
-  if (lower) {
-    filtered = filtered.filter(function(sk) {
-      return (sk.name && sk.name.toLowerCase().indexOf(lower) !== -1)
-        || (sk.description && sk.description.toLowerCase().indexOf(lower) !== -1)
-        || (sk.id && sk.id.toLowerCase().indexOf(lower) !== -1);
-    });
-  }
-  renderWorkflowSkills(filtered);
-}
-
-function toggleShowAllSkills() {
-  _wfShowAll = !_wfShowAll;
-  const btn = document.getElementById('wf-show-all-btn');
-  if (btn) btn.textContent = _wfShowAll ? 'Show installed' : 'Show all';
-  _renderFilteredSkills();
-}
-
-function renderWorkflowSkills(skills) {
-  const grid = document.getElementById('wf-skills-grid');
-  if (!grid) return;
-  if (!skills.length) {
-    grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--text3);font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">'
-      + (_wfShowAll ? 'No skills match your filter.' : 'No installed skills found. Click "Show all" to see available skills.')
-      + '</div>';
-    return;
-  }
-  grid.innerHTML = skills.map(function(sk) {
-    const emoji = sk.emoji || '\u2699';
-    const name = escHtml(sk.name);
-    const desc = escHtml(sk.description ? (sk.description.length > 80 ? sk.description.substring(0, 77) + '...' : sk.description) : 'No description');
-    const installed = sk.installed;
-    const manual = sk.manual;
-    const borderColor = installed ? 'var(--border)' : 'var(--border2)';
-    const opacity = installed ? '1' : '0.7';
-    const badge = !installed ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--raised);color:var(--text3);margin-left:auto">not installed</span>'
-      : manual ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);margin-left:auto">manual</span>'
-      : '';
-    const removeBtn = (installed || manual) ? '<button class="btn-xs" style="font-size:10px;padding:1px 6px;border:1px solid var(--border2);border-radius:3px;background:none;color:var(--text3);cursor:pointer;margin-left:4px" onclick="event.stopPropagation();removeSkill(\'' + escHtml(sk.id) + '\',\'' + name + '\')">\u00d7</button>' : '';
-    const installBtn = (!installed && !manual) ? '<button class="btn-xs" style="font-size:10px;padding:2px 8px;border:1px solid var(--accent);border-radius:4px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);cursor:pointer;margin-left:4px" onclick="event.stopPropagation();installSkill(\'' + escHtml(sk.id || sk.name) + '\',\'' + name + '\')">' + (sk.eligible !== false ? 'Install' : 'Setup') + '</button>' : '';
-    return '<div class="wf-skill-card" style="border-color:' + borderColor + ';opacity:' + opacity + '">'
-      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
-      + '<span style="font-size:16px">' + emoji + '</span>'
-      + '<span style="font-weight:500;font-size:13px;color:var(--text)">' + name + '</span>'
-      + badge + installBtn + removeBtn
-      + '</div>'
-      + '<div style="font-size:11px;color:var(--text3);line-height:1.4">' + desc + '</div>'
-      + (sk.requires && sk.requires.length ? '<div style="font-size:10px;color:var(--text3);margin-top:4px">Requires: ' + sk.requires.join(', ') + '</div>' : '')
-      + (sk.missing && sk.missing.bins && sk.missing.bins.length ? '<div style="font-size:10px;color:var(--danger,#ef4444);margin-top:3px">Missing: ' + sk.missing.bins.join(', ') + '</div>' : '')
-      + '</div>';
-  }).join('');
-}
-
-function filterWorkflowSkills() {
-  _renderFilteredSkills();
-}
 
 
 async function installSkill(id, name) {
@@ -11977,671 +11869,9 @@ function toggleCreateSkillForm() {
   if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
 }
 
-// ── Projects / Models / Tasks dashboard ─────────────────────────────────────
-// State
-let _projProjects = [];   // unified project list (registry + task-derived)
-let _projActiveId = null;
-let _projAllTasks = [];
-let _projExpanded = new Set();  // project ids that are expanded
-let _projDoneOpen = new Set();  // project ids with Done section open (auto-opens when ≤10)
-let _projOpenCollapsed = new Set();  // project ids with Open section collapsed
-let _cpTaskForModal = null;
-let _projFileCache = {};          // S7: project data cache
+// ── Projects (Coming Soon — backend kept, UI replaced) ─────────────────────
+function loadProjects() { /* no-op: Coming Soon */ }
 
-async function loadProjects() {
-  populateProjPersonaFilter();
-  const el = document.getElementById('proj-content-projects');
-  if (el) el.innerHTML = '<div class="loading-indicator" style="padding:16px 28px">Loading projects</div>';
-
-  const [regData, taskData] = await Promise.all([
-    api('/api/projects'),
-    api('/api/task-registry'),
-  ]);
-
-  const regProjects = (regData && regData.projects) || [];
-  _projConfigProjects = regProjects;  // S7: cache for config editor
-  _projActiveId    = regData && regData.active_project_id;
-  _projAllTasks    = (taskData && taskData.tasks) || [];
-
-  // Build unified project list: start from registry, then add any
-  // project referenced by tasks that isn't already there.
-  const byId   = new Map(regProjects.map(p => [p.id, {...p}]));
-  const byName = new Map(regProjects.map(p => [(p.name || '').toLowerCase(), p.id]));
-
-  _projAllTasks.forEach(t => {
-    if (t.project_id && t.project_name && !byId.has(t.project_id)) {
-      const key = (t.project_name || '').toLowerCase();
-      if (!byName.has(key)) {
-        const ghost = { id: t.project_id, name: t.project_name };
-        byId.set(t.project_id, ghost);
-        byName.set(key, t.project_id);
-      }
-    }
-  });
-
-  _projProjects = [...byId.values()];
-  // Auto-expand all on first load; preserve state after that
-  if (_projExpanded.size === 0) _projProjects.forEach(p => _projExpanded.add(p.id));
-  _renderProjectList();
-  _renderProjSharedFiles();
-  _projLastRefreshTs = Date.now();
-  _updateProjRefreshIndicator();
-  startProjAutoRefresh();
-}
-
-async function _renderProjSharedFiles() {
-  var el = document.getElementById('proj-shared-files');
-  if (!el) return;
-  try {
-    var resp = await api('/api/memory/overview');
-    var files = (resp && resp.coordination_files) || [];
-    if (!files.length) {
-      el.innerHTML = '<div class="mem-coord-item"><span class="coord-name">projects.md</span><span class="coord-desc">shared by all agents</span><button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="openConfigPanel(\'memory\',\'coordination\')">view</button></div>';
-      return;
-    }
-    el.innerHTML = files.map(function(f) {
-      return '<div class="mem-coord-item">'
-        + '<span class="coord-name">' + escHtml(f.name) + '</span>'
-        + '<span class="coord-desc">' + escHtml(f.description || 'shared by all agents') + '</span>'
-        + '<span class="coord-size">' + (f.size ? (f.size > 1024 ? (f.size/1024).toFixed(1) + ' KB' : f.size + ' B') : '') + '</span>'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="openConfigPanel(\'memory\',\'coordination\')">view</button>'
-        + '</div>';
-    }).join('');
-  } catch(e) {
-    el.innerHTML = '<div style="font-size:11px;color:var(--text3)">Could not load shared files</div>';
-  }
-}
-
-function switchProjTab(tab) { /* compat no-op */ }
-
-// S7: Auto-refresh projects every 30s when tab is visible
-let _projConfigProjects = [];
-let _projAutoRefreshTimer = null;
-let _projLastRefreshTs = 0;
-let _projRefreshTickTimer = null;
-
-
-// S7h: Rebuild a pending task — resets it based on sprint plan
-async function rebuildTask(taskId) {
-  var rebOk = await porterConfirm('Rebuild Task', 'Rebuild this task from sprint plan? This will reset its description and metadata.', { confirmLabel:'Rebuild' });
-  if (!rebOk) return;
-  const d = await api('/api/task-registry', {action:'rebuild', id: taskId});
-  if (d && d.ok) {
-    toast('Task rebuilt from sprint plan');
-    await loadProjects();
-  } else {
-    toast((d && d.error) || 'Rebuild failed', 'err');
-  }
-}
-
-// S7h: Logical reload — re-reads config + task registry from disk
-async function porterReload() {
-  const btn = event && event.target;
-  if (btn) { btn.disabled = true; btn.textContent = 'Reloading\u2026'; }
-  const d = await api('/api/reload');
-  if (d && d.ok) {
-    toast('Porter reloaded config and tasks from disk');
-    await loadProjects();
-  } else {
-    toast((d && d.error) || 'Reload failed', 'err');
-  }
-  if (btn) { btn.disabled = false; btn.textContent = '\u21bb Reload'; }
-}
-async function refreshProjects() {
-  _projFileCache = {};
-  await loadProjects();
-}
-
-
-// S7h: Update the "Updated X ago" indicator in Projects header
-function _updateProjRefreshIndicator() {
-  const el = document.getElementById('proj-refresh-indicator');
-  if (!el) return;
-  if (!_projLastRefreshTs) { el.textContent = ''; return; }
-  const sec = Math.floor((Date.now() - _projLastRefreshTs) / 1000);
-  if (sec < 5) el.textContent = 'Updated just now';
-  else if (sec < 60) el.textContent = 'Updated ' + sec + 's ago';
-  else if (sec < 3600) el.textContent = 'Updated ' + Math.floor(sec / 60) + 'm ago';
-  else el.textContent = 'Updated ' + Math.floor(sec / 3600) + 'h ago';
-}
-
-function startProjAutoRefresh() {
-  stopProjAutoRefresh();
-  _projAutoRefreshTimer = setInterval(() => {
-    // Only refresh if projects tab is visible
-    const mod = document.getElementById('projects-module');
-    if (mod && mod.style.display !== 'none') refreshProjects();
-  }, 30000);
-  // Tick the "Updated X ago" indicator every 5s
-  if (_projRefreshTickTimer) clearInterval(_projRefreshTickTimer);
-  _projRefreshTickTimer = setInterval(_updateProjRefreshIndicator, 5000);
-}
-
-
-function _projTraceSection(project) {
-  var pid = project.id;
-  return '<div class="proj-agents-section">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center">'
-    + '<div class="proj-agents-label">Live Trace</div>'
-    + '<button class="btn btn-xs btn-ghost" onclick="event.stopPropagation();_loadProjectTrace(\'' + pid + '\')">Refresh</button>'
-    + '</div>'
-    + '<div id="proj-trace-' + pid + '" class="trace-feed" style="margin-top:6px">'
-    + '<div style="padding:8px 12px;font-size:11px;color:var(--text3)">Loading trace...</div>'
-    + '</div>'
-    + '<div class="proj-agents-label" style="margin-top:12px">Task Board</div>'
-    + '<div id="proj-board-' + pid + '" class="task-board" style="margin-top:4px">'
-    + '<div style="grid-column:1/-1;padding:8px;font-size:11px;color:var(--text3)">Loading...</div>'
-    + '</div>'
-    + '</div>';
-}
-
-async function _loadProjectTrace(projectId) {
-  try {
-    var r = await api('/api/trace/steps?project_id=' + encodeURIComponent(projectId) + '&limit=20');
-    var el = document.getElementById('proj-trace-' + projectId);
-    if (!el || !r || !r.ok) return;
-    if (!r.steps || !r.steps.length) {
-      el.innerHTML = '<div style="padding:8px 12px;font-size:11px;color:var(--text3)">No trace steps yet. Dispatch to an agent to see activity.</div>';
-      return;
-    }
-    el.innerHTML = r.steps.map(function(s) {
-      var ago = _tsAgo(s.ts);
-      var stCls = s.status || 'running';
-      var tokHtml = (s.tokens_out || s.tokens_in) ? '<span class="trace-step-tokens">' + _fmtNum((s.tokens_in||0)+(s.tokens_out||0)) + ' tok</span>' : '';
-      return '<div class="trace-step">'
-        + '<span class="trace-step-agent">' + escHtml(s.agent_name || '?') + '</span>'
-        + '<span class="trace-step-action">' + escHtml(s.action || '') + '</span>'
-        + '<span class="trace-step-status ' + stCls + '">' + stCls + '</span>'
-        + tokHtml
-        + '<span class="trace-step-time">' + ago + '</span>'
-        + '</div>';
-    }).join('');
-  } catch(e) { console.debug('trace load:', e); }
-
-  // Also load task board
-  try {
-    var br = await api('/api/trace/task-board?project_id=' + encodeURIComponent(projectId));
-    var bel = document.getElementById('proj-board-' + projectId);
-    if (!bel || !br || !br.ok) return;
-    var board = br.board || {};
-    var cols = [
-      { key:'running', label:'Active', color:'#3b82f6' },
-      { key:'queued', label:'Queued', color:'var(--text3)' },
-      { key:'blocked', label:'Blocked', color:'#f59e0b' },
-      { key:'complete', label:'Done', color:'#22c55e' },
-    ];
-    bel.innerHTML = cols.map(function(c) {
-      var items = (board[c.key] || []).slice(0, 10);
-      var body = items.length
-        ? items.map(function(t) { return '<div class="task-board-item">' + escHtml(t.action||t.task_id||'?') + ' <span style="color:var(--text3);font-size:10px">' + escHtml(t.agent_name||'') + '</span></div>'; }).join('')
-        : '<div class="task-board-item" style="color:var(--text3);font-style:italic">None</div>';
-      return '<div class="task-board-col"><div class="task-board-col-hdr" style="color:' + c.color + '">' + c.label + ' (' + items.length + ')</div>' + body + '</div>';
-    }).join('');
-  } catch(e) { console.debug('board load:', e); }
-}
-
-function _projAgentSection(project) {
-  var pid = project.id;
-  var assigned = project.assigned_personas || [];
-  var allP = _personas || [];
-
-  // Build assigned agent chips
-  var chips = assigned.map(function(aid) {
-    var p = allP.find(function(x) { return x.id === aid; });
-    if (!p) return '';
-    return '<span class="proj-agent-chip">'
-      + '<span class="proj-agent-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</span>'
-      + '<span class="proj-agent-name">' + escHtml(p.name) + '</span>'
-      + '<button class="proj-agent-remove" onclick="event.stopPropagation();unassignAgentFromProject(\'' + pid + '\',\'' + aid + '\')" title="Remove">&times;</button>'
-      + '</span>';
-  }).join('');
-
-  // Unassigned agents for the dropdown
-  var unassigned = allP.filter(function(p) { return assigned.indexOf(p.id) < 0; });
-  var addBtn = '';
-  if (unassigned.length) {
-    addBtn = '<select class="proj-agent-add" onchange="if(this.value)assignAgentToProject(\'' + pid + '\',this.value);this.value=\'\';">'
-      + '<option value="">+ Assign agent</option>'
-      + unassigned.map(function(p) { return '<option value="' + p.id + '">' + escHtml((p.avatar||'') + ' ' + p.name) + '</option>'; }).join('')
-      + '</select>';
-  }
-
-  return '<div class="proj-agents-section">'
-    + '<div class="proj-agents-label">Assigned Agents</div>'
-    + '<div class="proj-agents-row">' + (chips || '<span class="proj-agents-empty">No agents assigned</span>') + addBtn + '</div>'
-    + '</div>';
-}
-
-async function assignAgentToProject(projectId, personaId) {
-  var r = await api('/api/projects', { action: 'assign_agent', project_id: projectId, persona_id: personaId });
-  if (r && r.ok) {
-    toast('Agent assigned');
-    loadProjects();
-  } else {
-    toast((r && r.error) || 'Failed', 'err');
-  }
-}
-
-async function unassignAgentFromProject(projectId, personaId) {
-  var r = await api('/api/projects', { action: 'unassign_agent', project_id: projectId, persona_id: personaId });
-  if (r && r.ok) {
-    toast('Agent removed');
-    loadProjects();
-  } else {
-    toast((r && r.error) || 'Failed', 'err');
-  }
-}
-
-function stopProjAutoRefresh() {
-  if (_projAutoRefreshTimer) { clearInterval(_projAutoRefreshTimer); _projAutoRefreshTimer = null; }
-  if (_projRefreshTickTimer) { clearInterval(_projRefreshTickTimer); _projRefreshTickTimer = null; }
-}
-
-var _projPersonaFilter = '';
-
-function populateProjPersonaFilter() {
-  var sel = document.getElementById('proj-persona-filter');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">All personas</option>' +
-    (_personas || []).map(function(p) {
-      return '<option value="' + p.id + '">' + escHtml((p.avatar||'') + ' ' + p.name) + '</option>';
-    }).join('');
-}
-
-function filterProjectsByPersona(personaId) {
-  _projPersonaFilter = personaId || '';
-  _renderProjectList();
-}
-
-function _renderProjectList() {
-  const el = document.getElementById('proj-content-projects');
-  if (!el) return;
-
-  // Filter by persona if active
-  var filteredTasks = _projAllTasks;
-  if (_projPersonaFilter) {
-    filteredTasks = _projAllTasks.filter(function(t) { return t.assigned_persona_id === _projPersonaFilter; });
-  }
-  // Group tasks by project_id
-  const tasksByProject = {};
-  const unassigned = [];
-  filteredTasks.forEach(t => {
-    if (t.project_id) {
-      (tasksByProject[t.project_id] = tasksByProject[t.project_id] || []).push(t);
-    } else {
-      unassigned.push(t);
-    }
-  });
-  // Sort tasks within each project by sort_order (ascending for open, will reverse for completed)
-  Object.values(tasksByProject).forEach(arr => arr.sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99)));
-  unassigned.sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99));
-
-  if (!_projProjects.length && !unassigned.length) {
-    el.innerHTML = '<div style="text-align:center;padding:48px 28px;color:var(--text3)">'
-      + '<div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:8px">No projects yet</div>'
-      + '<div style="font-size:13px">Projects are created by agents during task execution.</div>'
-      + '</div>';
-    return;
-  }
-
-  let html = _projProjects.map(p => {
-    const pid     = p.id;
-    const tasks   = tasksByProject[pid] || [];
-    const isOpen  = _projExpanded.has(pid);
-    const active  = tasks.filter(t => t.status === 'in_progress');
-    const pending = tasks.filter(t => t.status === 'pending');
-    const done    = tasks.filter(t => ['complete','completed','done','failed','cancelled'].includes(t.status));
-    // Auto-open Completed accordion when ≤10 done tasks
-    if (done.length > 0 && done.length <= 10 && !_projDoneOpen._autoChecked) _projDoneOpen.add(pid);
-    const live    = [...active, ...pending];
-    const cnt     = tasks.length;
-    const isAct   = pid === _projActiveId;
-    const pctDone = cnt ? Math.round((done.length / cnt) * 100) : 0;
-
-    // Active pill — right of project name
-    const activePill = isAct
-      ? '<span class="proj-status-toggle active" style="margin-left:8px;cursor:default;pointer-events:none">\u2713 Active</span>'
-      : '';
-
-    // Progress bar
-    const progressHtml = cnt
-      ? '<div class="proj-progress"><div class="proj-progress-bar"><div class="proj-progress-fill" style="width:' + pctDone + '%"></div></div><span class="proj-progress-label">' + pctDone + '%</span></div>'
-      : '';
-
-    // Project metrics — aggregate from tasks
-    const totalTokens = tasks.reduce((s, t) => s + (t.tokens_used || 0), 0);
-    const totalTime = tasks.reduce((s, t) => s + (t.time_spent_mins || 0), 0);
-    const startDate = p.created_at ? new Date(p.created_at * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',year:'numeric',timeZone:_porterTz()}) : '';
-    const endDate = p.completed_at ? new Date(p.completed_at * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',year:'numeric',timeZone:_porterTz()}) : '';
-    let metricsHtml = '<div class="proj-metrics">';
-    if (startDate) metricsHtml += '<span class="proj-metric">Started <span class="proj-metric-val">' + startDate + '</span></span>';
-    if (endDate) metricsHtml += '<span class="proj-metric">Completed <span class="proj-metric-val">' + endDate + '</span></span>';
-    metricsHtml += '<span class="proj-metric">Tokens <span class="proj-metric-val">' + _fmtNum(totalTokens) + '</span></span>';
-    metricsHtml += '<span class="proj-metric">Time <span class="proj-metric-val">' + _fmtDuration(totalTime) + '</span></span>';
-    metricsHtml += '<span class="proj-metric">Tasks <span class="proj-metric-val">' + done.length + '/' + cnt + ' done</span></span>';
-    metricsHtml += '</div>';
-
-    // Task body — Open and Completed accordions
-    let bodyHtml = '';
-    if (isOpen) {
-      let rows = '';
-      if (!tasks.length) {
-        rows = '<div style="padding:10px 12px;font-size:12px;color:var(--text3)">No tasks yet.'
-          + ' <button class="treg-act" style="font-size:11px"'
-          + ' onclick="openCreateTaskInProject(\'' + pid + '\')">+ Create task</button></div>';
-      } else {
-        // Open tasks accordion (active + pending)
-        if (live.length) {
-          const openOpen = !_projOpenCollapsed.has(pid);
-          rows += '<div class="proj-open-hdr" onclick="event.stopPropagation();toggleProjOpen(\'' + pid + '\')">'
-            + '<span class="proj-open-chevron' + (openOpen ? ' open' : '') + '">&#9658;</span>'
-            + '<span class="proj-open-label">Open</span>'
-            + '<span class="proj-open-count">' + live.length + ' task' + (live.length !== 1 ? 's' : '') + '</span>'
-            + '</div>'
-            + '<div id="proj-open-' + pid + '" style="display:' + (openOpen ? 'block' : 'none') + '">'
-            + live.map(t => _ptaskRow(t)).join('')
-            + '</div>';
-        }
-
-        // Completed tasks accordion (most recent first)
-        if (done.length) {
-          const doneOpen = _projDoneOpen.has(pid);
-          const doneReversed = [...done].reverse();
-          rows += '<div class="proj-done-hdr" onclick="event.stopPropagation();toggleProjDone(\'' + pid + '\')">'
-            + '<span class="proj-done-chevron' + (doneOpen ? ' open' : '') + '">&#9658;</span>'
-            + '<span class="proj-done-label">Completed</span>'
-            + '<span class="proj-done-count">' + done.length + ' task' + (done.length !== 1 ? 's' : '') + '</span>'
-            + '</div>'
-            + '<div id="proj-done-' + pid + '" style="display:' + (doneOpen ? 'block' : 'none') + '">'
-            + doneReversed.map(t => _ptaskRow(t)).join('')
-            + '</div>';
-        }
-      }
-      bodyHtml = '<div class="proj-tasks">' + rows + '</div>';
-    }
-
-    return '<div class="proj-card">'
-      + '<div class="proj-card-head" onclick="toggleProject(\'' + pid + '\')">'
-      + '<span class="proj-card-chevron' + (isOpen ? ' open' : '') + '">&#9658;</span>'
-      + '<span class="proj-card-name">' + escHtml(p.name || '') + '</span>'
-      + activePill
-      + '<span style="flex:1"></span>'
-      + (isOpen ? '<button class="btn btn-xs btn-ghost" onclick="event.stopPropagation();promptRenameProject(\'' + pid + '\',\'' + escHtml(p.name || '').replace(/'/g, "\\\\'") + '\')">Rename</button>' : '')
-      + (isOpen ? '<button class="btn btn-xs btn-ghost" style="color:var(--danger)" onclick="event.stopPropagation();if(confirm(\'Delete this project and all its tasks?\'))deleteProject(\'' + pid + '\')">Delete</button>' : '')
-      + '<button class="proj-card-refresh" onclick="event.stopPropagation();porterReload()" title="Re-read config and task registry from disk, then refresh display">&#8635; Reload</button>'
-      + '</div>'
-      + progressHtml
-      + metricsHtml
-      + (isOpen ? _projAgentSection(p) : '')
-      + (isOpen ? _projTraceSection(p) : '')
-      + (bodyHtml ? '<div class="proj-card-tasks">' + bodyHtml + '</div>' : '')
-      + '</div>';
-  }).join('');
-
-  // Inbox: unassigned tasks
-  if (unassigned.length) {
-    html += `<div class="proj-card">
-      <div class="proj-card-head" onclick="document.getElementById('proj-inbox-body').style.display=document.getElementById('proj-inbox-body').style.display==='none'?'block':'none'">
-        <span class="proj-card-chevron open">&#9658;</span>
-        <span class="proj-card-name">Inbox</span>
-        <span class="proj-card-count">${unassigned.length} unassigned</span>
-      </div>
-      <div id="proj-inbox-body" class="proj-card-tasks"><div class="proj-tasks">
-        ${unassigned.map(t => _ptaskRow(t)).join('')}
-      </div></div>
-    </div>`;
-  }
-
-  el.innerHTML = html;
-  // Auto-load traces for expanded projects
-  _projExpanded.forEach(function(pid) { setTimeout(function() { _loadProjectTrace(pid); }, 200); });
-}
-
-function toggleProject(pid) {
-  if (_projExpanded.has(pid)) _projExpanded.delete(pid);
-  else _projExpanded.add(pid);
-  _renderProjectList();
-  // Auto-load trace for expanded projects
-  if (_projExpanded.has(pid)) {
-    setTimeout(function() { _loadProjectTrace(pid); }, 100);
-  }
-}
-
-
-function toggleProjOpen(pid) {
-  if (_projOpenCollapsed.has(pid)) _projOpenCollapsed.delete(pid);
-  else _projOpenCollapsed.add(pid);
-  _renderProjectList();
-}
-
-function toggleProjDone(pid) {
-  if (_projDoneOpen.has(pid)) _projDoneOpen.delete(pid);
-  else _projDoneOpen.add(pid);
-  _renderProjectList();
-}
-
-function openProjMenu(evt, projId) {
-  evt.stopPropagation();
-  closeDropdown();
-  const dd = document.getElementById('dropdown');
-  if (!dd) return;
-  const items = [
-    { label: 'Settings', action: () => openProjectConfig(projId) },
-    { label: 'Set as active', action: () => setActiveProject(projId) },
-    { sep: true },
-    { label: 'Delete project', cls: 'danger', action: () => deleteProject(projId) },
-  ];
-  dd.innerHTML = items.map((it, i) =>
-    it.sep
-      ? '<div class="dropdown-sep"></div>'
-      : `<div class="dropdown-item ${it.cls || ''}" data-i="${i}"><span>${escHtml(it.label)}</span></div>`
-  ).join('');
-  dd.querySelectorAll('[data-i]').forEach(el => {
-    const i = +el.dataset.i;
-    el.onclick = () => { items[i].action(); closeDropdown(); };
-  });
-  const btn = evt.currentTarget || evt.target;
-  const rect = btn.getBoundingClientRect();
-  dd.style.display = 'block';
-  let left = rect.right - dd.offsetWidth;
-  let top  = rect.bottom + 4;
-  if (left < 8) left = 8;
-  if (top + dd.offsetHeight > window.innerHeight - 8) top = rect.top - dd.offsetHeight - 4;
-  dd.style.left = left + 'px';
-  dd.style.top  = top + 'px';
-  activeDropdown = dd;
-}
-
-function _ptaskRow(t) {
-  const st = t.status || 'pending';
-  const pillClass = { in_progress:'st-pill-progress', pending:'st-pill-pending', complete:'st-pill-complete', failed:'st-pill-failed', cancelled:'st-pill-cancelled' }[st] || 'st-pill-pending';
-  const stLabel = st === 'in_progress' ? 'active' : st === 'pending' ? 'queued' : st;
-  const showPill = st !== 'complete';
-  // Per-task metrics — completion date if known, age for open tasks, nothing for old completed
-  let metaItems = [];
-  if (st === 'complete' && t.completed_at) {
-    metaItems.push(new Date(t.completed_at * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',timeZone:_porterTz()}));
-  } else if (st !== 'complete') {
-    metaItems.push(_tsAgo(t.created_at));
-  }
-  if (t.tokens_used) metaItems.push(_fmtNum(t.tokens_used) + ' tokens');
-  if (t.time_spent_mins) metaItems.push(_fmtDuration(t.time_spent_mins));
-  const metaHtml = metaItems.join(' · ');
-  // Persona badge
-  var personaBadge = '';
-  if (t.assigned_persona_id) {
-    var _tp = (_personas || []).find(function(p) { return p.id === t.assigned_persona_id; });
-    if (_tp) personaBadge = '<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:color-mix(in srgb, var(--accent) 12%, var(--bg));color:var(--accent);margin-left:4px">' + escHtml((_tp.avatar||'') + ' ' + _tp.name) + '</span>';
-  }
-  return '<div class="ptask-row">'
-    + '<span class="ptask-row-title">' + escHtml(t.title || '') + '</span>'
-    + personaBadge
-    + (showPill ? '<span class="st-pill ' + pillClass + '">' + escHtml(stLabel) + '</span>' : '')
-    + '<span class="ptask-row-age">' + metaHtml + '</span>'
-    + '</div>';
-}
-
-async function setActiveProject(projId) {
-  const res = await api('/api/projects', { action: 'set_active', project_id: projId });
-  if (res && res.ok) { toast('Active project set', 'ok'); loadProjects(); }
-  else toast((res && res.error) || 'Failed', 'err');
-}
-
-async function deleteProject(projId) {
-  var delOk = await porterConfirm('Delete Project', 'Delete this project? Its tasks in the registry will remain (unassigned).', { danger:true, confirmLabel:'Delete' });
-  if (!delOk) return;
-  const res = await api('/api/projects', { action: 'delete', project_id: projId });
-  if (res && res.ok) { toast('Project deleted', 'ok'); loadProjects(); }
-  else toast((res && res.error) || 'Failed', 'err');
-}
-
-function openCreateTaskInProject(projId, projName) {
-  if (!projName) {
-    const _p = _projProjects.find(p => p.id === projId);
-    projName = _p ? _p.name : '';
-  }
-  _cpTaskForModal = { id: projId, name: projName };
-  openCreateTaskModal();
-  // override project dropdown after modal opens
-  setTimeout(() => {
-    const sel = document.getElementById('ct-project');
-    if (sel) {
-      // ensure option exists
-      let found = false;
-      for (let o of sel.options) { if (o.value === projId) { sel.value = projId; found = true; break; } }
-      if (!found) {
-        const o = document.createElement('option');
-        o.value = projId; o.textContent = projName; sel.appendChild(o); sel.value = projId;
-      }
-    }
-  }, 80);
-}
-
-async function migrateToRegistry(name) {
-  const res = await api('/api/projects', { action: 'create', name });
-  if (res && res.ok) { toast('Project added to registry', 'ok'); loadProjects(); }
-  else toast((res && res.error) || 'Failed', 'err');
-}
-
-
-async function startRenameProject(name) {
-  const newName = await porterPrompt('Rename Project', 'Enter new project name:', name);
-  if (!newName || newName.trim() === name) return;
-  const r = await fetch('/api/projects-dashboard', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({action: 'rename_project', old_name: name, new_name: newName.trim()}),
-  });
-  const d = await r.json();
-  if (d.ok) { toast('Project renamed', 'ok'); loadProjects(); }
-  else toast((d.error || 'Rename failed'), 'err');
-}
-
-function renderModelsTab(data) {
-  // Models moved to Agents > Models tab
-  return;
-  const el = document.getElementById('proj-content-models');
-  if (!el) return;
-  if (!data.models || !data.models.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:13px">No model registry found in projects.md</div>';
-    return;
-  }
-  // Pull capability data for gateway reachability
-  const caps = {};
-  if (window._lastCapabilities) window._lastCapabilities.forEach(c => caps[c.id] = c);
-
-  el.innerHTML = data.models.map(m => {
-    const memOk  = m.memory_exists;
-    const synced = m.synced;
-    const memDot = memOk
-      ? '<span style="color:#22c55e">✓</span>'
-      : '<span style="color:#ef4444">✗</span>';
-    const syncBadge = synced === true
-      ? '<span style="font-size:10px;padding:1px 5px;border-radius:8px;background:#14532d;color:#86efac;margin-left:4px">synced</span>'
-      : synced === false
-      ? '<span style="font-size:10px;padding:1px 5px;border-radius:8px;background:#7f1d1d;color:#fca5a5;margin-left:4px">drift</span>'
-      : '';
-    // Gateway reachability hint (map common interfaces to capability ids)
-    const iface = (m.interface || '').toLowerCase();
-    let gwBadge = '';
-    if (iface.includes('ollama'))    gwBadge = caps['ollama']?.ok ? '✓ Ollama up' : '○ Ollama offline';
-    if (iface.includes('openclaw'))  gwBadge = caps['openclaw']?.ok ? '✓ Gateway up' : '○ Gateway offline';
-    if (iface.includes('gemini'))    gwBadge = caps['gemini_cli']?.ok ? '✓ CLI found' : '○ CLI missing';
-    return `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);margin-bottom:8px">
-  <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-    <span style="font-weight:600;font-size:13px">${escHtml(m.model)}</span>
-    <span style="font-size:11px;color:var(--text3)">${escHtml(m.identity)}</span>
-  </div>
-  <div style="font-size:12px;color:var(--text2);margin-bottom:2px">${escHtml(m.role)}</div>
-  <div style="font-size:11px;color:var(--text3)">${escHtml(m.interface)}${gwBadge ? ' &nbsp;· ' + gwBadge : ''}</div>
-  <div style="font-size:11px;color:var(--text3);margin-top:6px;display:flex;align-items:center;gap:4px">
-    ${memDot} Memory file
-    ${m.memory_ago ? '<span style="color:var(--text3)">(modified ' + escHtml(m.memory_ago) + ')</span>' : ''}
-    ${syncBadge}
-  </div>
-  ${m.memory_path ? '<div style="font-size:10px;color:var(--text3);font-family:monospace;margin-top:2px">' + escHtml(m.memory_path) + '</div>' : ''}
-</div>`;
-  }).join('');
-}
-
-function renderSprintsTab(data) {
-  const el = document.getElementById('proj-content-sprints');
-  if (!el) return;
-  const tasks = (data.tasks || []);
-  if (!tasks.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:13px">No checkpoint files found.</div>';
-    return;
-  }
-  const statusColor = {in_progress: '#3b82f6', paused: '#f59e0b', complete: '#22c55e'};
-  const sprints = (data.sprints || []).filter(s => !s.complete);
-  const backlogHtml = sprints.length
-    ? '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">'
-      + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);font-weight:600;margin-bottom:8px">Sprint Backlog</div>'
-      + sprints.map(s => {
-          const badge = s.is_next ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--accent);color:#fff;margin-left:8px">NEXT</span>' : '';
-          const ver = s.version ? '<span style="font-size:11px;color:var(--text3);margin-left:auto">' + escHtml(s.version) + '</span>' : '';
-          return '<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);margin-bottom:6px">'
-            + '<span style="font-size:12px;color:var(--text2)">' + escHtml(s.title) + '</span>' + badge + ver + '</div>';
-        }).join('')
-      + '</div>'
-    : '';
-  el.innerHTML = tasks.map(t => {
-    const sc = statusColor[t.status] || '#6b7280';
-    const actionBtns = t.status !== 'complete' ? `
-  <div style="display:flex;gap:6px;margin-top:8px">
-    ${t.status === 'in_progress' ? '<button class="btn btn-ghost" onclick="cpAction(\'' + escHtml(t.checkpoint_path) + '\',\'pause\')">Pause</button>' : ''}
-    <button class="btn btn-ghost" onclick="cpAction(\'${escHtml(t.checkpoint_path)}\',\'complete\')">Mark complete</button>
-  </div>` : '';
-    return `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);margin-bottom:8px">
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-    <span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${sc}22;color:${sc};font-weight:600">${escHtml(t.status || '?')}</span>
-    <span style="font-weight:600;font-size:13px">${escHtml(t.project || 'unknown')}</span>
-    <span style="font-size:11px;color:var(--text3);margin-left:auto">${escHtml(t.modified_ago || '')}</span>
-  </div>
-  <div style="font-size:12px;color:var(--text2);margin-bottom:2px">${escHtml(t.task || '')}</div>
-  ${t.step ? '<div style="font-size:11px;color:var(--text3)">Step: ' + escHtml(t.step) + '</div>' : ''}
-  ${t.next_action ? '<div style="font-size:11px;color:var(--text3)"><b>Next:</b> ' + escHtml(t.next_action) + '</div>' : ''}
-  <div style="font-size:10px;color:var(--text3);font-family:monospace;margin-top:4px">${escHtml(t.checkpoint_path)}</div>
-  ${actionBtns}
-</div>`;
-  }).join('') + backlogHtml;
-}
-
-async function cpAction(path, action) {
-  try {
-    const r = await fetch('/api/checkpoint', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({path, action}),
-    });
-    const d = await r.json();
-    if (!d.ok) throw new Error(d.error || 'unknown error');
-    await loadProjects();
-    switchProjTab('sprints');
-  } catch(e) {
-    alert('Action failed: ' + e.message);
-  }
-}
 
 // ── Capabilities / System module ──────────────────────────────────────────
 async function renderGwsPanel() {
@@ -23570,9 +22800,10 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
             message = message[-_MAX_HISTORY_CHARS:]
 
     # Personality mode: conversational, includes identity context
+    _conflict_hint = " If the user changes a preference that contradicts your persona files, acknowledge it and ask: \"Should I update my memory to reflect this?\""
     if personality_mode:
         _role_hint = f" Your role is {prole}." if prole else ""
-        augmented_message = f"{message}\n\n(You are {pname}.{_role_hint} Respond in first person. Be conversational. Never mention which AI model or backend you run on — that is infrastructure, not identity. Optimize for reading feel: short paragraphs, markdown when useful, front-load the answer.)\n\n{_ctx_suffix}"
+        augmented_message = f"{message}\n\n(You are {pname}.{_role_hint} Respond in first person. Be conversational. Never mention which AI model or backend you run on — that is infrastructure, not identity.{_conflict_hint} Optimize for reading feel: short paragraphs, markdown when useful, front-load the answer.)\n\n{_ctx_suffix}"
     elif _ctx_suffix:
         augmented_message = f"{message}\n\n(Respond as {pname}. Never mention which AI model you run on. Optimize for reading feel: front-load the answer, use short paragraphs, markdown headers for structure, end cleanly.)\n\n{_ctx_suffix}"
     else:
@@ -24635,7 +23866,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.10"})
+            self.reply_json({"v": "0.28.11"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24797,7 +24028,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.10"
+                health["porter_version"] = "0.28.11"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26553,7 +25784,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.10'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.11'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -27012,6 +26243,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(row["data"])
             except Exception as e:
                 self.reply_json({"error": str(e)}, 500)
+
+        # ── Workflow Registry (GET) ────────────────────────────────────────────
+        elif parsed.path == "/api/workflows":
+            if not self.auth_check(redirect=False): return
+            self.reply_json({"ok": True, "workflows": _handle_wf_list()})
 
         else:
             self.reply_html("<h1>Not found</h1>", 404)
@@ -30602,8 +29838,122 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 resp["correlation_id"] = corr_id
             self.reply_json(resp, status)
 
+        # ── Workflow Registry (POST) ───────────────────────────────────────────
+        elif parsed.path.startswith("/api/workflows/") and parsed.path.endswith("/trigger"):
+            if not self.auth_check(redirect=False): return
+            wf_id = parsed.path.split("/")[3]
+            result = _handle_wf_trigger(wf_id)
+            if isinstance(result, tuple):
+                self.reply_json(result[0], result[1])
+            else:
+                self.reply_json(result)
+
+        elif parsed.path.startswith("/api/workflows/") and parsed.path.endswith("/toggle"):
+            if not self.auth_check(redirect=False): return
+            wf_id = parsed.path.split("/")[3]
+            result = _handle_wf_toggle(wf_id)
+            if isinstance(result, tuple):
+                self.reply_json(result[0], result[1])
+            else:
+                self.reply_json(result)
+
+        elif parsed.path.startswith("/api/workflows/") and parsed.path.endswith("/config"):
+            if not self.auth_check(redirect=False): return
+            wf_id = parsed.path.split("/")[3]
+            body = self.read_json_body() or {}
+            result = _handle_wf_config(wf_id, body)
+            if isinstance(result, tuple):
+                self.reply_json(result[0], result[1])
+            else:
+                self.reply_json(result)
+
         else:
             self.reply_html("<h1>Not found</h1>", 404)
+
+# ── Workflow Registry API ─────────────────────────────────────────────────
+
+def _handle_wf_list():
+    """GET /api/workflows — list all workflows with stats + config values."""
+    prefs = _config.get("preferences", {})
+    result = []
+    with _wf_lock:
+        for wf_id, wf in _wf_registry.items():
+            entry = dict(wf)
+            # Resolve current config values
+            entry["config"] = {}
+            for key in wf.get("config_keys", []):
+                entry["config"][key] = prefs.get(key)
+            result.append(entry)
+    return result
+
+def _handle_wf_trigger(wf_id):
+    """POST /api/workflows/<id>/trigger — run a workflow now in background."""
+    with _wf_lock:
+        wf = _wf_registry.get(wf_id)
+    if not wf:
+        return {"ok": False, "error": "Unknown workflow"}, 404
+    runners = {
+        "cortex_consolidation": lambda: _cortex_consolidate_once(),
+        "context_hygiene": lambda: _hygiene_run(),
+        "capability_checks": lambda: _run_cap_checks(force=True),
+        "heartbeat": lambda: _heartbeat_tick(),
+        "telemetry_rollup": lambda: (_rollup_hourly(), _rollup_daily()),
+    }
+    runner = runners.get(wf_id)
+    if not runner:
+        return {"ok": False, "error": "No runner for this workflow"}, 400
+    import time as _trig_t
+    def _bg_run():
+        _t0 = _trig_t.time()
+        try:
+            result = runner()
+            _wf_record_run(wf_id, success=True, result=str(result) if result else "ok", duration_s=_trig_t.time()-_t0)
+        except Exception as e:
+            _wf_record_run(wf_id, success=False, error=e, duration_s=_trig_t.time()-_t0)
+    threading.Thread(target=_bg_run, daemon=True, name=f"wf-trigger-{wf_id}").start()
+    return {"ok": True, "message": f"Triggered {wf_id}"}
+
+def _handle_wf_toggle(wf_id):
+    """POST /api/workflows/<id>/toggle — pause/resume a workflow."""
+    with _wf_lock:
+        wf = _wf_registry.get(wf_id)
+        if not wf:
+            return {"ok": False, "error": "Unknown workflow"}, 404
+        if wf["status"] == "paused":
+            wf["status"] = "active"
+            action = "resumed"
+        else:
+            wf["status"] = "paused"
+            action = "paused"
+    mlog.emit("info", "workflows", f"workflow.{action}", f"{wf_id} {action}")
+    return {"ok": True, "status": wf["status"], "action": action}
+
+def _handle_wf_config(wf_id, body):
+    """POST /api/workflows/<id>/config — update config keys."""
+    with _wf_lock:
+        wf = _wf_registry.get(wf_id)
+        if not wf:
+            return {"ok": False, "error": "Unknown workflow"}, 404
+        allowed_keys = set(wf.get("config_keys", []))
+    prefs = _config.setdefault("preferences", {})
+    updated = {}
+    for key, val in body.items():
+        if key in allowed_keys:
+            prefs[key] = val
+            updated[key] = val
+    if updated:
+        save_config(_config)
+        # Update interval_s if applicable
+        with _wf_lock:
+            wf = _wf_registry.get(wf_id)
+            if wf_id == "cortex_consolidation" and "cortex_consolidate_hours" in updated:
+                wf["interval_s"] = max(1, updated["cortex_consolidate_hours"]) * 3600
+                wf["interval"] = f"{max(1, updated['cortex_consolidate_hours'])}h"
+            elif wf_id == "context_hygiene" and "hygiene_interval_hours" in updated:
+                wf["interval_s"] = max(1, updated["hygiene_interval_hours"]) * 3600
+                wf["interval"] = f"{max(1, updated['hygiene_interval_hours'])}h"
+    return {"ok": True, "updated": updated}
+
 
 # ── main ──────────────────────────────────────────────────────────────────
 
@@ -30621,7 +29971,8 @@ if __name__ == "__main__":
     _migrate_checkpoint_to_registry()  # Gap31: one-time migration
     _sched_thread = threading.Thread(target=_scheduler_loop, name="porter-scheduler", daemon=True)
     _sched_thread.start()
-    _cap_thread = threading.Thread(target=_run_cap_checks, name="porter-cap-check", daemon=True)
+    _run_cap_checks(force=True)  # Initial capability scan
+    _cap_thread = threading.Thread(target=_cap_checks_loop, name="porter-cap-check", daemon=True)
     _cap_thread.start()
     _hb_thread = threading.Thread(target=_heartbeat_loop, name="porter-heartbeat", daemon=True)
     _hb_thread.start()
@@ -30635,7 +29986,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.10 ready (localhost only)")
+    print(f"\n  Porter v0.28.11 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
