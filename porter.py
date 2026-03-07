@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.8 — Dispatch Timeout Fix"""
+"""Porter v0.28.9 — Context Hygiene System"""
 
 
 import email
@@ -102,7 +102,29 @@ DEFAULT_PREFERENCES: dict = {
     "cortex_inject_limit":      5,
     "cortex_consolidate_hours": 6,
 
+    # Context Hygiene
+    "hygiene_enabled":              True,
+    "hygiene_interval_hours":       12,
+    "hygiene_log_retention_days":   7,
+    "hygiene_soul_max_traits":      20,
+    "hygiene_memory_max_lines":     100,
+    "hygiene_merge_identity":       True,
+    "hygiene_ctx_budget":           4000,
+    "hygiene_max_augmented_chars":  8000,
 }
+
+# ── Context Hygiene ────────────────────────────────────────────────────────
+_hygiene_stats: dict = {
+    "last_run": None,
+    "total_runs": 0,
+    "logs_pruned": 0,
+    "souls_capped": 0,
+    "memories_archived": 0,
+    "identities_merged": 0,
+    "errors": [],
+}
+_HYGIENE_MERGED_MARKER = "(Merged into SOUL.md — see SOUL.md for full content)"
+
 DEFAULT_AGENT_FLEET: dict = {
     "channel": "stable",
     "current_version": "0.1.0",
@@ -1280,6 +1302,264 @@ def _cortex_consolidate_loop():
         except Exception as e:
             log.debug("Cortex consolidation error: %s", e)
 
+
+
+
+# ── Context Hygiene Engine ─────────────────────────────────────────────────
+
+def _hygiene_prune_logs():
+    """Rule 1: Delete daily dispatch logs older than retention days."""
+    prefs = _config.get("preferences", {})
+    retention = max(1, prefs.get("hygiene_log_retention_days", 7))
+    from datetime import datetime, timedelta, timezone as _tz
+    cutoff = datetime.now(_tz.utc) - timedelta(days=retention)
+    pruned = 0
+    try:
+        if not PERSONAS_DIR.exists():
+            return pruned
+        for pdir in PERSONAS_DIR.iterdir():
+            mem_dir = pdir / "memory"
+            if not mem_dir.is_dir():
+                continue
+            for f in mem_dir.iterdir():
+                if not f.name.endswith(".md"):
+                    continue
+                # Match YYYY-MM-DD.md pattern
+                try:
+                    fdate = datetime.strptime(f.stem, "%Y-%m-%d").replace(tzinfo=_tz.utc)
+                    if fdate < cutoff:
+                        f.unlink()
+                        pruned += 1
+                except ValueError:
+                    continue
+    except Exception as e:
+        _hygiene_stats["errors"].append(f"prune_logs: {e}")
+        log.warning("Hygiene prune_logs error: %s", e)
+    return pruned
+
+
+def _hygiene_cap_soul():
+    """Rule 2: Cap Learned Traits in SOUL.md, archive overflow."""
+    prefs = _config.get("preferences", {})
+    max_traits = max(5, prefs.get("hygiene_soul_max_traits", 20))
+    capped = 0
+    try:
+        if not PERSONAS_DIR.exists():
+            return capped
+        for pdir in PERSONAS_DIR.iterdir():
+            soul_path = pdir / "SOUL.md"
+            if not soul_path.is_file():
+                continue
+            content = soul_path.read_text()
+            if "## Learned Traits" not in content:
+                continue
+            # Split at Learned Traits section
+            parts = content.split("## Learned Traits", 1)
+            header = parts[0]
+            traits_section = parts[1] if len(parts) > 1 else ""
+            # Extract trait lines (start with "- ")
+            trait_lines = [l for l in traits_section.split("\n") if l.strip().startswith("- ")]
+            if len(trait_lines) <= max_traits:
+                continue
+            # Archive overflow
+            overflow = trait_lines[:-max_traits]
+            keep = trait_lines[-max_traits:]
+            archive_path = pdir / "SOUL_ARCHIVE.md"
+            existing_archive = archive_path.read_text() if archive_path.exists() else ""
+            from datetime import datetime, timezone as _tz
+            ts = datetime.now(_tz.utc).strftime("%Y-%m-%d %H:%M")
+            archive_entry = f"\n## Archived Traits ({ts})\n" + "\n".join(overflow) + "\n"
+            archive_path.write_text(existing_archive + archive_entry)
+            # Rebuild SOUL.md with non-trait lines preserved
+            non_trait_lines = [l for l in traits_section.split("\n") if not l.strip().startswith("- ")]
+            rebuilt = header + "## Learned Traits" + "\n".join(non_trait_lines) + "\n" + "\n".join(keep) + "\n"
+            soul_path.write_text(rebuilt)
+            capped += 1
+            log.info("Hygiene: capped SOUL.md for %s (%d traits archived)", pdir.name, len(overflow))
+    except Exception as e:
+        _hygiene_stats["errors"].append(f"cap_soul: {e}")
+        log.warning("Hygiene cap_soul error: %s", e)
+    return capped
+
+
+def _hygiene_archive_memory():
+    """Rule 3: Archive MEMORY.md overflow beyond max lines."""
+    prefs = _config.get("preferences", {})
+    max_lines = max(20, prefs.get("hygiene_memory_max_lines", 100))
+    archived = 0
+    try:
+        if not PERSONAS_DIR.exists():
+            return archived
+        for pdir in PERSONAS_DIR.iterdir():
+            mem_path = pdir / "MEMORY.md"
+            if not mem_path.is_file():
+                continue
+            content = mem_path.read_text()
+            mem_lines = content.split("\n")
+            if len(mem_lines) <= max_lines:
+                continue
+            # Keep last max_lines, archive the rest
+            overflow = mem_lines[:-max_lines]
+            keep = mem_lines[-max_lines:]
+            archive_path = pdir / "MEMORY_ARCHIVE.md"
+            existing = archive_path.read_text() if archive_path.exists() else ""
+            from datetime import datetime, timezone as _tz
+            ts = datetime.now(_tz.utc).strftime("%Y-%m-%d %H:%M")
+            archive_entry = f"\n## Archived ({ts})\n" + "\n".join(overflow) + "\n"
+            archive_path.write_text(existing + archive_entry)
+            mem_path.write_text("\n".join(keep))
+            archived += 1
+            log.info("Hygiene: archived %d lines from MEMORY.md for %s", len(overflow), pdir.name)
+    except Exception as e:
+        _hygiene_stats["errors"].append(f"archive_memory: {e}")
+        log.warning("Hygiene archive_memory error: %s", e)
+    return archived
+
+
+def _hygiene_merge_identity():
+    """Rule 4: Merge IDENTITY.md and ROLE_CARD.md into SOUL.md (one-time, idempotent)."""
+    prefs = _config.get("preferences", {})
+    if not prefs.get("hygiene_merge_identity", True):
+        return 0
+    merged = 0
+    try:
+        if not PERSONAS_DIR.exists():
+            return merged
+        for pdir in PERSONAS_DIR.iterdir():
+            if not pdir.is_dir():
+                continue
+            soul_path = pdir / "SOUL.md"
+            identity_path = pdir / "IDENTITY.md"
+            role_card_path = pdir / "ROLE_CARD.md"
+            soul_content = soul_path.read_text().strip() if soul_path.exists() else ""
+            # Merge IDENTITY.md
+            if identity_path.exists():
+                id_content = identity_path.read_text().strip()
+                if id_content and _HYGIENE_MERGED_MARKER not in id_content:
+                    # Append to SOUL.md under ## Identity section if not already present
+                    if "## Identity" not in soul_content:
+                        soul_content += f"\n\n## Identity\n{id_content}"
+                    identity_path.write_text(_HYGIENE_MERGED_MARKER + "\n")
+                    merged += 1
+            # Merge ROLE_CARD.md
+            if role_card_path.exists():
+                rc_content = role_card_path.read_text().strip()
+                if rc_content and _HYGIENE_MERGED_MARKER not in rc_content:
+                    if "## Role Card" not in soul_content:
+                        soul_content += f"\n\n## Role Card\n{rc_content}"
+                    role_card_path.write_text(_HYGIENE_MERGED_MARKER + "\n")
+                    merged += 1
+            if merged > 0 and soul_path.exists():
+                soul_path.write_text(soul_content + "\n")
+    except Exception as e:
+        _hygiene_stats["errors"].append(f"merge_identity: {e}")
+        log.warning("Hygiene merge_identity error: %s", e)
+    return merged
+
+
+def _hygiene_run():
+    """Execute all hygiene rules. Called by daemon or API trigger."""
+    prefs = _config.get("preferences", {})
+    if not prefs.get("hygiene_enabled", True):
+        return {"skipped": True, "reason": "disabled"}
+    from datetime import datetime, timezone as _tz
+    t0 = _ptime.time()
+    results = {}
+    results["logs_pruned"] = _hygiene_prune_logs()
+    results["souls_capped"] = _hygiene_cap_soul()
+    results["memories_archived"] = _hygiene_archive_memory()
+    results["identities_merged"] = _hygiene_merge_identity()
+    elapsed = round(_ptime.time() - t0, 2)
+    results["elapsed_s"] = elapsed
+    # Update stats
+    _hygiene_stats["last_run"] = datetime.now(_tz.utc).isoformat()
+    _hygiene_stats["total_runs"] += 1
+    _hygiene_stats["logs_pruned"] += results["logs_pruned"]
+    _hygiene_stats["souls_capped"] += results["souls_capped"]
+    _hygiene_stats["memories_archived"] += results["memories_archived"]
+    _hygiene_stats["identities_merged"] += results["identities_merged"]
+    # Keep only last 20 errors
+    _hygiene_stats["errors"] = _hygiene_stats["errors"][-20:]
+    log.info("Hygiene run complete: %s (%.2fs)", results, elapsed)
+    # Mission log
+    try:
+        mlog.emit("info", "system", "hygiene.run", f"Hygiene complete: {results['logs_pruned']} logs pruned, {results['souls_capped']} souls capped, {results['memories_archived']} memories archived", elapsed_s=elapsed)
+    except Exception:
+        pass
+    return results
+
+
+def _context_hygiene_loop():
+    """Background daemon: run hygiene at configured interval."""
+    import time as _t
+    # Initial delay — let Porter boot
+    _t.sleep(60)
+    # Run once on startup
+    try:
+        _hygiene_run()
+    except Exception as e:
+        log.warning("Hygiene startup run failed: %s", e)
+    while True:
+        prefs = _config.get("preferences", {})
+        hours = max(1, prefs.get("hygiene_interval_hours", 12))
+        _t.sleep(hours * 3600)
+        if not prefs.get("hygiene_enabled", True):
+            continue
+        try:
+            _hygiene_run()
+        except Exception as e:
+            log.warning("Hygiene loop error: %s", e)
+
+
+def _build_context_suffix(persona_id, message=""):
+    """Build a budgeted context suffix for persona dispatch."""
+    prefs = _config.get("preferences", {})
+    total_budget = max(1000, prefs.get("hygiene_ctx_budget", 4000))
+    pdir = PERSONAS_DIR / persona_id
+    # Budget allocation: SOUL 40%, RULES 25%, Cortex 20%, MEMORY 15%
+    soul_budget = int(total_budget * 0.40)
+    rules_budget = int(total_budget * 0.25)
+    cortex_budget = int(total_budget * 0.20)
+    memory_budget = int(total_budget * 0.15)
+    parts = []
+    # SOUL.md (skip if merged marker only)
+    soul_path = pdir / "SOUL.md"
+    if soul_path.exists():
+        soul = soul_path.read_text().strip()
+        if soul:
+            parts.append(f"Identity:\n{soul[:soul_budget]}")
+    # IDENTITY.md — skip if merged
+    id_path = pdir / "IDENTITY.md"
+    if id_path.exists():
+        id_content = id_path.read_text().strip()
+        if id_content and _HYGIENE_MERGED_MARKER not in id_content:
+            parts.append(f"About:\n{id_content[:500]}")
+    # ROLE_CARD.md — skip if merged
+    rc_path = pdir / "ROLE_CARD.md"
+    if rc_path.exists():
+        rc_content = rc_path.read_text().strip()
+        if rc_content and _HYGIENE_MERGED_MARKER not in rc_content:
+            parts.append(f"Role:\n{rc_content[:500]}")
+    # RULES.md
+    rules_path = PERSONAS_DIR / "RULES.md"
+    if rules_path.exists():
+        rules = rules_path.read_text().strip()
+        if rules:
+            parts.append(f"Global rules:\n{rules[:rules_budget]}")
+    # Agent MEMORY.md
+    mem_path = pdir / "MEMORY.md"
+    if mem_path.exists():
+        mem = mem_path.read_text().strip()
+        if mem:
+            parts.append(f"Agent memory:\n{mem[:memory_budget]}")
+    # Cortex memories (budgeted)
+    try:
+        cortex_ctx = _cortex_inject_context(message, persona_id=persona_id)
+        if cortex_ctx:
+            parts.append(cortex_ctx[:cortex_budget])
+    except Exception:
+        pass
+    return "\n\n".join(parts)
 
 
 def _run_cap_checks(force: bool = False):
@@ -8036,7 +8316,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.8</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.9</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -23196,40 +23476,18 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
 
     pdir = PERSONAS_DIR / persona_id
     soul = _read_persona_file(pdir / 'SOUL.md')
-    identity = _read_persona_file(pdir / 'IDENTITY.md')
-    role_card = _read_persona_file(pdir / 'ROLE_CARD.md')
-    agent_memory = _read_persona_file(pdir / 'MEMORY.md')
-    rules = _read_persona_file(PERSONAS_DIR / 'RULES.md')
     # v0.28.4 — Record that this agent has synced with current rules
     _rules_record_sync(persona_id)
 
     pname = persona.get('name', 'Agent')
     prole = persona.get('role', '')
 
-    # Build context suffix — full files, structured sections
-    _ctx_parts = []
-    if soul:
-        _ctx_parts.append(f"Identity:\n{soul}")
-    if identity:
-        _ctx_parts.append(f"About:\n{identity}")
-    if role_card:
-        _ctx_parts.append(f"Role:\n{role_card}")
-    if agent_memory:
-        _ctx_parts.append(f"Agent memory:\n{agent_memory}")
-    if rules:
-        _ctx_parts.append(f"Global rules:\n{rules}")
-    _ctx_suffix = '\n\n'.join(_ctx_parts) if _ctx_parts else ''
+    # v0.28.9 — Budgeted context suffix (replaces uncapped assembly)
+    _ctx_suffix = _build_context_suffix(persona_id, message=message)
 
-    # Cortex: inject relevant memories into context
-    _cortex_context = _cortex_inject_context(message, persona_id=persona_id)
-    if _cortex_context:
-        _ctx_parts.append(_cortex_context)
-        _ctx_suffix = '\n\n'.join(_ctx_parts) if _ctx_parts else ''
-
-    # Cap prompt size: trim conversation history to last 3 turns if too long
-    _MAX_PROMPT_CHARS = 6000
-    if len(message) > _MAX_PROMPT_CHARS:
-        # Try to preserve last 3 exchanges from conversation history
+    # v0.28.9 — History trimmer: keep last 3 turns, cap at 3000 chars
+    _MAX_HISTORY_CHARS = 3000
+    if len(message) > _MAX_HISTORY_CHARS:
         _hist_marker = "Conversation history:"
         if _hist_marker in message:
             _hist_start = message.index(_hist_marker)
@@ -23239,17 +23497,15 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
                 _nm_pos = _after_hist.index(_new_msg_marker)
                 _history_block = _after_hist[:_nm_pos]
                 _new_msg_block = _after_hist[_nm_pos:]
-                # Keep last 3 exchanges from history
                 _turns = _history_block.split("\nUser:")
                 if len(_turns) > 3:
                     _trimmed_hist = _hist_marker + "\n(earlier turns trimmed)\n\nUser:" + "\nUser:".join(_turns[-3:])
                     message = _trimmed_hist + _new_msg_block
                     log.info("Persona dispatch: trimmed conversation from %d to %d chars", len(message) + len(_history_block), len(message))
             else:
-                # No new message marker — just truncate from the front
-                message = message[-_MAX_PROMPT_CHARS:]
+                message = message[-_MAX_HISTORY_CHARS:]
         else:
-            message = message[-_MAX_PROMPT_CHARS:]
+            message = message[-_MAX_HISTORY_CHARS:]
 
     # Personality mode: conversational, includes identity context
     if personality_mode:
@@ -23306,6 +23562,12 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
 
     _dtp_t0 = _ptime.time()
     # Dispatch via existing agent dispatch
+    # v0.28.9 — Final augmented prompt cap
+    _MAX_AUGMENTED_CHARS = _config.get("preferences", {}).get("hygiene_max_augmented_chars", 8000)
+    if len(augmented_message) > _MAX_AUGMENTED_CHARS:
+        log.info("Persona dispatch: augmented_message trimmed from %d to %d chars", len(augmented_message), _MAX_AUGMENTED_CHARS)
+        augmented_message = augmented_message[:_MAX_AUGMENTED_CHARS]
+
     result = dispatch_agent(augmented_message, backend, model=model_override, timeout=timeout, run_id=run_id, chain_id=chain_id, step_num=step_num)
 
     # Tag the agent_message with persona_id
@@ -24311,7 +24573,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.8"})
+            self.reply_json({"v": "0.28.9"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24473,7 +24735,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.8"
+                health["porter_version"] = "0.28.9"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -24553,6 +24815,35 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json(health)
 
         # ── Mission Control Log API ──────────────────────────────────────
+
+        elif parsed.path == "/api/admin/hygiene":
+            if not self.auth_check(redirect=False): return
+            # Per-agent context sizes
+            agent_sizes = {}
+            try:
+                if PERSONAS_DIR.exists():
+                    for pdir in PERSONAS_DIR.iterdir():
+                        if not pdir.is_dir():
+                            continue
+                        total_sz = 0
+                        files_info = {}
+                        for fname in ["SOUL.md", "IDENTITY.md", "ROLE_CARD.md", "MEMORY.md"]:
+                            fpath = pdir / fname
+                            if fpath.exists():
+                                sz = len(fpath.read_text())
+                                files_info[fname] = sz
+                                total_sz += sz
+                        agent_sizes[pdir.name] = {"total_chars": total_sz, "files": files_info}
+            except Exception:
+                pass
+            prefs = _config.get("preferences", {})
+            hygiene_config = {k: prefs.get(k, v) for k, v in DEFAULT_PREFERENCES.items() if k.startswith("hygiene_")}
+            self.reply_json({
+                "ok": True,
+                "stats": _hygiene_stats,
+                "config": hygiene_config,
+                "agent_context_sizes": agent_sizes,
+            })
 
         elif parsed.path == "/api/providers":
             if not self.auth_check(redirect=False): return
@@ -26171,7 +26462,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.8'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.9'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29251,6 +29542,33 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             save_config(_config)
             self.reply_json({"ok": True, "updated": updated})
 
+        elif parsed.path == "/api/admin/hygiene/run":
+            if not self.auth_check(redirect=False): return
+            try:
+                results = _hygiene_run()
+                self.reply_json({"ok": True, "results": results})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)})
+
+        elif parsed.path == "/api/admin/hygiene/config":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            if "preferences" not in _config:
+                _config["preferences"] = {}
+            hygiene_keys = [k for k in DEFAULT_PREFERENCES if k.startswith("hygiene_")]
+            updated = {}
+            for k in hygiene_keys:
+                if k in data:
+                    val = data[k]
+                    if k == "hygiene_enabled" or k == "hygiene_merge_identity":
+                        val = bool(val)
+                    else:
+                        val = max(1, int(val))
+                    _config["preferences"][k] = val
+                    updated[k] = val
+            save_config(_config)
+            self.reply_json({"ok": True, "updated": updated})
+
         elif parsed.path == "/api/config/apikeys":
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
@@ -30220,11 +30538,13 @@ if __name__ == "__main__":
     _rollup_thread.start()
     _cortex_thread = threading.Thread(target=_cortex_consolidate_loop, name="porter-cortex", daemon=True)
     _cortex_thread.start()
+    _hygiene_thread = threading.Thread(target=_context_hygiene_loop, name="porter-hygiene", daemon=True)
+    _hygiene_thread.start()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.8 ready (localhost only)")
+    print(f"\n  Porter v0.28.9 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
