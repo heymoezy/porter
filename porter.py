@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.12 — UI Polish Batch"""
+"""Porter v0.28.13 — UI Polish Batch"""
 
 
 import email
@@ -8447,7 +8447,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.12</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.13</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9057,9 +9057,9 @@ select.settings-input { padding-right: 26px; }
         </div>
       </div>
       <!-- Inbox sidebar (right) -->
-      <div id="cx-inbox-sidebar" style="width:340px;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg2)">
+      <div id="cx-inbox-sidebar" style="width:340px;min-width:0;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg2);overflow:hidden">
         <div style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
-          <div style="font-size:13px;font-weight:600;color:var(--text)">Memories</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">Inbox</div>
           <span id="cx-inbox-count" style="font-size:10px;color:var(--text3);display:none"></span>
           <div style="flex:1"></div>
           <div style="display:flex;gap:2px">
@@ -9076,7 +9076,10 @@ select.settings-input { padding-right: 26px; }
 
     <!-- CONFIG VIEW (hidden by default) -->
     <div id="cx-config-view" style="display:none;padding:16px 28px 28px">
-      <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:16px">Cortex Configuration</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <button class="btn btn-ghost" onclick="_switchCortexView('main')" style="font-size:12px;padding:4px 10px">&larr; Back</button>
+        <div style="font-size:14px;font-weight:600;color:var(--text)">Cortex Configuration</div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:600px">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer">
           <input type="checkbox" id="cx-toggle2" onchange="_saveCortexConfig2()" checked>
@@ -9697,6 +9700,7 @@ async function api(url, body, timeout_ms = 15000) {
 
 const CHANGELOG = [
   { ver:'v0.28.12', date:'2026-03-07', notes:['System prompt restructured: clean === delimited sections (SOUL/ROLE_CARD/RULES/MEMORY), structured framing rules','Removed Cortex 99+ nav badge (no-op kept for SSE compat)','Memory map resize fix: redraws + fits graph after window resize','Lock button on memory map: prevents layout changes on resize, circle-click filtering still works in locked mode','Removed IDENTITY.md from context (redundant with SOUL.md)'] },
+  { ver:'v0.28.13', date:'2026-03-07', notes:['Inbox: fixed text overflow (word-break)','Inbox: click-to-filter now works (agent: prefix stripped)','Inbox: renamed Memories → Inbox','Graph: removed 99+ count cap on nodes','Cortex Config: added Back button'] },
   { ver:'v0.28.11', date:'2026-03-07', notes:['Workflow Registry: 6 system workflows exposed as monitorable, configurable cards','GET /api/workflows + POST trigger/toggle/config endpoints','Daemons instrumented: cortex, hygiene, cap-checks, heartbeat, rollup, memory extraction','Workflows tab redesigned: live status, run history, pause/resume, config editing, manual trigger','Projects tab replaced with Coming Soon placeholder (backend preserved)','Agent persona files: quality MEMORY.md + ROLE_CARD.md for all 9 agents with conflict detection','Dead code removed: runBuild, chain builder, heartbeat editor, old workflow skills UI'] },
   { ver:'v0.28.10', date:'2026-03-07', notes:['UI Polish Batch — visual refinements across tabs'] },
   { ver:'v0.28.9', date:'2026-03-07', notes:['Memory map resize fix, context budget improvements, history trimmer for dispatch'] },
@@ -16163,7 +16167,7 @@ function _renderCortexMemories(memories) {
       + '<button class="btn btn-ghost" style="font-size:14px;padding:4px 10px" onclick="event.stopPropagation();_editCortexMem(' + m.id + ',this)" title="Edit">\u270f\ufe0e</button>'
       + '<button class="btn btn-ghost" style="font-size:14px;padding:4px 10px;color:var(--red,#f87171)" onclick="event.stopPropagation();_deleteCortexMem(' + m.id + ',this)" title="Delete">\u00d7</button>'
       + '</div>'
-      + '<div class="cx-fact-text" style="font-size:13px;color:var(--text);line-height:1.5;cursor:pointer" onclick="_editCortexMem(' + m.id + ',this)" title="Click to edit">' + escHtml(m.fact || '') + '</div>'
+      + '<div class="cx-fact-text" style="font-size:13px;color:var(--text);line-height:1.5;cursor:pointer;word-break:break-word;overflow-wrap:break-word" onclick="_editCortexMem(' + m.id + ',this)" title="Click to edit">' + escHtml(m.fact || '') + '</div>'
       + '</div>';
   });
   el.innerHTML = html;
@@ -16561,15 +16565,17 @@ function _setupGraphInteraction(canvas) {
     if (dragging) {
       var n = dragging;
       dragging.fixed = true; _saveGraphPositions(); dragging = null; canvas.style.cursor = 'grab';
-      // v0.28.9 — Click node to filter memory list
-      if (n.type === 'agent' && n.id) {
-        var f1 = (_cortexMemories || []).filter(function(m) { return m.scope === 'agent' && m.scope_id === n.id; });
+      // v0.28.13 — Click node to filter memory list (strip type prefix from node ID)
+      var _nid = (n.id || '').replace(/^(agent|project):/, '');
+      if (n.type === 'agent' && _nid) {
+        var f1 = (_cortexMemories || []).filter(function(m) { return m.scope === 'agent' && m.scope_id === _nid; });
         if (f1.length) { _renderCortexMemories(f1); toast(n.label + ': ' + f1.length + ' memories'); }
+        else { toast(n.label + ': no memories yet'); }
       } else if (n.type === 'global') {
         var f2 = (_cortexMemories || []).filter(function(m) { return m.scope === 'global'; });
         if (f2.length) { _renderCortexMemories(f2); toast('Global: ' + f2.length + ' memories'); }
       } else if (n.type === 'project' && n.id) {
-        var f3 = (_cortexMemories || []).filter(function(m) { return m.scope === 'project' && m.scope_id === n.id; });
+        var f3 = (_cortexMemories || []).filter(function(m) { return m.scope === 'project' && m.scope_id === _nid; });
         if (f3.length) { _renderCortexMemories(f3); toast(n.label + ': ' + f3.length + ' memories'); }
       } else if (n.type === 'cortex') {
         _renderCortexMemories(_cortexMemories || []); toast('All memories');
@@ -16804,7 +16810,7 @@ function _drawGraph() {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = '#fff';
-      ctx.fillText(n.count > 99 ? '99+' : n.count, bx, by);
+      ctx.fillText(n.count, bx, by);
     }
     ctx.globalAlpha = 1;
   });
@@ -23890,7 +23896,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.12"})
+            self.reply_json({"v": "0.28.13"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24052,7 +24058,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.12"
+                health["porter_version"] = "0.28.13"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25808,7 +25814,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.12'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.13'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30010,7 +30016,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.12 ready (localhost only)")
+    print(f"\n  Porter v0.28.13 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
