@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.26 — Session counts, image attach, model badge, Cortex live"""
+"""Porter v0.28.27 — Session counts, image attach, model badge, Cortex live"""
 
 
 import email
@@ -4299,7 +4299,7 @@ def _scheduler_loop() -> None:
 def _heartbeat_tick():
     """Check all personas with enabled heartbeats and dispatch if due."""
     now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-    conn = _db()
+    conn = _db_conn()
     rows = conn.execute(
         "SELECT id, name, heartbeat_cron, last_heartbeat FROM personas WHERE heartbeat_enabled = 1 AND heartbeat_cron != ''"
     ).fetchall()
@@ -8543,7 +8543,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.26</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.27</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9081,25 +9081,7 @@ select.settings-input { padding-right: 26px; }
       <div id="wf-system-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px"></div>
     </div>
 
-    <!-- Skill Workflows -->
-    <div style="margin-bottom:24px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">Skill Workflows</div>
-        <span id="wf-skill-count" style="font-size:11px;color:var(--text3)"></span>
-      </div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">OpenClaw skills that can be triggered as scheduled workflows.</div>
-      <div id="wf-skill-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px"></div>
-    </div>
 
-    <!-- External Schedulers -->
-    <div style="margin-bottom:24px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">External Schedulers</div>
-        <span id="wf-ext-count" style="font-size:11px;color:var(--text3)"></span>
-      </div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Cron jobs and scheduled tasks detected from connected services.</div>
-      <div id="wf-ext-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px"></div>
-    </div>
 
     <!-- User Workflows -->
     <div style="margin-bottom:16px">
@@ -9816,6 +9798,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.27', date:'2026-03-07', notes:['Models: extraction progress card with play button, correct session counts','Workflows: fixed screen flashing (lightweight refresh, no rebuild)','Workflows: removed skill/ext sections (system workflows only)','Workflows: wider interval input box','Fixed: heartbeat _db() → _db_conn() error','Fixed: cortex stats session counting (uses actual session loaders)'] },
   { ver:'v0.28.26', date:'2026-03-07', notes:['Workflows: skill-based workflows section (OpenClaw installed skills)','Workflows: external schedulers section (Ollama, OpenClaw, systemd)','Workflows: pause stops running workflow immediately','Workflows: fixed screen flashing (smart refresh, 8s interval)','Models: extraction progress indicator on model cards during learning extraction'] },
   { ver:'v0.28.25', date:'2026-03-07', notes:['Agent wizard: AI Suggest auto-fills role, personality, focus, style, avatar','Agent wizard: streams response from auto-routed model','Wizard header: mentions Cortex shared memory for new agents'] },
   { ver:'v0.28.24', date:'2026-03-07', notes:['Workflows: running state with animated progress bar','Workflows: interval editor (Runs every: N seconds/minutes/hours/weeks)','Workflows: auto-refresh while running, disable Run Now during execution','Workflows: daemon loops instrumented with start/stop tracking'] },
@@ -11758,7 +11741,7 @@ async function loadWorkflowRegistry() {
         var parsed = _wfParseInterval(wf.interval_s || wf.interval);
         intervalEditor = '<div style="display:flex;align-items:center;gap:6px;margin-left:auto;font-size:11px;color:var(--text3)">'
           + 'Runs every '
-          + '<input type="number" class="settings-input" id="wf-intval-' + wf.id + '" value="' + parsed.val + '" min="1" style="width:48px;font-size:11px;padding:2px 4px;text-align:center;border-radius:4px">'
+          + '<input type="number" class="settings-input" id="wf-intval-' + wf.id + '" value="' + parsed.val + '" min="1" style="width:60px;font-size:11px;padding:2px 6px;text-align:center;border-radius:4px">'
           + '<select class="settings-input" id="wf-intunit-' + wf.id + '" style="font-size:11px;padding:2px 4px;border-radius:4px">'
           + '<option value="s"' + (parsed.unit === 's' ? ' selected' : '') + '>seconds</option>'
           + '<option value="m"' + (parsed.unit === 'm' ? ' selected' : '') + '>minutes</option>'
@@ -11812,7 +11795,7 @@ async function loadWorkflowRegistry() {
         window._wfRefreshTimer = setTimeout(function() {
           window._wfRefreshTimer = null;
           var wfMod = document.getElementById('workflows-module');
-          if (wfMod && wfMod.classList.contains('active')) loadWorkflowRegistry();
+          if (wfMod && wfMod.classList.contains('active')) _wfRefreshSystemOnly();
         }, 8000);
       }
     } else {
@@ -11821,10 +11804,7 @@ async function loadWorkflowRegistry() {
   } catch(e) {
     grid.innerHTML = '<div style="padding:16px;color:var(--text3);text-align:center">Failed to load workflows</div>';
   }
-  // Load skill workflows
-  _loadSkillWorkflows();
-  // Load external schedulers
-  _loadExternalSchedulers();
+  // Skill/ext sections removed — system workflows only
 }
 
 async function _loadSkillWorkflows() {
@@ -11902,6 +11882,35 @@ async function _loadExternalSchedulers() {
       + '<div style="font-size:12px;color:var(--text3);line-height:1.4">' + escHtml(s.detail) + '</div>'
       + '</div>';
   }).join('');
+}
+
+async function _wfRefreshSystemOnly() {
+  var grid = document.getElementById('wf-system-grid');
+  if (!grid) return;
+  try {
+    var data = await api('/api/workflows');
+    if (!data || !data.workflows) return;
+    var wfs = data.workflows;
+    var countEl = document.getElementById('wf-sys-count');
+    if (countEl) countEl.textContent = wfs.length + ' workflow' + (wfs.length !== 1 ? 's' : '');
+    grid.innerHTML = wfs.map(function(wf) {
+      var dotColor = wf.running ? '#3b82f6' : wf.status === 'active' ? '#22c55e' : wf.status === 'paused' ? '#9ca3af' : '#ef4444';
+      return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+        + '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0"></span>'
+        + '<span style="font-weight:600;font-size:13px;color:var(--text)">' + escHtml(wf.name) + '</span>'
+        + '<span style="margin-left:auto;font-size:11px;color:var(--text3)">' + (wf.running ? 'Running...' : escHtml(wf.status)) + '</span>'
+        + '</div>'
+        + (wf.running ? '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:color-mix(in srgb,#3b82f6 8%,transparent);border:1px solid color-mix(in srgb,#3b82f6 20%,transparent);border-radius:6px"><span class="learn-spinner"></span><span style="font-size:11px;color:#3b82f6">Running' + (wf.running_for_s ? ' (' + Math.round(wf.running_for_s) + 's)' : '') + '</span></div>' : '')
+        + '</div>';
+    }).join('');
+    if (wfs.some(function(w) { return w.running; })) {
+      window._wfRefreshTimer = setTimeout(function() {
+        window._wfRefreshTimer = null;
+        _wfRefreshSystemOnly();
+      }, 8000);
+    }
+  } catch(e) {}
 }
 
 function _wfTimeAgo(ts) {
@@ -12455,24 +12464,69 @@ async function _preloadSessionCounts() {
 
 async function _updateExtractionProgress() {
   try {
-    var total = 0;
-    for (var src in _maSessionCounts) {
-      var c = _maSessionCounts[src];
-      if (c && c.count) total += c.count;
-    }
     var resp = await api('/api/cortex/stats');
-    var extracted = (resp && resp.total_active) ? resp.total_active : 0;
+    if (!resp) return;
+    var total = resp.sessions_total || 0;
+    var extracted = resp.sessions_extracted || 0;
+    var remaining = Math.max(0, total - extracted);
     var bar = document.getElementById('extraction-progress-bar');
     if (!bar) return;
     var pct = total > 0 ? Math.min(100, Math.round(extracted / total * 100)) : 0;
-    bar.innerHTML = '<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text3)">'
-      + '<span>Memory extraction:</span>'
-      + '<div style="flex:1;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden;min-width:80px">'
-      + '<div style="height:100%;width:' + pct + '%;background:var(--accent);border-radius:3px;transition:width 0.3s"></div>'
+    var isRunning = _extractAllRunning;
+    var dotColor = isRunning ? '#3b82f6' : (remaining > 0 ? '#22c55e' : '#9ca3af');
+    var dotAnim = isRunning ? ';animation:cx-blink 1s ease-in-out infinite' : '';
+    var statusLabel = isRunning ? 'Extracting...' : (remaining > 0 ? remaining + ' pending' : 'All extracted');
+    bar.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+      + '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0' + dotAnim + '"></span>'
+      + '<span style="font-weight:600;font-size:13px;color:var(--text)">Memory Extraction</span>'
+      + '<span style="margin-left:auto;font-size:11px;color:var(--text3)">' + statusLabel + '</span>'
       + '</div>'
-      + '<span>' + extracted + '/' + total + ' sessions (' + pct + '%)</span>'
+      + (isRunning
+        ? '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:8px;background:color-mix(in srgb,#3b82f6 8%,transparent);border:1px solid color-mix(in srgb,#3b82f6 20%,transparent);border-radius:6px">'
+          + '<span class="learn-spinner"></span>'
+          + '<span style="font-size:11px;color:#3b82f6;font-weight:500">Extracting learnings...</span>'
+          + '<div style="flex:1;height:4px;background:rgba(59,130,246,0.15);border-radius:2px;overflow:hidden"><div style="height:100%;background:#3b82f6;border-radius:2px;animation:wf-progress 2s ease-in-out infinite"></div></div>'
+          + '</div>'
+        : '')
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+      + '<div style="flex:1;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden">'
+      + '<div style="height:100%;width:' + pct + '%;background:' + (pct >= 100 ? '#22c55e' : 'var(--accent)') + ';border-radius:3px;transition:width 0.3s"></div>'
+      + '</div>'
+      + '<span style="font-size:11px;color:var(--text3);white-space:nowrap">' + extracted + '/' + total + ' (' + pct + '%)</span>'
+      + '</div>'
+      + '<div style="display:flex;gap:6px">'
+      + (isRunning
+        ? '<button class="btn btn-ghost" style="font-size:11px;color:#3b82f6" onclick="_extractAllRunning=false;_updateExtractionProgress()">\u23F8 Stop</button>'
+        : (remaining > 0
+          ? '<button class="btn btn-ghost" style="font-size:11px" onclick="_triggerExtractAll()">\u25B6 Extract All</button>'
+          : '<button class="btn btn-ghost" style="font-size:11px;opacity:0.5" disabled>\u2713 Complete</button>'))
+      + '</div>'
       + '</div>';
+    // Auto-refresh while extracting
+    if (isRunning) setTimeout(_updateExtractionProgress, 3000);
   } catch(e) {}
+}
+
+async function _triggerExtractAll() {
+  // Trigger extraction for each backend that has sessions
+  var sources = ['claude','openclaw','gemini','codex','ollama'];
+  for (var i = 0; i < sources.length; i++) {
+    var cnt = ((_maSessionCounts || {})[sources[i]] || {}).count;
+    if (cnt > 0) {
+      // Load sessions for this source then extract
+      try {
+        var resp = await api('/api/sessions?source=' + sources[i]);
+        if (resp && resp.sessions) {
+          _maSessionsData = resp.sessions;
+          _extractAllLearnings(sources[i]);
+          _updateExtractionProgress();
+          return; // one source at a time
+        }
+      } catch(e) {}
+    }
+  }
+  toast('No sessions to extract');
 }
 
 var _inlineSessionsExpanded = {};
@@ -24685,7 +24739,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.26"})
+            self.reply_json({"v": "0.28.27"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24847,7 +24901,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.26"
+                health["porter_version"] = "0.28.27"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25463,6 +25517,19 @@ class Handler(BaseHTTPRequestHandler):
                 by_scope[row[0]] = row[1]
             new_1h = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='active' AND created_at > ?", (_t.time() - 3600,)).fetchone()[0]
             archived = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='archived'").fetchone()[0]
+            # Session extraction stats
+            sessions_total = 0
+            sessions_extracted = 0
+            try:
+                sessions_extracted = conn.execute("SELECT COUNT(*) FROM session_learnings").fetchone()[0]
+                _loaders = {"openclaw": _load_session_summaries, "claude": _load_claude_session_summaries, "gemini": _load_gemini_session_summaries}
+                for _ldr in _loaders.values():
+                    try: sessions_total += len(_ldr())
+                    except Exception: pass
+                try: sessions_total += len(_load_porter_chat_sessions())
+                except Exception: pass
+            except Exception:
+                pass
             conn.close()
             self.reply_json({
                 "ok": True,
@@ -25472,7 +25539,9 @@ class Handler(BaseHTTPRequestHandler):
                 "by_scope": by_scope,
                 "new_1h": new_1h,
                 "archived": archived,
-                "enabled": _config.get("preferences", {}).get("cortex_enabled", True)
+                "enabled": _config.get("preferences", {}).get("cortex_enabled", True),
+                "sessions_total": sessions_total,
+                "sessions_extracted": sessions_extracted
             })
 
         elif parsed.path == "/api/cortex/graph":
@@ -26644,7 +26713,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.26'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.27'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30862,7 +30931,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.26 ready (localhost only)")
+    print(f"\n  Porter v0.28.27 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
