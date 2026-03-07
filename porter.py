@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.39 — Cortex UX Fixes"""
+"""Porter v0.27.40 — Cortex UX Fixes"""
 
 
 import email
@@ -7826,7 +7826,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.39</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.40</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9163,7 +9163,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.27.39', date:'2026-03-07', notes:['Memory Map: deferred canvas init fixes "No graph data" on first load','Counters simplified: Memories / New today / Inbox (removed Merged/Active jargon)','Bigger buttons on fact cards (edit, delete, push, dismiss, route)','Fact text clickable to open edit modal','Show all facts by default (routed + unrouted)','Extraction progress banner with animated shimmer during memory extraction'] },
+  { ver:'v0.27.40', date:'2026-03-07', notes:['Memory Map: deferred canvas init fixes "No graph data" on first load','Counters simplified: Memories / New today / Inbox (removed Merged/Active jargon)','Bigger buttons on fact cards (edit, delete, push, dismiss, route)','Fact text clickable to open edit modal','Show all facts by default (routed + unrouted)','Extraction progress banner with animated shimmer during memory extraction'] },
   { ver:'v0.27.38', date:'2026-03-07', notes:['Memory Map: edges connect at node borders (not centers)','Memory Map: distinct shapes per type (circles=agents, hexagons=global, rounded rects=projects)','Memory Map: scope filter buttons (All/Agent/Project/Global) with fade effect','Memory Map: hover tooltips show node details','Memory Map: hub renamed from Cortex to Inbox for clarity','Memory Map: agent-to-agent edges based on shared project work'] },
   { ver:'v0.27.37', date:'2026-03-06', notes:['Memory Map: drag persistence (double-click to unpin), auto-center, zoom controls','Memory Map: particles reflect real data flow (idle edges static)','Cortex inbox: filters to unrouted facts, counter matches inbox count','Cortex counter: auto-updates via SSE after every extraction','Session delete cascades to cortex inbox entries','Agent skills: per-agent skill assignment in Config tab'] },
   { ver:'v0.27.36', date:'2026-03-06', notes:['Cortex promoted to main nav with unrouted memory counter badge','Memory Inbox: review, route to agent/global, dismiss, or edit extracted facts','Interactive Memory Map: force-directed graph with animated data flow particles','Per-fact routing: push to agent MEMORY.md or global config, fact leaves inbox','Config view: auto-extract, auto-route, consolidation interval, injection limits','GET /api/cortex/graph + POST /api/cortex/memories/<id>/route endpoints'] },
@@ -9195,7 +9195,7 @@ const CHANGELOG = [
   { ver:'v0.27.10', date:'2026-03-03', notes:['Fix: chat titles use raw user text (not context-injected prompt)','Chat history shows General badge when no project','Persona dispatch: animated thinking dots, survives tab switching','SOUL context injection shortened (800 char cap, bracket framing)','Personality mode: brief role-play instruction (no more echo)'] },
   { ver:'v0.27.9', date:'2026-03-03', notes:['Fix: RULES.md no longer injected into persona dispatch (project governance, not agent behavior)','SOUL.md context framed as identity instructions, not raw text dump','Personality mode: dedicated prompt for identity conversations','Backend override passed through dispatch endpoint','Model selector override works in persona dispatch'] },
   { ver:'v0.27.8', date:'2026-03-03', notes:['Smart chat titles: persona prefix + trimmed message','Project badges in chat history','Persona badges in chat history','Bigger font in chat sidebar (13px)','project_id + persona saved with chat sessions'] },
-  { ver:'v0.27.8', date:'2026-03-07', notes:['Fix pack: TypeScript build now clean for new tab modules (type-only imports + unused symbol cleanup)','Fix: ApiError constructor compatibility with erasableSyntaxOnly TypeScript setting','Safe rollout: staged validation + build pass before restart'] },
+  { ver:'v0.27.40', date:'2026-03-07', notes:['Fix pack: TypeScript build now clean for new tab modules (type-only imports + unused symbol cleanup)','Fix: ApiError constructor compatibility with erasableSyntaxOnly TypeScript setting','Safe rollout: staged validation + build pass before restart'] },
   { ver:'v0.27.7', date:'2026-03-03', notes:['3-selector chat bar: Agent + Project + Model','Agent selector: pick persona for SOUL context injection','Project selector: General / Personality / specific project context','Model override: force specific backend or auto-route via agent preferred','Personality mode: build agent identity through conversation','Dropdown menus with search-friendly layout'] },
   { ver:'v0.27.6', date:'2026-03-03', notes:['Porter-styled modal dialogs (porterPrompt, porterConfirm, porterAlert)','Replaced 17+ browser prompt/confirm/alert calls with themed modals','Keyboard support (Enter to confirm, Escape to cancel)','Overlay click-to-dismiss'] },
   { ver:'v0.27.5', date:'2026-03-03', notes:['Slide-out detail panel from right (full height, overlay)','Agent cards: text wrapping, consistent 130px width','Cards left-aligned in grid','Removed max-height limit on detail content'] },
@@ -23862,7 +23862,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.39"})
+            self.reply_json({"v": "0.27.40"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -23949,7 +23949,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.39"
+                health["porter_version"] = "0.27.40"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25603,7 +25603,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.39'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.40'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29646,7 +29646,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.39 ready (localhost only)")
+    print(f"\n  Porter v0.27.40 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

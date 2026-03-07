@@ -1,6 +1,6 @@
 # Porter Release Notes
 
-## v0.27.8 (2026-03-07)
+## v0.27.40 (2026-03-07)
 
 **Fix pack: frontend build stabilization + safe restart rollout**
 
