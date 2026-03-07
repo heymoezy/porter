@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.44 — Persistent Graph Positions"""
+"""Porter v0.27.45 — Graph UX Polish"""
 
 
 import email
@@ -7826,7 +7826,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.44</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.45</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8499,6 +8499,7 @@ select.settings-input { padding-right: 26px; }
           <button class="btn btn-ghost" onclick="_graphZoomIn()" style="font-size:10px;padding:2px 8px" title="Zoom in">+</button>
           <button class="btn btn-ghost" onclick="_graphZoomOut()" style="font-size:10px;padding:2px 8px" title="Zoom out">&minus;</button>
           <button class="btn btn-ghost" onclick="_fitGraphToView()" style="font-size:10px;padding:2px 8px" title="Fit to view">Fit</button>
+          <button class="btn btn-ghost" onclick="_centerGraph()" style="font-size:10px;padding:2px 8px" title="Center (reset zoom)">Center</button>
         </div>
         <div style="flex:1;position:relative;overflow:hidden">
           <canvas id="cx-graph-canvas" width="700" height="500" style="width:100%;height:100%;cursor:grab"></canvas>
@@ -9163,6 +9164,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.45', date:'2026-03-07', notes:['Memory Map: Fit button uses tighter padding (8% vs 20%), min scale 0.5','Memory Map: new Center button (reset zoom to 1x, center on graph)','Memory Map: hover tooltip shows agent role','Graph API includes role field for agent nodes'] },
   { ver:'v0.27.44', date:'2026-03-07', notes:['Memory Map: node positions persist across page loads (localStorage)','Dragged nodes save position automatically','Saved layout skips force simulation entirely — instant render','New nodes (from new agents/projects) get force-placed around existing layout'] },
   { ver:'v0.27.43', date:'2026-03-07', notes:['Memory Map: static layout — nodes no longer float/bounce','Force simulation runs synchronously (200 iterations) then stops','Auto-fit to view after layout settles','Dragging still works but nodes stay where you put them'] },
   { ver:'v0.27.42', date:'2026-03-07', notes:['Chat: extraction feedback — shows "Extracting memories..." then "X memories extracted" inline after dispatch','Extraction indicator auto-fades after 4 seconds'] },
@@ -16565,14 +16567,26 @@ function _fitGraphToView() {
     if (n.y + r > maxY) maxY = n.y + r;
   });
   var gw = maxX - minX || 1, gh = maxY - minY || 1;
-  var padding = 0.2;
+  var padding = 0.08;
   var scaleX = canvas.width * (1 - padding * 2) / gw;
   var scaleY = canvas.height * (1 - padding * 2) / gh;
   var scale = Math.min(scaleX, scaleY, 2);
+  if (scale < 0.5) scale = 0.5;
   var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
   _graphZoom.scale = scale;
   _graphZoom.x = canvas.width / 2 - cx * scale;
   _graphZoom.y = canvas.height / 2 - cy * scale;
+  _drawGraph();
+}
+function _centerGraph() {
+  var canvas = document.getElementById('cx-graph-canvas');
+  if (!canvas || !_graphNodes.length) return;
+  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  _graphNodes.forEach(function(n) { if (n.x < minX) minX = n.x; if (n.y < minY) minY = n.y; if (n.x > maxX) maxX = n.x; if (n.y > maxY) maxY = n.y; });
+  var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  _graphZoom.scale = 1;
+  _graphZoom.x = canvas.width / 2 - cx;
+  _graphZoom.y = canvas.height / 2 - cy;
   _drawGraph();
 }
 function _graphZoomIn() { _graphZoom.scale = Math.min(3, _graphZoom.scale * 1.2); _drawGraph(); }
@@ -16697,9 +16711,9 @@ function _setupGraphInteraction(canvas) {
         var typeLabels = {cortex:'Inbox Hub', agent:'Agent', project:'Project', global:'Global'};
         var typeColors = {cortex:'#8b5cf6', agent:'#22d3ee', project:'#fbbf24', global:'#4ade80'};
         var html = '<div style="font-weight:600;margin-bottom:4px">' + (hovered.emoji || '') + ' ' + (hovered.label || '') + '</div>';
+        if (hovered.role) html += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px;font-style:italic">' + hovered.role + '</div>';
         html += '<span style="display:inline-block;font-size:9px;padding:1px 6px;border-radius:3px;background:' + (typeColors[hovered.type]||'#666') + '20;color:' + (typeColors[hovered.type]||'#888') + ';border:1px solid ' + (typeColors[hovered.type]||'#666') + '40">' + (typeLabels[hovered.type]||hovered.type) + '</span>';
         html += '<div style="margin-top:4px;font-size:11px;color:var(--text3)">' + (hovered.count || 0) + ' memories</div>';
-        if (hovered.backend) html += '<div style="font-size:10px;color:var(--text3)">Backend: ' + hovered.backend + '</div>';
         tip.innerHTML = html;
         tip.style.display = 'block';
         tip.style.left = (e.clientX - rect.left + 12) + 'px';
@@ -23908,7 +23922,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.44"})
+            self.reply_json({"v": "0.27.45"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -23995,7 +24009,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.44"
+                health["porter_version"] = "0.27.45"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -24522,12 +24536,12 @@ class Handler(BaseHTTPRequestHandler):
                     nodes.append({"id": "global", "label": "Global", "type": "global", "emoji": "\U0001f310", "radius": 18 + min(8, gc), "count": gc})
                     edges.append({"source": 0, "target": global_node_idx, "weight": max(1, min(6, gc))})
                 # Agent nodes (always show all agents)
-                personas = conn.execute("SELECT id, name, avatar FROM personas").fetchall()
+                personas = conn.execute("SELECT id, name, avatar, role FROM personas").fetchall()
                 for idx, p in enumerate(personas):
-                    pid, pname, pemoji = p[0], p[1], p[2] or "\u2699"
+                    pid, pname, pemoji, prole = p[0], p[1], p[2] or "\u2699", p[3] or ""
                     ac = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='agent' AND scope_id=? AND consolidated_into IS NULL", (pid,)).fetchone()[0]
                     node_idx = len(nodes)
-                    nodes.append({"id": "agent:" + pid, "label": pname, "type": "agent", "emoji": pemoji, "radius": 18 + min(8, ac), "count": ac})
+                    nodes.append({"id": "agent:" + pid, "label": pname, "type": "agent", "emoji": pemoji, "radius": 18 + min(8, ac), "count": ac, "role": prole})
                     # Always connect agents to cortex hub
                     edges.append({"source": 0, "target": node_idx, "weight": max(1, min(6, ac))})
                     # Connect agents to global if global exists
@@ -25649,7 +25663,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.44'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.45'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29692,7 +29706,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.44 ready (localhost only)")
+    print(f"\n  Porter v0.27.45 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
