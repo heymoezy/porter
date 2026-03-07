@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.38 — Cortex UX Polish + Agent/Skills Architecture"""
+"""Porter v0.27.39 — Cortex UX Fixes"""
 
 
 import email
@@ -893,6 +893,9 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
     max_facts = prefs.get("cortex_max_facts", 8)
     if len(response_text) < min_len:
         return
+
+    # Emit SSE event so UI can show progress banner
+    _emit_event("cortex:extracting", {"persona_id": persona_id, "backend": backend})
 
     # Build extraction prompt
     extract_prompt = (
@@ -7370,6 +7373,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .emoji-grid .emoji-btn:hover { border-color:var(--accent); }
 .emoji-grid .emoji-btn.selected { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, var(--bg)); }
 @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+@keyframes cx-shimmer { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }
 
 /* Memory tab v6 — compact layout (stripped in v0.27.31, kept: .mem-section-label, .mem-age-badge, .mem-coord-*) */
     /* Model list rows (replaces dropdown) */
@@ -7822,7 +7826,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.38</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.39</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8466,12 +8470,16 @@ select.settings-input { padding-right: 26px; }
       <button class="btn btn-ghost" style="margin-left:4px" onclick="_loadCortexTab()">&#8635;</button>
     </div>
 
+    <!-- Extraction progress banner -->
+    <div id="cx-extract-banner" style="display:none;padding:8px 28px;font-size:13px;font-weight:500;color:var(--text);background:linear-gradient(90deg,var(--surface),color-mix(in srgb,var(--accent) 15%,var(--surface)),var(--surface));background-size:200% 100%;animation:cx-shimmer 1.5s ease infinite;border-bottom:1px solid var(--border)">
+      &#x2728; Extracting memories&hellip;
+    </div>
+
     <!-- Stats bar -->
     <div id="cx-stats-bar" style="display:flex;gap:12px;padding:8px 28px;background:var(--surface);border-bottom:1px solid var(--border);font-size:13px">
-      <span style="color:var(--text2)">Active: <strong id="cx-total2" style="color:var(--accent)">—</strong></span>
-      <span style="color:var(--text3)">Merged: <strong id="cx-merged2">—</strong></span>
-      <span style="color:var(--text3)">24h: <strong id="cx-24h2">—</strong></span>
-      <span id="cx-unrouted-stat" style="color:var(--amber,#fbbf24);display:none">Unrouted: <strong id="cx-unrouted2">0</strong></span>
+      <span style="color:var(--text2)">Memories: <strong id="cx-total2" style="color:var(--accent)">—</strong></span>
+      <span style="color:var(--text3)">New today: <strong id="cx-24h2">—</strong></span>
+      <span style="color:var(--amber,#fbbf24)">Inbox: <strong id="cx-unrouted2">0</strong></span>
       <span style="margin-left:auto"><span id="cx-status2" style="font-weight:600;color:var(--green,#4ade80)">—</span></span>
     </div>
 
@@ -8517,7 +8525,7 @@ select.settings-input { padding-right: 26px; }
             <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('global',this)" style="font-size:9px;padding:2px 6px">Global</button>
           </div>
           <label style="display:flex;align-items:center;gap:3px;font-size:9px;color:var(--text3);cursor:pointer" title="Show already-routed facts">
-            <input type="checkbox" id="cx-show-routed" onchange="_toggleShowRouted(this.checked)" style="width:12px;height:12px">
+            <input type="checkbox" id="cx-show-routed" onchange="_toggleShowRouted(this.checked)" style="width:12px;height:12px" checked>
             Routed
           </label>
         </div>
@@ -9155,6 +9163,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.39', date:'2026-03-07', notes:['Memory Map: deferred canvas init fixes "No graph data" on first load','Counters simplified: Memories / New today / Inbox (removed Merged/Active jargon)','Bigger buttons on fact cards (edit, delete, push, dismiss, route)','Fact text clickable to open edit modal','Show all facts by default (routed + unrouted)','Extraction progress banner with animated shimmer during memory extraction'] },
   { ver:'v0.27.38', date:'2026-03-07', notes:['Memory Map: edges connect at node borders (not centers)','Memory Map: distinct shapes per type (circles=agents, hexagons=global, rounded rects=projects)','Memory Map: scope filter buttons (All/Agent/Project/Global) with fade effect','Memory Map: hover tooltips show node details','Memory Map: hub renamed from Cortex to Inbox for clarity','Memory Map: agent-to-agent edges based on shared project work'] },
   { ver:'v0.27.37', date:'2026-03-06', notes:['Memory Map: drag persistence (double-click to unpin), auto-center, zoom controls','Memory Map: particles reflect real data flow (idle edges static)','Cortex inbox: filters to unrouted facts, counter matches inbox count','Cortex counter: auto-updates via SSE after every extraction','Session delete cascades to cortex inbox entries','Agent skills: per-agent skill assignment in Config tab'] },
   { ver:'v0.27.36', date:'2026-03-06', notes:['Cortex promoted to main nav with unrouted memory counter badge','Memory Inbox: review, route to agent/global, dismiss, or edit extracted facts','Interactive Memory Map: force-directed graph with animated data flow particles','Per-fact routing: push to agent MEMORY.md or global config, fact leaves inbox','Config view: auto-extract, auto-route, consolidation interval, injection limits','GET /api/cortex/graph + POST /api/cortex/memories/<id>/route endpoints'] },
@@ -9186,6 +9195,7 @@ const CHANGELOG = [
   { ver:'v0.27.10', date:'2026-03-03', notes:['Fix: chat titles use raw user text (not context-injected prompt)','Chat history shows General badge when no project','Persona dispatch: animated thinking dots, survives tab switching','SOUL context injection shortened (800 char cap, bracket framing)','Personality mode: brief role-play instruction (no more echo)'] },
   { ver:'v0.27.9', date:'2026-03-03', notes:['Fix: RULES.md no longer injected into persona dispatch (project governance, not agent behavior)','SOUL.md context framed as identity instructions, not raw text dump','Personality mode: dedicated prompt for identity conversations','Backend override passed through dispatch endpoint','Model selector override works in persona dispatch'] },
   { ver:'v0.27.8', date:'2026-03-03', notes:['Smart chat titles: persona prefix + trimmed message','Project badges in chat history','Persona badges in chat history','Bigger font in chat sidebar (13px)','project_id + persona saved with chat sessions'] },
+  { ver:'v0.27.8', date:'2026-03-07', notes:['Fix pack: TypeScript build now clean for new tab modules (type-only imports + unused symbol cleanup)','Fix: ApiError constructor compatibility with erasableSyntaxOnly TypeScript setting','Safe rollout: staged validation + build pass before restart'] },
   { ver:'v0.27.7', date:'2026-03-03', notes:['3-selector chat bar: Agent + Project + Model','Agent selector: pick persona for SOUL context injection','Project selector: General / Personality / specific project context','Model override: force specific backend or auto-route via agent preferred','Personality mode: build agent identity through conversation','Dropdown menus with search-friendly layout'] },
   { ver:'v0.27.6', date:'2026-03-03', notes:['Porter-styled modal dialogs (porterPrompt, porterConfirm, porterAlert)','Replaced 17+ browser prompt/confirm/alert calls with themed modals','Keyboard support (Enter to confirm, Escape to cancel)','Overlay click-to-dismiss'] },
   { ver:'v0.27.5', date:'2026-03-03', notes:['Slide-out detail panel from right (full height, overlay)','Agent cards: text wrapping, consistent 130px width','Cards left-aligned in grid','Removed max-height limit on detail content'] },
@@ -10969,8 +10979,14 @@ function switchModule(name) {
         window._cortexEvtSrc.onmessage = function(e) {
           try {
             var d = JSON.parse(e.data);
+            if (d.type === 'cortex:extracting') {
+              var banner = document.getElementById('cx-extract-banner');
+              if (banner) banner.style.display = '';
+            }
             if (d.type === 'cortex:update' && d.data) {
               _updateCortexBadge(d.data.total_unrouted || 0);
+              var banner2 = document.getElementById('cx-extract-banner');
+              if (banner2) banner2.style.display = 'none';
               // If on Cortex tab, refresh inbox
               var cxMod = document.getElementById('cortex-module');
               if (cxMod && cxMod.classList.contains('active')) {
@@ -16152,14 +16168,12 @@ async function _loadCortexTab() {
     var stats = await api('/api/cortex/stats');
     if (stats) {
       var t = document.getElementById('cx-total2'); if (t) t.textContent = stats.total_active || 0;
-      var m = document.getElementById('cx-merged2'); if (m) m.textContent = stats.total_merged || 0;
       var h = document.getElementById('cx-24h2'); if (h) h.textContent = stats.last_24h || 0;
       var st = document.getElementById('cx-status2'); if (st) { st.textContent = stats.enabled ? 'ON' : 'OFF'; st.style.color = stats.enabled ? 'var(--green,#4ade80)' : 'var(--red,#f87171)'; }
       var tog = document.getElementById('cx-toggle2'); if (tog) tog.checked = stats.enabled !== false;
       // Unrouted count
       var unrouted = stats.unrouted || 0;
       var unEl = document.getElementById('cx-unrouted2'); if (unEl) unEl.textContent = unrouted;
-      var unStat = document.getElementById('cx-unrouted-stat'); if (unStat) unStat.style.display = unrouted > 0 ? '' : 'none';
       // Nav badge
       _updateCortexBadge(unrouted);
     }
@@ -16175,7 +16189,7 @@ async function _loadCortexTab() {
   } catch(e) {}
   // Load memories
   try {
-    var mems = await api('/api/cortex/memories?routed=false');
+    var mems = await api('/api/cortex/memories');
     _cortexMemories = (mems && mems.memories) || [];
     _renderCortexMemories(_cortexMemories);
     var countEl = document.getElementById('cx-inbox-count');
@@ -16184,8 +16198,8 @@ async function _loadCortexTab() {
     var el = document.getElementById('cx-memory-list');
     if (el) el.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--err)">Failed to load memories</div>';
   }
-  // Always init the graph
-  _initMemoryGraph();
+  // Always init the graph (defer to let layout settle)
+  requestAnimationFrame(function() { setTimeout(function() { _initMemoryGraph(); }, 50); });
 }
 
 function _updateCortexBadge(count) {
@@ -16229,13 +16243,13 @@ function _renderCortexMemories(memories) {
     if (!isRouted) {
       routeBar = '<div class="cx-route-bar">'
         + '<div class="cx-route-picker" data-mid="' + m.id + '" data-value="global" style="position:relative">'
-        + '<button class="btn btn-ghost" onclick="_toggleRoutePicker(this)" style="font-size:12px;padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);display:flex;align-items:center;gap:6px;min-width:120px">'
+        + '<button class="btn btn-ghost" onclick="_toggleRoutePicker(this)" style="font-size:13px;padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);display:flex;align-items:center;gap:6px;min-width:120px">'
         + '<span class="cx-pick-label">\ud83c\udf10 Global</span>'
         + '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:auto;opacity:.5"><polyline points="6 9 12 15 18 9"/></svg>'
         + '</button>'
         + '</div>'
-        + '<button class="btn btn-ghost" style="font-size:12px;padding:4px 14px;border:1px solid var(--accent);border-radius:6px;color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)" onclick="_routeCortexMem(' + m.id + ',this)">Push</button>'
-        + '<button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--text3)" onclick="_dismissCortexMem(' + m.id + ',this)">Dismiss</button>'
+        + '<button class="btn btn-ghost" style="font-size:13px;padding:6px 18px;border:1px solid var(--accent);border-radius:6px;color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)" onclick="_routeCortexMem(' + m.id + ',this)">Push</button>'
+        + '<button class="btn btn-ghost" style="font-size:13px;padding:6px 14px;color:var(--text3)" onclick="_dismissCortexMem(' + m.id + ',this)">Dismiss</button>'
         + '</div>';
     }
     html += '<div class="cx-mem-card cx-mem-row" data-scope="' + sc + '" data-id="' + m.id + '">'
@@ -16247,10 +16261,10 @@ function _renderCortexMemories(memories) {
         : '<span style="font-size:10px;color:var(--text3)">' + (m.source_type || 'dispatch') + '</span>')
       + routeStatus
       + '<div style="flex:1"></div>'
-      + '<button class="btn btn-ghost" style="font-size:12px;padding:0 6px" onclick="event.stopPropagation();_editCortexMem(' + m.id + ',this)" title="Edit">\u270f\ufe0e</button>'
-      + '<button class="btn btn-ghost" style="font-size:12px;padding:0 6px;color:var(--red,#f87171)" onclick="event.stopPropagation();_deleteCortexMem(' + m.id + ',this)" title="Delete">\u00d7</button>'
+      + '<button class="btn btn-ghost" style="font-size:14px;padding:4px 10px" onclick="event.stopPropagation();_editCortexMem(' + m.id + ',this)" title="Edit">\u270f\ufe0e</button>'
+      + '<button class="btn btn-ghost" style="font-size:14px;padding:4px 10px;color:var(--red,#f87171)" onclick="event.stopPropagation();_deleteCortexMem(' + m.id + ',this)" title="Delete">\u00d7</button>'
       + '</div>'
-      + '<div class="cx-fact-text" style="font-size:13px;color:var(--text);line-height:1.5">' + escHtml(m.fact || '') + '</div>'
+      + '<div class="cx-fact-text" style="font-size:13px;color:var(--text);line-height:1.5;cursor:pointer" onclick="_editCortexMem(' + m.id + ',this)" title="Click to edit">' + escHtml(m.fact || '') + '</div>'
       + routeBar
       + '</div>';
   });
@@ -16549,10 +16563,17 @@ async function _initMemoryGraph() {
   canvas.height = h;
   canvas.style.width = w + 'px';
   canvas.style.height = h + 'px';
-  // Fetch graph data
+  // Fetch graph data (with retry)
   try {
     var data = await api('/api/cortex/graph');
     if (!data || !data.nodes || !data.nodes.length) {
+      // Retry once after 500ms — data may still be loading
+      if (!window._graphRetried) {
+        window._graphRetried = true;
+        setTimeout(function() { _initMemoryGraph(); }, 500);
+        return;
+      }
+      window._graphRetried = false;
       var ctx = canvas.getContext('2d');
       ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text3').trim() || '#888';
       ctx.font = '14px system-ui';
@@ -16560,6 +16581,7 @@ async function _initMemoryGraph() {
       ctx.fillText('No graph data — dispatch to an agent first', w/2, h/2);
       return;
     }
+    window._graphRetried = false;
     _graphNodes = data.nodes;
     _graphEdges = data.edges;
     // Initialize positions in a circle
@@ -23840,7 +23862,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.38"})
+            self.reply_json({"v": "0.27.39"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -23927,7 +23949,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.38"
+                health["porter_version"] = "0.27.39"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25581,7 +25603,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.38'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.39'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29624,7 +29646,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.38 ready (localhost only)")
+    print(f"\n  Porter v0.27.39 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

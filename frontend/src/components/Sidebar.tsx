@@ -64,7 +64,7 @@ export function Sidebar() {
       {/* Footer */}
       <div className="p-4 border-t border-neutral-800">
         <span className="text-[10px] text-neutral-500 tracking-wider">
-          {sidebarCollapsed ? 'v24' : 'PORTER v0.24.2'}
+          {sidebarCollapsed ? 'v25' : 'PORTER v0.25.4'}
         </span>
       </div>
     </aside>

@@ -1,12 +1,28 @@
 import { Sidebar } from './Sidebar';
 import { useAppStore } from '../store/app';
 import { ChatView } from '../modules/chat/ChatView';
+import { OrchView } from '../modules/orchestration/OrchView';
+import { TasksView } from '../modules/tasks/TasksView';
+import { AdminView } from '../modules/admin/AdminView';
+import { LocationsView } from '../modules/locations/LocationsView';
+import { FilesView } from '../modules/files/FilesView';
+import { SettingsView } from '../modules/settings/SettingsView';
+import { MemoryView } from '../modules/memory/MemoryView';
+import { ExtensionsView } from '../modules/extensions/ExtensionsView';
 
 // Lazy placeholder for each tab — will be replaced with real modules
 function TabPlaceholder({ name }: { name: string }) {
   if (name === 'chat') return <ChatView />;
-  
+  if (name === 'orchestration') return <OrchView />;
+  if (name === 'projects') return <TasksView />; // Tasks/Projects are merged for now
+  if (name === 'admin') return <AdminView />;
+  if (name === 'locations') return <LocationsView />;
+  if (name === 'files') return <FilesView />;
+  if (name === 'settings') return <SettingsView />;
+  if (name === 'memory') return <MemoryView />;
+  if (name === 'extensions') return <ExtensionsView />;
   return (
+
     <div className="flex-1 flex items-center justify-center">
       <div className="text-center">
         <h2 className="text-xl font-semibold text-neutral-300 mb-2 capitalize">{name}</h2>
