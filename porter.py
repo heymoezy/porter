@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.11 — UI Polish Batch"""
+"""Porter v0.28.12 — UI Polish Batch"""
 
 
 import email
@@ -1636,36 +1636,30 @@ def _build_context_suffix(persona_id, message=""):
     if soul_path.exists():
         soul = soul_path.read_text().strip()
         if soul:
-            parts.append(f"Identity:\n{soul[:soul_budget]}")
-    # IDENTITY.md — skip if merged
-    id_path = pdir / "IDENTITY.md"
-    if id_path.exists():
-        id_content = id_path.read_text().strip()
-        if id_content and _HYGIENE_MERGED_MARKER not in id_content:
-            parts.append(f"About:\n{id_content[:500]}")
+            parts.append(f"--- SOUL.md ---\n{soul[:soul_budget]}\n--- end ---")
     # ROLE_CARD.md — skip if merged
     rc_path = pdir / "ROLE_CARD.md"
     if rc_path.exists():
         rc_content = rc_path.read_text().strip()
         if rc_content and _HYGIENE_MERGED_MARKER not in rc_content:
-            parts.append(f"Role:\n{rc_content[:500]}")
+            parts.append(f"--- ROLE_CARD.md ---\n{rc_content[:500]}\n--- end ---")
     # RULES.md
     rules_path = PERSONAS_DIR / "RULES.md"
     if rules_path.exists():
         rules = rules_path.read_text().strip()
         if rules:
-            parts.append(f"Global rules:\n{rules[:rules_budget]}")
+            parts.append(f"--- RULES.md ---\n{rules[:rules_budget]}\n--- end ---")
     # Agent MEMORY.md
     mem_path = pdir / "MEMORY.md"
     if mem_path.exists():
         mem = mem_path.read_text().strip()
         if mem:
-            parts.append(f"Agent memory:\n{mem[:memory_budget]}")
+            parts.append(f"--- MEMORY.md ---\n{mem[:memory_budget]}\n--- end ---")
     # Cortex memories (budgeted)
     try:
         cortex_ctx = _cortex_inject_context(message, persona_id=persona_id)
         if cortex_ctx:
-            parts.append(cortex_ctx[:cortex_budget])
+            parts.append(f"--- Relevant memories ---\n{cortex_ctx[:cortex_budget]}\n--- end ---")
     except Exception:
         pass
     return "\n\n".join(parts)
@@ -8453,7 +8447,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.11</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.12</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9048,6 +9042,7 @@ select.settings-input { padding-right: 26px; }
           <button class="btn btn-ghost" onclick="_graphZoomOut()" style="font-size:10px;padding:2px 8px" title="Zoom out">&minus;</button>
           <button class="btn btn-ghost" onclick="_fitGraphToView()" style="font-size:10px;padding:2px 8px" title="Fit to view">Fit</button>
           <button class="btn btn-ghost" onclick="_centerGraph()" style="font-size:10px;padding:2px 8px" title="Center (reset zoom)">Center</button>
+          <button id="cx-lock-btn" class="btn btn-ghost" onclick="_toggleGraphLock()" style="font-size:10px;padding:2px 8px" title="Lock layout (prevent resize)">&#x1f513;</button>
         </div>
         <div style="flex:1;position:relative;overflow:hidden">
           <canvas id="cx-graph-canvas" width="700" height="500" style="width:100%;height:100%;cursor:grab"></canvas>
@@ -9701,6 +9696,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.28.12', date:'2026-03-07', notes:['System prompt restructured: clean === delimited sections (SOUL/ROLE_CARD/RULES/MEMORY), structured framing rules','Removed Cortex 99+ nav badge (no-op kept for SSE compat)','Memory map resize fix: redraws + fits graph after window resize','Lock button on memory map: prevents layout changes on resize, circle-click filtering still works in locked mode','Removed IDENTITY.md from context (redundant with SOUL.md)'] },
   { ver:'v0.28.11', date:'2026-03-07', notes:['Workflow Registry: 6 system workflows exposed as monitorable, configurable cards','GET /api/workflows + POST trigger/toggle/config endpoints','Daemons instrumented: cortex, hygiene, cap-checks, heartbeat, rollup, memory extraction','Workflows tab redesigned: live status, run history, pause/resume, config editing, manual trigger','Projects tab replaced with Coming Soon placeholder (backend preserved)','Agent persona files: quality MEMORY.md + ROLE_CARD.md for all 9 agents with conflict detection','Dead code removed: runBuild, chain builder, heartbeat editor, old workflow skills UI'] },
   { ver:'v0.28.10', date:'2026-03-07', notes:['UI Polish Batch — visual refinements across tabs'] },
   { ver:'v0.28.9', date:'2026-03-07', notes:['Memory map resize fix, context budget improvements, history trimmer for dispatch'] },
@@ -11525,8 +11521,7 @@ function switchModule(name) {
   const loaders = {
     overview: function() {
       renderChatMessages(); populateChatModels(); populateChatRoutes(); loadPersonas();
-      // Update Cortex nav badge on page load
-      api('/api/cortex/stats').then(function(s) { if (s && s.new_1h) _updateCortexBadge(s.new_1h); }).catch(function() {});
+      // Cortex badge removed in v0.28.12
       // Connect SSE for real-time cortex badge updates
       if (!window._cortexEvtSrc) {
         window._cortexEvtSrc = new EventSource('/api/events');
@@ -16125,10 +16120,7 @@ async function _loadCortexTab() {
 }
 
 function _updateCortexBadge(count) {
-  var badge = document.getElementById('cortex-nav-badge');
-  if (!badge) return;
-  if (count > 0) { badge.textContent = count > 99 ? '99+' : count; badge.style.display = ''; }
-  else { badge.style.display = 'none'; }
+  // Badge removed in v0.28.12 — no-op kept to avoid SSE handler errors
 }
 
 // _toggleShowRouted removed in v0.28.1 — routing concept eliminated
@@ -16403,6 +16395,16 @@ function _centerGraph() {
 }
 function _graphZoomIn() { _graphZoom.scale = Math.min(3, _graphZoom.scale * 1.2); _drawGraph(); }
 function _graphZoomOut() { _graphZoom.scale = Math.max(0.3, _graphZoom.scale / 1.2); _drawGraph(); }
+function _toggleGraphLock() {
+  window._cxGraphLocked = !window._cxGraphLocked;
+  var btn = document.getElementById('cx-lock-btn');
+  if (btn) {
+    btn.innerHTML = window._cxGraphLocked ? '&#x1f512;' : '&#x1f513;';
+    btn.style.color = window._cxGraphLocked ? 'var(--accent)' : '';
+    btn.title = window._cxGraphLocked ? 'Unlock layout' : 'Lock layout (prevent resize)';
+  }
+  toast(window._cxGraphLocked ? 'Graph locked' : 'Graph unlocked');
+}
 function _graphFilterScope(scope, btn) {
   _graphFilter = scope;
   var toolbar = btn.parentElement;
@@ -16423,19 +16425,25 @@ async function _initMemoryGraph() {
   canvas.width = w;
   canvas.height = h;
   canvas.style.width = w + 'px';
-  // v0.28.9 — Resize canvas when window resizes
+  canvas.style.height = h + 'px';
+  // v0.28.12 — Resize canvas when window resizes (fixed: redraw + style update)
   window._cxResizeTimer = null;
+  window._cxGraphLocked = false;
   window.addEventListener('resize', function() {
+    if (window._cxGraphLocked) return;
     clearTimeout(window._cxResizeTimer);
     window._cxResizeTimer = setTimeout(function() {
       var c2 = document.getElementById('cx-graph-canvas');
       if (!c2 || !c2.parentElement) return;
       var nw = c2.parentElement.clientWidth || 700;
       var nh = c2.parentElement.clientHeight || 400;
-      if (nw > 100 && nh > 100) { c2.width = nw; c2.height = nh; }
+      if (nw > 100 && nh > 100) {
+        c2.width = nw; c2.height = nh;
+        c2.style.width = nw + 'px'; c2.style.height = nh + 'px';
+        _fitGraphToView();
+      }
     }, 200);
   });
-  canvas.style.height = h + 'px';
   // Fetch graph data (with retry)
   try {
     var data = await api('/api/cortex/graph');
@@ -22800,12 +22808,28 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
             message = message[-_MAX_HISTORY_CHARS:]
 
     # Personality mode: conversational, includes identity context
-    _conflict_hint = " If the user changes a preference that contradicts your persona files, acknowledge it and ask: \"Should I update my memory to reflect this?\""
     if personality_mode:
-        _role_hint = f" Your role is {prole}." if prole else ""
-        augmented_message = f"{message}\n\n(You are {pname}.{_role_hint} Respond in first person. Be conversational. Never mention which AI model or backend you run on — that is infrastructure, not identity.{_conflict_hint} Optimize for reading feel: short paragraphs, markdown when useful, front-load the answer.)\n\n{_ctx_suffix}"
+        _role_line = f"Role: {prole}\n" if prole else ""
+        _system_block = (
+            f"=== SYSTEM PROMPT ===\n"
+            f"You are {pname}.\n"
+            f"{_role_line}"
+            f"Voice: first person, conversational, direct.\n"
+            f"Format: short paragraphs, markdown when useful, front-load the answer.\n"
+            f"Rule: Never mention which AI model or backend you run on.\n"
+            f"Rule: If the user changes a preference that contradicts your persona files, flag it and ask whether to update your memory.\n"
+            f"=== END SYSTEM PROMPT ==="
+        )
+        augmented_message = f"{message}\n\n{_system_block}\n\n{_ctx_suffix}"
     elif _ctx_suffix:
-        augmented_message = f"{message}\n\n(Respond as {pname}. Never mention which AI model you run on. Optimize for reading feel: front-load the answer, use short paragraphs, markdown headers for structure, end cleanly.)\n\n{_ctx_suffix}"
+        _system_block = (
+            f"=== SYSTEM PROMPT ===\n"
+            f"You are {pname}.\n"
+            f"Format: front-load the answer, short paragraphs, markdown for structure.\n"
+            f"Rule: Never mention which AI model you run on.\n"
+            f"=== END SYSTEM PROMPT ==="
+        )
+        augmented_message = f"{message}\n\n{_system_block}\n\n{_ctx_suffix}"
     else:
         augmented_message = message
 
@@ -23866,7 +23890,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.11"})
+            self.reply_json({"v": "0.28.12"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24028,7 +24052,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.11"
+                health["porter_version"] = "0.28.12"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25784,7 +25808,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.11'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.12'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29986,7 +30010,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.11 ready (localhost only)")
+    print(f"\n  Porter v0.28.12 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
