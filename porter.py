@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.24 — Session counts, image attach, model badge, Cortex live"""
+"""Porter v0.28.25 — Session counts, image attach, model badge, Cortex live"""
 
 
 import email
@@ -8543,7 +8543,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.24</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.25</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8764,7 +8764,7 @@ select.settings-input { padding-right: 26px; }
         <span class="persona-detail-avatar">&#10024;</span>
         <div>
           <div class="persona-detail-name">Create New Agent</div>
-          <div class="persona-detail-role">Answer a few questions to build their identity</div>
+          <div class="persona-detail-role">New agents automatically benefit from shared Cortex memory</div>
         </div>
         <div style="margin-left:auto">
           <button class="btn btn-ghost" onclick="closePersonaWizard()">Cancel</button>
@@ -8778,6 +8778,8 @@ select.settings-input { padding-right: 26px; }
         <div class="wizard-step" data-step="2">
           <label class="wizard-label">What is their role?</label>
           <input id="wiz-role" class="settings-input" placeholder="e.g. Chief of Staff, Code Reviewer">
+          <button id="wiz-ai-btn" class="btn btn-ghost" style="margin-top:8px;font-size:11px;color:var(--accent)" onclick="_wizAiSuggest()">&#x2728; AI Suggest (auto-fill remaining fields)</button>
+          <div id="wiz-ai-status" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
         </div>
         <div class="wizard-step" data-step="3">
           <label class="wizard-label">Pick an avatar</label>
@@ -9794,6 +9796,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.25', date:'2026-03-07', notes:['Agent wizard: AI Suggest auto-fills role, personality, focus, style, avatar','Agent wizard: streams response from auto-routed model','Wizard header: mentions Cortex shared memory for new agents'] },
   { ver:'v0.28.24', date:'2026-03-07', notes:['Workflows: running state with animated progress bar','Workflows: interval editor (Runs every: N seconds/minutes/hours/weeks)','Workflows: auto-refresh while running, disable Run Now during execution','Workflows: daemon loops instrumented with start/stop tracking'] },
   { ver:'v0.28.23', date:'2026-03-07', notes:['Models: session counts for Codex + Ollama backends','Models: extraction progress bar (X/Y sessions)','Chat: image drag-drop with thumbnails (base64, 2MB limit)','Chat: welcome input full parity (paperclip+drag-drop on new chat)','Chat: badge shows actual model used, not Auto','Cortex: blinking Live dot replaces ON text','Removed: Every AI tagline'] },
   { ver:'v0.28.22', date:'2026-03-07', notes:['Memory map: zoom/pan persists across sessions','Chat: paperclip button + drag-drop file attachment','Chat history: restores agent/model/project context','Learnings: extraction uses preferred name (not "the user")','Learnings: date/time stamps on each card','Workflows: interval dropdown selector (persists)','Error Self-Heal workflow: detects recurring errors, auto-remediation','Fixed: _ptime import in hygiene, _load_config in eval loop'] },
@@ -18364,6 +18367,72 @@ function updateWizUI() {
   document.getElementById('wiz-progress').textContent = `Step ${_wizCurrentStep} of 7`;
 }
 
+async function _wizAiSuggest() {
+  var name = (document.getElementById('wiz-name').value || '').trim();
+  var role = (document.getElementById('wiz-role').value || '').trim();
+  if (!name) { toast('Enter a name first (Step 1)'); return; }
+  var btn = document.getElementById('wiz-ai-btn');
+  var status = document.getElementById('wiz-ai-status');
+  if (btn) btn.disabled = true;
+  if (status) status.innerHTML = '<span class="learn-spinner"></span> Thinking...';
+  var prompt = 'You are helping configure an AI agent named "' + name + '"'
+    + (role ? ' with the role "' + role + '"' : '')
+    + '. Respond with ONLY a JSON object (no markdown, no explanation) with these fields:'
+    + ' "role" (1-5 word job title),'
+    + ' "personality" (2-4 personality traits, comma-separated),'
+    + ' "focus" (2-3 focus areas, comma-separated),'
+    + ' "style" (brief communication style description),'
+    + ' "avatar" (single emoji that fits this agent).'
+    + ' Example: {"role":"QA Lead","personality":"Meticulous, thorough, direct","focus":"Testing, code quality, regression","style":"Technical, concise, uses bullet points","avatar":"🧪"}';
+  try {
+    var resp = await fetch('/api/chat/stream?model=auto&prompt=' + encodeURIComponent(prompt) + '&route=general&chat_id=wizard-' + Date.now());
+    var reader = resp.body.getReader();
+    var decoder = new TextDecoder();
+    var full = '';
+    while (true) {
+      var result = await reader.read();
+      if (result.done) break;
+      var chunk = decoder.decode(result.value, {stream: true});
+      var lines = chunk.split('\n');
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        if (line.startsWith('data: ')) {
+          try {
+            var d = JSON.parse(line.slice(6));
+            if (d.token) full += d.token;
+            if (d.done && d.full_response) full = d.full_response;
+          } catch(e) {}
+        }
+      }
+    }
+    // Parse JSON from response
+    var jsonMatch = full.match(/\{[^}]+\}/);
+    if (jsonMatch) {
+      var ai = JSON.parse(jsonMatch[0]);
+      if (ai.role && !role) document.getElementById('wiz-role').value = ai.role;
+      if (ai.personality) document.getElementById('wiz-personality').value = ai.personality;
+      if (ai.focus) document.getElementById('wiz-focus').value = ai.focus;
+      if (ai.style) document.getElementById('wiz-style').value = ai.style;
+      if (ai.avatar) {
+        _wizSelectedEmoji = ai.avatar;
+        var emojiGrid = document.getElementById('wiz-emoji-grid');
+        if (emojiGrid) {
+          emojiGrid.querySelectorAll('.emoji-btn').forEach(function(b) {
+            b.classList.toggle('selected', b.textContent === ai.avatar);
+          });
+        }
+      }
+      if (status) status.textContent = 'Fields auto-filled! Review and adjust as needed.';
+      toast('AI suggestions applied');
+    } else {
+      if (status) status.textContent = 'Could not parse AI response. Fill manually.';
+    }
+  } catch(e) {
+    if (status) status.textContent = 'AI unavailable: ' + e.message;
+  }
+  if (btn) btn.disabled = false;
+}
+
 async function createPersonaFromWizard() {
   const name = (document.getElementById('wiz-name').value || '').trim();
   if (!name) { porterAlert('Missing Field', 'Agent name is required.'); _wizCurrentStep = 1; updateWizUI(); return; }
@@ -24494,7 +24563,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.24"})
+            self.reply_json({"v": "0.28.25"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24656,7 +24725,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.24"
+                health["porter_version"] = "0.28.25"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26453,7 +26522,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.24'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.25'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30670,7 +30739,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.24 ready (localhost only)")
+    print(f"\n  Porter v0.28.25 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
