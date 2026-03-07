@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.0 — Cortex Memory Refactor"""
+"""Porter v0.28.1 — Cortex Memory Browser"""
 
 
 import email
@@ -101,7 +101,7 @@ DEFAULT_PREFERENCES: dict = {
     "cortex_max_facts":         8,
     "cortex_inject_limit":      5,
     "cortex_consolidate_hours": 6,
-    "cortex_auto_route":        True,
+
 }
 DEFAULT_AGENT_FLEET: dict = {
     "channel": "stable",
@@ -7860,7 +7860,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.0</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.1</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8543,26 +8543,21 @@ select.settings-input { padding-right: 26px; }
           <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22d3ee;margin-right:3px"></span>Agent</span>
           <span><span style="display:inline-block;width:10px;height:8px;border-radius:2px;background:#fbbf24;margin-right:3px"></span>Project</span>
           <span><svg width="10" height="10" viewBox="0 0 10 10" style="margin-right:3px;vertical-align:middle"><polygon points="5,0.5 9.3,2.75 9.3,7.25 5,9.5 0.7,7.25 0.7,2.75" fill="#4ade80"/></svg>Global</span>
-          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#8b5cf6;margin-right:3px"></span>Inbox</span>
+          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#8b5cf6;margin-right:3px"></span>Cortex</span>
           <span style="margin-left:auto">Drag to pin &#x2022; Double-click to unpin &#x2022; Scroll to zoom</span>
         </div>
       </div>
       <!-- Inbox sidebar (right) -->
       <div id="cx-inbox-sidebar" style="width:340px;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg2)">
         <div style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
-          <div style="font-size:13px;font-weight:600;color:var(--text)">Inbox</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">Memories</div>
           <span id="cx-inbox-count" style="font-size:10px;color:var(--text3)"></span>
           <div style="flex:1"></div>
           <div style="display:flex;gap:2px">
-            <button class="btn btn-ghost cx-scope-filter active" onclick="_filterCortexScope('all',this)" style="font-size:9px;padding:2px 6px">All</button>
-            <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('agent',this)" style="font-size:9px;padding:2px 6px">Agent</button>
-            <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('project',this)" style="font-size:9px;padding:2px 6px">Project</button>
-            <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('global',this)" style="font-size:9px;padding:2px 6px">Global</button>
+            <button class="btn btn-ghost cx-type-filter active" onclick="_filterCortexType('all',this)" style="font-size:9px;padding:2px 6px">All</button>
+            <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('semantic',this)" style="font-size:9px;padding:2px 6px">Facts</button>
+            <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('episodic',this)" style="font-size:9px;padding:2px 6px">Sessions</button>
           </div>
-          <label style="display:flex;align-items:center;gap:3px;font-size:9px;color:var(--text3);cursor:pointer" title="Show already-routed facts">
-            <input type="checkbox" id="cx-show-routed" onchange="_toggleShowRouted(this.checked)" style="width:12px;height:12px" checked>
-            Routed
-          </label>
         </div>
         <div id="cx-memory-list" style="flex:1;overflow-y:auto">
           <div style="padding:20px;text-align:center;font-size:12px;color:var(--text3)">Loading...</div>
@@ -8578,10 +8573,7 @@ select.settings-input { padding-right: 26px; }
           <input type="checkbox" id="cx-toggle2" onchange="_saveCortexConfig2()" checked>
           <span>Auto-extract enabled</span>
         </label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer">
-          <input type="checkbox" id="cx-auto-route" onchange="_saveCortexConfig2()" checked>
-          <span>Auto-route to files</span>
-        </label>
+
         <label style="font-size:13px;color:var(--text2)">
           Min response length
           <input type="number" id="cx-min2" value="100" min="20" max="1000" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
@@ -9198,6 +9190,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.28.1', date:'2026-03-07', notes:['Cortex Memory Browser: sidebar renamed Inbox→Memories','Cards: status dot (green/gray) + type pill (fact/session) + Archive/Restore buttons','Removed: route bar, Push/Dismiss, route picker, routed checkbox, auto-route config','Filter tabs: All/Facts/Sessions by memory_type','Graph: hub node renamed Inbox→Cortex with brain emoji','API: POST .../route replaced by POST .../status (active/archived)','API: GET memories supports ?memory_type= and ?status= filters','API: GET memories returns memory_type, status, confidence, use_count'] },
   { ver:'v0.28.0', date:'2026-03-07', notes:['Cortex Memory Refactor P1: Auto-accept — facts store silently, no inbox backlog','Schema: 6 new lifecycle columns (memory_type, status, confidence, superseded_by_id, last_used_at, use_count)','Injection: new scoring formula (0.4*keyword + 0.25*importance + 0.2*recency + 0.15*use_freq)','Injection: usage tracking (last_used_at + use_count updated on inject)','Stats: new_1h replaces unrouted count','Nav badge: shows new-in-last-hour instead of inbox count'] },
   { ver:'v0.27.45', date:'2026-03-07', notes:['Memory Map: Fit button uses tighter padding (8% vs 20%), min scale 0.5','Memory Map: new Center button (reset zoom to 1x, center on graph)','Memory Map: hover tooltip shows agent role','Graph API includes role field for agent nodes'] },
   { ver:'v0.27.44', date:'2026-03-07', notes:['Memory Map: node positions persist across page loads (localStorage)','Dragged nodes save position automatically','Saved layout skips force simulation entirely — instant render','New nodes (from new agents/projects) get force-placed around existing layout'] },
@@ -16247,7 +16240,7 @@ async function _loadCortexTab() {
     var m2 = document.getElementById('cx-min2'); if (m2) m2.value = prefs.cortex_min_response_len || 100;
     var mx = document.getElementById('cx-max2'); if (mx) mx.value = prefs.cortex_max_facts || 8;
     var ij = document.getElementById('cx-inject2'); if (ij) ij.value = prefs.cortex_inject_limit || 5;
-    var ar = document.getElementById('cx-auto-route'); if (ar) ar.checked = prefs.cortex_auto_route !== false;
+
     var co = document.getElementById('cx-consol2'); if (co) co.value = prefs.cortex_consolidate_hours || 6;
   } catch(e) {}
   // Load memories
@@ -16272,16 +16265,7 @@ function _updateCortexBadge(count) {
   else { badge.style.display = 'none'; }
 }
 
-async function _toggleShowRouted(show) {
-  var url = '/api/cortex/memories' + (show ? '' : '?routed=false');
-  try {
-    var mems = await api(url);
-    _cortexMemories = (mems && mems.memories) || [];
-    _renderCortexMemories(_cortexMemories);
-    var countEl = document.getElementById('cx-inbox-count');
-    if (countEl) countEl.textContent = _cortexMemories.length + ' fact' + (_cortexMemories.length !== 1 ? 's' : '');
-  } catch(e) {}
-}
+// _toggleShowRouted removed in v0.28.1 — routing concept eliminated
 
 function _renderCortexMemories(memories) {
   var el = document.getElementById('cx-memory-list');
@@ -16296,39 +16280,32 @@ function _renderCortexMemories(memories) {
     var sc = m.scope || 'global';
     var scColor = scopeColors[sc] || 'var(--text3)';
     var imp = m.importance || 5;
+    var memType = m.memory_type || 'semantic';
+    var memStatus = m.status || 'active';
     var impBar = '<span style="display:inline-flex;gap:1px;margin-left:4px" title="Importance ' + imp + '/10">';
     for (var i = 0; i < 5; i++) { impBar += '<span style="width:4px;height:10px;border-radius:1px;background:' + (i < Math.ceil(imp/2) ? 'var(--accent)' : 'var(--border)') + '"></span>'; }
     impBar += '</span>';
-    var isRouted = m.routed_to && m.routed_to.length > 0;
-    var routeStatus = isRouted ? '<span style="font-size:10px;color:var(--green,#4ade80)">\u2713 routed</span>' : '';
-    // Build routing bar for unrouted items
-    var routeBar = '';
-    if (!isRouted) {
-      routeBar = '<div class="cx-route-bar">'
-        + '<div class="cx-route-picker" data-mid="' + m.id + '" data-value="global" style="position:relative">'
-        + '<button class="btn btn-ghost" onclick="_toggleRoutePicker(this)" style="font-size:13px;padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);display:flex;align-items:center;gap:6px;min-width:120px">'
-        + '<span class="cx-pick-label">\ud83c\udf10 Global</span>'
-        + '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:auto;opacity:.5"><polyline points="6 9 12 15 18 9"/></svg>'
-        + '</button>'
-        + '</div>'
-        + '<button class="btn btn-ghost" style="font-size:13px;padding:6px 18px;border:1px solid var(--accent);border-radius:6px;color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)" onclick="_routeCortexMem(' + m.id + ',this)">Push</button>'
-        + '<button class="btn btn-ghost" style="font-size:13px;padding:6px 14px;color:var(--text3)" onclick="_dismissCortexMem(' + m.id + ',this)">Dismiss</button>'
-        + '</div>';
-    }
-    html += '<div class="cx-mem-card cx-mem-row" data-scope="' + sc + '" data-id="' + m.id + '">'
-      + '<div style="display:flex;align-items:center;gap:8px">'
+    // Status dot (green=active, gray=archived)
+    var statusDot = '<span style="width:6px;height:6px;border-radius:50%;background:' + (memStatus === 'active' ? 'var(--green,#4ade80)' : '#666') + ';display:inline-block" title="' + memStatus + '"></span>';
+    // Type pill
+    var typePill = '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:color-mix(in srgb,' + (memType === 'episodic' ? '#a78bfa' : 'var(--accent)') + ' 15%,transparent);color:' + (memType === 'episodic' ? '#a78bfa' : 'var(--accent)') + '">' + (memType === 'episodic' ? 'session' : 'fact') + '</span>';
+    html += '<div class="cx-mem-card cx-mem-row" data-scope="' + sc + '" data-id="' + m.id + '" data-type="' + memType + '" data-status="' + memStatus + '">'
+      + '<div style="display:flex;align-items:center;gap:6px">'
+      + statusDot
       + '<span style="font-size:10px;font-weight:600;color:' + scColor + ';text-transform:uppercase;background:color-mix(in srgb,' + scColor + ' 12%,transparent);padding:2px 8px;border-radius:4px;letter-spacing:0.5px">' + sc + '</span>'
       + impBar
+      + typePill
       + (m.source_type === 'session' && m.source_id
         ? '<a href="#" onclick="event.preventDefault();event.stopPropagation();_openCortexSession(\'' + escHtml(m.source_id) + '\')" style="font-size:10px;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:3px" title="Open session"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>session</a>'
         : '<span style="font-size:10px;color:var(--text3)">' + (m.source_type || 'dispatch') + '</span>')
-      + routeStatus
       + '<div style="flex:1"></div>'
+      + (memStatus === 'active'
+        ? '<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px;color:var(--text3)" onclick="event.stopPropagation();_archiveCortexMem(' + m.id + ',this)" title="Archive">Archive</button>'
+        : '<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px;color:var(--green,#4ade80)" onclick="event.stopPropagation();_restoreCortexMem(' + m.id + ',this)" title="Restore">Restore</button>')
       + '<button class="btn btn-ghost" style="font-size:14px;padding:4px 10px" onclick="event.stopPropagation();_editCortexMem(' + m.id + ',this)" title="Edit">\u270f\ufe0e</button>'
       + '<button class="btn btn-ghost" style="font-size:14px;padding:4px 10px;color:var(--red,#f87171)" onclick="event.stopPropagation();_deleteCortexMem(' + m.id + ',this)" title="Delete">\u00d7</button>'
       + '</div>'
       + '<div class="cx-fact-text" style="font-size:13px;color:var(--text);line-height:1.5;cursor:pointer" onclick="_editCortexMem(' + m.id + ',this)" title="Click to edit">' + escHtml(m.fact || '') + '</div>'
-      + routeBar
       + '</div>';
   });
   el.innerHTML = html;
@@ -16366,121 +16343,54 @@ function _openCortexSession(sessionId) {
   }, 800);
 }
 
-function _filterCortexScope(scope, btn) {
-  document.querySelectorAll('.cx-scope-filter').forEach(function(b) { b.classList.remove('active'); });
+function _filterCortexType(type, btn) {
+  document.querySelectorAll('.cx-type-filter').forEach(function(b) { b.classList.remove('active'); });
   btn.classList.add('active');
   document.querySelectorAll('.cx-mem-row').forEach(function(r) {
-    r.style.display = (scope === 'all' || r.getAttribute('data-scope') === scope) ? '' : 'none';
+    r.style.display = (type === 'all' || r.getAttribute('data-type') === type) ? '' : 'none';
   });
 }
 
-function _toggleRoutePicker(triggerBtn) {
-  // Close any existing picker
-  document.querySelectorAll('.cx-route-menu').forEach(function(m) { m.remove(); });
-  var picker = triggerBtn.closest('.cx-route-picker');
-  if (!picker) return;
-  var rect = triggerBtn.getBoundingClientRect();
-  var menu = document.createElement('div');
-  menu.className = 'cx-route-menu';
-  menu.style.cssText = 'position:fixed;z-index:200;background:var(--raised);border:1px solid var(--border2);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.5);min-width:180px;max-height:300px;overflow-y:auto;padding:4px 0;'
-    + 'left:' + rect.left + 'px;top:' + (rect.bottom + 4) + 'px';
-  // Global option
-  var globalItem = document.createElement('div');
-  globalItem.className = 'dropdown-item';
-  globalItem.innerHTML = '<span style="font-size:14px">\ud83c\udf10</span> Global';
-  globalItem.onclick = function() { _selectRouteTarget(picker, 'global', '\ud83c\udf10 Global'); menu.remove(); };
-  menu.appendChild(globalItem);
-  // Agent options
-  if (_cortexAgents.length) {
-    var sep = document.createElement('div');
-    sep.className = 'dropdown-sep';
-    menu.appendChild(sep);
-    var hdr = document.createElement('div');
-    hdr.style.cssText = 'padding:4px 14px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px';
-    hdr.textContent = 'Agents';
-    menu.appendChild(hdr);
-    _cortexAgents.forEach(function(a) {
-      var item = document.createElement('div');
-      item.className = 'dropdown-item';
-      item.innerHTML = '<span style="font-size:14px">' + (a.emoji || '\u2699') + '</span> ' + escHtml(a.name);
-      item.onclick = function() { _selectRouteTarget(picker, 'agent:' + a.id, (a.emoji || '\u2699') + ' ' + a.name); menu.remove(); };
-      menu.appendChild(item);
-    });
-  }
-  document.body.appendChild(menu);
-  // Close on click outside
-  setTimeout(function() {
-    document.addEventListener('click', function _close(e) {
-      if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', _close); }
-    });
-  }, 10);
-}
-
-function _selectRouteTarget(picker, value, label) {
-  picker.setAttribute('data-value', value);
-  var lbl = picker.querySelector('.cx-pick-label');
-  if (lbl) lbl.textContent = label;
-}
-
-async function _routeCortexMem(id, btn) {
-  var card = btn.closest('.cx-mem-card');
-  if (!card) return;
-  var picker = card.querySelector('.cx-route-picker');
-  var target = picker ? picker.getAttribute('data-value') : 'global';
-  var scope = 'global';
-  var scopeId = '';
-  if (target.startsWith('agent:')) { scope = 'agent'; scopeId = target.split(':')[1]; }
+async function _archiveCortexMem(id, btn) {
   btn.disabled = true;
-  btn.textContent = 'Pushing...';
   try {
-    var r = await api('/api/cortex/memories/' + id + '/route', { scope: scope, scope_id: scopeId });
+    var r = await api('/api/cortex/memories/' + id + '/status', { status: 'archived' });
     if (r && r.ok) {
-      card.style.transition = 'opacity 0.3s, max-height 0.4s, padding 0.3s, margin 0.3s';
-      card.style.opacity = '0';
-      card.style.maxHeight = '0';
-      card.style.padding = '0 14px';
-      card.style.overflow = 'hidden';
-      setTimeout(function() { card.remove(); }, 400);
-      toast('Routed to ' + (r.destination || scope));
-      // Pulse the relevant edge on the graph
-      if (_graphEdges && _graphEdges.length) {
-        _graphEdges.forEach(function(edge) {
-          var targetNode = _graphNodes[edge.target];
-          if (targetNode && (targetNode.id === scope + ':' + scopeId || targetNode.type === scope)) {
-            edge.lastActivity = Date.now();
-          }
-        });
+      var card = btn.closest('.cx-mem-card');
+      if (card) {
+        card.setAttribute('data-status', 'archived');
+        // Update status dot
+        var dot = card.querySelector('span[title]');
+        if (dot && dot.style.borderRadius === '50%') { dot.style.background = '#666'; dot.title = 'archived'; }
+        // Swap button to Restore
+        btn.textContent = 'Restore';
+        btn.style.color = 'var(--green,#4ade80)';
+        btn.onclick = function() { _restoreCortexMem(id, btn); };
       }
-      // Update badge count
-      var badge = document.getElementById('cortex-nav-badge');
-      if (badge && badge.style.display !== 'none') {
-        var c = parseInt(badge.textContent) - 1;
-        _updateCortexBadge(Math.max(0, c));
-      }
-    } else { toast(r && r.error || 'Route failed', 'err'); btn.disabled = false; btn.textContent = 'Push'; }
-  } catch(e) { toast('Route failed', 'err'); btn.disabled = false; btn.textContent = 'Push'; }
+      toast('Archived');
+    } else { toast('Failed', 'err'); }
+  } catch(e) { toast('Failed', 'err'); }
+  btn.disabled = false;
 }
 
-async function _dismissCortexMem(id, btn) {
-  var card = btn.closest('.cx-mem-card');
-  if (!card) return;
-  // Mark as routed_to='dismissed' so it leaves the inbox
+async function _restoreCortexMem(id, btn) {
+  btn.disabled = true;
   try {
-    var r = await api('/api/cortex/memories/' + id + '/route', { scope: 'dismissed', scope_id: '' });
+    var r = await api('/api/cortex/memories/' + id + '/status', { status: 'active' });
     if (r && r.ok) {
-      card.style.transition = 'opacity 0.3s, max-height 0.4s';
-      card.style.opacity = '0';
-      card.style.maxHeight = '0';
-      card.style.overflow = 'hidden';
-      setTimeout(function() { card.remove(); }, 400);
-      toast('Dismissed');
-      var badge = document.getElementById('cortex-nav-badge');
-      if (badge && badge.style.display !== 'none') {
-        var c = parseInt(badge.textContent) - 1;
-        _updateCortexBadge(Math.max(0, c));
+      var card = btn.closest('.cx-mem-card');
+      if (card) {
+        card.setAttribute('data-status', 'active');
+        var dot = card.querySelector('span[title]');
+        if (dot && dot.style.borderRadius === '50%') { dot.style.background = 'var(--green,#4ade80)'; dot.title = 'active'; }
+        btn.textContent = 'Archive';
+        btn.style.color = 'var(--text3)';
+        btn.onclick = function() { _archiveCortexMem(id, btn); };
       }
-    }
+      toast('Restored');
+    } else { toast('Failed', 'err'); }
   } catch(e) { toast('Failed', 'err'); }
+  btn.disabled = false;
 }
 
 async function _deleteCortexMem(id, btn) {
@@ -16565,7 +16475,7 @@ async function _saveCortexConfig2() {
     cortex_max_facts: parseInt(document.getElementById('cx-max2').value) || 8,
     cortex_inject_limit: parseInt(document.getElementById('cx-inject2').value) || 5,
     cortex_consolidate_hours: parseInt((document.getElementById('cx-consol2') || {}).value) || 6,
-    cortex_auto_route: (document.getElementById('cx-auto-route') || {}).checked !== false,
+
   };
   var r = await api('/api/cortex/config', payload);
   if (r && r.ok) toast('Cortex config saved');
@@ -23957,7 +23867,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.0"})
+            self.reply_json({"v": "0.28.1"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -24044,7 +23954,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.0"
+                health["porter_version"] = "0.28.1"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -24488,16 +24398,19 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             scope = qs.get("scope", [""])[0].strip()
             scope_id = qs.get("scope_id", [""])[0].strip()
-            routed_filter = qs.get("routed", [""])[0].strip().lower()
+            memory_type_filter = qs.get("memory_type", [""])[0].strip().lower()
+            status_filter = qs.get("status", [""])[0].strip().lower()
             limit_n = min(200, max(10, int(qs.get("limit", ["50"])[0])))
             offset_n = max(0, int(qs.get("offset", ["0"])[0]))
             conn = _db_conn()
             where_parts = ["consolidated_into IS NULL"]
             params = []
-            if routed_filter == "false":
-                where_parts.append("(routed_to IS NULL OR routed_to='')")
-            elif routed_filter == "true":
-                where_parts.append("routed_to IS NOT NULL AND routed_to!=''")
+            if memory_type_filter and memory_type_filter in ("semantic", "episodic"):
+                where_parts.append("memory_type=?")
+                params.append(memory_type_filter)
+            if status_filter and status_filter in ("active", "archived"):
+                where_parts.append("status=?")
+                params.append(status_filter)
             if scope:
                 where_parts.append("scope=?")
                 params.append(scope)
@@ -24507,7 +24420,7 @@ class Handler(BaseHTTPRequestHandler):
             where = " AND ".join(where_parts)
             rows = conn.execute(
                 f"SELECT id, fact, scope, scope_id, source_type, source_id, importance, keywords, "
-                f"routed_to, created_at, updated_at FROM cortex_memories WHERE {where} "
+                f"routed_to, created_at, updated_at, memory_type, status, confidence, use_count FROM cortex_memories WHERE {where} "
                 f"ORDER BY created_at DESC LIMIT ? OFFSET ?",
                 params + [limit_n, offset_n]
             ).fetchall()
@@ -24519,7 +24432,9 @@ class Handler(BaseHTTPRequestHandler):
                     "id": r[0], "fact": r[1], "scope": r[2], "scope_id": r[3],
                     "source_type": r[4], "source_id": r[5], "importance": r[6],
                     "keywords": r[7], "routed_to": r[8],
-                    "created_at": r[9], "updated_at": r[10]
+                    "created_at": r[9], "updated_at": r[10],
+                    "memory_type": r[11] or "semantic", "status": r[12] or "active",
+                    "confidence": r[13], "use_count": r[14] or 0
                 })
             self.reply_json({"ok": True, "memories": memories, "total": total,
                              "limit": limit_n, "offset": offset_n})
@@ -24562,7 +24477,7 @@ class Handler(BaseHTTPRequestHandler):
                 nodes = []
                 edges = []
                 # Cortex hub node (always present)
-                nodes.append({"id": "inbox", "label": "Inbox", "type": "cortex", "emoji": "\U0001f4e5", "radius": 32, "count": 0})
+                nodes.append({"id": "cortex", "label": "Cortex", "type": "cortex", "emoji": "\U0001f9e0", "radius": 32, "count": 0})
                 # Global node (always present)
                 gc = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='global' AND consolidated_into IS NULL").fetchone()[0]
                 global_node_idx = -1
@@ -24621,7 +24536,7 @@ class Handler(BaseHTTPRequestHandler):
                         if shared_projects > 0:
                             edges.append({"source": agent_indices[a1], "target": agent_indices[a2], "weight": min(3, shared_projects), "type": "collab"})
                 # Hub count = unrouted facts
-                uc = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL AND (routed_to IS NULL OR routed_to = '')").fetchone()[0]
+                uc = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL AND status='active'").fetchone()[0]
                 nodes[0]["count"] = uc
                 conn.close()
                 self.reply_json({"nodes": nodes, "edges": edges})
@@ -25698,7 +25613,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.0'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.1'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -28199,38 +28114,24 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
-        # ── Route cortex memory to destination (POST) ─────────────────────
-        elif parsed.path.startswith("/api/cortex/memories/") and parsed.path.endswith("/route"):
+        # ── Update cortex memory status (POST) ─────────────────────────────
+        elif parsed.path.startswith("/api/cortex/memories/") and parsed.path.endswith("/status"):
             if not self.auth_check(redirect=False): return
             parts = parsed.path.split("/")
             mem_id = parts[4] if len(parts) >= 6 else ""
             if not mem_id:
                 self.reply_json({"ok": False, "error": "Missing memory ID"}, 400); return
             data = self.read_json_body()
-            scope = str(data.get("scope", "global")).strip()
-            scope_id = str(data.get("scope_id", "")).strip()
+            new_status = str(data.get("status", "")).strip()
+            if new_status not in ("active", "archived"):
+                self.reply_json({"ok": False, "error": "Status must be 'active' or 'archived'"}, 400); return
             try:
                 conn = _db_conn()
-                row = conn.execute("SELECT fact, scope, scope_id FROM cortex_memories WHERE id=?", (mem_id,)).fetchone()
-                if not row:
-                    conn.close()
-                    self.reply_json({"ok": False, "error": "Memory not found"}, 404); return
-                fact_text = row[0]
-                dest_str = ""
-                if scope != "dismissed":
-                    new_scope = scope if scope != row[1] else row[1]
-                    new_scope_id = scope_id if scope_id else row[2]
-                    dest = _cortex_resolve_destination(new_scope, new_scope_id)
-                    dest_str = str(dest) if dest else ""
-                    if dest:
-                        _cortex_append_to_file(dest, fact_text)
-                else:
-                    dest_str = "dismissed"
-                conn.execute("UPDATE cortex_memories SET routed_to=?, scope=?, scope_id=?, updated_at=strftime('%s','now') WHERE id=?",
-                             (dest_str, scope if scope != "dismissed" else row[1], scope_id or row[2], mem_id))
+                conn.execute("UPDATE cortex_memories SET status=?, updated_at=strftime('%s','now') WHERE id=?",
+                             (new_status, mem_id))
                 conn.commit()
                 conn.close()
-                self.reply_json({"ok": True, "id": mem_id, "destination": dest_str})
+                self.reply_json({"ok": True, "id": mem_id, "status": new_status})
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
@@ -28754,12 +28655,12 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             if "preferences" not in _config:
                 _config["preferences"] = {}
             cortex_keys = ["cortex_enabled", "cortex_min_response_len", "cortex_max_facts",
-                           "cortex_inject_limit", "cortex_consolidate_hours", "cortex_auto_route"]
+                           "cortex_inject_limit", "cortex_consolidate_hours"]
             updated = {}
             for k in cortex_keys:
                 if k in data:
                     val = data[k]
-                    if k == "cortex_enabled" or k == "cortex_auto_route":
+                    if k == "cortex_enabled":
                         val = bool(val)
                     else:
                         val = max(1, int(val))
@@ -29741,7 +29642,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.0 ready (localhost only)")
+    print(f"\n  Porter v0.28.1 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
