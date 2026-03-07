@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.14 — UI Polish Batch"""
+"""Porter v0.28.15 — UI Polish Batch"""
 
 
 import email
@@ -4299,7 +4299,12 @@ def _cap_checks_loop():
         _wf_registry["capability_checks"]["started_at"] = _ct.time()
     while True:
         if _wf_is_enabled("capability_checks"):
-            _run_cap_checks(force=True)
+            _t0 = _ct.time()
+            try:
+                _run_cap_checks(force=True)
+                _wf_record_run("capability_checks", success=True, result="OK", duration=_ct.time()-_t0)
+            except Exception as _cce:
+                _wf_record_run("capability_checks", success=False, error=_cce, duration=_ct.time()-_t0)
         _ct.sleep(30)
 
 def _heartbeat_loop():
@@ -8447,7 +8452,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.14</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.15</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9702,6 +9707,7 @@ const CHANGELOG = [
   { ver:'v0.28.12', date:'2026-03-07', notes:['System prompt restructured: clean === delimited sections (SOUL/ROLE_CARD/RULES/MEMORY), structured framing rules','Removed Cortex 99+ nav badge (no-op kept for SSE compat)','Memory map resize fix: redraws + fits graph after window resize','Lock button on memory map: prevents layout changes on resize, circle-click filtering still works in locked mode','Removed IDENTITY.md from context (redundant with SOUL.md)'] },
   { ver:'v0.28.13', date:'2026-03-07', notes:['Inbox: fixed text overflow (word-break)','Inbox: click-to-filter now works (agent: prefix stripped)','Inbox: renamed Memories → Inbox','Graph: removed 99+ count cap on nodes','Cortex Config: added Back button'] },
   { ver:'v0.28.14', date:'2026-03-07', notes:['Graph lock now prevents node dragging and panning (click-to-filter still works)'] },
+  { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.11', date:'2026-03-07', notes:['Workflow Registry: 6 system workflows exposed as monitorable, configurable cards','GET /api/workflows + POST trigger/toggle/config endpoints','Daemons instrumented: cortex, hygiene, cap-checks, heartbeat, rollup, memory extraction','Workflows tab redesigned: live status, run history, pause/resume, config editing, manual trigger','Projects tab replaced with Coming Soon placeholder (backend preserved)','Agent persona files: quality MEMORY.md + ROLE_CARD.md for all 9 agents with conflict detection','Dead code removed: runBuild, chain builder, heartbeat editor, old workflow skills UI'] },
   { ver:'v0.28.10', date:'2026-03-07', notes:['UI Polish Batch — visual refinements across tabs'] },
   { ver:'v0.28.9', date:'2026-03-07', notes:['Memory map resize fix, context budget improvements, history trimmer for dispatch'] },
@@ -11769,6 +11775,21 @@ async function loadSkills() {
   }
 }
 
+function toggleShowAllSkills() {
+  _wfShowAll = !_wfShowAll;
+  var btn = document.getElementById('wf-show-all-btn');
+  if (btn) btn.textContent = _wfShowAll ? 'Installed only' : 'Show all';
+  loadSkills();
+}
+function filterWorkflowSkills() {
+  var q = (document.getElementById('wf-skill-filter') || {}).value || '';
+  q = q.toLowerCase().trim();
+  document.querySelectorAll('#wf-skills-grid > div').forEach(function(card) {
+    var name = (card.getAttribute('data-name') || '').toLowerCase();
+    var desc = (card.getAttribute('data-desc') || '').toLowerCase();
+    card.style.display = (!q || name.indexOf(q) >= 0 || desc.indexOf(q) >= 0) ? '' : 'none';
+  });
+}
 function _skillSkeletons(n) {
   var html = '';
   for (var i = 0; i < n; i++) {
@@ -11788,6 +11809,8 @@ function _appendSkillBatch(grid, skills) {
   skills.forEach(function(sk) {
     var card = document.createElement('div');
     card.className = 'wf-skill-card';
+    card.setAttribute('data-name', sk.name || '');
+    card.setAttribute('data-desc', sk.description || '');
     card.style.opacity = '0';
     card.style.transition = 'opacity 0.2s';
     var emoji = sk.emoji || '\u2699';
@@ -14087,7 +14110,7 @@ function chatSend() {
     }
 
     if (cmd === '/status') {
-      _chatMessages.push({ role: 'assistant', content: '_Checking system health..._', model: 'porter' });
+      _chatMessages.push({ role: 'assistant', content: 'Checking system health...', model: 'porter' });
       renderChatMessages();
       api('/api/admin/health').then(function(h) {
         if (!h) { _chatMessages[_chatMessages.length-1].content = 'Failed to get health data.'; renderChatMessages(); return; }
@@ -14110,24 +14133,32 @@ function chatSend() {
     }
 
     if (cmd === '/models') {
-      var _mLines = ['**Connected Models**\n'];
-      var _pickers = document.querySelectorAll('.model-picker .mp-opt');
-      var _seen = {};
-      _pickers.forEach(function(o) {
-        var v = o.dataset.v;
-        if (v && !_seen[v]) {
-          _seen[v] = true;
-          _mLines.push('- **' + o.textContent.trim() + '**  `' + v + '`');
-        }
-      });
-      if (Object.keys(_seen).length === 0) _mLines.push('_No models detected._');
-      _chatMessages.push({ role: 'assistant', content: _mLines.join('\n'), model: 'porter' });
+      _chatMessages.push({ role: 'assistant', content: 'Loading models...', model: 'porter' });
       renderChatMessages();
+      api('/api/models/available').then(function(data) {
+        var lines = ['**Connected Models**\n'];
+        if (data && data.backends) {
+          Object.keys(data.backends).forEach(function(b) {
+            var info = data.backends[b];
+            var status = info.available ? '\u2705' : '\u274c';
+            lines.push('**' + b + '** ' + status);
+            if (info.models && info.models.length) {
+              info.models.forEach(function(m) { lines.push('  - `' + (m.id || m.name || m) + '`'); });
+            }
+          });
+        }
+        if (lines.length <= 1) lines.push('No models detected.');
+        _chatMessages[_chatMessages.length-1].content = lines.join('\n');
+        renderChatMessages();
+      }).catch(function() {
+        _chatMessages[_chatMessages.length-1].content = 'Failed to load models.';
+        renderChatMessages();
+      });
       return;
     }
 
     if (cmd === '/projects') {
-      _chatMessages.push({ role: 'assistant', content: '_Loading projects..._', model: 'porter' });
+      _chatMessages.push({ role: 'assistant', content: 'Loading projects...', model: 'porter' });
       renderChatMessages();
       api('/api/projects').then(function(data) {
         if (!data || !data.projects || !data.projects.length) {
@@ -14150,7 +14181,7 @@ function chatSend() {
     }
 
     if (cmd === '/agents') {
-      _chatMessages.push({ role: 'assistant', content: '_Loading agent squad..._', model: 'porter' });
+      _chatMessages.push({ role: 'assistant', content: 'Loading agent squad...', model: 'porter' });
       renderChatMessages();
       api('/api/personas').then(function(data) {
         if (!data || !data.ok || !data.personas || !data.personas.length) {
@@ -14177,7 +14208,7 @@ function chatSend() {
     }
 
     if (cmd === '/flush') {
-      _chatMessages.push({ role: 'assistant', content: '_Flushing session to memory..._', model: 'porter' });
+      _chatMessages.push({ role: 'assistant', content: 'Flushing session...', model: 'porter' });
       renderChatMessages();
       api('/api/memory/flush', { session: true }).then(function(r) {
         _chatMessages[_chatMessages.length-1].content = (r && r.ok) ? 'Session flushed to memory.' : 'Flush failed: ' + ((r && r.error) || 'unknown error');
@@ -14192,7 +14223,7 @@ function chatSend() {
 
     if (cmd === '/ship') {
       var shipArg = text.substring(5).trim();
-      _chatMessages.push({ role: 'assistant', content: '_Validating ship readiness..._', model: 'porter' });
+      _chatMessages.push({ role: 'assistant', content: 'Validating ship readiness...', model: 'porter' });
       renderChatMessages();
       api('/api/ship/validate').then(function(data) {
         if (!data || !data.ok) {
@@ -14252,7 +14283,7 @@ function chatSend() {
       var gwsArgs = text.substring(cmd.length).trim();
       if (!gwsArgs || gwsArgs === 'setup') {
         // Setup / status check
-        _chatMessages.push({ role: 'assistant', content: '_Checking Google Workspace status..._', model: 'porter' });
+        _chatMessages.push({ role: 'assistant', content: 'Checking Google Workspace status...', model: 'porter' });
         renderChatMessages();
         api('/api/gws/status').then(function(s) {
           if (!s) { _chatMessages[_chatMessages.length-1].content = 'Failed to check gws status.'; renderChatMessages(); return; }
@@ -14288,7 +14319,7 @@ function chatSend() {
       };
       var shortcut = _gwsShortcuts[gwsArgs.toLowerCase()];
       if (shortcut) {
-        _chatMessages.push({ role: 'assistant', content: '_Executing: gws ' + gwsArgs + '..._', model: 'porter' });
+        _chatMessages.push({ role: 'assistant', content: 'Executing: gws ' + gwsArgs + '...', model: 'porter' });
         renderChatMessages();
         api('/api/gws/exec', shortcut, 35000).then(function(r) {
           if (!r) { _chatMessages[_chatMessages.length-1].content = 'gws request failed.'; renderChatMessages(); return; }
@@ -14311,7 +14342,7 @@ function chatSend() {
         if (parts.length > 3) {
           try { payload.params = JSON.parse(parts.slice(3).join(' ')); } catch(e) {}
         }
-        _chatMessages.push({ role: 'assistant', content: '_Executing: gws ' + gwsArgs + '..._', model: 'porter' });
+        _chatMessages.push({ role: 'assistant', content: 'Executing: gws ' + gwsArgs + '...', model: 'porter' });
         renderChatMessages();
         api('/api/gws/exec', payload, 35000).then(function(r) {
           if (!r) { _chatMessages[_chatMessages.length-1].content = 'gws request failed.'; renderChatMessages(); return; }
@@ -16078,6 +16109,8 @@ function _switchCortexView(view) {
 }
 
 var _cortexMemories = [];
+var _wfSkills = [];
+var _wfShowAll = false;
 var _cortexAgents = [];
 async function _loadCortexTab() {
   // Load agents list for routing dropdowns
@@ -16910,7 +16943,7 @@ function _renderModelCards(data, act) {
     if (activeRuns.length > 0) {
       liveTraceBtn = '<div style="margin-top:4px"><button class="btn btn-ghost" style="font-size:10px;width:100%;color:var(--accent)" onclick="_openModelActivity(\'' + escHtml(p.id) + '\')">Live Trace</button></div>';
     }
-    var lastPromptBtn = '<div style="margin-top:4px"><button class="btn btn-ghost" style="font-size:10px;width:100%;color:var(--text3)" onclick="_showLastPrompt(\'' + escHtml(p.id) + '\')">Last Prompt</button></div>';
+    var lastPromptBtn = '<div style="margin-top:4px"><button class="btn btn-ghost" style="font-size:10px;width:100%;color:var(--text3)" onclick="_showLastPrompt(\'' + escHtml(p.id) + '\')">Last Dispatch</button></div>';
 
     // Model selector: show active model name as card title
     var _avBk = (_modelAvailableData || {})[p.id] || {};
@@ -23901,7 +23934,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.14"})
+            self.reply_json({"v": "0.28.15"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24063,7 +24096,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.14"
+                health["porter_version"] = "0.28.15"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -24182,7 +24215,7 @@ class Handler(BaseHTTPRequestHandler):
                 if backend_filter:
                     rows = conn.execute(
                         "SELECT run_id, from_agent, to_agent, message, response, status, model, tokens_total, duration_ms, created_at "
-                        "FROM agent_messages WHERE to_agent=? ORDER BY created_at DESC LIMIT ?", (backend_filter, limit)).fetchall()
+                        "FROM agent_messages WHERE to_agent=? AND message NOT LIKE '%memory extraction system%' ORDER BY created_at DESC LIMIT ?", (backend_filter, limit)).fetchall()
                 else:
                     rows = conn.execute(
                         "SELECT run_id, from_agent, to_agent, message, response, status, model, tokens_total, duration_ms, created_at "
@@ -25819,7 +25852,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.14'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.15'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30021,7 +30054,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.14 ready (localhost only)")
+    print(f"\n  Porter v0.28.15 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
