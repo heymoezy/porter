@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.42 — Chat Extraction Feedback"""
+"""Porter v0.27.43 — Static Memory Map"""
 
 
 import email
@@ -7826,7 +7826,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.42</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.43</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9163,6 +9163,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.43', date:'2026-03-07', notes:['Memory Map: static layout — nodes no longer float/bounce','Force simulation runs synchronously (200 iterations) then stops','Auto-fit to view after layout settles','Dragging still works but nodes stay where you put them'] },
   { ver:'v0.27.42', date:'2026-03-07', notes:['Chat: extraction feedback — shows "Extracting memories..." then "X memories extracted" inline after dispatch','Extraction indicator auto-fades after 4 seconds'] },
   { ver:'v0.27.41', date:'2026-03-07', notes:['Memory Map: fixed closed-database error in /api/cortex/graph (conn.close before final query)','Unrouted count now uses routed_to check instead of scope_id filter'] },
   { ver:'v0.27.40', date:'2026-03-07', notes:['Memory Map: deferred canvas init fixes "No graph data" on first load','Counters simplified: Memories / New today / Inbox (removed Merged/Active jargon)','Bigger buttons on fact cards (edit, delete, push, dismiss, route)','Fact text clickable to open edit modal','Show all facts by default (routed + unrouted)','Extraction progress banner with animated shimmer during memory extraction'] },
@@ -16708,9 +16709,9 @@ function _setupGraphInteraction(canvas) {
 
 function _runGraphSimulation(canvas) {
   if (_graphAnim) cancelAnimationFrame(_graphAnim);
-  var iterations = 0;
-  function tick() {
-    var alpha = Math.max(0.01, 1 - iterations / 200);
+  // Run force layout synchronously (no animation bounce)
+  for (var iter = 0; iter < 200; iter++) {
+    var alpha = Math.max(0.01, 1 - iter / 200);
     // Repulsion between nodes
     for (var i = 0; i < _graphNodes.length; i++) {
       for (var j = i + 1; j < _graphNodes.length; j++) {
@@ -16747,13 +16748,11 @@ function _runGraphSimulation(canvas) {
       n.x += n.vx;
       n.y += n.vy;
     });
-    _drawGraph();
-    iterations++;
-    // Auto-center after initial layout settles
-    if (iterations === 180) _fitGraphToView();
-    _graphAnim = requestAnimationFrame(tick);
   }
-  tick();
+  // Zero out velocities — nodes are now static
+  _graphNodes.forEach(function(n) { n.vx = 0; n.vy = 0; });
+  _fitGraphToView();
+  _drawGraph();
 }
 
 function _drawGraph() {
@@ -23886,7 +23885,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.42"})
+            self.reply_json({"v": "0.27.43"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -23973,7 +23972,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.42"
+                health["porter_version"] = "0.27.43"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25627,7 +25626,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.42'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.43'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29670,7 +29669,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.42 ready (localhost only)")
+    print(f"\n  Porter v0.27.43 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
