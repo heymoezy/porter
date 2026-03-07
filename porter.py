@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.43 — Static Memory Map"""
+"""Porter v0.27.44 — Persistent Graph Positions"""
 
 
 import email
@@ -7826,7 +7826,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.43</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.44</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9163,6 +9163,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.44', date:'2026-03-07', notes:['Memory Map: node positions persist across page loads (localStorage)','Dragged nodes save position automatically','Saved layout skips force simulation entirely — instant render','New nodes (from new agents/projects) get force-placed around existing layout'] },
   { ver:'v0.27.43', date:'2026-03-07', notes:['Memory Map: static layout — nodes no longer float/bounce','Force simulation runs synchronously (200 iterations) then stops','Auto-fit to view after layout settles','Dragging still works but nodes stay where you put them'] },
   { ver:'v0.27.42', date:'2026-03-07', notes:['Chat: extraction feedback — shows "Extracting memories..." then "X memories extracted" inline after dispatch','Extraction indicator auto-fades after 4 seconds'] },
   { ver:'v0.27.41', date:'2026-03-07', notes:['Memory Map: fixed closed-database error in /api/cortex/graph (conn.close before final query)','Unrouted count now uses routed_to check instead of scope_id filter'] },
@@ -16542,6 +16543,15 @@ var _graphDrag = null;
 var _graphZoom = {x: 0, y: 0, scale: 1};
 var _graphFilter = 'all';
 
+function _saveGraphPositions() {
+  var pos = {};
+  _graphNodes.forEach(function(n) { pos[n.id] = {x: Math.round(n.x), y: Math.round(n.y)}; });
+  try { localStorage.setItem('porter_graph_positions', JSON.stringify(pos)); } catch(e) {}
+}
+function _loadGraphPositions() {
+  try { return JSON.parse(localStorage.getItem('porter_graph_positions') || '{}'); } catch(e) { return {}; }
+}
+
 function _resetGraphZoom() { _fitGraphToView(); }
 function _fitGraphToView() {
   var canvas = document.getElementById('cx-graph-canvas');
@@ -16609,20 +16619,33 @@ async function _initMemoryGraph() {
     window._graphRetried = false;
     _graphNodes = data.nodes;
     _graphEdges = data.edges;
-    // Initialize positions in a circle
+    // Restore saved positions or initialize in a circle
+    var saved = _loadGraphPositions();
     var cx = w / 2, cy = h / 2;
+    var allRestored = true;
     _graphNodes.forEach(function(n, i) {
-      var angle = (2 * Math.PI * i) / _graphNodes.length - Math.PI/2;
-      var radius = Math.min(w, h) * 0.3 + Math.random() * 30;
-      n.x = cx + Math.cos(angle) * radius;
-      n.y = cy + Math.sin(angle) * radius;
-      n.vx = 0;
-      n.vy = 0;
+      n.vx = 0; n.vy = 0;
+      if (saved[n.id]) {
+        n.x = saved[n.id].x; n.y = saved[n.id].y; n.fixed = true;
+      } else {
+        allRestored = false;
+        var angle = (2 * Math.PI * i) / _graphNodes.length - Math.PI/2;
+        var radius = Math.min(w, h) * 0.3 + Math.random() * 30;
+        n.x = cx + Math.cos(angle) * radius;
+        n.y = cy + Math.sin(angle) * radius;
+      }
     });
-    // Center the cortex hub
-    if (_graphNodes[0]) { _graphNodes[0].x = cx; _graphNodes[0].y = cy; }
+    // Center the cortex hub only if no saved positions
+    if (!allRestored && _graphNodes[0] && !_graphNodes[0].fixed) { _graphNodes[0].x = cx; _graphNodes[0].y = cy; }
     _setupGraphInteraction(canvas);
-    _runGraphSimulation(canvas);
+    if (allRestored) {
+      // All positions restored — just draw, no simulation needed
+      _fitGraphToView();
+      _drawGraph();
+    } else {
+      _runGraphSimulation(canvas);
+      _saveGraphPositions();
+    }
   } catch(e) {
     console.debug('Graph init error:', e);
     var ctx = canvas.getContext('2d');
@@ -16688,7 +16711,7 @@ function _setupGraphInteraction(canvas) {
       }
     }
   };
-  canvas.onmouseup = function() { if (dragging) { dragging.fixed = true; dragging = null; canvas.style.cursor = 'grab'; } panning = false; };
+  canvas.onmouseup = function() { if (dragging) { dragging.fixed = true; _saveGraphPositions(); dragging = null; canvas.style.cursor = 'grab'; } panning = false; };
   canvas.onmouseleave = function() { if (dragging) { dragging.fixed = true; dragging = null; } panning = false; var tip = document.getElementById('cx-graph-tooltip'); if (tip) tip.style.display = 'none'; };
   canvas.onwheel = function(e) {
     e.preventDefault();
@@ -23885,7 +23908,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.43"})
+            self.reply_json({"v": "0.27.44"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -23972,7 +23995,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.43"
+                health["porter_version"] = "0.27.44"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25626,7 +25649,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.43'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.44'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29669,7 +29692,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.43 ready (localhost only)")
+    print(f"\n  Porter v0.27.44 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
