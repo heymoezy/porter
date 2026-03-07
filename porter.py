@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.7 — Streaming Token Reveal"""
+"""Porter v0.28.8 — Dispatch Timeout Fix"""
 
 
 import email
@@ -8036,7 +8036,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.7</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.8</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9373,6 +9373,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.28.8', date:'2026-03-07', notes:['Fix: persona dispatch prompt capped at 6000 chars (prevents CLI timeout on long conversations)','Fix: conversation history trimmed to last 3 turns before dispatch','Fix: stale thinking indicator cleared on poll timeout/error — shows clear error message','Fix: poll loop detects failed status and shows error text instead of generic timeout','Dispatch timeout increased to 180s for Claude CLI (heavy persona context)'] },
   { ver:'v0.28.7', date:'2026-03-07', notes:['Streaming token reveal — typewriter-style animation for chat responses','Token buffer with adaptive chunk sizing (4/10/18 chars based on buffer depth)','16ms drain interval for smooth 60fps rendering','Graceful finish: pending-done flag waits for buffer drain before closing stream','Reset on stop/error/new-send for clean state management'] },
   { ver:'v0.28.6', date:'2026-03-07', notes:['/ship chat command — validate version consistency + trigger release pipeline','GET /api/ship/validate — checks all 6 version strings match, syntax compiles, uncommitted changes','Ship gate: pre-commit validation prevents mismatched versions','Autocomplete + help text updated'] },
   { ver:'v0.28.5', date:'2026-03-07', notes:['Mermaid diagram rendering in chat — ```mermaid fenced blocks render as SVG diagrams','Mermaid CDN loaded via ES module (jsdelivr)','CSS: .chat-mermaid container with dark theme styling','_renderMermaidDiagrams() with dedup (data-mermaid-rendered flag)','Render hook in renderChatMessages() for both full repaints and streaming updates'] },
@@ -17844,19 +17845,32 @@ async function _pollPersonaResponse(runId, persona, waitIdx) {
       const r = await api('/api/bridge/runs?limit=1&run_id=' + runId, null, 30000);
       if (r.ok && r.runs && r.runs.length > 0) {
         const run = r.runs[0];
-        if (run.status === 'complete' || run.status === 'failed') {
+        if (run.status === 'complete') {
           const detail = await api('/api/bridge/run?id=' + runId, null, 30000);
           var responseText = (detail && detail.run && detail.run.response) || '(no response)';
           // Typing animation: reveal text progressively
           await _typePersonaResponse(waitIdx, responseText, persona);
           return;
         }
+        if (run.status === 'failed') {
+          const detail = await api('/api/bridge/run?id=' + runId, null, 30000);
+          var errText = (detail && detail.run && detail.run.error) || (detail && detail.run && detail.run.response) || 'Dispatch failed — backend may have timed out.';
+          _chatMessages[waitIdx] = { role: 'error', content: errText, model: persona.preferred_backend || 'auto' };
+          _chatMessages[waitIdx]._pending = false;
+          _chatStreaming = false;
+          _updateStopBtn(false);
+          renderChatMessages();
+          return;
+        }
       }
     } catch(e) { /* continue polling */ }
   }
-  _chatMessages[waitIdx] = { role: 'assistant', content: '(dispatch timed out after 2 minutes)', model: 'timeout' };
+  _chatMessages[waitIdx] = { role: 'error', content: 'Dispatch timed out — the model took too long to respond. Try a shorter message or different model.', model: 'timeout' };
+  _chatMessages[waitIdx]._pending = false;
   _chatStreaming = false;
   _updateStopBtn(false);
+  var _thinkEl = document.getElementById('chat-thinking');
+  if (_thinkEl) _thinkEl.remove();
   renderChatMessages();
 }
 
@@ -22401,7 +22415,7 @@ def _dispatch_gemini(message, model=None, timeout=120):
     }
 
 
-def _dispatch_claude(message, model=None, timeout=120):
+def _dispatch_claude(message, model=None, timeout=180):
     """Invoke Claude Code CLI (claude -p) and return normalized response."""
     import subprocess
     cl_bin = _resolve_cli("claude")
@@ -23211,6 +23225,31 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     if _cortex_context:
         _ctx_parts.append(_cortex_context)
         _ctx_suffix = '\n\n'.join(_ctx_parts) if _ctx_parts else ''
+
+    # Cap prompt size: trim conversation history to last 3 turns if too long
+    _MAX_PROMPT_CHARS = 6000
+    if len(message) > _MAX_PROMPT_CHARS:
+        # Try to preserve last 3 exchanges from conversation history
+        _hist_marker = "Conversation history:"
+        if _hist_marker in message:
+            _hist_start = message.index(_hist_marker)
+            _after_hist = message[_hist_start:]
+            _new_msg_marker = "\nNew message:\n"
+            if _new_msg_marker in _after_hist:
+                _nm_pos = _after_hist.index(_new_msg_marker)
+                _history_block = _after_hist[:_nm_pos]
+                _new_msg_block = _after_hist[_nm_pos:]
+                # Keep last 3 exchanges from history
+                _turns = _history_block.split("\nUser:")
+                if len(_turns) > 3:
+                    _trimmed_hist = _hist_marker + "\n(earlier turns trimmed)\n\nUser:" + "\nUser:".join(_turns[-3:])
+                    message = _trimmed_hist + _new_msg_block
+                    log.info("Persona dispatch: trimmed conversation from %d to %d chars", len(message) + len(_history_block), len(message))
+            else:
+                # No new message marker — just truncate from the front
+                message = message[-_MAX_PROMPT_CHARS:]
+        else:
+            message = message[-_MAX_PROMPT_CHARS:]
 
     # Personality mode: conversational, includes identity context
     if personality_mode:
@@ -24272,7 +24311,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.7"})
+            self.reply_json({"v": "0.28.8"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24434,7 +24473,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.7"
+                health["porter_version"] = "0.28.8"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26132,7 +26171,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.7'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.8'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30185,7 +30224,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.7 ready (localhost only)")
+    print(f"\n  Porter v0.28.8 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
