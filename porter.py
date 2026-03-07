@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.21 — Timezone Fix + Cortex Names"""
+"""Porter v0.28.22 — Chat Files + Self-Heal + UX"""
 
 
 import email
@@ -203,6 +203,24 @@ _wf_register("agent_backend_eval", "Agent Backend Eval",
     "Cycles through agents testing each backend for response quality and speed",
     interval="168h", interval_s=604800,
     config_keys=["agent_eval_enabled", "agent_eval_interval_hours"])
+
+_wf_register("error_self_heal", "Error Self-Heal",
+    "Detects recurring errors in logs and attempts auto-remediation",
+    interval="1h", interval_s=3600,
+    config_keys=["self_heal_enabled", "self_heal_max_actions"])
+
+# Restore persisted workflow intervals from config
+def _wf_restore_intervals():
+    """Restore workflow intervals from porter_config.json on startup."""
+    try:
+        saved = _config.get("workflow_intervals", {})
+        for wf_id, vals in saved.items():
+            if wf_id in _wf_registry:
+                _wf_registry[wf_id]["interval"] = vals.get("interval", _wf_registry[wf_id]["interval"])
+                _wf_registry[wf_id]["interval_s"] = vals.get("interval_s", _wf_registry[wf_id]["interval_s"])
+    except Exception:
+        pass
+# Deferred — called after config is loaded (in _db_init or main)
 
 DEFAULT_AGENT_FLEET: dict = {
     "channel": "stable",
@@ -1105,6 +1123,13 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
     _emit_event("cortex:extracting", {"persona_id": persona_id, "backend": backend})
 
     # Build extraction prompt
+    # Get user's preferred name for personalized extraction
+    _user_name = ""
+    try:
+        _user_name = _config.get("display_name", "") or _config.get("preferences", {}).get("display_name", "")
+    except Exception:
+        pass
+    _name_rule = f"\n- Always refer to the user as \"{_user_name}\" (never \"the user\" or \"user\")\n" if _user_name else ""
     extract_prompt = (
         "You are a memory extraction system. Analyze this conversation and extract "
         "key facts worth remembering for future interactions.\n\n"
@@ -1118,6 +1143,7 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
         "- scope=project for project-specific info\n"
         "- scope=global for universally useful knowledge\n"
         "- importance: 1=trivial, 5=moderate, 10=critical\n"
+        + _name_rule +
         "Return ONLY valid JSON, no explanation."
     )
 
@@ -1563,6 +1589,7 @@ def _hygiene_merge_identity():
 
 def _hygiene_run():
     """Execute all hygiene rules. Called by daemon or API trigger."""
+    import time as _ptime
     prefs = _config.get("preferences", {})
     if not prefs.get("hygiene_enabled", True):
         return {"skipped": True, "reason": "disabled"}
@@ -3474,8 +3501,15 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
     structured_facts = []
     llm_used = False
     if transcript.strip():
+        # Get user's preferred name
+        _user_name2 = ""
+        try:
+            _user_name2 = _config.get("display_name", "") or _config.get("preferences", {}).get("display_name", "")
+        except Exception:
+            pass
+        _name_instr = f"\nIMPORTANT: Always refer to the user by their name \"{_user_name2}\", never as \"the user\" or \"user\"." if _user_name2 else ""
         prompt = (
-            "Extract learnings from this session as structured JSON.\n"
+            "Extract learnings from this session as structured JSON." + _name_instr + "\n"
             "Categorize each fact by scope:\n"
             "- agent: facts about a specific agent\'s behavior, preferences, or performance\n"
             "- project: facts about a specific project, codebase, or task\n"
@@ -4307,9 +4341,9 @@ def _cap_checks_loop():
             _t0 = _ct.time()
             try:
                 _run_cap_checks(force=True)
-                _wf_record_run("capability_checks", success=True, result="OK", duration=_ct.time()-_t0)
+                _wf_record_run("capability_checks", success=True, result="OK", duration_s=_ct.time()-_t0)
             except Exception as _cce:
-                _wf_record_run("capability_checks", success=False, error=_cce, duration=_ct.time()-_t0)
+                _wf_record_run("capability_checks", success=False, error=_cce, duration_s=_ct.time()-_t0)
         _ct.sleep(30)
 
 def _heartbeat_loop():
@@ -6173,13 +6207,30 @@ def _save_chat_message(chat_id, model_id, user_msg, assistant_msg, project_id=""
         res = conn.execute("SELECT 1 FROM chats WHERE id = ?", (chat_id,)).fetchone()
         if not res:
             title = _smart_chat_title(user_msg, persona_name)
-            _meta = json.dumps({"persona_name": persona_name}) if persona_name else "{}"
+            _meta_dict = {}
+            if persona_name:
+                _meta_dict["persona_name"] = persona_name
+            # v0.28.22 — save full dispatch context
+            if model_id:
+                _meta_dict["model"] = model_id
+            if project_id:
+                _meta_dict["project_id"] = project_id
+            _meta = json.dumps(_meta_dict) if _meta_dict else "{}"
             conn.execute("""
                 INSERT INTO chats (id, title, model_id, project_id, created_at, updated_at, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (chat_id, title, model_id, project_id or None, now, now, _meta))
         else:
-            conn.execute("UPDATE chats SET updated_at = ?, model_id = ? WHERE id = ?", (now, model_id, chat_id))
+            # Update metadata with current context
+            _upd_meta = {}
+            if persona_name:
+                _upd_meta["persona_name"] = persona_name
+            if model_id:
+                _upd_meta["model"] = model_id
+            if project_id:
+                _upd_meta["project_id"] = project_id
+            conn.execute("UPDATE chats SET updated_at = ?, model_id = ?, metadata = ? WHERE id = ?",
+                        (now, model_id, json.dumps(_upd_meta) if _upd_meta else None, chat_id))
         
         # Insert messages
         conn.execute("INSERT INTO chat_messages (chat_id, role, content, timestamp, model_id) VALUES (?, ?, ?, ?, ?)",
@@ -6980,6 +7031,13 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   font-size:14px; line-height:1; transition:.12s;
 }
 .chat-attach-btn:hover { border-color:var(--accent); color:var(--accent); }
+.chat-drop-zone {
+  padding:24px;text-align:center;font-size:13px;color:var(--accent);
+  border:2px dashed var(--accent);border-radius:8px;margin:6px 0;
+  background:color-mix(in srgb,var(--accent) 5%,transparent);
+  transition:.15s;
+}
+.chat-input-wrap.drag-over { border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent); }
 .chat-file-picker {
   position:absolute; bottom:100%; left:0; right:0; max-height:250px;
   overflow-y:auto; background:var(--bg); border:1px solid var(--border);
@@ -8471,7 +8529,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.21</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.22</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8557,7 +8615,12 @@ select.settings-input { padding-right: 26px; }
             <div class="chat-welcome-sub">⚡ One prompt. Every AI. Zero friction.</div>
             <div class="chat-welcome-input-wrap">
               <div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>
-              <textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)"></textarea>
+              <div style="display:flex;align-items:flex-end;gap:4px;width:100%" ondragover="_chatDragOver(event)" ondrop="_chatDrop(event)" ondragleave="_chatDragLeave(event)" ondragenter="_chatDragEnter(event)">
+                <button class="chat-attach-btn" onclick="toggleChatFilePicker()" title="Attach file">&#x1f4ce;</button>
+                <textarea id="chat-input-welcome" placeholder="Ask anything or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)" style="flex:1"></textarea>
+              </div>
+              <div id="chat-file-picker-welcome" class="chat-file-picker" style="display:none"></div>
+              <div id="chat-drop-zone-welcome" class="chat-drop-zone" style="display:none">Drop files here</div>
               <div id="chat-at-ind-welcome" class="chat-at-indicator"></div>
               <div id="chat-persona-bar" class="chat-persona-bar"></div>
               <select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option></select>
@@ -8571,9 +8634,14 @@ select.settings-input { padding-right: 26px; }
         <div id="chat-ctx-bar" class="chat-ctx-bar" style="display:none"></div>
         <div class="chat-input-area" id="chat-input-area" style="display:none">
           <div id="chat-autocomplete" class="chat-autocomplete"></div>
-          <div class="chat-input-wrap">
-            <textarea id="chat-input" class="chat-input-bottom" placeholder="Reply or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)"></textarea>
+          <div class="chat-input-wrap" ondragover="_chatDragOver(event)" ondrop="_chatDrop(event)" ondragleave="_chatDragLeave(event)" ondragenter="_chatDragEnter(event)">
+            <div id="chat-file-picker" class="chat-file-picker" style="display:none"></div>
+            <div style="display:flex;align-items:flex-end;gap:4px">
+              <button class="chat-attach-btn" onclick="toggleChatFilePicker()" title="Attach file">&#x1f4ce;</button>
+              <textarea id="chat-input" class="chat-input-bottom" placeholder="Reply or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)" style="flex:1"></textarea>
+            </div>
             <div id="chat-at-ind-bottom" class="chat-at-indicator"></div>
+            <div id="chat-drop-zone" class="chat-drop-zone" style="display:none">Drop files here</div>
             <div class="chat-input-bottom-meta">
               <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
               <select id="chat-backend-sel" style="display:none"><option value="">Auto-route</option></select>
@@ -9711,6 +9779,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.22', date:'2026-03-07', notes:['Memory map: zoom/pan persists across sessions','Chat: paperclip button + drag-drop file attachment','Chat history: restores agent/model/project context','Learnings: extraction uses preferred name (not "the user")','Learnings: date/time stamps on each card','Workflows: interval dropdown selector (persists)','Error Self-Heal workflow: detects recurring errors, auto-remediation','Fixed: _ptime import in hygiene, _load_config in eval loop'] },
   { ver:'v0.28.21', date:'2026-03-07', notes:['Timezone: Porter-styled select dropdown, persists across sessions','Cortex: agent scope resolves persona ID to name (pre-fetches persona map)'] },
   { ver:'v0.28.20', date:'2026-03-07', notes:['Graph: scroll zoom blocked when locked','Workflow history: singular "run" when count is 1','Cortex: agent scope resolves persona ID to name','Cortex: scope tag truncation for long names','Removed API Keys from Settings (use Extensions)'] },
   { ver:'v0.28.19', date:'2026-03-07', notes:['Agent Config tab: editable backend + fallback chain','Agent Self-Test workflow: periodic benchmarks across backends','Graph lock ON by default, disables +/-/Fit/Center','Removed Memory tab from agent slide-out (use Cortex)','Cortex: scope shows agent name, counter says learnings, removed type pills','Inbox button cutoff fix'] },
@@ -11636,7 +11705,12 @@ async function loadWorkflowRegistry() {
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
         + '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0"></span>'
         + '<span style="font-weight:600;font-size:13px;color:var(--text)">' + escHtml(wf.name) + '</span>'
-        + '<span style="font-size:10px;color:var(--text3);margin-left:auto;font-family:monospace">' + escHtml(wf.interval) + '</span>'
+        + '<select class="settings-input wf-interval-sel" data-wf="' + wf.id + '" onchange="_wfSetInterval(this)" style="font-size:10px;padding:1px 4px;margin-left:auto;max-width:100px;border-radius:4px">'
+        + (function() {
+            var opts = [{v:'per-response',l:'per-response'},{v:'30s',l:'30s'},{v:'1m',l:'1 min'},{v:'5m',l:'5 min'},{v:'15m',l:'15 min'},{v:'30m',l:'30 min'},{v:'1h',l:'1 hour'},{v:'6h',l:'6 hours'},{v:'12h',l:'12 hours'},{v:'24h',l:'24 hours'},{v:'168h',l:'weekly'}];
+            return opts.map(function(o) { return '<option value="' + o.v + '"' + (wf.interval === o.v ? ' selected' : '') + '>' + o.l + '</option>'; }).join('');
+          })()
+        + '</select>'
         + '</div>'
         + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.4">' + escHtml(wf.description) + '</div>'
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:11px;margin-bottom:10px">'
@@ -11721,6 +11795,19 @@ async function _wfSaveConfig(id) {
     var r = await api('/api/workflows/' + id + '/config', body);
     if (r && r.ok) { toast('Config saved', 'ok'); loadWorkflowRegistry(); }
     else toast((r && r.error) || 'Save failed', 'err');
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+async function _wfSetInterval(sel) {
+  var id = sel.getAttribute('data-wf');
+  var interval = sel.value;
+  // Map interval string to seconds
+  var map = {'per-response':0,'30s':30,'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'6h':21600,'12h':43200,'24h':86400,'168h':604800};
+  var secs = map[interval] || 0;
+  try {
+    var r = await api('/api/workflows/' + id + '/interval', { interval: interval, interval_s: secs });
+    if (r && r.ok) { toast('Interval updated', 'ok'); }
+    else toast((r && r.error) || 'Update failed', 'err');
   } catch(e) { toast('Error: ' + e.message, 'err'); }
 }
 
@@ -14622,9 +14709,18 @@ async function loadChatSession(id) {
   _chatMessages = (resp.chat.messages || []).map(function(m) {
     return { role: m.role, content: m.content };
   });
-  const sel = document.getElementById('chat-model');
-  if (sel && resp.chat.model) sel.value = resp.chat.model;
-  _chatModelChanged();
+  // Restore dispatch bar context from metadata
+  var meta = resp.chat.metadata || {};
+  if (meta.persona_name && window._personas) {
+    var found = window._personas.find(function(p) { return p.name === meta.persona_name; });
+    if (found) { window._chatAgent = found; }
+  }
+  if (meta.model) { window._chatModel = meta.model; }
+  if (meta.project_id) {
+    var proj = (_allProjects || []).find(function(p) { return p.id === meta.project_id; });
+    if (proj) { window._chatProject = proj; }
+  }
+  buildChatCtxSelectors();
   closeChatHistory();
   renderChatMessages();
 }
@@ -14744,6 +14840,71 @@ async function attachChatFile(rootPath, name) {
     toast('Error reading file', 'err');
   }
   document.getElementById('chat-file-picker').style.display = 'none';
+}
+
+var _chatDragCtr = 0;
+function _chatDragEnter(e) {
+  e.preventDefault(); e.stopPropagation();
+  _chatDragCtr++;
+  var wrap = e.currentTarget;
+  if (wrap) wrap.classList.add('drag-over');
+  var dz = wrap.querySelector('.chat-drop-zone');
+  if (dz) dz.style.display = '';
+}
+function _chatDragOver(e) { e.preventDefault(); e.stopPropagation(); }
+function _chatDragLeave(e) {
+  e.preventDefault(); e.stopPropagation();
+  _chatDragCtr--;
+  if (_chatDragCtr <= 0) {
+    _chatDragCtr = 0;
+    var wrap = e.currentTarget;
+    if (wrap) wrap.classList.remove('drag-over');
+    var dz = wrap.querySelector('.chat-drop-zone');
+    if (dz) dz.style.display = 'none';
+  }
+}
+function _chatDrop(e) {
+  e.preventDefault(); e.stopPropagation();
+  _chatDragCtr = 0;
+  var wrap = e.currentTarget;
+  if (wrap) wrap.classList.remove('drag-over');
+  var dz = wrap.querySelector('.chat-drop-zone');
+  if (dz) dz.style.display = 'none';
+  var files = e.dataTransfer.files;
+  if (!files || !files.length) return;
+  Array.from(files).forEach(function(file) {
+    _attachLocalFile(file);
+  });
+}
+
+function _attachLocalFile(file) {
+  // Read file as text (for text files) or base64 (for others)
+  var textExts = ['md','txt','py','js','ts','json','yaml','yml','toml','cfg','ini','sh','css','html','xml','csv','log','sql','env','jsx','tsx','go','rs','java','rb','php','c','cpp','h'];
+  var ext = (file.name || '').split('.').pop().toLowerCase();
+  var isText = textExts.indexOf(ext) >= 0 || file.type.startsWith('text/');
+  if (file.size > 500000) {
+    toast('File too large (max 500KB for chat attachment)', 'err');
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function() {
+    var content = reader.result;
+    if (!isText && typeof content !== 'string') {
+      content = '[Binary file: ' + file.name + ' (' + file.size + ' bytes)]';
+    }
+    // Truncate content for context
+    if (typeof content === 'string' && content.length > 8000) {
+      content = content.substring(0, 8000) + '\n... (truncated)';
+    }
+    _chatContextFiles.push({ path: 'local/' + file.name, name: file.name, content: content });
+    renderContextBar();
+    toast('Attached: ' + file.name);
+  };
+  if (isText) {
+    reader.readAsText(file);
+  } else {
+    reader.readAsText(file);  // try text first, binary will show garbled but that's OK
+  }
 }
 
 
@@ -16231,6 +16392,7 @@ function _renderCortexMemories(memories) {
         ? '<a href="#" onclick="event.preventDefault();event.stopPropagation();_openCortexSession(\'' + escHtml(m.source_id) + '\')" style="font-size:10px;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:3px" title="Open session"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>session</a>'
         : '')
       + '<div style="flex:1"></div>'
+      + '<span style="font-size:9px;color:var(--text3);white-space:nowrap">' + (m.created_at ? new Date(m.created_at * 1000).toLocaleDateString(undefined, {month:'short',day:'numeric'}) + ' ' + new Date(m.created_at * 1000).toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit'}) : '') + '</span>'
       + (memStatus === 'active'
         ? '<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px;color:var(--text3)" onclick="event.stopPropagation();_archiveCortexMem(' + m.id + ',this)" title="Archive">Archive</button>'
         : '<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px;color:var(--green,#4ade80)" onclick="event.stopPropagation();_restoreCortexMem(' + m.id + ',this)" title="Restore">Restore</button>')
@@ -16428,8 +16590,14 @@ function _saveGraphPositions() {
   _graphNodes.forEach(function(n) { pos[n.id] = {x: Math.round(n.x), y: Math.round(n.y)}; });
   try { localStorage.setItem('porter_graph_positions', JSON.stringify(pos)); } catch(e) {}
 }
+function _saveGraphZoom() {
+  try { localStorage.setItem('porter_graph_zoom', JSON.stringify({x:_graphZoom.x, y:_graphZoom.y, scale:_graphZoom.scale})); } catch(e) {}
+}
 function _loadGraphPositions() {
   try { return JSON.parse(localStorage.getItem('porter_graph_positions') || '{}'); } catch(e) { return {}; }
+}
+function _loadGraphZoom() {
+  try { var z = JSON.parse(localStorage.getItem('porter_graph_zoom') || 'null'); return z && z.scale ? z : null; } catch(e) { return null; }
 }
 
 function _resetGraphZoom() { _fitGraphToView(); }
@@ -16456,6 +16624,7 @@ function _fitGraphToView() {
   _graphZoom.x = canvas.width / 2 - cx * scale;
   _graphZoom.y = canvas.height / 2 - cy * scale;
   _drawGraph();
+  _saveGraphZoom();
 }
 function _centerGraph() {
   if (window._cxGraphLocked) return;
@@ -16468,9 +16637,10 @@ function _centerGraph() {
   _graphZoom.x = canvas.width / 2 - cx;
   _graphZoom.y = canvas.height / 2 - cy;
   _drawGraph();
+  _saveGraphZoom();
 }
-function _graphZoomIn() { if (window._cxGraphLocked) return; _graphZoom.scale = Math.min(3, _graphZoom.scale * 1.2); _drawGraph(); }
-function _graphZoomOut() { if (window._cxGraphLocked) return; _graphZoom.scale = Math.max(0.3, _graphZoom.scale / 1.2); _drawGraph(); }
+function _graphZoomIn() { if (window._cxGraphLocked) return; _graphZoom.scale = Math.min(3, _graphZoom.scale * 1.2); _drawGraph(); _saveGraphZoom(); }
+function _graphZoomOut() { if (window._cxGraphLocked) return; _graphZoom.scale = Math.max(0.3, _graphZoom.scale / 1.2); _drawGraph(); _saveGraphZoom(); }
 function _toggleGraphLock() {
   window._cxGraphLocked = !window._cxGraphLocked;
   var btn = document.getElementById('cx-lock-btn');
@@ -16584,8 +16754,11 @@ async function _initMemoryGraph() {
     if (!allRestored && _graphNodes[0] && !_graphNodes[0].fixed) { _graphNodes[0].x = cx; _graphNodes[0].y = cy; }
     _setupGraphInteraction(canvas);
     if (allRestored) {
-      // All positions restored — just draw, no simulation needed
-      _fitGraphToView();
+      // All positions restored — restore saved zoom or fit to view
+      var savedZoom = _loadGraphZoom();
+      if (savedZoom) {
+        _graphZoom.x = savedZoom.x; _graphZoom.y = savedZoom.y; _graphZoom.scale = savedZoom.scale;
+      }
       _drawGraph();
     } else {
       _runGraphSimulation(canvas);
@@ -16660,6 +16833,7 @@ function _setupGraphInteraction(canvas) {
     }
   };
   canvas.onmouseup = function() {
+    if (panning) { _saveGraphZoom(); }
     var n = dragging || _clickedNode;
     _clickedNode = null;
     if (n) {
@@ -16689,6 +16863,7 @@ function _setupGraphInteraction(canvas) {
     var delta = e.deltaY > 0 ? 0.92 : 1.08;
     _graphZoom.scale = Math.max(0.3, Math.min(3, _graphZoom.scale * delta));
     _drawGraph();
+    _saveGraphZoom();
   };
   canvas.ondblclick = function(e) {
     var rect = canvas.getBoundingClientRect();
@@ -23134,6 +23309,84 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     return result
 
 
+# ── Error Self-Heal (v0.28.22) ─────────────────────────────────────────
+
+def _error_self_heal_once():
+    """Scan recent logs for recurring errors and attempt auto-remediation."""
+    import time as _sht
+    prefs = _config.get("preferences", {})
+    if not prefs.get("self_heal_enabled", False):
+        return {"ok": True, "skipped": True, "reason": "disabled"}
+
+    max_actions = prefs.get("self_heal_max_actions", 3)
+    actions_taken = []
+
+    try:
+        conn = _db_conn()
+        # Query mission log for recent errors (last hour)
+        cutoff = _sht.time() - 3600
+        errors = conn.execute(
+            "SELECT category, event_type, message, COUNT(*) as cnt "
+            "FROM mission_log WHERE level='error' AND ts >= ? "
+            "GROUP BY category, event_type ORDER BY cnt DESC LIMIT 10",
+            (cutoff,)
+        ).fetchall()
+
+        for err in errors:
+            if len(actions_taken) >= max_actions:
+                break
+            cat = err["category"]
+            etype = err["event_type"]
+            cnt = err["cnt"]
+            msg = err["message"]
+
+            # Auto-remediation rules
+            if "heartbeat" in cat and cnt >= 3:
+                # Disable failing heartbeats
+                actions_taken.append(f"Paused heartbeat workflow (failed {cnt}x)")
+                with _wf_lock:
+                    if "heartbeat" in _wf_registry:
+                        _wf_registry["heartbeat"]["enabled"] = False
+
+            elif "dispatch" in etype and "timeout" in msg.lower() and cnt >= 5:
+                # Log timeout pattern but don't auto-fix (risky)
+                actions_taken.append(f"Detected dispatch timeout pattern ({cnt}x): {msg[:80]}")
+
+            elif "probe" in etype and cnt >= 3:
+                # Backend probe failing — log it
+                actions_taken.append(f"Backend probe failing ({cnt}x): {msg[:80]}")
+
+            elif cnt >= 10:
+                # Generic high-frequency error — log for review
+                actions_taken.append(f"High-frequency error ({cnt}x) [{cat}.{etype}]: {msg[:60]}")
+
+        if actions_taken:
+            log.info("Self-heal took %d actions: %s", len(actions_taken), "; ".join(actions_taken))
+            mlog.emit("info", "self-heal", "self_heal.actions",
+                      f"Took {len(actions_taken)} actions: {'; '.join(actions_taken)}")
+
+        _wf_record_run("error_self_heal", success=True,
+                       result=f"{len(actions_taken)} actions" if actions_taken else "clean")
+        return {"ok": True, "actions": actions_taken}
+
+    except Exception as e:
+        log.warning("Self-heal error: %s", e)
+        _wf_record_run("error_self_heal", success=False, error=str(e))
+        return {"ok": False, "error": str(e)}
+
+
+def _error_self_heal_loop():
+    """Background daemon for error self-healing."""
+    import time as _shlt
+    _shlt.sleep(120)  # wait 2min after startup
+    while True:
+        if _wf_is_enabled("error_self_heal"):
+            cfg = _config.get("preferences", {})
+            if cfg.get("self_heal_enabled", False):
+                _error_self_heal_once()
+        _shlt.sleep(3600)  # check hourly
+
+
 # ── Agent Backend Eval (v0.28.19) ──────────────────────────────────────
 
 _eval_agent_idx = 0
@@ -23212,7 +23465,7 @@ def _agent_eval_loop():
     _ael.sleep(300)
     while True:
         try:
-            cfg = _load_config()
+            cfg = _config
             if not cfg.get("agent_eval_enabled", False):
                 _ael.sleep(3600)
                 continue
@@ -24140,7 +24393,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.21"})
+            self.reply_json({"v": "0.28.22"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24302,7 +24555,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.21"
+                health["porter_version"] = "0.28.22"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26010,6 +26263,23 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
+        elif parsed.path.startswith("/api/workflows/") and parsed.path.endswith("/interval"):
+            if not self.auth_check(redirect=False): return
+            wf_id = parsed.path.split("/")[3]
+            data = self.read_json_body()
+            interval = data.get("interval", "")
+            interval_s = data.get("interval_s", 0)
+            with _wf_lock:
+                if wf_id in _wf_registry:
+                    _wf_registry[wf_id]["interval"] = interval
+                    _wf_registry[wf_id]["interval_s"] = interval_s
+                    wf_cfg = _config.setdefault("workflow_intervals", {})
+                    wf_cfg[wf_id] = {"interval": interval, "interval_s": interval_s}
+                    save_config(_config)
+                    self.reply_json({"ok": True})
+                else:
+                    self.reply_json({"ok": False, "error": "Workflow not found"}, 404)
+
         elif parsed.path == "/api/agents/eval-run":
             if not self.auth_check(redirect=False): return
             data = self._read_json()
@@ -26082,7 +26352,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.21'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.22'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -28798,6 +29068,10 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                         m_dict["attachments"] = atts_by_msg.get(m["id"], [])
                         messages.append(m_dict)
 
+                    # Parse metadata for dispatch context
+                    _meta = {}
+                    try: _meta = json.loads(c["metadata"] or "{}")
+                    except Exception: pass
                     chat_data = {
                         "id": c["id"],
                         "title": c["title"],
@@ -28806,7 +29080,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                         "username": c["username"],
                         "created": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(c["created_at"])),
                         "updated": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(c["updated_at"])),
-                        "messages": messages
+                        "messages": messages,
+                        "metadata": _meta
                     }
                     self.reply_json({"ok": True, "chat": chat_data})
 
@@ -30266,6 +30541,7 @@ if __name__ == "__main__":
     mlog.start()  # Start Mission Control log system
     _db_migrate_chats()  # Migrate JSON chats to SQLite
     _treg_load()  # populate task registry from SQLite (needs _db_init first)
+    _wf_restore_intervals()  # Restore saved workflow intervals
     _migrate_checkpoint_to_registry()  # Gap31: one-time migration
     _sched_thread = threading.Thread(target=_scheduler_loop, name="porter-scheduler", daemon=True)
     _sched_thread.start()
@@ -30282,11 +30558,13 @@ if __name__ == "__main__":
     _hygiene_thread.start()
     _eval_thread = threading.Thread(target=_agent_eval_loop, name="porter-eval", daemon=True)
     _eval_thread.start()
+    _heal_thread = threading.Thread(target=_error_self_heal_loop, name="porter-self-heal", daemon=True)
+    _heal_thread.start()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.21 ready (localhost only)")
+    print(f"\n  Porter v0.28.22 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
