@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.41 — Graph DB Fix"""
+"""Porter v0.27.42 — Chat Extraction Feedback"""
 
 
 import email
@@ -7826,7 +7826,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.41</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.42</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9163,6 +9163,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.27.42', date:'2026-03-07', notes:['Chat: extraction feedback — shows "Extracting memories..." then "X memories extracted" inline after dispatch','Extraction indicator auto-fades after 4 seconds'] },
   { ver:'v0.27.41', date:'2026-03-07', notes:['Memory Map: fixed closed-database error in /api/cortex/graph (conn.close before final query)','Unrouted count now uses routed_to check instead of scope_id filter'] },
   { ver:'v0.27.40', date:'2026-03-07', notes:['Memory Map: deferred canvas init fixes "No graph data" on first load','Counters simplified: Memories / New today / Inbox (removed Merged/Active jargon)','Bigger buttons on fact cards (edit, delete, push, dismiss, route)','Fact text clickable to open edit modal','Show all facts by default (routed + unrouted)','Extraction progress banner with animated shimmer during memory extraction'] },
   { ver:'v0.27.38', date:'2026-03-07', notes:['Memory Map: edges connect at node borders (not centers)','Memory Map: distinct shapes per type (circles=agents, hexagons=global, rounded rects=projects)','Memory Map: scope filter buttons (All/Agent/Project/Global) with fade effect','Memory Map: hover tooltips show node details','Memory Map: hub renamed from Cortex to Inbox for clarity','Memory Map: agent-to-agent edges based on shared project work'] },
@@ -10982,11 +10983,34 @@ function switchModule(name) {
             if (d.type === 'cortex:extracting') {
               var banner = document.getElementById('cx-extract-banner');
               if (banner) banner.style.display = '';
+              // Show extracting indicator in chat
+              var chatMod = document.getElementById('chat-module');
+              if (chatMod && chatMod.classList.contains('active')) {
+                var chatMsgs = document.getElementById('chat-messages');
+                if (chatMsgs) {
+                  var existing = document.getElementById('cx-chat-extract');
+                  if (existing) existing.remove();
+                  chatMsgs.insertAdjacentHTML('beforeend', '<div id="cx-chat-extract" style="text-align:center;padding:6px;font-size:11px;color:var(--text3);animation:fadeIn 0.2s"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber,#fbbf24);margin-right:6px;animation:cx-shimmer 1s infinite"></span>Extracting memories\u2026</div>');
+                  chatMsgs.scrollTop = chatMsgs.scrollHeight;
+                }
+              }
             }
             if (d.type === 'cortex:update' && d.data) {
               _updateCortexBadge(d.data.total_unrouted || 0);
               var banner2 = document.getElementById('cx-extract-banner');
               if (banner2) banner2.style.display = 'none';
+              // Update chat extraction indicator
+              var cxChatEx = document.getElementById('cx-chat-extract');
+              if (cxChatEx) {
+                var nf = d.data.new_facts || 0;
+                if (nf > 0) {
+                  cxChatEx.innerHTML = '<span style="color:var(--green,#4ade80)">\u2713</span> ' + nf + ' memor' + (nf === 1 ? 'y' : 'ies') + ' extracted';
+                  cxChatEx.style.color = 'var(--green,#4ade80)';
+                } else {
+                  cxChatEx.innerHTML = '<span style="color:var(--text3)">No new memories</span>';
+                }
+                setTimeout(function() { if (cxChatEx.parentNode) { cxChatEx.style.transition='opacity 0.5s'; cxChatEx.style.opacity='0'; setTimeout(function(){ if(cxChatEx.parentNode) cxChatEx.remove(); },600); } }, 4000);
+              }
               // If on Cortex tab, refresh inbox
               var cxMod = document.getElementById('cortex-module');
               if (cxMod && cxMod.classList.contains('active')) {
@@ -23862,7 +23886,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.41"})
+            self.reply_json({"v": "0.27.42"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -23949,7 +23973,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.41"
+                health["porter_version"] = "0.27.42"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25603,7 +25627,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.41'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.42'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29646,7 +29670,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.41 ready (localhost only)")
+    print(f"\n  Porter v0.27.42 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
