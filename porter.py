@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.9 — Context Hygiene System"""
+"""Porter v0.28.10 — UI Polish Batch"""
 
 
 import email
@@ -8274,7 +8274,7 @@ select.settings-input { padding-right: 26px; }
     <button class="mnav-item" id="mnav-cortex" onclick="switchModule('cortex')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
       <span class="mnav-label">Cortex</span>
-      <span id="cortex-nav-badge" class="mnav-badge" style="display:none;background:var(--accent);color:#fff;font-size:9px;min-width:16px;height:16px;border-radius:8px;text-align:center;line-height:16px;padding:0 4px;margin-left:auto;font-weight:600"></span>
+
     </button>
     <div class="mnav-group-label">Config</div>
     <button class="mnav-item" id="mnav-capabilities" onclick="switchModule('capabilities')">
@@ -8316,7 +8316,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.9</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.10</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8483,6 +8483,7 @@ select.settings-input { padding-right: 26px; }
         <button class="pd-tab active" onclick="switchPdTab('identity')">Identity</button>
         <button class="pd-tab" onclick="switchPdTab('memory')">Memory</button>
         <button class="pd-tab" onclick="switchPdTab('activity')">Activity</button>
+        <button class="pd-tab" onclick="switchPdTab('skills')">Skills</button>
         <button class="pd-tab" onclick="switchPdTab('config')">Config</button>
       </div>
       <div id="pd-content" class="persona-detail-content"></div>
@@ -8967,8 +8968,8 @@ select.settings-input { padding-right: 26px; }
 
     <!-- Stats bar -->
     <div id="cx-stats-bar" style="display:flex;gap:12px;padding:8px 28px;background:var(--surface);border-bottom:1px solid var(--border);font-size:13px">
-      <span style="color:var(--text2)">Active: <strong id="cx-total2" style="color:var(--accent)">—</strong></span>
-      <span style="color:var(--text3)">New today: <strong id="cx-24h2">—</strong></span>
+      <span style="color:var(--text2)"><strong id="cx-total2" style="color:var(--accent)">—</strong> memories</span>
+      <span style="color:var(--text3)"><strong id="cx-24h2">—</strong> new today</span>
       <span style="margin-left:auto"><span id="cx-status2" style="font-weight:600;color:var(--green,#4ade80)">—</span></span>
     </div>
 
@@ -9006,11 +9007,11 @@ select.settings-input { padding-right: 26px; }
       <div id="cx-inbox-sidebar" style="width:340px;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg2)">
         <div style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
           <div style="font-size:13px;font-weight:600;color:var(--text)">Memories</div>
-          <span id="cx-inbox-count" style="font-size:10px;color:var(--text3)"></span>
+          <span id="cx-inbox-count" style="font-size:10px;color:var(--text3);display:none"></span>
           <div style="flex:1"></div>
           <div style="display:flex;gap:2px">
             <button class="btn btn-ghost cx-type-filter active" onclick="_filterCortexType('all',this)" style="font-size:9px;padding:2px 6px">All</button>
-            <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('semantic',this)" style="font-size:9px;padding:2px 6px">Facts</button>
+            <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('semantic',this)" style="font-size:9px;padding:2px 6px">Learned</button>
             <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('episodic',this)" style="font-size:9px;padding:2px 6px">Sessions</button>
           </div>
         </div>
@@ -9142,10 +9143,7 @@ select.settings-input { padding-right: 26px; }
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
         Password
       </button>
-      <button class="settings-nav-item" id="snav-billing" onclick="switchSettingsTab('billing')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-        Billing
-      </button>
+
       <button class="settings-nav-item" id="snav-apikeys" onclick="switchSettingsTab('apikeys')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
         API Keys
@@ -9402,15 +9400,7 @@ select.settings-input { padding-right: 26px; }
         </div>
       </div>
 
-      <!-- Billing page -->
-      <div class="settings-page" id="spage-billing">
-        <div class="settings-page-title">Billing</div>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Stripe integration placeholder.</div>
-        <div style="background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:14px">
-          <div style="font-size:13px;font-weight:600;color:var(--text)">Coming soon</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:6px">Subscription, invoices, payment method management, and usage-based charges will appear here once Stripe is connected.</div>
-        </div>
-      </div>
+
 
 
       <!-- API Keys page -->
@@ -12939,6 +12929,37 @@ async function _preloadSessionCounts() {
 
 var _inlineSessionsExpanded = {};
 
+
+async function _showLastPrompt(backend) {
+  try {
+    var resp = await api('/api/admin/dispatch-log?backend=' + backend + '&limit=1');
+    if (!resp || !resp.dispatches || !resp.dispatches.length) {
+      toast('No dispatches found for ' + backend); return;
+    }
+    var d = resp.dispatches[0];
+    var prompt = d.prompt || '(empty)';
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    var modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:20px;max-width:700px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+    modal.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
+      + '<div style="font-size:14px;font-weight:600;color:var(--text)">Last Dispatch → ' + escHtml(backend) + '</div>'
+      + '<div style="flex:1"></div>'
+      + '<span style="font-size:10px;color:var(--text3)">' + (d.prompt_len || 0) + ' chars</span>'
+      + '<span style="font-size:10px;color:var(--text3)">' + (d.duration_ms || 0) + 'ms</span>'
+      + '<span style="font-size:10px;color:' + (d.status === 'complete' ? 'var(--green,#4ade80)' : '#ef4444') + '">' + (d.status || '?') + '</span>'
+      + '<button class="btn btn-ghost" onclick="this.closest(\'div\').parentElement.parentElement.remove()" style="font-size:14px;padding:2px 8px">\u00d7</button>'
+      + '</div>'
+      + '<pre style="font-size:11px;line-height:1.5;color:var(--text2);background:var(--bg2);padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word;max-height:60vh;overflow-y:auto;border:1px solid var(--border)">' + escHtml(prompt) + '</pre>'
+      + '<div style="margin-top:8px;display:flex;gap:8px">'
+      + '<button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(this.parentElement.previousElementSibling.textContent);toast(\'Copied\')">Copy prompt</button>'
+      + '</div>';
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+  } catch(e) { toast('Failed to load prompt', 'err'); }
+}
+
 function _toggleInlineSessions(btn, backend, source) {
   var container = document.getElementById('inline-sess-' + backend);
   if (!container) return;
@@ -13770,8 +13791,11 @@ function loadApiKeys() {
       html += '</div>';
       html += '</div>';
       if (hasKey) {
-        html += '<span style="font-family:monospace;font-size:12px;color:var(--text2);background:var(--raised);padding:3px 8px;border-radius:4px;border:1px solid var(--border)">' + escHtml(saved[def.id]) + '</span>';
-        html += '<button class="btn btn-ghost btn-sm" style="color:#ef4444;min-width:auto;padding:4px 10px" onclick="deleteApiKey(\'' + def.id + '\')">Delete</button>';
+        var masked = saved[def.id].slice(0,4) + '\u2022'.repeat(Math.min(20, saved[def.id].length - 8)) + saved[def.id].slice(-4);
+        html += '<span id="apikey-val-' + def.id + '" style="font-family:monospace;font-size:12px;color:var(--text2);background:var(--raised);padding:3px 8px;border-radius:4px;border:1px solid var(--border)" data-full="' + escHtml(saved[def.id]) + '" data-masked="' + escHtml(masked) + '">' + escHtml(masked) + '</span>';
+        html += '<button class="btn btn-ghost btn-sm" style="min-width:auto;padding:4px 8px;font-size:10px" onclick="var s=document.getElementById(\'apikey-val-' + def.id + '\');if(s){var f=s.dataset.full,m=s.dataset.masked;s.textContent=s.textContent===m?f:m;this.textContent=s.textContent===m?\'Show\':\'Hide\'}" title="Toggle visibility">Show</button>';
+        html += '<button class="btn btn-ghost btn-sm" style="min-width:auto;padding:4px 8px;font-size:10px" onclick="var s=document.getElementById(\'apikey-val-' + def.id + '\');if(s)navigator.clipboard.writeText(s.dataset.full).then(function(){toast(\'Copied\')})">Copy</button>';
+        html += '<button class="btn btn-ghost btn-sm" style="color:#ef4444;min-width:auto;padding:4px 8px;font-size:10px" onclick="deleteApiKey(\'' + def.id + '\')">Delete</button>';
       } else {
         html += '<button class="btn btn-ghost btn-sm" style="min-width:auto;padding:4px 10px" onclick="showApiKeyAdd(\'' + def.id + '\',\'' + escHtml(def.label) + '\',\'' + escHtml(def.url) + '\')">Add</button>';
       }
@@ -16900,7 +16924,7 @@ function _renderCortexMemories(memories) {
     // Status dot (green=active, gray=archived)
     var statusDot = '<span style="width:6px;height:6px;border-radius:50%;background:' + (memStatus === 'active' ? 'var(--green,#4ade80)' : '#666') + ';display:inline-block" title="' + memStatus + '"></span>';
     // Type pill
-    var typePill = '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:color-mix(in srgb,' + (memType === 'episodic' ? '#a78bfa' : 'var(--accent)') + ' 15%,transparent);color:' + (memType === 'episodic' ? '#a78bfa' : 'var(--accent)') + '">' + (memType === 'episodic' ? 'session' : 'fact') + '</span>';
+    var typePill = '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:color-mix(in srgb,' + (memType === 'episodic' ? '#a78bfa' : 'var(--accent)') + ' 15%,transparent);color:' + (memType === 'episodic' ? '#a78bfa' : 'var(--accent)') + '">' + (memType === 'episodic' ? 'session' : 'learned') + '</span>';
     html += '<div class="cx-mem-card cx-mem-row" data-scope="' + sc + '" data-id="' + m.id + '" data-type="' + memType + '" data-status="' + memStatus + '">'
       + '<div style="display:flex;align-items:center;gap:6px">'
       + statusDot
@@ -17169,6 +17193,18 @@ async function _initMemoryGraph() {
   canvas.width = w;
   canvas.height = h;
   canvas.style.width = w + 'px';
+  // v0.28.9 — Resize canvas when window resizes
+  window._cxResizeTimer = null;
+  window.addEventListener('resize', function() {
+    clearTimeout(window._cxResizeTimer);
+    window._cxResizeTimer = setTimeout(function() {
+      var c2 = document.getElementById('cx-graph-canvas');
+      if (!c2 || !c2.parentElement) return;
+      var nw = c2.parentElement.clientWidth || 700;
+      var nh = c2.parentElement.clientHeight || 400;
+      if (nw > 100 && nh > 100) { c2.width = nw; c2.height = nh; }
+    }, 200);
+  });
   canvas.style.height = h + 'px';
   // Fetch graph data (with retry)
   try {
@@ -17283,7 +17319,26 @@ function _setupGraphInteraction(canvas) {
       }
     }
   };
-  canvas.onmouseup = function() { if (dragging) { dragging.fixed = true; _saveGraphPositions(); dragging = null; canvas.style.cursor = 'grab'; } panning = false; };
+  canvas.onmouseup = function() {
+    if (dragging) {
+      var n = dragging;
+      dragging.fixed = true; _saveGraphPositions(); dragging = null; canvas.style.cursor = 'grab';
+      // v0.28.9 — Click node to filter memory list
+      if (n.type === 'agent' && n.id) {
+        var f1 = (_cortexMemories || []).filter(function(m) { return m.scope === 'agent' && m.scope_id === n.id; });
+        if (f1.length) { _renderCortexMemories(f1); toast(n.label + ': ' + f1.length + ' memories'); }
+      } else if (n.type === 'global') {
+        var f2 = (_cortexMemories || []).filter(function(m) { return m.scope === 'global'; });
+        if (f2.length) { _renderCortexMemories(f2); toast('Global: ' + f2.length + ' memories'); }
+      } else if (n.type === 'project' && n.id) {
+        var f3 = (_cortexMemories || []).filter(function(m) { return m.scope === 'project' && m.scope_id === n.id; });
+        if (f3.length) { _renderCortexMemories(f3); toast(n.label + ': ' + f3.length + ' memories'); }
+      } else if (n.type === 'cortex') {
+        _renderCortexMemories(_cortexMemories || []); toast('All memories');
+      }
+    }
+    panning = false;
+  };
   canvas.onmouseleave = function() { if (dragging) { dragging.fixed = true; dragging = null; } panning = false; var tip = document.getElementById('cx-graph-tooltip'); if (tip) tip.style.display = 'none'; };
   canvas.onwheel = function(e) {
     e.preventDefault();
@@ -17589,7 +17644,7 @@ function _renderModelCards(data, act) {
     }
 
     // Inline expandable sessions + Live Trace button
-    var _maSourceMap2 = {claude:'claude', openclaw:'openclaw', gemini:'gemini'};
+    var _maSourceMap2 = {claude:'claude', openclaw:'openclaw', gemini:'gemini', ollama:'ollama', codex:'codex'};
     var _maCardSource = _maSourceMap2[p.id] || null;
     var sessionsBtn = '';
     if (_maCardSource) {
@@ -17606,6 +17661,7 @@ function _renderModelCards(data, act) {
     if (activeRuns.length > 0) {
       liveTraceBtn = '<div style="margin-top:4px"><button class="btn btn-ghost" style="font-size:10px;width:100%;color:var(--accent)" onclick="_openModelActivity(\'' + escHtml(p.id) + '\')">Live Trace</button></div>';
     }
+    var lastPromptBtn = '<div style="margin-top:4px"><button class="btn btn-ghost" style="font-size:10px;width:100%;color:var(--text3)" onclick="_showLastPrompt(\'' + escHtml(p.id) + '\')">Last Prompt</button></div>';
 
     // Model selector: show active model name as card title
     var _avBk = (_modelAvailableData || {})[p.id] || {};
@@ -17654,6 +17710,7 @@ function _renderModelCards(data, act) {
       + ''
       + sessionsBtn
       + liveTraceBtn
+      + lastPromptBtn
       + '</div>';
   }).join('');
 
@@ -18383,6 +18440,9 @@ function switchPdTab(tab) {
       html += '</div>';
       content.innerHTML = html;
     });
+  } else if (tab === 'skills') {
+    content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div style="font-size:12px;color:var(--text3)">Loading skills...</div></div>';
+    _loadPersonaSkills(p.id);
   } else if (tab === 'config') {
     let fb = [];
     try { fb = JSON.parse(p.fallback_backends || '[]'); } catch(e){}
@@ -18406,13 +18466,7 @@ function switchPdTab(tab) {
       <div style="margin-top:16px;display:flex;gap:8px">
         <button class="btn btn-ghost" onclick="wakePersona('${p.id}')" style="font-size:12px">Wake</button>
         <button class="btn btn-ghost" onclick="sleepPersona('${p.id}')" style="font-size:12px">Sleep</button>
-      </div>
-      <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px">
-        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">Assigned Skills</div>
-        <div id="pd-skills-list" style="font-size:12px;color:var(--text3)">Loading skills...</div>
       </div>`;
-    // Load skills for this persona
-    _loadPersonaSkills(p.id);
   }
 }
 
@@ -18426,19 +18480,27 @@ async function _loadPersonaSkills(pid) {
     ]);
     var assignedNames = ((assigned && assigned.skills) || []).map(function(s) { return s.name; });
     var allSkills = (available && available.skills) || [];
-    if (!allSkills.length) {
-      container.innerHTML = '<div style="font-size:11px;color:var(--text3)">No skills available</div>';
+    // Only show installed skills
+    var installed = allSkills.filter(function(sk) { return sk.installed; });
+    if (!installed.length) {
+      container.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No installed skills. Install skills from the <a href="#" onclick="switchModule(\'skills\');closePersonaDetail();return false" style="color:var(--accent)">Skills tab</a>.</div>';
       return;
     }
-    var html = '<div style="display:flex;flex-direction:column;gap:4px">';
-    allSkills.forEach(function(sk) {
+    var html = '<div style="display:flex;flex-direction:column;gap:6px">';
+    installed.forEach(function(sk) {
       var name = sk.name || sk.id || sk;
+      var emoji = sk.emoji || '⚡';
+      var desc = sk.description || '';
       var checked = assignedNames.indexOf(name) >= 0 ? 'checked' : '';
-      html += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text2)">';
-      html += '<input type="checkbox" ' + checked + ' onchange="_togglePersonaSkill(\'' + pid + '\',\'' + name + '\',this.checked)" style="width:14px;height:14px">';
-      html += name + '</label>';
+      html += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface)">';
+      html += '<input type="checkbox" ' + checked + ' onchange="_togglePersonaSkill(\'' + pid + '\',\'' + name + '\',this.checked)" style="width:14px;height:14px;flex-shrink:0">';
+      html += '<span style="font-size:14px">' + emoji + '</span>';
+      html += '<div style="flex:1;min-width:0"><div style="color:var(--text);font-weight:500">' + escHtml(name) + '</div>';
+      if (desc) html += '<div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(desc.slice(0,60)) + '</div>';
+      html += '</div></label>';
     });
     html += '</div>';
+    html += '<div style="margin-top:8px;font-size:10px;color:var(--text3)">' + installed.length + ' installed · ' + assignedNames.length + ' assigned</div>';
     container.innerHTML = html;
   } catch(e) {
     container.innerHTML = '<div style="font-size:11px;color:var(--text3)">Could not load skills</div>';
@@ -24573,7 +24635,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.9"})
+            self.reply_json({"v": "0.28.10"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24735,7 +24797,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.9"
+                health["porter_version"] = "0.28.10"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -24844,6 +24906,35 @@ class Handler(BaseHTTPRequestHandler):
                 "config": hygiene_config,
                 "agent_context_sizes": agent_sizes,
             })
+
+        elif parsed.path == "/api/admin/dispatch-log":
+            if not self.auth_check(redirect=False): return
+            limit = min(int(qs.get("limit", ["20"])[0]), 100)
+            backend_filter = qs.get("backend", [""])[0]
+            try:
+                conn = _db_conn()
+                if backend_filter:
+                    rows = conn.execute(
+                        "SELECT run_id, from_agent, to_agent, message, response, status, model, tokens_total, duration_ms, created_at "
+                        "FROM agent_messages WHERE to_agent=? ORDER BY created_at DESC LIMIT ?", (backend_filter, limit)).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT run_id, from_agent, to_agent, message, response, status, model, tokens_total, duration_ms, created_at "
+                        "FROM agent_messages ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+                conn.close()
+                dispatches = []
+                for r in rows:
+                    dispatches.append({
+                        "run_id": r[0], "from": r[1], "to": r[2],
+                        "prompt": r[3][:2000] if r[3] else "", "prompt_len": len(r[3] or ""),
+                        "response_preview": (r[4] or "")[:200], "response_len": len(r[4] or ""),
+                        "status": r[5], "model": r[6],
+                        "tokens": r[7], "duration_ms": r[8],
+                        "created_at": r[9],
+                    })
+                self.reply_json({"ok": True, "dispatches": dispatches, "count": len(dispatches)})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)})
 
         elif parsed.path == "/api/providers":
             if not self.auth_check(redirect=False): return
@@ -26209,7 +26300,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             source_filter = qs.get("source", [""])[0].lower()
             show_archived = qs.get("show_archived", [""])[0] == "1"
-            loaders = {"openclaw": _load_session_summaries, "claude": _load_claude_session_summaries, "gemini": _load_gemini_session_summaries, "porter": _load_porter_chat_sessions}
+            loaders = {"openclaw": _load_session_summaries, "claude": _load_claude_session_summaries, "gemini": _load_gemini_session_summaries, "porter": _load_porter_chat_sessions, "ollama": lambda: [s for s in _load_porter_chat_sessions() if s.get("source") == "ollama"], "codex": lambda: [s for s in _load_porter_chat_sessions() if s.get("source") == "codex"]}
             if source_filter and source_filter in loaders:
                 all_sessions = loaders[source_filter]()
             else:
@@ -26462,7 +26553,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.9'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.10'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30544,7 +30635,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.9 ready (localhost only)")
+    print(f"\n  Porter v0.28.10 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
