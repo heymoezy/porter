@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.16 — UI Polish Batch"""
+"""Porter v0.28.17 — UI Polish Batch"""
 
 
 import email
@@ -8452,7 +8452,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.16</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.17</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8965,7 +8965,7 @@ select.settings-input { padding-right: 26px; }
   <div id="workflows-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Workflows</span>
-      <button class="btn btn-ghost" onclick="loadWorkflowRegistry()">&#8635; Refresh</button>
+
     </div>
     <div class="module-intro">Porter's background daemons and system workflows.</div>
 
@@ -9064,13 +9064,13 @@ select.settings-input { padding-right: 26px; }
       <!-- Inbox sidebar (right) -->
       <div id="cx-inbox-sidebar" style="width:340px;min-width:0;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg2);overflow:hidden">
         <div style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
-          <div style="font-size:13px;font-weight:600;color:var(--text)">Inbox</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">Learnings</div>
           <span id="cx-inbox-count" style="font-size:10px;color:var(--text3);display:none"></span>
           <div style="flex:1"></div>
           <div style="display:flex;gap:2px">
             <button class="btn btn-ghost cx-type-filter active" onclick="_filterCortexType('all',this)" style="font-size:9px;padding:2px 6px">All</button>
-            <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('semantic',this)" style="font-size:9px;padding:2px 6px">Learned</button>
-            <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('episodic',this)" style="font-size:9px;padding:2px 6px">Sessions</button>
+            <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('semantic',this)" style="font-size:9px;padding:2px 6px">Facts</button>
+            <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('episodic',this)" style="font-size:9px;padding:2px 6px">Episodes</button>
           </div>
         </div>
         <div id="cx-memory-list" style="flex:1;overflow-y:auto">
@@ -9709,6 +9709,7 @@ const CHANGELOG = [
   { ver:'v0.28.14', date:'2026-03-07', notes:['Graph lock now prevents node dragging and panning (click-to-filter still works)'] },
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
+  { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
   { ver:'v0.28.11', date:'2026-03-07', notes:['Workflow Registry: 6 system workflows exposed as monitorable, configurable cards','GET /api/workflows + POST trigger/toggle/config endpoints','Daemons instrumented: cortex, hygiene, cap-checks, heartbeat, rollup, memory extraction','Workflows tab redesigned: live status, run history, pause/resume, config editing, manual trigger','Projects tab replaced with Coming Soon placeholder (backend preserved)','Agent persona files: quality MEMORY.md + ROLE_CARD.md for all 9 agents with conflict detection','Dead code removed: runBuild, chain builder, heartbeat editor, old workflow skills UI'] },
   { ver:'v0.28.10', date:'2026-03-07', notes:['UI Polish Batch — visual refinements across tabs'] },
   { ver:'v0.28.9', date:'2026-03-07', notes:['Memory map resize fix, context budget improvements, history trimmer for dispatch'] },
@@ -16145,7 +16146,7 @@ async function _loadCortexTab() {
   } catch(e) {}
   // Load memories
   try {
-    var mems = await api('/api/cortex/memories');
+    var mems = await api('/api/cortex/memories?limit=200');
     _cortexMemories = (mems && mems.memories) || [];
     _renderCortexMemories(_cortexMemories);
     var countEl = document.getElementById('cx-inbox-count');
@@ -16442,6 +16443,19 @@ function _toggleGraphLock() {
     btn.style.color = window._cxGraphLocked ? 'var(--accent)' : '';
     btn.title = window._cxGraphLocked ? 'Unlock layout' : 'Lock layout (prevent resize)';
   }
+  // Freeze/unfreeze the canvas container size
+  var c = document.getElementById('cx-graph-canvas');
+  if (c && c.parentElement) {
+    if (window._cxGraphLocked) {
+      c.parentElement.style.width = c.parentElement.clientWidth + 'px';
+      c.parentElement.style.height = c.parentElement.clientHeight + 'px';
+      c.parentElement.style.flex = 'none';
+    } else {
+      c.parentElement.style.width = '';
+      c.parentElement.style.height = '';
+      c.parentElement.style.flex = '1';
+    }
+  }
   toast(window._cxGraphLocked ? 'Graph locked' : 'Graph unlocked');
 }
 function _graphFilterScope(scope, btn) {
@@ -16467,7 +16481,6 @@ async function _initMemoryGraph() {
   canvas.style.height = h + 'px';
   // v0.28.12 — Resize canvas when window resizes (fixed: redraw + style update)
   window._cxResizeTimer = null;
-  window._cxGraphLocked = false;
   window.addEventListener('resize', function() {
     if (window._cxGraphLocked) return;
     clearTimeout(window._cxResizeTimer);
@@ -23935,7 +23948,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.16"})
+            self.reply_json({"v": "0.28.17"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24097,7 +24110,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.16"
+                health["porter_version"] = "0.28.17"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25853,7 +25866,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.16'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.17'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30055,7 +30068,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.16 ready (localhost only)")
+    print(f"\n  Porter v0.28.17 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
