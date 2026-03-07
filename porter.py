@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.27.45 — Graph UX Polish"""
+"""Porter v0.28.0 — Cortex Memory Refactor"""
 
 
 import email
@@ -960,22 +960,19 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
         if _is_duplicate(fact_text, existing_facts):
             continue
 
-        # Resolve destination and append
+        # v0.28.0 — auto-accept: store directly, no file routing
         scope_id = persona_id if scope == "agent" else ""
-        dest = _cortex_resolve_destination(scope, scope_id)
-        routed_to = str(dest) if dest else ""
-        if dest and prefs.get("cortex_auto_route", True):
-            _cortex_append_to_file(dest, fact_text)
+        confidence = round(importance / 10.0, 2)
 
-        # Insert into DB
+        # Insert into DB with new columns
         try:
             conn = _db_conn()
             conn.execute(
                 """INSERT INTO cortex_memories (fact, scope, scope_id, source_type, source_id,
-                   importance, keywords, routed_to)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   importance, keywords, routed_to, memory_type, status, confidence)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, '', 'semantic', 'active', ?)""",
                 (fact_text, scope, scope_id, "dispatch", persona_id or backend,
-                 importance, keywords, routed_to)
+                 importance, keywords, confidence)
             )
             conn.commit()
             conn.close()
@@ -990,10 +987,11 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
                    persona_id=persona_id, backend=backend)
         # Broadcast cortex update to all SSE clients
         try:
+            import time as _t_sse
             conn2 = _db_conn()
-            total_unrouted = conn2.execute("SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL AND (routed_to IS NULL OR routed_to='')").fetchone()[0]
+            new_1h = conn2.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='active' AND created_at > ?", (_t_sse.time() - 3600,)).fetchone()[0]
             conn2.close()
-            _emit_event("cortex:update", {"new_facts": inserted, "total_unrouted": total_unrouted, "persona_id": persona_id, "backend": backend})
+            _emit_event("cortex:update", {"new_facts": inserted, "new_1h": new_1h, "persona_id": persona_id, "backend": backend})
         except Exception:
             pass
 
@@ -1008,11 +1006,13 @@ def _cortex_inject_context(message, persona_id="", project_id=""):
     if not query_kw:
         return ""
 
+    import time as _t_inj
+
     try:
         conn = _db_conn()
         rows = conn.execute(
-            "SELECT id, fact, scope, scope_id, importance, keywords FROM cortex_memories "
-            "WHERE consolidated_into IS NULL ORDER BY created_at DESC LIMIT 200"
+            "SELECT id, fact, scope, scope_id, importance, keywords, created_at, use_count FROM cortex_memories "
+            "WHERE consolidated_into IS NULL AND status='active' ORDER BY created_at DESC LIMIT 200"
         ).fetchall()
         conn.close()
     except Exception:
@@ -1021,25 +1021,43 @@ def _cortex_inject_context(message, persona_id="", project_id=""):
     if not rows:
         return ""
 
-    # Score each memory — prioritize by scope relevance
+    now = _t_inj.time()
+    max_age = 90 * 86400  # 90 days normalization window
+
+    # Score each memory — v0.28.0 formula: keyword + importance + recency + use_freq
     scored = []
     for row in rows:
-        rid, fact, scope, scope_id, importance, kw_str = row
+        rid, fact, scope, scope_id, importance, kw_str, created_at, use_count = row
         stored_kw = set(k.strip() for k in kw_str.split(",") if k.strip()) if kw_str else _cortex_tokenize(fact)
-        base_score = _cortex_relevance_score(query_kw, stored_kw, importance)
-        # Scope bonus: agent > project > global
+        keyword_score = _jaccard_similarity(query_kw, stored_kw)
+        importance_score = importance / 10.0
+        recency = max(0, 1.0 - (now - created_at) / max_age) if created_at else 0.5
+        use_freq = min(1.0, (use_count or 0) / 20.0)
+        base_score = 0.4 * keyword_score + 0.25 * importance_score + 0.2 * recency + 0.15 * use_freq
+        # Scope bonus
         if scope == "agent" and scope_id == persona_id:
             base_score *= 1.5
         elif scope == "project" and scope_id == project_id:
             base_score *= 1.3
         if base_score > 0.05:
-            scored.append((base_score, fact))
+            scored.append((base_score, fact, rid))
 
     if not scored:
         return ""
 
     scored.sort(key=lambda x: x[0], reverse=True)
     top = scored[:inject_limit]
+
+    # Update usage stats for injected memories
+    try:
+        conn2 = _db_conn()
+        for _, _, rid in top:
+            conn2.execute("UPDATE cortex_memories SET last_used_at=?, use_count=use_count+1 WHERE id=?", (now, rid))
+        conn2.commit()
+        conn2.close()
+    except Exception:
+        pass
+
     facts = [f"- {s[1]}" for s in top]
     return "Relevant memories:\n" + "\n".join(facts)
 
@@ -2765,9 +2783,10 @@ def _delete_session_file(session_id: str, source: str) -> dict:
         conn.execute("DELETE FROM cortex_memories WHERE source_id=?", (session_id,))
         conn.commit()
         # Broadcast badge update
-        total_unrouted = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL AND (routed_to IS NULL OR routed_to='')").fetchone()[0]
+        import time as _t_cas
+        new_1h = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='active' AND created_at > ?", (_t_cas.time() - 3600,)).fetchone()[0]
         conn.close()
-        _emit_event("cortex:update", {"new_facts": 0, "total_unrouted": total_unrouted, "action": "cascade_delete"})
+        _emit_event("cortex:update", {"new_facts": 0, "new_1h": new_1h, "action": "cascade_delete"})
     except Exception:
         pass
 
@@ -5232,6 +5251,21 @@ def _init_trace_tables():
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_scope ON cortex_memories(scope, scope_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_active ON cortex_memories(consolidated_into)")
+    # v0.28.0 — Cortex memory refactor: add lifecycle columns
+    for _col_def in [
+        ("memory_type", "TEXT DEFAULT 'semantic'"),
+        ("status", "TEXT DEFAULT 'active'"),
+        ("confidence", "REAL DEFAULT 1.0"),
+        ("superseded_by_id", "INTEGER DEFAULT NULL"),
+        ("last_used_at", "REAL DEFAULT NULL"),
+        ("use_count", "INTEGER DEFAULT 0"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE cortex_memories ADD COLUMN {_col_def[0]} {_col_def[1]}")
+        except Exception:
+            pass  # column already exists
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_status ON cortex_memories(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_type ON cortex_memories(memory_type)")
 
     conn.execute("""
     CREATE TABLE IF NOT EXISTS persona_skills (
@@ -7826,7 +7860,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.27.45</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.0</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8479,7 +8513,7 @@ select.settings-input { padding-right: 26px; }
     <div id="cx-stats-bar" style="display:flex;gap:12px;padding:8px 28px;background:var(--surface);border-bottom:1px solid var(--border);font-size:13px">
       <span style="color:var(--text2)">Memories: <strong id="cx-total2" style="color:var(--accent)">—</strong></span>
       <span style="color:var(--text3)">New today: <strong id="cx-24h2">—</strong></span>
-      <span style="color:var(--amber,#fbbf24)">Inbox: <strong id="cx-unrouted2">0</strong></span>
+      <span style="color:var(--text3)">New (1h): <strong id="cx-new1h2">0</strong></span>
       <span style="margin-left:auto"><span id="cx-status2" style="font-weight:600;color:var(--green,#4ade80)">—</span></span>
     </div>
 
@@ -9164,6 +9198,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.28.0', date:'2026-03-07', notes:['Cortex Memory Refactor P1: Auto-accept — facts store silently, no inbox backlog','Schema: 6 new lifecycle columns (memory_type, status, confidence, superseded_by_id, last_used_at, use_count)','Injection: new scoring formula (0.4*keyword + 0.25*importance + 0.2*recency + 0.15*use_freq)','Injection: usage tracking (last_used_at + use_count updated on inject)','Stats: new_1h replaces unrouted count','Nav badge: shows new-in-last-hour instead of inbox count'] },
   { ver:'v0.27.45', date:'2026-03-07', notes:['Memory Map: Fit button uses tighter padding (8% vs 20%), min scale 0.5','Memory Map: new Center button (reset zoom to 1x, center on graph)','Memory Map: hover tooltip shows agent role','Graph API includes role field for agent nodes'] },
   { ver:'v0.27.44', date:'2026-03-07', notes:['Memory Map: node positions persist across page loads (localStorage)','Dragged nodes save position automatically','Saved layout skips force simulation entirely — instant render','New nodes (from new agents/projects) get force-placed around existing layout'] },
   { ver:'v0.27.43', date:'2026-03-07', notes:['Memory Map: static layout — nodes no longer float/bounce','Force simulation runs synchronously (200 iterations) then stops','Auto-fit to view after layout settles','Dragging still works but nodes stay where you put them'] },
@@ -10977,7 +11012,7 @@ function switchModule(name) {
     overview: function() {
       renderChatMessages(); populateChatModels(); populateChatRoutes(); loadPersonas();
       // Update Cortex nav badge on page load
-      api('/api/cortex/stats').then(function(s) { if (s && s.unrouted) _updateCortexBadge(s.unrouted); }).catch(function() {});
+      api('/api/cortex/stats').then(function(s) { if (s && s.new_1h) _updateCortexBadge(s.new_1h); }).catch(function() {});
       // Connect SSE for real-time cortex badge updates
       if (!window._cortexEvtSrc) {
         window._cortexEvtSrc = new EventSource('/api/events');
@@ -11000,7 +11035,7 @@ function switchModule(name) {
               }
             }
             if (d.type === 'cortex:update' && d.data) {
-              _updateCortexBadge(d.data.total_unrouted || 0);
+              _updateCortexBadge(d.data.new_1h || 0);
               var banner2 = document.getElementById('cx-extract-banner');
               if (banner2) banner2.style.display = 'none';
               // Update chat extraction indicator
@@ -16200,10 +16235,10 @@ async function _loadCortexTab() {
       var st = document.getElementById('cx-status2'); if (st) { st.textContent = stats.enabled ? 'ON' : 'OFF'; st.style.color = stats.enabled ? 'var(--green,#4ade80)' : 'var(--red,#f87171)'; }
       var tog = document.getElementById('cx-toggle2'); if (tog) tog.checked = stats.enabled !== false;
       // Unrouted count
-      var unrouted = stats.unrouted || 0;
-      var unEl = document.getElementById('cx-unrouted2'); if (unEl) unEl.textContent = unrouted;
-      // Nav badge
-      _updateCortexBadge(unrouted);
+      var new1h = stats.new_1h || 0;
+      var n1El = document.getElementById('cx-new1h2'); if (n1El) n1El.textContent = new1h;
+      // Nav badge — show hourly count
+      _updateCortexBadge(new1h);
     }
   } catch(e) {}
   // Load config
@@ -23922,7 +23957,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.27.45"})
+            self.reply_json({"v": "0.28.0"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -24009,7 +24044,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.27.45"
+                health["porter_version"] = "0.28.0"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -24508,7 +24543,7 @@ class Handler(BaseHTTPRequestHandler):
                 "SELECT scope, COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL GROUP BY scope"
             ).fetchall():
                 by_scope[row[0]] = row[1]
-            unrouted = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL AND (routed_to IS NULL OR routed_to='')").fetchone()[0]
+            new_1h = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='active' AND created_at > ?", (_t.time() - 3600,)).fetchone()[0]
             conn.close()
             self.reply_json({
                 "ok": True,
@@ -24516,7 +24551,7 @@ class Handler(BaseHTTPRequestHandler):
                 "total_merged": total_merged,
                 "last_24h": last_24h,
                 "by_scope": by_scope,
-                "unrouted": unrouted,
+                "new_1h": new_1h,
                 "enabled": _config.get("preferences", {}).get("cortex_enabled", True)
             })
 
@@ -25663,7 +25698,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.27.45'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.0'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29706,7 +29741,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.27.45 ready (localhost only)")
+    print(f"\n  Porter v0.28.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
