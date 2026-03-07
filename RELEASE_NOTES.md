@@ -1,17 +1,5 @@
 # Porter Release Notes
 
-## v0.27.40 (2026-03-07)
-
-**Fix pack: frontend build stabilization + safe restart rollout**
-
-- Fixed TypeScript build blockers across Chat/Admin/Extensions/Files/Locations/Memory/Orchestration/Settings/Tasks modules.
-- Converted required imports to `import type` under `verbatimModuleSyntax`.
-- Removed unused imports/state bindings tripping `noUnusedLocals`.
-- Updated `ApiError` to avoid constructor parameter properties (compatible with `erasableSyntaxOnly`).
-- Verified with `npm --prefix frontend run build` before service restart.
-
----
-
 ## v0.25.48 (2026-03-02)
 
 **Fix: All panels showing at once**
