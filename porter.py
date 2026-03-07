@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.4 — Chat Intelligence Patterns"""
+"""Porter v0.28.5 — Mermaid Diagrams in Chat"""
 
 
 import email
@@ -6100,6 +6100,16 @@ PAGE = r"""<!DOCTYPE html>
 <meta name="theme-color" content="#0F0F0F">
 <title>Porter</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23F7931A'/><rect x='9' y='8' width='4' height='16' rx='1.5' fill='white'/><rect x='9' y='8' width='10' height='4' rx='1.5' fill='white'/><rect x='9' y='15' width='10' height='4' rx='1.5' fill='white'/><rect x='19' y='8' width='4' height='11' rx='1.5' fill='white'/></svg>">
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+window.mermaid = mermaid;
+window._mermaidReady = Promise.resolve(mermaid.initialize({
+  startOnLoad: false,
+  securityLevel: 'loose',
+  theme: 'dark',
+  fontFamily: 'Segoe UI, sans-serif'
+}));
+</script>
 <style>
 :root {
   --bg:       #0F0F0F;
@@ -6715,6 +6725,20 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-msg pre:hover .chat-code-copy { opacity:1; }
 .chat-code-copy:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
 .chat-code-copy.copied { background:var(--accent); color:#fff; }
+.chat-msg .chat-mermaid {
+  margin: 8px 0;
+  padding: 12px;
+  background: rgba(255,255,255,.02);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+.chat-msg .chat-mermaid svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
 .chat-thinking {
   align-self:flex-start; display:flex; gap:4px; padding:12px 16px; align-items:center;
 }
@@ -8012,7 +8036,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.4</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.5</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9349,6 +9373,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.28.5', date:'2026-03-07', notes:['Mermaid diagram rendering in chat — ```mermaid fenced blocks render as SVG diagrams','Mermaid CDN loaded via ES module (jsdelivr)','CSS: .chat-mermaid container with dark theme styling','_renderMermaidDiagrams() with dedup (data-mermaid-rendered flag)','Render hook in renderChatMessages() for both full repaints and streaming updates'] },
   { ver:'v0.28.4', date:'2026-03-07', notes:['Chat Intelligence: 5 patterns from agentchattr research','Loop Guard: auto-pause after 4 agent-to-agent hops, human message resets','Cursor-Based Reads: GET /api/chat/read — agents get only NEW messages since last read','Escalating Empty-Read Warnings: 3-tier warnings to stop agent polling loops','Rules Epoch Tracking: version counter on RULES.md changes, stale agent detection, GET /api/rules/epoch','Job Proposals: agents use [proposal] tag, human Accept/Dismiss, GET/POST /api/jobs/proposals','Presentation: polished ChatGPT-style output formatting instructions for all dispatch paths'] },
   { ver:'v0.28.3', date:'2026-03-07', notes:['Cortex Staleness + Lifecycle: memories self-maintain via auto-archive rules','Staleness: unused facts (>60d, <3 uses) auto-archived in consolidation loop','Staleness: low-importance facts (<=2, 0 uses, >7d) auto-archived','Supersession: new facts with Jaccard 0.6-0.8 overlap supersede older lower-importance facts','Config: archive threshold days + min use count settings','Stats: active count + archived count in API response','Stats bar: Active: X | New today: X'] },
   { ver:'v0.28.2', date:'2026-03-07', notes:['Cortex Session Distill: session flush creates episodic memory in DB instead of MEMORY.md writes','New _cortex_distill_session(): inserts memory_type=episodic row with session summary','OpenClaw/Claude/Gemini flush all route through distill','Injection: separate episodic block (max 2 recent sessions)','Consolidation: only merges within same memory_type','Removed: _cortex_resolve_destination and _cortex_append_to_file (dead code)'] },
@@ -13524,8 +13549,12 @@ function _renderMarkdown(md) {
   md = md.replace(/```(\w*)\n([\s\S]*?)\n```/g, function(_, lang, c) {
     var i = idx++;
     var esc = c.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    blocks.push('<pre><code class="language-' + (lang||'text') + '">' + esc + '</code>' +
-      '<button class="chat-code-copy" onclick="_copyCodeBlock(this)">Copy</button></pre>');
+    if ((lang || '').toLowerCase() === 'mermaid') {
+      blocks.push('<div class="chat-mermaid"><div class="mermaid">' + esc + '</div></div>');
+    } else {
+      blocks.push('<pre><code class="language-' + (lang||'text') + '">' + esc + '</code>' +
+        '<button class="chat-code-copy" onclick="_copyCodeBlock(this)">Copy</button></pre>');
+    }
     return '%%CB_' + i + '%%';
   });
   md = md.replace(/`([^`]+)`/g, function(_, c) {
@@ -13593,6 +13622,20 @@ function _copyCodeBlock(btn) {
     btn.textContent = 'Copied!';
     btn.classList.add('copied');
     setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+function _renderMermaidDiagrams(root) {
+  if (!root || !window.mermaid || !window._mermaidReady) return;
+  var nodes = Array.from(root.querySelectorAll('.mermaid')).filter(function(node) {
+    return node.dataset.mermaidRendered !== '1';
+  });
+  if (!nodes.length) return;
+  window._mermaidReady.then(function() {
+    return window.mermaid.run({ nodes: nodes });
+  }).then(function() {
+    nodes.forEach(function(node) { node.dataset.mermaidRendered = '1'; });
+  }).catch(function(err) {
+    console.warn('Mermaid render failed', err);
   });
 }
 function _modelBadge(m) {
@@ -14015,6 +14058,7 @@ function renderChatMessages(streamUpdate) {
     if (last && last.classList.contains('assistant')) {
       var m = _chatMessages[_chatMessages.length - 1];
       last.innerHTML = _renderMarkdown(m.content) + _modelBadge(m);
+      _renderMermaidDiagrams(last);
       if (el.scrollHeight - el.scrollTop - el.clientHeight < 150) el.scrollTop = el.scrollHeight;
       return;
     }
@@ -14026,6 +14070,7 @@ function renderChatMessages(streamUpdate) {
     var badge = (m.role === 'assistant' || m.role === 'skill') ? _modelBadge(m) : '';
     return '<div class="chat-msg ' + cls + streaming + '">' + content + badge + '</div>';
   }).join('');
+  _renderMermaidDiagrams(el);
   if (!_chatStreaming || el.scrollHeight - el.scrollTop - el.clientHeight < 150) el.scrollTop = el.scrollHeight;
   _updateStopBtn(_chatStreaming);
   if (!streamUpdate) _saveChatMessages();
@@ -24103,7 +24148,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.4"})
+            self.reply_json({"v": "0.28.5"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -24190,7 +24235,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.4"
+                health["porter_version"] = "0.28.5"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25888,7 +25933,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.4'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.5'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29941,7 +29986,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.4 ready (localhost only)")
+    print(f"\n  Porter v0.28.5 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
