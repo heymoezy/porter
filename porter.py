@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.3 — Cortex Staleness + Lifecycle"""
+"""Porter v0.28.4 — Chat Intelligence Patterns"""
 
 
 import email
@@ -277,6 +277,23 @@ def _db_init():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_run ON agent_messages(run_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_status ON agent_messages(status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_chain ON agent_messages(chain_id)")
+
+    # v0.28.4 — Job proposals from agents
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS job_proposals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL DEFAULT '',
+        proposed_by TEXT NOT NULL,
+        proposed_by_name TEXT DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        chat_id TEXT DEFAULT '',
+        project_id TEXT DEFAULT '',
+        created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+        resolved_at REAL DEFAULT NULL,
+        resolved_by TEXT DEFAULT ''
+    )
+    """)
 
     # ── Personas table (Phase A: persona-first architecture) ──
     conn.execute("""
@@ -783,6 +800,91 @@ _CORTEX_STOP_WORDS = frozenset(
     "than too very just about also back even still well much now much also".split()
 )
 _CORTEX_EXTRACT_GUARD = threading.local()
+
+# v0.28.4 — Loop guard: prevent runaway agent-to-agent dispatch loops
+_loop_guard = {}  # chat_id -> {"hop_count": int, "paused": bool, "last_human_at": float}
+_loop_guard_lock = threading.Lock()
+_LOOP_GUARD_MAX_HOPS = 4  # Auto-pause after this many agent-to-agent hops
+
+def _loop_guard_check(chat_id, sender_is_human=False):
+    """Check/update loop guard. Returns (allowed, message)."""
+    import time as _t
+    with _loop_guard_lock:
+        if chat_id not in _loop_guard:
+            _loop_guard[chat_id] = {"hop_count": 0, "paused": False, "last_human_at": _t.time()}
+        state = _loop_guard[chat_id]
+        if sender_is_human:
+            state["hop_count"] = 0
+            state["paused"] = False
+            state["last_human_at"] = _t.time()
+            return True, ""
+        if state["paused"]:
+            return False, f"Loop guard: chain paused after {_LOOP_GUARD_MAX_HOPS} agent hops. Send a message to resume."
+        state["hop_count"] += 1
+        if state["hop_count"] > _LOOP_GUARD_MAX_HOPS:
+            state["paused"] = True
+            mlog.emit("warn", "chat", "loop_guard.pause", f"Loop guard paused chat {chat_id} after {state['hop_count']} hops")
+            return False, f"Loop guard: {state['hop_count']} consecutive agent hops — paused to prevent runaway. Send a message to resume."
+        return True, ""
+
+def _loop_guard_reset(chat_id):
+    """Reset loop guard for a chat (e.g., on /continue command)."""
+    with _loop_guard_lock:
+        if chat_id in _loop_guard:
+            _loop_guard[chat_id]["hop_count"] = 0
+            _loop_guard[chat_id]["paused"] = False
+
+# v0.28.4 — Cursor-based reads: per-agent read position tracking
+_agent_cursors = {}  # agent_id -> {chat_id -> last_message_id}
+_agent_cursor_lock = threading.Lock()
+_agent_empty_reads = {}  # agent_id -> consecutive empty read count
+
+def _cursor_get_new_messages(agent_id, chat_id, limit=20):
+    """Get only NEW messages since this agent's last read. Returns (messages, warning_text)."""
+    with _agent_cursor_lock:
+        cursor = _agent_cursors.get(agent_id, {}).get(chat_id, 0)
+    try:
+        conn = _db_conn()
+        if cursor:
+            rows = conn.execute(
+                "SELECT id, role, content, timestamp FROM chat_messages "
+                "WHERE chat_id=? AND id > ? ORDER BY id ASC LIMIT ?",
+                (chat_id, cursor, limit)
+            ).fetchall()
+        else:
+            # First read: return last N messages for initial context
+            rows = conn.execute(
+                "SELECT id, role, content, timestamp FROM chat_messages "
+                "WHERE chat_id=? ORDER BY id DESC LIMIT ?",
+                (chat_id, limit)
+            ).fetchall()
+            rows = list(reversed(rows))
+        conn.close()
+    except Exception:
+        rows = []
+
+    messages = [{"id": r[0], "role": r[1], "content": r[2], "timestamp": r[3]} for r in rows]
+
+    # Update cursor
+    if messages:
+        with _agent_cursor_lock:
+            if agent_id not in _agent_cursors:
+                _agent_cursors[agent_id] = {}
+            _agent_cursors[agent_id][chat_id] = messages[-1]["id"]
+            _agent_empty_reads[agent_id] = 0
+        return messages, ""
+
+    # Empty read — escalating warnings
+    with _agent_cursor_lock:
+        _agent_empty_reads[agent_id] = _agent_empty_reads.get(agent_id, 0) + 1
+        n = _agent_empty_reads[agent_id]
+    if n == 1:
+        warning = "No new messages. Do not poll — wait for a mention or event."
+    elif n == 2:
+        warning = "You have read with no results twice. Stop polling and wait."
+    else:
+        warning = "STOP. Repeated empty reads waste tokens. Only read when triggered."
+    return [], warning
 
 def _cortex_tokenize(text):
     """Extract meaningful keywords from text, removing stop words."""
@@ -7910,7 +8012,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.3</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.4</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9247,6 +9349,7 @@ async function api(url, body, timeout_ms = 15000) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.28.4', date:'2026-03-07', notes:['Chat Intelligence: 5 patterns from agentchattr research','Loop Guard: auto-pause after 4 agent-to-agent hops, human message resets','Cursor-Based Reads: GET /api/chat/read — agents get only NEW messages since last read','Escalating Empty-Read Warnings: 3-tier warnings to stop agent polling loops','Rules Epoch Tracking: version counter on RULES.md changes, stale agent detection, GET /api/rules/epoch','Job Proposals: agents use [proposal] tag, human Accept/Dismiss, GET/POST /api/jobs/proposals','Presentation: polished ChatGPT-style output formatting instructions for all dispatch paths'] },
   { ver:'v0.28.3', date:'2026-03-07', notes:['Cortex Staleness + Lifecycle: memories self-maintain via auto-archive rules','Staleness: unused facts (>60d, <3 uses) auto-archived in consolidation loop','Staleness: low-importance facts (<=2, 0 uses, >7d) auto-archived','Supersession: new facts with Jaccard 0.6-0.8 overlap supersede older lower-importance facts','Config: archive threshold days + min use count settings','Stats: active count + archived count in API response','Stats bar: Active: X | New today: X'] },
   { ver:'v0.28.2', date:'2026-03-07', notes:['Cortex Session Distill: session flush creates episodic memory in DB instead of MEMORY.md writes','New _cortex_distill_session(): inserts memory_type=episodic row with session summary','OpenClaw/Claude/Gemini flush all route through distill','Injection: separate episodic block (max 2 recent sessions)','Consolidation: only merges within same memory_type','Removed: _cortex_resolve_destination and _cortex_append_to_file (dead code)'] },
   { ver:'v0.28.1', date:'2026-03-07', notes:['Cortex Memory Browser: sidebar renamed Inbox→Memories','Cards: status dot (green/gray) + type pill (fact/session) + Archive/Restore buttons','Removed: route bar, Push/Dismiss, route picker, routed checkbox, auto-route config','Filter tabs: All/Facts/Sessions by memory_type','Graph: hub node renamed Inbox→Cortex with brain emoji','API: POST .../route replaced by POST .../status (active/archived)','API: GET memories supports ?memory_type= and ?status= filters','API: GET memories returns memory_type, status, confidence, use_count'] },
@@ -22809,11 +22912,46 @@ def _persona_get_rules():
         return rules_path.read_text()
     return ""
 
+# v0.28.4 — Rules epoch tracking
+_rules_epoch = 0
+_rules_agent_sync = {}  # agent_id -> epoch_when_last_synced
+
+def _rules_get_epoch():
+    """Get current rules epoch."""
+    return _rules_epoch
+
+def _rules_bump_epoch():
+    """Increment rules epoch when rules change."""
+    global _rules_epoch
+    _rules_epoch += 1
+    mlog.emit("info", "rules", "rules.epoch", f"Rules epoch bumped to {_rules_epoch}")
+    return _rules_epoch
+
+def _rules_record_sync(agent_id):
+    """Record that an agent has synced with current rules epoch."""
+    _rules_agent_sync[agent_id] = _rules_epoch
+
+def _rules_stale_agents():
+    """Return list of agents that haven't synced with current rules."""
+    stale = []
+    try:
+        conn = _db_conn()
+        agents = conn.execute("SELECT id, name FROM personas").fetchall()
+        conn.close()
+        for a in agents:
+            synced_epoch = _rules_agent_sync.get(a[0], 0)
+            if synced_epoch < _rules_epoch:
+                stale.append({"id": a[0], "name": a[1], "synced_epoch": synced_epoch, "current_epoch": _rules_epoch})
+    except Exception:
+        pass
+    return stale
+
 def _persona_set_rules(text):
-    """Write global RULES.md."""
+    """Write global RULES.md and bump epoch."""
     rules_path = PERSONAS_DIR / "RULES.md"
     PERSONAS_DIR.mkdir(parents=True, exist_ok=True)
     rules_path.write_text(text)
+    _rules_bump_epoch()
     return True
 
 def _persona_get_memory(persona_id):
@@ -22853,6 +22991,14 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     if not persona:
         return {"ok": False, "error": f"Persona not found: {persona_id}", "run_id": run_id}
 
+    # v0.28.4 — Loop guard check (agent dispatch = not human)
+    _lg_chat_id = chain_id or run_id or ""
+    if _lg_chat_id:
+        _lg_ok, _lg_msg = _loop_guard_check(_lg_chat_id, sender_is_human=False)
+        if not _lg_ok:
+            log.warning("Loop guard blocked dispatch to %s: %s", persona.get("name", "?"), _lg_msg)
+            return {"ok": False, "error": _lg_msg, "run_id": run_id, "loop_guard": True}
+
     # Load all persona .md files + global RULES.md for dispatch context
     # Safety cap per file: 20KB (prevents accidental mega-files from blowing context)
     _CTX_FILE_CAP = 20_000
@@ -22871,6 +23017,8 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     role_card = _read_persona_file(pdir / 'ROLE_CARD.md')
     agent_memory = _read_persona_file(pdir / 'MEMORY.md')
     rules = _read_persona_file(PERSONAS_DIR / 'RULES.md')
+    # v0.28.4 — Record that this agent has synced with current rules
+    _rules_record_sync(persona_id)
 
     pname = persona.get('name', 'Agent')
     prole = persona.get('role', '')
@@ -22898,9 +23046,9 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     # Personality mode: conversational, includes identity context
     if personality_mode:
         _role_hint = f" Your role is {prole}." if prole else ""
-        augmented_message = f"{message}\n\n(You are {pname}.{_role_hint} Respond in first person. Be conversational. Never mention which AI model or backend you run on — that is infrastructure, not identity.)\n\n{_ctx_suffix}"
+        augmented_message = f"{message}\n\n(You are {pname}.{_role_hint} Respond in first person. Be conversational. Never mention which AI model or backend you run on — that is infrastructure, not identity. Optimize for reading feel: short paragraphs, markdown when useful, front-load the answer.)\n\n{_ctx_suffix}"
     elif _ctx_suffix:
-        augmented_message = f"{message}\n\n(Respond as {pname}. Never mention which AI model you run on.)\n\n{_ctx_suffix}"
+        augmented_message = f"{message}\n\n(Respond as {pname}. Never mention which AI model you run on. Optimize for reading feel: front-load the answer, use short paragraphs, markdown headers for structure, end cleanly.)\n\n{_ctx_suffix}"
     else:
         augmented_message = message
 
@@ -23003,6 +23151,28 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     except Exception:
         pass
 
+    # v0.28.4 — Detect job proposals in agent response
+    if result.get("ok") and result.get("text"):
+        _resp_text = result.get("text", "")
+        if "[proposal]" in _resp_text.lower() or "[suggest]" in _resp_text.lower():
+            # Parse proposal: first line after tag is title, rest is body
+            import re as _re_prop
+            _prop_match = _re_prop.search(r'\[(?:proposal|suggest)\]\s*(.+?)(?:\n|$)', _resp_text, _re_prop.IGNORECASE)
+            if _prop_match:
+                _prop_title = _prop_match.group(1).strip()[:200]
+                _prop_body = _resp_text[_prop_match.end():].strip()[:2000]
+                try:
+                    conn_prop = _db_conn()
+                    conn_prop.execute(
+                        "INSERT INTO job_proposals (title, body, proposed_by, proposed_by_name) VALUES (?, ?, ?, ?)",
+                        (_prop_title, _prop_body, persona_id, pname))
+                    conn_prop.commit()
+                    conn_prop.close()
+                    _emit_event("job:proposal", {"title": _prop_title, "agent": pname, "persona_id": persona_id})
+                    mlog.emit("info", "jobs", "job.proposal", f"Agent {pname} proposed: {_prop_title}", persona_id=persona_id)
+                except Exception as _pe:
+                    log.debug("Job proposal insert failed: %s", _pe)
+
     # Cortex: extract facts from this dispatch in background
     if result.get("ok") and result.get("text"):
         _cortex_msg = message
@@ -23104,6 +23274,11 @@ def _run_chain(chain_id, steps, initial_input, timeout_per_step=120):
     """
     import time as _ct
     import uuid as _cu
+    # v0.28.4 — Loop guard: check before starting chain
+    _lg_ok, _lg_msg = _loop_guard_check(chain_id, sender_is_human=False)
+    if not _lg_ok:
+        _emit_event("chain:error", {"chain_id": chain_id, "error": _lg_msg})
+        return {"chain_id": chain_id, "status": "blocked", "error": _lg_msg, "loop_guard": True}
     _emit_event("chain:start", {"chain_id": chain_id, "steps": len(steps), "input": initial_input[:200]})
     mlog.emit("info", "chain", "chain.start", f"Chain {chain_id} started ({len(steps)} steps)",
               chain_id=chain_id, step_count=len(steps), trace_id=_get_trace_id())
@@ -23883,6 +24058,7 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/personas/rules":
             if not self.auth_check(redirect=False): return
             rules_text = _persona_get_rules()
+            # Include epoch info in response
             self.reply_json({"ok": True, "rules": rules_text})
 
         elif parsed.path.startswith("/api/personas/"):
@@ -23927,7 +24103,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.3"})
+            self.reply_json({"v": "0.28.4"})
         elif parsed.path == "/api/admin/health":
             if not self.auth_check(redirect=False): return
             import platform
@@ -24014,7 +24190,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.3"
+                health["porter_version"] = "0.28.4"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -24498,6 +24674,43 @@ class Handler(BaseHTTPRequestHandler):
                 })
             self.reply_json({"ok": True, "memories": memories, "total": total,
                              "limit": limit_n, "offset": offset_n})
+
+        # v0.28.4 — Job proposals API
+        elif parsed.path == "/api/jobs/proposals":
+            if not self.auth_check(redirect=False): return
+            if self.command == "GET":
+                status_filter = parse_qs(parsed.query).get("status", ["pending"])[0]
+                conn = _db_conn()
+                rows = conn.execute(
+                    "SELECT id, title, body, proposed_by, proposed_by_name, status, chat_id, project_id, created_at, resolved_at "
+                    "FROM job_proposals WHERE status=? ORDER BY created_at DESC LIMIT 50",
+                    (status_filter,)
+                ).fetchall()
+                conn.close()
+                proposals = [{"id": r[0], "title": r[1], "body": r[2], "proposed_by": r[3],
+                              "proposed_by_name": r[4], "status": r[5], "chat_id": r[6],
+                              "project_id": r[7], "created_at": r[8], "resolved_at": r[9]}
+                             for r in rows]
+                self.reply_json({"ok": True, "proposals": proposals})
+            else:
+                data = self.read_json_body()
+                proposal_id = data.get("id")
+                action = data.get("action", "").strip()
+                if not proposal_id or action not in ("accept", "dismiss"):
+                    self.reply_json({"ok": False, "error": "id and action (accept/dismiss) required"}, 400); return
+                import time as _t_jp
+                new_status = "accepted" if action == "accept" else "dismissed"
+                conn = _db_conn()
+                conn.execute("UPDATE job_proposals SET status=?, resolved_at=?, resolved_by='human' WHERE id=?",
+                             (new_status, _t_jp.time(), proposal_id))
+                conn.commit()
+                conn.close()
+                self.reply_json({"ok": True, "id": proposal_id, "status": new_status})
+
+        # v0.28.4 — Rules epoch API
+        elif parsed.path == "/api/rules/epoch":
+            if not self.auth_check(redirect=False): return
+            self.reply_json({"ok": True, "epoch": _rules_get_epoch(), "stale_agents": _rules_stale_agents()})
 
         elif parsed.path == "/api/cortex/stats":
             if not self.auth_check(redirect=False): return
@@ -25675,7 +25888,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.3'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.4'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -25696,6 +25909,21 @@ class Handler(BaseHTTPRequestHandler):
                         _event_queues.remove(q)
                 log.info("Client disconnected from event hub")
             return
+
+        # v0.28.4 — Cursor-based read endpoint for agents
+        elif parsed.path == "/api/chat/read":
+            if not self.auth_check(redirect=False): return
+            qs_r = parse_qs(parsed.query)
+            agent_id = qs_r.get("agent_id", [""])[0].strip()
+            chat_id = qs_r.get("chat_id", [""])[0].strip()
+            limit = min(50, max(1, int(qs_r.get("limit", ["20"])[0])))
+            if not agent_id or not chat_id:
+                self.reply_json({"ok": False, "error": "agent_id and chat_id required"}, 400); return
+            messages, warning = _cursor_get_new_messages(agent_id, chat_id, limit)
+            resp = {"ok": True, "messages": messages, "count": len(messages)}
+            if warning:
+                resp["warning"] = warning
+            self.reply_json(resp)
 
         elif parsed.path == "/api/chat/stream":
             if not self.auth_check(redirect=False): return
@@ -25740,8 +25968,13 @@ class Handler(BaseHTTPRequestHandler):
                     "[System context: You are responding within Porter, an AI orchestration platform. "
                     "Porter manages multiple AI backends (OpenClaw/GPT, Claude, Gemini, Codex, Ollama), "
                     "agent personas with memory files, Porter Cortex (auto-memory system), "
-                    "file management, project workflows, and dispatch routing. "
-                    "Be helpful and concise. If the user asks about Porter features, explain them knowledgeably.]\n\n"
+                    "file management, project workflows, and dispatch routing.]\n\n"
+                    "[Response style: Optimize for reading feel — polished, not dense. "
+                    "Front-load the key answer. Use short paragraphs with clean rhythm. "
+                    "Use markdown deliberately: **bold headers**, concise bullet lists, `inline code` for identifiers. "
+                    "Structure longer answers with 2-4 labeled sections (e.g., **What\u2019s Happening**, **Fix**, **Next Step**). "
+                    "Keep headers minimal and attractive. Avoid walls of text. "
+                    "End cleanly without boilerplate. Make it feel smooth, readable, and editorial.]\n\n"
                 )
                 prompt = _porter_ctx + prompt
 
@@ -25769,6 +26002,9 @@ class Handler(BaseHTTPRequestHandler):
             with _streams_lock:
                 _active_streams[_stream_run_id] = {"backend": _stream_backend, "chunks": [], "started_at": __import__("time").time()}
             _emit_event("bridge:dispatch", {"run_id": _stream_run_id, "backend": _stream_backend, "prompt": prompt[:200], "source": "chat"})
+            # v0.28.4 — Loop guard: human chat message resets guard
+            _lg_chat_id_stream = chat_id or _stream_run_id
+            _loop_guard_check(_lg_chat_id_stream, sender_is_human=True)
             mlog.emit("info", "chat", "chat.stream.start", f"Chat stream: {model_id}", model=model_id, prompt_len=len(prompt))
 
             try:
@@ -29705,7 +29941,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.3 ready (localhost only)")
+    print(f"\n  Porter v0.28.4 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
