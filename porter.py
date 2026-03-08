@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.51 — Memory extraction fixes, consolidation API"""
+"""Porter v0.29.52 — Kraken market skills, crypto squad assignments"""
 
 
 import email
@@ -9157,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.51</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.52</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10451,6 +10451,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.52', date:'2026-03-08', notes:['8 Kraken public market data skills created (ticker, OHLC, orderbook, spread, assets, pairs, status, trades)','Crypto Squad agents assigned appropriate Kraken skills','Dev Squad agents assigned coding/github/research skills','Skill recommendation engine now includes crypto/trading patterns'] },
   { ver:'v0.29.51', date:'2026-03-08', notes:['FIX: empty extractions now persisted (prevents infinite retry loops)','FIX: session loading limits raised (Claude 15→50, Porter 100→200)','Added /api/cortex/consolidate endpoint for manual memory consolidation','Added Porter chat sessions to extraction batch'] },
   { ver:'v0.29.50', date:'2026-03-08', notes:['FIX: agent card delete uses Porter confirm instead of system confirm','FIX: project delete uses Porter confirm instead of system confirm','FIX: cortex memory filter defaults to show all (cx-show-routed ghost element removed)','Removed dead code references'] },
   { ver:'v0.29.49', date:'2026-03-08', notes:['FIX: agent delete button now calls correct function','FIX: skill install/remove refreshes Skills tab (was calling nonexistent loadWorkflows)','FIX: agent card delete calls correct function'] },
@@ -20726,6 +20727,10 @@ function _isSkillRecommended(sk, persona) {
   if (/orchestrat|lead|manage|direct/.test(role)) {
     if (/ai|llm|deploy|git|search|doc/.test(n)) return true;
   }
+  // Trading/Finance agents → crypto/market/trading skills
+  if (/trad|market|analyst|risk|execut|reconcil|financ|crypto/.test(role)) {
+    if (/kraken|trade|ticker|ohlc|order|spread|asset|pair|market|price|balance|ledger|portfolio/.test(n)) return true;
+  }
   return false;
 }
 
@@ -27506,7 +27511,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.51"})
+            self.reply_json({"v": "0.29.52"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27668,7 +27673,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.51"
+                health["porter_version"] = "0.29.52"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29512,7 +29517,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.51'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.52'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34052,7 +34057,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.51 ready (localhost only)")
+    print(f"\n  Porter v0.29.52 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
