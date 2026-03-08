@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.41 — Squad awareness, persona restore, interval fix, workflow triggers"""
+"""Porter v0.28.42 — Squad awareness, persona restore, interval fix, workflow triggers"""
 
 
 import email
@@ -1362,15 +1362,20 @@ def _cortex_consolidate_once():
             groups.setdefault(key, []).append(row)
 
         merged_count = 0
+        merged_ids = set()
         for key, members in groups.items():
             if len(members) < 2:
                 continue
-            # Compare all pairs
+            # Compare all pairs, skip already-merged
             for i in range(len(members)):
+                if members[i][0] in merged_ids:
+                    continue
                 for j in range(i + 1, len(members)):
+                    if members[j][0] in merged_ids:
+                        continue
                     kw_i = _cortex_tokenize(members[i][1])
                     kw_j = _cortex_tokenize(members[j][1])
-                    if _jaccard_similarity(kw_i, kw_j) > 0.5:
+                    if _jaccard_similarity(kw_i, kw_j) >= 0.4:
                         # Keep the one with higher importance
                         keep = members[i] if members[i][4] >= members[j][4] else members[j]
                         discard = members[j] if keep == members[i] else members[i]
@@ -1378,6 +1383,7 @@ def _cortex_consolidate_once():
                             "UPDATE cortex_memories SET consolidated_into=?, updated_at=strftime('%s','now') WHERE id=?",
                             (keep[0], discard[0])
                         )
+                        merged_ids.add(discard[0])
                         merged_count += 1
 
         # v0.28.3 — Staleness: auto-archive old unused memories
@@ -8547,7 +8553,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.41</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.42</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9806,6 +9812,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.42', date:'2026-03-08', notes:['Consolidation: lowered Jaccard threshold 0.5→0.4, skip already-merged pairs','Fixed API limit cap (200→1000) — graph counters now match inbox','Merged 9 duplicate memories (including 3x Moe name facts)'] },
   { ver:'v0.28.41', date:'2026-03-08', notes:['Fix memory extraction: agent-scoped facts without persona_id fall back to global','Migrated 47 orphaned agent memories to global (were invisible to injection)','Prevents future orphan memories from scope assignment bug'] },
   { ver:'v0.28.40', date:'2026-03-08', notes:['Removed squad scope from Cortex (redundant with global)','Fixed count mismatch: load all memories (was limited to 200)','Graph: removed squad node'] },
   { ver:'v0.28.39', date:'2026-03-08', notes:['Cortex: scope filter bar (All/Unassigned/Global/Squad)','Cortex: agent view includes shared squad learnings','Cortex: graph + list refresh after edit save','Removed facts counter from sidebar'] },
@@ -24913,7 +24920,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.41"})
+            self.reply_json({"v": "0.28.42"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25075,7 +25082,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.41"
+                health["porter_version"] = "0.28.42"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25594,7 +25601,7 @@ class Handler(BaseHTTPRequestHandler):
             scope_id = qs.get("scope_id", [""])[0].strip()
             memory_type_filter = qs.get("memory_type", [""])[0].strip().lower()
             status_filter = qs.get("status", [""])[0].strip().lower()
-            limit_n = min(200, max(10, int(qs.get("limit", ["50"])[0])))
+            limit_n = min(1000, max(10, int(qs.get("limit", ["50"])[0])))
             offset_n = max(0, int(qs.get("offset", ["0"])[0]))
             conn = _db_conn()
             where_parts = ["consolidated_into IS NULL"]
@@ -26898,7 +26905,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.41'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.42'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31132,7 +31139,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.41 ready (localhost only)")
+    print(f"\n  Porter v0.28.42 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
