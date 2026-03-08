@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.2 — System prompt truthfulness (show actual runtime prompt)"""
+"""Porter v0.29.4 — Performance: gzip + ETag + parallel init"""
 
 
 import email
@@ -6185,6 +6185,7 @@ def _init_trace_tables():
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_scope ON cortex_memories(scope, scope_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_active ON cortex_memories(consolidated_into)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_list ON cortex_memories(status, consolidated_into, scope, scope_id, created_at DESC)")
     # v0.28.0 — Cortex memory refactor: add lifecycle columns
     for _col_def in [
         ("memory_type", "TEXT DEFAULT 'semantic'"),
@@ -8915,7 +8916,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.2</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.4</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10174,6 +10175,8 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.4', date:'2026-03-08', notes:['Performance: gzip compression on HTML+JSON (848KB\u2192~100KB)','ETag caching with 304 Not Modified for main page','Parallel init() API calls (no sequential awaits)','Cortex DB covering index for faster queries'] },
+  { ver:'v0.29.3', date:'2026-03-08', notes:['Fix: undefined agent name in chat (missing avatar in Chat with Agent)','Removed dead Quests section from chat welcome','Chat with Agent now switches to chat tab properly','Removed redundant Quick Settings from Identity tab'] },
   { ver:'v0.29.2', date:'2026-03-08', notes:['System prompt viewer now shows actual runtime prompt (not bloated file dump)','What you see = what agents actually get dispatched','Removed DELIVERABLES.md/full MEMORY.md from prompt viewer'] },
   { ver:'v0.29.1', date:'2026-03-08', notes:['Kill slide-out panel: full-page agent detail view replaces 520px drawer','Agent identity card with avatar, name, role, group, status, backend badges','New Overview tab as default landing for agent detail','New Memory tab showing agent-scoped Cortex learnings inline','Back button returns to agent grid, no overlay needed'] },
   { ver:'v0.29.0', date:'2026-03-08', notes:['Phase 0: 8 surgical fixes from GPT-5.4 code audit','Fix skill install body.get bug, system prompt endpoint, switchPdTab null-crash','Fix skill detection normalization, show all 55 skills, surface silent errors','Fix tasks/projects routing, dead code cleanup'] },
@@ -18959,7 +18962,18 @@ function switchPdTab(tab) {
     let fb = [];
     try { fb = JSON.parse(p.fallback_backends || '[]'); } catch(e){}
     var backends = Object.keys(window._providerRegistry || {openclaw:1,claude:1,gemini:1,codex:1,ollama:1});
-    content.innerHTML = '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Routing</div>'
+    content.innerHTML = '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Profile</div>'
+      + '<div style="display:grid;grid-template-columns:60px 1fr 1fr;gap:12px;margin-bottom:16px">'
+      + '<div class="settings-field"><label>Avatar</label>'
+      + '  <input class="settings-input" id="pd-edit-avatar" value="' + (p.avatar || '\u{1F916}') + '" style="width:48px;text-align:center;font-size:20px"></div>'
+      + '<div class="settings-field"><label>Name</label>'
+      + '  <input class="settings-input" id="pd-edit-name" value="' + escHtml(p.name) + '"></div>'
+      + '<div class="settings-field"><label>Role</label>'
+      + '  <input class="settings-input" id="pd-edit-role" value="' + escHtml(p.role || '') + '"></div>'
+      + '</div>'
+      + '<div style="margin-bottom:16px"><button class="btn btn-ghost" onclick="savePersonaMeta()" style="font-size:11px">Save Profile</button></div>'
+      + '<div style="padding-top:12px;border-top:1px solid var(--border)">'
+      + '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Routing</div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
       + '<div class="settings-field"><label>Preferred Backend</label>'
       + '  <select class="settings-input" id="pd-cfg-backend">'
@@ -21690,17 +21704,15 @@ function _renderSidebarLocs(locs, activeRoot) {
 }
 
 async function init() {
-  // Show chat immediately — before any network calls
   switchModule('overview');
   loadSettings();
-  await loadMe();
   populateChangelog();
-  const nodeData = await api('/api/nodes');
-  const nodes = (nodeData && nodeData.nodes) || [];
+  var [meData, nodeData] = await Promise.all([loadMe(), api('/api/nodes')]);
+  var nodes = (nodeData && nodeData.nodes) || [];
   _lastNodes = nodes;
   if (nodes[0] && !window._serverHostname) window._serverHostname = nodes[0].hostname || nodes[0].id;
   _renderSidebarNodes(nodes, null);
-  await maybeShowWizard();
+  setTimeout(maybeShowWizard, 100);
 }
 
 // ── navigation ──
@@ -25059,9 +25071,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def reply_json(self, data, code=200):
         body = json.dumps(data).encode()
+        use_gzip = len(body) > 2000 and "gzip" in self.headers.get("Accept-Encoding", "")
+        if use_gzip:
+            import gzip as _gzip
+            body = _gzip.compress(body, compresslevel=4)
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        if use_gzip:
+            self.send_header("Content-Encoding", "gzip")
         self.send_header("Cache-Control", "no-store")
         self._add_security_headers()
         self.end_headers()
@@ -25072,10 +25090,27 @@ class Handler(BaseHTTPRequestHandler):
 
     def reply_html(self, body_str, code=200):
         body = body_str.encode("utf-8")
+        # ETag from raw body (before gzip, since gzip includes timestamp)
+        import hashlib as _hl
+        etag = '"' + _hl.md5(body).hexdigest()[:16] + '"'
+        if_none = self.headers.get("If-None-Match", "")
+        if if_none == etag:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.end_headers()
+            return
+        # Gzip if client supports it and body is large enough
+        use_gzip = len(body) > 1000 and "gzip" in self.headers.get("Accept-Encoding", "")
+        if use_gzip:
+            import gzip as _gzip
+            body = _gzip.compress(body, compresslevel=6)
         self.send_response(code)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        if use_gzip:
+            self.send_header("Content-Encoding", "gzip")
+        self.send_header("ETag", etag)
+        self.send_header("Cache-Control", "private, must-revalidate")
         self._add_security_headers()
         self.end_headers()
         self.wfile.write(body)
@@ -25542,7 +25577,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.2"})
+            self.reply_json({"v": "0.29.4"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25704,7 +25739,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.2"
+                health["porter_version"] = "0.29.4"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27513,7 +27548,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.2'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.4'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31935,7 +31970,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.2 ready (localhost only)")
+    print(f"\n  Porter v0.29.4 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
