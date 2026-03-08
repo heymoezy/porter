@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.42 — Porter-style dialogs, squad config panel"""
+"""Porter v0.29.43 — Squad leaders, chat squad context"""
 
 
 import email
@@ -9156,7 +9156,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.42</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.43</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10449,6 +10449,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.43', date:'2026-03-08', notes:['Squad leaders: Lobster designated leader of Dev + Crypto squads','Squad leader badge shown on agent cards in squad sections','Chat: squad leaders receive squad roster context (roles + skills of all members)','All agents now have proper skills assigned (Dev + Crypto squads)','Squad edit: leader selector in member list'] },
   { ver:'v0.29.42', date:'2026-03-08', notes:['Porter-style dialogs replace system confirm/prompt in Projects + Squads','Squad config panel: mission/description, rename, color, member management','Squad-level skill assignment from squad edit panel','Delete squad + delete project use Porter overlay instead of browser confirm','Assign agent + attach workflow use Porter selection overlay'] },
   { ver:'v0.29.41', date:'2026-03-08', notes:['Agents: removed role filter row — squad filter only','Agents: + Squad button moved to module header left of + New Agent','Removed auto-seed that recreated role-based squads on restart'] },
   { ver:'v0.29.40', date:'2026-03-08', notes:['Agents: dual filter bar — filter by Squad and by Role separately','Agents: agents grouped by squad with section headers and color accents','Agents: + New Squad button inline, old role-based squads cleaned up','Roles (Orchestrator/Strategy/Creative/Technical/Operations) are NOT squads'] },
@@ -19901,11 +19902,14 @@ function _editSquad(id) {
     + '<div style="display:flex;flex-direction:column;gap:3px;max-height:180px;overflow-y:auto;margin-bottom:10px">';
   allAgents.forEach(function(a) {
     var checked = memberIds.indexOf(a.id) >= 0 ? 'checked' : '';
+    var isLeader = (s.members || []).some(function(m) { return m.id === a.id && m.squad_role === 'leader'; });
     html += '<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:3px 0">'
       + '<input type="checkbox" class="sq-edit-member" value="' + a.id + '" ' + checked + '>'
       + '<span>' + (a.avatar || '\u{1F916}') + '</span>'
       + '<span style="color:var(--text)">' + escHtml(a.name) + '</span>'
       + '<span style="font-size:10px;color:var(--text3)">' + escHtml(a.role || '') + '</span>'
+      + (isLeader ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f59e0b20;color:#f59e0b;font-weight:700">LEADER</span>' : '')
+      + (checked ? '<button type="button" onclick="_setSquadLeader(\'' + id + '\',\'' + a.id + '\');event.preventDefault()" style="font-size:9px;padding:1px 6px;border-radius:3px;background:none;border:1px solid var(--border);color:var(--text3);cursor:pointer;margin-left:auto">' + (isLeader ? 'Leader ✓' : 'Set leader') + '</button>' : '')
       + '</label>';
   });
   html += '</div>'
@@ -19969,6 +19973,22 @@ async function _assignSkillToSquadFromEdit(squadId) {
   } catch(e) { toast('Failed to load skills', 'err'); }
 }
 
+
+async function _setSquadLeader(squadId, personaId) {
+  try {
+    var sq = _squads.find(function(s) { return s.id === squadId; });
+    if (!sq) return;
+    // Update squad — keep members, set leader role on personaId
+    var memberIds = (sq.members || []).map(function(m) { return m.id; });
+    var r = await api('/api/squads', { action:'set_leader', id:squadId, persona_id:personaId });
+    if (r && r.ok) {
+      toast('Leader set', 'ok');
+      await loadSquads();
+      _editSquad(squadId);
+    } else { toast(r && r.error || 'Failed', 'err'); }
+  } catch(e) { toast('Failed', 'err'); }
+}
+
 async function _saveSquadEdit(id) {
   var name = document.getElementById('sq-edit-name').value.trim();
   var color = document.getElementById('sq-edit-color').value;
@@ -20023,10 +20043,12 @@ function renderPersonaOrg() {
     var grpColor = groupColors[grp] || 'var(--text3)';
     var grpBadge = grp ? '<div style="font-size:10px;padding:1px 6px;border-radius:3px;background:' + grpColor + '20;color:' + grpColor + ';font-weight:600;margin-top:4px;letter-spacing:.3px">' + grp + '</div>' : '';
     var statusClass = p.status === 'active' ? ' status-active' : p.status === 'error' ? ' status-error' : p.status === 'sleeping' ? ' status-sleeping' : '';
+    var leaderBadge = p._isLeader ? '<div style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f59e0b20;color:#f59e0b;font-weight:700;margin-top:2px;letter-spacing:.3px">LEADER</div>' : '';
     return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + statusClass + '" data-persona-id="' + p.id + '" onmousedown="_pMouseDown(event)" ontouchstart="_pTouchStart(event)" onclick="selectPersona(\'' + p.id + '\')">'
       + '<div class="persona-card-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
       + '<div class="persona-card-role">' + escHtml(p.role || 'General') + '</div>'
+      + leaderBadge
       + grpBadge
       + '<div class="persona-card-status">'
       + '<span class="persona-card-dot" style="background:' + dotColor + '"></span>'
@@ -20050,9 +20072,14 @@ function renderPersonaOrg() {
         + '<span style="font-size:11px;color:var(--text3)">' + members.length + ' agent' + (members.length !== 1 ? 's' : '') + '</span>'
         + '</div>'
         + '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">';
+      // Mark leaders for this squad
+      var leaderIds = {};
+      (sq.members || []).forEach(function(m) { if (m.squad_role === 'leader') leaderIds[m.id] = true; });
       members.forEach(function(p) {
+        p._isLeader = !!leaderIds[p.id];
         html += cardHtml(p);
         rendered[p.id] = true;
+        p._isLeader = false;
       });
       html += '</div></div>';
     });
@@ -25985,11 +26012,39 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     # Personality mode: conversational, includes identity context
     if personality_mode:
         _role_line = f"Role: {prole}\n" if prole else ""
+        # v0.29.43 — Squad leader context: inject roster of squad members
+        _squad_ctx = ""
+        try:
+            _all_squads = _squad_list()
+            for _sq in _all_squads:
+                _is_leader = any(m["id"] == persona_id and m.get("squad_role") == "leader" for m in _sq.get("members", []))
+                if _is_leader:
+                    _roster_lines = []
+                    for _sm in _sq["members"]:
+                        if _sm["id"] == persona_id:
+                            continue
+                        _sk_data = []
+                        try:
+                            _sk_conn = _db_conn()
+                            _sk_rows = _sk_conn.execute("SELECT skill_name FROM persona_skills WHERE persona_id=? AND enabled=1", (_sm["id"],)).fetchall()
+                            _sk_conn.close()
+                            _sk_data = [r[0] for r in _sk_rows]
+                        except Exception:
+                            pass
+                        _sk_str = ", ".join(_sk_data) if _sk_data else "none"
+                        _roster_lines.append(f"- {_sm.get('avatar','')} {_sm['name']} ({_sm.get('role','agent')}): skills=[{_sk_str}]")
+                    if _roster_lines:
+                        _squad_ctx += f"\nYou are the LEADER of {_sq['name']}.\nYour squad members:\n" + "\n".join(_roster_lines)
+                        if _sq.get("description"):
+                            _squad_ctx += f"\nSquad mission: {_sq['description']}"
+        except Exception:
+            pass
         _system_block = (
             f"=== SYSTEM PROMPT ===\n"
             f"You are {pname}.\n"
             f"{_role_line}"
-            f"Voice: first person, conversational, direct.\n"
+            + (_squad_ctx + "\n" if _squad_ctx else "")
+            + f"Voice: first person, conversational, direct.\n"
             f"Format: short paragraphs, markdown when useful, front-load the answer.\n"
             f"Rule: Never mention which AI model or backend you run on.\n"
             f"Rule: If the user changes a preference that contradicts your persona files, flag it and ask whether to update your memory.\n"
@@ -27340,7 +27395,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.42"})
+            self.reply_json({"v": "0.29.43"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27502,7 +27557,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.42"
+                health["porter_version"] = "0.29.43"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29337,7 +29392,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.42'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.43'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31391,6 +31446,17 @@ class Handler(BaseHTTPRequestHandler):
                         conn.execute("DELETE FROM squad_members WHERE squad_id=?", (sid,))
                         for pid in body["members"]:
                             conn.execute("INSERT INTO squad_members (squad_id, persona_id) VALUES (?,?)", (sid, pid))
+                    conn.commit(); conn.close()
+                    self.reply_json({"ok": True})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)[:200]}, 500)
+            elif action == "set_leader":
+                sid = body.get("id", "")
+                pid = body.get("persona_id", "")
+                try:
+                    conn = _db_conn()
+                    conn.execute("UPDATE squad_members SET role='member' WHERE squad_id=?", (sid,))
+                    conn.execute("UPDATE squad_members SET role='leader' WHERE squad_id=? AND persona_id=?", (sid, pid))
                     conn.commit(); conn.close()
                     self.reply_json({"ok": True})
                 except Exception as e:
@@ -33844,7 +33910,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.42 ready (localhost only)")
+    print(f"\n  Porter v0.29.43 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
