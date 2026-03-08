@@ -20345,6 +20345,8 @@ function _renderPersonaSkills() {
   if (!container) return;
   var pid = _psPid;
   var skills = _psAllSkills;
+  // Save search value before rebuilding DOM
+  var _psQ = (document.getElementById('ps-search') || {}).value || '';
   var assignedSkills = skills.filter(function(s) { return s._assigned; });
   var assignedCount = assignedSkills.length;
   var discoverCount = skills.filter(function(s) { return !s._assigned; }).length;
@@ -20359,10 +20361,10 @@ function _renderPersonaSkills() {
     + (_psView === 'discover' ? 'background:var(--accent);color:#fff' : 'background:var(--surface);color:var(--text3)')
     + '">Discover (' + discoverCount + ')</button>';
   html += '</div>';
-  html += '<input type="text" id="ps-search" placeholder="Search..." oninput="_renderPersonaSkills()" style="flex:1;font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);outline:none;min-width:0">';
+  html += '<input type="text" id="ps-search" placeholder="Search..." value="' + escHtml(_psQ) + '" oninput="_renderPersonaSkills()" style="flex:1;font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);outline:none;min-width:0">';
   html += '</div>';
 
-  var q = (document.getElementById('ps-search') || {}).value || '';
+  var q = _psQ;
   q = q.toLowerCase().trim();
 
   if (_psView === 'installed') {
@@ -20375,7 +20377,7 @@ function _renderPersonaSkills() {
         + '<button onclick="_psSetView(\x27discover\x27)" style="margin-top:8px;font-size:11px;padding:4px 12px;border:1px solid var(--accent);border-radius:6px;background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--accent);cursor:pointer">Browse skills</button>'
         + '</div>';
     } else {
-      html += '<div style="display:flex;flex-direction:column;gap:6px">';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">';
       shown.forEach(function(sk) { html += _psCard(sk, pid); });
       html += '</div>';
     }
@@ -20407,13 +20409,13 @@ function _renderPersonaSkills() {
 
     if (recommended.length) {
       html += '<div style="font-size:10px;font-weight:600;color:#22c55e;text-transform:uppercase;letter-spacing:.5px;margin:4px 0 6px">Recommended (' + recommended.length + ')</div>';
-      html += '<div style="display:flex;flex-direction:column;gap:6px">';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">';
       recommended.forEach(function(sk) { html += _psCard(sk, pid); });
       html += '</div>';
     }
     if (rest.length) {
       html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Available (' + rest.length + ')</div>';
-      html += '<div style="display:flex;flex-direction:column;gap:6px">';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">';
       rest.forEach(function(sk) { html += _psCard(sk, pid); });
       html += '</div>';
     }
@@ -20423,6 +20425,11 @@ function _renderPersonaSkills() {
   }
 
   container.innerHTML = html;
+  // Restore search focus + cursor position after DOM rebuild
+  if (_psQ) {
+    var si = document.getElementById('ps-search');
+    if (si) { si.focus(); si.setSelectionRange(_psQ.length, _psQ.length); }
+  }
 }
 
 function _psCard(sk, pid) {
@@ -21372,6 +21379,9 @@ document.addEventListener('keydown', function(e) {
   // Persona detail slide-out
   var pd = document.getElementById('persona-detail');
   if (pd && pd.classList.contains('open')) { closePersonaDetail(); e.stopPropagation(); return; }
+  // v0.29.32 — Skip if any fixed overlay is open (system prompt, squad manager, etc.)
+  var _fixedOverlays = document.querySelectorAll('div[style*="position:fixed"][style*="z-index:9999"]');
+  if (_fixedOverlays.length > 0) return;  // let the overlay's own Escape handler run
   // v0.29.20 — Escape from agent detail view back to grid
   var _adv = document.getElementById('agent-detail-view');
   if (_adv && _adv.style.display !== 'none' && typeof closePersonaDetail === 'function') {
@@ -31095,6 +31105,23 @@ class Handler(BaseHTTPRequestHandler):
                     "last_heartbeat": row["last_heartbeat"] if row else None,
                 })
 
+        elif parsed.path == "/api/personas/reorder":
+            if not self.auth_check(redirect=False): return
+            try:
+                body = self.read_json_body()
+                order = body.get("order", [])
+                if not order or not isinstance(order, list):
+                    self.reply_json({"ok": False, "error": "order list required"}, 400)
+                    return
+                conn = _db_conn()
+                for idx, pid in enumerate(order):
+                    conn.execute("UPDATE personas SET sort_order=? WHERE id=?", (idx, pid))
+                conn.commit()
+                conn.close()
+                self.reply_json({"ok": True})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
+
         elif parsed.path.startswith("/api/personas/"):
             # PUT-style update via POST (persona_id in path)
             if not self.auth_check(redirect=False): return
@@ -31583,23 +31610,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
-        # ── Agent reorder ─────────────────────────────────────────────────────
-        elif parsed.path == "/api/personas/reorder":
-            if not self.auth_check(redirect=False): return
-            try:
-                body = self.read_json_body()
-                order = body.get("order", [])  # list of persona IDs in new order
-                if not order or not isinstance(order, list):
-                    self.reply_json({"ok": False, "error": "order list required"}, 400)
-                    return
-                conn = _db_conn()
-                for idx, pid in enumerate(order):
-                    conn.execute("UPDATE personas SET sort_order=? WHERE id=?", (idx, pid))
-                conn.commit()
-                conn.close()
-                self.reply_json({"ok": True})
-            except Exception as e:
-                self.reply_json({"ok": False, "error": str(e)}, 500)
+        # ── Agent reorder (moved before catch-all — see line 31098) ──────────
 
         # ── Learning destinations (GET) ───────────────────────────────────────
         elif parsed.path == "/api/sessions/destinations":
