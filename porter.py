@@ -23311,7 +23311,13 @@ def _probe_backend_versions():
         if not path:
             return {"version": "", "detected": False}
         try:
-            result = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5)
+            # v0.28.50 — Ensure PATH includes user-local dirs (systemd service PATH is minimal)
+            _env = dict(os.environ)
+            _home = str(Path.home())
+            _extra = f"{_home}/.npm-global/bin:{_home}/.local/bin:/usr/local/bin"
+            _env["PATH"] = _extra + ":" + _env.get("PATH", "")
+            _env["HOME"] = _home
+            result = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5, env=_env)
             out = (result.stdout or result.stderr or "").strip()
             ver = parse_fn(out) if parse_fn else out.split()[-1] if out else ""
             return {"version": ver, "detected": True} if ver else {"version": "", "detected": False}
