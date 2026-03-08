@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.47 — Deep-links, chat routing preview, grid skeleton"""
+"""Porter v0.29.48 — Chat save fix, preview HTTP check, files state reset"""
 
 
 import email
@@ -9157,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.47</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.48</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10451,6 +10451,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.48', date:'2026-03-08', notes:['FIX: persona dispatch responses now saved to chat history (was broken stub)','FIX: file preview checks HTTP status before rendering content','FIX: files home button resets curRoot/curPath state','Removed dead flush wizard CSS (2KB savings)','Added /api/chat/save endpoint for client-side message persistence'] },
   { ver:'v0.29.47', date:'2026-03-08', notes:['Deep-links: clicking squad name in section header opens squad manager','Chat: route preview shows which model/agent will handle the message','Grid view: skeleton loader shows grid-shaped placeholders','Agent cards: clicking role badge filters by that role'] },
   { ver:'v0.29.46', date:'2026-03-08', notes:['FIX: memory extraction use-after-close on SQLite (cached facts were always empty)','FIX: esc() now escapes double quotes (prevents HTML attribute injection)','FIX: GWS Quick Action buttons target correct chat input selector','FIX: cortex_max_facts default unified to 8 everywhere','Removed dead flush wizard CSS (2KB savings)'] },
   { ver:'v0.29.45', date:'2026-03-08', notes:['FIX: chat_sessions→chats table reference (session lifecycle was dead code)','FIX: chat session timestamps restored when loading history','FIX: deleteChatSession now uses Porter confirm dialog','FIX: grid view file cards now have context menu (right-click or 3-dot button)','Added session_state/last_activity/paused_at/archived_at columns to chats table'] },
@@ -15139,11 +15140,21 @@ async function _runAtChain(fullText, matches) {
 // Backward compat alias
 function invokeSkill(message) { invokeAgent(message, 'openclaw'); }
 
-function _save_chat_message_local(chatId, model, userMsg, assistantMsg) {
-  // Save via chat API
-  fetch('/api/chat/stream?model=' + encodeURIComponent(model) + '&chat_id=' + encodeURIComponent(chatId) + '&prompt=' + encodeURIComponent('SAVED'), {
-    method: 'GET'
-  }).catch(function() {});
+function _save_chat_message_local(chatId, model, userMsg, assistantMsg, personaName) {
+  // v0.29.48 — properly save message pair via dedicated endpoint
+  fetch('/api/chat/save', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      chat_id: chatId,
+      model_id: model,
+      user_msg: userMsg,
+      assistant_msg: assistantMsg,
+      persona_name: personaName || '',
+      project_id: _chatProject ? _chatProject.id : ''
+    })
+  }).catch(function(e) { console.warn('Chat save failed:', e); });
 }
 
 // ── Chat Engine (replaced Quick Prompt) ──
@@ -19588,7 +19599,7 @@ async function _typePersonaResponse(waitIdx, fullText, persona) {
   if (_chatId) {
     _save_chat_message_local(_chatId, persona.preferred_backend || 'auto',
       _chatMessages.filter(function(m){return m.role==='user'}).pop().content || '',
-      fullText);
+      fullText, persona.name);
   }
 }
 
@@ -23736,7 +23747,7 @@ async function loadDiskInfo(root) {
 // ── Files home view (inline location tree in listing) ──
 // _fhomeActive, _fhomeExpanded, _fhomeInitDone declared at script top
 
-function _goFilesHome() { _fhomeActive = null; renderBreadcrumb("",""); showFilesHome(); }
+function _goFilesHome() { _fhomeActive = null; curRoot = ''; curPath = ''; renderBreadcrumb("",""); showFilesHome(); }
 
 async function selectMount(mountId, path) {
   // Toggle collapse if clicking the same mount+path
@@ -24489,6 +24500,7 @@ async function openPreview(name) {
   } else if (TEXT_EXTS.has(ext)) {
     try {
       const r = await fetch(previewUrl);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
       const text = await r.text();
       previewContent = text;
       document.getElementById('previewBody').innerHTML =
@@ -27484,7 +27496,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.47"})
+            self.reply_json({"v": "0.29.48"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27646,7 +27658,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.47"
+                health["porter_version"] = "0.29.48"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29481,7 +29493,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.47'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.48'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32247,6 +32259,28 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
 
         # ── Gap30: Direct model prompt (POST) ────────────────────────────────
 
+        elif parsed.path == "/api/chat/save":
+            token = self.get_session_token()
+            session = get_session(token, ip=self.client_address[0], ua=self.headers.get("User-Agent", ""))
+            if not session:
+                self.reply_json({"error": "unauthorized"}, 401); return
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+                _cid = body.get("chat_id", "")
+                _mid = body.get("model_id", "")
+                _umsg = body.get("user_msg", "")
+                _amsg = body.get("assistant_msg", "")
+                _persona = body.get("persona_name", "")
+                _project = body.get("project_id", "")
+                if _cid and _umsg and _amsg:
+                    _save_chat_message(_cid, _mid, _umsg, _amsg, project_id=_project, persona_name=_persona)
+                    self.reply_json({"ok": True})
+                else:
+                    self.reply_json({"ok": False, "error": "Missing chat_id, user_msg, or assistant_msg"})
+            except Exception as e:
+                log.warning("Chat save error: %s", e)
+                self.reply_json({"ok": False, "error": str(e)}, 500)
+
         elif parsed.path == "/api/chat":
             token = self.get_session_token()
             session = get_session(token, ip=self.client_address[0], ua=self.headers.get("User-Agent", ""))
@@ -33999,7 +34033,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.47 ready (localhost only)")
+    print(f"\n  Porter v0.29.48 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
