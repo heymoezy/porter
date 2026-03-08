@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.46 — Memory extraction fix, esc() security, cortex defaults"""
+"""Porter v0.29.47 — Deep-links, chat routing preview, grid skeleton"""
 
 
 import email
@@ -9157,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.46</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.47</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9275,6 +9275,7 @@ input[type="number"].settings-input { min-width: 60px; }
             <div id="chat-file-picker" class="chat-file-picker" style="display:none"></div>
             <div style="display:flex;align-items:flex-end;gap:4px">
               <button class="chat-attach-btn" onclick="toggleChatFilePicker()" title="Attach file">&#x1f4ce;</button>
+      <div id="chat-route-preview" style="padding:0 4px;min-height:14px"></div>
               <textarea id="chat-input" class="chat-input-bottom" placeholder="Reply or type / for shortcuts" rows="1" onkeydown="chatInputKey(event)" oninput="_chatAutoGrow(this); _acCheck(); _showAtIndicator(this)" style="flex:1"></textarea>
             </div>
             <div id="chat-at-ind-bottom" class="chat-at-indicator"></div>
@@ -10450,6 +10451,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.47', date:'2026-03-08', notes:['Deep-links: clicking squad name in section header opens squad manager','Chat: route preview shows which model/agent will handle the message','Grid view: skeleton loader shows grid-shaped placeholders','Agent cards: clicking role badge filters by that role'] },
   { ver:'v0.29.46', date:'2026-03-08', notes:['FIX: memory extraction use-after-close on SQLite (cached facts were always empty)','FIX: esc() now escapes double quotes (prevents HTML attribute injection)','FIX: GWS Quick Action buttons target correct chat input selector','FIX: cortex_max_facts default unified to 8 everywhere','Removed dead flush wizard CSS (2KB savings)'] },
   { ver:'v0.29.45', date:'2026-03-08', notes:['FIX: chat_sessions→chats table reference (session lifecycle was dead code)','FIX: chat session timestamps restored when loading history','FIX: deleteChatSession now uses Porter confirm dialog','FIX: grid view file cards now have context menu (right-click or 3-dot button)','Added session_state/last_activity/paused_at/archived_at columns to chats table'] },
   { ver:'v0.29.44', date:'2026-03-08', notes:['Replaced all remaining system confirm/prompt dialogs with Porter-style overlays','Session archive, file editor unsaved changes, bootstrap command all use Porter dialogs','Zero system dialogs remaining — fully native UX'] },
@@ -19527,6 +19529,7 @@ function _ctxPick(event, type, value) {
   // Close dropdown
   document.querySelectorAll('.chat-ctx-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
   buildChatCtxSelectors();
+  if (typeof _updateRoutePreview === 'function') _updateRoutePreview();
 }
 
 async function _dispatchToPersonaChat(persona, message) {
@@ -19773,6 +19776,26 @@ function _porterSelect(title, items, onSelect) {
   box.querySelectorAll('._ps-item').forEach(function(el) {
     el.onclick = function() { ov.remove(); if (onSelect) onSelect(items[parseInt(el.dataset.idx)]); };
   });
+}
+
+
+function _updateRoutePreview() {
+  var el = document.getElementById('chat-route-preview');
+  if (!el) return;
+  var persona = window._chatAgent || null;
+  var model = window._chatModel || '';
+  var parts = [];
+  if (persona) {
+    parts.push((persona.avatar || '\u{1F916}') + ' ' + persona.name);
+  }
+  if (model) {
+    parts.push(model);
+  } else if (persona && persona.preferred_backend) {
+    parts.push(persona.preferred_backend);
+  } else {
+    parts.push('auto');
+  }
+  el.innerHTML = parts.length ? '<span style="font-size:10px;color:var(--text3);display:flex;align-items:center;gap:4px">\u2192 ' + parts.join(' \u2022 ') + '</span>' : '';
 }
 
 async function loadSquads() {
@@ -20075,7 +20098,7 @@ function renderPersonaOrg() {
       html += '<div style="margin-bottom:16px">'
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid ' + sq.color + '">'
         + '<span style="width:10px;height:10px;border-radius:50%;background:' + sq.color + ';flex-shrink:0"></span>'
-        + '<span style="font-size:13px;font-weight:600;color:var(--text)">' + escHtml(sq.name) + '</span>'
+        + '<span style="font-size:13px;font-weight:600;color:var(--text);cursor:pointer" onclick="_editSquad(\'' + sq.id + '\')" title="Configure squad">' + escHtml(sq.name) + '</span>'
         + '<span style="font-size:11px;color:var(--text3)">' + members.length + ' agent' + (members.length !== 1 ? 's' : '') + '</span>'
         + '</div>'
         + '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">';
@@ -23989,18 +24012,28 @@ function renderBreadcrumb(root, path) {
 
 // ── skeleton ──
 function showSkeleton() {
-  const widths = [180, 140, 220, 160, 200, 170];
-  document.getElementById('listing').innerHTML = widths.map(w => `
-    <div class="file-row">
-      <div class="cb-col"></div>
-      <div class="file-name">
-        <div class="skel" style="width:18px;height:18px;border-radius:4px;flex-shrink:0"></div>
-        <div class="skel" style="width:${w}px;height:13px"></div>
-      </div>
-      <div class="skel" style="width:44px;height:12px"></div>
-      <div class="skel" style="width:66px;height:12px"></div>
-      <div></div>
-    </div>`).join('');
+  var listing = document.getElementById('listing');
+  if (!listing) return;
+  if (_fileViewMode === 'grid') {
+    var cards = '';
+    for (var i = 0; i < 8; i++) {
+      cards += '<div style="width:120px;height:120px;background:var(--surface);border:1px solid var(--border);border-radius:10px"><div class="skel" style="width:100%;height:100%;border-radius:10px"></div></div>';
+    }
+    listing.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;padding:8px">' + cards + '</div>';
+  } else {
+    const widths = [180, 140, 220, 160, 200, 170];
+    listing.innerHTML = widths.map(w => `
+      <div class="file-row">
+        <div class="cb-col"></div>
+        <div class="file-name">
+          <div class="skel" style="width:18px;height:18px;border-radius:4px;flex-shrink:0"></div>
+          <div class="skel" style="width:${w}px;height:13px"></div>
+        </div>
+        <div class="skel" style="width:44px;height:12px"></div>
+        <div class="skel" style="width:66px;height:12px"></div>
+        <div></div>
+      </div>`).join('');
+  }
 }
 
 // ── listing render ──
@@ -27451,7 +27484,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.46"})
+            self.reply_json({"v": "0.29.47"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27613,7 +27646,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.46"
+                health["porter_version"] = "0.29.47"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29448,7 +29481,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.46'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.47'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -33966,7 +33999,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.46 ready (localhost only)")
+    print(f"\n  Porter v0.29.47 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
