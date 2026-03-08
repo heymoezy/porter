@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.30 — HiDPI canvas, XSS hardening, graph rendering polish"""
+"""Porter v0.28.31 — Production cleanup: console removal, session accordion, code hygiene"""
 
 
 import email
@@ -8543,7 +8543,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.30</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.31</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9809,6 +9809,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.31', date:'2026-03-08', notes:['Models: session accordion (opening one closes others)','Removed 7 console.debug/log calls (production hygiene)','Test suite: 38/38 green (fixed Chat module-title check)'] },
   { ver:'v0.28.30', date:'2026-03-08', notes:['Memory map: HiDPI/Retina canvas scaling (devicePixelRatio)','Memory map: crisp text and nodes on 2x+ displays','XSS: escaped graph tooltip labels, error messages','All graph functions use CSS-pixel math (fit, center, simulation)'] },
   { ver:'v0.28.29', date:'2026-03-08', notes:['Cortex: text search in learnings sidebar','Cortex: filter indicator bar with clear button on node click','Cortex: ambient animation loop (pulsing hub ring, particles)','Cortex: config loads archive_days + min_use from saved prefs','Cortex: scope badge updates color on edit','Cortex: tooltip clamped to canvas bounds','Cortex: inbox count badge now visible','Cortex: consistent fact/facts pluralization'] },
   { ver:'v0.28.28', date:'2026-03-07', notes:['Fixed: extraction progress counts match model card session counts','Counts per-source (openclaw/claude/gemini/codex/ollama) excluding archived','No more phantom sessions in total'] },
@@ -12066,7 +12067,7 @@ async function loadSkills() {
     }
   } catch(e) {
     if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--text3);font-size:12px">Could not load skills</div>';
-    console.debug('loadSkills:', e);
+    /* loadSkills error silenced */
   }
 }
 
@@ -12415,7 +12416,7 @@ async function loadMemory() {
       _memOverview = overviewResp;
       if (statusResp && statusResp.ok) _memAgentStatus = statusResp.status || {};
     }
-  } catch(e) { console.debug('loadMemory:', e); }
+  } catch(e) { /* loadMemory error silenced */ }
 }
 
 function _memSize(bytes) {
@@ -12580,6 +12581,18 @@ function _toggleInlineSessions(btn, backend, source) {
     _inlineSessionsExpanded[backend] = false;
     return;
   }
+  // Accordion: close other expanded session panels
+  document.querySelectorAll('.model-inline-sessions').forEach(function(other) {
+    if (other !== container && other.style.display !== 'none') {
+      other.style.display = 'none';
+      var otherId = (other.id || '').replace('inline-sess-', '');
+      _inlineSessionsExpanded[otherId] = false;
+      // Fix the toggle arrow on the other button
+      var otherBtn = other.previousElementSibling;
+      if (!otherBtn) otherBtn = other.parentElement.querySelector('[onclick*="_toggleInlineSessions"]');
+      if (otherBtn) otherBtn.textContent = otherBtn.textContent.replace('\u25b2', '\u25bc');
+    }
+  });
   container.style.display = 'block';
   btn.textContent = btn.textContent.replace('\u25bc', '\u25b2');
   _inlineSessionsExpanded[backend] = true;
@@ -16546,7 +16559,7 @@ async function loadModels() {
     _renderModelsSummary(data);
     _renderModelCards(data, _modelActivityData);
     _connectModelSSE();
-  } catch(e) { console.debug('loadModels:', e); }
+  } catch(e) { /* loadModels error silenced */ }
 }
 
 function _switchCortexView(view) {
@@ -17089,7 +17102,7 @@ async function _initMemoryGraph() {
     // Start ambient animation loop (pulsing ring + particles)
     _startGraphAnimLoop();
   } catch(e) {
-    console.debug('Graph init error:', e);
+    /* graph init error — rendered on canvas */
     var ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#888';
@@ -17834,7 +17847,7 @@ async function loadPersonas() {
       renderPersonaOrg();
       populateChatPersonaBar();
     }
-  } catch(e) { console.debug('loadPersonas:', e); }
+  } catch(e) { /* loadPersonas error silenced */ }
 }
 
 function populateChatPersonaBar() {
@@ -18206,7 +18219,7 @@ async function selectPersona(id) {
     document.getElementById('pd-role').textContent = p.role || 'No role assigned';
     window._selectedPersona = p;
     switchPdTab('identity');
-  } catch(e) { console.debug('selectPersona:', e); }
+  } catch(e) { /* selectPersona error silenced */ }
 }
 
 function closePersonaDetail() {
@@ -22375,7 +22388,7 @@ init();
       var d = await r.json();
       if (!_appVersion) { _appVersion = d.v; return; }
       if (d.v !== _appVersion) {
-        console.log('Porter updated: ' + _appVersion + ' → ' + d.v);
+        /* version update detected */
         location.reload();
       }
     } catch(e) {}
@@ -24817,7 +24830,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.30"})
+            self.reply_json({"v": "0.28.31"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24979,7 +24992,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.30"
+                health["porter_version"] = "0.28.31"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26799,7 +26812,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.30'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.31'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31017,7 +31030,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.30 ready (localhost only)")
+    print(f"\n  Porter v0.28.31 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
