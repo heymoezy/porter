@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.56 — Fix chat welcome timestamps, agent chips"""
+"""Porter v0.29.57 — Time ago polish, Settings visible"""
 
 
 import email
@@ -9157,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.56</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.57</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10449,6 +10449,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.57', date:'2026-03-08', notes:['Time ago display shows date for items older than 7 days','Settings tab visible in nav'] },
   { ver:'v0.29.56', date:'2026-03-08', notes:['FIX: chat welcome timestamps show correctly (was NaN)','FIX: agent chips load after personas fetch completes','Welcome agents deferred until _personas populated'] },
   { ver:'v0.29.55', date:'2026-03-08', notes:['Removed dead openCreateAgent button (function no longer exists)','Removed dead renderOperatorConfigSummary call','Code cleanup pass'] },
   { ver:'v0.29.54', date:'2026-03-08', notes:['Chat welcome shows quick-start agent chips and recent chats','Clicking agent chip pre-selects that agent for chat','Recent chats in welcome are clickable to resume'] },
@@ -15598,7 +15599,9 @@ function _timeAgo(ts) {
   if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
   if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
   if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
-  return new Date(ts * 1000).toLocaleDateString();
+  var d = new Date(ts * 1000);
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return d.getDate() + ' ' + months[d.getMonth()];
 }
 
 function renderChatMessages(streamUpdate) {
@@ -27597,7 +27600,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.56"})
+            self.reply_json({"v": "0.29.57"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27759,7 +27762,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.56"
+                health["porter_version"] = "0.29.57"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29603,7 +29606,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.56'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.57'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34143,7 +34146,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.56 ready (localhost only)")
+    print(f"\n  Porter v0.29.57 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
