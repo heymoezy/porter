@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.48 — Chat save fix, preview HTTP check, files state reset"""
+"""Porter v0.29.49 — Agent delete fix, skill refresh, cleanup"""
 
 
 import email
@@ -9157,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.48</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.49</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9335,7 +9335,7 @@ input[type="number"].settings-input { min-width: 60px; }
         <button class="btn btn-ghost" onclick="closePersonaDetail()" style="font-size:13px">&larr; Back to Agents</button>
         <div style="flex:1"></div>
         <button class="btn btn-ghost btn-sm" id="pd-sp-btn" onclick="_showSystemPrompt(_selectedPersonaId)" style="font-size:11px">System Prompt</button>
-        <button class="btn btn-ghost btn-sm" id="pd-delete-btn" style="font-size:11px;color:#ef4444" onclick="_deletePersona(_selectedPersonaId)">Delete</button>
+        <button class="btn btn-ghost btn-sm" id="pd-delete-btn" style="font-size:11px;color:#ef4444" onclick="deletePersona()">Delete</button>
       </div>
       <div class="agent-identity-shell">
         <div class="agent-identity-card">
@@ -10451,6 +10451,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.49', date:'2026-03-08', notes:['FIX: agent delete button now calls correct function','FIX: skill install/remove refreshes Skills tab (was calling nonexistent loadWorkflows)','FIX: agent card delete calls correct function'] },
   { ver:'v0.29.48', date:'2026-03-08', notes:['FIX: persona dispatch responses now saved to chat history (was broken stub)','FIX: file preview checks HTTP status before rendering content','FIX: files home button resets curRoot/curPath state','Removed dead flush wizard CSS (2KB savings)','Added /api/chat/save endpoint for client-side message persistence'] },
   { ver:'v0.29.47', date:'2026-03-08', notes:['Deep-links: clicking squad name in section header opens squad manager','Chat: route preview shows which model/agent will handle the message','Grid view: skeleton loader shows grid-shaped placeholders','Agent cards: clicking role badge filters by that role'] },
   { ver:'v0.29.46', date:'2026-03-08', notes:['FIX: memory extraction use-after-close on SQLite (cached facts were always empty)','FIX: esc() now escapes double quotes (prevents HTML attribute injection)','FIX: GWS Quick Action buttons target correct chat input selector','FIX: cortex_max_facts default unified to 8 everywhere','Removed dead flush wizard CSS (2KB savings)'] },
@@ -13135,7 +13136,7 @@ async function installSkill(id, name) {
   const res = await api('/api/openclaw/skills', { action: action, id: id, name: name });
   if (res && res.ok) {
     toast('Skill "' + name + '" installed');
-    loadWorkflows();
+    loadSkills();
   } else {
     toast((res && res.error) || 'Failed to install skill', 'err');
   }
@@ -13147,7 +13148,7 @@ async function removeSkill(id, name) {
   const res = await api('/api/openclaw/skills', { action: 'remove', id: id });
   if (res && res.ok) {
     toast('Skill "' + name + '" removed');
-    loadWorkflows();
+    loadSkills();
   } else {
     toast((res && res.error) || 'Failed to remove skill', 'err');
   }
@@ -13168,7 +13169,7 @@ async function createSkill() {
     // Collapse form
     const form = document.getElementById('wf-create-form');
     if (form) form.style.display = 'none';
-    loadWorkflows();
+    loadSkills();
   } else {
     toast((res && res.error) || 'Failed to create skill', 'err');
   }
@@ -21128,6 +21129,14 @@ async function _runAgentEval(pid) {
   } catch(e) { _showToast('Self-test error'); }
 }
 
+
+function _deletePersona(id) {
+  var p = (_personas || []).find(function(a) { return a.id === id; });
+  if (!p) { toast('Agent not found', 'err'); return; }
+  window._selectedPersona = p;
+  deletePersona();
+}
+
 async function deletePersona() {
   const p = window._selectedPersona;
   if (!p) return;
@@ -27496,7 +27505,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.48"})
+            self.reply_json({"v": "0.29.49"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27658,7 +27667,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.48"
+                health["porter_version"] = "0.29.49"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29493,7 +29502,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.48'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.49'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34033,7 +34042,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.48 ready (localhost only)")
+    print(f"\n  Porter v0.29.49 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
