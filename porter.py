@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.22 — Auto Skill Mining"""
+"""Porter v0.29.23 — Leaner prompts, fixed drag-drop, chat polish"""
 
 
 import email
@@ -2033,10 +2033,9 @@ def _build_context_suffix(persona_id, message=""):
     prefs = _config.get("preferences", {})
     total_budget = max(800, prefs.get("hygiene_ctx_budget", 2500))
     pdir = PERSONAS_DIR / persona_id
-    # Budget: SOUL 50%, RULES 20%, Cortex 15%, MEMORY 15%
-    soul_budget = int(total_budget * 0.50)
-    rules_budget = int(total_budget * 0.20)
-    cortex_budget = int(total_budget * 0.15)
+    # Budget: SOUL 60%, RULES 25%, MEMORY 15% (v0.29.23: Cortex removed — bloats prompt)
+    soul_budget = int(total_budget * 0.60)
+    rules_budget = int(total_budget * 0.25)
     memory_budget = int(total_budget * 0.15)
     parts = []
     # SOUL.md — primary identity source (replaces IDENTITY.md + ROLE_CARD.md)
@@ -2068,13 +2067,7 @@ def _build_context_suffix(persona_id, message=""):
             mem = _re.sub(r"# MEMORY\.md - \w+\n?", "", mem).strip()
             if mem:
                 parts.append(f"--- Memory ---\n{mem[:memory_budget]}\n---")
-    # Cortex memories
-    try:
-        cortex_ctx = _cortex_inject_context(message, persona_id=persona_id)
-        if cortex_ctx:
-            parts.append(f"--- Cortex ---\n{cortex_ctx[:cortex_budget]}\n---")
-    except Exception:
-        pass
+    # v0.29.23 — Cortex removed from system prompts (unnecessary bloat, slows dispatch)
     # Squad roster — compact one-liner per teammate
     try:
         teammates = _persona_list()
@@ -7518,9 +7511,9 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .flush-wizard-impact span { display:flex; flex-direction:column; gap:2px; }
 .flush-wizard-impact strong { font-size:11px; color:var(--text); }
 .flush-wizard-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
-.persona-card[draggable] { cursor:grab; transition:transform .18s ease; }
+.persona-card[draggable] { cursor:grab; }
 .persona-card[draggable]:active { cursor:grabbing; }
-.persona-card.drag-src { opacity:.3; }
+.persona-card.drag-src { opacity:.3; transform:scale(.95); }
 .persona-wizard-overlay { position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.4);z-index:999; }
 .persona-wizard-modal { position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:480px;max-height:80vh;background:var(--surface);border-radius:12px;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.25);z-index:1000;overflow:hidden;display:flex;flex-direction:column; }
 .learn-spinner { display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:learn-spin .6s linear infinite;vertical-align:middle;margin-right:4px; }
@@ -9085,7 +9078,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.22</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.23</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10339,6 +10332,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.23', date:'2026-03-08', notes:['Removed Cortex memories from agent system prompts (faster dispatch)','Prompt budget: SOUL 60%, RULES 25%, MEMORY 15%','Fixed agent drag-and-drop (simplified, working)','Chat: delete message button, improved hover actions'] },
   { ver:'v0.29.22', date:'2026-03-08', notes:['Auto Skill Mining: discovers repeated successful patterns from traces','skill_proposals table + GET/POST API endpoints','Proposed Skills section in Skills tab with approve/dismiss','Skill mining runs every 6h as system workflow'] },
   { ver:'v0.29.21', date:'2026-03-08', notes:['Chat: hover actions (copy, regenerate, edit) on messages','Chat: timestamps shown on hover','Chat: Ctrl/Cmd+Enter to send, Up arrow edits last message','Chat: regenerate resends last prompt to get new response'] },
   { ver:'v0.29.20', date:'2026-03-08', notes:['Skills: removed Use button (invocation at agent level)','Skills: descriptions clamped to 3 lines','Escape key properly returns to agents grid','Cross-tab agent links: openAgentDetail() helper'] },
@@ -14862,9 +14856,16 @@ function _chatEditMsg(i) {
   var input = document.getElementById('chat-input') || document.getElementById('chat-input-welcome');
   if (input) { input.value = m.content; input.focus(); _chatAutoGrow(input); }
 }
+function _chatDeleteMsg(i) {
+  if (i < 0 || i >= _chatMessages.length) return;
+  _chatMessages.splice(i, 1);
+  renderChatMessages();
+}
+
 function _chatMsgActions(m, i) {
   var ts = m.ts ? new Date(m.ts).toLocaleTimeString('en-SG', {hour:'2-digit',minute:'2-digit',timeZone:_porterTz()}) : '';
   var actions = '<div class="chat-msg-actions">';
+  actions += '<button onclick="_chatDeleteMsg(' + i + ')" title="Delete" style="color:var(--err,#ef4444)">\u2715</button>';
   actions += '<button onclick="_chatCopyMsg(' + i + ')" title="Copy">\u{1F4CB}</button>';
   if (m.role === 'assistant') actions += '<button onclick="_chatRegenMsg(' + i + ')" title="Regenerate">\u{1F504}</button>';
   if (m.role === 'user') actions += '<button onclick="_chatEditMsg(' + i + ')" title="Edit">\u270F\uFE0F</button>';
@@ -19115,47 +19116,53 @@ function renderPersonaOrg() {
 }
 
 
-// ── Trello-style drag-and-drop for persona cards (v0.29.19 — GPT-5.4 design) ──
-var _pDragId=null,_pClone=null,_pMarker=null,_pCont=null,_pRect=null,_pX=0,_pY=0,_pRAF=0;
+// ── Agent card drag-and-drop (v0.29.23 — simplified, working) ──
+var _pDragId = null;
 function _pDragStart(e) {
-  var id = e.currentTarget.dataset.personaId;
-  _pDragId=id; _pCont=document.getElementById('persona-cards-row'); if(!_pCont)return;
-  var card=e.currentTarget; _pRect=card.getBoundingClientRect();
-  e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',id);
-  var img=new Image(); img.src='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='; e.dataTransfer.setDragImage(img,0,0);
-  card.classList.add('drag-src');
-  _pClone=card.cloneNode(true); _pClone.className='persona-card';
-  _pClone.style.cssText='position:fixed;left:'+_pRect.left+'px;top:'+_pRect.top+'px;width:'+_pRect.width+'px;pointer-events:none;z-index:9999;opacity:.92;transform:scale(1.03);box-shadow:0 12px 28px rgba(0,0,0,.35);transition:none';
-  document.body.appendChild(_pClone);
-  _pMarker=document.createElement('div');
-  _pMarker.style.cssText='width:130px;min-height:120px;border:2px dashed var(--accent);border-radius:10px;background:color-mix(in srgb,var(--accent) 8%,transparent);flex-shrink:0';
-  _pX=e.clientX; _pY=e.clientY; document.addEventListener('dragover',_pDragMove);
-}
-function _pDragMove(e) {
-  _pX=e.clientX; _pY=e.clientY; if(_pRAF) return;
-  _pRAF=requestAnimationFrame(function(){ _pRAF=0; if(_pClone){ _pClone.style.left=(_pX-(_pRect?_pRect.width/2:65))+'px'; _pClone.style.top=(_pY-24)+'px'; }});
+  _pDragId = e.currentTarget.dataset.personaId;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', _pDragId);
+  e.currentTarget.classList.add('drag-src');
+  setTimeout(function() { e.target.style.opacity = '0.3'; }, 0);
 }
 function _pDragOver(e) {
-  e.preventDefault(); e.dataTransfer.dropEffect='move'; if(!_pMarker||!_pCont) return;
-  var cards=[].slice.call(_pCont.querySelectorAll('.persona-card:not(.drag-src)'));
-  var placed=false;
-  for(var i=0;i<cards.length;i++){
-    var c=cards[i], r=c.getBoundingClientRect(), before=e.clientX < r.left + r.width/2;
-    if(e.clientY>=r.top-20 && e.clientY<=r.bottom+20){ _pCont.insertBefore(_pMarker,before?c:c.nextSibling); placed=true; break; }
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  if (!_pDragId) return;
+  var card = e.target.closest('.persona-card');
+  if (!card || card.dataset.personaId === _pDragId) return;
+  // Show drop indicator
+  var cont = document.getElementById('persona-cards-row');
+  if (!cont) return;
+  var cards = [].slice.call(cont.querySelectorAll('.persona-card'));
+  cards.forEach(function(c) { c.style.borderLeft = ''; c.style.borderRight = ''; });
+  var r = card.getBoundingClientRect();
+  if (e.clientX < r.left + r.width / 2) {
+    card.style.borderLeft = '3px solid var(--accent)';
+  } else {
+    card.style.borderRight = '3px solid var(--accent)';
   }
-  if(!placed && _pCont.lastChild !== _pMarker) _pCont.appendChild(_pMarker);
 }
 function _pDragEnd(e) {
-  document.removeEventListener('dragover',_pDragMove);
-  if(_pClone) _pClone.remove(); if(_pMarker) _pMarker.remove();
-  document.querySelectorAll('.persona-card.drag-src').forEach(function(el){ el.classList.remove('drag-src'); });
-  _pDragId=_pClone=_pMarker=_pCont=_pRect=null; _pRAF=0;
+  _pDragId = null;
+  var cont = document.getElementById('persona-cards-row');
+  if (cont) {
+    [].slice.call(cont.querySelectorAll('.persona-card')).forEach(function(c) {
+      c.classList.remove('drag-src');
+      c.style.opacity = '';
+      c.style.borderLeft = '';
+      c.style.borderRight = '';
+    });
+  }
 }
 function _pDrop(e) {
   e.preventDefault();
-  var targetId = e.currentTarget.dataset.personaId;
-  if (!_pDragId || _pDragId === targetId) { _pDragEnd(e); return; }
-  // v0.29.19 — FLIP animation reorder
+  var card = e.target.closest('.persona-card');
+  var targetId = card ? card.dataset.personaId : (e.currentTarget.dataset ? e.currentTarget.dataset.personaId : null);
+  if (!_pDragId || !targetId || _pDragId === targetId) { _pDragEnd(e); return; }
+  // Determine if dropping before or after target
+  var r = card ? card.getBoundingClientRect() : null;
+  var insertBefore = r ? (e.clientX < r.left + r.width / 2) : false;
   var sorted = _personas.slice().sort(function(a, b) {
     var oa = typeof a.sort_order === 'number' ? a.sort_order : 50;
     var ob = typeof b.sort_order === 'number' ? b.sort_order : 50;
@@ -19167,7 +19174,10 @@ function _pDrop(e) {
   var toIdx = ids.indexOf(targetId);
   if (fromIdx < 0 || toIdx < 0) { _pDragEnd(e); return; }
   ids.splice(fromIdx, 1);
-  ids.splice(toIdx, 0, _pDragId);
+  // Adjust index if dropping after
+  var newIdx = ids.indexOf(targetId);
+  if (!insertBefore) newIdx++;
+  ids.splice(newIdx, 0, _pDragId);
   // Update sort_order in _personas
   ids.forEach(function(id, i) {
     var p = _personas.find(function(x) { return x.id === id; });
@@ -26159,7 +26169,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.22"})
+            self.reply_json({"v": "0.29.23"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26321,7 +26331,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.22"
+                health["porter_version"] = "0.29.23"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28155,7 +28165,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.22'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.23'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32657,7 +32667,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.22 ready (localhost only)")
+    print(f"\n  Porter v0.29.23 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
