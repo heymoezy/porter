@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.53 — Richer project agent cards, upload validation"""
+"""Porter v0.29.54 — Chat welcome quick actions, agent suggestions"""
 
 
 import email
@@ -9157,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.53</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.54</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10451,6 +10451,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.54', date:'2026-03-08', notes:['Chat welcome shows quick-start agent chips and recent chats','Clicking agent chip pre-selects that agent for chat','Recent chats in welcome are clickable to resume'] },
   { ver:'v0.29.53', date:'2026-03-08', notes:['Project agent cards now show role, backend, skills count, and squad','Upload response validated (was silently ignoring errors)','Upload error now shown as toast notification'] },
   { ver:'v0.29.52', date:'2026-03-08', notes:['8 Kraken public market data skills created (ticker, OHLC, orderbook, spread, assets, pairs, status, trades)','Crypto Squad agents assigned appropriate Kraken skills','Dev Squad agents assigned coding/github/research skills','Skill recommendation engine now includes crypto/trading patterns'] },
   { ver:'v0.29.51', date:'2026-03-08', notes:['FIX: empty extractions now persisted (prevents infinite retry loops)','FIX: session loading limits raised (Claude 15→50, Porter 100→200)','Added /api/cortex/consolidate endpoint for manual memory consolidation','Added Porter chat sessions to extraction batch'] },
@@ -15546,6 +15547,48 @@ function _chatMsgActions(m, i) {
   return { actions: actions, ts: tsHtml };
 }
 
+
+function _populateWelcomeAgents() {
+  var el = document.getElementById('chat-welcome-agents');
+  if (!el || !_personas || !_personas.length) return;
+  var chips = _personas.slice(0, 6).map(function(p) {
+    return '<button onclick="_ctxPick(event,\'agent\',\'' + p.id + '\')" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:16px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-size:11px;color:var(--text2);transition:border-color .15s" onmouseenter="this.style.borderColor=\'var(--accent)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">'
+      + '<span style="font-size:14px">' + (p.avatar || '\u{1F916}') + '</span>'
+      + '<span>' + escHtml(p.name) + '</span></button>';
+  }).join('');
+  el.innerHTML = chips;
+}
+
+function _populateWelcomeRecent() {
+  var el = document.getElementById('chat-welcome-recent');
+  if (!el) return;
+  api('/api/chat/sessions').then(function(data) {
+    if (!data || !data.sessions || !data.sessions.length) return;
+    var recent = data.sessions.slice(0, 3);
+    var html = '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px;font-weight:600">Recent Chats</div>';
+    recent.forEach(function(s) {
+      var title = s.title || 'Untitled';
+      if (title.length > 50) title = title.slice(0, 47) + '...';
+      var ago = _timeAgo(s.updated_at || s.created_at);
+      html += '<div onclick="loadChatHistory(\'' + s.id + '\')" style="padding:6px 10px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--text2);transition:background .15s" onmouseenter="this.style.background=\'var(--surface)\'" onmouseleave="this.style.background=\'none\'">';
+      html += '<span>' + escHtml(title) + '</span>';
+      html += '<span style="font-size:10px;color:var(--text3)">' + ago + '</span>';
+      html += '</div>';
+    });
+    el.innerHTML = html;
+  });
+}
+
+function _timeAgo(ts) {
+  if (!ts) return '';
+  var diff = (Date.now() / 1000) - ts;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+  return new Date(ts * 1000).toLocaleDateString();
+}
+
 function renderChatMessages(streamUpdate) {
   var el = document.getElementById('chat-messages');
   if (!el) return;
@@ -15571,8 +15614,14 @@ function renderChatMessages(streamUpdate) {
       + '<div class="chat-welcome-meta">'
       + '<div id="chat-ctx-selectors" class="chat-ctx-selectors" style="margin:0"></div>'
       + '<button class="btn btn-ghost" style="font-size:11px" onclick="loadChatSessions()">History</button>'
-      + '</div></div></div>';
+      + '</div>'
+      + '<div id="chat-welcome-agents" style="margin-top:16px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center"></div>'
+      + '<div id="chat-welcome-recent" style="margin-top:12px;max-width:500px;width:100%"></div>'
+      + '</div></div>';
     buildChatCtxSelectors();
+    // Populate agent chips in welcome
+    _populateWelcomeAgents();
+    _populateWelcomeRecent();
     if (inputArea) inputArea.style.display = 'none';
     if (routeBar) routeBar.style.display = 'none';
     _updateStopBtn(false);
@@ -27537,7 +27586,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.53"})
+            self.reply_json({"v": "0.29.54"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27699,7 +27748,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.53"
+                health["porter_version"] = "0.29.54"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29543,7 +29592,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.53'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.54'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34083,7 +34132,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.53 ready (localhost only)")
+    print(f"\n  Porter v0.29.54 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
