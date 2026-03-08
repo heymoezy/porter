@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.32 — Fix heartbeat schema + workflow card refresh"""
+"""Porter v0.28.33 — Fix workflow runners, blink-free refresh, memory_extraction guard"""
 
 
 import email
@@ -8549,7 +8549,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.32</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.33</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9815,6 +9815,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.33', date:'2026-03-08', notes:['Fix: error_self_heal + agent_backend_eval runners missing from trigger map','Fix: blink-free workflow refresh (in-place DOM updates, no innerHTML wipe)','Memory extraction: no Run Now button (per-response only)','Workflow cards now have data-wf-id for targeted updates'] },
   { ver:'v0.28.32', date:'2026-03-08', notes:['Fix: heartbeat workflow error (missing DB columns — added migration)','Fix: workflow cards losing content on auto-refresh (was using minimal renderer)'] },
   { ver:'v0.28.31', date:'2026-03-08', notes:['Models: session accordion (opening one closes others)','Removed 7 console.debug/log calls (production hygiene)','Test suite: 38/38 green (fixed Chat module-title check)'] },
   { ver:'v0.28.30', date:'2026-03-08', notes:['Memory map: HiDPI/Retina canvas scaling (devicePixelRatio)','Memory map: crisp text and nodes on 2x+ displays','XSS: escaped graph tooltip labels, error messages','All graph functions use CSS-pixel math (fit, center, simulation)'] },
@@ -11775,26 +11776,27 @@ async function loadWorkflowRegistry() {
       } else {
         intervalEditor = '<span style="margin-left:auto;font-size:11px;color:var(--text3)">per-response</span>';
       }
-      return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'
+      var canTrigger = wf.id !== 'memory_extraction';
+      return '<div class="wf-card" data-wf-id="' + wf.id + '" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
-        + '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0' + dotAnim + '"></span>'
+        + '<span class="wf-dot" style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0' + dotAnim + '"></span>'
         + '<span style="font-weight:600;font-size:13px;color:var(--text)">' + escHtml(wf.name) + '</span>'
         + intervalEditor
         + '</div>'
         + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.4">' + escHtml(wf.description) + '</div>'
-        + runningBar
+        + '<div class="wf-running-slot">' + runningBar + '</div>'
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:11px;margin-bottom:10px">'
-        + '<div style="color:var(--text3)">Last run: <span style="color:var(--text2)">' + lastRun + '</span></div>'
-        + '<div style="color:var(--text3)">Next run: <span style="color:var(--text2)">' + nextRun + '</span></div>'
-        + '<div style="color:var(--text3)">Runs: <span style="color:var(--text2)">' + (wf.run_count || 0) + '</span></div>'
-        + '<div style="color:var(--text3)">Errors: <span style="color:' + (wf.error_count ? '#ef4444' : 'var(--text2)') + '">' + (wf.error_count || 0) + '</span></div>'
-        + '<div style="color:var(--text3)">Duration: <span style="color:var(--text2)">' + durStr + '</span></div>'
-        + '<div style="color:var(--text3)">Status: <span style="color:var(--text2)">' + (wf.running ? 'running' : escHtml(wf.status)) + '</span></div>'
+        + '<div style="color:var(--text3)">Last run: <span class="wf-last-run" style="color:var(--text2)">' + lastRun + '</span></div>'
+        + '<div style="color:var(--text3)">Next run: <span class="wf-next-run" style="color:var(--text2)">' + nextRun + '</span></div>'
+        + '<div style="color:var(--text3)">Runs: <span class="wf-run-count" style="color:var(--text2)">' + (wf.run_count || 0) + '</span></div>'
+        + '<div style="color:var(--text3)">Errors: <span class="wf-err-count" style="color:' + (wf.error_count ? '#ef4444' : 'var(--text2)') + '">' + (wf.error_count || 0) + '</span></div>'
+        + '<div style="color:var(--text3)">Duration: <span class="wf-duration" style="color:var(--text2)">' + durStr + '</span></div>'
+        + '<div style="color:var(--text3)">Status: <span class="wf-status" style="color:var(--text2)">' + (wf.running ? 'running' : escHtml(wf.status)) + '</span></div>'
         + '</div>'
-        + errBanner
-        + '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
+        + '<div class="wf-err-slot">' + errBanner + '</div>'
+        + '<div class="wf-btn-slot" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
         + '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfToggle(\'' + wf.id + '\')">' + toggleLabel + '</button>'
-        + (wf.running ? '<button class="btn btn-ghost" style="font-size:11px;color:#3b82f6" disabled>Running...</button>' : '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfTrigger(\'' + wf.id + '\')">\u25B6 Run Now</button>')
+        + (canTrigger ? (wf.running ? '<button class="btn btn-ghost" style="font-size:11px;color:#3b82f6" disabled>Running...</button>' : '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfTrigger(\'' + wf.id + '\')">\u25B6 Run Now</button>') : '')
         + (wf.config_keys && wf.config_keys.length ? '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfShowConfig(\'' + wf.id + '\')">\u2699 Config</button>' : '')
         + '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfShowHistory(\'' + wf.id + '\')">History</button>'
         + '</div>'
@@ -11907,9 +11909,58 @@ async function _loadExternalSchedulers() {
 }
 
 async function _wfRefreshSystemOnly() {
-  // Use the full card renderer — avoids stripping content on refresh
-  var wfMod = document.getElementById('workflows-module');
-  if (wfMod && wfMod.classList.contains('active')) loadWorkflowRegistry();
+  // In-place update — no innerHTML replacement, no blink
+  try {
+    var data = await api('/api/workflows');
+    if (!data || !data.workflows) return;
+    var wfs = data.workflows;
+    var anyRunning = false;
+    wfs.forEach(function(wf) {
+      var card = document.querySelector('.wf-card[data-wf-id="' + wf.id + '"]');
+      if (!card) return;
+      // Update status dot
+      var dot = card.querySelector('.wf-dot');
+      if (dot) {
+        var dotColor = wf.running ? '#3b82f6' : wf.status === 'active' ? '#22c55e' : wf.status === 'paused' ? '#9ca3af' : '#ef4444';
+        dot.style.background = dotColor;
+        dot.style.animation = wf.running ? 'cx-blink 1s ease-in-out infinite' : '';
+      }
+      // Update stats
+      var lr = card.querySelector('.wf-last-run'); if (lr) lr.textContent = wf.last_run ? _wfTimeAgo(wf.last_run) : 'never';
+      var nr = card.querySelector('.wf-next-run'); if (nr) nr.textContent = wf.next_run ? _wfTimeAgo(wf.next_run) : (wf.interval === 'per-response' ? 'per-response' : '\u2014');
+      var rc = card.querySelector('.wf-run-count'); if (rc) rc.textContent = wf.run_count || 0;
+      var ec = card.querySelector('.wf-err-count'); if (ec) { ec.textContent = wf.error_count || 0; ec.style.color = wf.error_count ? '#ef4444' : 'var(--text2)'; }
+      var du = card.querySelector('.wf-duration'); if (du) du.textContent = wf.last_duration_s ? wf.last_duration_s.toFixed(2) + 's' : '\u2014';
+      var st = card.querySelector('.wf-status'); if (st) st.textContent = wf.running ? 'running' : wf.status;
+      // Update running bar
+      var rs = card.querySelector('.wf-running-slot');
+      if (rs) {
+        if (wf.running) {
+          rs.innerHTML = '<div style="margin:8px 0;padding:6px 8px;background:color-mix(in srgb,#3b82f6 8%,transparent);border:1px solid color-mix(in srgb,#3b82f6 20%,transparent);border-radius:6px;display:flex;align-items:center;gap:8px">'
+            + '<span class="learn-spinner"></span>'
+            + '<span style="font-size:11px;color:#3b82f6;font-weight:500">Running' + (wf.running_for_s ? ' (' + Math.round(wf.running_for_s) + 's)' : '') + '</span>'
+            + '<div style="flex:1;height:4px;background:rgba(59,130,246,0.15);border-radius:2px;overflow:hidden"><div style="height:100%;background:#3b82f6;border-radius:2px;animation:wf-progress 2s ease-in-out infinite"></div></div>'
+            + '</div>';
+        } else { rs.innerHTML = ''; }
+      }
+      // Update error banner
+      var es = card.querySelector('.wf-err-slot');
+      if (es) {
+        if (wf.last_error) {
+          es.innerHTML = '<div style="margin-top:8px;padding:6px 8px;background:color-mix(in srgb,#ef4444 8%,transparent);border:1px solid color-mix(in srgb,#ef4444 20%,transparent);border-radius:6px;font-size:11px;color:#ef4444;word-break:break-word">' + escHtml(wf.last_error) + '</div>';
+        } else { es.innerHTML = ''; }
+      }
+      if (wf.running) anyRunning = true;
+    });
+    // Schedule next refresh only if something is running
+    if (anyRunning) {
+      window._wfRefreshTimer = setTimeout(function() {
+        window._wfRefreshTimer = null;
+        var wfMod = document.getElementById('workflows-module');
+        if (wfMod && wfMod.classList.contains('active')) _wfRefreshSystemOnly();
+      }, 8000);
+    }
+  } catch(e) {}
 }
 
 function _wfTimeAgo(ts) {
@@ -24814,7 +24865,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.32"})
+            self.reply_json({"v": "0.28.33"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24976,7 +25027,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.32"
+                health["porter_version"] = "0.28.33"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26796,7 +26847,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.32'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.33'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30919,6 +30970,8 @@ def _handle_wf_trigger(wf_id):
         "capability_checks": lambda: _run_cap_checks(force=True),
         "heartbeat": lambda: _heartbeat_tick(),
         "telemetry_rollup": lambda: (_rollup_hourly(), _rollup_daily()),
+        "error_self_heal": lambda: _error_self_heal_once(),
+        "agent_backend_eval": lambda: _agent_eval_once(),
     }
     runner = runners.get(wf_id)
     if not runner:
@@ -31014,7 +31067,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.32 ready (localhost only)")
+    print(f"\n  Porter v0.28.33 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
