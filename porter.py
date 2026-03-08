@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.17 — Skills summary stats"""
+"""Porter v0.29.18 — Lean system prompts"""
 
 
 import email
@@ -1932,69 +1932,63 @@ def _context_hygiene_loop():
 
 
 def _build_context_suffix(persona_id, message=""):
-    """Build a budgeted context suffix for persona dispatch."""
+    """Build a lean context suffix for persona dispatch.
+    v0.29.18: Trimmed from ~4.5KB to ~2KB by dropping redundant files."""
     prefs = _config.get("preferences", {})
-    total_budget = max(1000, prefs.get("hygiene_ctx_budget", 4000))
+    total_budget = max(800, prefs.get("hygiene_ctx_budget", 2500))
     pdir = PERSONAS_DIR / persona_id
-    # Budget allocation: SOUL 40%, RULES 25%, Cortex 20%, MEMORY 15%
-    soul_budget = int(total_budget * 0.40)
-    rules_budget = int(total_budget * 0.25)
-    cortex_budget = int(total_budget * 0.20)
+    # Budget: SOUL 50%, RULES 20%, Cortex 15%, MEMORY 15%
+    soul_budget = int(total_budget * 0.50)
+    rules_budget = int(total_budget * 0.20)
+    cortex_budget = int(total_budget * 0.15)
     memory_budget = int(total_budget * 0.15)
     parts = []
-    # SOUL.md (skip if merged marker only)
+    # SOUL.md — primary identity source (replaces IDENTITY.md + ROLE_CARD.md)
     soul_path = pdir / "SOUL.md"
     if soul_path.exists():
         soul = soul_path.read_text().strip()
         if soul:
-            parts.append(f"--- SOUL.md ---\n{soul[:soul_budget]}\n--- end ---")
-    # ROLE_CARD.md
-    rc_path = pdir / "ROLE_CARD.md"
-    if rc_path.exists():
-        rc_content = rc_path.read_text().strip()
-        if rc_content and _HYGIENE_MERGED_MARKER not in rc_content:
-            parts.append(f"--- ROLE_CARD.md ---\n{rc_content[:500]}\n--- end ---")
-    # IDENTITY.md
-    id_path = pdir / "IDENTITY.md"
-    if id_path.exists():
-        id_content = id_path.read_text().strip()
-        if id_content and _HYGIENE_MERGED_MARKER not in id_content:
-            parts.append(f"--- IDENTITY.md ---\n{id_content[:300]}\n--- end ---")
-    # RULES.md
+            parts.append(f"--- SOUL ---\n{soul[:soul_budget]}\n---")
+    # RULES.md — communication + task rules only (skip ship process)
     rules_path = PERSONAS_DIR / "RULES.md"
     if rules_path.exists():
         rules = rules_path.read_text().strip()
         if rules:
-            parts.append(f"--- RULES.md ---\n{rules[:rules_budget]}\n--- end ---")
-    # Agent MEMORY.md
+            # Strip ship process section — not relevant to chat dispatch
+            _ship_idx = rules.find("## 6. Ship Process")
+            if _ship_idx > 0:
+                rules = rules[:_ship_idx].rstrip()
+            parts.append(f"--- Rules ---\n{rules[:rules_budget]}\n---")
+    # Agent MEMORY.md — skip boilerplate headers, only real content
     mem_path = pdir / "MEMORY.md"
     if mem_path.exists():
         mem = mem_path.read_text().strip()
         if mem:
-            parts.append(f"--- MEMORY.md ---\n{mem[:memory_budget]}\n--- end ---")
-    # Cortex memories (budgeted)
+            # Strip template boilerplate
+            import re as _re
+            mem = _re.sub(r"## Conflict Detection\n.*?(?=\n## |$)", "", mem, flags=_re.DOTALL).strip()
+            mem = _re.sub(r"## Preferences\n\*.*?\*\n?", "", mem).strip()
+            mem = _re.sub(r"## Learned Behaviors\n\*.*?\*\n?", "", mem).strip()
+            mem = _re.sub(r"# MEMORY\.md - \w+\n?", "", mem).strip()
+            if mem:
+                parts.append(f"--- Memory ---\n{mem[:memory_budget]}\n---")
+    # Cortex memories
     try:
         cortex_ctx = _cortex_inject_context(message, persona_id=persona_id)
         if cortex_ctx:
-            parts.append(f"--- Relevant memories ---\n{cortex_ctx[:cortex_budget]}\n--- end ---")
+            parts.append(f"--- Cortex ---\n{cortex_ctx[:cortex_budget]}\n---")
     except Exception:
         pass
-    # v0.28.34 — Squad awareness: inject teammate roster so agents can propose handoffs
+    # Squad roster — compact one-liner per teammate
     try:
         teammates = _persona_list()
         if len(teammates) > 1:
-            roster_lines = []
-            for tm in teammates:
-                if tm.get("id") == persona_id:
-                    continue  # skip self
-                tm_name = tm.get("name", "?")
-                tm_role = tm.get("role", "")
-                tm_be = tm.get("preferred_backend", "")
-                roster_lines.append(f"- {tm_name}: {tm_role}" + (f" [{tm_be}]" if tm_be else ""))
-            if roster_lines:
-                squad_block = "You are part of a squad. Your teammates:\n" + "\n".join(roster_lines)
-                squad_block += "\nWhen a task falls outside your expertise, propose a HANDOFF to the right teammate by name. Format: [HANDOFF: AgentName] reason."
-                parts.append(f"--- Squad ---\n{squad_block}\n--- end ---")
+            roster = ", ".join(
+                f"{tm.get('name','?')} ({tm.get('role','')})"
+                for tm in teammates if tm.get("id") != persona_id
+            )
+            if roster:
+                parts.append(f"Squad: {roster}\nIf outside scope: [HANDOFF: AgentName] reason")
     except Exception:
         pass
     return "\n\n".join(parts)
@@ -8967,7 +8961,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.17</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.18</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10221,6 +10215,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.18', date:'2026-03-08', notes:['Lean system prompts: ~4.5KB→~2KB per dispatch','Dropped redundant IDENTITY.md + ROLE_CARD.md from prompt','Strip MEMORY.md boilerplate + ship process from RULES.md','Compact squad roster (one line vs 10-line block)'] },
   { ver:'v0.29.17', date:'2026-03-08', notes:['Skills summary stats bar (total, installed, manual, categories)','GPT-5.4 design audit integration'] },
   { ver:'v0.29.16', date:'2026-03-08', notes:['Shared SSE bus: 5 EventSource connections consolidated to 1','Reduces server thread usage and improves responsiveness'] },
   { ver:'v0.29.15', date:'2026-03-08', notes:['Fix: Chat with Agent button now passes full persona (including avatar)','Uses chatWithPersona() for consistent behavior'] },
@@ -25911,7 +25906,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.17"})
+            self.reply_json({"v": "0.29.18"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26073,7 +26068,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.17"
+                health["porter_version"] = "0.29.18"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27882,7 +27877,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.17'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.18'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32363,7 +32358,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.17 ready (localhost only)")
+    print(f"\n  Porter v0.29.18 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
