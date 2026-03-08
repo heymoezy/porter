@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.36 — Project workflow attachment"""
+"""Porter v0.29.37 — Project card cleanup"""
 
 
 import email
@@ -9183,7 +9183,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.36</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.37</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10477,6 +10477,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.37', date:'2026-03-08', notes:['Projects: removed agent icons from front card','Projects: tab counters use parentheses — Agents (9), Workflows (3)','Projects: front card shows plain agent count instead of emoji avatars'] },
   { ver:'v0.29.36', date:'2026-03-08', notes:['Projects: attach/detach system workflows in Workflows tab','Projects: workflow cards show status, interval, last run','Projects: trigger attached workflow from project context','Backend: project update supports workflows field'] },
   { ver:'v0.29.35', date:'2026-03-08', notes:['Files: grid/list view toggle in toolbar','Files: grid view shows file cards with type-colored icons','Files: view preference persists in localStorage','Files: storage bar moved to home view (always visible)','Files: home view mount cards show item count + total size'] },
   { ver:'v0.29.34', date:'2026-03-08', notes:['Projects: richer front cards (description, type badge, agent avatars, date)','Projects: active project toggle (click again to deactivate)','Projects: overview shows name, description, type, status, created date','Projects: workspace files moved from Overview to dedicated Files tab','Projects: tab labels show counts (Agents 9, Memory 3, Files 12)','Projects: date format DD-Mon-YYYY'] },
@@ -13241,20 +13242,9 @@ function _renderProjList() {
     html += '</div>';
     // Row 2: description (always show, even if empty)
     html += '<div style="font-size:11px;color:var(--text3);margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:16px">' + escHtml(p.description || 'No description') + '</div>';
-    // Row 3: agent avatars + date
+    // Row 3: agent count + date
     html += '<div style="display:flex;align-items:center;justify-content:space-between">';
-    html += '<div style="display:flex;align-items:center;gap:2px">';
-    if (agentCount > 0) {
-      var sortedIds = (p.assigned_personas || []).slice(0, 5);
-      sortedIds.forEach(function(pid) {
-        var ag = (_personas || []).find(function(x) { return x.id === pid; });
-        html += '<span title="' + escHtml(ag ? ag.name : '') + '" style="font-size:14px">' + (ag ? (ag.avatar || '\u{1f916}') : '\u{1f916}') + '</span>';
-      });
-      if (agentCount > 5) html += '<span style="font-size:10px;color:var(--text3);margin-left:2px">+' + (agentCount - 5) + '</span>';
-    } else {
-      html += '<span style="font-size:10px;color:var(--text3)">No agents</span>';
-    }
-    html += '</div>';
+    html += '<span style="font-size:10px;color:var(--text3)">' + agentCount + ' agent' + (agentCount !== 1 ? 's' : '') + '</span>';
     if (dateStr) html += '<span style="font-size:10px;color:var(--text3)">' + dateStr + '</span>';
     html += '</div></div>';
   });
@@ -13304,9 +13294,9 @@ function _renderProjTabs() {
   var agentCount = (proj.assigned_personas || []).length;
   var items = [
     {id:'overview', label:'Overview'},
-    {id:'agents', label:'Agents' + (agentCount ? ' ' + agentCount : '')},
+    {id:'agents', label:'Agents' + (agentCount ? ' (' + agentCount + ')' : '')},
     {id:'files', label:'Files'},
-    {id:'workflows', label:'Workflows' + ((proj.workflows||[]).length ? ' ' + (proj.workflows||[]).length : '')},
+    {id:'workflows', label:'Workflows' + ((proj.workflows||[]).length ? ' (' + (proj.workflows||[]).length + ')' : '')},
     {id:'memory', label:'Memory'},
     {id:'settings', label:'Settings'}
   ];
@@ -27162,7 +27152,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.36"})
+            self.reply_json({"v": "0.29.37"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -29159,7 +29149,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.36'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.37'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -33666,7 +33656,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.36 ready (localhost only)")
+    print(f"\n  Porter v0.29.37 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
