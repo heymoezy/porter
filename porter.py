@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.35 — Files tab: grid/list toggle"""
+"""Porter v0.29.36 — Project workflow attachment"""
 
 
 import email
@@ -9183,7 +9183,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.35</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.36</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10477,6 +10477,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.36', date:'2026-03-08', notes:['Projects: attach/detach system workflows in Workflows tab','Projects: workflow cards show status, interval, last run','Projects: trigger attached workflow from project context','Backend: project update supports workflows field'] },
   { ver:'v0.29.35', date:'2026-03-08', notes:['Files: grid/list view toggle in toolbar','Files: grid view shows file cards with type-colored icons','Files: view preference persists in localStorage','Files: storage bar moved to home view (always visible)','Files: home view mount cards show item count + total size'] },
   { ver:'v0.29.34', date:'2026-03-08', notes:['Projects: richer front cards (description, type badge, agent avatars, date)','Projects: active project toggle (click again to deactivate)','Projects: overview shows name, description, type, status, created date','Projects: workspace files moved from Overview to dedicated Files tab','Projects: tab labels show counts (Agents 9, Memory 3, Files 12)','Projects: date format DD-Mon-YYYY'] },
   { ver:'v0.29.33', date:'2026-03-08', notes:['Kraken CLI added to Extensions tool detection','Squad-wide skill assignment: assign a skill to all squad members at once','Recommended skills section shown in Installed view (not just Discover)','Improved skill recommendations: file/deploy/ops agents get matching skills'] },
@@ -13305,7 +13306,7 @@ function _renderProjTabs() {
     {id:'overview', label:'Overview'},
     {id:'agents', label:'Agents' + (agentCount ? ' ' + agentCount : '')},
     {id:'files', label:'Files'},
-    {id:'workflows', label:'Workflows'},
+    {id:'workflows', label:'Workflows' + ((proj.workflows||[]).length ? ' ' + (proj.workflows||[]).length : '')},
     {id:'memory', label:'Memory'},
     {id:'settings', label:'Settings'}
   ];
@@ -13394,11 +13395,21 @@ async function _renderProjTabContent() {
     return;
 
   } else if (_projTab === 'workflows') {
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Attached Workflows</div>';
-    html += '<div style="padding:16px;text-align:center;color:var(--text3);font-size:12px">';
-    html += 'Project-scoped workflows coming in next update.<br>';
-    html += '<span style="font-size:11px">System workflows run globally across all projects.</span>';
+    var attached = proj.workflows || [];
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Attached Workflows (' + attached.length + ')</div>';
+    html += '<button onclick="_projAttachWf(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:11px">+ Attach</button>';
     html += '</div>';
+    if (!attached.length) {
+      html += '<div style="padding:16px;text-align:center;color:var(--text3);font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">';
+      html += 'No workflows attached.<br><span style="font-size:11px">Attach system workflows to scope them to this project.</span>';
+      html += '</div>';
+    } else {
+      html += '<div id="proj-wf-list" style="display:flex;flex-direction:column;gap:8px">Loading...</div>';
+      content.innerHTML = html;
+      _projLoadWorkflows(proj.id, attached);
+      return;
+    }
 
   } else if (_projTab === 'memory') {
     html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Project Memory</div>';
@@ -13547,6 +13558,85 @@ async function _projDelete(pid) {
       _projBack();
       loadProjects();
     } else { toast(r && r.error || 'Failed', 'err'); }
+  } catch(e) { toast('Failed', 'err'); }
+}
+
+// v0.29.36 — Project workflow attachment
+async function _projLoadWorkflows(pid, wfIds) {
+  var el = document.getElementById('proj-wf-list');
+  if (!el) return;
+  try {
+    var data = await api('/api/workflows');
+    var allWfs = (data && data.workflows) || [];
+    var attached = allWfs.filter(function(wf) { return wfIds.indexOf(wf.id) >= 0; });
+    if (!attached.length) {
+      el.innerHTML = '<div style="padding:8px;color:var(--text3);font-size:12px">None of the attached workflow IDs match active workflows.</div>';
+      return;
+    }
+    var html = '';
+    attached.forEach(function(wf) {
+      var dotColor = wf.running ? '#3b82f6' : wf.status === 'active' ? '#22c55e' : '#9ca3af';
+      var statusLabel = wf.running ? 'Running' : (wf.status === 'active' ? 'Active' : 'Paused');
+      var lastRun = wf.last_run ? new Date(wf.last_run * 1000).toLocaleString() : 'Never';
+      html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);display:flex;align-items:center;gap:10px">';
+      html += '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0"></span>';
+      html += '<div style="flex:1;min-width:0">';
+      html += '<div style="font-size:12px;font-weight:500;color:var(--text)">' + escHtml(wf.name || wf.id) + '</div>';
+      html += '<div style="font-size:10px;color:var(--text3)">' + statusLabel + ' \u00b7 ' + (wf.interval || 'manual') + ' \u00b7 Last: ' + lastRun + '</div>';
+      html += '</div>';
+      html += '<button onclick="_projTriggerWf(\x27' + wf.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px" title="Trigger now">Run</button>';
+      html += '<button onclick="_projDetachWf(\x27' + pid + '\x27,\x27' + wf.id + '\x27)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:2px 4px" title="Detach">&times;</button>';
+      html += '</div>';
+    });
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div style="color:var(--text3);font-size:12px">Could not load workflows</div>'; }
+}
+
+async function _projAttachWf(pid) {
+  var proj = _projList.find(function(p) { return p.id === pid; });
+  if (!proj) return;
+  var attached = proj.workflows || [];
+  try {
+    var data = await api('/api/workflows');
+    var allWfs = (data && data.workflows) || [];
+    var available = allWfs.filter(function(wf) { return attached.indexOf(wf.id) < 0; });
+    if (!available.length) { toast('All workflows already attached'); return; }
+    var opts = available.map(function(wf, i) { return (i+1) + '. ' + (wf.name || wf.id) + ' (' + (wf.status || 'unknown') + ')'; });
+    var idx = prompt('Select workflow to attach:\n' + opts.join('\n'));
+    if (!idx) return;
+    var sel = available[parseInt(idx) - 1];
+    if (!sel) { toast('Invalid selection', 'err'); return; }
+    attached.push(sel.id);
+    var r = await api('/api/projects', {action: 'update', project_id: pid, workflows: attached});
+    if (r && r.ok) {
+      toast('Workflow attached', 'ok');
+      await loadProjects();
+      var updated = _projList.find(function(p) { return p.id === pid; });
+      if (updated) { window._projCurrent = updated; _renderProjTabs(); _renderProjTabContent(); }
+    } else { toast(r && r.error || 'Failed', 'err'); }
+  } catch(e) { toast('Failed to load workflows', 'err'); }
+}
+
+async function _projDetachWf(pid, wfId) {
+  var proj = _projList.find(function(p) { return p.id === pid; });
+  if (!proj) return;
+  var attached = (proj.workflows || []).filter(function(id) { return id !== wfId; });
+  try {
+    var r = await api('/api/projects', {action: 'update', project_id: pid, workflows: attached});
+    if (r && r.ok) {
+      toast('Workflow detached', 'ok');
+      await loadProjects();
+      var updated = _projList.find(function(p) { return p.id === pid; });
+      if (updated) { window._projCurrent = updated; _renderProjTabs(); _renderProjTabContent(); }
+    } else { toast(r && r.error || 'Failed', 'err'); }
+  } catch(e) { toast('Failed', 'err'); }
+}
+
+async function _projTriggerWf(wfId) {
+  try {
+    var r = await api('/api/workflows/' + wfId + '/trigger', {});
+    if (r && r.ok) { toast('Workflow triggered', 'ok'); }
+    else { toast(r && r.error || 'Failed', 'err'); }
   } catch(e) { toast('Failed', 'err'); }
 }
 
@@ -27072,7 +27162,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.35"})
+            self.reply_json({"v": "0.29.36"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -29069,7 +29159,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.35'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.36'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32569,6 +32659,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     if mf in data:
                         try: proj[mf] = int(data[mf])
                         except (ValueError, TypeError): pass
+                if "workflows" in data:
+                    proj["workflows"] = list(data["workflows"]) if isinstance(data["workflows"], list) else []
                 if "start_date" in data:
                     proj["start_date"] = str(data["start_date"]).strip()
                 if "end_date" in data:
@@ -33574,7 +33666,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.35 ready (localhost only)")
+    print(f"\n  Porter v0.29.36 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
