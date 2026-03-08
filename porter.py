@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.20 — Skills cleanup + cross-tab agent links"""
+"""Porter v0.29.21 — Chat UX: message actions + timestamps"""
 
 
 import email
@@ -7718,6 +7718,14 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-msg.assistant { align-self:flex-start; background:var(--raised); border:1px solid var(--border); border-bottom-left-radius:2px; color:var(--text); }
 .chat-msg.error { align-self:center; background:none; color:var(--err); font-size:12px; font-style:italic; }
 .chat-msg.streaming { opacity:.9; }
+.chat-msg { position:relative; }
+.chat-msg-actions { position:absolute; top:-10px; right:8px; display:none; gap:2px; background:var(--raised); border:1px solid var(--border); border-radius:6px; padding:2px; box-shadow:0 2px 8px rgba(0,0,0,.2); z-index:10; }
+.chat-msg.user .chat-msg-actions { right:auto; left:8px; }
+.chat-msg:hover .chat-msg-actions { display:flex; }
+.chat-msg-actions button { background:none; border:none; cursor:pointer; padding:3px 6px; border-radius:4px; font-size:12px; color:var(--text3); line-height:1; }
+.chat-msg-actions button:hover { background:var(--surface); color:var(--text); }
+.chat-msg-ts { font-size:9px; color:var(--text3); opacity:0; transition:opacity .15s; margin-top:4px; }
+.chat-msg:hover .chat-msg-ts { opacity:1; }
 
 /* Chat autocomplete */
 .chat-autocomplete {
@@ -8963,7 +8971,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.20</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.21</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10217,6 +10225,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.21', date:'2026-03-08', notes:['Chat: hover actions (copy, regenerate, edit) on messages','Chat: timestamps shown on hover','Chat: Ctrl/Cmd+Enter to send, Up arrow edits last message','Chat: regenerate resends last prompt to get new response'] },
   { ver:'v0.29.20', date:'2026-03-08', notes:['Skills: removed Use button (invocation at agent level)','Skills: descriptions clamped to 3 lines','Escape key properly returns to agents grid','Cross-tab agent links: openAgentDetail() helper'] },
   { ver:'v0.29.19', date:'2026-03-08', notes:['Fix: Cortex extraction NameError blocking all new facts since v0.28.45','Removed confusing XP bar from agent cards','Escape key returns to agents grid from agent view','Trello-style drag-and-drop with custom clone + FLIP animation','Dynamic squad colors (removed hardcoded map)'] },
   { ver:'v0.29.18', date:'2026-03-08', notes:['Lean system prompts: ~4.5KB→~2KB per dispatch','Dropped redundant IDENTITY.md + ROLE_CARD.md from prompt','Strip MEMORY.md boilerplate + ship process from RULES.md','Compact squad roster (one line vs 10-line block)'] },
@@ -14264,7 +14273,7 @@ async function invokeAgent(message, backend) {
     _chatMessages = _chatMessages.filter(function(m) { return m.role !== 'skill-pending'; });
 
     if (resp && resp.ok) {
-      _chatMessages.push({ role: 'assistant', content: resp.text || '', model: resp.model || backend });
+      _chatMessages.push({ role: 'assistant', content: resp.text || '', model: resp.model || backend, ts: Date.now() });
     } else {
       _chatMessages.push({ role: 'error', content: label + ' error: ' + (resp ? resp.error : 'No response') });
     }
@@ -14666,6 +14675,46 @@ function chatNewConversation() {
   closeChatHistory();
 }
 
+// v0.29.21 — Message actions
+function _chatCopyMsg(i) {
+  var m = _chatMessages[i];
+  if (!m) return;
+  navigator.clipboard.writeText(m.content).then(function() { toast('Copied'); }).catch(function() {});
+}
+function _chatRegenMsg(i) {
+  // Remove last assistant message and resend
+  if (_chatStreaming) return;
+  while (_chatMessages.length > 0 && _chatMessages[_chatMessages.length - 1].role !== 'user') {
+    _chatMessages.pop();
+  }
+  if (!_chatMessages.length) return;
+  var lastUser = _chatMessages[_chatMessages.length - 1];
+  _chatMessages.pop();  // Remove user msg too — chatSend will re-add it
+  renderChatMessages();
+  // Re-send the message
+  var input = document.getElementById('chat-input') || document.getElementById('chat-input-welcome');
+  if (input) { input.value = lastUser.content; chatSend(); }
+}
+function _chatEditMsg(i) {
+  var m = _chatMessages[i];
+  if (!m || m.role !== 'user') return;
+  // Trim conversation to this point
+  _chatMessages = _chatMessages.slice(0, i);
+  renderChatMessages();
+  var input = document.getElementById('chat-input') || document.getElementById('chat-input-welcome');
+  if (input) { input.value = m.content; input.focus(); _chatAutoGrow(input); }
+}
+function _chatMsgActions(m, i) {
+  var ts = m.ts ? new Date(m.ts).toLocaleTimeString('en-SG', {hour:'2-digit',minute:'2-digit',timeZone:_porterTz()}) : '';
+  var actions = '<div class="chat-msg-actions">';
+  actions += '<button onclick="_chatCopyMsg(' + i + ')" title="Copy">\u{1F4CB}</button>';
+  if (m.role === 'assistant') actions += '<button onclick="_chatRegenMsg(' + i + ')" title="Regenerate">\u{1F504}</button>';
+  if (m.role === 'user') actions += '<button onclick="_chatEditMsg(' + i + ')" title="Edit">\u270F\uFE0F</button>';
+  actions += '</div>';
+  var tsHtml = ts ? '<div class="chat-msg-ts">' + ts + '</div>' : '';
+  return { actions: actions, ts: tsHtml };
+}
+
 function renderChatMessages(streamUpdate) {
   var el = document.getElementById('chat-messages');
   if (!el) return;
@@ -14717,7 +14766,8 @@ function renderChatMessages(streamUpdate) {
     var streaming = (i === _chatMessages.length - 1 && _chatStreaming && m.role === 'assistant') ? ' streaming' : '';
     var content = m.role === 'user' ? escHtml(m.content).replace(/@(claude|gemini|openclaw|codex|ollama)\\b/g, '<span class="chat-at-mention">@$1</span>') : _renderMarkdown(m.content);
     var badge = (m.role === 'assistant' || m.role === 'skill') ? _modelBadge(m) : '';
-    return '<div class="chat-msg ' + cls + streaming + '">' + content + badge + '</div>';
+    var _ma = _chatMsgActions(m, i);
+    return '<div class="chat-msg ' + cls + streaming + '">' + _ma.actions + content + badge + _ma.ts + '</div>';
   }).join('');
   _renderMermaidDiagrams(el);
   if (!_chatStreaming || el.scrollHeight - el.scrollTop - el.clientHeight < 150) el.scrollTop = el.scrollHeight;
@@ -15073,6 +15123,19 @@ function chatInputKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     chatSend();
+    return;
+  }
+  // v0.29.21 — Ctrl/Cmd+Enter also sends
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    chatSend();
+    return;
+  }
+  // v0.29.21 — Up arrow edits last user message when input is empty
+  if (e.key === 'ArrowUp' && !e.target.value.trim()) {
+    for (var _li = _chatMessages.length - 1; _li >= 0; _li--) {
+      if (_chatMessages[_li].role === 'user') { e.preventDefault(); _chatEditMsg(_li); return; }
+    }
   }
 }
 
@@ -15539,7 +15602,7 @@ function chatSend() {
     '<div class="chat-thinking-dot"></div><div class="chat-thinking-dot"></div><div class="chat-thinking-dot"></div></div>';
   var msgEl = document.getElementById('chat-messages');
   if (msgEl) { msgEl.insertAdjacentHTML('beforeend', thinkHtml); msgEl.scrollTop = msgEl.scrollHeight; }
-  _chatMessages.push({ role: 'assistant', content: '', model: modelId });
+  _chatMessages.push({ role: 'assistant', content: '', model: modelId, ts: Date.now() });
   _updateStopBtn(true);
   _resetChatStreamReveal();
   _chatStreamTargetIdx = _chatMessages.length - 1;
@@ -25936,7 +25999,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.20"})
+            self.reply_json({"v": "0.29.21"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26098,7 +26161,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.20"
+                health["porter_version"] = "0.29.21"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27907,7 +27970,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.20'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.21'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32388,7 +32451,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.20 ready (localhost only)")
+    print(f"\n  Porter v0.29.21 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
