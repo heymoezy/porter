@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.58 — Fix 4 broken onclick handlers, dead code removal"""
+"""Porter v0.29.59 — Replace last native confirm() dialogs"""
 
 
 import email
@@ -9157,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.58</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.59</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10443,6 +10443,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.59', date:'2026-03-08', notes:['Replace last 6 native confirm() dialogs with Porter-style modals','Agent workspace + file preview editors now use themed dialogs'] },
   { ver:'v0.29.58', date:'2026-03-08', notes:['FIX: chat welcome recent chats now clickable (was loadChatSession→loadChatSession)','FIX: project agent cards now clickable (was openPersonaDetail→switchModule+selectPersona)','FIX: location form Cancel/Save buttons now work (was undefined functions)','Removed dead wizard button from settings','Removed 5 empty stub functions','Fixed duplicate style attribute on cortex status'] },
   { ver:'v0.29.57', date:'2026-03-08', notes:['Time ago display shows date for items older than 7 days','Settings tab visible in nav'] },
   { ver:'v0.29.56', date:'2026-03-08', notes:['FIX: chat welcome timestamps show correctly (was NaN)','FIX: agent chips load after personas fetch completes','Welcome agents deferred until _personas populated'] },
@@ -22325,9 +22326,9 @@ function openAgentWorkspace(agentId, agentName) {
   _awRenderFileGuide('', '');
   loadAgentWorkspaceList(true);
 }
-function closeAgentWorkspace() {
+async function closeAgentWorkspace() {
   if (_awDirty) {
-    const leave = confirm('You have unsaved changes. Discard them and close?');
+    const leave = await porterConfirm('Unsaved Changes', 'Discard changes and close?', {confirmLabel:'Discard', danger:true});
     if (!leave) return;
   }
   const ws = document.getElementById('agent-workspace');
@@ -22349,13 +22350,11 @@ async function loadAgentWorkspaceList(openFirst = false) {
 async function openAgentWorkspaceFile(path) {
   const previous = _awCurrentFile;
   if (_awDirty && previous && previous !== path) {
-    const saveFirst = confirm('You have unsaved changes. Save before switching files?');
+    const saveFirst = await porterConfirm('Unsaved Changes', 'Save before switching files?', {confirmLabel:'Save', cancelLabel:'Discard'});
     if (saveFirst) {
       await saveAgentWorkspaceFile();
       if (_awDirty) return;
     } else {
-      const discard = confirm('Discard unsaved changes and switch file?');
-      if (!discard) return;
       _awDirty = false;
     }
   }
@@ -22393,7 +22392,7 @@ async function saveAgentWorkspaceFile() {
   const content = ed ? ed.value : '';
   const sensitive = (_awCurrentFile.endsWith('/SOUL.md') || _awCurrentFile.endsWith('/MEMORY.md') || _awCurrentFile === 'workspace/SOUL.md' || _awCurrentFile === 'workspace/MEMORY.md');
   if (sensitive) {
-    const ok = confirm(`Save changes to ${_awCurrentFile}?`);
+    const ok = await porterConfirm('Confirm Save', 'Save changes to ' + _awCurrentFile + '?', {confirmLabel:'Save'});
     if (!ok) return;
   }
   const st = document.getElementById('aw-save-state');
@@ -24565,7 +24564,7 @@ function _fileDrop(e) {
 // ── preview panel ──
 async function openPreview(name) {
   if (previewOpen && previewDirty) {
-    if (!confirm('Discard unsaved changes?')) return;
+    if (!await porterConfirm('Unsaved Changes', 'Discard unsaved changes?', {confirmLabel:'Discard', danger:true})) return;
   }
   previewDirty = false;
   previewContent = '';
@@ -24615,9 +24614,9 @@ async function openPreview(name) {
   }
 }
 
-function closePreview() {
+async function closePreview() {
   if (previewDirty) {
-    if (!confirm('Discard unsaved changes?')) return;
+    if (!await porterConfirm('Unsaved Changes', 'Discard unsaved changes?', {confirmLabel:'Discard', danger:true})) return;
   }
   previewOpen = false; previewDirty = false; previewName = null; previewContent = '';
   document.getElementById('previewPanel').classList.remove('open');
@@ -27588,7 +27587,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.58"})
+            self.reply_json({"v": "0.29.59"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27750,7 +27749,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.58"
+                health["porter_version"] = "0.29.59"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29594,7 +29593,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.58'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.59'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34134,7 +34133,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.58 ready (localhost only)")
+    print(f"\n  Porter v0.29.59 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
