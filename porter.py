@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.26 — Graceful failure, Iterative Retrieval"""
+"""Porter v0.29.27 — Verification Loops, Session Lifecycle"""
 
 
 import email
@@ -2025,6 +2025,45 @@ def _skill_mining_run():
             log.info("Skill mining: %d new proposals", n)
     except Exception as e:
         _wf_record_run("skill_mining", success=False, error=e, duration_s=_sm.time()-_t0)
+
+
+# v0.29.27 — Session Lifecycle: state machine (active → paused → archived)
+_SESSION_PAUSE_SECS = 1800   # 30 minutes
+_SESSION_ARCHIVE_SECS = 86400  # 24 hours
+
+def _session_update_activity(chat_id):
+    """Mark a chat session as active."""
+    import time as _sa
+    try:
+        conn = _db_conn()
+        conn.execute(
+            "UPDATE chat_sessions SET session_state='active', last_activity=?, paused_at=NULL WHERE id=?",
+            (_sa.time(), chat_id))
+        conn.commit(); conn.close()
+    except Exception:
+        pass
+
+def _session_lifecycle_sweep():
+    """Background sweep: pause inactive, archive old sessions."""
+    import time as _sl
+    now = _sl.time()
+    try:
+        conn = _db_conn()
+        conn.execute(
+            "UPDATE chat_sessions SET session_state='paused', paused_at=? "
+            "WHERE session_state='active' AND last_activity IS NOT NULL AND last_activity < ?",
+            (now, now - _SESSION_PAUSE_SECS))
+        conn.execute(
+            "UPDATE chat_sessions SET session_state='archived', archived_at=? "
+            "WHERE session_state='paused' AND paused_at IS NOT NULL AND paused_at < ?",
+            (now, now - _SESSION_ARCHIVE_SECS))
+        conn.commit(); conn.close()
+    except Exception:
+        pass
+
+def _session_resume(chat_id):
+    """Resume a paused/archived session."""
+    _session_update_activity(chat_id)
 
 
 def _iterative_retrieve(message, persona_id="", max_chunks=3):
@@ -6349,6 +6388,16 @@ def _init_trace_tables():
     try: conn.execute("ALTER TABLE personas ADD COLUMN hook_profile TEXT DEFAULT 'balanced'")
     except: pass  # Column already exists
 
+    # v0.29.27 — Session Lifecycle: chat session state machine
+    try: conn.execute("ALTER TABLE chat_sessions ADD COLUMN session_state TEXT DEFAULT 'active'")
+    except: pass
+    try: conn.execute("ALTER TABLE chat_sessions ADD COLUMN last_activity REAL")
+    except: pass
+    try: conn.execute("ALTER TABLE chat_sessions ADD COLUMN paused_at REAL")
+    except: pass
+    try: conn.execute("ALTER TABLE chat_sessions ADD COLUMN archived_at REAL")
+    except: pass
+
     # Auto-seed squads from existing agent_group values
     try:
         existing_groups = conn.execute(
@@ -9093,7 +9142,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.26</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.27</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10378,6 +10427,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.27', date:'2026-03-08', notes:['Verification Loops: strict hook profile agents get post-dispatch response quality checks','Verification scoring: length, echo detection, hedging patterns, keyword overlap','Session Lifecycle: chat sessions auto-pause after 30min, archive after 24h','DB migration: session_state, last_activity, paused_at, archived_at columns'] },
   { ver:'v0.29.26', date:'2026-03-08', notes:['Graceful failure: api() returns better error messages (offline/timeout/server error)','uiFail() centralized error display with retry button','Loading timeout: stuck Loading... auto-replaced with retry after 10s','Iterative Retrieval: 2-pass keyword-based context from agent memory files for chat dispatch'] },
   { ver:'v0.29.25', date:'2026-03-08', notes:['Deleted obsolete setup wizard (~400 lines CSS/JS/HTML removed)','Workflow history: shows run stats, last error, last run time even without detailed entries','Hook Profiles: per-agent dispatch strictness (relaxed/balanced/strict) in Config tab','DB migration: hook_profile column added to personas table'] },
   { ver:'v0.29.24', date:'2026-03-08', notes:['Config tab: removed redundant Info section (raw timestamp, soul hash, status, last active)','Config tab: emoji picker for avatar selection with search','Config tab: fallback chain as ordered dropdowns with none option','Skills tab: organized by Assigned/Recommended/Available with category grouping','Squad management: create/edit/delete squads with member assignment from chip bar'] },
@@ -24803,6 +24853,60 @@ def _persona_append_daily_log(persona_id, text):
     log_path.write_text(existing + f"\n## {timestamp}\n\n{text}\n")
 
 
+# v0.29.27 — Verification Loop: post-dispatch quality check for strict agents
+def _verify_dispatch_response(original_message, response_text, agent_name="", backend="", run_id="", persona_id=""):
+    """Quick verification of dispatch response quality. Returns {passed, score, reason}."""
+    import time as _vt
+    _v_t0 = _vt.time()
+    issues = []
+    score = 100
+
+    # Check 1: Response not empty or too short
+    if not response_text or len(response_text.strip()) < 10:
+        issues.append("Response too short or empty")
+        score -= 40
+
+    # Check 2: Response not just echoing the question
+    if response_text.strip().lower()[:100] == original_message.strip().lower()[:100]:
+        issues.append("Response appears to echo the input")
+        score -= 30
+
+    # Check 3: No obvious error/hedging patterns
+    _error_patterns = ["i can't", "i cannot", "i'm unable", "as an ai", "i don't have access",
+                       "error occurred", "something went wrong", "i apologize, but i"]
+    _resp_lower = response_text.lower()
+    for ep in _error_patterns:
+        if ep in _resp_lower:
+            issues.append(f"Response contains hedging: '{ep}'")
+            score -= 10
+            break
+
+    # Check 4: Response relevance — keyword overlap
+    import re as _vre
+    q_words = set(_vre.findall(r'[a-zA-Z]{4,}', original_message.lower()))
+    r_words = set(_vre.findall(r'[a-zA-Z]{4,}', response_text.lower()))
+    overlap = q_words & r_words
+    if len(q_words) > 3 and len(overlap) < 1:
+        issues.append("Low keyword overlap with question")
+        score -= 15
+
+    passed = score >= 60
+    reason = "; ".join(issues) if issues else "OK"
+    _v_dur = round(_vt.time() - _v_t0, 4)
+
+    # Log to trace
+    try:
+        emit_trace_step("verification",
+            agent_id=persona_id, agent_name=agent_name,
+            stage="verify", input_summary=f"score={score}, passed={passed}",
+            status="done" if passed else "error",
+            trace_id=run_id)
+    except Exception:
+        pass
+
+    return {"passed": passed, "score": score, "reason": reason, "duration_s": _v_dur}
+
+
 def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=None, step_num=0, personality_mode=False, backend_override=""):
     """Dispatch a message to a persona: load SOUL, resolve backend, call dispatch_agent."""
     import uuid as _uuid
@@ -24960,6 +25064,26 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     response_text = result.get("text", "")[:500] if result.get("ok") else result.get("error", "")[:200]
     _persona_append_daily_log(persona_id, f"**Dispatch** ({backend})\n> {message[:200]}\n\nResponse: {response_text}")
 
+    # v0.29.27 — Verification Loop for strict hook profile agents
+    _hook_profile = persona.get("hook_profile", "balanced")
+    if _hook_profile == "strict" and result.get("ok") and result.get("text"):
+        try:
+            _verify_result = _verify_dispatch_response(
+                original_message=message[:500],
+                response_text=result["text"][:1000],
+                agent_name=pname,
+                backend=backend,
+                run_id=run_id,
+                persona_id=persona_id,
+            )
+            result["verification"] = _verify_result
+            if not _verify_result.get("passed"):
+                log.warning("Verification FAILED for %s: %s", pname, _verify_result.get("reason", ""))
+                mlog.emit("warn", "bridge", "verification.failed",
+                    f"{pname}: {_verify_result.get('reason','')}", persona_id=persona_id, run_id=run_id)
+        except Exception as _ve:
+            log.debug("Verification skipped: %s", _ve)
+
     # Soul shaping: detect identity instructions and persist to SOUL.md
     _shaping_triggers = ['remember that you', 'from now on you', 'you should always',
                          'you should never', 'your personality is', 'your tone should',
@@ -25107,6 +25231,9 @@ def _error_self_heal_loop():
     while True:
         if _wf_is_enabled("skill_mining"):
             _run_if_due("skill_mining", _skill_mining_run)
+        # v0.29.27 — Session lifecycle sweep (lightweight, runs every cycle)
+        try: _session_lifecycle_sweep()
+        except Exception: pass
         if _wf_is_enabled("error_self_heal"):
             cfg = _config.get("preferences", {})
             if cfg.get("self_heal_enabled", False):
@@ -26202,7 +26329,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.26"})
+            self.reply_json({"v": "0.29.27"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26364,7 +26491,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.26"
+                health["porter_version"] = "0.29.27"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28198,7 +28325,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.26'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.27'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32700,7 +32827,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.26 ready (localhost only)")
+    print(f"\n  Porter v0.29.27 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
