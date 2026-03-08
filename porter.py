@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.12 — Skills tab redesign"""
+"""Porter v0.29.13 — Inline-edit agent header"""
 
 
 import email
@@ -8967,7 +8967,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.12</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.13</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9141,10 +9141,10 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
       <div class="agent-identity-shell">
         <div class="agent-identity-card">
-          <div class="agent-identity-avatar" id="pd-avatar2">&#x1f916;</div>
+          <div class="agent-identity-avatar" id="pd-avatar2" onclick="_editCardField('avatar')" style="cursor:pointer" title="Click to edit">&#x1f916;</div>
           <div class="agent-identity-meta">
-            <div class="agent-identity-name" id="pd-name2"></div>
-            <div class="agent-identity-role" id="pd-role2"></div>
+            <div class="agent-identity-name" id="pd-name2" onclick="_editCardField('name')" style="cursor:pointer" title="Click to edit"></div>
+            <div class="agent-identity-role" id="pd-role2" onclick="_editCardField('role')" style="cursor:pointer" title="Click to edit"></div>
             <div class="agent-identity-badges">
               <span class="agent-badge" id="pd-group-badge2">&mdash;</span>
               <span class="agent-badge" id="pd-status-badge2">idle</span>
@@ -10220,6 +10220,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.13', date:'2026-03-08', notes:['Click-to-edit agent avatar, name, and role in header','Removed redundant Quick Settings from Identity tab'] },
   { ver:'v0.29.12', date:'2026-03-08', notes:['Skills tab redesign with categories','Use in Chat button on installed skills','Category filter chips + better card layout'] },
   { ver:'v0.29.11', date:'2026-03-08', notes:['Deferred startup threads (3s faster boot)','Stop phantom pollers on tab switch','MC metrics polling 5s→15s'] },
   { ver:'v0.29.10', date:'2026-03-08', notes:['@squad mentions in chat (e.g. @technical, @creative)','Squad dispatch routes to best-fit member','Squad names in autocomplete alongside agent names'] },
@@ -19100,19 +19101,7 @@ function switchPdTab(tab) {
 
     content.innerHTML = '<div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;align-items:center">' + fileTabs + '</div>'
       + fileEditors
-      + '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">'
-      + '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Quick Settings</div>'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
-      + '<div class="settings-field"><label>Name</label>'
-      + '  <input class="settings-input" id="pd-edit-name" value="' + escHtml(p.name) + '"></div>'
-      + '<div class="settings-field"><label>Role</label>'
-      + '  <input class="settings-input" id="pd-edit-role" value="' + escHtml(p.role || '') + '"></div>'
-
-      + '<div class="settings-field"><label>Avatar</label>'
-      + '  <input class="settings-input" id="pd-edit-avatar" value="' + (p.avatar || '\u{1F916}') + '" style="width:60px"></div>'
-      + '</div>'
-      + '<div style="margin-top:8px"><button class="btn btn-ghost" onclick="savePersonaMeta()" style="font-size:11px">Save Settings</button></div>'
-      + '</div>';
+;
   } else if (tab === 'live') {
     // v0.28.54 — Live inspection: stream dispatch events for this agent
     content.innerHTML = '<div style="padding:8px 0">'
@@ -25880,7 +25869,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.12"})
+            self.reply_json({"v": "0.29.13"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26042,7 +26031,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.12"
+                health["porter_version"] = "0.29.13"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27851,7 +27840,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.12'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.13'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32332,7 +32321,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.12 ready (localhost only)")
+    print(f"\n  Porter v0.29.13 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
