@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.48 — Squad awareness, persona restore, interval fix, workflow triggers"""
+"""Porter v0.28.49 — Universal truth dedup: CLAUDE.md + auto-memory in cortex filter, cross-session dedup"""
 
 
 import email
@@ -1134,6 +1134,28 @@ def _load_md_knowledge_lines(persona_id=""):
                 for f in pdir.iterdir():
                     if f.suffix == ".md" and f.name not in ("heartbeat.md",):
                         md_files.append(f)
+
+    # v0.28.49 — External knowledge sources: CLAUDE.md files + auto-memory
+    # These are the canonical "universal truth" sources that all agents share.
+    # Auto-detected from home dir and project dir — no hardcoded paths.
+    if not persona_id:
+        _home = Path.home()
+        _ext_candidates = [
+            _home / "CLAUDE.md",                         # global instructions
+            _DATA_DIR / "CLAUDE.md",                     # project-level instructions
+            _DATA_DIR.parent / "CLAUDE.md",              # parent project dir
+        ]
+        # Claude Code auto-memory dirs (any MEMORY.md under ~/.claude/projects/)
+        _claude_proj = _home / ".claude" / "projects"
+        if _claude_proj.is_dir():
+            for _mp in _claude_proj.rglob("MEMORY.md"):
+                _ext_candidates.append(_mp)
+        for _ef in _ext_candidates:
+            try:
+                if _ef.exists() and _ef.is_file() and _ef not in md_files:
+                    md_files.append(_ef)
+            except Exception:
+                pass
 
     for fpath in md_files:
         try:
@@ -3775,6 +3797,10 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
             conn = _db_conn()
             # Clear old session-linked facts before re-inserting
             conn.execute("DELETE FROM cortex_memories WHERE source_type='session' AND source_id=?", (session_id,))
+            # v0.28.49 — load existing facts once for cross-session dedup
+            _existing_facts = [r[0] for r in conn.execute(
+                "SELECT fact FROM cortex_memories WHERE consolidated_into IS NULL AND status='active'"
+            ).fetchall()]
             for fact_obj in structured_facts:
                 fact_text = str(fact_obj.get("text", "")).strip()
                 if not fact_text or len(fact_text) < 5:
@@ -3785,6 +3811,9 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
                 importance = max(1, min(10, int(fact_obj.get("importance", 5))))
                 # v0.28.45 — skip facts covered by .md files or low-value
                 if _fact_is_low_value(fact_text) or _fact_covered_by_md(fact_text, scope, ""):
+                    continue
+                # v0.28.49 — cross-session dedup: skip if Jaccard match with any existing fact
+                if _is_duplicate(fact_text, _existing_facts):
                     continue
                 keywords = ",".join(_cortex_tokenize(fact_text))
                 conn.execute(
@@ -8762,7 +8791,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.48</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.49</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9982,6 +10011,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.49', date:'2026-03-08', notes:['Universal truth dedup: cortex filter now reads CLAUDE.md + Claude auto-memory (not just persona .md files)','Cross-session dedup: re-extract no longer creates duplicates of facts from other sessions','Added naming rule to RULES.md so persona filter catches it','Cleaned cortex: 56 → 10 high-quality durable memories'] },
   { ver:'v0.28.48', date:'2026-03-08', notes:['Remove Cortex Config button and view (system workflows handle it)','Remove Global filter from inbox (graph icon already filters)','Fix: project scope without real ID falls back to global','Cleaned 84 stale implementation facts from cortex (236 \u2192 61)'] },
   { ver:'v0.28.47', date:'2026-03-08', notes:['Fix: Loading indicator visible on memory map (CSS var resolved properly)','Fix: Memory map resizes with browser even when locked (lock = freeze nodes only)','Lock no longer disables zoom/fit/center controls'] },
   { ver:'v0.28.46', date:'2026-03-08', notes:['Disciplined extraction prompt — only durable knowledge, not session artifacts','Max facts reduced from 8 to 5','DO NOT extract list: implementation details, session observations, agent identity, task status','Strengthened low-value patterns for consolidation cleanup'] },
@@ -25049,7 +25079,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.48"})
+            self.reply_json({"v": "0.28.49"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25211,7 +25241,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.48"
+                health["porter_version"] = "0.28.49"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27019,7 +27049,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.48'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.49'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31254,7 +31284,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.48 ready (localhost only)")
+    print(f"\n  Porter v0.28.49 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
