@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.24 — Config cleanup, squad management, skills categories, emoji picker"""
+"""Porter v0.29.25 — Delete wizard, fix workflow history, Hook Profiles"""
 
 
 import email
@@ -6289,6 +6289,10 @@ def _init_trace_tables():
         position INTEGER DEFAULT 50,
         PRIMARY KEY (squad_id, persona_id)
     )""")
+    # v0.29.25 — Hook Profiles: dispatch strictness per agent
+    try: conn.execute("ALTER TABLE personas ADD COLUMN hook_profile TEXT DEFAULT 'balanced'")
+    except: pass  # Column already exists
+
     # Auto-seed squads from existing agent_group values
     try:
         existing_groups = conn.execute(
@@ -8913,52 +8917,7 @@ input[type="number"].settings-input { min-width: 60px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
 
-/* ── onboarding wizard ── */
-.wiz-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.85);
-  backdrop-filter: blur(6px); z-index: 500; display: none; align-items: center;
-  justify-content: center; }
-.wiz-overlay.open { display: flex; }
-.wiz-dialog { background: var(--surface); border: 1px solid var(--border);
-  border-radius: 16px; width: 520px; padding: 40px 48px;
-  box-shadow: 0 40px 100px rgba(0,0,0,.8); }
-.wiz-step { display: none; }
-.wiz-step.active { display: block; }
-.wiz-step-badge { font-size: 11px; font-weight: 600; letter-spacing: .8px;
-  color: var(--accent); text-transform: uppercase; margin-bottom: 12px; }
-.wiz-title { font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
-.wiz-subtitle { font-size: 14px; color: var(--text2); margin-bottom: 28px; line-height: 1.5; }
-.wiz-actions { display: flex; gap: 10px; margin-top: 28px; align-items: center; }
-.wiz-actions .btn-skip { background: none; border: none; color: var(--text3);
-  font-size: 13px; cursor: pointer; padding: 0; margin-left: auto; font-family: inherit; }
-.wiz-actions .btn-skip:hover { color: var(--text2); }
-.wiz-type-cards { display: flex; gap: 10px; margin-bottom: 20px; }
-.wiz-type-card { flex: 1; padding: 12px 8px; border: 1px solid var(--border);
-  border-radius: 10px; cursor: pointer; transition: .15s; background: var(--bg); text-align: center; }
-.wiz-type-card:hover:not(.disabled) { border-color: var(--accent); }
-.wiz-type-card.selected { border-color: var(--accent); background: rgba(247,147,26,.07); }
-.wiz-type-card.disabled { opacity: .4; cursor: not-allowed; }
-.wiz-card-icon { font-size: 20px; margin-bottom: 4px; }
-.wiz-card-label { font-size: 12px; font-weight: 600; color: var(--text); }
-.wiz-card-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
-.wiz-checklist { list-style: none; padding: 0; margin: 0 0 8px; }
-.wiz-checklist li { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0;
-  border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text2); }
-.wiz-checklist li:last-child { border-bottom: none; }
-.wiz-check-icon { color: #4caf50; flex-shrink: 0; }
-.wiz-check-skip { color: var(--text3); flex-shrink: 0; }
-.wiz-progress { display: flex; gap: 6px; margin-bottom: 28px; }
-.wiz-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); transition: .2s; }
-.wiz-dot.done { background: var(--accent); }
-.wiz-dot.active { background: var(--accent); box-shadow: 0 0 0 3px rgba(247,147,26,.25); }
-.wiz-key-box { font-family: monospace; font-size: 12px; background: var(--bg);
-  border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;
-  word-break: break-all; color: var(--text); margin-bottom: 8px; }
-.wiz-key-note { font-size: 12px; color: var(--danger); margin-bottom: 16px; }
-.wiz-cap-list { list-style: none; padding: 0; margin: 0 0 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.wiz-cap-item { font-size: 12px; display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
-.wiz-cap-status { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; }
-.wiz-cap-status.ok { background: #4caf50; box-shadow: 0 0 8px rgba(76,175,80,.4); }
-.wiz-cap-status.missing { background: var(--text3); opacity: .3; }
+/* v0.29.25 — setup wizard removed (was obsolete) */
 </style>
 <script src="/js/tour.js" defer></script>
 </head>
@@ -9078,7 +9037,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.24</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.25</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10332,6 +10291,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.25', date:'2026-03-08', notes:['Deleted obsolete setup wizard (~400 lines CSS/JS/HTML removed)','Workflow history: shows run stats, last error, last run time even without detailed entries','Hook Profiles: per-agent dispatch strictness (relaxed/balanced/strict) in Config tab','DB migration: hook_profile column added to personas table'] },
   { ver:'v0.29.24', date:'2026-03-08', notes:['Config tab: removed redundant Info section (raw timestamp, soul hash, status, last active)','Config tab: emoji picker for avatar selection with search','Config tab: fallback chain as ordered dropdowns with none option','Skills tab: organized by Assigned/Recommended/Available with category grouping','Squad management: create/edit/delete squads with member assignment from chip bar'] },
   { ver:'v0.29.23', date:'2026-03-08', notes:['Removed Cortex memories from agent system prompts (faster dispatch)','Prompt budget: SOUL 60%, RULES 25%, MEMORY 15%','Fixed agent drag-and-drop (simplified, working)','Chat: delete message button, improved hover actions'] },
   { ver:'v0.29.22', date:'2026-03-08', notes:['Auto Skill Mining: discovers repeated successful patterns from traces','skill_proposals table + GET/POST API endpoints','Proposed Skills section in Skills tab with approve/dismiss','Skill mining runs every 6h as system workflow'] },
@@ -12647,26 +12607,48 @@ function _wfShowHistory(id) {
   if (!el) return;
   if (el.style.display !== 'none') { el.style.display = 'none'; return; }
   el.style.display = 'block';
+  el.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:4px">Loading...</div>';
   api('/api/workflows').then(function(data) {
-    if (!data || !data.workflows) return;
+    if (!data || !data.workflows) { el.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:4px">Failed to load</div>'; return; }
     var wf = data.workflows.find(function(w) { return w.id === id; });
-    if (!wf || !wf.history || !wf.history.length) {
-      el.innerHTML = '<div style="font-size:12px;color:var(--text3);text-align:center;padding:8px">No history yet</div>';
-      return;
+    if (!wf) { el.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:4px">Workflow not found</div>'; return; }
+    var html = '';
+    // v0.29.25 — Always show run stats summary even without detailed history
+    var lastRunStr = wf.last_run ? new Date(wf.last_run * 1000).toLocaleString() : 'Never';
+    var durStr = wf.last_duration_s ? wf.last_duration_s.toFixed(2) + 's' : '—';
+    html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;font-size:11px">'
+      + '<div style="text-align:center;padding:6px;background:var(--surface);border-radius:6px;border:1px solid var(--border)"><div style="font-size:16px;font-weight:600;color:var(--text)">' + (wf.run_count || 0) + '</div><div style="color:var(--text3)">Runs</div></div>'
+      + '<div style="text-align:center;padding:6px;background:var(--surface);border-radius:6px;border:1px solid var(--border)"><div style="font-size:16px;font-weight:600;color:' + (wf.error_count > 0 ? '#ef4444' : 'var(--text)') + '">' + (wf.error_count || 0) + '</div><div style="color:var(--text3)">Errors</div></div>'
+      + '<div style="text-align:center;padding:6px;background:var(--surface);border-radius:6px;border:1px solid var(--border)"><div style="font-size:11px;font-weight:500;color:var(--text2);margin-top:2px">' + durStr + '</div><div style="color:var(--text3)">Last duration</div></div>'
+      + '<div style="text-align:center;padding:6px;background:var(--surface);border-radius:6px;border:1px solid var(--border)"><div style="font-size:11px;font-weight:500;color:var(--text2);margin-top:2px">' + lastRunStr + '</div><div style="color:var(--text3)">Last run</div></div>'
+      + '</div>';
+    // Last error
+    if (wf.last_error) {
+      html += '<div style="font-size:11px;padding:6px 8px;background:#ef444415;border:1px solid #ef444440;border-radius:6px;color:#ef4444;margin-bottom:8px;word-break:break-word">' + escHtml(wf.last_error) + '</div>';
     }
-    el.innerHTML = '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px">Last ' + wf.history.length + ' run' + (wf.history.length !== 1 ? 's' : '') + '</div>'
-      + wf.history.slice().reverse().map(function(h) {
-        var ts = h.ts ? new Date(h.ts * 1000).toLocaleTimeString() : '';
+    // Detailed history entries
+    if (wf.history && wf.history.length) {
+      html += '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:4px">Recent runs (' + wf.history.length + ')</div>';
+      html += wf.history.slice().reverse().map(function(h) {
+        var ts = h.ts ? new Date(h.ts * 1000).toLocaleString() : '';
         var dot = h.ok ? '#22c55e' : '#ef4444';
         var dur = h.duration_s ? h.duration_s.toFixed(2) + 's' : '';
-        return '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:11px;border-bottom:1px solid var(--border)">'
-          + '<span style="width:5px;height:5px;border-radius:50%;background:' + dot + '"></span>'
-          + '<span style="color:var(--text3)">' + ts + '</span>'
-          + '<span style="color:var(--text2)">' + dur + '</span>'
-          + (h.error ? '<span style="color:#ef4444;margin-left:auto;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(h.error) + '</span>' : '')
-          + (h.result ? '<span style="color:var(--text3);margin-left:auto;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(h.result) + '</span>' : '')
+        return '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:11px;border-bottom:1px solid var(--border)">'
+          + '<span style="width:6px;height:6px;border-radius:50%;background:' + dot + ';flex-shrink:0"></span>'
+          + '<span style="color:var(--text3);min-width:140px">' + ts + '</span>'
+          + '<span style="color:var(--text2);min-width:50px">' + dur + '</span>'
+          + (h.error ? '<span style="color:#ef4444;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(h.error) + '</span>' : '')
+          + (h.result ? '<span style="color:var(--text3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(h.result) + '</span>' : '')
           + '</div>';
       }).join('');
+    } else if (wf.run_count > 0) {
+      html += '<div style="font-size:11px;color:var(--text3);padding:6px 0">Detailed history starts from next run.</div>';
+    } else {
+      html += '<div style="font-size:11px;color:var(--text3);padding:6px 0">No runs yet. Click "Run Now" or wait for scheduled trigger.</div>';
+    }
+    el.innerHTML = html;
+  }).catch(function() {
+    el.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:4px">Failed to load history</div>';
   });
 }
 
@@ -19641,6 +19623,21 @@ function switchPdTab(tab) {
       + '</div>'
       + '<div style="margin-top:10px"><button class="btn btn-ghost" onclick="_saveAgentConfig()" style="font-size:11px">Save Routing</button></div>'
       + '<div style="margin-top:20px;padding-top:12px;border-top:1px solid var(--border)">'
+      + '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Hook Profile</div>'
+      + '<div style="display:flex;gap:8px;margin-bottom:8px">'
+      + [['relaxed','Relaxed','Fast dispatch, minimal checks. Good for trusted tasks.','#22c55e'],
+         ['balanced','Balanced','Standard verification. Recommended for most agents.','var(--accent)'],
+         ['strict','Strict','Full verification loop. Use for critical or external-facing work.','#ef4444']].map(function(hp) {
+          var sel = (p.hook_profile || 'balanced') === hp[0];
+          return '<button class="btn btn-ghost" onclick="_setHookProfile(\'' + p.id + '\',\'' + hp[0] + '\')" '
+            + 'style="flex:1;padding:10px 8px;border-radius:8px;text-align:center;border:1px solid ' + (sel ? hp[3] : 'var(--border)') + ';'
+            + (sel ? 'background:color-mix(in srgb,' + hp[3] + ' 10%,transparent)' : '') + '">'
+            + '<div style="font-size:12px;font-weight:600;color:' + (sel ? hp[3] : 'var(--text)') + '">' + hp[1] + '</div>'
+            + '<div style="font-size:10px;color:var(--text3);margin-top:2px">' + hp[2] + '</div>'
+            + '</button>';
+        }).join('')
+      + '</div></div>'
+      + '<div style="margin-top:20px;padding-top:12px;border-top:1px solid var(--border)">'
       + '<div style="display:flex;align-items:center;gap:8px">'
       + '  <button class="btn btn-ghost" onclick="wakePersona(\'' + p.id + '\')" style="font-size:12px">Wake</button>'
       + '  <button class="btn btn-ghost" onclick="sleepPersona(\'' + p.id + '\')" style="font-size:12px">Sleep</button>'
@@ -19893,6 +19890,15 @@ function _pickEmoji(emoji) {
   if (btn) btn.textContent = emoji;
   var picker = document.getElementById('pd-emoji-picker');
   if (picker) picker.style.display = 'none';
+}
+
+async function _setHookProfile(pid, profile) {
+  var r = await api('/api/personas/' + pid, { hook_profile: profile });
+  if (r && r.ok) {
+    toast('Hook profile set to ' + profile, 'ok');
+    var p = window._selectedPersona;
+    if (p) { p.hook_profile = profile; selectPersona(p.id); }
+  } else { toast('Failed', 'err'); }
 }
 
 async function _saveAgentConfig() {
@@ -23602,188 +23608,8 @@ function toast(msg, type='') {
 }
 
 // ── api helpers ──
-// ── onboarding wizard ──────────────────────────────────────────────────────
-let _wizStep = 1, _wizLocAdded = false, _wizAgentCreated = false, _wizPwChanged = false;
-let _wizAgentKey = '', _wizAgentRole = 'writer';
-const WIZ_TOTAL = 6;
-
-function _wizUpdateProgress() {
-  const bar = document.getElementById('wizProgress');
-  if (!bar) return;
-  bar.innerHTML = Array.from({length: WIZ_TOTAL}, (_, i) => {
-    const n = i + 1;
-    const cls = n < _wizStep ? 'done' : n === _wizStep ? 'active' : '';
-    return `<div class="wiz-dot ${cls}"></div>`;
-  }).join('');
-}
-
-function wizShowStep(n) {
-  _wizStep = n;
-  document.querySelectorAll('.wiz-step').forEach((el, i) => {
-    el.classList.toggle('active', i + 1 === n);
-  });
-  if (n === 3) wizScanCapabilities();
-  if (n === 4 && !_wizAgentCreated) {
-    document.getElementById('wiz-agent-key-section').style.display = 'none';
-    document.getElementById('wiz-agent-btn').textContent = 'Create agent';
-    document.getElementById('wiz-agent-btn').onclick = wizCreateAgent;
-    document.getElementById('wiz-agent-skip').style.display = '';
-  }
-  if (n === WIZ_TOTAL) _wizBuildChecklist();
-  _wizUpdateProgress();
-}
-
-function wizNext() { wizShowStep(_wizStep + 1); }
-function wizPrev() { wizShowStep(_wizStep - 1); }
-function wizSkipStep() { wizNext(); }
-
-async function wizScanCapabilities() {
-  const list = document.getElementById('wiz-cap-list');
-  const note = document.getElementById('wiz-gemini-note');
-  if (!list) return;
-  list.innerHTML = '<div class="loading-indicator" style="grid-column:1/-1">Scanning...</div>';
-  if (note) note.style.display = 'none';
-
-  const r = await api('/api/capabilities');
-  if (r && r.capabilities) {
-    let hasGemini = false;
-    list.innerHTML = r.capabilities.map(c => {
-      const ok = c.detected;
-      if (c.id === 'gemini_cli' && ok) hasGemini = true;
-      return `<li class="wiz-cap-item">
-        <span class="wiz-cap-status ${ok ? 'ok' : 'missing'}"></span>
-        <span>${c.name}</span>
-      </li>`;
-    }).join('');
-    if (!hasGemini && note) note.style.display = 'block';
-  } else {
-    list.innerHTML = '<div style="color:var(--danger);grid-column:1/-1">Scan failed</div>';
-  }
-}
-
-async function wizSetPassword() {
-  const p1 = document.getElementById('wiz-pw-1').value;
-  const p2 = document.getElementById('wiz-pw-2').value;
-  if (!p1) { toast('Enter a new password', 'err'); return; }
-  if (p1.length < 8) { toast('Password must be at least 8 characters', 'err'); return; }
-  if (p1 !== p2) { toast('Passwords do not match', 'err'); return; }
-
-  const r = await api('/api/password/change', { new: p1 });
-  if (r && r.ok) {
-    _wizPwChanged = true;
-    toast('Password updated', 'ok');
-    wizNext();
-  } else {
-    toast((r && r.error) || 'Failed to update password', 'err');
-  }
-}
-
-async function wizSkip() {
-  await api('/api/preferences', { onboarding_complete: true });
-  document.getElementById('wizOverlay').classList.remove('open');
-}
-
-async function wizTestPath() {
-  const path = document.getElementById('wiz-loc-path').value.trim();
-  const res = document.getElementById('wiz-path-result');
-  if (!path) { res.textContent = 'Enter a path first.'; res.style.color = 'var(--danger)'; return; }
-  const r = await api('/api/locations/test', { path });
-  if (r && r.ok && r.readable) {
-    res.textContent = r.writable ? '✓ Path exists and is writable' : '✓ Path exists (read-only)';
-    res.style.color = '#4caf50';
-  } else {
-    res.textContent = (r && r.error) || 'Path not accessible';
-    res.style.color = 'var(--danger)';
-  }
-}
-
-async function wizSaveLocation() {
-  const label = document.getElementById('wiz-loc-label').value.trim();
-  const path  = document.getElementById('wiz-loc-path').value.trim();
-  if (!label || !path) { toast('Enter a label and path', 'err'); return; }
-  const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'location';
-  const r = await api('/api/locations', { action: 'add', id, label, type: 'local', path });
-  if (r && r.ok) {
-    _wizLocAdded = true;
-    toast('Location added', 'ok');
-    wizNext();
-  } else {
-    toast((r && r.error) || 'Failed to add location', 'err');
-  }
-}
-
-async function wizCreateAgent() {
-  const name = document.getElementById('wiz-agent-name').value.trim();
-  _wizAgentRole = document.getElementById('wiz-agent-role').value;
-  if (!name) { toast('Enter an agent name', 'err'); return; }
-  const r = await api('/api/agents', { action: 'create', name, role: _wizAgentRole, namespaces: [] });
-  if (r && r.ok) {
-    _wizAgentCreated = true;
-    _wizAgentKey = r.key || '';
-    document.getElementById('wiz-agent-key-display').textContent = _wizAgentKey;
-    document.getElementById('wiz-agent-key-section').style.display = 'block';
-    const btn = document.getElementById('wiz-agent-btn');
-    btn.textContent = 'Continue';
-    btn.onclick = wizNext;
-    document.getElementById('wiz-agent-skip').style.display = 'none';
-    toast('Agent created — copy your key!', 'ok');
-  } else {
-    toast((r && r.error) || 'Failed to create agent', 'err');
-  }
-}
-
-function wizCopyKey() {
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(_wizAgentKey).then(() => toast('Key copied', 'ok'));
-  } else {
-    const ta = document.createElement('textarea');
-    ta.value = _wizAgentKey;
-    document.body.appendChild(ta); ta.select();
-    document.execCommand('copy'); ta.remove();
-    toast('Key copied', 'ok');
-  }
-}
-
-function _wizBuildChecklist() {
-  const items = [
-    { done: _wizLocAdded,
-      label: 'File location added',
-      skip:  'No location added — add one in Settings → Locations' },
-    { done: _wizAgentCreated,
-      label: `Agent created (role: ${_wizAgentRole})`,
-      skip:  'No agent connected — add one in Settings → Agents' },
-    { done: _wizPwChanged,
-      label: 'Operator password updated',
-      skip:  'Password not changed — using default "porter"' },
-  ];
-  document.getElementById('wiz-checklist').innerHTML = items.map(it => `
-    <li>
-      <span class="${it.done ? 'wiz-check-icon' : 'wiz-check-skip'}">${it.done ? '✓' : '—'}</span>
-      <span>${it.done ? it.label : it.skip}</span>
-    </li>`).join('');
-}
-
-async function wizFinish() {
-  await api('/api/preferences', { onboarding_complete: true });
-  document.getElementById('wizOverlay').classList.remove('open');
-  init(); // refresh sidebar with any newly added locations
-}
-
-async function openWizard() {
-  closeSettings();
-  await api('/api/preferences', { onboarding_complete: false });
-  wizShowStep(1);
-  document.getElementById('wizOverlay').classList.add('open');
-}
-
-async function maybeShowWizard() {
-  const prefs = await api('/api/preferences');
-  if (prefs && prefs.onboarding_complete === false) {
-    wizShowStep(1);
-    document.getElementById('wizOverlay').classList.add('open');
-  }
-}
-// ── end wizard ─────────────────────────────────────────────────────────────
+// v0.29.25 — Setup wizard removed (obsolete). Stub for backward compat.
+async function maybeShowWizard() { /* wizard deleted v0.29.25 */ }
 
 
 // ── Global keyboard shortcuts ────────────────────────────────────────────
@@ -23857,142 +23683,8 @@ init();
 
 </script>
 
-<!-- ── onboarding wizard ── -->
-<div class="wiz-overlay" id="wizOverlay">
-  <div class="wiz-dialog">
-    <div class="wiz-progress" id="wizProgress"></div>
+<!-- v0.29.25 — wizard removed -->
 
-    <!-- Step 1: Welcome -->
-    <div class="wiz-step active" id="wiz-step-1">
-      <div class="wiz-step-badge">Welcome</div>
-      <div class="wiz-title">Set up Porter</div>
-      <div class="wiz-subtitle">Connect your file locations and optionally register AI agents. Takes about 2 minutes.</div>
-      <div class="wiz-actions">
-        <button class="btn" onclick="wizNext()">Start setup</button>
-        <button class="btn-skip" onclick="wizSkip()">Skip for now</button>
-      </div>
-    </div>
-
-    <!-- Step 2: Add Location -->
-    <div class="wiz-step" id="wiz-step-2">
-      <div class="wiz-step-badge">Step 1 of 5</div>
-      <div class="wiz-title">Add a location</div>
-      <div class="wiz-subtitle">Connect a directory on this server. You can add more later in Settings → Locations.</div>
-      <div class="wiz-type-cards">
-        <div class="wiz-type-card selected">
-          <div class="wiz-card-icon">📁</div>
-          <div class="wiz-card-label">Local directory</div>
-          <div class="wiz-card-sub">This server</div>
-        </div>
-        <div class="wiz-type-card disabled">
-          <div class="wiz-card-icon">🔌</div>
-          <div class="wiz-card-label">SSH server</div>
-          <div class="wiz-card-sub">Coming soon</div>
-        </div>
-        <div class="wiz-type-card disabled">
-          <div class="wiz-card-icon">🐙</div>
-          <div class="wiz-card-label">GitHub repo</div>
-          <div class="wiz-card-sub">Coming soon</div>
-        </div>
-      </div>
-      <div class="settings-field">
-        <label>Label</label>
-        <input class="settings-input" id="wiz-loc-label" placeholder="e.g. My Files" />
-      </div>
-      <div class="settings-field">
-        <label>Absolute path</label>
-        <div style="display:flex;gap:8px">
-          <input class="settings-input" id="wiz-loc-path" placeholder="/home/user/files" style="flex:1" />
-          <button class="btn-secondary" onclick="wizTestPath()">Test</button>
-        </div>
-        <div id="wiz-path-result" style="font-size:12px;margin-top:6px;color:var(--text3)"></div>
-      </div>
-      <div class="wiz-actions">
-        <button class="btn" onclick="wizSaveLocation()">Add & Continue</button>
-        <button class="btn-secondary" onclick="wizPrev()">Back</button>
-        <button class="btn-skip" onclick="wizSkipStep()">Skip this step</button>
-      </div>
-    </div>
-
-    <!-- Step 3: Capability Scan -->
-    <div class="wiz-step" id="wiz-step-3">
-      <div class="wiz-step-badge">Step 2 of 5</div>
-      <div class="wiz-title">Capability Scan</div>
-      <div class="wiz-subtitle">Scanning system for tools and models. Gemini is highly recommended for research.</div>
-      <ul class="wiz-cap-list" id="wiz-cap-list"></ul>
-      <div id="wiz-gemini-note" style="display:none;font-size:12px;color:var(--text3);margin-bottom:16px;background:rgba(247,147,26,.05);padding:10px;border-radius:8px;border:1px solid rgba(247,147,26,.2)">
-        <span style="color:var(--accent)">💡 Tip:</span> <b>Gemini CLI</b> not found. It provides superior research and multimodal capabilities.
-      </div>
-      <div class="wiz-actions">
-        <button class="btn" onclick="wizNext()">Continue</button>
-        <button class="btn-secondary" onclick="wizScanCapabilities()">Re-scan</button>
-        <button class="btn-secondary" onclick="wizPrev()">Back</button>
-      </div>
-    </div>
-
-    <!-- Step 4: Connect Agent -->
-    <div class="wiz-step" id="wiz-step-4">
-      <div class="wiz-step-badge">Step 3 of 5</div>
-      <div class="wiz-title">Connect an agent</div>
-      <div class="wiz-subtitle">Issue an API key for an AI agent. You can skip this and add agents later in Settings → Agents.</div>
-      <div class="settings-field">
-        <label>Agent name</label>
-        <input class="settings-input" id="wiz-agent-name" placeholder="e.g. openclaw" />
-      </div>
-      <div class="settings-field">
-        <label>Role</label>
-        <select class="settings-input" id="wiz-agent-role">
-          <option value="viewer">Observer — read only</option>
-          <option value="writer" selected>Writer — read + write files</option>
-          <option value="operator">Operator — + checkpoint / finalize</option>
-          <option value="admin">Admin — full access</option>
-        </select>
-      </div>
-      <div id="wiz-agent-key-section" style="display:none">
-        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">API key — copy now, shown once</div>
-        <div class="wiz-key-box" id="wiz-agent-key-display"></div>
-        <div class="wiz-key-note">Save this key — it will not be shown again.</div>
-        <button class="btn-secondary" onclick="wizCopyKey()" style="margin-bottom:16px">Copy key</button>
-      </div>
-      <div class="wiz-actions">
-        <button class="btn" id="wiz-agent-btn" onclick="wizCreateAgent()">Create agent</button>
-        <button class="btn-secondary" onclick="wizPrev()">Back</button>
-        <button class="btn-skip" id="wiz-agent-skip" onclick="wizSkipStep()">Skip this step</button>
-      </div>
-    </div>
-
-    <!-- Step 5: Operator Password -->
-    <div class="wiz-step" id="wiz-step-5">
-      <div class="wiz-step-badge">Step 4 of 5</div>
-      <div class="wiz-title">Operator Password</div>
-      <div class="wiz-subtitle">The default password is <code>porter</code>. Change it now to secure your instance.</div>
-      <div class="settings-field">
-        <label>New password</label>
-        <input type="password" class="settings-input" id="wiz-pw-1" placeholder="Minimum 8 characters" />
-      </div>
-      <div class="settings-field">
-        <label>Confirm password</label>
-        <input type="password" class="settings-input" id="wiz-pw-2" placeholder="Repeat password" />
-      </div>
-      <div class="wiz-actions">
-        <button class="btn" onclick="wizSetPassword()">Set Password & Continue</button>
-        <button class="btn-secondary" onclick="wizPrev()">Back</button>
-        <button class="btn-skip" onclick="wizSkipStep()">Keep default</button>
-      </div>
-    </div>
-
-    <!-- Step 6: Complete -->
-    <div class="wiz-step" id="wiz-step-6">
-      <div class="wiz-step-badge">Done</div>
-      <div class="wiz-title">Porter is ready</div>
-      <div class="wiz-subtitle">Here's what was configured. Adjust everything anytime in Settings.</div>
-      <ul class="wiz-checklist" id="wiz-checklist"></ul>
-      <div class="wiz-actions">
-        <button class="btn" onclick="wizFinish()">Open Porter</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 
 
@@ -24860,7 +24552,7 @@ def _persona_update(persona_id, data):
     """Update persona DB row + optionally SOUL.md."""
     import hashlib
     sets, vals = [], []
-    for field in ("name", "role", "avatar", "preferred_backend", "status", "heartbeat_cron"):
+    for field in ("name", "role", "avatar", "preferred_backend", "status", "heartbeat_cron", "hook_profile"):
         if field in data:
             sets.append(f"{field}=?")
             vals.append(data[field])
@@ -26420,7 +26112,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.24"})
+            self.reply_json({"v": "0.29.25"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26582,7 +26274,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.24"
+                health["porter_version"] = "0.29.25"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28416,7 +28108,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.24'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.25'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32918,7 +32610,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.24 ready (localhost only)")
+    print(f"\n  Porter v0.29.25 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
