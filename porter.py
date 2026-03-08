@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.19 — Multi-fix: Cortex bug, UX improvements"""
+"""Porter v0.29.20 — Skills cleanup + cross-tab agent links"""
 
 
 import email
@@ -8963,7 +8963,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.19</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.20</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10217,6 +10217,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.20', date:'2026-03-08', notes:['Skills: removed Use button (invocation at agent level)','Skills: descriptions clamped to 3 lines','Escape key properly returns to agents grid','Cross-tab agent links: openAgentDetail() helper'] },
   { ver:'v0.29.19', date:'2026-03-08', notes:['Fix: Cortex extraction NameError blocking all new facts since v0.28.45','Removed confusing XP bar from agent cards','Escape key returns to agents grid from agent view','Trello-style drag-and-drop with custom clone + FLIP animation','Dynamic squad colors (removed hardcoded map)'] },
   { ver:'v0.29.18', date:'2026-03-08', notes:['Lean system prompts: ~4.5KB→~2KB per dispatch','Dropped redundant IDENTITY.md + ROLE_CARD.md from prompt','Strip MEMORY.md boilerplate + ship process from RULES.md','Compact squad roster (one line vs 10-line block)'] },
   { ver:'v0.29.17', date:'2026-03-08', notes:['Skills summary stats bar (total, installed, manual, categories)','GPT-5.4 design audit integration'] },
@@ -12701,12 +12702,11 @@ function _buildSkillCard(sk) {
     statusBadge = '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:var(--raised);color:var(--text3)">available</span>';
   }
 
+  // v0.29.20 — removed Use button (skill invocation belongs at agent level, not skill card)
   var actions = '';
   if (installed) {
-    actions += '<button class="btn-xs" style="font-size:10px;padding:2px 10px;border:1px solid var(--accent);border-radius:4px;background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();_useSkillInChat(\'' + escHtml(sk.name || sk.id) + '\')">'
-      + '\u25B6 Use</button>';
     actions += '<button class="btn-xs" style="font-size:10px;padding:2px 8px;border:1px solid var(--border2);border-radius:4px;background:none;color:var(--text3);cursor:pointer" onclick="event.stopPropagation();removeSkill(\'' + escHtml(sk.id) + '\',\'' + name + '\')">'
-      + '\u00d7</button>';
+      + 'Remove</button>';
   } else {
     actions += '<button class="btn-xs" style="font-size:10px;padding:2px 10px;border:1px solid var(--accent);border-radius:4px;background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();installSkill(\'' + escHtml(sk.id || sk.name) + '\',\'' + name + '\')">'
       + (sk.eligible !== false ? 'Install' : 'Setup') + '</button>';
@@ -12726,7 +12726,7 @@ function _buildSkillCard(sk) {
     + '<span style="font-weight:500;font-size:13px;color:var(--text);flex:1;min-width:0;overflow-wrap:break-word">' + name + '</span>'
     + statusBadge
     + '</div>'
-    + '<div style="font-size:11px;color:var(--text3);line-height:1.4;margin-bottom:6px">' + desc + '</div>'
+    + '<div style="font-size:11px;color:var(--text3);line-height:1.4;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">' + desc + '</div>'
     + reqs
     + '<div style="display:flex;gap:6px;margin-top:6px">' + actions + '</div>'
     + '</div>';
@@ -18506,6 +18506,7 @@ async function loadPersonas() {
             var s = statsR.stats[p.id] || globalStats;
             p.confidence = s.confidence || 0;
             p.evidence_count = s.evidence || 0;
+            p.link = '<a onclick="openAgentDetail(\'' + p.id + '\')" style="cursor:pointer;color:var(--accent);text-decoration:none">' + escHtml(p.name) + '</a>';
           });
         }
       } catch(x) {}
@@ -18957,6 +18958,13 @@ function _pDrop(e) {
   api('/api/personas/reorder', { order: ids }).then(function(r) {
     if (r && r.ok) toast('Agent order saved', 'ok');
   });
+}
+
+// v0.29.20 — Cross-tab agent link: navigate to Agents tab and select agent
+function openAgentDetail(personaId) {
+  if (!personaId) return;
+  switchModule('agents');
+  setTimeout(function() { selectPersona(personaId); }, 150);
 }
 
 async function selectPersona(id) {
@@ -20192,15 +20200,10 @@ document.addEventListener('keydown', function(e) {
   // Persona detail slide-out
   var pd = document.getElementById('persona-detail');
   if (pd && pd.classList.contains('open')) { closePersonaDetail(); e.stopPropagation(); return; }
-  // v0.29.19 — Deselect agent and go back to agents grid
-  if (typeof _selectedPersona !== 'undefined' && _selectedPersona && document.getElementById('agents-module') && document.getElementById('agents-module').classList.contains('active')) {
-    _selectedPersona = null;
-    document.querySelectorAll('.persona-card.selected').forEach(function(c) { c.classList.remove('selected'); });
-    var agentDetail = document.getElementById('agent-detail-area');
-    if (agentDetail) agentDetail.style.display = 'none';
-    var agentGrid = document.getElementById('persona-cards-row');
-    if (agentGrid) agentGrid.scrollIntoView({ behavior: 'smooth' });
-    e.stopPropagation(); return;
+  // v0.29.20 — Escape from agent detail view back to grid
+  var _adv = document.getElementById('agent-detail-view');
+  if (_adv && _adv.style.display !== 'none' && typeof closePersonaDetail === 'function') {
+    closePersonaDetail(); e.stopPropagation(); return;
   }
   // Model activity slide-out
   var ma = document.getElementById('model-activity-panel');
@@ -25933,7 +25936,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.19"})
+            self.reply_json({"v": "0.29.20"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26095,7 +26098,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.19"
+                health["porter_version"] = "0.29.20"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27904,7 +27907,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.19'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.20'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32385,7 +32388,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.19 ready (localhost only)")
+    print(f"\n  Porter v0.29.20 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
