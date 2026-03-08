@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.1 — Full-page agent detail view (kill slide-out panel)"""
+"""Porter v0.29.2 — System prompt truthfulness (show actual runtime prompt)"""
 
 
 import email
@@ -8915,7 +8915,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.1</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.2</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10174,6 +10174,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.2', date:'2026-03-08', notes:['System prompt viewer now shows actual runtime prompt (not bloated file dump)','What you see = what agents actually get dispatched','Removed DELIVERABLES.md/full MEMORY.md from prompt viewer'] },
   { ver:'v0.29.1', date:'2026-03-08', notes:['Kill slide-out panel: full-page agent detail view replaces 520px drawer','Agent identity card with avatar, name, role, group, status, backend badges','New Overview tab as default landing for agent detail','New Memory tab showing agent-scoped Cortex learnings inline','Back button returns to agent grid, no overlay needed'] },
   { ver:'v0.29.0', date:'2026-03-08', notes:['Phase 0: 8 surgical fixes from GPT-5.4 code audit','Fix skill install body.get bug, system prompt endpoint, switchPdTab null-crash','Fix skill detection normalization, show all 55 skills, surface silent errors','Fix tasks/projects routing, dead code cleanup'] },
   { ver:'v0.28.54', date:'2026-03-08', notes:['Spatial agent status: cards pulse green when dispatching, shake on error, glow on active','Live inspection tab: real-time SSE stream of dispatch events in agent slide-out panel','Quest log: Command Center shows pending QA escalations and agent decisions needing input','Agent XP: confidence score and evidence count shown on agent cards as XP bar'] },
@@ -25426,7 +25427,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"ok": True, "personas": personas})
 
 
-        # ── v0.29.0 — System Prompt endpoint ────────────────────────
+        # ── v0.29.2 — System Prompt endpoint (shows actual runtime prompt) ──
         elif parsed.path.startswith("/api/persona") and parsed.path.endswith("/system-prompt"):
             if not self.auth_check(redirect=False): return
             pid = parsed.path.split("/")[3]
@@ -25434,29 +25435,20 @@ class Handler(BaseHTTPRequestHandler):
             if not p:
                 self.reply_json({"ok": False, "error": "Persona not found"}, 404); return
             try:
-                prompt_parts = []
-                persona_dir = PERSONAS_DIR / pid
-                for fname in ["SOUL.md", "IDENTITY.md", "ROLE_CARD.md", "RULES.md", "DELIVERABLES.md", "MEMORY.md"]:
-                    fpath = persona_dir / fname
-                    if fpath.exists():
-                        content = fpath.read_text(encoding="utf-8", errors="replace")[:8000]
-                        prompt_parts.append(f"=== {fname} ===\n{content}")
-                global_rules = PERSONAS_DIR / "RULES.md"
-                if global_rules.exists():
-                    prompt_parts.append(f"=== GLOBAL RULES ===\n{global_rules.read_text(encoding='utf-8', errors='replace')[:4000]}")
-                try:
-                    conn = _db_conn()
-                    facts = conn.execute(
-                        "SELECT fact FROM cortex_memories WHERE status='active' AND "
-                        "(scope='global' OR (scope='agent' AND scope_id=?)) "
-                        "ORDER BY confidence DESC, importance DESC LIMIT 20", (pid,)
-                    ).fetchall()
-                    conn.close()
-                    if facts:
-                        prompt_parts.append("=== CORTEX MEMORIES ===\n" + "\n".join(f"- {r[0]}" for r in facts))
-                except Exception:
-                    pass
-                full_prompt = "\n\n".join(prompt_parts)
+                pname = p.get("name", "Agent")
+                prole = p.get("role", "")
+                role_line = f"Role: {prole}\n" if prole else ""
+                system_block = (
+                    f"=== SYSTEM PROMPT ===\n"
+                    f"You are {pname}.\n"
+                    f"{role_line}"
+                    f"Voice: first person, conversational, direct.\n"
+                    f"Format: short paragraphs, markdown when useful, front-load the answer.\n"
+                    f"Rule: Never mention which AI model or backend you run on.\n"
+                    f"=== END SYSTEM PROMPT ==="
+                )
+                ctx_suffix = _build_context_suffix(pid, message="(system prompt preview)")
+                full_prompt = f"{system_block}\n\n{ctx_suffix}"
                 self.reply_json({"ok": True, "persona": p.get("name", ""), "prompt": full_prompt, "length": len(full_prompt)})
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)[:200]}, 500)
@@ -25550,7 +25542,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.1"})
+            self.reply_json({"v": "0.29.2"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25712,7 +25704,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.1"
+                health["porter_version"] = "0.29.2"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27521,7 +27513,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.1'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.2'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31943,7 +31935,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.1 ready (localhost only)")
+    print(f"\n  Porter v0.29.2 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
