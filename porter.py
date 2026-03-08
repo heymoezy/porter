@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.60 — Fix locations module forms, cleanup dead code"""
+"""Porter v0.29.61 — Fix workflow interval save and skill proposal actions"""
 
 
 import email
@@ -9157,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.60</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.61</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10404,6 +10404,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.61', date:'2026-03-08', notes:['FIX: workflow interval save now works (handler moved from GET to POST)','FIX: skill proposal approve/dismiss now works (handler moved from GET to POST)'] },
   { ver:'v0.29.60', date:'2026-03-08', notes:['FIX: locations module Add Location form now works (moved from dead settings page)','Removed dead spage-locations, spage-apikeys settings pages','Fixed duplicate id=pd-content (renamed slide-out to pd-content-slideout)','Removed orphaned orchestration cleanup code'] },
   { ver:'v0.29.59', date:'2026-03-08', notes:['Replace last 6 native confirm() dialogs with Porter-style modals','Agent workspace + file preview editors now use themed dialogs'] },
   { ver:'v0.29.58', date:'2026-03-08', notes:['FIX: chat welcome recent chats now clickable (was loadChatSession→loadChatSession)','FIX: project agent cards now clickable (was openPersonaDetail→switchModule+selectPersona)','FIX: location form Cancel/Save buttons now work (was undefined functions)','Removed dead wizard button from settings','Removed 5 empty stub functions','Fixed duplicate style attribute on cortex status'] },
@@ -27547,7 +27548,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.60"})
+            self.reply_json({"v": "0.29.61"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27709,7 +27710,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.60"
+                health["porter_version"] = "0.29.61"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29436,50 +29437,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
-        elif parsed.path.startswith("/api/skills/proposals/"):
-            if not self.auth_check(redirect=False): return
-            data = self.read_json_body()
-            parts = parsed.path.split("/")
-            prop_id = parts[4] if len(parts) > 4 else ""
-            action = data.get("action", "")
-            if action == "approve":
-                try:
-                    conn = _db_conn()
-                    conn.execute("UPDATE skill_proposals SET status='approved', updated_at=strftime('%s','now') WHERE id=?", (prop_id,))
-                    conn.commit(); conn.close()
-                    self.reply_json({"ok": True})
-                except Exception as e:
-                    self.reply_json({"ok": False, "error": str(e)}, 500)
-            elif action == "dismiss":
-                try:
-                    conn = _db_conn()
-                    conn.execute("UPDATE skill_proposals SET status='dismissed', updated_at=strftime('%s','now') WHERE id=?", (prop_id,))
-                    conn.commit(); conn.close()
-                    self.reply_json({"ok": True})
-                except Exception as e:
-                    self.reply_json({"ok": False, "error": str(e)}, 500)
-            else:
-                self.reply_json({"ok": False, "error": "Unknown action"}, 400)
-
-        elif parsed.path.startswith("/api/workflows/") and parsed.path.endswith("/interval"):
-            if not self.auth_check(redirect=False): return
-            wf_id = parsed.path.split("/")[3]
-            data = self.read_json_body()
-            if not data:
-                self.reply_json({"ok": False, "error": "Invalid request body"}, 400)
-                return
-            interval = data.get("interval", "")
-            interval_s = data.get("interval_s", 0)
-            with _wf_lock:
-                if wf_id in _wf_registry:
-                    _wf_registry[wf_id]["interval"] = interval
-                    _wf_registry[wf_id]["interval_s"] = interval_s
-                    wf_cfg = _config.setdefault("workflow_intervals", {})
-                    wf_cfg[wf_id] = {"interval": interval, "interval_s": interval_s}
-                    save_config(_config)
-                    self.reply_json({"ok": True})
-                else:
-                    self.reply_json({"ok": False, "error": "Workflow not found"}, 404)
 
         elif parsed.path == "/api/agents/eval-run":
             if not self.auth_check(redirect=False): return
@@ -29553,7 +29510,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.60'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.61'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -33787,6 +33744,51 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             else:
                 self.reply_json(result)
 
+        elif parsed.path.startswith("/api/skills/proposals/"):
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            parts = parsed.path.split("/")
+            prop_id = parts[4] if len(parts) > 4 else ""
+            action = data.get("action", "")
+            if action == "approve":
+                try:
+                    conn = _db_conn()
+                    conn.execute("UPDATE skill_proposals SET status='approved', updated_at=strftime('%s','now') WHERE id=?", (prop_id,))
+                    conn.commit(); conn.close()
+                    self.reply_json({"ok": True})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
+            elif action == "dismiss":
+                try:
+                    conn = _db_conn()
+                    conn.execute("UPDATE skill_proposals SET status='dismissed', updated_at=strftime('%s','now') WHERE id=?", (prop_id,))
+                    conn.commit(); conn.close()
+                    self.reply_json({"ok": True})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
+            else:
+                self.reply_json({"ok": False, "error": "Unknown action"}, 400)
+
+        elif parsed.path.startswith("/api/workflows/") and parsed.path.endswith("/interval"):
+            if not self.auth_check(redirect=False): return
+            wf_id = parsed.path.split("/")[3]
+            data = self.read_json_body()
+            if not data:
+                self.reply_json({"ok": False, "error": "Invalid request body"}, 400)
+                return
+            interval = data.get("interval", "")
+            interval_s = data.get("interval_s", 0)
+            with _wf_lock:
+                if wf_id in _wf_registry:
+                    _wf_registry[wf_id]["interval"] = interval
+                    _wf_registry[wf_id]["interval_s"] = interval_s
+                    wf_cfg = _config.setdefault("workflow_intervals", {})
+                    wf_cfg[wf_id] = {"interval": interval, "interval_s": interval_s}
+                    save_config(_config)
+                    self.reply_json({"ok": True})
+                else:
+                    self.reply_json({"ok": False, "error": "Workflow not found"}, 404)
+
         else:
             self.reply_html("<h1>Not found</h1>", 404)
 
@@ -34093,7 +34095,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.60 ready (localhost only)")
+    print(f"\n  Porter v0.29.61 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
