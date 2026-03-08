@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.64 — Fix keyboard shortcuts tab mapping"""
+"""Porter v0.29.65 — Fix squad skill assign, project rename, capability timing"""
 
 
 import email
@@ -2187,6 +2187,7 @@ def _run_cap_checks(force: bool = False):
     global _capabilities_cache_ts
     if not force and _capabilities_cache and (time.time() - _capabilities_cache_ts) < 30:
         return  # Cache is fresh enough
+    _cap_start_t = time.time()
     checked = {}
     for cap in AI_PROVIDERS + CAPABILITIES:
         try:
@@ -2209,10 +2210,11 @@ def _run_cap_checks(force: bool = False):
                 "error": str(exc),
             }
     _capabilities_cache.update(checked)
+    _cap_check_duration = time.time() - _cap_start_t
     _capabilities_cache_ts = time.time()
     _wf_record_run("capability_checks", success=True,
                     result=f"{sum(1 for v in checked.values() if v.get('ok'))}/{len(checked)} ok",
-                    duration_s=time.time()-_capabilities_cache_ts+0.001)
+                    duration_s=_cap_check_duration)
     try:
         (RUNTIME_DIR / "capabilities.json").write_text(
             json.dumps(list(checked.values()), indent=2)
@@ -9169,7 +9171,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.64</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.65</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10416,6 +10418,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.65', date:'2026-03-08', notes:['FIX: squad skill assign now uses correct /api/openclaw/skills endpoint','FIX: project rename API call was double-wrapped (never worked)','FIX: capability check duration timing was always ~0s'] },
   { ver:'v0.29.64', date:'2026-03-08', notes:['Fix number key shortcuts to match nav order (1-Chat, 2-Agents, 3-Skills, ..., 9-Cortex)','Updated shortcuts overlay to show tab mapping'] },
   { ver:'v0.29.63', date:'2026-03-08', notes:['Better empty states with icons for Workflows, Skills, Capabilities tabs'] },
   { ver:'v0.29.62', date:'2026-03-08', notes:['Light theme: fix hardcoded dark colors (autocomplete, menus, borders)','Panel fade-in animation on tab switch','Loading timeouts with retry buttons on Models, Workflows, Cortex'] },
@@ -20041,7 +20044,7 @@ async function _loadSquadSkills(squadId, memberIds) {
 
 async function _assignSkillToSquadFromEdit(squadId) {
   try {
-    var data = await api('/api/skills');
+    var data = await api('/api/openclaw/skills');
     var allSkills = (data && data.skills) || [];
     if (!allSkills.length) { toast('No skills available', 'err'); return; }
     var items = allSkills.map(function(sk) { return {id: sk.id, label: sk.name || sk.id, sub: sk.description || ''}; });
@@ -22027,11 +22030,7 @@ async function saveProjectConfig(projId) {
 async function promptRenameProject(pid, currentName) {
   const newName = await porterPrompt('Rename Project', 'Enter new project name:', currentName);
   if (newName === null || !newName.trim() || newName.trim() === currentName) return;
-  const d = await api('/api/projects', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ action: 'update', project_id: pid, name: newName.trim() })
-  });
+  const d = await api('/api/projects', { action: 'update', project_id: pid, name: newName.trim() });
   if (d && d.ok) {
     toast('Project renamed');
     _projFileCache = {};
@@ -27563,7 +27562,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.64"})
+            self.reply_json({"v": "0.29.65"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27725,7 +27724,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.64"
+                health["porter_version"] = "0.29.65"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29525,7 +29524,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.64'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.65'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34110,7 +34109,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.64 ready (localhost only)")
+    print(f"\n  Porter v0.29.65 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
