@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.29 — Cortex alpha polish (search, filter bar, anim loop, config load, tooltip clamp)"""
+"""Porter v0.28.30 — HiDPI canvas, XSS hardening, graph rendering polish"""
 
 
 import email
@@ -8543,7 +8543,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.29</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.30</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9809,6 +9809,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.30', date:'2026-03-08', notes:['Memory map: HiDPI/Retina canvas scaling (devicePixelRatio)','Memory map: crisp text and nodes on 2x+ displays','XSS: escaped graph tooltip labels, error messages','All graph functions use CSS-pixel math (fit, center, simulation)'] },
   { ver:'v0.28.29', date:'2026-03-08', notes:['Cortex: text search in learnings sidebar','Cortex: filter indicator bar with clear button on node click','Cortex: ambient animation loop (pulsing hub ring, particles)','Cortex: config loads archive_days + min_use from saved prefs','Cortex: scope badge updates color on edit','Cortex: tooltip clamped to canvas bounds','Cortex: inbox count badge now visible','Cortex: consistent fact/facts pluralization'] },
   { ver:'v0.28.28', date:'2026-03-07', notes:['Fixed: extraction progress counts match model card session counts','Counts per-source (openclaw/claude/gemini/codex/ollama) excluding archived','No more phantom sessions in total'] },
   { ver:'v0.28.27', date:'2026-03-07', notes:['Models: extraction progress card with play button, correct session counts','Workflows: fixed screen flashing (lightweight refresh, no rebuild)','Workflows: removed skill/ext sections (system workflows only)','Workflows: wider interval input box','Fixed: heartbeat _db() → _db_conn() error','Fixed: cortex stats session counting (uses actual session loaders)'] },
@@ -12271,7 +12272,7 @@ async function loadCapabilities() {
         renderGwsPanel();
       }
     })
-    .catch(function(e) { if (toolsEl) toolsEl.innerHTML = '<div style="color:var(--err);font-size:13px">Could not load: ' + e.message + '</div>'; });
+    .catch(function(e) { if (toolsEl) toolsEl.innerHTML = '<div style="color:var(--err);font-size:13px">Could not load: ' + escHtml(e.message) + '</div>'; });
 }
 
 function _capSkeletons(n) {
@@ -16918,6 +16919,8 @@ function _fitGraphToView() {
   if (window._cxGraphLocked) return;
   var canvas = document.getElementById('cx-graph-canvas');
   if (!canvas || !_graphNodes.length) { _graphZoom = {x: 0, y: 0, scale: 1}; _drawGraph(); return; }
+  var dpr = window._cxDpr || 1;
+  var cw = canvas.width / dpr, ch = canvas.height / dpr;
   var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   _graphNodes.forEach(function(n) {
     var r = n.radius || 20;
@@ -16928,14 +16931,14 @@ function _fitGraphToView() {
   });
   var gw = maxX - minX || 1, gh = maxY - minY || 1;
   var padding = 0.08;
-  var scaleX = canvas.width * (1 - padding * 2) / gw;
-  var scaleY = canvas.height * (1 - padding * 2) / gh;
+  var scaleX = cw * (1 - padding * 2) / gw;
+  var scaleY = ch * (1 - padding * 2) / gh;
   var scale = Math.min(scaleX, scaleY, 2);
   if (scale < 0.5) scale = 0.5;
   var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
   _graphZoom.scale = scale;
-  _graphZoom.x = canvas.width / 2 - cx * scale;
-  _graphZoom.y = canvas.height / 2 - cy * scale;
+  _graphZoom.x = cw / 2 - cx * scale;
+  _graphZoom.y = ch / 2 - cy * scale;
   _drawGraph();
   _saveGraphZoom();
 }
@@ -16943,12 +16946,14 @@ function _centerGraph() {
   if (window._cxGraphLocked) return;
   var canvas = document.getElementById('cx-graph-canvas');
   if (!canvas || !_graphNodes.length) return;
+  var dpr = window._cxDpr || 1;
+  var cw = canvas.width / dpr, ch = canvas.height / dpr;
   var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   _graphNodes.forEach(function(n) { if (n.x < minX) minX = n.x; if (n.y < minY) minY = n.y; if (n.x > maxX) maxX = n.x; if (n.y > maxY) maxY = n.y; });
   var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
   _graphZoom.scale = 1;
-  _graphZoom.x = canvas.width / 2 - cx;
-  _graphZoom.y = canvas.height / 2 - cy;
+  _graphZoom.x = cw / 2 - cx;
+  _graphZoom.y = ch / 2 - cy;
   _drawGraph();
   _saveGraphZoom();
 }
@@ -16999,16 +17004,17 @@ function _graphFilterScope(scope, btn) {
 async function _initMemoryGraph() {
   var canvas = document.getElementById('cx-graph-canvas');
   if (!canvas) return;
-  // Use CSS pixel dimensions (no DPI scaling — let CSS handle it)
+  var dpr = window.devicePixelRatio || 1;
   var container = canvas.parentElement;
   var w = container ? container.clientWidth : 700;
   var h = container ? container.clientHeight : 400;
   if (w < 100) w = 700;
   if (h < 100) h = 400;
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
   canvas.style.width = w + 'px';
   canvas.style.height = h + 'px';
+  window._cxDpr = dpr;
   // v0.28.12 — Resize canvas when window resizes (fixed: redraw + style update)
   window._cxResizeTimer = null;
   window.addEventListener('resize', function() {
@@ -17020,8 +17026,10 @@ async function _initMemoryGraph() {
       var nw = c2.parentElement.clientWidth || 700;
       var nh = c2.parentElement.clientHeight || 400;
       if (nw > 100 && nh > 100) {
-        c2.width = nw; c2.height = nh;
+        var dpr2 = window.devicePixelRatio || 1;
+        c2.width = nw * dpr2; c2.height = nh * dpr2;
         c2.style.width = nw + 'px'; c2.style.height = nh + 'px';
+        window._cxDpr = dpr2;
         _fitGraphToView();
       }
     }, 200);
@@ -17038,6 +17046,7 @@ async function _initMemoryGraph() {
       }
       window._graphRetried = false;
       var ctx = canvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text3').trim() || '#888';
       ctx.font = '14px system-ui';
       ctx.textAlign = 'center';
@@ -17082,6 +17091,7 @@ async function _initMemoryGraph() {
   } catch(e) {
     console.debug('Graph init error:', e);
     var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#888';
     ctx.font = '13px system-ui';
     ctx.textAlign = 'center';
@@ -17147,8 +17157,8 @@ function _setupGraphInteraction(canvas) {
       if (hovered && tip) {
         var typeLabels = {cortex:'Inbox Hub', agent:'Agent', project:'Project', global:'Global'};
         var typeColors = {cortex:'#8b5cf6', agent:'#22d3ee', project:'#fbbf24', global:'#4ade80'};
-        var html = '<div style="font-weight:600;margin-bottom:4px">' + (hovered.emoji || '') + ' ' + (hovered.label || '') + '</div>';
-        if (hovered.role) html += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px;font-style:italic">' + hovered.role + '</div>';
+        var html = '<div style="font-weight:600;margin-bottom:4px">' + escHtml(hovered.emoji || '') + ' ' + escHtml(hovered.label || '') + '</div>';
+        if (hovered.role) html += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px;font-style:italic">' + escHtml(hovered.role) + '</div>';
         html += '<span style="display:inline-block;font-size:9px;padding:1px 6px;border-radius:3px;background:' + (typeColors[hovered.type]||'#666') + '20;color:' + (typeColors[hovered.type]||'#888') + ';border:1px solid ' + (typeColors[hovered.type]||'#666') + '40">' + (typeLabels[hovered.type]||hovered.type) + '</span>';
         html += '<div style="margin-top:4px;font-size:11px;color:var(--text3)">' + (hovered.count || 0) + ' memories</div>';
         tip.innerHTML = html;
@@ -17244,7 +17254,8 @@ function _runGraphSimulation(canvas) {
       if (!b.fixed) { b.vx -= fx; b.vy -= fy; }
     });
     // Center gravity
-    var cx = canvas.width / 2, cy = canvas.height / 2;
+    var dpr3 = window._cxDpr || 1;
+    var cx = (canvas.width / dpr3) / 2, cy = (canvas.height / dpr3) / 2;
     _graphNodes.forEach(function(n) {
       if (n.fixed) return;
       n.vx += (cx - n.x) * 0.001 * alpha;
@@ -17265,10 +17276,12 @@ function _drawGraph() {
   var canvas = document.getElementById('cx-graph-canvas');
   if (!canvas) return;
   var ctx = canvas.getContext('2d');
-  var w = canvas.width, h = canvas.height;
+  var dpr = window._cxDpr || 1;
+  var w = canvas.width / dpr, h = canvas.height / dpr;
   var cs = getComputedStyle(document.documentElement);
   var bgColor = cs.getPropertyValue('--bg2').trim() || '#111';
   var textColor = cs.getPropertyValue('--text').trim() || '#eee';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, w, h);
@@ -24804,7 +24817,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.29"})
+            self.reply_json({"v": "0.28.30"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24966,7 +24979,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.29"
+                health["porter_version"] = "0.28.30"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26786,7 +26799,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.29'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.30'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31004,7 +31017,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.29 ready (localhost only)")
+    print(f"\n  Porter v0.28.30 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
