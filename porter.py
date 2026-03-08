@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.4 — Performance: gzip + ETag + parallel init"""
+"""Porter v0.29.6 — Chat bug fixes (GPT-5.4 audit)"""
 
 
 import email
@@ -8916,7 +8916,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.4</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.6</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10175,6 +10175,8 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.6', date:'2026-03-08', notes:['Fix: undefined avatar in chat agent selector (null-safe)','XSS escape in chat context selector labels','Optimized persona poll (direct DOM update, no full chat rerender)','Null guard in persona dispatch'] },
+  { ver:'v0.29.5', date:'2026-03-08', notes:['Click-to-edit name/role/avatar in agent identity card','Profile editing integrated into header (not separate section)','Saves inline on Enter/blur'] },
   { ver:'v0.29.4', date:'2026-03-08', notes:['Performance: gzip compression on HTML+JSON (848KB\u2192~100KB)','ETag caching with 304 Not Modified for main page','Parallel init() API calls (no sequential awaits)','Cortex DB covering index for faster queries'] },
   { ver:'v0.29.3', date:'2026-03-08', notes:['Fix: undefined agent name in chat (missing avatar in Chat with Agent)','Removed dead Quests section from chat welcome','Chat with Agent now switches to chat tab properly','Removed redundant Quick Settings from Identity tab'] },
   { ver:'v0.29.2', date:'2026-03-08', notes:['System prompt viewer now shows actual runtime prompt (not bloated file dump)','What you see = what agents actually get dispatched','Removed DELIVERABLES.md/full MEMORY.md from prompt viewer'] },
@@ -18330,9 +18332,9 @@ function buildChatCtxSelectors() {
     var el = document.getElementById(containerId);
     if (!el) return;
 
-    var agentLabel = _chatAgent ? _chatAgent.avatar + ' ' + _chatAgent.name : 'No Agent';
-    var projectLabel = _chatProject ? (_chatProject.id === '_personality' ? '🎭 Personality' : '📁 ' + _chatProject.name) : 'General';
-    var modelLabel = _chatModel ? _chatModel.charAt(0).toUpperCase() + _chatModel.slice(1) : 'Auto';
+    var agentLabel = _chatAgent ? ((_chatAgent.avatar || '\u{1F916}') + ' ' + escHtml(_chatAgent.name || 'Agent')) : 'No Agent';
+    var projectLabel = _chatProject ? (_chatProject.id === '_personality' ? '\u{1F3AD} Personality' : '\u{1F4C1} ' + escHtml(_chatProject.name || '?')) : 'General';
+    var modelLabel = _chatModel ? escHtml(_chatModel.charAt(0).toUpperCase() + _chatModel.slice(1)) : 'Auto';
 
     el.innerHTML = ''
       + '<div class="chat-ctx-sel' + (_chatAgent ? ' active' : '') + '" onclick="_ctxToggle(event,\'agent\')">'
@@ -18464,6 +18466,7 @@ function _ctxPick(event, type, value) {
 }
 
 async function _dispatchToPersonaChat(persona, message) {
+  if (!persona || !persona.id) { toast('Invalid agent selected','err'); return; }
   // Dispatch a message to a persona via chat, showing response as assistant message
   var waitIdx = _chatMessages.length;
   _chatMessages.push({ role: 'assistant', content: '\u23f3 ' + persona.name + ' is thinking...', model: persona.preferred_backend || 'auto', _pending: true });
@@ -18531,7 +18534,7 @@ async function _pollPersonaResponse(runId, persona, waitIdx) {
     dots = (dots + 1) % 4;
     if (_chatMessages[waitIdx] && _chatMessages[waitIdx]._pending) {
       _chatMessages[waitIdx].content = '\u23f3 ' + baseMsg + '.'.repeat(dots + 1);
-      renderChatMessages();
+      (function(){var _pe=document.querySelector(".chat-msg:last-child .chat-msg-body");if(_pe)_pe.innerHTML=escHtml(_chatMessages[waitIdx].content)})();
     }
     try {
       const r = await api('/api/bridge/runs?limit=1&run_id=' + runId, null, 30000);
@@ -18738,6 +18741,41 @@ async function selectPersona(id) {
     if (bb) bb.textContent = p.preferred_backend || 'auto-route';
     switchPdTab('overview');
   } catch(e) { console.error('selectPersona failed', e); if (typeof toast === 'function') toast('Failed to open agent','err'); }
+}
+
+// v0.29.5 — Inline edit for identity card fields
+function _editCardField(field) {
+  var p = window._selectedPersona;
+  if (!p) return;
+  var elId = field === 'avatar' ? 'pd-avatar2' : field === 'name' ? 'pd-name2' : 'pd-role2';
+  var el = document.getElementById(elId);
+  if (!el || el.querySelector('input')) return;
+  var cur = field === 'avatar' ? (p.avatar || '\u{1F916}') : field === 'name' ? p.name : (p.role || '');
+  var w = field === 'avatar' ? '48px' : '100%';
+  var fs = field === 'avatar' ? '20px' : field === 'name' ? '16px' : '12px';
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.value = cur;
+  input.className = 'settings-input';
+  input.style.cssText = 'width:' + w + ';font-size:' + fs + ';padding:2px 6px;margin:-2px 0';
+  el.textContent = '';
+  el.appendChild(input);
+  input.focus();
+  input.select();
+  function save() {
+    var val = input.value.trim();
+    if (!val && field === 'name') val = cur;
+    p[field] = val;
+    if (field === 'avatar') { el.textContent = val; p.avatar = val; }
+    else if (field === 'name') { el.textContent = val; p.name = val; }
+    else { el.textContent = val || 'No role'; p.role = val; }
+    var body = {};
+    body[field] = val;
+    api('/api/personas/' + p.id, { method:'POST', body: JSON.stringify(Object.assign({action:'update'}, body)) });
+    toast('Saved');
+  }
+  input.onblur = save;
+  input.onkeydown = function(e) { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } if (e.key === 'Escape') { el.textContent = cur; } };
 }
 
 function closePersonaDetail() {
@@ -25577,7 +25615,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.4"})
+            self.reply_json({"v": "0.29.6"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25739,7 +25777,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.4"
+                health["porter_version"] = "0.29.6"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27548,7 +27586,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.4'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.6'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31970,7 +32008,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.4 ready (localhost only)")
+    print(f"\n  Porter v0.29.6 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
