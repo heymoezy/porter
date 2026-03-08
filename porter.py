@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.52 — Kraken market skills, crypto squad assignments"""
+"""Porter v0.29.53 — Richer project agent cards, upload validation"""
 
 
 import email
@@ -9157,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.52</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.53</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10451,6 +10451,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.53', date:'2026-03-08', notes:['Project agent cards now show role, backend, skills count, and squad','Upload response validated (was silently ignoring errors)','Upload error now shown as toast notification'] },
   { ver:'v0.29.52', date:'2026-03-08', notes:['8 Kraken public market data skills created (ticker, OHLC, orderbook, spread, assets, pairs, status, trades)','Crypto Squad agents assigned appropriate Kraken skills','Dev Squad agents assigned coding/github/research skills','Skill recommendation engine now includes crypto/trading patterns'] },
   { ver:'v0.29.51', date:'2026-03-08', notes:['FIX: empty extractions now persisted (prevents infinite retry loops)','FIX: session loading limits raised (Claude 15→50, Porter 100→200)','Added /api/cortex/consolidate endpoint for manual memory consolidation','Added Porter chat sessions to extraction batch'] },
   { ver:'v0.29.50', date:'2026-03-08', notes:['FIX: agent card delete uses Porter confirm instead of system confirm','FIX: project delete uses Porter confirm instead of system confirm','FIX: cortex memory filter defaults to show all (cx-show-routed ghost element removed)','Removed dead code references'] },
@@ -13375,9 +13376,26 @@ async function _renderProjTabContent() {
         var p = (_personas || []).find(function(x) { return x.id === pid; });
         var name = p ? p.name : pid.slice(0,8);
         var avatar = p ? (p.avatar || '\u{1f916}') : '\u{1f916}';
-        html += '<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:12px">';
-        html += '<span>' + avatar + '</span><span style="color:var(--text)">' + escHtml(name) + '</span>';
-        html += '<button onclick="_projUnassign(\x27' + proj.id + '\x27,\x27' + pid + '\x27)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 2px" title="Remove">&times;</button>';
+        var role = p ? (p.role || '') : '';
+        var backend = p ? (p.preferred_backend || 'auto') : '';
+        var group = p ? (p.agent_group || '') : '';
+        var skillCount = (p && p.skills) ? p.skills.length : 0;
+        // Find squad membership
+        var squadName = '';
+        (_squads || []).forEach(function(sq) {
+          if (sq.members && sq.members.indexOf(pid) >= 0) squadName = sq.name;
+        });
+        html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);font-size:12px;min-width:200px;cursor:pointer" onclick="openPersonaDetail(\x27' + pid + '\x27)">';
+        html += '<span style="font-size:22px">' + avatar + '</span>';
+        html += '<div style="flex:1;min-width:0">';
+        html += '<div style="font-weight:600;color:var(--text)">' + escHtml(name) + '</div>';
+        if (role) html += '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + escHtml(role) + '</div>';
+        html += '<div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">';
+        if (backend) html += '<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:var(--raised);color:var(--text3)">' + escHtml(backend) + '</span>';
+        if (squadName) html += '<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:color-mix(in srgb, var(--accent) 15%, var(--bg));color:var(--accent)">' + escHtml(squadName) + '</span>';
+        if (skillCount) html += '<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:var(--raised);color:var(--text3)">' + skillCount + ' skills</span>';
+        html += '</div></div>';
+        html += '<button onclick="event.stopPropagation();_projUnassign(\x27' + proj.id + '\x27,\x27' + pid + '\x27)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 2px;flex-shrink:0" title="Remove">&times;</button>';
         html += '</div>';
       });
       html += '</div>';
@@ -24443,6 +24461,14 @@ async function uploadOne(file) {
     xhr.onload = () => {
       bar.classList.remove('visible');
       if (xhr.status === 200) {
+        try {
+          var resp = JSON.parse(xhr.responseText);
+          if (resp && resp.ok === false) {
+            toast(resp.error || 'Upload failed', 'err');
+            resolve(false);
+            return;
+          }
+        } catch(e) { /* non-JSON response is fine */ }
         if (uploadQueue.length <= 1) toast(`Uploaded ${file.name}`, 'ok');
         resolve(true);
       } else {
@@ -27511,7 +27537,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.52"})
+            self.reply_json({"v": "0.29.53"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27673,7 +27699,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.52"
+                health["porter_version"] = "0.29.53"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29517,7 +29543,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.52'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.53'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34057,7 +34083,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.52 ready (localhost only)")
+    print(f"\n  Porter v0.29.53 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
