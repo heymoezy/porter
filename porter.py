@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.54 — Spatial agent status, live inspection, quest log, agent XP"""
+"""Porter v0.29.0 — Phase 0 stability: 8 surgical fixes from GPT-5.4 audit"""
 
 
 import email
@@ -990,12 +990,6 @@ def _loop_guard_check(chat_id, sender_is_human=False):
             return False, f"Loop guard: {state['hop_count']} consecutive agent hops — paused to prevent runaway. Send a message to resume."
         return True, ""
 
-def _loop_guard_reset(chat_id):
-    """Reset loop guard for a chat (e.g., on /continue command)."""
-    with _loop_guard_lock:
-        if chat_id in _loop_guard:
-            _loop_guard[chat_id]["hop_count"] = 0
-            _loop_guard[chat_id]["paused"] = False
 
 # v0.28.4 — Cursor-based reads: per-agent read position tracking
 _agent_cursors = {}  # agent_id -> {chat_id -> last_message_id}
@@ -2681,10 +2675,12 @@ def _load_openclaw_skills() -> list:
             for _sk, sess in sessions.items():
                 snap = sess.get("skillsSnapshot", {})
                 for rs in snap.get("resolvedSkills", []):
+                    def _norm_skill(s): return str(s or "").strip().lower().replace("_", "-")
                     if isinstance(rs, str):
-                        active_skills.add(rs)
+                        active_skills.add(_norm_skill(rs))
                     elif isinstance(rs, dict):
-                        active_skills.add(rs.get("name", rs.get("id", "")))
+                        active_skills.add(_norm_skill(rs.get("name", "")))
+                        active_skills.add(_norm_skill(rs.get("id", "")))
         except Exception as e:
             log.debug("Ignored: %s", e)
 
@@ -2725,7 +2721,7 @@ def _load_openclaw_skills() -> list:
                                     requires_bins = [b.strip().strip('"').strip("'") for b in m.group(1).split(',') if b.strip()]
 
                 # Installed = appears in OpenClaw's active/resolved skills
-                installed = skill_dir.name in active_skills
+                installed = _norm_skill(skill_dir.name) in active_skills or _norm_skill(name) in active_skills
 
                 skills.append({
                     "id": skill_dir.name,
@@ -8905,7 +8901,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.54</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.0</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10133,6 +10129,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.0', date:'2026-03-08', notes:['Phase 0: 8 surgical fixes from GPT-5.4 code audit','Fix skill install body.get bug, system prompt endpoint, switchPdTab null-crash','Fix skill detection normalization, show all 55 skills, surface silent errors','Fix tasks/projects routing, dead code cleanup'] },
   { ver:'v0.28.54', date:'2026-03-08', notes:['Spatial agent status: cards pulse green when dispatching, shake on error, glow on active','Live inspection tab: real-time SSE stream of dispatch events in agent slide-out panel','Quest log: Command Center shows pending QA escalations and agent decisions needing input','Agent XP: confidence score and evidence count shown on agent cards as XP bar'] },
   { ver:'v0.28.53', date:'2026-03-08', notes:['Dev→QA retry loop: POST /api/qa/review dispatches task to dev agent then BugBanisher for QA, retries up to 3x on FAIL','Screenshot-evidence QA: POST /api/qa/screenshot runs Playwright on specified tests, returns screenshot paths','Agent DELIVERABLES.md: all 9 agents now have concrete output specs and quality criteria','Local CLAUDE.md: targeted guidance files in tests/ and personas/ directories'] },
   { ver:'v0.28.52', date:'2026-03-08', notes:['Confidence scoring: facts start at 0.5, reinforced on re-extraction (+0.15, cap 0.95)','Evidence tracking: evidence_count column tracks independent extractions of same fact','Confidence decay: consolidation reduces confidence by 0.05 for unused facts >7 days old','Injection scoring includes confidence weight (replaces flat importance/10)','Claude Code hooks: PreCompact checkpoint, PostToolUse syntax gate, Stop session log, strategic compact suggester'] },
@@ -12059,7 +12056,7 @@ function switchModule(name) {
         if (document.getElementById('overview-module') && document.getElementById('overview-module').classList.contains('active')) { loadPersonas(); if (typeof _loadQuestLog === 'function') _loadQuestLog(); }
         else clearInterval(window._personaRefreshTimer);
       }, 30000);
-    }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); }, projects: function() {}, admin: loadAdmin,
+    }, tasks: function() { /* tasks merged into projects */ }, agents: function() { loadAgents(); }, projects: function() {}, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
     models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, cortex: _loadCortexTab, system: loadWorkflowRegistry, workflows: function(){}, settings: syncSettingsUI,
   };
@@ -18265,7 +18262,7 @@ async function loadPersonas() {
       renderPersonaOrg();
       populateChatPersonaBar();
     }
-  } catch(e) { /* loadPersonas error silenced */ }
+  } catch(e) { console.error('loadPersonas failed', e); }
 }
 
 function populateChatPersonaBar() {
@@ -18682,7 +18679,7 @@ async function selectPersona(id) {
     document.getElementById('pd-role').textContent = p.role || 'No role assigned';
     window._selectedPersona = p;
     switchPdTab('identity');
-  } catch(e) { /* selectPersona error silenced */ }
+  } catch(e) { console.error('selectPersona failed', e); if (typeof toast === 'function') toast('Failed to open agent','err'); }
 }
 
 function closePersonaDetail() {
@@ -18697,7 +18694,8 @@ function closePersonaDetail() {
 
 function switchPdTab(tab) {
   document.querySelectorAll('.pd-tab').forEach(t => t.classList.remove('active'));
-  document.querySelector(`.pd-tab[onclick*="${tab}"]`).classList.add('active');
+  var _activeTab = document.querySelector(`.pd-tab[onclick*="${tab}"]`);
+  if (_activeTab) _activeTab.classList.add('active');
   const content = document.getElementById('pd-content');
   const p = window._selectedPersona;
   if (!p) return;
@@ -18875,10 +18873,16 @@ async function _loadPersonaSkills(pid) {
     ]);
     var assignedNames = ((assigned && assigned.skills) || []).map(function(s) { return s.name; });
     var allSkills = (available && available.skills) || [];
-    // Only show installed skills
-    var installed = allSkills.filter(function(sk) { return sk.installed; });
+    // v0.29.0 — Show ALL skills, sorted: assigned > installed > available
+    allSkills.sort(function(a, b) {
+      var aA = assignedNames.indexOf(a.name || a.id) >= 0 ? 0 : 1;
+      var bA = assignedNames.indexOf(b.name || b.id) >= 0 ? 0 : 1;
+      if (aA !== bA) return aA - bA;
+      return (a.installed ? 0 : 1) - (b.installed ? 0 : 1);
+    });
+    var installed = allSkills;
     if (!installed.length) {
-      container.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No installed skills. Install skills from the <a href="#" onclick="switchModule(\'skills\');closePersonaDetail();return false" style="color:var(--accent)">Skills tab</a>.</div>';
+      container.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No skills available.</div>';
       return;
     }
     var html = '<div style="display:flex;flex-direction:column;gap:6px">';
@@ -18890,12 +18894,13 @@ async function _loadPersonaSkills(pid) {
       html += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface)">';
       html += '<input type="checkbox" ' + checked + ' onchange="_togglePersonaSkill(\'' + pid + '\',\'' + name + '\',this.checked)" style="width:14px;height:14px;flex-shrink:0">';
       html += '<span style="font-size:14px">' + emoji + '</span>';
-      html += '<div style="flex:1;min-width:0"><div style="color:var(--text);font-weight:500">' + escHtml(name) + '</div>';
+      var _skBadge = sk.installed ? '<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:#22c55e22;color:#22c55e;margin-left:4px">active</span>' : '<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:#f59e0b22;color:#f59e0b;margin-left:4px">available</span>';
+      html += '<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:2px"><span style="color:var(--text);font-weight:500">' + escHtml(name) + '</span>' + _skBadge + '</div>';
       if (desc) html += '<div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(desc.slice(0,60)) + '</div>';
       html += '</div></label>';
     });
     html += '</div>';
-    html += '<div style="margin-top:8px;font-size:10px;color:var(--text3)">' + installed.length + ' installed · ' + assignedNames.length + ' assigned</div>';
+    html += '<div style="margin-top:8px;font-size:10px;color:var(--text3)">' + allSkills.filter(function(s){return s.installed;}).length + '/' + allSkills.length + ' active · ' + assignedNames.length + ' assigned</div>';
     container.innerHTML = html;
   } catch(e) {
     container.innerHTML = '<div style="font-size:11px;color:var(--text3)">Could not load skills</div>';
@@ -25284,6 +25289,43 @@ class Handler(BaseHTTPRequestHandler):
             personas = _persona_list()
             self.reply_json({"ok": True, "personas": personas})
 
+
+        # ── v0.29.0 — System Prompt endpoint ────────────────────────
+        elif parsed.path.startswith("/api/persona") and parsed.path.endswith("/system-prompt"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path.split("/")[3]
+            p = _persona_by_id(pid)
+            if not p:
+                self.reply_json({"ok": False, "error": "Persona not found"}, 404); return
+            try:
+                prompt_parts = []
+                persona_dir = PERSONAS_DIR / pid
+                for fname in ["SOUL.md", "IDENTITY.md", "ROLE_CARD.md", "RULES.md", "DELIVERABLES.md", "MEMORY.md"]:
+                    fpath = persona_dir / fname
+                    if fpath.exists():
+                        content = fpath.read_text(encoding="utf-8", errors="replace")[:8000]
+                        prompt_parts.append(f"=== {fname} ===\n{content}")
+                global_rules = PERSONAS_DIR / "RULES.md"
+                if global_rules.exists():
+                    prompt_parts.append(f"=== GLOBAL RULES ===\n{global_rules.read_text(encoding='utf-8', errors='replace')[:4000]}")
+                try:
+                    conn = _db_conn()
+                    facts = conn.execute(
+                        "SELECT fact FROM cortex_memories WHERE status='active' AND "
+                        "(scope='global' OR (scope='agent' AND scope_id=?)) "
+                        "ORDER BY confidence DESC, importance DESC LIMIT 20", (pid,)
+                    ).fetchall()
+                    conn.close()
+                    if facts:
+                        prompt_parts.append("=== CORTEX MEMORIES ===\n" + "\n".join(f"- {r[0]}" for r in facts))
+                except Exception:
+                    pass
+                full_prompt = "\n\n".join(prompt_parts)
+                self.reply_json({"ok": True, "persona": p.get("name", ""), "prompt": full_prompt, "length": len(full_prompt)})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)[:200]}, 500)
+            return
+
         elif parsed.path == "/api/personas/stats":
             # v0.28.54 — Per-agent cortex confidence + evidence stats
             if not self.auth_check(redirect=False): return
@@ -25372,7 +25414,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.54"})
+            self.reply_json({"v": "0.29.0"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25534,7 +25576,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.54"
+                health["porter_version"] = "0.29.0"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27343,7 +27385,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.54'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.0'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29653,7 +29695,7 @@ class Handler(BaseHTTPRequestHandler):
             action = str(data.get("action", "")).strip()
 
             if action == "install":
-                skill_id = body.get("id", body.get("name", ""))
+                skill_id = data.get("id", data.get("name", ""))
                 if not skill_id:
                     self.reply_json({"ok": False, "error": "No skill ID"}, 400)
                     return
@@ -31765,7 +31807,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.54 ready (localhost only)")
+    print(f"\n  Porter v0.29.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
