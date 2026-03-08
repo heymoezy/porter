@@ -17291,6 +17291,10 @@ function _setupGraphInteraction(canvas) {
       } else if (n.type === 'project' && n.id) {
         var f3 = (_cortexMemories || []).filter(function(m) { return m.scope === 'project' && m.scope_id === _nid; });
         if (f3.length) { _renderCortexMemories(f3); _showCortexFilterBar(n.label + ' — ' + f3.length + ' memories'); }
+      } else if (n.type === 'squad') {
+        var f4 = (_cortexMemories || []).filter(function(m) { return m.scope === 'squad'; });
+        if (f4.length) { _renderCortexMemories(f4); _showCortexFilterBar('Squad — ' + f4.length + ' memories'); }
+        else { toast('No squad learnings yet'); }
       } else if (n.type === 'cortex') {
         _clearCortexFilter();
       }
