@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.15 — Fix Chat with Agent button"""
+"""Porter v0.29.16 — Shared SSE bus (5 connections → 1)"""
 
 
 import email
@@ -8967,7 +8967,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.15</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.16</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10220,6 +10220,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.16', date:'2026-03-08', notes:['Shared SSE bus: 5 EventSource connections consolidated to 1','Reduces server thread usage and improves responsiveness'] },
   { ver:'v0.29.15', date:'2026-03-08', notes:['Fix: Chat with Agent button now passes full persona (including avatar)','Uses chatWithPersona() for consistent behavior'] },
   { ver:'v0.29.14', date:'2026-03-08', notes:['Stop model timers and TS polling when leaving their tabs','Complete phantom poller cleanup across all tabs'] },
   { ver:'v0.29.13', date:'2026-03-08', notes:['Click-to-edit agent avatar, name, and role in header','Removed redundant Quick Settings from Identity tab'] },
@@ -12070,7 +12071,7 @@ function switchModule(name) {
   // v0.29.11 — Stop phantom pollers when leaving their tabs
   if (_currentModule === 'admin' && name !== 'admin') {
     if (_mcMetricsTimer) { clearInterval(_mcMetricsTimer); _mcMetricsTimer = null; }
-    if (_mcEvtSrc) { _mcEvtSrc.close(); _mcEvtSrc = null; }
+    if (_mcSseId) { _sseUnsubscribe(_mcSseId); _mcSseId = null; }
   }
   if (_currentModule === 'orchestration' && name !== 'orchestration') {
     if (_orchHubPollTimer) { clearInterval(_orchHubPollTimer); _orchHubPollTimer = null; }
@@ -12120,11 +12121,9 @@ function switchModule(name) {
       renderChatMessages(); populateChatModels(); populateChatRoutes(); loadPersonas();
       // Cortex badge removed in v0.28.12
       // Connect SSE for real-time cortex badge updates
-      if (!window._cortexEvtSrc) {
-        window._cortexEvtSrc = new EventSource('/api/events');
-        window._cortexEvtSrc.onmessage = function(e) {
+      if (!window._cortexSseId) {
+        window._cortexSseId = _sseSubscribe(function(d) {
           try {
-            var d = JSON.parse(e.data);
             if (d.type === 'cortex:extracting') {
               var banner = document.getElementById('cx-extract-banner');
               if (banner) banner.style.display = '';
@@ -12171,7 +12170,7 @@ function switchModule(name) {
               }
             }
           } catch(ex) {}
-        };
+        });
       }
       if (window._personaRefreshTimer) clearInterval(window._personaRefreshTimer);
       window._personaRefreshTimer = setInterval(function() {
@@ -15876,7 +15875,7 @@ let _mcPaused = false;
 let _mcSelectedId = null;
 let _mcQueryStr = '';
 let _mcMetricsTimer = null;
-let _mcEvtSrc = null;
+let _mcSseId = null;
 let _mcRightTab = 'detail';
 let _mcReportId = null;
 
@@ -15952,18 +15951,14 @@ async function mcInit() {
   if (_mcMetricsTimer) clearInterval(_mcMetricsTimer);
   _mcMetricsTimer = setInterval(mcUpdateCards, 15000);
   // Subscribe to SSE for live events
-  if (_mcEvtSrc) { _mcEvtSrc.close(); _mcEvtSrc = null; }
-  _mcEvtSrc = new EventSource('/api/events');
-  _mcEvtSrc.onmessage = function(e) {
-    try {
-      var d = JSON.parse(e.data);
-      if (d.type === 'log:event') mcOnSSE(d);
-      else if (d.type === 'log:incident') mcOnIncident(d);
-      else if (d.type === 'log:remediation') mcOnRemediation(d);
-      else if (d.type === 'log:bugreport') mcOnBugReport(d);
-      else if (d.type === 'chat:system') mcOnSystemNotify(d);
-    } catch(ex) {}
-  };
+  if (_mcSseId) { _sseUnsubscribe(_mcSseId); _mcSseId = null; }
+  _mcSseId = _sseSubscribe(function(d) {
+    if (d.type === 'log:event') mcOnSSE(d);
+    else if (d.type === 'log:incident') mcOnIncident(d);
+    else if (d.type === 'log:remediation') mcOnRemediation(d);
+    else if (d.type === 'log:bugreport') mcOnBugReport(d);
+    else if (d.type === 'chat:system') mcOnSystemNotify(d);
+  });
 }
 
 async function mcLoadEvents() {
@@ -17158,7 +17153,7 @@ function _ensureOrchHubPolling(agentCount, modelCount) {
 var _modelTimers = {};
 var _modelActivityBackend = null;
 var _modelActivityPoller = null;
-var _modelEvtSrc = null;
+var _modelSseId = null;
 var _modelActivityData = {};
 var _modelAvailableData = {};
 
@@ -18358,27 +18353,15 @@ async function _pollActivityTrace(backend) {
 }
 
 function _connectModelSSE() {
-  // Use existing SSE event source if available, or set up listener
-  // We'll listen on the main event source from Mission Control or create our own
-  if (_modelEvtSrc) { _modelEvtSrc.close(); _modelEvtSrc = null; }
-  _modelEvtSrc = new EventSource('/api/events');
-  _modelEvtSrc.onmessage = function(e) {
-    try {
-      var d = JSON.parse(e.data);
-      if (!d || !d.type) return;
-      var evtData = d.data || {};
-
-      if (d.type === 'bridge:dispatch') {
-        _handleModelDispatch(evtData);
-      } else if (d.type === 'bridge:response') {
-        _handleModelResponse(evtData);
-      } else if (d.type === 'bridge:error') {
-        _handleModelError(evtData);
-      } else if (d.type === 'bridge:chunk') {
-        _handleModelChunk(evtData);
-      }
-    } catch(ex) { /* ignore parse errors */ }
-  };
+  if (_modelSseId) { _sseUnsubscribe(_modelSseId); _modelSseId = null; }
+  _modelSseId = _sseSubscribe(function(d) {
+    if (!d || !d.type) return;
+    var evtData = d.data || {};
+    if (d.type === 'bridge:dispatch') _handleModelDispatch(evtData);
+    else if (d.type === 'bridge:response') _handleModelResponse(evtData);
+    else if (d.type === 'bridge:error') _handleModelError(evtData);
+    else if (d.type === 'bridge:chunk') _handleModelChunk(evtData);
+  });
 }
 
 function _handleModelDispatch(data) {
@@ -19010,7 +18993,7 @@ function _editCardField(field) {
 }
 
 function closePersonaDetail() {
-  if (window._pdLiveSource) { window._pdLiveSource.close(); window._pdLiveSource = null; }
+  if (window._pdLiveSseId) { _sseUnsubscribe(window._pdLiveSseId); window._pdLiveSseId = null; }
   _selectedPersonaId = null;
   window._selectedPersona = null;
   // v0.29.1 — Show grid, hide detail
@@ -19123,18 +19106,16 @@ function switchPdTab(tab) {
       + '<div id="pd-live-feed" style="max-height:500px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;font-family:monospace;font-size:11px"></div>'
       + '</div>';
     // Connect to SSE and filter for this agent
-    if (window._pdLiveSource) { window._pdLiveSource.close(); window._pdLiveSource = null; }
+    if (window._pdLiveSseId) { _sseUnsubscribe(window._pdLiveSseId); window._pdLiveSseId = null; }
     var feed = document.getElementById('pd-live-feed');
     var countEl = document.getElementById('pd-live-count');
     var _liveCount = 0;
     var agentId = p.id;
     var agentName = p.name;
     try {
-      var es = new EventSource('/api/events');
-      window._pdLiveSource = es;
-      es.onmessage = function(e) {
+      if (window._pdLiveSseId) _sseUnsubscribe(window._pdLiveSseId);
+      window._pdLiveSseId = _sseSubscribe(function(data) {
         try {
-          var data = JSON.parse(e.data);
           // Filter: only show events relevant to this agent
           var txt = JSON.stringify(data);
           if (txt.indexOf(agentId) < 0 && txt.indexOf(agentName) < 0) return;
@@ -19155,8 +19136,7 @@ function switchPdTab(tab) {
           // Cap at 50 events
           while (feed.children.length > 50) feed.removeChild(feed.lastChild);
         } catch(x) {}
-      };
-      es.onerror = function() { if (window._pdLiveSource === es) { es.close(); window._pdLiveSource = null; } };
+      });
     } catch(x) {}
   } else if (tab === 'activity') {
     content.innerHTML = '<div class="loading-indicator">Loading activity...</div>';
@@ -21957,6 +21937,35 @@ function _renderSidebarLocs(locs, activeRoot) {
     // has node context: build pseudo-nodes and delegate
     const nodes = Object.entries(byNode).map(([nid, ms]) => ({id:nid, label:nid, type:'local', mounts:ms}));
     _renderSidebarNodes(nodes, activeRoot);
+  }
+}
+
+// v0.29.16 — Shared SSE bus (single connection, multiple consumers)
+var _sseBus = null;
+var _sseSubs = {};
+var _sseSubId = 0;
+function _sseSubscribe(handler) {
+  var id = ++_sseSubId;
+  _sseSubs[id] = handler;
+  if (!_sseBus || _sseBus.readyState === 2) {
+    _sseBus = new EventSource('/api/events');
+    _sseBus.onmessage = function(e) {
+      try {
+        var d = JSON.parse(e.data);
+        Object.keys(_sseSubs).forEach(function(k) { try { _sseSubs[k](d); } catch(ex){} });
+      } catch(ex) {}
+    };
+    _sseBus.onerror = function() {
+      // Auto-reconnect is built into EventSource spec
+    };
+  }
+  return id;
+}
+function _sseUnsubscribe(id) {
+  delete _sseSubs[id];
+  if (Object.keys(_sseSubs).length === 0 && _sseBus) {
+    _sseBus.close();
+    _sseBus = null;
   }
 }
 
@@ -25879,7 +25888,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.15"})
+            self.reply_json({"v": "0.29.16"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26041,7 +26050,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.15"
+                health["porter_version"] = "0.29.16"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27850,7 +27859,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.15'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.16'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32331,7 +32340,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.15 ready (localhost only)")
+    print(f"\n  Porter v0.29.16 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
