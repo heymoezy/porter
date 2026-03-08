@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.61 — Fix workflow interval save and skill proposal actions"""
+"""Porter v0.29.62 — Light theme fixes, panel transitions, loading timeouts"""
 
 
 import email
@@ -8353,6 +8353,17 @@ kbd {
   --surface2:#F8F8F8;
 }
 :root.light ::-webkit-scrollbar-thumb { background: #ccc; }
+
+/* v0.29.62 — Light theme overrides for hardcoded dark elements */
+:root.light .chat-autocomplete { background:var(--surface); border-color:var(--border); box-shadow:0 4px 12px rgba(0,0,0,.1); }
+:root.light .chat-ac-item:hover, :root.light .chat-ac-item.selected { background:var(--raised); }
+:root.light .ctx-menu { background:var(--surface); border-color:var(--border); box-shadow:0 4px 16px rgba(0,0,0,.12); }
+:root.light .mp-opt { color:var(--text2); }
+:root.light .mp-opt:hover { background:var(--raised); color:var(--text); }
+:root.light .mp-close { color:var(--text3); }
+:root.light .model-activity-header .ma-status.idle { background:var(--raised); }
+:root.light .proj-row { border-bottom-color: var(--border); }
+:root.light .ptask-row { border-bottom-color: var(--border); }
 .cl-ver-row {
   display:flex; align-items:baseline; gap:10px;
   margin-top:20px; padding-bottom:8px; border-bottom:1px solid var(--border);
@@ -8431,7 +8442,8 @@ body.density-compact .file-name { padding: 6px 0; }
 .settings-page.active { display: block; }
 .module-panel { display:none; position:relative; flex:1; flex-direction:column;
   overflow-y:auto; padding:24px 28px; background:var(--bg); }
-.module-panel.active { display:flex; }
+.module-panel.active { display:flex; animation:panelFadeIn .15s ease; }
+@keyframes panelFadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 #agents-module.configuring { padding: 0; overflow: hidden; }
 #agents-module.configuring > *:not(#agent-workspace) { display: none !important; }
 #agents-module.configuring #agent-workspace { display: block !important; height: 100%; margin: 0; border-radius: 0; border-left: none; border-right: none; border-bottom: none; }
@@ -9157,7 +9169,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.61</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.62</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10404,6 +10416,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.62', date:'2026-03-08', notes:['Light theme: fix hardcoded dark colors (autocomplete, menus, borders)','Panel fade-in animation on tab switch','Loading timeouts with retry buttons on Models, Workflows, Cortex'] },
   { ver:'v0.29.61', date:'2026-03-08', notes:['FIX: workflow interval save now works (handler moved from GET to POST)','FIX: skill proposal approve/dismiss now works (handler moved from GET to POST)'] },
   { ver:'v0.29.60', date:'2026-03-08', notes:['FIX: locations module Add Location form now works (moved from dead settings page)','Removed dead spage-locations, spage-apikeys settings pages','Fixed duplicate id=pd-content (renamed slide-out to pd-content-slideout)','Removed orphaned orchestration cleanup code'] },
   { ver:'v0.29.59', date:'2026-03-08', notes:['Replace last 6 native confirm() dialogs with Porter-style modals','Agent workspace + file preview editors now use themed dialogs'] },
@@ -12427,7 +12440,7 @@ function switchModule(name) {
       }, 30000);
     }, tasks: function() { /* tasks merged into projects */ }, agents: function() { loadAgents(); }, projects: function() { loadProjects(); }, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
-    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, cortex: _loadCortexTab, system: loadWorkflowRegistry, workflows: function(){}, settings: syncSettingsUI,
+    models: function(){ withLoadTimeout('models-grid','loadModels()'); loadModels(); }, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, cortex: function(){ withLoadTimeout('cx-memory-list','_loadCortexTab()'); _loadCortexTab(); }, system: function(){ withLoadTimeout('wf-system-grid','loadWorkflowRegistry()'); loadWorkflowRegistry(); }, workflows: function(){}, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -27548,7 +27561,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.61"})
+            self.reply_json({"v": "0.29.62"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27710,7 +27723,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.61"
+                health["porter_version"] = "0.29.62"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29510,7 +29523,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.61'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.62'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34095,7 +34108,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.61 ready (localhost only)")
+    print(f"\n  Porter v0.29.62 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
