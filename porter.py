@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.34 — Projects tab overhaul"""
+"""Porter v0.29.35 — Files tab: grid/list toggle"""
 
 
 import email
@@ -7511,6 +7511,33 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   flex: 1; overflow-y: auto; position: relative;
   padding: 16px 28px 0; min-height: 200px;
 }
+/* grid view */
+.file-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
+.file-grid-card {
+  padding:12px; border:1px solid var(--border); border-radius:10px;
+  background:var(--surface); cursor:pointer; transition:background .1s,border-color .15s;
+  display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center;
+  min-height:110px; position:relative;
+}
+.file-grid-card:hover { background:var(--raised); border-color:var(--border2); }
+.file-grid-card .grid-icon { font-size:28px; opacity:.85; }
+.file-grid-card .grid-name {
+  font-size:11px; font-weight:500; color:var(--text);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; line-height:1.3;
+}
+.file-grid-card .grid-meta { font-size:10px; color:var(--text3); }
+.file-grid-card.is-dir .grid-icon { opacity:1; }
+.file-grid-card .grid-cb {
+  position:absolute; top:6px; left:6px; opacity:0; transition:opacity .1s;
+}
+.file-grid-card:hover .grid-cb,
+.file-area.has-selection .grid-cb { opacity:1; }
+.view-toggle { display:flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+.view-toggle button {
+  background:transparent; border:none; padding:4px 8px; cursor:pointer;
+  color:var(--text3); font-size:12px; line-height:1;
+}
+.view-toggle button.active { background:var(--accent); color:#fff; }
 .file-area.drag-over::after {
   content: 'Drop to upload'; position: absolute; inset: 0;
   background: rgba(247,147,26,.08);
@@ -9156,7 +9183,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.34</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.35</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9169,6 +9196,14 @@ input[type="number"].settings-input { min-width: 60px; }
     <span class="module-title" style="flex:none">Files</span>
     <div class="breadcrumb" id="breadcrumb"></div>
     <div class="toolbar-actions">
+      <div class="view-toggle" id="viewToggle">
+        <button id="vt-list" class="active" onclick="_setViewMode('list')" title="List view">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        </button>
+        <button id="vt-grid" onclick="_setViewMode('grid')" title="Grid view">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        </button>
+      </div>
       <button class="btn btn-ghost" id="btnMkdir" onclick="openMkdir()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
         New folder
@@ -10442,6 +10477,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.35', date:'2026-03-08', notes:['Files: grid/list view toggle in toolbar','Files: grid view shows file cards with type-colored icons','Files: view preference persists in localStorage','Files: storage bar moved to home view (always visible)','Files: home view mount cards show item count + total size'] },
   { ver:'v0.29.34', date:'2026-03-08', notes:['Projects: richer front cards (description, type badge, agent avatars, date)','Projects: active project toggle (click again to deactivate)','Projects: overview shows name, description, type, status, created date','Projects: workspace files moved from Overview to dedicated Files tab','Projects: tab labels show counts (Agents 9, Memory 3, Files 12)','Projects: date format DD-Mon-YYYY'] },
   { ver:'v0.29.33', date:'2026-03-08', notes:['Kraken CLI added to Extensions tool detection','Squad-wide skill assignment: assign a skill to all squad members at once','Recommended skills section shown in Installed view (not just Discover)','Improved skill recommendations: file/deploy/ops agents get matching skills'] },
   { ver:'v0.29.32', date:'2026-03-08', notes:['Projects tab: replaced Coming Soon with real project containers','Project list: card grid with status dots, agent count, token usage','Project detail: tabbed view (Overview, Agents, Workflows, Memory, Settings)','Overview: stats grid, workspace files with exists/size indicators','Agents: assign/unassign with avatar chips','Memory: project-scoped Cortex learnings inline','Settings: edit name, description, type, set active, delete'] },
@@ -12361,6 +12397,7 @@ function switchModule(name) {
     renderBreadcrumb('', '');
     var _lh = document.querySelector('.list-header');
     if (_lh) _lh.style.display = 'none';
+    _initViewToggle();
   }
   const loaders = {
     overview: function() {
@@ -23706,16 +23743,63 @@ function setSort(col) {
   renderListing(curEntries);
 }
 
+var _fileViewMode = localStorage.getItem('porter_file_view') || 'list';
+
+function _setViewMode(mode) {
+  _fileViewMode = mode;
+  localStorage.setItem('porter_file_view', mode);
+  document.getElementById('vt-list').classList.toggle('active', mode === 'list');
+  document.getElementById('vt-grid').classList.toggle('active', mode === 'grid');
+  // Re-render with current entries
+  var hdr = document.querySelector('.list-header');
+  if (mode === 'grid') {
+    if (hdr) hdr.style.display = 'none';
+  } else {
+    if (hdr) hdr.style.display = '';
+  }
+  if (window._lastFileEntries) renderListing(window._lastFileEntries);
+}
+
+function _initViewToggle() {
+  var listBtn = document.getElementById('vt-list');
+  var gridBtn = document.getElementById('vt-grid');
+  if (listBtn) listBtn.classList.toggle('active', _fileViewMode === 'list');
+  if (gridBtn) gridBtn.classList.toggle('active', _fileViewMode === 'grid');
+}
+
+function gridCardHTML(e) {
+  var icon = e.type === 'dir' ? I.folder : fileIcon(e.name);
+  var click = e.type === 'dir'
+    ? 'onclick="navigate(\'' + esc(curRoot) + '\',\'' + esc(curPath ? curPath+'/'+e.name : e.name) + '\')"'
+    : 'onclick="openPreview(\'' + esc(e.name) + '\')"';
+  var checked = selectedItems.has(e.name) ? 'checked' : '';
+  return '<div class="file-grid-card' + (e.type==='dir'?' is-dir':'') + '" ' + click + '>'
+    + '<input type="checkbox" class="row-cb grid-cb" ' + checked
+    + ' onclick="event.stopPropagation()" onchange="toggleSelect(\'' + esc(e.name) + '\',this.checked)">'
+    + '<span class="grid-icon">' + icon + '</span>'
+    + '<span class="grid-name" title="' + escHtml(e.name) + '">' + escHtml(e.name) + '</span>'
+    + '<span class="grid-meta">' + (e.type === 'dir' ? 'Folder' : e.size) + '</span>'
+    + '</div>';
+}
+
 function renderListing(entries) {
   updateSortHeaders();
   const el = document.getElementById('listing');
   const visible = settings.showHidden ? entries : entries.filter(e => !e.name.startsWith('.'));
   const sorted = sortedEntries(visible);
+  window._lastFileEntries = entries;
   if (!sorted.length) {
-    el.innerHTML = `<div class="empty-state">${I.empty}<p>This folder is empty</p><p style="font-size:12px;color:var(--text3);margin-top:-4px">Upload files or create a new folder to get started</p></div>`;
+    el.innerHTML = '<div class="empty-state">' + I.empty + '<p>This folder is empty</p><p style="font-size:12px;color:var(--text3);margin-top:-4px">Upload files or create a new folder to get started</p></div>';
     return;
   }
-  el.innerHTML = sorted.map(e => rowHTML(e)).join('');
+  var hdr = document.querySelector('.list-header');
+  if (_fileViewMode === 'grid') {
+    if (hdr) hdr.style.display = 'none';
+    el.innerHTML = '<div class="file-grid">' + sorted.map(function(e) { return gridCardHTML(e); }).join('') + '</div>';
+  } else {
+    if (hdr) hdr.style.display = '';
+    el.innerHTML = sorted.map(e => rowHTML(e)).join('');
+  }
 }
 
 function rowHTML(e) {
@@ -26988,7 +27072,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.34"})
+            self.reply_json({"v": "0.29.35"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -28985,7 +29069,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.34'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.35'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -33490,7 +33574,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.34 ready (localhost only)")
+    print(f"\n  Porter v0.29.35 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
