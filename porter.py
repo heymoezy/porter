@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.10 — @squad mentions in chat"""
+"""Porter v0.29.11 — Startup + polling performance"""
 
 
 import email
@@ -8967,7 +8967,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.10</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.11</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10223,6 +10223,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.11', date:'2026-03-08', notes:['Deferred startup threads (3s faster boot)','Stop phantom pollers on tab switch','MC metrics polling 5s→15s'] },
   { ver:'v0.29.10', date:'2026-03-08', notes:['@squad mentions in chat (e.g. @technical, @creative)','Squad dispatch routes to best-fit member','Squad names in autocomplete alongside agent names'] },
   { ver:'v0.29.9', date:'2026-03-08', notes:['Squads UI: colored chip bar above agent grid','Click squad to filter agents by membership','All/squad toggle with member counts','Squads auto-loaded on Agents tab open'] },
   { ver:'v0.29.8', date:'2026-03-08', notes:['Phase 2: Squads foundation \u2014 squads + squad_members tables','Auto-seed squads from existing agent_group values','GET /api/squads with member list + counts','POST /api/squads (create/update/delete + member management)'] },
@@ -12065,6 +12066,14 @@ function renderConfigSummary(d) {
 let _currentModule = 'overview';
 window._lastAgents = [];
 function switchModule(name) {
+  // v0.29.11 — Stop phantom pollers when leaving their tabs
+  if (_currentModule === 'admin' && name !== 'admin') {
+    if (_mcMetricsTimer) { clearInterval(_mcMetricsTimer); _mcMetricsTimer = null; }
+    if (_mcEvtSrc) { _mcEvtSrc.close(); _mcEvtSrc = null; }
+  }
+  if (_currentModule === 'orchestration' && name !== 'orchestration') {
+    if (_orchHubPollTimer) { clearInterval(_orchHubPollTimer); _orchHubPollTimer = null; }
+  }
   if (name !== 'settings') closeSettings();
   const leavingFiles = _currentModule === 'files' && name !== 'files';
   if (leavingFiles && typeof closePreview === 'function') {
@@ -15825,7 +15834,7 @@ async function mcInit() {
   await mcLoadEvents();
   mcUpdateCards();
   if (_mcMetricsTimer) clearInterval(_mcMetricsTimer);
-  _mcMetricsTimer = setInterval(mcUpdateCards, 5000);
+  _mcMetricsTimer = setInterval(mcUpdateCards, 15000);
   // Subscribe to SSE for live events
   if (_mcEvtSrc) { _mcEvtSrc.close(); _mcEvtSrc = null; }
   _mcEvtSrc = new EventSource('/api/events');
@@ -25766,7 +25775,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.10"})
+            self.reply_json({"v": "0.29.11"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25928,7 +25937,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.10"
+                health["porter_version"] = "0.29.11"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27737,7 +27746,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.10'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.11'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32196,28 +32205,29 @@ if __name__ == "__main__":
     except Exception:
         pass
     _migrate_checkpoint_to_registry()  # Gap31: one-time migration
+    # v0.29.11 — Scheduler starts immediately (cron); rest deferred 3s for fast boot
     _sched_thread = threading.Thread(target=_scheduler_loop, name="porter-scheduler", daemon=True)
     _sched_thread.start()
-    _run_cap_checks(force=True)  # Initial capability scan
-    _cap_thread = threading.Thread(target=_cap_checks_loop, name="porter-cap-check", daemon=True)
-    _cap_thread.start()
-    _hb_thread = threading.Thread(target=_heartbeat_loop, name="porter-heartbeat", daemon=True)
-    _hb_thread.start()
-    _rollup_thread = threading.Thread(target=_telemetry_rollup_loop, name="porter-rollup", daemon=True)
-    _rollup_thread.start()
-    _cortex_thread = threading.Thread(target=_cortex_consolidate_loop, name="porter-cortex", daemon=True)
-    _cortex_thread.start()
-    _hygiene_thread = threading.Thread(target=_context_hygiene_loop, name="porter-hygiene", daemon=True)
-    _hygiene_thread.start()
-    _eval_thread = threading.Thread(target=_agent_eval_loop, name="porter-eval", daemon=True)
-    _eval_thread.start()
-    _heal_thread = threading.Thread(target=_error_self_heal_loop, name="porter-self-heal", daemon=True)
-    _heal_thread.start()
+    def _deferred_boot():
+        import time as _bt
+        _bt.sleep(3)
+        _run_cap_checks(force=True)
+        for _tgt, _tn in [
+            (_cap_checks_loop, "porter-cap-check"),
+            (_heartbeat_loop, "porter-heartbeat"),
+            (_telemetry_rollup_loop, "porter-rollup"),
+            (_cortex_consolidate_loop, "porter-cortex"),
+            (_context_hygiene_loop, "porter-hygiene"),
+            (_agent_eval_loop, "porter-eval"),
+            (_error_self_heal_loop, "porter-self-heal"),
+        ]:
+            threading.Thread(target=_tgt, name=_tn, daemon=True).start()
+    threading.Thread(target=_deferred_boot, name="porter-deferred-boot", daemon=True).start()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.10 ready (localhost only)")
+    print(f"\n  Porter v0.29.11 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
