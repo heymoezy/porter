@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.9 — Squads UI in Agents tab"""
+"""Porter v0.29.10 — @squad mentions in chat"""
 
 
 import email
@@ -8967,7 +8967,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.9</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.10</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10223,6 +10223,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.10', date:'2026-03-08', notes:['@squad mentions in chat (e.g. @technical, @creative)','Squad dispatch routes to best-fit member','Squad names in autocomplete alongside agent names'] },
   { ver:'v0.29.9', date:'2026-03-08', notes:['Squads UI: colored chip bar above agent grid','Click squad to filter agents by membership','All/squad toggle with member counts','Squads auto-loaded on Agents tab open'] },
   { ver:'v0.29.8', date:'2026-03-08', notes:['Phase 2: Squads foundation \u2014 squads + squad_members tables','Auto-seed squads from existing agent_group values','GET /api/squads with member list + counts','POST /api/squads (create/update/delete + member management)'] },
   { ver:'v0.29.7', date:'2026-03-08', notes:['Removed dead Quests section from chat welcome','Added \u26A1 Porter title above chat input','Cleaned up static + dynamic welcome HTML'] },
@@ -15275,6 +15276,11 @@ function chatSend() {
     var slug = (p.name || '').toLowerCase().replace(/\s+/g, '');
     if (slug && _atModels.indexOf(slug) === -1) _atModels.push(slug);
   });
+  // v0.29.10 — Add squad names to @mention list
+  (_squads || []).forEach(function(s) {
+    var slug = (s.name || '').toLowerCase().replace(/\s+/g, '');
+    if (slug && _atModels.indexOf(slug) === -1) _atModels.push(slug);
+  });
   var _atRe = new RegExp('@(' + _atModels.join('|') + ')\\b', 'gi');
   var _atMatches = [];
   var _m;
@@ -15303,7 +15309,23 @@ function chatSend() {
         // Dispatch via persona layer
         _dispatchToPersonaChat(_matchedPersona, _msg1);
       } else {
-        invokeAgent(_msg1, _atMatches[0].model);
+        // v0.29.10 — Check if it's a squad name
+        var _matchedSquad = (_squads || []).find(function(s) {
+          return (s.name || '').toLowerCase().replace(/\s+/g, '') === _mentionName;
+        });
+        if (_matchedSquad && _matchedSquad.members && _matchedSquad.members.length > 0) {
+          // Pick best-fit member (first active, or first member)
+          var _bestMember = _matchedSquad.members.find(function(m) { return m.status === 'active'; }) || _matchedSquad.members[0];
+          var _fullPersona = (_personas || []).find(function(p) { return p.id === _bestMember.id; });
+          if (_fullPersona) {
+            _chatMessages[_chatMessages.length - 1].content += ' [via ' + escHtml(_matchedSquad.name) + ' squad]';
+            _dispatchToPersonaChat(_fullPersona, _msg1);
+          } else {
+            toast('Squad member not found', 'err');
+          }
+        } else {
+          invokeAgent(_msg1, _atMatches[0].model);
+        }
       }
     } else {
       // Multi-@ chain: @model1 <task> ... @model2 <task>
@@ -25744,7 +25766,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.9"})
+            self.reply_json({"v": "0.29.10"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25906,7 +25928,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.9"
+                health["porter_version"] = "0.29.10"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27715,7 +27737,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.9'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.10'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32195,7 +32217,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.9 ready (localhost only)")
+    print(f"\n  Porter v0.29.10 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
