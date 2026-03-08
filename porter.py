@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.50 — Last system confirms replaced, cortex filter fix"""
+"""Porter v0.29.51 — Memory extraction fixes, consolidation API"""
 
 
 import email
@@ -3083,7 +3083,7 @@ def _load_porter_chat_sessions() -> list:
         rows = conn.execute(
             "SELECT c.id, c.title, c.model_id, c.created_at, c.updated_at, "
             "(SELECT COUNT(*) FROM chat_messages WHERE chat_id=c.id) as msg_count "
-            "FROM chats c ORDER BY c.updated_at DESC LIMIT 100"
+            "FROM chats c ORDER BY c.updated_at DESC LIMIT 200"
         ).fetchall()
         conn.close()
         sessions = []
@@ -3241,7 +3241,7 @@ def _load_claude_session_summaries() -> list:
 
     summaries = []
     # Only process the 15 most recent files by mtime to keep it fast
-    jsonl_files = sorted(claude_dir.glob("*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True)[:15]
+    jsonl_files = sorted(claude_dir.glob("*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True)[:50]
     for jsonl_file in jsonl_files:
         try:
             session_id = jsonl_file.stem
@@ -4058,17 +4058,17 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
     # Persist to DB — both session_learnings (legacy) and cortex_memories (structured)
     backend_used = ""
     cortex_ids = []
-    if learnings:
-        try:
-            conn = _db_conn()
-            conn.execute(
-                "INSERT OR REPLACE INTO session_learnings (session_id, source, learnings, backend_used) VALUES (?,?,?,?)",
-                (session_id, source, learnings, backend_used)
-            )
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            log.debug("Failed to persist learnings: %s", e)
+    # Always persist extraction result (even empty) to prevent infinite retry loops
+    try:
+        conn = _db_conn()
+        conn.execute(
+            "INSERT OR REPLACE INTO session_learnings (session_id, source, learnings, backend_used) VALUES (?,?,?,?)",
+            (session_id, source, learnings or "(no extractable learnings)", backend_used)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.debug("Failed to persist learnings: %s", e)
 
     # Store structured facts in cortex_memories
     if structured_facts:
@@ -9157,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.50</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.51</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10451,6 +10451,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.51', date:'2026-03-08', notes:['FIX: empty extractions now persisted (prevents infinite retry loops)','FIX: session loading limits raised (Claude 15→50, Porter 100→200)','Added /api/cortex/consolidate endpoint for manual memory consolidation','Added Porter chat sessions to extraction batch'] },
   { ver:'v0.29.50', date:'2026-03-08', notes:['FIX: agent card delete uses Porter confirm instead of system confirm','FIX: project delete uses Porter confirm instead of system confirm','FIX: cortex memory filter defaults to show all (cx-show-routed ghost element removed)','Removed dead code references'] },
   { ver:'v0.29.49', date:'2026-03-08', notes:['FIX: agent delete button now calls correct function','FIX: skill install/remove refreshes Skills tab (was calling nonexistent loadWorkflows)','FIX: agent card delete calls correct function'] },
   { ver:'v0.29.48', date:'2026-03-08', notes:['FIX: persona dispatch responses now saved to chat history (was broken stub)','FIX: file preview checks HTTP status before rendering content','FIX: files home button resets curRoot/curPath state','Removed dead flush wizard CSS (2KB savings)','Added /api/chat/save endpoint for client-side message persistence'] },
@@ -27505,7 +27506,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.50"})
+            self.reply_json({"v": "0.29.51"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27667,7 +27668,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.50"
+                health["porter_version"] = "0.29.51"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28180,6 +28181,15 @@ class Handler(BaseHTTPRequestHandler):
             cols = [d[0] for d in conn.description] if rows else []
             results = [dict(zip(cols, r)) for r in rows]
             self.reply_json({"ok": True, "results": results})
+
+        elif parsed.path == "/api/cortex/consolidate":
+            if not self.auth_check(redirect=False): return
+            try:
+                _cortex_consolidate_once()
+                self.reply_json({"ok": True, "message": "Consolidation complete"})
+            except Exception as e:
+                log.warning("Manual consolidation error: %s", e)
+                self.reply_json({"ok": False, "error": str(e)}, 500)
 
         elif parsed.path == "/api/cortex/memories":
             if not self.auth_check(redirect=False): return
@@ -29195,11 +29205,11 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             source_filter = qs.get("source", [""])[0].lower()
             show_archived = qs.get("show_archived", [""])[0] == "1"
-            loaders = {"openclaw": _load_session_summaries, "claude": _load_claude_session_summaries, "gemini": _load_gemini_session_summaries, "porter": _load_porter_chat_sessions, "ollama": lambda: [s for s in _load_porter_chat_sessions() if s.get("source") == "ollama"], "codex": lambda: [s for s in _load_porter_chat_sessions() if s.get("source") == "codex"]}
+            loaders = {"openclaw": _load_session_summaries, "claude": _load_claude_session_summaries, "gemini": _load_gemini_session_summaries, "porter": _load_porter_chat_sessions, "porter": _load_porter_chat_sessions, "ollama": lambda: [s for s in _load_porter_chat_sessions() if s.get("source") == "ollama"], "codex": lambda: [s for s in _load_porter_chat_sessions() if s.get("source") == "codex"]}
             if source_filter and source_filter in loaders:
                 all_sessions = loaders[source_filter]()
             else:
-                all_sessions = _load_session_summaries() + _load_claude_session_summaries() + _load_gemini_session_summaries() + _load_porter_chat_sessions()
+                all_sessions = _load_session_summaries() + _load_claude_session_summaries() + _load_gemini_session_summaries() + _load_porter_chat_sessions() + _load_porter_chat_sessions()
             # Tag archived sessions and filter if needed
             archived_ids = _get_archived_session_ids()
             for s in all_sessions:
@@ -29502,7 +29512,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.50'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.51'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34042,7 +34052,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.50 ready (localhost only)")
+    print(f"\n  Porter v0.29.51 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
