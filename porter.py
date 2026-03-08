@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.0 — Phase 0 stability: 8 surgical fixes from GPT-5.4 audit"""
+"""Porter v0.29.1 — Full-page agent detail view (kill slide-out panel)"""
 
 
 import email
@@ -8402,6 +8402,20 @@ body.density-compact .file-name { padding: 6px 0; }
 .persona-card-xp-fill { height:100%; border-radius:2px; background:linear-gradient(90deg,#3b82f6,#8b5cf6); transition:width .3s; }
 .persona-card-xp-label { font-size:9px; color:var(--text3); margin-top:2px; }
 
+/* v0.29.1 — Full-page Agent Detail View */
+.agent-detail-view { display:flex; flex-direction:column; gap:12px; }
+.agent-detail-topbar { display:flex; align-items:center; gap:8px; }
+.agent-identity-shell { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; }
+.agent-identity-card { display:flex; align-items:center; gap:14px; }
+.agent-identity-avatar { width:56px; height:56px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:28px; background:var(--bg); border:1px solid var(--border); }
+.agent-identity-name { font-size:16px; font-weight:600; color:var(--text); }
+.agent-identity-role { font-size:12px; color:var(--text3); margin-top:2px; }
+.agent-identity-badges { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+.agent-badge { font-size:10px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:var(--bg); color:var(--text2); }
+.agent-detail-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); }
+.agent-detail-tabs .pd-tab { padding:8px 16px; }
+.agent-detail-content { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; min-height:400px; }
+
 /* ── Persona Detail — slide-out right panel ──────────────── */
 .persona-detail { position:fixed; top:0; right:0; width:520px; height:100vh; z-index:900;
   background:var(--surface); border-left:1px solid var(--border); box-shadow:-4px 0 20px rgba(0,0,0,.12);
@@ -8901,7 +8915,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.0</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.1</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9060,10 +9074,45 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
 
     <!-- Agent Grid -->
-    <div id="persona-org-chart" style="margin-bottom:16px">
-      <div id="persona-cards-row" class="persona-cards-row">
-        <div class="loading-indicator">Loading personas...</div>
+    <div id="agents-grid-view">
+      <div id="persona-org-chart" style="margin-bottom:16px">
+        <div id="persona-cards-row" class="persona-cards-row">
+          <div class="loading-indicator">Loading personas...</div>
+        </div>
       </div>
+    </div>
+
+    <!-- v0.29.1 — Full-page Agent Detail View -->
+    <div id="agent-detail-view" class="agent-detail-view" style="display:none">
+      <div class="agent-detail-topbar">
+        <button class="btn btn-ghost" onclick="closePersonaDetail()" style="font-size:13px">&larr; Back to Agents</button>
+        <div style="flex:1"></div>
+        <button class="btn btn-ghost btn-sm" id="pd-sp-btn" onclick="_showSystemPrompt(_selectedPersonaId)" style="font-size:11px">System Prompt</button>
+        <button class="btn btn-ghost btn-sm" id="pd-delete-btn" style="font-size:11px;color:#ef4444" onclick="_deletePersona(_selectedPersonaId)">Delete</button>
+      </div>
+      <div class="agent-identity-shell">
+        <div class="agent-identity-card">
+          <div class="agent-identity-avatar" id="pd-avatar2">&#x1f916;</div>
+          <div class="agent-identity-meta">
+            <div class="agent-identity-name" id="pd-name2"></div>
+            <div class="agent-identity-role" id="pd-role2"></div>
+            <div class="agent-identity-badges">
+              <span class="agent-badge" id="pd-group-badge2">&mdash;</span>
+              <span class="agent-badge" id="pd-status-badge2">idle</span>
+              <span class="agent-badge" id="pd-backend-badge2">auto-route</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="agent-detail-tabs">
+        <button class="pd-tab active" onclick="switchPdTab('overview')">Overview</button>
+        <button class="pd-tab" onclick="switchPdTab('identity')">Identity</button>
+        <button class="pd-tab" onclick="switchPdTab('activity')">Activity</button>
+        <button class="pd-tab" onclick="switchPdTab('skills')">Skills</button>
+        <button class="pd-tab" onclick="switchPdTab('memory')">Memory</button>
+        <button class="pd-tab" onclick="switchPdTab('config')">Config</button>
+      </div>
+      <div id="pd-content" class="agent-detail-content"></div>
     </div>
 
     <!-- Slide-out overlay -->
@@ -9083,11 +9132,7 @@ input[type="number"].settings-input { min-width: 60px; }
         </div>
       </div>
       <div class="persona-detail-tabs">
-        <button class="pd-tab active" onclick="switchPdTab('identity')">Identity</button>
-        <button class="pd-tab" onclick="switchPdTab('live')">Live</button>
-        <button class="pd-tab" onclick="switchPdTab('activity')">Activity</button>
-        <button class="pd-tab" onclick="switchPdTab('skills')">Skills</button>
-        <button class="pd-tab" onclick="switchPdTab('config')">Config</button>
+        <!-- old slide-out tabs removed in v0.29.1 -->
       </div>
       <div id="pd-content" class="persona-detail-content"></div>
     </div>
@@ -10129,6 +10174,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.1', date:'2026-03-08', notes:['Kill slide-out panel: full-page agent detail view replaces 520px drawer','Agent identity card with avatar, name, role, group, status, backend badges','New Overview tab as default landing for agent detail','New Memory tab showing agent-scoped Cortex learnings inline','Back button returns to agent grid, no overlay needed'] },
   { ver:'v0.29.0', date:'2026-03-08', notes:['Phase 0: 8 surgical fixes from GPT-5.4 code audit','Fix skill install body.get bug, system prompt endpoint, switchPdTab null-crash','Fix skill detection normalization, show all 55 skills, surface silent errors','Fix tasks/projects routing, dead code cleanup'] },
   { ver:'v0.28.54', date:'2026-03-08', notes:['Spatial agent status: cards pulse green when dispatching, shake on error, glow on active','Live inspection tab: real-time SSE stream of dispatch events in agent slide-out panel','Quest log: Command Center shows pending QA escalations and agent decisions needing input','Agent XP: confidence score and evidence count shown on agent cards as XP bar'] },
   { ver:'v0.28.53', date:'2026-03-08', notes:['Dev→QA retry loop: POST /api/qa/review dispatches task to dev agent then BugBanisher for QA, retries up to 3x on FAIL','Screenshot-evidence QA: POST /api/qa/screenshot runs Playwright on specified tests, returns screenshot paths','Agent DELIVERABLES.md: all 9 agents now have concrete output specs and quality criteria','Local CLAUDE.md: targeted guidance files in tests/ and personas/ directories'] },
@@ -18659,36 +18705,46 @@ function _pDrop(e) {
 
 async function selectPersona(id) {
   _selectedPersonaId = id;
-  renderPersonaOrg(); // highlight selected card
-  const detail = document.getElementById('persona-detail');
-  const overlay = document.getElementById('persona-detail-overlay');
-  if (!detail) return;
-  detail.classList.add('open');
-  if (overlay) overlay.classList.add('open');
+  renderPersonaOrg();
+  // v0.29.1 — Show full-page detail, hide grid
+  var grid = document.getElementById('agents-grid-view');
+  var detail = document.getElementById('agent-detail-view');
+  if (grid) grid.style.display = 'none';
+  if (detail) detail.style.display = 'flex';
   // Close other panels
-  document.getElementById('rules-editor').style.display = 'none';
-  document.getElementById('persona-wizard').style.display = 'none';
-  document.getElementById('persona-wizard-overlay').style.display = 'none';
-  // Fetch full persona data
+  var re = document.getElementById('rules-editor'); if (re) re.style.display = 'none';
+  var wz = document.getElementById('persona-wizard'); if (wz) wz.style.display = 'none';
+  var wzo = document.getElementById('persona-wizard-overlay'); if (wzo) wzo.style.display = 'none';
   try {
-    const r = await api('/api/personas/' + id);
-    if (!r.ok) return;
-    const p = r.persona;
-    document.getElementById('pd-avatar').textContent = p.avatar || '🤖';
-    document.getElementById('pd-name').textContent = p.name;
-    document.getElementById('pd-role').textContent = p.role || 'No role assigned';
+    var r = await api('/api/personas/' + id);
+    if (!r || !r.ok) return;
+    var p = r.persona;
     window._selectedPersona = p;
-    switchPdTab('identity');
+    var av = document.getElementById('pd-avatar2');
+    var nm = document.getElementById('pd-name2');
+    var rl = document.getElementById('pd-role2');
+    var gb = document.getElementById('pd-group-badge2');
+    var sb = document.getElementById('pd-status-badge2');
+    var bb = document.getElementById('pd-backend-badge2');
+    if (av) av.textContent = p.avatar || '\u{1f916}';
+    if (nm) nm.textContent = p.name || 'Unnamed';
+    if (rl) rl.textContent = p.role || 'No role assigned';
+    if (gb) { gb.textContent = p.agent_group || 'Ungrouped'; var gc = {Orchestrator:'#ef4444',Strategy:'#6366f1',Creative:'#ec4899',Technical:'#06b6d4',Operations:'#f59e0b'}; gb.style.borderColor = gc[p.agent_group] || 'var(--border)'; gb.style.color = gc[p.agent_group] || 'var(--text2)'; }
+    if (sb) { sb.textContent = p.status || 'idle'; sb.style.color = p.status === 'active' ? '#22c55e' : p.status === 'error' ? '#ef4444' : 'var(--text3)'; }
+    if (bb) bb.textContent = p.preferred_backend || 'auto-route';
+    switchPdTab('overview');
   } catch(e) { console.error('selectPersona failed', e); if (typeof toast === 'function') toast('Failed to open agent','err'); }
 }
 
 function closePersonaDetail() {
   if (window._pdLiveSource) { window._pdLiveSource.close(); window._pdLiveSource = null; }
   _selectedPersonaId = null;
-  var d = document.getElementById('persona-detail');
-  var o = document.getElementById('persona-detail-overlay');
-  if (d) d.classList.remove('open');
-  if (o) o.classList.remove('open');
+  window._selectedPersona = null;
+  // v0.29.1 — Show grid, hide detail
+  var grid = document.getElementById('agents-grid-view');
+  var detail = document.getElementById('agent-detail-view');
+  if (grid) grid.style.display = '';
+  if (detail) detail.style.display = 'none';
   renderPersonaOrg();
 }
 
@@ -18699,7 +18755,57 @@ function switchPdTab(tab) {
   const content = document.getElementById('pd-content');
   const p = window._selectedPersona;
   if (!p) return;
-  if (tab === 'identity') {
+  if (tab === 'overview') {
+    // v0.29.1 — Overview: stats + recent dispatches + quick actions
+    if (!p) { content.innerHTML = '<div class="loading-indicator">Select an agent</div>'; return; }
+    content.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">'
+      + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">'
+      + '<div style="font-size:20px;font-weight:600;color:var(--text)" id="ov-dispatches">—</div>'
+      + '<div style="font-size:10px;color:var(--text3)">Dispatches</div></div>'
+      + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">'
+      + '<div style="font-size:20px;font-weight:600;color:var(--text)" id="ov-tokens">—</div>'
+      + '<div style="font-size:10px;color:var(--text3)">Tokens</div></div>'
+      + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">'
+      + '<div style="font-size:20px;font-weight:600;color:var(--text)" id="ov-skills">—</div>'
+      + '<div style="font-size:10px;color:var(--text3)">Skills</div></div></div>'
+      + '<div style="margin-bottom:16px"><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Quick Actions</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      + '<button class="btn btn-ghost btn-sm" onclick="switchModule(\'overview\');window._chatAgent={id:\'' + p.id + '\',name:\'' + escHtml(p.name) + '\'};renderChatMessages()">Chat with Agent</button>'
+      + '<button class="btn btn-ghost btn-sm" onclick="_showSystemPrompt(\'' + p.id + '\')">View System Prompt</button>'
+      + '<button class="btn btn-ghost btn-sm" onclick="switchPdTab(\'identity\')">Edit Identity</button>'
+      + '</div></div>'
+      + '<div><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Recent Activity</div>'
+      + '<div id="ov-activity" style="font-size:12px;color:var(--text3)">Loading...</div></div>';
+    // Fetch stats
+    (async function() {
+      try {
+        var runs = await api('/api/bridge/runs?persona_id=' + p.id + '&limit=5');
+        var el = document.getElementById('ov-activity');
+        if (runs && runs.runs && runs.runs.length && el) {
+          var totalTokens = 0;
+          el.innerHTML = runs.runs.map(function(r) {
+            totalTokens += r.tokens_total || 0;
+            var st = r.status === 'complete' ? '#22c55e' : r.status === 'failed' ? '#ef4444' : '#f59e0b';
+            var ago = r.created_at ? new Date(r.created_at * 1000).toLocaleString() : '';
+            return '<div style="padding:6px 8px;border-left:3px solid ' + st + ';background:var(--bg);border-radius:4px;margin-bottom:4px">'
+              + '<div style="display:flex;justify-content:space-between"><span style="color:var(--text)">' + escHtml((r.message || '').substring(0, 80)) + '</span>'
+              + '<span style="font-size:10px;color:var(--text3)">' + ago + '</span></div></div>';
+          }).join('');
+          var dEl = document.getElementById('ov-dispatches');
+          var tEl = document.getElementById('ov-tokens');
+          if (dEl) dEl.textContent = runs.runs.length + '+';
+          if (tEl) tEl.textContent = totalTokens > 1000 ? Math.round(totalTokens/1000) + 'K' : totalTokens;
+        } else if (el) {
+          el.innerHTML = '<div style="color:var(--text3);font-size:12px">No dispatches yet</div>';
+        }
+      } catch(e) {}
+      try {
+        var skills = await api('/api/personas/' + p.id + '/skills');
+        var sEl = document.getElementById('ov-skills');
+        if (sEl && skills && skills.skills) sEl.textContent = skills.skills.length;
+      } catch(e) {}
+    })();
+  } else if (tab === 'identity') {
     // Dynamic files from API response
     var _filesRaw = (p.files || []).map(function(f) {
       var key = f.filename.replace(/\.md$/,'').replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
@@ -18818,6 +18924,36 @@ function switchPdTab(tab) {
   } else if (tab === 'skills') {
     content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div style="font-size:12px;color:var(--text3)">Loading skills...</div></div>';
     _loadPersonaSkills(p.id);
+  } else if (tab === 'memory') {
+    // v0.29.1 — Agent-scoped Cortex memories
+    content.innerHTML = '<div class="loading-indicator">Loading memories...</div>';
+    (async function() {
+      try {
+        var r = await api('/api/cortex/memories?scope=agent&scope_id=' + p.id + '&limit=50');
+        var facts = (r && r.memories) || [];
+        if (!facts.length) {
+          content.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px">No memories for this agent yet. Dispatch tasks to build knowledge.</div>';
+          return;
+        }
+        var html = '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">' + facts.length + ' memories</div>';
+        html += '<div style="display:flex;flex-direction:column;gap:6px">';
+        facts.forEach(function(f) {
+          var conf = Math.round((f.confidence || 0) * 100);
+          var confColor = conf >= 70 ? '#22c55e' : conf >= 40 ? '#f59e0b' : '#ef4444';
+          html += '<div style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px">'
+            + '<div style="font-size:12px;color:var(--text)">' + escHtml(f.fact || '') + '</div>'
+            + '<div style="display:flex;gap:12px;margin-top:4px;font-size:10px;color:var(--text3)">'
+            + '<span style="color:' + confColor + '">' + conf + '% confidence</span>'
+            + '<span>' + (f.evidence_count || 0) + ' evidence</span>'
+            + '<span>' + (f.memory_type || 'semantic') + '</span>'
+            + '</div></div>';
+        });
+        html += '</div>';
+        content.innerHTML = html;
+      } catch(e) {
+        content.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load memories</div>';
+      }
+    })();
   } else if (tab === 'config') {
     let fb = [];
     try { fb = JSON.parse(p.fallback_backends || '[]'); } catch(e){}
@@ -25414,7 +25550,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.0"})
+            self.reply_json({"v": "0.29.1"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25576,7 +25712,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.0"
+                health["porter_version"] = "0.29.1"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27385,7 +27521,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.0'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.1'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31807,7 +31943,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.0 ready (localhost only)")
+    print(f"\n  Porter v0.29.1 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
