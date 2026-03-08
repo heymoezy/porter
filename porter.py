@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.45 — Critical bug fixes (chat lifecycle, grid context menu)"""
+"""Porter v0.29.46 — Memory extraction fix, esc() security, cortex defaults"""
 
 
 import email
@@ -3884,7 +3884,6 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
         try:
             conn = _db_conn()
             row = conn.execute("SELECT learnings, backend_used, extracted_at FROM session_learnings WHERE session_id=?", (session_id,)).fetchone()
-            conn.close()
             if row and row[0]:
                 # Also fetch structured facts from cortex_memories
                 _cached_facts = []
@@ -3896,11 +3895,13 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
                     _cached_facts = [{"id": r[0], "fact": r[1], "scope": r[2], "importance": r[3]} for r in _cf_rows]
                 except Exception:
                     pass
+                conn.close()
                 return {
                     "ok": True, "learnings": row[0], "facts": _cached_facts,
                     "llm_used": True, "cached": True,
                     "session_id": session_id, "source": source,
                 }
+            conn.close()
         except Exception:
             pass
 
@@ -7590,7 +7591,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 
 
 /* Flush wizard modal */
-.flush-wizard-overlay {
+/* v0.29.46 — flush wizard CSS removed (dead code) */
   position:fixed; top:0; left:0; right:0; bottom:0;
   background:rgba(0,0,0,.5); z-index:200; display:flex;
   align-items:center; justify-content:center;
@@ -9156,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.45</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.46</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10391,7 +10392,7 @@ var _fhomeInitDone = false;
 // ── helpers ──
 function enc(s) { return encodeURIComponent(s); }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function esc(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function esc(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
 async function api(url, body, timeout_ms = 15000) {
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), timeout_ms);
@@ -10449,6 +10450,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.46', date:'2026-03-08', notes:['FIX: memory extraction use-after-close on SQLite (cached facts were always empty)','FIX: esc() now escapes double quotes (prevents HTML attribute injection)','FIX: GWS Quick Action buttons target correct chat input selector','FIX: cortex_max_facts default unified to 8 everywhere','Removed dead flush wizard CSS (2KB savings)'] },
   { ver:'v0.29.45', date:'2026-03-08', notes:['FIX: chat_sessions→chats table reference (session lifecycle was dead code)','FIX: chat session timestamps restored when loading history','FIX: deleteChatSession now uses Porter confirm dialog','FIX: grid view file cards now have context menu (right-click or 3-dot button)','Added session_state/last_activity/paused_at/archived_at columns to chats table'] },
   { ver:'v0.29.44', date:'2026-03-08', notes:['Replaced all remaining system confirm/prompt dialogs with Porter-style overlays','Session archive, file editor unsaved changes, bootstrap command all use Porter dialogs','Zero system dialogs remaining — fully native UX'] },
   { ver:'v0.29.43', date:'2026-03-08', notes:['Squad leaders: Lobster designated leader of Dev + Crypto squads','Squad leader badge shown on agent cards in squad sections','Chat: squad leaders receive squad roster context (roles + skills of all members)','All agents now have proper skills assigned (Dev + Crypto squads)','Squad edit: leader selector in member list'] },
@@ -13669,7 +13671,7 @@ async function renderGwsPanel() {
       {label:'\ud83d\udcc5 Today', cmd:'/workspace calendar today'},
     ];
     actions.forEach(function(a) {
-      h += '<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="document.querySelector(\'.chat-input\').value=\'' + a.cmd + '\';document.querySelector(\'.chat-input\').focus()">' + a.label + '</button>';
+      h += '<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="document.getElementById(\'chat-input\').value=\'' + a.cmd + '\';document.getElementById(\'chat-input\').focus()">' + a.label + '</button>';
     });
     h += '</div>';
     panel.innerHTML = h;
@@ -27449,7 +27451,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.45"})
+            self.reply_json({"v": "0.29.46"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27611,7 +27613,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.45"
+                health["porter_version"] = "0.29.46"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29446,7 +29448,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.45'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.46'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -33964,7 +33966,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.45 ready (localhost only)")
+    print(f"\n  Porter v0.29.46 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
