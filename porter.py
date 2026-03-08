@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.28 — Design consistency: remove left-border accents"""
+"""Porter v0.29.29 — Trello-style drag-and-drop"""
 
 
 import email
@@ -7622,7 +7622,22 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .flush-wizard-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
 .persona-card[draggable] { cursor:grab; }
 .persona-card[draggable]:active { cursor:grabbing; }
-.persona-card.drag-src { opacity:.3; transform:scale(.95); }
+.persona-card.drag-src { opacity:.25; transform:scale(.96); pointer-events:none; }
+.persona-cards-row { min-height:80px; }
+.persona-cards-row .persona-card { transition:transform .15s ease, margin .15s ease; }
+.persona-cards-row .drag-gap {
+  width:130px; min-height:120px; border-radius:10px;
+  background:color-mix(in srgb, var(--accent) 6%, transparent);
+  border:2px dashed color-mix(in srgb, var(--accent) 30%, transparent);
+  flex-shrink:0; transition:width .15s ease, opacity .15s ease;
+  pointer-events:none;
+}
+.drag-clone {
+  position:fixed; pointer-events:none; z-index:9999;
+  opacity:.92; transform:rotate(2deg) scale(1.04);
+  box-shadow:0 16px 40px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.2);
+  transition:none;
+}
 .persona-wizard-overlay { position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.4);z-index:999; }
 .persona-wizard-modal { position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:480px;max-height:80vh;background:var(--surface);border-radius:12px;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.25);z-index:1000;overflow:hidden;display:flex;flex-direction:column; }
 .learn-spinner { display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:learn-spin .6s linear infinite;vertical-align:middle;margin-right:4px; }
@@ -9142,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.28</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.29</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9300,7 +9315,7 @@ input[type="number"].settings-input { min-width: 60px; }
         <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">Squads</span>
       </div>
       <div id="persona-org-chart" style="margin-bottom:16px">
-        <div id="persona-cards-row" class="persona-cards-row">
+        <div id="persona-cards-row" class="persona-cards-row" ondragover="_pDragOver(event)" ondrop="_pDrop(event)">
           <div class="loading-indicator">Loading personas...</div>
         </div>
       </div>
@@ -10427,6 +10442,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.29', date:'2026-03-08', notes:['Trello-style drag-and-drop: elevated clone with shadow + 2deg tilt follows cursor','Gap placeholder shows where card will land (dashed border, animated)','Cards shuffle apart with 150ms CSS transitions','No more border-left/right color indicators','Container-level drop handler for reliable drop detection'] },
   { ver:'v0.29.28', date:'2026-03-08', notes:['Design consistency: replaced all border-left:3px accent patterns with status dots','Quest items, squad cards, activity runs, live feed events — all use dots now','Summary turns: removed border-left, kept subtle background tints','Skill proposals: replaced dashed accent border with solid border'] },
   { ver:'v0.29.27', date:'2026-03-08', notes:['Verification Loops: strict hook profile agents get post-dispatch response quality checks','Verification scoring: length, echo detection, hedging patterns, keyword overlap','Session Lifecycle: chat sessions auto-pause after 30min, archive after 24h','DB migration: session_state, last_activity, paused_at, archived_at columns'] },
   { ver:'v0.29.26', date:'2026-03-08', notes:['Graceful failure: api() returns better error messages (offline/timeout/server error)','uiFail() centralized error display with retry button','Loading timeout: stuck Loading... auto-replaced with retry after 10s','Iterative Retrieval: 2-pass keyword-based context from agent memory files for chat dispatch'] },
@@ -19357,7 +19373,7 @@ function renderPersonaOrg() {
     // v0.28.54 — Spatial status class + XP bar
     var statusClass = p.status === 'active' ? ' status-active' : p.status === 'error' ? ' status-error' : p.status === 'sleeping' ? ' status-sleeping' : '';
     var xpBar = '';  // v0.29.19 — removed confusing XP bar (was showing raw Cortex confidence with no context)
-    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + statusClass + '" draggable="true" data-persona-id="' + p.id + '" ondragstart="_pDragStart(event)" ondragover="_pDragOver(event)" ondrop="_pDrop(event)" ondragend="_pDragEnd(event)" onclick="selectPersona(\'' + p.id + '\')">'
+    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + statusClass + '" draggable="true" data-persona-id="' + p.id + '" ondragstart="_pDragStart(event)" ondragend="_pDragEnd(event)" onclick="selectPersona(\'' + p.id + '\')">'
       + '<div class="persona-card-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
       + '<div class="persona-card-role">' + escHtml(p.role || 'General') + '</div>'
@@ -19372,53 +19388,96 @@ function renderPersonaOrg() {
 }
 
 
-// ── Agent card drag-and-drop (v0.29.23 — simplified, working) ──
-var _pDragId = null;
+// ── Agent card drag-and-drop (v0.29.29 — Trello-style) ──
+// Elevated clone follows cursor, gap placeholder shows drop position, cards animate apart
+var _pDragId = null, _pClone = null, _pGap = null, _pRAF = 0, _pX = 0, _pY = 0;
+
 function _pDragStart(e) {
-  _pDragId = e.currentTarget.dataset.personaId;
+  var card = e.currentTarget;
+  _pDragId = card.dataset.personaId;
   e.dataTransfer.effectAllowed = 'move';
   e.dataTransfer.setData('text/plain', _pDragId);
-  e.currentTarget.classList.add('drag-src');
-  setTimeout(function() { e.target.style.opacity = '0.3'; }, 0);
+  // Hide default drag image
+  var blank = new Image();
+  blank.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+  e.dataTransfer.setDragImage(blank, 0, 0);
+  // Create elevated clone (follows cursor with tilt + shadow)
+  var rect = card.getBoundingClientRect();
+  _pClone = card.cloneNode(true);
+  _pClone.className = 'persona-card drag-clone';
+  _pClone.style.width = rect.width + 'px';
+  _pClone.style.left = rect.left + 'px';
+  _pClone.style.top = rect.top + 'px';
+  _pClone.removeAttribute('onclick');
+  _pClone.removeAttribute('ondragstart');
+  document.body.appendChild(_pClone);
+  // Ghost the source card
+  card.classList.add('drag-src');
+  // Create gap placeholder
+  _pGap = document.createElement('div');
+  _pGap.className = 'drag-gap';
+  // Track mouse position
+  _pX = e.clientX; _pY = e.clientY;
+  document.addEventListener('dragover', _pTrackMouse);
 }
+
+function _pTrackMouse(e) {
+  _pX = e.clientX; _pY = e.clientY;
+  if (_pRAF) return;
+  _pRAF = requestAnimationFrame(function() {
+    _pRAF = 0;
+    if (_pClone) {
+      _pClone.style.left = (_pX - 65) + 'px';
+      _pClone.style.top = (_pY - 30) + 'px';
+    }
+  });
+}
+
 function _pDragOver(e) {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  if (!_pDragId) return;
-  var card = e.target.closest('.persona-card');
-  if (!card || card.dataset.personaId === _pDragId) return;
-  // Show drop indicator
+  if (!_pDragId || !_pGap) return;
   var cont = document.getElementById('persona-cards-row');
   if (!cont) return;
-  var cards = [].slice.call(cont.querySelectorAll('.persona-card'));
-  cards.forEach(function(c) { c.style.borderLeft = ''; c.style.borderRight = ''; });
+  var card = e.target.closest('.persona-card:not(.drag-src)');
+  if (!card) {
+    // If dragging over empty space at the end, append gap
+    if (!_pGap.parentNode || _pGap.parentNode !== cont) {
+      cont.appendChild(_pGap);
+    }
+    return;
+  }
+  // Insert gap before or after the hovered card
   var r = card.getBoundingClientRect();
   if (e.clientX < r.left + r.width / 2) {
-    card.style.borderLeft = '3px solid var(--accent)';
+    cont.insertBefore(_pGap, card);
   } else {
-    card.style.borderRight = '3px solid var(--accent)';
+    cont.insertBefore(_pGap, card.nextSibling);
   }
 }
+
 function _pDragEnd(e) {
+  document.removeEventListener('dragover', _pTrackMouse);
+  if (_pClone) { _pClone.remove(); _pClone = null; }
+  if (_pGap && _pGap.parentNode) { _pGap.remove(); }
+  _pGap = null;
   _pDragId = null;
+  _pRAF = 0;
   var cont = document.getElementById('persona-cards-row');
   if (cont) {
     [].slice.call(cont.querySelectorAll('.persona-card')).forEach(function(c) {
       c.classList.remove('drag-src');
       c.style.opacity = '';
-      c.style.borderLeft = '';
-      c.style.borderRight = '';
     });
   }
 }
+
 function _pDrop(e) {
   e.preventDefault();
-  var card = e.target.closest('.persona-card');
-  var targetId = card ? card.dataset.personaId : (e.currentTarget.dataset ? e.currentTarget.dataset.personaId : null);
-  if (!_pDragId || !targetId || _pDragId === targetId) { _pDragEnd(e); return; }
-  // Determine if dropping before or after target
-  var r = card ? card.getBoundingClientRect() : null;
-  var insertBefore = r ? (e.clientX < r.left + r.width / 2) : false;
+  if (!_pDragId) { _pDragEnd(e); return; }
+  var cont = document.getElementById('persona-cards-row');
+  if (!cont) { _pDragEnd(e); return; }
+  // Build new order from DOM position of gap
   var sorted = _personas.slice().sort(function(a, b) {
     var oa = typeof a.sort_order === 'number' ? a.sort_order : 50;
     var ob = typeof b.sort_order === 'number' ? b.sort_order : 50;
@@ -19427,21 +19486,30 @@ function _pDrop(e) {
   });
   var ids = sorted.map(function(p) { return p.id; });
   var fromIdx = ids.indexOf(_pDragId);
-  var toIdx = ids.indexOf(targetId);
-  if (fromIdx < 0 || toIdx < 0) { _pDragEnd(e); return; }
+  if (fromIdx < 0) { _pDragEnd(e); return; }
+  // Find where gap is in the DOM
+  var children = [].slice.call(cont.children);
+  var gapIdx = _pGap ? children.indexOf(_pGap) : -1;
+  // Count how many non-gap, non-drag-src cards are before the gap
+  var insertAt = 0;
+  for (var ci = 0; ci < children.length; ci++) {
+    if (children[ci] === _pGap) break;
+    if (children[ci].classList.contains('persona-card') && !children[ci].classList.contains('drag-src')) {
+      insertAt++;
+    }
+  }
+  // Build new order
   ids.splice(fromIdx, 1);
-  // Adjust index if dropping after
-  var newIdx = ids.indexOf(targetId);
-  if (!insertBefore) newIdx++;
-  ids.splice(newIdx, 0, _pDragId);
-  // Update sort_order in _personas
+  if (insertAt > ids.length) insertAt = ids.length;
+  ids.splice(insertAt, 0, _pDragId);
+  // Update sort_order
   ids.forEach(function(id, i) {
     var p = _personas.find(function(x) { return x.id === id; });
     if (p) p.sort_order = i;
   });
   _pDragEnd(e);
   renderPersonaOrg();
-  // Persist to backend
+  // Persist
   api('/api/personas/reorder', { order: ids }).then(function(r) {
     if (r && r.ok) toast('Agent order saved', 'ok');
   });
@@ -26333,7 +26401,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.28"})
+            self.reply_json({"v": "0.29.29"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26495,7 +26563,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.28"
+                health["porter_version"] = "0.29.29"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28329,7 +28397,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.28'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.29'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32831,7 +32899,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.28 ready (localhost only)")
+    print(f"\n  Porter v0.29.29 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
