@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.66 — Declutter chat welcome screen"""
+"""Porter v0.29.67 — Squad wizard, per-squad config, agents UX cleanup"""
 
 
 import email
@@ -9171,7 +9171,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.66</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.67</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9327,7 +9327,7 @@ input[type="number"].settings-input { min-width: 60px; }
   <div id="agents-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Agents</span>
-      <button class="btn btn-ghost" onclick="_openSquadManager()" style="font-size:12px">+ Squad</button>
+      <button class="btn btn-ghost" onclick="openSquadWizard()" style="font-size:12px">+ Squad</button>
       <button class="btn btn-primary" onclick="openPersonaWizard()" style="font-size:12px">+ New Agent</button>
       <button class="btn btn-ghost" onclick="openRulesEditor()" style="font-size:12px">📋 Global Rules</button>
 
@@ -9335,7 +9335,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
     <!-- Agent Grid -->
     <div id="agents-grid-view">
-      <div id="squad-chips-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center"></div>
+      <div id="squad-chips-row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center"></div>
       <div id="persona-org-chart" style="margin-bottom:16px">
         <div id="persona-cards-row" class="persona-cards-row">
           <div class="loading-indicator">Loading personas...</div>
@@ -9486,6 +9486,62 @@ input[type="number"].settings-input { min-width: 60px; }
         <div id="wiz-progress" class="wizard-progress">Step 1 of 7</div>
         <button id="wiz-next" class="btn btn-primary" onclick="wizStep(1)">Next</button>
       </div>
+    </div>
+
+
+    <!-- Squad Wizard (hidden) -->
+    <div id="squad-wizard-overlay" class="persona-wizard-overlay" onclick="closeSquadWizard()" style="display:none"></div>
+    <div id="squad-wizard" class="persona-wizard-modal" style="display:none">
+      <div class="persona-detail-header">
+        <span class="persona-detail-avatar">&#128101;</span>
+        <div>
+          <div class="persona-detail-name">Create New Squad</div>
+          <div class="persona-detail-role">Build a focused team and then drag agents into it</div>
+        </div>
+        <div style="margin-left:auto">
+          <button class="btn btn-ghost" onclick="closeSquadWizard()">Cancel</button>
+        </div>
+      </div>
+      <div id="squad-wizard-steps" class="wizard-steps">
+        <div class="wizard-step active" data-step="1">
+          <label class="wizard-label">What should this squad be called?</label>
+          <input id="sq-wiz-name" class="settings-input" placeholder="e.g. Dev Squad, Growth Squad">
+        </div>
+        <div class="wizard-step" data-step="2">
+          <label class="wizard-label">Pick a color</label>
+          <div id="sq-wiz-color-grid" class="emoji-grid"></div>
+          <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--text3)">Custom</span>
+            <input id="sq-wiz-color" class="settings-input" type="color" value="#6366f1" style="width:40px;height:34px;padding:2px;cursor:pointer">
+          </div>
+        </div>
+        <div class="wizard-step" data-step="3">
+          <label class="wizard-label">Squad mission / description</label>
+          <textarea id="sq-wiz-desc" class="settings-input" placeholder="What is this squad responsible for?" style="width:100%;min-height:110px;resize:vertical;box-sizing:border-box"></textarea>
+        </div>
+      </div>
+      <div class="wizard-nav">
+        <button id="sq-wiz-back" class="btn btn-ghost" onclick="squadWizStep(-1)" disabled>Back</button>
+        <div id="sq-wiz-progress" class="wizard-progress">Step 1 of 3</div>
+        <button id="sq-wiz-next" class="btn btn-primary" onclick="squadWizStep(1)">Next</button>
+      </div>
+    </div>
+
+    <!-- Squad Config Slide-Out -->
+    <div id="squad-config-overlay" class="persona-detail-overlay" onclick="_closeSquadConfig()"></div>
+    <div id="squad-config-panel" class="persona-detail">
+      <div class="persona-detail-header">
+        <span class="persona-detail-avatar">&#9881;</span>
+        <div>
+          <div class="persona-detail-name" id="sq-config-title">Squad Config</div>
+          <div class="persona-detail-role">Manage name, color, mission, members, and skills</div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-ghost" id="sq-config-delete" style="color:#ef4444;font-size:11px" onclick="_deleteSquad(window._activeSquadEditId, document.getElementById('sq-edit-name') ? document.getElementById('sq-edit-name').value : '')">Delete</button>
+          <button class="btn btn-ghost" onclick="_closeSquadConfig()">Close</button>
+        </div>
+      </div>
+      <div id="squad-config-body" class="persona-detail-content"></div>
     </div>
   </div>
 
@@ -10418,6 +10474,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.67', date:'2026-03-08', notes:['Squad creation wizard (3-step)','Per-squad config buttons replace global modal','Agents tab UX cleanup'] },
   { ver:'v0.29.66', date:'2026-03-08', notes:['Remove agent chips and recent chats from chat welcome screen (declutter per user request)'] },
   { ver:'v0.29.65', date:'2026-03-08', notes:['FIX: squad skill assign now uses correct /api/openclaw/skills endpoint','FIX: project rename API call was double-wrapped (never worked)','FIX: capability check duration timing was always ~0s'] },
   { ver:'v0.29.64', date:'2026-03-08', notes:['Fix number key shortcuts to match nav order (1-Chat, 2-Agents, 3-Skills, ..., 9-Cortex)','Updated shortcuts overlay to show tab mapping'] },
@@ -19708,6 +19765,9 @@ async function _loadQuestLog() {
 // v0.29.9 — Squads UI
 var _squads = [];
 var _activeSquadFilter = null;
+var _squadWizStep = 1;
+var _squadWizColor = '#6366f1';
+window._activeSquadEditId = null;
 
 
 // ── v0.29.42 — Porter-style dialog system (replaces confirm/prompt) ──
@@ -19829,15 +19889,14 @@ async function loadSquads() {
 function renderSquadChips() {
   var row = document.getElementById('squad-chips-row');
   if (!row) return;
-  var chips = '<span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">Squad</span>';
-  chips += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 10px;border-radius:12px;' + (!_activeSquadFilter ? 'background:var(--accent);color:#fff' : '') + '" onclick="_filterSquad(null)">All</button>';
+  var chips = '<button class="btn btn-ghost" style="font-size:11px;padding:2px 11px;border-radius:12px;' + (!_activeSquadFilter ? 'background:var(--accent);color:#fff' : '') + '" onclick="_filterSquad(null)">All</button>';
   _squads.forEach(function(s) {
     var active = _activeSquadFilter === s.id;
-    chips += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 10px;border-radius:12px;border:1px solid ' + s.color + ';color:' + (active ? '#fff' : s.color) + ';' + (active ? 'background:' + s.color : '') + '" onclick="_filterSquad(\'' + s.id + '\')">' + escHtml(s.name) + ' <span style="font-size:9px;opacity:0.7">' + s.member_count + '</span></button>';
+    chips += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 11px;border-radius:12px;border:1px solid ' + s.color + ';color:' + (active ? '#fff' : s.color) + ';' + (active ? 'background:' + s.color : '') + '" onclick="_filterSquad(\'' + s.id + '\')">' + escHtml(s.name) + ' <span style="font-size:9px;opacity:0.7">' + s.member_count + '</span></button>';
   });
-  chips += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;border-radius:12px;color:var(--text3)" onclick="_openSquadManager()" title="Manage Squads">\u2699</button>';
   row.innerHTML = chips;
 }
+
 function _filterSquad(squadId) {
   _activeSquadFilter = _activeSquadFilter === squadId ? null : squadId;
   renderSquadChips();
@@ -19845,78 +19904,118 @@ function _filterSquad(squadId) {
 }
 
 
-// v0.29.24 — Squad Management UI
+// v0.29.67 — Squad Creation Wizard + inline config panel
 function _openSquadManager() {
-  var overlay = document.getElementById('squad-manager-overlay');
-  if (overlay) { overlay.remove(); }
-  overlay = document.createElement('div');
-  overlay.id = 'squad-manager-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center';
-  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
-  var panel = document.createElement('div');
-  panel.style.cssText = 'background:var(--raised);border:1px solid var(--border);border-radius:12px;width:480px;max-height:80vh;overflow-y:auto;padding:24px;box-shadow:0 12px 40px rgba(0,0,0,.4)';
-  panel.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
-    + '<div style="font-size:15px;font-weight:600;color:var(--text)">Manage Squads</div>'
-    + '<button onclick="this.closest(\'#squad-manager-overlay\').remove()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">\u2715</button>'
-    + '</div>'
-    + '<div id="squad-mgr-list"></div>'
-    + '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">'
-    + '  <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">New Squad</div>'
-    + '  <div style="display:flex;gap:8px;align-items:center">'
-    + '    <input class="settings-input" id="sq-new-name" placeholder="Squad name" style="flex:1;font-size:12px;padding:6px 10px">'
-    + '    <input class="settings-input" id="sq-new-color" type="color" value="#6366f1" style="width:36px;height:32px;padding:2px;cursor:pointer">'
-    + '    <button class="btn btn-primary" onclick="_createSquad()" style="font-size:12px;padding:6px 14px;white-space:nowrap">Create</button>'
-    + '  </div>'
-    + '</div>';
-  overlay.appendChild(panel);
-  document.body.appendChild(overlay);
-  _renderSquadMgrList();
+  openSquadWizard();
 }
 
-function _renderSquadMgrList() {
-  var list = document.getElementById('squad-mgr-list');
-  if (!list) return;
-  if (!_squads.length) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:12px 0">No squads yet. Create one below.</div>';
+function openSquadWizard() {
+  var overlay = document.getElementById('squad-wizard-overlay');
+  var panel = document.getElementById('squad-wizard');
+  if (!overlay || !panel) return;
+  overlay.style.display = 'block';
+  panel.style.display = 'flex';
+  document.getElementById('persona-detail').style.display = 'none';
+  document.getElementById('rules-editor').style.display = 'none';
+  closePersonaWizard();
+  _closeSquadConfig();
+  _squadWizStep = 1;
+  _squadWizColor = '#6366f1';
+  var n = document.getElementById('sq-wiz-name'); if (n) n.value = '';
+  var c = document.getElementById('sq-wiz-color'); if (c) c.value = '#6366f1';
+  var d = document.getElementById('sq-wiz-desc'); if (d) d.value = '';
+  var grid = document.getElementById('sq-wiz-color-grid');
+  if (grid) {
+    var colors = ['#ef4444','#f97316','#f59e0b','#84cc16','#22c55e','#14b8a6','#06b6d4','#3b82f6','#6366f1','#8b5cf6','#ec4899','#64748b'];
+    var html = '';
+    colors.forEach(function(color) {
+      html += '<button class="emoji-btn' + (color === _squadWizColor ? ' selected' : '') + '" title="' + color + '" onclick="squadWizSelectColor(this,\'' + color + '\')" style="font-size:0;background:' + color + ';border-color:' + color + ';"></button>';
+    });
+    grid.innerHTML = html;
+  }
+  updateSquadWizUI();
+}
+
+function closeSquadWizard() {
+  var panel = document.getElementById('squad-wizard');
+  var overlay = document.getElementById('squad-wizard-overlay');
+  if (panel) panel.style.display = 'none';
+  if (overlay) overlay.style.display = 'none';
+}
+
+function squadWizSelectColor(btn, color) {
+  _squadWizColor = color;
+  var input = document.getElementById('sq-wiz-color');
+  if (input) input.value = color;
+  document.querySelectorAll('#sq-wiz-color-grid .emoji-btn').forEach(function(b) { b.classList.remove('selected'); });
+  if (btn) btn.classList.add('selected');
+}
+
+function squadWizStep(dir) {
+  _squadWizStep += dir;
+  if (_squadWizStep < 1) _squadWizStep = 1;
+  if (_squadWizStep > 3) {
+    createSquadFromWizard();
     return;
   }
-  var html = '';
-  _squads.forEach(function(s) {
-    html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--surface)">'
-      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
-      + '  <div style="display:flex;align-items:center;gap:8px">'
-      + '    <span style="width:8px;height:8px;border-radius:50%;background:' + s.color + ';flex-shrink:0"></span>'
-      + '    <span style="font-weight:600;font-size:13px;color:var(--text)">' + escHtml(s.name) + '</span>'
-      + '    <span style="font-size:10px;color:var(--text3)">' + s.member_count + ' member' + (s.member_count !== 1 ? 's' : '') + '</span>'
-      + '  </div>'
-      + '  <div style="display:flex;gap:4px">'
-      + '    <button class="btn btn-ghost" onclick="_editSquad(\'' + s.id + '\')" style="font-size:10px;padding:2px 8px">Edit</button>'
-      + '    <button class="btn btn-ghost" onclick="_deleteSquad(\'' + s.id + '\',\'' + escHtml(s.name) + '\')" style="font-size:10px;padding:2px 8px;color:var(--err,#ef4444)">Delete</button>'
-      + '  </div></div>';
-    // Members
-    if (s.members && s.members.length) {
-      html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
-      s.members.forEach(function(m) {
-        html += '<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--text2)">' + (m.avatar || '\u{1F916}') + ' ' + escHtml(m.name) + '</span>';
-      });
-      html += '</div>';
-    }
-    html += '</div>';
-  });
-  list.innerHTML = html;
+  updateSquadWizUI();
 }
 
-async function _createSquad() {
-  var name = document.getElementById('sq-new-name').value.trim();
-  if (!name) { toast('Name required', 'err'); return; }
-  var color = document.getElementById('sq-new-color').value || '#6366f1';
-  var r = await api('/api/squads', { action:'create', name:name, color:color });
+function updateSquadWizUI() {
+  document.querySelectorAll('#squad-wizard .wizard-step').forEach(function(s) { s.classList.remove('active'); });
+  var step = document.querySelector('#squad-wizard .wizard-step[data-step="' + _squadWizStep + '"]');
+  if (step) step.classList.add('active');
+  var back = document.getElementById('sq-wiz-back');
+  var next = document.getElementById('sq-wiz-next');
+  var progress = document.getElementById('sq-wiz-progress');
+  if (back) back.disabled = _squadWizStep <= 1;
+  if (next) next.textContent = _squadWizStep >= 3 ? 'Create' : 'Next';
+  if (progress) progress.textContent = 'Step ' + _squadWizStep + ' of 3';
+}
+
+async function createSquadFromWizard() {
+  var name = (document.getElementById('sq-wiz-name') || {}).value || '';
+  name = name.trim();
+  if (!name) {
+    porterAlert('Missing Field', 'Squad name is required.');
+    _squadWizStep = 1;
+    updateSquadWizUI();
+    return;
+  }
+  var colorInput = document.getElementById('sq-wiz-color');
+  var color = colorInput && colorInput.value ? colorInput.value : (_squadWizColor || '#6366f1');
+  var desc = (document.getElementById('sq-wiz-desc') || {}).value || '';
+  await _createSquad(name, color, desc);
+}
+
+function _closeSquadConfig() {
+  var panel = document.getElementById('squad-config-panel');
+  var overlay = document.getElementById('squad-config-overlay');
+  if (panel) panel.classList.remove('open');
+  if (overlay) overlay.classList.remove('open');
+  window._activeSquadEditId = null;
+}
+
+async function _createSquad(name, color, description) {
+  var n = (name || '').trim();
+  if (!n) {
+    var input = document.getElementById('sq-new-name');
+    n = input ? input.value.trim() : '';
+  }
+  if (!n) { toast('Name required', 'err'); return; }
+  var c = color || ((document.getElementById('sq-new-color') || {}).value) || '#6366f1';
+  var d = typeof description === 'string' ? description : '';
+  var r = await api('/api/squads', { action:'create', name:n, color:c, description:d });
   if (r && r.ok) {
     toast('Squad created', 'ok');
-    document.getElementById('sq-new-name').value = '';
+    var oldInput = document.getElementById('sq-new-name');
+    if (oldInput) oldInput.value = '';
     await loadSquads();
-    _renderSquadMgrList();
-  } else { toast(r && r.error || 'Failed', 'err'); }
+    closeSquadWizard();
+    renderPersonaOrg();
+  } else {
+    toast(r && r.error || 'Failed', 'err');
+  }
 }
 
 async function _deleteSquad(id, name) {
@@ -19925,7 +20024,8 @@ async function _deleteSquad(id, name) {
     if (r && r.ok) {
       toast('Squad deleted', 'ok');
       await loadSquads();
-      _renderSquadMgrList();
+      renderPersonaOrg();
+      if (window._activeSquadEditId === id) _closeSquadConfig();
     } else { toast('Failed', 'err'); }
   }, {danger: true, okLabel: 'Delete'});
 }
@@ -19933,23 +20033,25 @@ async function _deleteSquad(id, name) {
 function _editSquad(id) {
   var s = _squads.find(function(x) { return x.id === id; });
   if (!s) return;
-  var list = document.getElementById('squad-mgr-list');
-  if (!list) return;
+  var panel = document.getElementById('squad-config-panel');
+  var overlay = document.getElementById('squad-config-overlay');
+  var body = document.getElementById('squad-config-body');
+  var title = document.getElementById('sq-config-title');
+  if (!panel || !overlay || !body) return;
+  window._activeSquadEditId = id;
+  if (title) title.textContent = s.name + ' Config';
   var allAgents = (_personas || []).slice();
   var memberIds = (s.members || []).map(function(m) { return m.id; });
-  var html = '<div style="padding:16px;border:1px solid var(--accent);border-radius:8px;background:color-mix(in srgb,var(--accent) 4%,transparent)">'
-    + '<div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;margin-bottom:12px">Configure: ' + escHtml(s.name) + '</div>'
-    // Name + Color row
-    + '<div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px">'
+  var html = '<div style="display:flex;flex-direction:column;gap:12px">'
+    + '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Squad Details</div>'
+    + '<div style="display:grid;grid-template-columns:1fr auto;gap:8px">'
     + '  <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">NAME</div><input class="settings-input" id="sq-edit-name" value="' + escHtml(s.name) + '" style="font-size:12px;padding:6px 10px;width:100%;box-sizing:border-box"></div>'
-    + '  <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">COLOR</div><input class="settings-input" id="sq-edit-color" type="color" value="' + (s.color || '#6366f1') + '" style="width:36px;height:32px;padding:2px;cursor:pointer"></div>'
+    + '  <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">COLOR</div><input class="settings-input" id="sq-edit-color" type="color" value="' + (s.color || '#6366f1') + '" style="width:40px;height:34px;padding:2px;cursor:pointer"></div>'
     + '</div>'
-    // Mission / Description
-    + '<div style="margin-bottom:10px"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">MISSION</div>'
-    + '<textarea class="settings-input" id="sq-edit-desc" placeholder="What does this squad do? Goals, scope, focus areas..." style="width:100%;font-size:12px;padding:6px 10px;min-height:50px;resize:vertical;box-sizing:border-box">' + escHtml(s.description || '') + '</textarea></div>'
-    // Members
-    + '<div style="font-size:10px;color:var(--text3);margin-bottom:6px">MEMBERS</div>'
-    + '<div style="display:flex;flex-direction:column;gap:3px;max-height:180px;overflow-y:auto;margin-bottom:10px">';
+    + '<div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">MISSION</div>'
+    + '<textarea class="settings-input" id="sq-edit-desc" placeholder="What does this squad do? Goals, scope, focus areas..." style="width:100%;font-size:12px;padding:8px 10px;min-height:70px;resize:vertical;box-sizing:border-box">' + escHtml(s.description || '') + '</textarea></div>'
+    + '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Members</div>'
+    + '<div style="display:flex;flex-direction:column;gap:3px;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--bg2)">';
   allAgents.forEach(function(a) {
     var checked = memberIds.indexOf(a.id) >= 0 ? 'checked' : '';
     var isLeader = (s.members || []).some(function(m) { return m.id === a.id && m.squad_role === 'leader'; });
@@ -19963,18 +20065,17 @@ function _editSquad(id) {
       + '</label>';
   });
   html += '</div>'
-    // Squad Skills section
-    + '<div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:10px">'
-    + '<div style="font-size:10px;color:var(--text3);margin-bottom:6px">SQUAD SKILLS <span style="font-size:9px;opacity:.7">(applied to all members)</span></div>'
+    + '<div style="border-top:1px solid var(--border);padding-top:10px">'
+    + '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Squad Skills <span style="font-size:9px;opacity:.7">(applied to all members)</span></div>'
     + '<div id="sq-edit-skills-' + id + '" style="font-size:11px;color:var(--text3)">Loading...</div>'
     + '</div>'
-    // Buttons
-    + '<div style="display:flex;gap:8px">'
-    + '  <button class="btn btn-primary" onclick="_saveSquadEdit(\'' + id + '\')" style="font-size:11px;padding:4px 14px">Save</button>'
-    + '  <button class="btn btn-ghost" onclick="_renderSquadMgrList()" style="font-size:11px;padding:4px 14px">Cancel</button>'
+    + '<div style="display:flex;gap:8px;padding-top:6px">'
+    + '  <button class="btn btn-primary" onclick="_saveSquadEdit(\'' + id + '\')" style="font-size:11px;padding:5px 14px">Save</button>'
+    + '  <button class="btn btn-ghost" onclick="_closeSquadConfig()" style="font-size:11px;padding:5px 14px">Cancel</button>'
     + '</div></div>';
-  list.innerHTML = html;
-  // Load common skills across members
+  body.innerHTML = html;
+  overlay.classList.add('open');
+  panel.classList.add('open');
   _loadSquadSkills(id, memberIds);
 }
 
@@ -20049,7 +20150,8 @@ async function _saveSquadEdit(id) {
   if (r && r.ok) {
     toast('Squad saved', 'ok');
     await loadSquads();
-    _renderSquadMgrList();
+    renderPersonaOrg();
+    _editSquad(id);
   } else { toast(r && r.error || 'Failed', 'err'); }
 }
 
@@ -20115,13 +20217,15 @@ function renderPersonaOrg() {
         return (pSquads[p.id] || []).some(function(s) { return s.id === sq.id; });
       });
       if (!members.length) return;
-      html += '<div style="margin-bottom:16px">'
-        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid ' + sq.color + '">'
-        + '<span style="width:10px;height:10px;border-radius:50%;background:' + sq.color + ';flex-shrink:0"></span>'
-        + '<span style="font-size:13px;font-weight:600;color:var(--text);cursor:pointer" onclick="_editSquad(\'' + sq.id + '\')" title="Configure squad">' + escHtml(sq.name) + '</span>'
+      html += '<div style="margin-bottom:14px">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;padding:4px 0 7px 0;border-bottom:1px solid ' + sq.color + '">'
+        + '<span style="width:9px;height:9px;border-radius:50%;background:' + sq.color + ';flex-shrink:0"></span>'
+        + '<span style="font-size:13px;font-weight:600;color:var(--text)">' + escHtml(sq.name) + '</span>'
         + '<span style="font-size:11px;color:var(--text3)">' + members.length + ' agent' + (members.length !== 1 ? 's' : '') + '</span>'
+        + '<button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;margin-left:auto" onclick="_editSquad(\'' + sq.id + '\')" title="Configure squad">⚙</button>'
         + '</div>'
-        + '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">';
+        + '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:2px 0">';
+      // Mark leaders for this squad
       // Mark leaders for this squad
       var leaderIds = {};
       (sq.members || []).forEach(function(m) { if (m.squad_role === 'leader') leaderIds[m.id] = true; });
@@ -21249,12 +21353,12 @@ function wizStep(dir) {
 }
 
 function updateWizUI() {
-  document.querySelectorAll('.wizard-step').forEach(s => s.classList.remove('active'));
-  const step = document.querySelector(`.wizard-step[data-step="${_wizCurrentStep}"]`);
+  document.querySelectorAll('#persona-wizard .wizard-step').forEach(function(s) { s.classList.remove('active'); });
+  var step = document.querySelector('#persona-wizard .wizard-step[data-step="' + _wizCurrentStep + '"]');
   if (step) step.classList.add('active');
   document.getElementById('wiz-back').disabled = _wizCurrentStep <= 1;
   document.getElementById('wiz-next').textContent = _wizCurrentStep >= 7 ? 'Create' : 'Next';
-  document.getElementById('wiz-progress').textContent = `Step ${_wizCurrentStep} of 7`;
+  document.getElementById('wiz-progress').textContent = 'Step ' + _wizCurrentStep + ' of 7';
 }
 
 async function _wizAiSuggest() {
@@ -27519,7 +27623,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.66"})
+            self.reply_json({"v": "0.29.67"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27681,7 +27785,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.66"
+                health["porter_version"] = "0.29.67"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29481,7 +29585,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.66'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.67'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34066,7 +34170,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.66 ready (localhost only)")
+    print(f"\n  Porter v0.29.67 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
