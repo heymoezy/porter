@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.25 — Delete wizard, fix workflow history, Hook Profiles"""
+"""Porter v0.29.26 — Graceful failure, Iterative Retrieval"""
 
 
 import email
@@ -2027,6 +2027,54 @@ def _skill_mining_run():
         _wf_record_run("skill_mining", success=False, error=e, duration_s=_sm.time()-_t0)
 
 
+def _iterative_retrieve(message, persona_id="", max_chunks=3):
+    """v0.29.26 — Iterative Retrieval: 2-pass context assembly.
+    Pass 1: keyword extraction from message.
+    Pass 2: retrieve relevant memory chunks using extracted keywords.
+    Returns a short context string suitable for injection."""
+    if not message or len(message) < 10:
+        return ""
+    import re as _ir_re
+    # Pass 1: Extract significant keywords (nouns/verbs, skip stopwords)
+    stopwords = {'the','a','an','is','are','was','were','be','been','being','have','has','had',
+                 'do','does','did','will','would','shall','should','may','might','can','could',
+                 'i','me','my','we','our','you','your','he','him','his','she','her','it','its',
+                 'they','them','their','this','that','these','those','what','which','who','whom',
+                 'when','where','why','how','not','no','nor','but','and','or','if','then','else',
+                 'so','for','to','of','in','on','at','by','with','from','up','out','about','into',
+                 'over','after','before','between','through','during','above','below','just','also',
+                 'very','too','quite','really','here','there','now','all','each','every','both',
+                 'few','more','most','other','some','such','only','own','same','than','like','want',
+                 'need','make','get','go','come','take','give','tell','say','know','think','see',
+                 'use','try','find','help','let','please','could','would'}
+    words = _ir_re.findall(r'[a-zA-Z]{3,}', message.lower())
+    keywords = [w for w in words if w not in stopwords][:10]
+    if not keywords:
+        return ""
+    # Pass 2: Search memory files for keyword matches
+    try:
+        persona_dir = PERSONAS_DIR / persona_id if persona_id else None
+        chunks = []
+        if persona_dir and persona_dir.exists():
+            for md_file in sorted(persona_dir.glob("*.md")):
+                if md_file.name in ("ROLE_CARD.md", "IDENTITY.md"):
+                    continue  # Already in SOUL budget
+                try:
+                    content = md_file.read_text(encoding="utf-8")[:2000]
+                    score = sum(1 for kw in keywords if kw in content.lower())
+                    if score >= 2:  # At least 2 keyword matches
+                        chunks.append((score, md_file.name, content[:300]))
+                except Exception:
+                    pass
+        chunks.sort(key=lambda x: -x[0])
+        result_parts = []
+        for score, fname, text in chunks[:max_chunks]:
+            result_parts.append(f"[{fname}] {text.strip()}")
+        return "\n".join(result_parts)
+    except Exception:
+        return ""
+
+
 def _build_context_suffix(persona_id, message=""):
     """Build a lean context suffix for persona dispatch.
     v0.29.18: Trimmed from ~4.5KB to ~2KB by dropping redundant files."""
@@ -2068,6 +2116,14 @@ def _build_context_suffix(persona_id, message=""):
             if mem:
                 parts.append(f"--- Memory ---\n{mem[:memory_budget]}\n---")
     # v0.29.23 — Cortex removed from system prompts (unnecessary bloat, slows dispatch)
+
+    # v0.29.26 — Iterative Retrieval: inject relevant memory chunks based on message keywords
+    try:
+        ir_ctx = _iterative_retrieve(message, persona_id=persona_id)
+        if ir_ctx:
+            parts.append(f"--- Relevant Context ---\n{ir_ctx[:memory_budget // 2]}\n---")
+    except Exception:
+        pass
     # Squad roster — compact one-liner per teammate
     try:
         teammates = _persona_list()
@@ -9037,7 +9093,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.25</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.26</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10269,19 +10325,50 @@ async function api(url, body, timeout_ms = 15000) {
     const r = await fetch(url, opt);
     clearTimeout(tid);
     if (r.status === 401) { window.location.href = '/login'; return null; }
-    const d = await r.json();
+    var d;
+    try { d = await r.json(); } catch(_) { d = { ok: false, error: 'Invalid response from server' }; }
     if (!r.ok) {
-      const errMsg = d.error && typeof d.error === 'object' ? (d.error.message || 'API error') : (d.error || 'API error');
+      const errMsg = d.error && typeof d.error === 'object' ? (d.error.message || 'API error') : (d.error || 'Server error (' + r.status + ')');
       toast(errMsg, 'err');
       return null;
     }
     return d;
   } catch(e) {
     clearTimeout(tid);
-    if (e.name === 'AbortError') { toast('Request timed out — check your connection', 'err'); return null; }
-    toast('Network error', 'err');
+    if (e.name === 'AbortError') {
+      toast('Request timed out', 'err');
+      return null;
+    }
+    // v0.29.26 — Detect offline vs network error
+    if (!navigator.onLine) { toast('You appear to be offline', 'err'); }
+    else { toast('Connection failed — server may be restarting', 'err'); }
     return null;
   }
+}
+
+// v0.29.26 — Centralized UI failure display with retry
+function uiFail(containerId, msg, retryFn) {
+  var el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text3)">'
+    + '<div style="font-size:12px;margin-bottom:8px">' + escHtml(msg || 'Failed to load') + '</div>'
+    + (retryFn ? '<button class="btn btn-ghost" style="font-size:11px" onclick="(' + retryFn.toString().replace(/"/g, '&quot;') + ')()">Retry</button>' : '')
+    + '</div>';
+}
+
+// v0.29.26 — Loading timeout: auto-replace stuck "Loading..." with retry
+function withLoadTimeout(containerId, loadFn, ms) {
+  ms = ms || 10000;
+  var el = document.getElementById(containerId);
+  if (!el) return;
+  var _lt = setTimeout(function() {
+    if (el.innerHTML.indexOf('Loading') >= 0 || el.innerHTML.indexOf('loading') >= 0) {
+      el.innerHTML = '<div style="text-align:center;padding:12px;color:var(--text3)">'
+        + '<div style="font-size:12px;margin-bottom:8px">Taking too long...</div>'
+        + '<button class="btn btn-ghost" style="font-size:11px" onclick="' + (loadFn || '') + '">Retry</button></div>';
+    }
+  }, ms);
+  return _lt;
 }
 
 const CHANGELOG = [
@@ -10291,6 +10378,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.26', date:'2026-03-08', notes:['Graceful failure: api() returns better error messages (offline/timeout/server error)','uiFail() centralized error display with retry button','Loading timeout: stuck Loading... auto-replaced with retry after 10s','Iterative Retrieval: 2-pass keyword-based context from agent memory files for chat dispatch'] },
   { ver:'v0.29.25', date:'2026-03-08', notes:['Deleted obsolete setup wizard (~400 lines CSS/JS/HTML removed)','Workflow history: shows run stats, last error, last run time even without detailed entries','Hook Profiles: per-agent dispatch strictness (relaxed/balanced/strict) in Config tab','DB migration: hook_profile column added to personas table'] },
   { ver:'v0.29.24', date:'2026-03-08', notes:['Config tab: removed redundant Info section (raw timestamp, soul hash, status, last active)','Config tab: emoji picker for avatar selection with search','Config tab: fallback chain as ordered dropdowns with none option','Skills tab: organized by Assigned/Recommended/Available with category grouping','Squad management: create/edit/delete squads with member assignment from chip bar'] },
   { ver:'v0.29.23', date:'2026-03-08', notes:['Removed Cortex memories from agent system prompts (faster dispatch)','Prompt budget: SOUL 60%, RULES 25%, MEMORY 15%','Fixed agent drag-and-drop (simplified, working)','Chat: delete message button, improved hover actions'] },
@@ -18717,6 +18805,8 @@ async function loadPersonas() {
       } catch(x) {}
       renderPersonaOrg();
       loadSquads();
+      // v0.29.26 — Loading timeout for agent grid
+      withLoadTimeout('persona-cards-row', 'loadPersonas()', 8000);
       populateChatPersonaBar();
     }
   } catch(e) { console.error('loadPersonas failed', e); }
@@ -26112,7 +26202,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.25"})
+            self.reply_json({"v": "0.29.26"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26274,7 +26364,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.25"
+                health["porter_version"] = "0.29.26"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28108,7 +28198,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.25'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.26'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32610,7 +32700,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.25 ready (localhost only)")
+    print(f"\n  Porter v0.29.26 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
