@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.40 — Squad awareness, persona restore, interval fix, workflow triggers"""
+"""Porter v0.28.41 — Squad awareness, persona restore, interval fix, workflow triggers"""
 
 
 import email
@@ -1226,6 +1226,9 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
             pass
 
         # v0.28.0 — auto-accept: store directly, no file routing
+        # If LLM says "agent" but no persona_id, fall back to global (prevent orphans)
+        if scope == "agent" and not persona_id:
+            scope = "global"
         scope_id = persona_id if scope == "agent" else ""
         confidence = round(importance / 10.0, 2)
 
@@ -8544,7 +8547,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.40</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.41</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9803,6 +9806,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.41', date:'2026-03-08', notes:['Fix memory extraction: agent-scoped facts without persona_id fall back to global','Migrated 47 orphaned agent memories to global (were invisible to injection)','Prevents future orphan memories from scope assignment bug'] },
   { ver:'v0.28.40', date:'2026-03-08', notes:['Removed squad scope from Cortex (redundant with global)','Fixed count mismatch: load all memories (was limited to 200)','Graph: removed squad node'] },
   { ver:'v0.28.39', date:'2026-03-08', notes:['Cortex: scope filter bar (All/Unassigned/Global/Squad)','Cortex: agent view includes shared squad learnings','Cortex: graph + list refresh after edit save','Removed facts counter from sidebar'] },
   { ver:'v0.28.38', date:'2026-03-08', notes:['System workflows moved to Intelligence > System (separate from user Workflows)','Workflows tab now reserved for user-defined workflow builder'] },
@@ -24909,7 +24913,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.40"})
+            self.reply_json({"v": "0.28.41"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25071,7 +25075,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.40"
+                health["porter_version"] = "0.28.41"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26894,7 +26898,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.40'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.41'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31128,7 +31132,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.40 ready (localhost only)")
+    print(f"\n  Porter v0.28.41 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
