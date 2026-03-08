@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.53 — Dev→QA retry loop, screenshot-evidence QA, agent deliverables"""
+"""Porter v0.28.54 — Spatial agent status, live inspection, quest log, agent XP"""
 
 
 import email
@@ -8396,6 +8396,16 @@ body.density-compact .file-name { padding: 6px 0; }
 .persona-card-status { display:flex; align-items:center; gap:4px; margin-top:4px; font-size:10px; }
 .persona-card-dot { width:5px; height:5px; border-radius:50%; }
 
+/* v0.28.54 — Spatial agent status animations */
+@keyframes agent-pulse { 0%,100% { box-shadow:0 0 0 0 rgba(34,197,94,.4); } 50% { box-shadow:0 0 0 8px rgba(34,197,94,0); } }
+@keyframes agent-shake { 0%,100% { transform:translateX(0); } 20%,60% { transform:translateX(-3px); } 40%,80% { transform:translateX(3px); } }
+.persona-card.status-active { animation:agent-pulse 2s ease-in-out infinite; border-color:#22c55e; }
+.persona-card.status-error { animation:agent-shake .4s ease-in-out; border-color:#ef4444; }
+.persona-card.status-sleeping { opacity:.7; }
+.persona-card-xp { width:100%; height:3px; border-radius:2px; background:var(--border); margin-top:6px; overflow:hidden; }
+.persona-card-xp-fill { height:100%; border-radius:2px; background:linear-gradient(90deg,#3b82f6,#8b5cf6); transition:width .3s; }
+.persona-card-xp-label { font-size:9px; color:var(--text3); margin-top:2px; }
+
 /* ── Persona Detail — slide-out right panel ──────────────── */
 .persona-detail { position:fixed; top:0; right:0; width:520px; height:100vh; z-index:900;
   background:var(--surface); border-left:1px solid var(--border); box-shadow:-4px 0 20px rgba(0,0,0,.12);
@@ -8895,7 +8905,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.53</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.54</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -8979,6 +8989,13 @@ input[type="number"].settings-input { min-width: 60px; }
         <div id="chat-messages" class="chat-messages welcome-state">
           <div class="chat-welcome">
             <div class="chat-welcome-sub"></div>
+            <div id="quest-log-wrap" style="width:100%;max-width:640px;margin:0 auto 16px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+                <span style="font-size:13px;font-weight:600;color:var(--text)">⚔️ Quests</span>
+                <span style="font-size:10px;color:var(--text3)">— pending decisions</span>
+              </div>
+              <div id="quest-log"></div>
+            </div>
             <div class="chat-welcome-input-wrap">
               <div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>
               <div style="display:flex;align-items:flex-end;gap:4px;width:100%" ondragover="_chatDragOver(event)" ondrop="_chatDrop(event)" ondragleave="_chatDragLeave(event)" ondragenter="_chatDragEnter(event)">
@@ -9071,6 +9088,7 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
       <div class="persona-detail-tabs">
         <button class="pd-tab active" onclick="switchPdTab('identity')">Identity</button>
+        <button class="pd-tab" onclick="switchPdTab('live')">Live</button>
         <button class="pd-tab" onclick="switchPdTab('activity')">Activity</button>
         <button class="pd-tab" onclick="switchPdTab('skills')">Skills</button>
         <button class="pd-tab" onclick="switchPdTab('config')">Config</button>
@@ -10115,6 +10133,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.54', date:'2026-03-08', notes:['Spatial agent status: cards pulse green when dispatching, shake on error, glow on active','Live inspection tab: real-time SSE stream of dispatch events in agent slide-out panel','Quest log: Command Center shows pending QA escalations and agent decisions needing input','Agent XP: confidence score and evidence count shown on agent cards as XP bar'] },
   { ver:'v0.28.53', date:'2026-03-08', notes:['Dev→QA retry loop: POST /api/qa/review dispatches task to dev agent then BugBanisher for QA, retries up to 3x on FAIL','Screenshot-evidence QA: POST /api/qa/screenshot runs Playwright on specified tests, returns screenshot paths','Agent DELIVERABLES.md: all 9 agents now have concrete output specs and quality criteria','Local CLAUDE.md: targeted guidance files in tests/ and personas/ directories'] },
   { ver:'v0.28.52', date:'2026-03-08', notes:['Confidence scoring: facts start at 0.5, reinforced on re-extraction (+0.15, cap 0.95)','Evidence tracking: evidence_count column tracks independent extractions of same fact','Confidence decay: consolidation reduces confidence by 0.05 for unused facts >7 days old','Injection scoring includes confidence weight (replaces flat importance/10)','Claude Code hooks: PreCompact checkpoint, PostToolUse syntax gate, Stop session log, strategic compact suggester'] },
   { ver:'v0.28.51', date:'2026-03-08', notes:['Cortex dedup thresholds lowered: .md gate 0.35→0.25, cross-session 0.6→0.45','Suffix stemmer for Jaccard matching (word form normalization)','Workflow history bootstrap: initializes DB rows for all registered workflows on startup','Better duplicate rejection for semantic variants (addressed/address/prefers)'] },
@@ -12037,7 +12056,7 @@ function switchModule(name) {
       }
       if (window._personaRefreshTimer) clearInterval(window._personaRefreshTimer);
       window._personaRefreshTimer = setInterval(function() {
-        if (document.getElementById('overview-module') && document.getElementById('overview-module').classList.contains('active')) loadPersonas();
+        if (document.getElementById('overview-module') && document.getElementById('overview-module').classList.contains('active')) { loadPersonas(); if (typeof _loadQuestLog === 'function') _loadQuestLog(); }
         else clearInterval(window._personaRefreshTimer);
       }, 30000);
     }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); }, projects: function() {}, admin: loadAdmin,
@@ -14410,7 +14429,14 @@ function renderChatMessages(streamUpdate) {
     // Centered welcome state
     el.classList.add('welcome-state');
     el.innerHTML = '<div class="chat-welcome">'
-      + '<div class="chat-welcome-sub"></div>'
+      + '<div class="chat-welcome-sub"></div>
+            <div id="quest-log-wrap" style="width:100%;max-width:640px;margin:0 auto 16px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+                <span style="font-size:13px;font-weight:600;color:var(--text)">⚔️ Quests</span>
+                <span style="font-size:10px;color:var(--text3)">— pending decisions</span>
+              </div>
+              <div id="quest-log"></div>
+            </div>'
       + '<div class="chat-welcome-input-wrap">'
       + '<div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>'
       + '<div style="display:flex;align-items:flex-end;gap:4px;width:100%" ondragover="_chatDragOver(event)" ondrop="_chatDrop(event)" ondragleave="_chatDragLeave(event)" ondragenter="_chatDragEnter(event)">'
@@ -18226,6 +18252,18 @@ async function loadPersonas() {
     const r = await api('/api/personas');
     if (r.ok) {
       _personas = r.personas || [];
+      // v0.28.54 — Fetch cortex stats and merge into persona data
+      try {
+        var statsR = await api('/api/personas/stats');
+        if (statsR && statsR.stats) {
+          var globalStats = statsR.stats._global || {};
+          _personas.forEach(function(p) {
+            var s = statsR.stats[p.id] || globalStats;
+            p.confidence = s.confidence || 0;
+            p.evidence_count = s.evidence || 0;
+          });
+        }
+      } catch(x) {}
       renderPersonaOrg();
       populateChatPersonaBar();
     }
@@ -18493,6 +18531,44 @@ async function chatWithPersona(personaId) {
   if (input) input.focus();
 }
 
+
+// v0.28.54 — Quest Log: pending decisions needing Moe's input
+async function _loadQuestLog() {
+  var el = document.getElementById('quest-log');
+  if (!el) return;
+  var quests = [];
+  // Check for QA escalations (from SSE events stored in memory)
+  try {
+    var wfData = await api('/api/workflows');
+    if (wfData && Array.isArray(wfData)) {
+      wfData.forEach(function(wf) {
+        if (wf.last_error && wf.status === 'error') {
+          quests.push({ type:'error', icon:'⚠️', title:wf.name + ' failed', detail:wf.last_error.substring(0,100), ts:wf.last_run });
+        }
+      });
+    }
+  } catch(e) {}
+  // Check for agents with error status
+  (_personas || []).forEach(function(p) {
+    if (p.status === 'error') {
+      quests.push({ type:'agent', icon:'🔴', title:p.name + ' needs attention', detail:'Agent in error state', ts:null });
+    }
+  });
+  if (!quests.length) {
+    el.innerHTML = '<div style="padding:8px 12px;font-size:12px;color:var(--text3)">No pending quests — all clear</div>';
+    return;
+  }
+  el.innerHTML = quests.map(function(q) {
+    var color = q.type === 'error' ? '#ef4444' : q.type === 'agent' ? '#f59e0b' : '#3b82f6';
+    return '<div style="padding:8px 12px;border-left:3px solid ' + color + ';background:var(--bg2);border-radius:4px;margin-bottom:6px">'
+      + '<div style="display:flex;align-items:center;gap:6px">'
+      + '<span>' + q.icon + '</span>'
+      + '<span style="font-size:12px;font-weight:500;color:var(--text)">' + escHtml(q.title) + '</span></div>'
+      + (q.detail ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;padding-left:22px">' + escHtml(q.detail) + '</div>' : '')
+      + '</div>';
+  }).join('');
+}
+
 function renderPersonaOrg() {
   const row = document.getElementById('persona-cards-row');
   if (!row) return;
@@ -18516,7 +18592,12 @@ function renderPersonaOrg() {
     var grp = p.agent_group || '';
     var grpColor = groupColors[grp] || 'var(--text3)';
     var grpBadge = grp ? '<div style="font-size:10px;padding:1px 6px;border-radius:3px;background:' + grpColor + '20;color:' + grpColor + ';font-weight:600;margin-top:4px;letter-spacing:.3px">' + grp + '</div>' : '';
-    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + '" draggable="true" data-persona-id="' + p.id + '" ondragstart="_pDragStart(event)" ondragover="_pDragOver(event)" ondrop="_pDrop(event)" ondragend="_pDragEnd(event)" onclick="selectPersona(\'' + p.id + '\')">'
+    // v0.28.54 — Spatial status class + XP bar
+    var statusClass = p.status === 'active' ? ' status-active' : p.status === 'error' ? ' status-error' : p.status === 'sleeping' ? ' status-sleeping' : '';
+    var xpPct = Math.min(100, Math.round((p.confidence || 0) * 100));
+    var evCount = p.evidence_count || 0;
+    var xpBar = xpPct > 0 ? '<div class="persona-card-xp"><div class="persona-card-xp-fill" style="width:' + xpPct + '%"></div></div><div class="persona-card-xp-label">' + xpPct + '% · ' + evCount + ' evidence</div>' : '';
+    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + statusClass + '" draggable="true" data-persona-id="' + p.id + '" ondragstart="_pDragStart(event)" ondragover="_pDragOver(event)" ondrop="_pDrop(event)" ondragend="_pDragEnd(event)" onclick="selectPersona(\'' + p.id + '\')">'
       + '<div class="persona-card-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
       + '<div class="persona-card-role">' + escHtml(p.role || 'General') + '</div>'
@@ -18524,7 +18605,9 @@ function renderPersonaOrg() {
       + '<div class="persona-card-status">'
       + '<span class="persona-card-dot" style="background:' + dotColor + '"></span>'
       + '<span style="color:var(--text3)">' + statusLabel + '</span>'
-      + '</div></div>';
+      + '</div>'
+      + xpBar
+      + '</div>';
   }).join('');
 }
 
@@ -18605,6 +18688,7 @@ async function selectPersona(id) {
 }
 
 function closePersonaDetail() {
+  if (window._pdLiveSource) { window._pdLiveSource.close(); window._pdLiveSource = null; }
   _selectedPersonaId = null;
   var d = document.getElementById('persona-detail');
   var o = document.getElementById('persona-detail-overlay');
@@ -18665,6 +18749,52 @@ function switchPdTab(tab) {
       + '</div>'
       + '<div style="margin-top:8px"><button class="btn btn-ghost" onclick="savePersonaMeta()" style="font-size:11px">Save Settings</button></div>'
       + '</div>';
+  } else if (tab === 'live') {
+    // v0.28.54 — Live inspection: stream dispatch events for this agent
+    content.innerHTML = '<div style="padding:8px 0">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
+      + '<span style="width:8px;height:8px;border-radius:50%;background:#22c55e;animation:agent-pulse 2s infinite"></span>'
+      + '<span style="font-size:12px;font-weight:500;color:var(--text)">Live Feed</span>'
+      + '<span style="font-size:10px;color:var(--text3);margin-left:auto" id="pd-live-count">0 events</span>'
+      + '</div>'
+      + '<div id="pd-live-feed" style="max-height:500px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;font-family:monospace;font-size:11px"></div>'
+      + '</div>';
+    // Connect to SSE and filter for this agent
+    if (window._pdLiveSource) { window._pdLiveSource.close(); window._pdLiveSource = null; }
+    var feed = document.getElementById('pd-live-feed');
+    var countEl = document.getElementById('pd-live-count');
+    var _liveCount = 0;
+    var agentId = p.id;
+    var agentName = p.name;
+    try {
+      var es = new EventSource('/api/events');
+      window._pdLiveSource = es;
+      es.onmessage = function(e) {
+        try {
+          var data = JSON.parse(e.data);
+          // Filter: only show events relevant to this agent
+          var txt = JSON.stringify(data);
+          if (txt.indexOf(agentId) < 0 && txt.indexOf(agentName) < 0) return;
+          _liveCount++;
+          if (countEl) countEl.textContent = _liveCount + ' events';
+          var eventType = data.type || 'event';
+          var ts = new Date().toLocaleTimeString();
+          var color = eventType.includes('error') || eventType.includes('fail') ? '#ef4444'
+            : eventType.includes('complete') || eventType.includes('pass') ? '#22c55e' : '#3b82f6';
+          var detail = data.text ? data.text.substring(0, 200) : (data.output_summary || data.prompt || data.message || '').substring(0, 200);
+          var el = document.createElement('div');
+          el.style.cssText = 'padding:8px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;border-left:3px solid ' + color;
+          el.innerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">'
+            + '<span style="font-size:10px;color:' + color + ';font-weight:600">' + escHtml(eventType) + '</span>'
+            + '<span style="font-size:9px;color:var(--text3);margin-left:auto">' + ts + '</span></div>'
+            + (detail ? '<div style="color:var(--text2);word-break:break-word">' + escHtml(detail) + '</div>' : '');
+          feed.prepend(el);
+          // Cap at 50 events
+          while (feed.children.length > 50) feed.removeChild(feed.lastChild);
+        } catch(x) {}
+      };
+      es.onerror = function() { if (window._pdLiveSource === es) { es.close(); window._pdLiveSource = null; } };
+    } catch(x) {}
   } else if (tab === 'activity') {
     content.innerHTML = '<div class="loading-indicator">Loading activity...</div>';
     api('/api/bridge/runs?persona_id=' + p.id + '&limit=20').then(r => {
@@ -25156,6 +25286,32 @@ class Handler(BaseHTTPRequestHandler):
             personas = _persona_list()
             self.reply_json({"ok": True, "personas": personas})
 
+        elif parsed.path == "/api/personas/stats":
+            # v0.28.54 — Per-agent cortex confidence + evidence stats
+            if not self.auth_check(redirect=False): return
+            try:
+                conn = _db_conn()
+                rows = conn.execute(
+                    "SELECT scope_id, AVG(confidence), SUM(evidence_count), COUNT(*) "
+                    "FROM cortex_memories WHERE status='active' AND scope='agent' AND consolidated_into IS NULL "
+                    "GROUP BY scope_id"
+                ).fetchall()
+                # Also get global stats
+                glob = conn.execute(
+                    "SELECT AVG(confidence), SUM(evidence_count), COUNT(*) "
+                    "FROM cortex_memories WHERE status='active' AND scope='global' AND consolidated_into IS NULL"
+                ).fetchone()
+                conn.close()
+                stats = {}
+                for r in rows:
+                    stats[r[0]] = {"confidence": round(r[1] or 0, 2), "evidence": r[2] or 0, "facts": r[3] or 0}
+                if glob:
+                    stats["_global"] = {"confidence": round(glob[0] or 0, 2), "evidence": glob[1] or 0, "facts": glob[2] or 0}
+                self.reply_json({"ok": True, "stats": stats})
+            except Exception as e:
+                self.reply_json({"ok": True, "stats": {}})
+
+
         elif re.match(r'^/api/personas/[^/]+/skills$', parsed.path):
             if not self.auth_check(redirect=False): return
             pid = parsed.path.split("/")[3]
@@ -25218,7 +25374,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.53"})
+            self.reply_json({"v": "0.28.54"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25380,7 +25536,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.53"
+                health["porter_version"] = "0.28.54"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27189,7 +27345,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.53'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.54'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31611,7 +31767,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.53 ready (localhost only)")
+    print(f"\n  Porter v0.28.54 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
