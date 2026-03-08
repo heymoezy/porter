@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.59 — Replace last native confirm() dialogs"""
+"""Porter v0.29.60 — Fix locations module forms, cleanup dead code"""
 
 
 import email
@@ -9157,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.59</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.60</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9381,7 +9381,7 @@ input[type="number"].settings-input { min-width: 60px; }
       <div class="persona-detail-tabs">
         <!-- old slide-out tabs removed in v0.29.1 -->
       </div>
-      <div id="pd-content" class="persona-detail-content"></div>
+      <div id="pd-content-slideout" class="persona-detail-content"></div>
     </div>
 
     <!-- Model Activity Slide-Out -->
@@ -9482,34 +9482,70 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
     <div class="module-intro">Devices and network locations connected to this Porter instance.</div>
     <div id="loc-list"></div>
-    <div id="lm-mount-form" style="display:none;margin-top:14px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
-      <div class="settings-field"><label>Path on server</label>
-        <input class="settings-input" id="mf-path" placeholder="/home/user/project">
+
+    <!-- mount add/edit form (moved from spage-locations) -->
+    <div id="mount-form" style="display:none;margin-top:16px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">Mount path</div>
+      <input type="hidden" id="nm-node-id">
+      <input type="hidden" id="nm-mount-id">
+      <div class="settings-field">
+        <label>Label</label>
+        <input type="text" class="settings-input" id="nm-label" placeholder="Documents">
       </div>
-      <div class="settings-field"><label>Label</label>
-        <input class="settings-input" id="mf-label" placeholder="My Project">
+      <div class="settings-field">
+        <label>Absolute path</label>
+        <input type="text" class="settings-input" id="nm-path" placeholder="/home/user/files">
       </div>
-      <input type="hidden" id="mf-node-id">
       <div class="settings-save-row" style="gap:8px">
+        <button class="btn btn-ghost" onclick="testMountPath()">Test path</button>
+        <div style="flex:1"></div>
         <button class="btn btn-ghost" onclick="cancelMountForm()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveMountForm()">Add Path</button>
+        <button class="btn btn-primary" onclick="saveMountForm()">Save</button>
       </div>
+      <div id="nm-status" style="font-size:12px;margin-top:6px;color:var(--text3)"></div>
     </div>
-    <div id="lm-loc-form" style="display:none;margin-top:14px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
-      <div class="settings-field"><label>Location name</label>
-        <input class="settings-input" id="lf2-name" placeholder="My VPS">
+
+    <!-- add location form -->
+    <div id="loc-form" style="display:none;margin-top:16px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">Add Location</div>
+      <input type="hidden" id="lf-edit-id">
+      <input type="hidden" id="lf-type">
+      <div class="loc-type-grid">
+        <button class="loc-type-card" onclick="addLocalNode()">
+          <span class="loc-card-title">🖥 Local machine</span>
+          <span class="loc-card-desc">Add another local node instance</span>
+        </button>
+        <button class="loc-type-card" onclick="addVpsNode()">
+          <span class="loc-card-title">☁ VPS / Remote server</span>
+          <span class="loc-card-desc">A cloud or hosted server accessed via SSH or direct mount</span>
+        </button>
+        <button class="loc-type-card" onclick="addTailscaleNode()">
+          <span class="loc-card-title">🔗 Tailscale peer</span>
+          <span class="loc-card-desc">Discover and add a peer from your tailnet</span>
+        </button>
+        <button class="loc-type-card" disabled>
+          <span class="loc-card-title">🐙 GitHub repository</span>
+          <span class="loc-card-desc">Coming soon</span>
+        </button>
       </div>
-      <div class="settings-field"><label>Type</label>
-        <select class="settings-input" id="lf2-type" style="cursor:pointer">
-          <option value="local">Local machine</option>
-          <option value="vps">VPS</option>
-          <option value="tailscale">Tailscale</option>
-        </select>
+      <!-- tailscale peer selector -->
+      <div id="lf-ts-picker" style="display:none;margin-top:12px">
+        <div class="settings-field">
+          <label>Select peer</label>
+          <select class="settings-input" id="lf-ts-peer" onchange="onTsPeerSelect()" style="cursor:pointer">
+            <option value="">Loading peers…</option>
+          </select>
+        </div>
+        <div id="lf-ts-status" style="font-size:11px;color:var(--text3);margin-bottom:10px"></div>
+        <div class="settings-save-row" style="gap:8px">
+          <button class="btn btn-ghost" onclick="cancelLocationForm()">Cancel</button>
+          <button class="btn btn-primary" id="lf-ts-add-btn" disabled onclick="addTailscaleNodeFromPeer()">Add Location</button>
+        </div>
       </div>
-      <div class="settings-save-row" style="gap:8px">
-        <button class="btn btn-ghost" onclick="cancelLocationForm()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveLocationForm()">Add Location</button>
-      </div>
+      <div id="lf-status" style="font-size:12px;margin-top:8px;color:var(--text3)"></div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="openAddLocation()">+ Add Location</button>
     </div>
   </div>
 
@@ -9999,79 +10035,6 @@ input[type="number"].settings-input { min-width: 60px; }
         <!-- moved to Password tab -->
       </div>
 
-      <!-- Locations page -->
-      <div class="settings-page" id="spage-locations">
-        <div class="settings-page-title">Locations</div>
-        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">Machines and paths Porter can browse. Add a location first, then add paths under it.</div>
-        <div id="loc-list"></div>
-
-        <!-- mount add/edit form -->
-        <div id="mount-form" style="display:none;margin-top:16px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
-          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">Mount path</div>
-          <input type="hidden" id="nm-node-id">
-          <input type="hidden" id="nm-mount-id">
-          <div class="settings-field">
-            <label>Label</label>
-            <input type="text" class="settings-input" id="nm-label" placeholder="Documents">
-          </div>
-          <div class="settings-field">
-            <label>Absolute path</label>
-            <input type="text" class="settings-input" id="nm-path" placeholder="/home/user/files">
-          </div>
-          <div class="settings-save-row" style="gap:8px">
-            <button class="btn btn-ghost" onclick="testMountPath()">Test path</button>
-            <div style="flex:1"></div>
-            <button class="btn btn-ghost" onclick="cancelMountForm()">Cancel</button>
-            <button class="btn btn-primary" onclick="saveMountForm()">Save</button>
-          </div>
-          <div id="nm-status" style="font-size:12px;margin-top:6px;color:var(--text3)"></div>
-        </div>
-
-        <!-- add location form (Add Location button → type picker) -->
-        <div id="loc-form" style="display:none;margin-top:16px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
-          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">Add Location</div>
-          <input type="hidden" id="lf-edit-id">
-          <input type="hidden" id="lf-type">
-          <div class="loc-type-grid">
-            <button class="loc-type-card" onclick="addLocalNode()">
-              <span class="loc-card-title">🖥 Local machine</span>
-              <span class="loc-card-desc">Add another local node instance</span>
-            </button>
-            <button class="loc-type-card" onclick="addVpsNode()">
-              <span class="loc-card-title">☁ VPS / Remote server</span>
-              <span class="loc-card-desc">A cloud or hosted server accessed via SSH or direct mount</span>
-            </button>
-            <button class="loc-type-card" onclick="addTailscaleNode()">
-              <span class="loc-card-title">🔗 Tailscale peer</span>
-              <span class="loc-card-desc">Discover and add a peer from your tailnet</span>
-            </button>
-            <button class="loc-type-card" disabled>
-              <span class="loc-card-title">🐙 GitHub repository</span>
-              <span class="loc-card-desc">Coming soon</span>
-            </button>
-          </div>
-          <!-- tailscale peer selector (hidden until tailscale chosen) -->
-          <div id="lf-ts-picker" style="display:none;margin-top:12px">
-            <div class="settings-field">
-              <label>Select peer</label>
-              <select class="settings-input" id="lf-ts-peer" onchange="onTsPeerSelect()" style="cursor:pointer">
-                <option value="">Loading peers…</option>
-              </select>
-            </div>
-            <div id="lf-ts-status" style="font-size:11px;color:var(--text3);margin-bottom:10px"></div>
-            <div class="settings-save-row" style="gap:8px">
-              <button class="btn btn-ghost" onclick="cancelLocationForm()">Cancel</button>
-              <button class="btn btn-primary" id="lf-ts-add-btn" disabled onclick="addTailscaleNodeFromPeer()">Add Location</button>
-            </div>
-          </div>
-          <div id="lf-status" style="font-size:12px;margin-top:8px;color:var(--text3)"></div>
-        </div>
-
-        <div style="margin-top:16px;display:flex;gap:8px">
-          <button class="btn btn-primary" onclick="openAddLocation()">+ Add Location</button>
-        </div>
-      </div>
-
       <!-- Agents page -->
       <div class="settings-page" id="spage-agents">
         <div class="settings-page-title">Agents</div>
@@ -10184,9 +10147,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
 
 
-      <!-- API Keys page -->
-      <div class="settings-page" id="spage-apikeys" style="display:none">
-      </div>
+
 <div class="settings-page" id="spage-tasks">
         <div class="sp-header">
           <h2>Task Operations</h2>
@@ -10443,6 +10404,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.60', date:'2026-03-08', notes:['FIX: locations module Add Location form now works (moved from dead settings page)','Removed dead spage-locations, spage-apikeys settings pages','Fixed duplicate id=pd-content (renamed slide-out to pd-content-slideout)','Removed orphaned orchestration cleanup code'] },
   { ver:'v0.29.59', date:'2026-03-08', notes:['Replace last 6 native confirm() dialogs with Porter-style modals','Agent workspace + file preview editors now use themed dialogs'] },
   { ver:'v0.29.58', date:'2026-03-08', notes:['FIX: chat welcome recent chats now clickable (was loadChatSession→loadChatSession)','FIX: project agent cards now clickable (was openPersonaDetail→switchModule+selectPersona)','FIX: location form Cancel/Save buttons now work (was undefined functions)','Removed dead wizard button from settings','Removed 5 empty stub functions','Fixed duplicate style attribute on cortex status'] },
   { ver:'v0.29.57', date:'2026-03-08', notes:['Time ago display shows date for items older than 7 days','Settings tab visible in nav'] },
@@ -12360,9 +12322,7 @@ function switchModule(name) {
     if (_mcMetricsTimer) { clearInterval(_mcMetricsTimer); _mcMetricsTimer = null; }
     if (_mcSseId) { _sseUnsubscribe(_mcSseId); _mcSseId = null; }
   }
-  if (_currentModule === 'orchestration' && name !== 'orchestration') {
-    if (_orchHubPollTimer) { clearInterval(_orchHubPollTimer); _orchHubPollTimer = null; }
-  }
+
   if (_currentModule === 'models' && name !== 'models') {
     Object.keys(_modelTimers).forEach(function(k) { clearInterval(_modelTimers[k]); });
     _modelTimers = {};
@@ -27587,7 +27547,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.59"})
+            self.reply_json({"v": "0.29.60"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27749,7 +27709,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.59"
+                health["porter_version"] = "0.29.60"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29593,7 +29553,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.59'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.60'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34133,7 +34093,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.59 ready (localhost only)")
+    print(f"\n  Porter v0.29.60 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
