@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.46 — Squad awareness, persona restore, interval fix, workflow triggers"""
+"""Porter v0.28.47 — Squad awareness, persona restore, interval fix, workflow triggers"""
 
 
 import email
@@ -8762,7 +8762,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.46</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.47</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10021,6 +10021,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.47', date:'2026-03-08', notes:['Fix: Loading indicator visible on memory map (CSS var resolved properly)','Fix: Memory map resizes with browser even when locked (lock = freeze nodes only)','Lock no longer disables zoom/fit/center controls'] },
   { ver:'v0.28.46', date:'2026-03-08', notes:['Disciplined extraction prompt — only durable knowledge, not session artifacts','Max facts reduced from 8 to 5','DO NOT extract list: implementation details, session observations, agent identity, task status','Strengthened low-value patterns for consolidation cleanup'] },
   { ver:'v0.28.45', date:'2026-03-08', notes:['.md-aware memory dedup — skip facts already in persona files','Low-value fact filter (meta-commentary, session noise)','Consolidation deletes facts covered by .md files'] },
   { ver:'v0.28.44', date:'2026-03-08', notes:['Sessions auto-archive after extraction','Session list: pending prominent, extracted collapsed + dimmed with checkmark','Progress bar refreshes after extraction completes'] },
@@ -16925,22 +16926,10 @@ async function _loadCortexTab() {
   // Always init the graph (defer to let layout settle)
   requestAnimationFrame(function() { setTimeout(function() {
     _initMemoryGraph();
-    // Show loading while graph fetches
-    var _gCanvas = document.getElementById('cx-graph-canvas');
-    if (_gCanvas) { var _gCtx = _gCanvas.getContext('2d'); if (_gCtx) { _gCtx.fillStyle = 'var(--text3)'; _gCtx.font = '13px sans-serif'; _gCtx.textAlign = 'center'; _gCtx.fillText('Loading...', _gCanvas.width/2, _gCanvas.height/2); } }
-    // Init graph as locked
+    // Init graph as locked (nodes frozen, canvas still resizes)
     window._cxGraphLocked = true;
     var lockBtn = document.getElementById('cx-lock-btn');
-    if (lockBtn) { lockBtn.innerHTML = '\u{1f512}'; lockBtn.style.color = 'var(--accent)'; lockBtn.title = 'Unlock layout'; }
-    // Gray out graph controls
-    document.querySelectorAll('#cx-graph-canvas').forEach(function(c) {
-      var toolbar = c.closest('div').previousElementSibling;
-      if (!toolbar) return;
-      toolbar.querySelectorAll('button').forEach(function(b) {
-        if (b.id === 'cx-lock-btn' || b.classList.contains('gf-btn')) return;
-        b.style.opacity = '0.4'; b.style.pointerEvents = 'none';
-      });
-    });
+    if (lockBtn) { lockBtn.innerHTML = '\u{1f512}'; lockBtn.style.color = 'var(--accent)'; lockBtn.title = 'Unlock layout (nodes frozen, canvas still resizes)'; }
   }, 50); });
 }
 
@@ -17246,7 +17235,6 @@ function _loadGraphZoom() {
 
 function _resetGraphZoom() { _fitGraphToView(); }
 function _fitGraphToView() {
-  if (window._cxGraphLocked) return;
   var canvas = document.getElementById('cx-graph-canvas');
   if (!canvas || !_graphNodes.length) { _graphZoom = {x: 0, y: 0, scale: 1}; _drawGraph(); return; }
   var dpr = window._cxDpr || 1;
@@ -17273,7 +17261,6 @@ function _fitGraphToView() {
   _saveGraphZoom();
 }
 function _centerGraph() {
-  if (window._cxGraphLocked) return;
   var canvas = document.getElementById('cx-graph-canvas');
   if (!canvas || !_graphNodes.length) return;
   var dpr = window._cxDpr || 1;
@@ -17287,41 +17274,19 @@ function _centerGraph() {
   _drawGraph();
   _saveGraphZoom();
 }
-function _graphZoomIn() { if (window._cxGraphLocked) return; _graphZoom.scale = Math.min(3, _graphZoom.scale * 1.2); _drawGraph(); _saveGraphZoom(); }
-function _graphZoomOut() { if (window._cxGraphLocked) return; _graphZoom.scale = Math.max(0.3, _graphZoom.scale / 1.2); _drawGraph(); _saveGraphZoom(); }
+function _graphZoomIn() { _graphZoom.scale = Math.min(3, _graphZoom.scale * 1.2); _drawGraph(); _saveGraphZoom(); }
+function _graphZoomOut() { _graphZoom.scale = Math.max(0.3, _graphZoom.scale / 1.2); _drawGraph(); _saveGraphZoom(); }
 function _toggleGraphLock() {
   window._cxGraphLocked = !window._cxGraphLocked;
   var btn = document.getElementById('cx-lock-btn');
   if (btn) {
     btn.innerHTML = window._cxGraphLocked ? '&#x1f512;' : '&#x1f513;';
     btn.style.color = window._cxGraphLocked ? 'var(--accent)' : '';
-    btn.title = window._cxGraphLocked ? 'Unlock layout' : 'Lock layout (prevent resize)';
+    btn.title = window._cxGraphLocked ? 'Unlock layout (nodes frozen, canvas still resizes)' : 'Lock layout';
   }
-  // Freeze/unfreeze the canvas container size
-  var c = document.getElementById('cx-graph-canvas');
-  if (c && c.parentElement) {
-    if (window._cxGraphLocked) {
-      c.parentElement.style.width = c.parentElement.clientWidth + 'px';
-      c.parentElement.style.height = c.parentElement.clientHeight + 'px';
-      c.parentElement.style.flex = 'none';
-    } else {
-      c.parentElement.style.width = '';
-      c.parentElement.style.height = '';
-      c.parentElement.style.flex = '1';
-    }
-  }
-  // Gray out graph controls when locked
-  document.querySelectorAll('#cx-graph-canvas').forEach(function(c) {
-    var toolbar = c.closest('div').previousElementSibling;
-    if (!toolbar) return;
-    toolbar.querySelectorAll('button').forEach(function(b) {
-      if (b.id === 'cx-lock-btn') return;
-      if (b.classList.contains('gf-btn')) return;  // keep filter buttons active
-      b.style.opacity = window._cxGraphLocked ? '0.4' : '';
-      b.style.pointerEvents = window._cxGraphLocked ? 'none' : '';
-    });
-  });
-  toast(window._cxGraphLocked ? 'Graph locked' : 'Graph unlocked');
+  // v0.28.47 — Lock freezes NODE positions only, container always stays flex:1
+  // No container size freeze — canvas should always resize with browser
+  toast(window._cxGraphLocked ? 'Layout locked — nodes frozen' : 'Layout unlocked');
 }
 function _graphFilterScope(scope, btn) {
   _graphFilter = scope;
@@ -17345,10 +17310,19 @@ async function _initMemoryGraph() {
   canvas.style.width = w + 'px';
   canvas.style.height = h + 'px';
   window._cxDpr = dpr;
+  // v0.28.47 — Show centered "Loading..." on canvas before fetch
+  var _lCtx = canvas.getContext('2d');
+  if (_lCtx) {
+    _lCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var _lBg = getComputedStyle(document.documentElement).getPropertyValue('--bg2').trim() || '#111';
+    var _lFg = getComputedStyle(document.documentElement).getPropertyValue('--text3').trim() || '#888';
+    _lCtx.fillStyle = _lBg; _lCtx.fillRect(0, 0, w, h);
+    _lCtx.fillStyle = _lFg; _lCtx.font = '14px system-ui'; _lCtx.textAlign = 'center';
+    _lCtx.fillText('Loading memory map...', w/2, h/2);
+  }
   // v0.28.12 — Resize canvas when window resizes (fixed: redraw + style update)
   window._cxResizeTimer = null;
   window.addEventListener('resize', function() {
-    if (window._cxGraphLocked) return;
     clearTimeout(window._cxResizeTimer);
     window._cxResizeTimer = setTimeout(function() {
       var c2 = document.getElementById('cx-graph-canvas');
@@ -17360,7 +17334,8 @@ async function _initMemoryGraph() {
         c2.width = nw * dpr2; c2.height = nh * dpr2;
         c2.style.width = nw + 'px'; c2.style.height = nh + 'px';
         window._cxDpr = dpr2;
-        _fitGraphToView();
+        // v0.28.47 — always resize canvas, only reflow nodes if unlocked
+        if (window._cxGraphLocked) { _drawGraph(); } else { _fitGraphToView(); }
       }
     }, 200);
   });
@@ -25147,7 +25122,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.46"})
+            self.reply_json({"v": "0.28.47"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25309,7 +25284,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.46"
+                health["porter_version"] = "0.28.47"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25966,10 +25941,18 @@ class Handler(BaseHTTPRequestHandler):
                 conn = _db_conn()
                 nodes = []
                 edges = []
+                # v0.28.47 — batch query: get all scope counts in one pass
+                scope_counts = {}
+                for row in conn.execute(
+                    "SELECT scope, scope_id, COUNT(*) FROM cortex_memories "
+                    "WHERE consolidated_into IS NULL AND status='active' GROUP BY scope, scope_id"
+                ).fetchall():
+                    scope_counts[(row[0], row[1] or "")] = row[2]
+                total_active = sum(scope_counts.values())
                 # Cortex hub node (always present)
-                nodes.append({"id": "cortex", "label": "Cortex", "type": "cortex", "emoji": "\U0001f9e0", "radius": 32, "count": 0})
-                # Global node (always present)
-                gc = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='global' AND consolidated_into IS NULL").fetchone()[0]
+                nodes.append({"id": "cortex", "label": "Cortex", "type": "cortex", "emoji": "\U0001f9e0", "radius": 32, "count": total_active})
+                # Global node
+                gc = scope_counts.get(("global", ""), 0)
                 global_node_idx = -1
                 if gc > 0:
                     global_node_idx = len(nodes)
@@ -25977,57 +25960,34 @@ class Handler(BaseHTTPRequestHandler):
                     edges.append({"source": 0, "target": global_node_idx, "weight": max(1, min(6, gc))})
                 # Agent nodes (always show all agents)
                 personas = conn.execute("SELECT id, name, avatar, role FROM personas").fetchall()
-                for idx, p in enumerate(personas):
+                agent_indices = {}
+                for p in personas:
                     pid, pname, pemoji, prole = p[0], p[1], p[2] or "\u2699", p[3] or ""
-                    ac = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='agent' AND scope_id=? AND consolidated_into IS NULL", (pid,)).fetchone()[0]
+                    ac = scope_counts.get(("agent", pid), 0)
                     node_idx = len(nodes)
+                    agent_indices[pid] = node_idx
                     nodes.append({"id": "agent:" + pid, "label": pname, "type": "agent", "emoji": pemoji, "radius": 18 + min(8, ac), "count": ac, "role": prole})
-                    # Always connect agents to cortex hub
                     edges.append({"source": 0, "target": node_idx, "weight": max(1, min(6, ac))})
-                    # Connect agents to global if global exists
                     if global_node_idx >= 0:
                         edges.append({"source": global_node_idx, "target": node_idx, "weight": 1})
-                # Project nodes (only if they have memories)
-                projects = conn.execute("SELECT DISTINCT scope_id FROM cortex_memories WHERE scope='project' AND consolidated_into IS NULL AND scope_id != ''").fetchall()
-                for proj in projects:
-                    proj_id = proj[0]
-                    pc = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='project' AND scope_id=? AND consolidated_into IS NULL", (proj_id,)).fetchone()[0]
-                    node_idx = len(nodes)
-                    nodes.append({"id": "project:" + proj_id, "label": proj_id[:20], "type": "project", "emoji": "\U0001f4c1", "radius": 18 + min(8, pc), "count": pc})
-                    edges.append({"source": 0, "target": node_idx, "weight": max(1, min(6, pc))})
-                # Agent-to-agent edges (shared project scope)
-                agent_indices = {}
-                for ni, nd in enumerate(nodes):
-                    if nd["id"].startswith("agent:"):
-                        agent_indices[nd["id"].split(":", 1)[1]] = ni
-                # Agent→project edges
+                # Project nodes (from scope_counts, no extra queries)
                 project_indices = {}
-                for ni, nd in enumerate(nodes):
-                    if nd["id"].startswith("project:"):
-                        project_indices[nd["id"].split(":", 1)[1]] = ni
-                if agent_indices and project_indices:
-                    for aid, aidx in agent_indices.items():
-                        for pid, pidx in project_indices.items():
-                            shared = conn.execute(
-                                "SELECT COUNT(*) FROM cortex_memories WHERE scope='project' AND scope_id=? AND consolidated_into IS NULL",
-                                (pid,)
-                            ).fetchone()[0]
-                            if shared > 0:
-                                edges.append({"source": aidx, "target": pidx, "weight": max(1, min(4, shared))})
-                # Agent-to-agent edges (agents sharing a project)
+                for (scope, sid), cnt in scope_counts.items():
+                    if scope == "project" and sid:
+                        node_idx = len(nodes)
+                        project_indices[sid] = node_idx
+                        nodes.append({"id": "project:" + sid, "label": sid[:20], "type": "project", "emoji": "\U0001f4c1", "radius": 18 + min(8, cnt), "count": cnt})
+                        edges.append({"source": 0, "target": node_idx, "weight": max(1, min(6, cnt))})
+                # Agent→project edges (every agent connects to every project)
+                for aidx in agent_indices.values():
+                    for pidx in project_indices.values():
+                        edges.append({"source": aidx, "target": pidx, "weight": 1})
+                # Agent-to-agent collab edges (if 2+ agents exist)
                 agent_ids = list(agent_indices.keys())
-                for i in range(len(agent_ids)):
-                    for j in range(i + 1, len(agent_ids)):
-                        a1, a2 = agent_ids[i], agent_ids[j]
-                        # Check if both agents have memories in any common project
-                        shared_projects = conn.execute(
-                            "SELECT COUNT(DISTINCT scope_id) FROM cortex_memories WHERE scope='project' AND consolidated_into IS NULL AND scope_id IN (SELECT DISTINCT scope_id FROM cortex_memories WHERE scope='project' AND consolidated_into IS NULL)",
-                        ).fetchone()[0]
-                        if shared_projects > 0:
-                            edges.append({"source": agent_indices[a1], "target": agent_indices[a2], "weight": min(3, shared_projects), "type": "collab"})
-                # Hub count = unrouted facts
-                uc = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL AND status='active'").fetchone()[0]
-                nodes[0]["count"] = uc
+                if len(agent_ids) >= 2 and project_indices:
+                    for i in range(len(agent_ids)):
+                        for j in range(i + 1, len(agent_ids)):
+                            edges.append({"source": agent_indices[agent_ids[i]], "target": agent_indices[agent_ids[j]], "weight": 1, "type": "collab"})
                 conn.close()
                 self.reply_json({"nodes": nodes, "edges": edges})
             except Exception as e:
@@ -27132,7 +27092,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.46'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.47'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31367,7 +31327,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.46 ready (localhost only)")
+    print(f"\n  Porter v0.28.47 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
