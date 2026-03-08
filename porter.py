@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.33 — Fix workflow runners, blink-free refresh, memory_extraction guard"""
+"""Porter v0.28.34 — Squad awareness, persona restore, interval fix, workflow triggers"""
 
 
 import email
@@ -1556,44 +1556,10 @@ def _hygiene_archive_memory():
 
 
 def _hygiene_merge_identity():
-    """Rule 4: Merge IDENTITY.md and ROLE_CARD.md into SOUL.md (one-time, idempotent)."""
-    prefs = _config.get("preferences", {})
-    if not prefs.get("hygiene_merge_identity", True):
-        return 0
-    merged = 0
-    try:
-        if not PERSONAS_DIR.exists():
-            return merged
-        for pdir in PERSONAS_DIR.iterdir():
-            if not pdir.is_dir():
-                continue
-            soul_path = pdir / "SOUL.md"
-            identity_path = pdir / "IDENTITY.md"
-            role_card_path = pdir / "ROLE_CARD.md"
-            soul_content = soul_path.read_text().strip() if soul_path.exists() else ""
-            # Merge IDENTITY.md
-            if identity_path.exists():
-                id_content = identity_path.read_text().strip()
-                if id_content and _HYGIENE_MERGED_MARKER not in id_content:
-                    # Append to SOUL.md under ## Identity section if not already present
-                    if "## Identity" not in soul_content:
-                        soul_content += f"\n\n## Identity\n{id_content}"
-                    identity_path.write_text(_HYGIENE_MERGED_MARKER + "\n")
-                    merged += 1
-            # Merge ROLE_CARD.md
-            if role_card_path.exists():
-                rc_content = role_card_path.read_text().strip()
-                if rc_content and _HYGIENE_MERGED_MARKER not in rc_content:
-                    if "## Role Card" not in soul_content:
-                        soul_content += f"\n\n## Role Card\n{rc_content}"
-                    role_card_path.write_text(_HYGIENE_MERGED_MARKER + "\n")
-                    merged += 1
-            if merged > 0 and soul_path.exists():
-                soul_path.write_text(soul_content + "\n")
-    except Exception as e:
-        _hygiene_stats["errors"].append(f"merge_identity: {e}")
-        log.warning("Hygiene merge_identity error: %s", e)
-    return merged
+    """Rule 4: DISABLED — persona files must stay separate (IDENTITY.md, ROLE_CARD.md, SOUL.md)."""
+    # v0.28.34 — Merging was architecturally wrong. Each file serves a distinct purpose:
+    # SOUL.md = personality/directives, IDENTITY.md = metadata, ROLE_CARD.md = governance/scope.
+    return 0
 
 
 def _hygiene_run():
@@ -1678,12 +1644,18 @@ def _build_context_suffix(persona_id, message=""):
         soul = soul_path.read_text().strip()
         if soul:
             parts.append(f"--- SOUL.md ---\n{soul[:soul_budget]}\n--- end ---")
-    # ROLE_CARD.md — skip if merged
+    # ROLE_CARD.md
     rc_path = pdir / "ROLE_CARD.md"
     if rc_path.exists():
         rc_content = rc_path.read_text().strip()
         if rc_content and _HYGIENE_MERGED_MARKER not in rc_content:
             parts.append(f"--- ROLE_CARD.md ---\n{rc_content[:500]}\n--- end ---")
+    # IDENTITY.md
+    id_path = pdir / "IDENTITY.md"
+    if id_path.exists():
+        id_content = id_path.read_text().strip()
+        if id_content and _HYGIENE_MERGED_MARKER not in id_content:
+            parts.append(f"--- IDENTITY.md ---\n{id_content[:300]}\n--- end ---")
     # RULES.md
     rules_path = PERSONAS_DIR / "RULES.md"
     if rules_path.exists():
@@ -1701,6 +1673,24 @@ def _build_context_suffix(persona_id, message=""):
         cortex_ctx = _cortex_inject_context(message, persona_id=persona_id)
         if cortex_ctx:
             parts.append(f"--- Relevant memories ---\n{cortex_ctx[:cortex_budget]}\n--- end ---")
+    except Exception:
+        pass
+    # v0.28.34 — Squad awareness: inject teammate roster so agents can propose handoffs
+    try:
+        teammates = _persona_list()
+        if len(teammates) > 1:
+            roster_lines = []
+            for tm in teammates:
+                if tm.get("id") == persona_id:
+                    continue  # skip self
+                tm_name = tm.get("name", "?")
+                tm_role = tm.get("role", "")
+                tm_be = tm.get("preferred_backend", "")
+                roster_lines.append(f"- {tm_name}: {tm_role}" + (f" [{tm_be}]" if tm_be else ""))
+            if roster_lines:
+                squad_block = "You are part of a squad. Your teammates:\n" + "\n".join(roster_lines)
+                squad_block += "\nWhen a task falls outside your expertise, propose a HANDOFF to the right teammate by name. Format: [HANDOFF: AgentName] reason."
+                parts.append(f"--- Squad ---\n{squad_block}\n--- end ---")
     except Exception:
         pass
     return "\n\n".join(parts)
@@ -8549,7 +8539,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.33</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.34</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9815,6 +9805,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.34', date:'2026-03-08', notes:['Restored IDENTITY.md + ROLE_CARD.md separation (reverted hygiene merge)','Squad awareness: agents see teammate roster, propose [HANDOFF: Name]','Fixed interval save crash (null body guard)','Workflow cards show trigger details','Disabled hygiene merge daemon (persona files stay separate)'] },
   { ver:'v0.28.33', date:'2026-03-08', notes:['Fix: error_self_heal + agent_backend_eval runners missing from trigger map','Fix: blink-free workflow refresh (in-place DOM updates, no innerHTML wipe)','Memory extraction: no Run Now button (per-response only)','Workflow cards now have data-wf-id for targeted updates'] },
   { ver:'v0.28.32', date:'2026-03-08', notes:['Fix: heartbeat workflow error (missing DB columns — added migration)','Fix: workflow cards losing content on auto-refresh (was using minimal renderer)'] },
   { ver:'v0.28.31', date:'2026-03-08', notes:['Models: session accordion (opening one closes others)','Removed 7 console.debug/log calls (production hygiene)','Test suite: 38/38 green (fixed Chat module-title check)'] },
@@ -11783,7 +11774,8 @@ async function loadWorkflowRegistry() {
         + '<span style="font-weight:600;font-size:13px;color:var(--text)">' + escHtml(wf.name) + '</span>'
         + intervalEditor
         + '</div>'
-        + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.4">' + escHtml(wf.description) + '</div>'
+        + '<div style="font-size:12px;color:var(--text3);margin-bottom:' + (wf.trigger_detail ? '4' : '10') + 'px;line-height:1.4">' + escHtml(wf.description) + '</div>'
+        + (wf.trigger_detail ? '<div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.3;opacity:0.7"><span style="color:var(--accent);font-weight:500">Trigger:</span> ' + escHtml(wf.trigger_detail) + '</div>' : '')
         + '<div class="wf-running-slot">' + runningBar + '</div>'
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:11px;margin-bottom:10px">'
         + '<div style="color:var(--text3)">Last run: <span class="wf-last-run" style="color:var(--text2)">' + lastRun + '</span></div>'
@@ -24865,7 +24857,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.33"})
+            self.reply_json({"v": "0.28.34"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25027,7 +25019,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.33"
+                health["porter_version"] = "0.28.34"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26762,6 +26754,9 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             wf_id = parsed.path.split("/")[3]
             data = self.read_json_body()
+            if not data:
+                self.reply_json({"ok": False, "error": "Invalid request body"}, 400)
+                return
             interval = data.get("interval", "")
             interval_s = data.get("interval_s", 0)
             with _wf_lock:
@@ -26847,7 +26842,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.33'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.34'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30943,6 +30938,17 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
 def _handle_wf_list():
     """GET /api/workflows — list all workflows with stats + config values."""
     prefs = _config.get("preferences", {})
+    # v0.28.34 — Trigger descriptions for each workflow
+    _wf_triggers = {
+        "cortex_consolidation": "Timer: runs every configured interval. Merges duplicate memories, archives stale ones (>30d unused).",
+        "context_hygiene": "Timer: runs every configured interval. Prunes old log entries, caps oversized SOUL files, archives stale agent memories.",
+        "capability_checks": "Timer: polls all AI backends and system tools to detect availability changes.",
+        "heartbeat": "Timer: pings each agent with heartbeat_enabled=1 on their configured cron schedule.",
+        "telemetry_rollup": "Timer: aggregates raw agent telemetry into hourly and daily summary rows.",
+        "memory_extraction": "Event: fires after every chat response. Extracts facts from AI responses into cortex memory.",
+        "agent_backend_eval": "Timer: weekly cycle through agents testing each backend for response quality and latency.",
+        "error_self_heal": "Timer: scans recent error logs for recurring patterns and attempts auto-remediation.",
+    }
     result = []
     with _wf_lock:
         for wf_id, wf in _wf_registry.items():
@@ -30955,6 +30961,8 @@ def _handle_wf_list():
             entry["config"] = {}
             for key in wf.get("config_keys", []):
                 entry["config"][key] = prefs.get(key)
+            # v0.28.34 — Trigger detail
+            entry["trigger_detail"] = _wf_triggers.get(wf_id, "")
             result.append(entry)
     return result
 
@@ -31067,7 +31075,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.33 ready (localhost only)")
+    print(f"\n  Porter v0.28.34 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
