@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.63 — Better empty states across tabs"""
+"""Porter v0.29.64 — Fix keyboard shortcuts tab mapping"""
 
 
 import email
@@ -7147,7 +7147,7 @@ async function doLogin() {
   <div class="kb-dialog">
     <div class="kb-title">Keyboard Shortcuts</div>
     <div class="kb-row"><span class="kb-key">Ctrl+K</span><span class="kb-desc">Focus chat input</span></div>
-    <div class="kb-row"><span class="kb-key">1</span>-<span class="kb-key">9</span><span class="kb-desc">Switch tabs</span></div>
+    <div class="kb-row"><span class="kb-key">1</span>-<span class="kb-key">9</span><span class="kb-desc">Switch tabs (Chat, Agents, Skills, Projects, Workflows, Locations, Files, Models, Cortex)</span></div>
     <div class="kb-row"><span class="kb-key">Esc</span><span class="kb-desc">Close panel / cancel</span></div>
     <div class="kb-row"><span class="kb-key">?</span><span class="kb-desc">Show this help</span></div>
     <div class="kb-row"><span class="kb-key">Enter</span><span class="kb-desc">Send message</span></div>
@@ -9169,7 +9169,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.63</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.64</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10416,6 +10416,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.64', date:'2026-03-08', notes:['Fix number key shortcuts to match nav order (1-Chat, 2-Agents, 3-Skills, ..., 9-Cortex)','Updated shortcuts overlay to show tab mapping'] },
   { ver:'v0.29.63', date:'2026-03-08', notes:['Better empty states with icons for Workflows, Skills, Capabilities tabs'] },
   { ver:'v0.29.62', date:'2026-03-08', notes:['Light theme: fix hardcoded dark colors (autocomplete, menus, borders)','Panel fade-in animation on tab switch','Loading timeouts with retry buttons on Models, Workflows, Cortex'] },
   { ver:'v0.29.61', date:'2026-03-08', notes:['FIX: workflow interval save now works (handler moved from GET to POST)','FIX: skill proposal approve/dismiss now works (handler moved from GET to POST)'] },
@@ -24996,9 +24997,9 @@ document.addEventListener('keydown', function(e) {
 
   // Number keys 1-9: switch tabs
   var tabMap = {
-    '1': 'overview', '2': 'agents', '3': 'memory',
-    '4': 'capabilities', '5': 'projects', '6': 'workflows',
-    '7': 'locations', '8': 'files', '9': 'admin'
+    '1': 'overview', '2': 'agents', '3': 'skills',
+    '4': 'projects', '5': 'workflows', '6': 'locations',
+    '7': 'files', '8': 'models', '9': 'cortex'
   };
   if (tabMap[e.key]) {
     e.preventDefault();
@@ -27562,7 +27563,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.63"})
+            self.reply_json({"v": "0.29.64"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27724,7 +27725,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.63"
+                health["porter_version"] = "0.29.64"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29524,7 +29525,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.63'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.64'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34109,7 +34110,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.63 ready (localhost only)")
+    print(f"\n  Porter v0.29.64 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
