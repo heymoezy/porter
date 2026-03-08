@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.21 — Chat UX: message actions + timestamps"""
+"""Porter v0.29.22 — Auto Skill Mining"""
 
 
 import email
@@ -246,6 +246,11 @@ _wf_register("memory_extraction", "Memory Extraction",
 _wf_register("agent_backend_eval", "Agent Backend Eval",
     "Cycles through agents testing each backend for response quality and speed",
     interval="168h", interval_s=604800,
+    )
+
+_wf_register("skill_mining", "Skill Mining",
+    "Discovers repeated successful patterns and proposes new skills",
+    interval="6h", interval_s=6*3600,
     )
 
 _wf_register("error_self_heal", "Error Self-Heal",
@@ -1929,6 +1934,97 @@ def _context_hygiene_loop():
         except Exception as e:
             log.warning("Hygiene loop error: %s", e)
             _wf_record_run("context_hygiene", success=False, error=e, duration_s=_t.time()-_t0)
+
+
+
+# ── v0.29.22 — Auto Skill Mining ────────────────────────────────────────────
+
+def _mine_skill_candidates(window_hours=72, min_repeats=2, min_success_rate=0.7):
+    """Analyze recent traces for repeated successful patterns → propose skills."""
+    import time as _mt
+    cutoff = _mt.time() - (window_hours * 3600)
+    try:
+        conn = _db_conn()
+        # Find repeated successful action patterns by agent
+        rows = conn.execute(
+            "SELECT agent_name, action, COUNT(*) as cnt, "
+            "SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as ok_cnt, "
+            "GROUP_CONCAT(DISTINCT input_summary) as inputs "
+            "FROM trace_steps WHERE ts > ? AND action != '' "
+            "GROUP BY agent_name, action HAVING cnt >= ? "
+            "ORDER BY cnt DESC LIMIT 20",
+            (cutoff, min_repeats)
+        ).fetchall()
+        conn.close()
+    except Exception:
+        return []
+
+    candidates = []
+    for agent_name, action, cnt, ok_cnt, inputs in rows:
+        rate = ok_cnt / cnt if cnt else 0
+        if rate < min_success_rate:
+            continue
+        # Generate a skill ID from the action
+        skill_id = "auto-" + re.sub(r"[^a-z0-9]+", "-", action.lower()).strip("-")[:40]
+        title = action.replace("_", " ").title()
+        # Build description from inputs
+        input_samples = (inputs or "")[:200]
+        desc = f"Auto-discovered pattern: {action} (seen {cnt}x, {int(rate*100)}% success)"
+        rationale = f"Agent {agent_name} performed '{action}' {cnt} times with {int(rate*100)}% success rate. Sample inputs: {input_samples}"
+        candidates.append({
+            "skill_id": skill_id,
+            "title": title,
+            "command": action,
+            "description": desc,
+            "rationale": rationale,
+            "evidence_count": cnt,
+            "success_rate": rate,
+            "source_agents": agent_name or ""
+        })
+    return candidates
+
+def _upsert_skill_proposals(candidates):
+    """Store or update skill proposals in DB."""
+    import time as _ut
+    inserted = 0
+    try:
+        conn = _db_conn()
+        for c in candidates:
+            existing = conn.execute("SELECT id, status FROM skill_proposals WHERE skill_id=?", (c["skill_id"],)).fetchone()
+            if existing:
+                if existing[1] == "dismissed":
+                    continue  # Don't re-propose dismissed
+                conn.execute(
+                    "UPDATE skill_proposals SET evidence_count=?, success_rate=?, "
+                    "source_agents=?, updated_at=? WHERE skill_id=?",
+                    (c["evidence_count"], c["success_rate"], c["source_agents"], _ut.time(), c["skill_id"])
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO skill_proposals (skill_id, title, command, description, rationale, "
+                    "evidence_count, success_rate, source_agents) VALUES (?,?,?,?,?,?,?,?)",
+                    (c["skill_id"], c["title"], c["command"], c["description"],
+                     c["rationale"], c["evidence_count"], c["success_rate"], c["source_agents"])
+                )
+                inserted += 1
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.debug("Skill proposal upsert failed: %s", e)
+    return inserted
+
+def _skill_mining_run():
+    """Run skill mining — called by scheduler."""
+    import time as _sm
+    _t0 = _sm.time()
+    try:
+        candidates = _mine_skill_candidates()
+        n = _upsert_skill_proposals(candidates)
+        _wf_record_run("skill_mining", success=True, result=f"{n} new proposals from {len(candidates)} candidates", duration_s=_sm.time()-_t0)
+        if n:
+            log.info("Skill mining: %d new proposals", n)
+    except Exception as e:
+        _wf_record_run("skill_mining", success=False, error=e, duration_s=_sm.time()-_t0)
 
 
 def _build_context_suffix(persona_id, message=""):
@@ -6250,6 +6346,24 @@ def _init_trace_tables():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_type ON cortex_memories(memory_type)")
 
     conn.execute("""
+    CREATE TABLE IF NOT EXISTS skill_proposals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        skill_id TEXT NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        command TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        rationale TEXT DEFAULT '',
+        evidence_count INTEGER DEFAULT 1,
+        success_rate REAL DEFAULT 0.0,
+        source_agents TEXT DEFAULT '',
+        status TEXT DEFAULT 'proposed',
+        created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+        updated_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+    )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sp_status ON skill_proposals(status, created_at DESC)")
+
+    conn.execute("""
     CREATE TABLE IF NOT EXISTS persona_skills (
         persona_id TEXT NOT NULL,
         skill_name TEXT NOT NULL,
@@ -8971,7 +9085,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.21</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.22</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10225,6 +10339,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.22', date:'2026-03-08', notes:['Auto Skill Mining: discovers repeated successful patterns from traces','skill_proposals table + GET/POST API endpoints','Proposed Skills section in Skills tab with approve/dismiss','Skill mining runs every 6h as system workflow'] },
   { ver:'v0.29.21', date:'2026-03-08', notes:['Chat: hover actions (copy, regenerate, edit) on messages','Chat: timestamps shown on hover','Chat: Ctrl/Cmd+Enter to send, Up arrow edits last message','Chat: regenerate resends last prompt to get new response'] },
   { ver:'v0.29.20', date:'2026-03-08', notes:['Skills: removed Use button (invocation at agent level)','Skills: descriptions clamped to 3 lines','Escape key properly returns to agents grid','Cross-tab agent links: openAgentDetail() helper'] },
   { ver:'v0.29.19', date:'2026-03-08', notes:['Fix: Cortex extraction NameError blocking all new facts since v0.28.45','Removed confusing XP bar from agent cards','Escape key returns to agents grid from agent view','Trello-style drag-and-drop with custom clone + FLIP animation','Dynamic squad colors (removed hardcoded map)'] },
@@ -12693,6 +12808,49 @@ function _renderSkillsTab() {
     html += '</div></div>';
   });
   grid.innerHTML = html;
+
+  // v0.29.22 — Proposed skills section (auto-mined)
+  var proposalDiv = document.getElementById('wf-skills-proposals');
+  if (!proposalDiv) {
+    proposalDiv = document.createElement('div');
+    proposalDiv.id = 'wf-skills-proposals';
+    proposalDiv.style.cssText = 'margin-top:20px';
+    grid.parentElement.appendChild(proposalDiv);
+  }
+  api('/api/skills/proposals').then(function(data) {
+    if (!data || !data.proposals || !data.proposals.length) { proposalDiv.innerHTML = ''; return; }
+    var proposed = data.proposals.filter(function(p) { return p.status === 'proposed'; });
+    if (!proposed.length) { proposalDiv.innerHTML = ''; return; }
+    proposalDiv.innerHTML = '<div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding:0 2px">'
+      + '\u{1F4A1} Proposed Skills <span style="font-weight:400;opacity:.6">(' + proposed.length + ' from patterns)</span></div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">'
+      + proposed.map(function(p) {
+        return '<div style="padding:10px 14px;border:1px dashed var(--accent);border-radius:8px;background:color-mix(in srgb,var(--accent) 4%,transparent)">'
+          + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+          + '<span style="font-size:14px">\u{2728}</span>'
+          + '<span style="font-weight:500;font-size:13px;color:var(--text)">' + escHtml(p.title) + '</span>'
+          + '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">proposed</span>'
+          + '</div>'
+          + '<div style="font-size:11px;color:var(--text3);line-height:1.4;margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + escHtml(p.description) + '</div>'
+          + '<div style="font-size:10px;color:var(--text3);margin-bottom:6px">Seen ' + p.evidence_count + 'x \u00b7 ' + Math.round(p.success_rate * 100) + '% success \u00b7 ' + escHtml(p.source_agents || 'unknown') + '</div>'
+          + '<div style="display:flex;gap:6px">'
+          + '<button class="btn-xs" style="font-size:10px;padding:2px 10px;border:1px solid #22c55e;border-radius:4px;background:color-mix(in srgb,#22c55e 8%,transparent);color:#22c55e;cursor:pointer" onclick="event.stopPropagation();_approveProposal(' + p.id + ')">Approve</button>'
+          + '<button class="btn-xs" style="font-size:10px;padding:2px 8px;border:1px solid var(--border2);border-radius:4px;background:none;color:var(--text3);cursor:pointer" onclick="event.stopPropagation();_dismissProposal(' + p.id + ')">Dismiss</button>'
+          + '</div></div>';
+      }).join('')
+      + '</div>';
+  }).catch(function() { proposalDiv.innerHTML = ''; });
+}
+
+async function _approveProposal(id) {
+  var r = await api('/api/skills/proposals/' + id, { action: 'approve' });
+  if (r && r.ok) { toast('Skill approved', 'ok'); _renderSkillsTab(); }
+  else toast('Failed', 'err');
+}
+async function _dismissProposal(id) {
+  var r = await api('/api/skills/proposals/' + id, { action: 'dismiss' });
+  if (r && r.ok) { toast('Dismissed'); _renderSkillsTab(); }
+  else toast('Failed', 'err');
 }
 
 function _buildSkillCard(sk) {
@@ -24904,6 +25062,8 @@ def _error_self_heal_loop():
     import time as _shlt
     _shlt.sleep(120)  # wait 2min after startup
     while True:
+        if _wf_is_enabled("skill_mining"):
+            _run_if_due("skill_mining", _skill_mining_run)
         if _wf_is_enabled("error_self_heal"):
             cfg = _config.get("preferences", {})
             if cfg.get("self_heal_enabled", False):
@@ -25999,7 +26159,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.21"})
+            self.reply_json({"v": "0.29.22"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26161,7 +26321,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.21"
+                health["porter_version"] = "0.29.22"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27878,6 +28038,31 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
+        elif parsed.path.startswith("/api/skills/proposals/"):
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            parts = parsed.path.split("/")
+            prop_id = parts[4] if len(parts) > 4 else ""
+            action = data.get("action", "")
+            if action == "approve":
+                try:
+                    conn = _db_conn()
+                    conn.execute("UPDATE skill_proposals SET status='approved', updated_at=strftime('%s','now') WHERE id=?", (prop_id,))
+                    conn.commit(); conn.close()
+                    self.reply_json({"ok": True})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
+            elif action == "dismiss":
+                try:
+                    conn = _db_conn()
+                    conn.execute("UPDATE skill_proposals SET status='dismissed', updated_at=strftime('%s','now') WHERE id=?", (prop_id,))
+                    conn.commit(); conn.close()
+                    self.reply_json({"ok": True})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
+            else:
+                self.reply_json({"ok": False, "error": "Unknown action"}, 400)
+
         elif parsed.path.startswith("/api/workflows/") and parsed.path.endswith("/interval"):
             if not self.auth_check(redirect=False): return
             wf_id = parsed.path.split("/")[3]
@@ -27970,7 +28155,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.21'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.22'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -28429,6 +28614,27 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(row["data"])
             except Exception as e:
                 self.reply_json({"error": str(e)}, 500)
+
+        # ── Skill Proposals (GET) ──────────────────────────────────────────────
+        elif parsed.path == "/api/skills/proposals":
+            if not self.auth_check(redirect=False): return
+            try:
+                conn = _db_conn()
+                rows = conn.execute(
+                    "SELECT id, skill_id, title, command, description, rationale, "
+                    "evidence_count, success_rate, source_agents, status, created_at "
+                    "FROM skill_proposals WHERE status != 'dismissed' ORDER BY evidence_count DESC"
+                ).fetchall()
+                conn.close()
+                proposals = [{
+                    "id": r[0], "skill_id": r[1], "title": r[2], "command": r[3],
+                    "description": r[4], "rationale": r[5], "evidence_count": r[6],
+                    "success_rate": r[7], "source_agents": r[8], "status": r[9],
+                    "created_at": r[10]
+                } for r in rows]
+                self.reply_json({"ok": True, "proposals": proposals})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
 
         # ── Workflow Registry (GET) ────────────────────────────────────────────
         elif parsed.path == "/api/workflows":
@@ -32451,7 +32657,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.21 ready (localhost only)")
+    print(f"\n  Porter v0.29.22 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
