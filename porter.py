@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.45 — Squad awareness, persona restore, interval fix, workflow triggers"""
+"""Porter v0.28.46 — Squad awareness, persona restore, interval fix, workflow triggers"""
 
 
 import email
@@ -98,7 +98,7 @@ DEFAULT_PREFERENCES: dict = {
     "policy_preset":       "balanced",
     "cortex_enabled":           True,
     "cortex_min_response_len":  100,
-    "cortex_max_facts":         8,
+    "cortex_max_facts":         5,
     "cortex_inject_limit":      5,
     "cortex_consolidate_hours": 6,
 
@@ -1294,19 +1294,32 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
         pass
     _name_rule = f"\n- Always refer to the user as \"{_user_name}\" (never \"the user\" or \"user\")\n" if _user_name else ""
     extract_prompt = (
-        "You are a memory extraction system. Analyze this conversation and extract "
-        "key facts worth remembering for future interactions.\n\n"
+        "You are a memory extraction system. Extract ONLY durable knowledge worth "
+        "remembering months from now. Be extremely selective.\n\n"
         f"USER MESSAGE:\n{message[:1000]}\n\n"
         f"RESPONSE:\n{response_text[:2000]}\n\n"
         "Return a JSON object with this structure:\n"
         '{"facts": [{"text": "concise fact", "scope": "global|agent|project", '
         '"importance": 1-10, "keywords": "comma,separated,keywords"}]}\n\n'
-        f"Rules:\n- Max {max_facts} facts\n- Skip trivial/obvious information\n"
+        f"Rules:\n- Max {max_facts} facts. Fewer is better. 0 is fine.\n"
         "- scope=agent for agent-specific behavior\n"
         "- scope=project for project-specific info\n"
         "- scope=global for universally useful knowledge\n"
         "- importance: 1=trivial, 5=moderate, 10=critical\n"
         + _name_rule +
+        "\nDO NOT extract:\n"
+        "- Implementation details (specific code changes, version numbers, patch steps)\n"
+        "- Session-specific observations (what happened this session, what was diagnosed)\n"
+        "- Agent self-description (name, role, persona — these live in .md files)\n"
+        "- Environment facts (what tools are installed, file paths)\n"
+        "- Task status (what was completed, what is pending)\n"
+        "- Generic knowledge (what a tool does, what a format looks like)\n"
+        "- Response style preferences (already in persona SOUL.md files)\n\n"
+        "ONLY extract:\n"
+        "- Durable user preferences that affect future interactions\n"
+        "- Architectural decisions that won't change session-to-session\n"
+        "- Hard-won debugging insights (not the specific bug, but the reusable lesson)\n"
+        "- User-stated rules or constraints for future behavior\n\n"
         "Return ONLY valid JSON, no explanation."
     )
 
@@ -3685,19 +3698,31 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
             pass
         _name_instr = f"\nIMPORTANT: Always refer to the user by their name \"{_user_name2}\", never as \"the user\" or \"user\"." if _user_name2 else ""
         prompt = (
-            "Extract learnings from this session as structured JSON." + _name_instr + "\n"
+            "Extract ONLY durable knowledge from this session worth remembering months from now." + _name_instr + "\n"
+            "Be extremely selective. Fewer facts is better. 0 is fine if nothing is durable.\n\n"
             "Categorize each fact by scope:\n"
-            "- agent: facts about a specific agent\'s behavior, preferences, or performance\n"
+            "- agent: facts about a specific agent's behavior, preferences, or performance\n"
             "- project: facts about a specific project, codebase, or task\n"
             "- global: universally useful knowledge, patterns, or user preferences\n\n"
             "Return ONLY valid JSON:\n"
             '{"facts": [{"text": "concise actionable insight", "scope": "agent|project|global", "importance": 1-10}]}\n\n'
             "Rules:\n"
-            "- Be specific: include file names, function names, config keys\n"
-            "- Skip trivial items. Only things worth remembering.\n"
-            "- Max 10 facts\n"
+            "- Max 5 facts. Quality over quantity.\n"
             "- importance: 1=trivial, 5=moderate, 10=critical\n"
             "- Return ONLY the JSON object, no markdown fences, no explanation\n\n"
+            "DO NOT extract:\n"
+            "- Implementation details (specific code changes, version numbers, patches, bug fixes)\n"
+            "- Session-specific observations (what happened this session, what was diagnosed)\n"
+            "- Agent self-description (name, role, persona — these live in .md files)\n"
+            "- Environment facts (what tools are installed, file paths, versions)\n"
+            "- Task status or progress (what was completed, what is pending)\n"
+            "- Generic/obvious knowledge anyone would know\n"
+            "- Response style preferences (already in SOUL.md files)\n\n"
+            "ONLY extract:\n"
+            "- Durable user preferences that affect future interactions\n"
+            "- Architectural decisions that won't change session-to-session\n"
+            "- Hard-won debugging insights (reusable lessons, not specific bugs)\n"
+            "- User-stated rules or constraints for future behavior\n\n"
             + transcript
         )
         # Try all available backends — API-based first, then CLI-based
@@ -8737,7 +8762,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.45</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.46</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9996,6 +10021,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.46', date:'2026-03-08', notes:['Disciplined extraction prompt — only durable knowledge, not session artifacts','Max facts reduced from 8 to 5','DO NOT extract list: implementation details, session observations, agent identity, task status','Strengthened low-value patterns for consolidation cleanup'] },
   { ver:'v0.28.45', date:'2026-03-08', notes:['.md-aware memory dedup — skip facts already in persona files','Low-value fact filter (meta-commentary, session noise)','Consolidation deletes facts covered by .md files'] },
   { ver:'v0.28.44', date:'2026-03-08', notes:['Sessions auto-archive after extraction','Session list: pending prominent, extracted collapsed + dimmed with checkmark','Progress bar refreshes after extraction completes'] },
   { ver:'v0.28.43', date:'2026-03-08', notes:['System workflow run counts persist to DB (survive restarts)','Consolidation deletes duplicates instead of chaining consolidated_into','Memory map shows Loading... while graph fetches'] },
@@ -25121,7 +25147,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.45"})
+            self.reply_json({"v": "0.28.46"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25283,7 +25309,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.45"
+                health["porter_version"] = "0.28.46"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27106,7 +27132,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.45'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.46'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31341,7 +31367,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.45 ready (localhost only)")
+    print(f"\n  Porter v0.28.46 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
