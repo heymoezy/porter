@@ -289,7 +289,7 @@ test.describe('Nav regression — all tabs render content', () => {
     await login(page);
   });
 
-  const allTabs = ['overview', 'agents', 'models', 'capabilities', 'projects', 'workflows', 'locations', 'admin'];
+  const allTabs = ['overview', 'agents', 'models', 'capabilities', 'projects', 'workflows', 'locations', 'admin', 'system'];
 
   test('every tab shows content when clicked', async ({ page }) => {
     for (const tab of allTabs) {
@@ -324,7 +324,7 @@ test.describe('Nav bar structure', () => {
 
   const expectedNavItems = [
     'Chat', 'Agents', 'Projects', 'Workflows',
-    'Locations', 'Files', 'Models', 'Extensions', 'Skills', 'Logs', 'Settings'
+    'Locations', 'Files', 'Models', 'Cortex', 'System', 'Extensions', 'Skills', 'Logs', 'Settings'
   ];
 
   test('sidebar contains all expected nav buttons', async ({ page }) => {

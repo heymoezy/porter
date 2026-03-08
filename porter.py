@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.37 — Squad awareness, persona restore, interval fix, workflow triggers"""
+"""Porter v0.28.38 — Squad awareness, persona restore, interval fix, workflow triggers"""
 
 
 import email
@@ -8500,6 +8500,10 @@ input[type="number"].settings-input { min-width: 60px; }
       <span class="mnav-label">Cortex</span>
 
     </button>
+    <button class="mnav-item" id="mnav-system" onclick="switchModule('system')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span class="mnav-label">System</span>
+    </button>
     <div class="mnav-group-label">Config</div>
     <button class="mnav-item" id="mnav-capabilities" onclick="switchModule('capabilities')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
@@ -8540,7 +8544,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.37</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.38</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9062,34 +9066,26 @@ input[type="number"].settings-input { min-width: 60px; }
   </div>
 
   <!-- Workflows panel — automations only -->
+  <div id="system-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">System</span>
+    </div>
+    <div class="module-intro">Background daemons that maintain intelligence, health, and hygiene.</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <span id="wf-sys-count" style="font-size:11px;color:var(--text3)"></span>
+    </div>
+    <div id="wf-system-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px"></div>
+  </div>
+
   <div id="workflows-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Workflows</span>
-
     </div>
-    <div class="module-intro">System daemons, skill-based workflows, and external schedulers.</div>
-
-    <!-- System Workflows -->
-    <div style="margin-bottom:24px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">System Workflows</div>
-        <span id="wf-sys-count" style="font-size:11px;color:var(--text3)"></span>
-      </div>
-      <div id="wf-system-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px"></div>
-    </div>
-
-
-
-    <!-- User Workflows -->
-    <div style="margin-bottom:16px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">User Workflows</div>
-      </div>
-      <div style="padding:32px;text-align:center;color:var(--text3);font-size:13px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">
-        <div style="font-size:24px;margin-bottom:8px;opacity:.5">&#128679;</div>
-        <div style="font-weight:500;color:var(--text2);margin-bottom:4px">Coming Soon</div>
-        <div>Custom user-defined workflows with triggers, conditions, and multi-step agent chains.</div>
-      </div>
+    <div class="module-intro">Custom user-defined workflows with triggers, conditions, and multi-step agent chains.</div>
+    <div style="padding:32px;text-align:center;color:var(--text3);font-size:13px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">
+      <div style="font-size:24px;margin-bottom:8px;opacity:.5">&#128679;</div>
+      <div style="font-weight:500;color:var(--text2);margin-bottom:4px">Coming Soon</div>
+      <div>Build multi-step agent chains with triggers and conditions.</div>
     </div>
   </div>
 
@@ -9802,6 +9798,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.38', date:'2026-03-08', notes:['System workflows moved to Intelligence > System (separate from user Workflows)','Workflows tab now reserved for user-defined workflow builder'] },
   { ver:'v0.28.37', date:'2026-03-08', notes:['Cortex: removed filter bar, condensed toolbar, icon-only buttons','Agent shows actual name, edit has Squad scope + agent picker','Squad scope for shared learnings, graph strokes thinned'] },
   { ver:'v0.28.36', date:'2026-03-08', notes:['Dark mode overhaul: --text2 → #E0, --text3 → #C0 (45+ elements fixed)','All 9px fonts bumped to 10px (minimum readable size)','Fixed status pills: cancelled/pending now visible','Workflow interval inputs wider (no more cut-off numbers)','Nav group labels brighter'] },
   { ver:'v0.28.35', date:'2026-03-08', notes:['Dark mode readability: brightened --text2 (#C0→#D4), --text3 (#90→#B0)','Raised surfaces and borders for better card separation','All UI labels, descriptions, stats now higher contrast'] },
@@ -11714,7 +11711,7 @@ function switchModule(name) {
       }, 30000);
     }, tasks: () => switchModule('projects'), agents: function() { loadAgents(); }, projects: function() {}, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
-    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, cortex: _loadCortexTab, workflows: loadWorkflowRegistry, settings: syncSettingsUI,
+    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, cortex: _loadCortexTab, system: loadWorkflowRegistry, workflows: function(){}, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -11799,7 +11796,7 @@ async function loadWorkflowRegistry() {
       if (!window._wfRefreshTimer) {
         window._wfRefreshTimer = setTimeout(function() {
           window._wfRefreshTimer = null;
-          var wfMod = document.getElementById('workflows-module');
+          var wfMod = document.getElementById('system-module');
           if (wfMod && wfMod.classList.contains('active')) _wfRefreshSystemOnly();
         }, 8000);
       }
@@ -24890,7 +24887,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.37"})
+            self.reply_json({"v": "0.28.38"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25052,7 +25049,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.37"
+                health["porter_version"] = "0.28.38"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26883,7 +26880,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.37'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.38'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31117,7 +31114,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.37 ready (localhost only)")
+    print(f"\n  Porter v0.28.38 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
