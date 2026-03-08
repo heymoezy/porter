@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.18 — Lean system prompts"""
+"""Porter v0.29.19 — Multi-fix: Cortex bug, UX improvements"""
 
 
 import email
@@ -1410,6 +1410,10 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
             scope = "global"
         importance = max(1, min(10, int(fact_obj.get("importance", 5))))
         keywords = str(fact_obj.get("keywords", ""))
+        # v0.29.19 — compute scope_id early (was NameError before)
+        if scope == "agent" and not persona_id:
+            scope = "global"
+        scope_id = persona_id if scope == "agent" else ""
 
         # Duplicate check + supersession (v0.28.3)
         if _is_duplicate(fact_text, existing_facts):
@@ -1442,10 +1446,6 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
             pass
 
         # v0.28.0 — auto-accept: store directly, no file routing
-        # If LLM says "agent" but no persona_id, fall back to global (prevent orphans)
-        if scope == "agent" and not persona_id:
-            scope = "global"
-        scope_id = persona_id if scope == "agent" else ""
         confidence = 0.5  # v0.28.52 — new facts start at 0.5, reinforced on re-extraction
 
         # v0.28.52 — Check for near-duplicate to reinforce instead of insert
@@ -6205,17 +6205,18 @@ def _init_trace_tables():
         existing_groups = conn.execute(
             "SELECT DISTINCT agent_group FROM personas WHERE agent_group != '' AND agent_group IS NOT NULL"
         ).fetchall()
-        group_colors = {
-            'Orchestrator': '#ef4444', 'Strategy': '#6366f1',
-            'Creative': '#ec4899', 'Technical': '#06b6d4', 'Operations': '#f59e0b'
-        }
+        # v0.29.19 — dynamic squad colors (no hardcoded map)
+        import hashlib as _hc
+        def _squad_color(name):
+            h = int(_hc.md5(name.encode()).hexdigest()[:6], 16) % 360
+            return f'hsl({h}, 65%, 55%)'
         for (grp,) in existing_groups:
             try:
                 import uuid as _uuid
                 sid = _uuid.uuid4().hex[:16]
                 conn.execute(
                     "INSERT OR IGNORE INTO squads (id, name, color) VALUES (?, ?, ?)",
-                    (sid, grp, group_colors.get(grp, '#6366f1'))
+                    (sid, grp, _squad_color(grp))
                 )
                 # Add members from that group
                 members = conn.execute(
@@ -7403,8 +7404,9 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .flush-wizard-impact span { display:flex; flex-direction:column; gap:2px; }
 .flush-wizard-impact strong { font-size:11px; color:var(--text); }
 .flush-wizard-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
-.persona-card[draggable] { cursor:grab; }
+.persona-card[draggable] { cursor:grab; transition:transform .18s ease; }
 .persona-card[draggable]:active { cursor:grabbing; }
+.persona-card.drag-src { opacity:.3; }
 .persona-wizard-overlay { position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.4);z-index:999; }
 .persona-wizard-modal { position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:480px;max-height:80vh;background:var(--surface);border-radius:12px;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.25);z-index:1000;overflow:hidden;display:flex;flex-direction:column; }
 .learn-spinner { display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:learn-spin .6s linear infinite;vertical-align:middle;margin-right:4px; }
@@ -8961,7 +8963,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.18</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.19</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10215,6 +10217,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.19', date:'2026-03-08', notes:['Fix: Cortex extraction NameError blocking all new facts since v0.28.45','Removed confusing XP bar from agent cards','Escape key returns to agents grid from agent view','Trello-style drag-and-drop with custom clone + FLIP animation','Dynamic squad colors (removed hardcoded map)'] },
   { ver:'v0.29.18', date:'2026-03-08', notes:['Lean system prompts: ~4.5KB→~2KB per dispatch','Dropped redundant IDENTITY.md + ROLE_CARD.md from prompt','Strip MEMORY.md boilerplate + ship process from RULES.md','Compact squad roster (one line vs 10-line block)'] },
   { ver:'v0.29.17', date:'2026-03-08', notes:['Skills summary stats bar (total, installed, manual, categories)','GPT-5.4 design audit integration'] },
   { ver:'v0.29.16', date:'2026-03-08', notes:['Shared SSE bus: 5 EventSource connections consolidated to 1','Reduces server thread usage and improves responsiveness'] },
@@ -18874,9 +18877,7 @@ function renderPersonaOrg() {
     var grpBadge = grp ? '<div style="font-size:10px;padding:1px 6px;border-radius:3px;background:' + grpColor + '20;color:' + grpColor + ';font-weight:600;margin-top:4px;letter-spacing:.3px">' + grp + '</div>' : '';
     // v0.28.54 — Spatial status class + XP bar
     var statusClass = p.status === 'active' ? ' status-active' : p.status === 'error' ? ' status-error' : p.status === 'sleeping' ? ' status-sleeping' : '';
-    var xpPct = Math.min(100, Math.round((p.confidence || 0) * 100));
-    var evCount = p.evidence_count || 0;
-    var xpBar = xpPct > 0 ? '<div class="persona-card-xp"><div class="persona-card-xp-fill" style="width:' + xpPct + '%"></div></div><div class="persona-card-xp-label">' + xpPct + '% · ' + evCount + ' evidence</div>' : '';
+    var xpBar = '';  // v0.29.19 — removed confusing XP bar (was showing raw Cortex confidence with no context)
     return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + statusClass + '" draggable="true" data-persona-id="' + p.id + '" ondragstart="_pDragStart(event)" ondragover="_pDragOver(event)" ondrop="_pDrop(event)" ondragend="_pDragEnd(event)" onclick="selectPersona(\'' + p.id + '\')">'
       + '<div class="persona-card-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
@@ -18892,31 +18893,47 @@ function renderPersonaOrg() {
 }
 
 
-// ── Drag-and-drop reorder for persona cards ──
-var _pDragId = null;
+// ── Trello-style drag-and-drop for persona cards (v0.29.19 — GPT-5.4 design) ──
+var _pDragId=null,_pClone=null,_pMarker=null,_pCont=null,_pRect=null,_pX=0,_pY=0,_pRAF=0;
 function _pDragStart(e) {
-  _pDragId = e.currentTarget.dataset.personaId;
-  e.currentTarget.style.opacity = '0.4';
-  e.dataTransfer.effectAllowed = 'move';
+  var id = e.currentTarget.dataset.personaId;
+  _pDragId=id; _pCont=document.getElementById('persona-cards-row'); if(!_pCont)return;
+  var card=e.currentTarget; _pRect=card.getBoundingClientRect();
+  e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',id);
+  var img=new Image(); img.src='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='; e.dataTransfer.setDragImage(img,0,0);
+  card.classList.add('drag-src');
+  _pClone=card.cloneNode(true); _pClone.className='persona-card';
+  _pClone.style.cssText='position:fixed;left:'+_pRect.left+'px;top:'+_pRect.top+'px;width:'+_pRect.width+'px;pointer-events:none;z-index:9999;opacity:.92;transform:scale(1.03);box-shadow:0 12px 28px rgba(0,0,0,.35);transition:none';
+  document.body.appendChild(_pClone);
+  _pMarker=document.createElement('div');
+  _pMarker.style.cssText='width:130px;min-height:120px;border:2px dashed var(--accent);border-radius:10px;background:color-mix(in srgb,var(--accent) 8%,transparent);flex-shrink:0';
+  _pX=e.clientX; _pY=e.clientY; document.addEventListener('dragover',_pDragMove);
+}
+function _pDragMove(e) {
+  _pX=e.clientX; _pY=e.clientY; if(_pRAF) return;
+  _pRAF=requestAnimationFrame(function(){ _pRAF=0; if(_pClone){ _pClone.style.left=(_pX-(_pRect?_pRect.width/2:65))+'px'; _pClone.style.top=(_pY-24)+'px'; }});
 }
 function _pDragOver(e) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  var card = e.currentTarget;
-  card.style.borderLeft = '3px solid var(--accent)';
+  e.preventDefault(); e.dataTransfer.dropEffect='move'; if(!_pMarker||!_pCont) return;
+  var cards=[].slice.call(_pCont.querySelectorAll('.persona-card:not(.drag-src)'));
+  var placed=false;
+  for(var i=0;i<cards.length;i++){
+    var c=cards[i], r=c.getBoundingClientRect(), before=e.clientX < r.left + r.width/2;
+    if(e.clientY>=r.top-20 && e.clientY<=r.bottom+20){ _pCont.insertBefore(_pMarker,before?c:c.nextSibling); placed=true; break; }
+  }
+  if(!placed && _pCont.lastChild !== _pMarker) _pCont.appendChild(_pMarker);
 }
 function _pDragEnd(e) {
-  _pDragId = null;
-  document.querySelectorAll('.persona-card').forEach(function(c) {
-    c.style.opacity = '1';
-    c.style.borderLeft = '';
-  });
+  document.removeEventListener('dragover',_pDragMove);
+  if(_pClone) _pClone.remove(); if(_pMarker) _pMarker.remove();
+  document.querySelectorAll('.persona-card.drag-src').forEach(function(el){ el.classList.remove('drag-src'); });
+  _pDragId=_pClone=_pMarker=_pCont=_pRect=null; _pRAF=0;
 }
 function _pDrop(e) {
   e.preventDefault();
   var targetId = e.currentTarget.dataset.personaId;
   if (!_pDragId || _pDragId === targetId) { _pDragEnd(e); return; }
-  // Reorder in _personas array
+  // v0.29.19 — FLIP animation reorder
   var sorted = _personas.slice().sort(function(a, b) {
     var oa = typeof a.sort_order === 'number' ? a.sort_order : 50;
     var ob = typeof b.sort_order === 'number' ? b.sort_order : 50;
@@ -20175,6 +20192,16 @@ document.addEventListener('keydown', function(e) {
   // Persona detail slide-out
   var pd = document.getElementById('persona-detail');
   if (pd && pd.classList.contains('open')) { closePersonaDetail(); e.stopPropagation(); return; }
+  // v0.29.19 — Deselect agent and go back to agents grid
+  if (typeof _selectedPersona !== 'undefined' && _selectedPersona && document.getElementById('agents-module') && document.getElementById('agents-module').classList.contains('active')) {
+    _selectedPersona = null;
+    document.querySelectorAll('.persona-card.selected').forEach(function(c) { c.classList.remove('selected'); });
+    var agentDetail = document.getElementById('agent-detail-area');
+    if (agentDetail) agentDetail.style.display = 'none';
+    var agentGrid = document.getElementById('persona-cards-row');
+    if (agentGrid) agentGrid.scrollIntoView({ behavior: 'smooth' });
+    e.stopPropagation(); return;
+  }
   // Model activity slide-out
   var ma = document.getElementById('model-activity-panel');
   if (ma && ma.classList.contains('open')) { _closeModelActivity(); e.stopPropagation(); return; }
@@ -25906,7 +25933,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.18"})
+            self.reply_json({"v": "0.29.19"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26068,7 +26095,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.18"
+                health["porter_version"] = "0.29.19"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27877,7 +27904,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.18'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.19'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32358,7 +32385,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.18 ready (localhost only)")
+    print(f"\n  Porter v0.29.19 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
