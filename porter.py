@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.37 — Project card cleanup"""
+"""Porter v0.29.38 — Color-coded file icons"""
 
 
 import email
@@ -9183,7 +9183,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.37</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.38</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10477,6 +10477,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.38', date:'2026-03-08', notes:['Files: color-coded file type icons in grid view','Python blue, JS yellow, HTML red, JSON purple, images green, PDFs red','Folders amber, shell green, markdown gray, archives amber','fileIconColor() function maps extensions to language-standard colors'] },
   { ver:'v0.29.37', date:'2026-03-08', notes:['Projects: removed agent icons from front card','Projects: tab counters use parentheses — Agents (9), Workflows (3)','Projects: front card shows plain agent count instead of emoji avatars'] },
   { ver:'v0.29.36', date:'2026-03-08', notes:['Projects: attach/detach system workflows in Workflows tab','Projects: workflow cards show status, interval, last run','Projects: trigger attached workflow from project context','Backend: project update supports workflows field'] },
   { ver:'v0.29.35', date:'2026-03-08', notes:['Files: grid/list view toggle in toolbar','Files: grid view shows file cards with type-colored icons','Files: view preference persists in localStorage','Files: storage bar moved to home view (always visible)','Files: home view mount cards show item count + total size'] },
@@ -11999,6 +12000,21 @@ function fileIcon(name) {
   if (['csv','tsv','xlsx','xls'].includes(ext)) return I.data;
   if (['zip','gz','tar','bz2','xz','rar','7z'].includes(ext)) return I.archive;
   return I.file;
+}
+function fileIconColor(name, isDir) {
+  if (isDir) return '#f79a1a';
+  var ext = (name.split('.').pop() || '').toLowerCase();
+  if (['py'].includes(ext)) return '#3572a5';
+  if (['js','ts'].includes(ext)) return '#f1e05a';
+  if (['html','css'].includes(ext)) return '#e34c26';
+  if (['json','yaml','yml','toml','xml'].includes(ext)) return '#8b5cf6';
+  if (['sh','bash'].includes(ext)) return '#89e051';
+  if (['md','txt','log'].includes(ext)) return '#9ca3af';
+  if (['png','jpg','jpeg','gif','svg','webp','ico'].includes(ext)) return '#22c55e';
+  if (ext === 'pdf') return '#ef4444';
+  if (['csv','tsv','xlsx','xls'].includes(ext)) return '#10b981';
+  if (['zip','gz','tar','bz2','xz','rar','7z'].includes(ext)) return '#f59e0b';
+  return 'var(--text3)';
 }
 
 const TEXT_EXTS = new Set(['py','js','ts','sh','bash','json','yaml','yml','toml','md','txt','log','env','csv','html','css','xml','ini','conf','rs','go','java','c','cpp','h','rb','php']);
@@ -23849,6 +23865,7 @@ function _initViewToggle() {
 
 function gridCardHTML(e) {
   var icon = e.type === 'dir' ? I.folder : fileIcon(e.name);
+  var iconClr = fileIconColor(e.name, e.type === 'dir');
   var click = e.type === 'dir'
     ? 'onclick="navigate(\'' + esc(curRoot) + '\',\'' + esc(curPath ? curPath+'/'+e.name : e.name) + '\')"'
     : 'onclick="openPreview(\'' + esc(e.name) + '\')"';
@@ -23856,7 +23873,7 @@ function gridCardHTML(e) {
   return '<div class="file-grid-card' + (e.type==='dir'?' is-dir':'') + '" ' + click + '>'
     + '<input type="checkbox" class="row-cb grid-cb" ' + checked
     + ' onclick="event.stopPropagation()" onchange="toggleSelect(\'' + esc(e.name) + '\',this.checked)">'
-    + '<span class="grid-icon">' + icon + '</span>'
+    + '<span class="grid-icon" style="color:' + iconClr + '">' + icon + '</span>'
     + '<span class="grid-name" title="' + escHtml(e.name) + '">' + escHtml(e.name) + '</span>'
     + '<span class="grid-meta">' + (e.type === 'dir' ? 'Folder' : e.size) + '</span>'
     + '</div>';
@@ -27152,7 +27169,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.37"})
+            self.reply_json({"v": "0.29.38"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -29149,7 +29166,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.37'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.38'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -33656,7 +33673,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.37 ready (localhost only)")
+    print(f"\n  Porter v0.29.38 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
