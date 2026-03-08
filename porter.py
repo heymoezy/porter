@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.38 — Color-coded file icons"""
+"""Porter v0.29.39 — Finance Squad + Kraken integration"""
 
 
 import email
@@ -798,6 +798,10 @@ CAPABILITIES: list = [
      "install": "npm install -g @googleworkspace/cli",
      "features": ["Gmail", "Drive", "Calendar", "Sheets", "Docs", "MCP server"],
      "check": lambda: _check_gws_cli()},
+    {"id": "kraken",       "label": "Kraken CLI",
+     "install": "https://github.com/krakenfx/kraken-cli",
+     "features": ["Crypto trading", "Market data", "Portfolio management", "MCP server"],
+     "check": lambda: _cap_check_bin("kraken")},
 ]
 
 
@@ -9183,7 +9187,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.38</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.39</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10477,6 +10481,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.39', date:'2026-03-08', notes:['Finance Squad: 4 new agents (MarketWatch, Guardian, Flash, Ledger)','Dev Squad: all 9 dev agents with role-specific skill assignments','Kraken CLI added to Extensions capability detection','Old role squads replaced with Dev Squad + Finance Squad','Skills assigned: Vision/LogicLord get coding-agent+github, Sage/Pretty/Quill get gemini+gog'] },
   { ver:'v0.29.38', date:'2026-03-08', notes:['Files: color-coded file type icons in grid view','Python blue, JS yellow, HTML red, JSON purple, images green, PDFs red','Folders amber, shell green, markdown gray, archives amber','fileIconColor() function maps extensions to language-standard colors'] },
   { ver:'v0.29.37', date:'2026-03-08', notes:['Projects: removed agent icons from front card','Projects: tab counters use parentheses — Agents (9), Workflows (3)','Projects: front card shows plain agent count instead of emoji avatars'] },
   { ver:'v0.29.36', date:'2026-03-08', notes:['Projects: attach/detach system workflows in Workflows tab','Projects: workflow cards show status, interval, last run','Projects: trigger attached workflow from project context','Backend: project update supports workflows field'] },
@@ -27169,7 +27174,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.38"})
+            self.reply_json({"v": "0.29.39"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -29166,7 +29171,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.38'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.39'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -33673,7 +33678,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.38 ready (localhost only)")
+    print(f"\n  Porter v0.29.39 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
