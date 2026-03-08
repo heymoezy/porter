@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.29 — Trello-style drag-and-drop"""
+"""Porter v0.29.30 — Agent Skills tab: cards, search, discover"""
 
 
 import email
@@ -9157,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.29</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.30</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10436,12 +10436,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.28.12', date:'2026-03-07', notes:['System prompt restructured: clean === delimited sections (SOUL/ROLE_CARD/RULES/MEMORY), structured framing rules','Removed Cortex 99+ nav badge (no-op kept for SSE compat)','Memory map resize fix: redraws + fits graph after window resize','Lock button on memory map: prevents layout changes on resize, circle-click filtering still works in locked mode','Removed IDENTITY.md from context (redundant with SOUL.md)'] },
-  { ver:'v0.28.13', date:'2026-03-07', notes:['Inbox: fixed text overflow (word-break)','Inbox: click-to-filter now works (agent: prefix stripped)','Inbox: renamed Memories → Inbox','Graph: removed 99+ count cap on nodes','Cortex Config: added Back button'] },
-  { ver:'v0.28.14', date:'2026-03-07', notes:['Graph lock now prevents node dragging and panning (click-to-filter still works)'] },
-  { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
-  { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
-  { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.30', date:'2026-03-08', notes:['Agent Skills tab redesign: cards matching global Skills tab style','Installed/Discover toggle — only assigned skills shown by default','Search input filters skills in both views','Category chips for filtering in Discover view','Recommended skills highlighted with badge in Discover view','Assign/Remove buttons with auto-refresh'] },
   { ver:'v0.29.29', date:'2026-03-08', notes:['Trello-style drag-and-drop: elevated clone with shadow + 2deg tilt follows cursor','Gap placeholder shows where card will land (dashed border, animated)','Cards shuffle apart with 150ms CSS transitions','No more border-left/right color indicators','Container-level drop handler for reliable drop detection'] },
   { ver:'v0.29.28', date:'2026-03-08', notes:['Design consistency: replaced all border-left:3px accent patterns with status dots','Quest items, squad cards, activity runs, live feed events — all use dots now','Summary turns: removed border-left, kept subtle background tints','Skill proposals: replaced dashed accent border with solid border'] },
   { ver:'v0.29.27', date:'2026-03-08', notes:['Verification Loops: strict hook profile agents get post-dispatch response quality checks','Verification scoring: length, echo detection, hedging patterns, keyword overlap','Session Lifecycle: chat sessions auto-pause after 30min, archive after 24h','DB migration: session_state, last_activity, paused_at, archived_at columns'] },
@@ -10509,6 +10504,12 @@ const CHANGELOG = [
   { ver:'v0.28.20', date:'2026-03-07', notes:['Graph: scroll zoom blocked when locked','Workflow history: singular "run" when count is 1','Cortex: agent scope resolves persona ID to name','Cortex: scope tag truncation for long names','Removed API Keys from Settings (use Extensions)'] },
   { ver:'v0.28.19', date:'2026-03-07', notes:['Agent Config tab: editable backend + fallback chain','Agent Self-Test workflow: periodic benchmarks across backends','Graph lock ON by default, disables +/-/Fit/Center','Removed Memory tab from agent slide-out (use Cortex)','Cortex: scope shows agent name, counter says learnings, removed type pills','Inbox button cutoff fix'] },
   { ver:'v0.28.18', date:'2026-03-07', notes:['System Prompt viewer: shows the full initial prompt Porter sends each agent','GET /api/persona/<id>/system-prompt endpoint','System Prompt button in agent slide-out panel header','Removed Last Dispatch from Models tab'] },
+  { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
+  { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
+  { ver:'v0.28.14', date:'2026-03-07', notes:['Graph lock now prevents node dragging and panning (click-to-filter still works)'] },
+  { ver:'v0.28.13', date:'2026-03-07', notes:['Inbox: fixed text overflow (word-break)','Inbox: click-to-filter now works (agent: prefix stripped)','Inbox: renamed Memories → Inbox','Graph: removed 99+ count cap on nodes','Cortex Config: added Back button'] },
+  { ver:'v0.28.12', date:'2026-03-07', notes:['System prompt restructured: clean === delimited sections (SOUL/ROLE_CARD/RULES/MEMORY), structured framing rules','Removed Cortex 99+ nav badge (no-op kept for SSE compat)','Memory map resize fix: redraws + fits graph after window resize','Lock button on memory map: prevents layout changes on resize, circle-click filtering still works in locked mode','Removed IDENTITY.md from context (redundant with SOUL.md)'] },
   { ver:'v0.28.11', date:'2026-03-07', notes:['Workflow Registry: 6 system workflows exposed as monitorable, configurable cards','GET /api/workflows + POST trigger/toggle/config endpoints','Daemons instrumented: cortex, hygiene, cap-checks, heartbeat, rollup, memory extraction','Workflows tab redesigned: live status, run history, pause/resume, config editing, manual trigger','Projects tab replaced with Coming Soon placeholder (backend preserved)','Agent persona files: quality MEMORY.md + ROLE_CARD.md for all 9 agents with conflict detection','Dead code removed: runBuild, chain builder, heartbeat editor, old workflow skills UI'] },
   { ver:'v0.28.10', date:'2026-03-07', notes:['UI Polish Batch — visual refinements across tabs'] },
   { ver:'v0.28.9', date:'2026-03-07', notes:['Memory map resize fix, context budget improvements, history trimmer for dispatch'] },
@@ -13494,6 +13495,8 @@ async function _showSystemPrompt(personaId) {
     var overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
     overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    function _sqEsc(e) { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', _sqEsc); } }
+    document.addEventListener('keydown', _sqEsc);
     var modal = document.createElement('div');
     modal.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:20px;max-width:700px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
     modal.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
@@ -19461,7 +19464,13 @@ function _pDragEnd(e) {
   if (_pClone) { _pClone.remove(); _pClone = null; }
   if (_pGap && _pGap.parentNode) { _pGap.remove(); }
   _pGap = null;
+  // Brief delay before clearing drag ID so selectPersona click is suppressed
+  var wasDragging = !!_pDragId;
   _pDragId = null;
+  if (wasDragging) {
+    _pDragId = '__clearing__';
+    setTimeout(function() { _pDragId = null; }, 100);
+  }
   _pRAF = 0;
   var cont = document.getElementById('persona-cards-row');
   if (cont) {
@@ -19523,6 +19532,7 @@ function openAgentDetail(personaId) {
 }
 
 async function selectPersona(id) {
+  if (_pDragId) return;  // v0.29.30 — don't select during drag
   _selectedPersonaId = id;
   renderPersonaOrg();
   // v0.29.1 — Show full-page detail, hide grid
@@ -19904,9 +19914,13 @@ function _isSkillRecommended(sk, persona) {
   return false;
 }
 
+// v0.29.30 — Agent Skills tab: cards, search, installed/discover toggle
+var _psView = 'installed', _psCatFilter = '', _psAllSkills = [], _psPid = '';
+
 async function _loadPersonaSkills(pid) {
   var container = document.getElementById('pd-skills-list');
   if (!container) return;
+  _psPid = pid;
   try {
     var p = window._selectedPersona;
     var [assigned, available] = await Promise.all([
@@ -19914,81 +19928,147 @@ async function _loadPersonaSkills(pid) {
       api('/api/openclaw/skills?action=list').catch(function() { return {skills:[]}; })
     ]);
     var assignedNames = ((assigned && assigned.skills) || []).map(function(s) { return s.name; });
-    var allSkills = (available && available.skills) || [];
-    if (!allSkills.length) {
+    _psAllSkills = (available && available.skills) || [];
+    if (!_psAllSkills.length) {
       container.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No skills available.</div>';
       return;
     }
-    // Categorize + tag
-    allSkills.forEach(function(sk) {
+    _psAllSkills.forEach(function(sk) {
       sk._assigned = assignedNames.indexOf(sk.name || sk.id) >= 0;
       sk._recommended = _isSkillRecommended(sk, p);
       sk._category = _inferSkillCategory(sk);
     });
-    // Build sections: Assigned → Recommended → Available (grouped by category)
-    var html = '';
-    var assignedSkills = allSkills.filter(function(s) { return s._assigned; });
-    var recommended = allSkills.filter(function(s) { return !s._assigned && s._recommended; });
-    var rest = allSkills.filter(function(s) { return !s._assigned && !s._recommended; });
-
-    function _renderSkillRow(sk) {
-      var name = sk.name || sk.id || sk;
-      var emoji = sk.emoji || '\u26A1';
-      var desc = sk.description || '';
-      var checked = sk._assigned ? 'checked' : '';
-      var r = '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface)">';
-      r += '<input type="checkbox" ' + checked + ' onchange="_togglePersonaSkill(\'' + pid + '\',\'' + name + '\',this.checked)" style="width:14px;height:14px;flex-shrink:0">';
-      r += '<span style="font-size:14px">' + emoji + '</span>';
-      var badge = sk.installed ? '<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:#22c55e22;color:#22c55e;margin-left:4px">active</span>' : '<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:#f59e0b22;color:#f59e0b;margin-left:4px">available</span>';
-      r += '<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:2px"><span style="color:var(--text);font-weight:500">' + escHtml(name) + '</span>' + badge + '</div>';
-      if (desc) r += '<div style="font-size:10px;color:var(--text3);display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">' + escHtml(desc.slice(0,80)) + '</div>';
-      r += '</div></label>';
-      return r;
-    }
-
-    function _sectionHeader(label, count, color) {
-      return '<div style="font-size:10px;font-weight:600;color:' + (color||'var(--text3)') + ';text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px;padding:0 2px">' + label + ' <span style="font-weight:400;opacity:.6">(' + count + ')</span></div>';
-    }
-
-    // Assigned section
-    if (assignedSkills.length) {
-      html += _sectionHeader('Assigned', assignedSkills.length, 'var(--accent)');
-      html += '<div style="display:flex;flex-direction:column;gap:4px">';
-      assignedSkills.forEach(function(sk) { html += _renderSkillRow(sk); });
-      html += '</div>';
-    }
-    // Recommended section
-    if (recommended.length) {
-      html += _sectionHeader('Recommended', recommended.length, '#22c55e');
-      html += '<div style="display:flex;flex-direction:column;gap:4px">';
-      recommended.forEach(function(sk) { html += _renderSkillRow(sk); });
-      html += '</div>';
-    }
-    // Available — grouped by category
-    if (rest.length) {
-      html += _sectionHeader('Available', rest.length, 'var(--text3)');
-      var cats = {};
-      rest.forEach(function(sk) {
-        if (!cats[sk._category]) cats[sk._category] = [];
-        cats[sk._category].push(sk);
-      });
-      var catNames = Object.keys(cats).sort();
-      catNames.forEach(function(cat) {
-        html += '<div style="font-size:9px;color:var(--text3);padding:6px 2px 3px;opacity:.7">' + cat + '</div>';
-        html += '<div style="display:flex;flex-direction:column;gap:3px">';
-        cats[cat].forEach(function(sk) { html += _renderSkillRow(sk); });
-        html += '</div>';
-      });
-    }
-    html += '<div style="margin-top:8px;font-size:10px;color:var(--text3)">' + assignedSkills.length + ' assigned \u00b7 ' + allSkills.filter(function(s){return s.installed;}).length + '/' + allSkills.length + ' active</div>';
-    container.innerHTML = html;
+    _psView = 'installed'; _psCatFilter = '';
+    _renderPersonaSkills();
   } catch(e) {
     container.innerHTML = '<div style="font-size:11px;color:var(--text3)">Could not load skills</div>';
   }
 }
 
+function _psSetView(v) { _psView = v; _psCatFilter = ''; _renderPersonaSkills(); }
+function _psSetCat(c) { _psCatFilter = (_psCatFilter === c) ? '' : c; _renderPersonaSkills(); }
+
+function _renderPersonaSkills() {
+  var container = document.getElementById('pd-skills-list');
+  if (!container) return;
+  var pid = _psPid;
+  var skills = _psAllSkills;
+  var assignedSkills = skills.filter(function(s) { return s._assigned; });
+  var assignedCount = assignedSkills.length;
+  var discoverCount = skills.filter(function(s) { return !s._assigned; }).length;
+
+  // Toolbar: toggle + search
+  var html = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">';
+  html += '<div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;flex-shrink:0">';
+  html += '<button onclick="_psSetView(\x27installed\x27)" style="font-size:11px;padding:4px 10px;border:none;cursor:pointer;'
+    + (_psView === 'installed' ? 'background:var(--accent);color:#fff' : 'background:var(--surface);color:var(--text3)')
+    + '">Installed (' + assignedCount + ')</button>';
+  html += '<button onclick="_psSetView(\x27discover\x27)" style="font-size:11px;padding:4px 10px;border:none;border-left:1px solid var(--border);cursor:pointer;'
+    + (_psView === 'discover' ? 'background:var(--accent);color:#fff' : 'background:var(--surface);color:var(--text3)')
+    + '">Discover (' + discoverCount + ')</button>';
+  html += '</div>';
+  html += '<input type="text" id="ps-search" placeholder="Search..." oninput="_renderPersonaSkills()" style="flex:1;font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);outline:none;min-width:0">';
+  html += '</div>';
+
+  var q = (document.getElementById('ps-search') || {}).value || '';
+  q = q.toLowerCase().trim();
+
+  if (_psView === 'installed') {
+    // Show only assigned skills
+    var shown = assignedSkills;
+    if (q) shown = shown.filter(function(s) { return ((s.name||s.id||'')+(s.description||'')).toLowerCase().indexOf(q) >= 0; });
+    if (!shown.length) {
+      html += '<div style="text-align:center;padding:20px 0;color:var(--text3);font-size:12px">'
+        + (q ? 'No matching skills' : 'No skills assigned yet') + '<br>'
+        + '<button onclick="_psSetView(\x27discover\x27)" style="margin-top:8px;font-size:11px;padding:4px 12px;border:1px solid var(--accent);border-radius:6px;background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--accent);cursor:pointer">Browse skills</button>'
+        + '</div>';
+    } else {
+      html += '<div style="display:flex;flex-direction:column;gap:6px">';
+      shown.forEach(function(sk) { html += _psCard(sk, pid); });
+      html += '</div>';
+    }
+  } else {
+    // Discover view: recommended strip + category chips + available cards
+    var unassigned = skills.filter(function(s) { return !s._assigned; });
+    if (q) unassigned = unassigned.filter(function(s) { return ((s.name||s.id||'')+(s.description||'')).toLowerCase().indexOf(q) >= 0; });
+
+    // Category chips
+    var cats = {};
+    unassigned.forEach(function(s) { cats[s._category] = (cats[s._category] || 0) + 1; });
+    var catNames = Object.keys(cats).sort();
+    if (catNames.length > 1) {
+      html += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">';
+      catNames.forEach(function(c) {
+        var active = _psCatFilter === c;
+        html += '<button onclick="_psSetCat(\x27'+c+'\x27)" style="font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid '
+          + (active ? 'var(--accent)' : 'var(--border2)') + ';background:' + (active ? 'color-mix(in srgb,var(--accent) 15%,transparent)' : 'transparent')
+          + ';color:' + (active ? 'var(--accent)' : 'var(--text3)') + ';cursor:pointer;white-space:nowrap">' + c + ' (' + cats[c] + ')</button>';
+      });
+      html += '</div>';
+    }
+
+    if (_psCatFilter) unassigned = unassigned.filter(function(s) { return s._category === _psCatFilter; });
+
+    // Recommended first
+    var recommended = unassigned.filter(function(s) { return s._recommended; });
+    var rest = unassigned.filter(function(s) { return !s._recommended; });
+
+    if (recommended.length) {
+      html += '<div style="font-size:10px;font-weight:600;color:#22c55e;text-transform:uppercase;letter-spacing:.5px;margin:4px 0 6px">Recommended (' + recommended.length + ')</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:6px">';
+      recommended.forEach(function(sk) { html += _psCard(sk, pid); });
+      html += '</div>';
+    }
+    if (rest.length) {
+      html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Available (' + rest.length + ')</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:6px">';
+      rest.forEach(function(sk) { html += _psCard(sk, pid); });
+      html += '</div>';
+    }
+    if (!recommended.length && !rest.length) {
+      html += '<div style="text-align:center;padding:16px 0;color:var(--text3);font-size:12px">' + (q || _psCatFilter ? 'No matching skills' : 'All skills assigned') + '</div>';
+    }
+  }
+
+  container.innerHTML = html;
+}
+
+function _psCard(sk, pid) {
+  var name = sk.name || sk.id || '';
+  var emoji = sk.emoji || '\u2699';
+  var desc = sk.description || 'No description';
+  var isAssigned = sk._assigned;
+  var isInstalled = sk.installed || sk.manual;
+  var statusBadge = '';
+  if (isAssigned) {
+    statusBadge = '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">assigned</span>';
+  } else if (isInstalled) {
+    statusBadge = '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:color-mix(in srgb,#22c55e 15%,transparent);color:#22c55e">active</span>';
+  } else {
+    statusBadge = '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:var(--raised);color:var(--text3)">available</span>';
+  }
+  if (sk._recommended && !isAssigned) {
+    statusBadge += ' <span style="font-size:9px;padding:1px 6px;border-radius:3px;background:color-mix(in srgb,#22c55e 15%,transparent);color:#22c55e">recommended</span>';
+  }
+  var catBadge = '<span style="font-size:9px;color:var(--text3);opacity:.7">' + escHtml(sk._category || '') + '</span>';
+  var action = '';
+  if (isAssigned) {
+    action = '<button style="font-size:10px;padding:2px 8px;border:1px solid var(--border2);border-radius:4px;background:none;color:var(--text3);cursor:pointer" onclick="event.stopPropagation();_togglePersonaSkill(\x27'+pid+'\x27,\x27'+escHtml(name)+'\x27,false).then(function(){_loadPersonaSkills(\x27'+pid+'\x27)})">Remove</button>';
+  } else {
+    action = '<button style="font-size:10px;padding:2px 10px;border:1px solid var(--accent);border-radius:4px;background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();_togglePersonaSkill(\x27'+pid+'\x27,\x27'+escHtml(name)+'\x27,true).then(function(){_loadPersonaSkills(\x27'+pid+'\x27)})">Assign</button>';
+  }
+  return '<div style="padding:10px 12px;border:1px solid ' + (isAssigned ? 'var(--border)' : 'var(--border2)') + ';border-radius:8px;background:' + (isAssigned ? 'var(--surface)' : 'var(--surface2)') + ';opacity:' + (isAssigned ? '1' : '0.8') + '">'
+    + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+    + '<span style="font-size:16px">' + emoji + '</span>'
+    + '<span style="font-weight:500;font-size:12px;color:var(--text);flex:1;min-width:0;overflow-wrap:break-word">' + escHtml(name) + '</span>'
+    + statusBadge
+    + '</div>'
+    + '<div style="font-size:10px;color:var(--text3);line-height:1.4;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + escHtml(desc) + '</div>'
+    + '<div style="display:flex;align-items:center;justify-content:space-between">' + catBadge + action + '</div>'
+    + '</div>';
+}
+
 async function _togglePersonaSkill(pid, skillName, enabled) {
-  // Get current skills, toggle, then save
   try {
     var current = await api('/api/personas/' + pid + '/skills');
     var skills = ((current && current.skills) || []).map(function(s) { return s.name; });
@@ -26401,7 +26481,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.29"})
+            self.reply_json({"v": "0.29.30"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26563,7 +26643,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.29"
+                health["porter_version"] = "0.29.30"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28397,7 +28477,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.29'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.30'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32899,7 +32979,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.29 ready (localhost only)")
+    print(f"\n  Porter v0.29.30 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
