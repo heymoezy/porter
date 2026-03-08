@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.50 — Workflow history polish, extraction bar blue, stale error fix"""
+"""Porter v0.28.51 — Lower dedup thresholds, stemmer, workflow history fix"""
 
 
 import email
@@ -1049,10 +1049,26 @@ def _cursor_get_new_messages(agent_id, chat_id, limit=20):
         warning = "STOP. Repeated empty reads waste tokens. Only read when triggered."
     return [], warning
 
+def _cortex_stem(word):
+    """Lightweight suffix stemming — normalize word forms for Jaccard matching."""
+    if len(word) <= 4:
+        return word
+    # Multi-char suffixes first (longer before shorter)
+    for suffix in ('ation', 'ments', 'ness', 'ting', 'ised', 'ized', 'edly',
+                    'ally', 'ment', 'able', 'ible', 'less', 'ful', 'ous', 'ive',
+                    'ing', 'ied', 'ies', 'ers', 'est', 'ely',
+                    'ed', 'er', 'ly'):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            return word[:-len(suffix)]
+    # Plural 's' — only strip if root is 4+ chars
+    if word.endswith('s') and not word.endswith('ss') and len(word) >= 6:
+        return word[:-1]
+    return word
+
 def _cortex_tokenize(text):
-    """Extract meaningful keywords from text, removing stop words."""
+    """Extract meaningful keywords from text, removing stop words, with stemming."""
     words = re.findall(r'[a-z0-9_]+', text.lower())
-    return set(w for w in words if len(w) > 2 and w not in _CORTEX_STOP_WORDS)
+    return set(_cortex_stem(w) for w in words if len(w) > 2 and w not in _CORTEX_STOP_WORDS)
 
 def _jaccard_similarity(kw_a, kw_b):
     """Set overlap ratio between two keyword sets."""
@@ -1095,7 +1111,7 @@ def _is_duplicate(new_fact, existing_facts):
     """Check if a fact is a duplicate (keyword overlap > 0.6)."""
     new_kw = _cortex_tokenize(new_fact)
     for ef in existing_facts:
-        if _jaccard_similarity(new_kw, _cortex_tokenize(ef)) > 0.6:
+        if _jaccard_similarity(new_kw, _cortex_tokenize(ef)) > 0.45:
             return True
     return False
 
@@ -1176,18 +1192,18 @@ def _load_md_knowledge_lines(persona_id=""):
     return kw_sets
 
 def _fact_covered_by_md(fact_text, scope="global", scope_id=""):
-    """Check if a fact is already covered by persona .md files (Jaccard >= 0.35)."""
+    """Check if a fact is already covered by persona .md files (Jaccard >= 0.25)."""
     fact_kw = _cortex_tokenize(fact_text)
     if len(fact_kw) < 3:
         return False
     # Check persona-specific .md files
     if scope == "agent" and scope_id:
         for md_kw in _load_md_knowledge_lines(scope_id):
-            if _jaccard_similarity(fact_kw, md_kw) >= 0.35:
+            if _jaccard_similarity(fact_kw, md_kw) >= 0.25:
                 return True
     # Always check global .md files
     for md_kw in _load_md_knowledge_lines(""):
-        if _jaccard_similarity(fact_kw, md_kw) >= 0.35:
+        if _jaccard_similarity(fact_kw, md_kw) >= 0.25:
             return True
     return False
 
@@ -1231,6 +1247,9 @@ _LOW_VALUE_PATTERNS = [
     re.compile(r"^(no other persona|the service under test)", re.I),
     re.compile(r"(may not be directly verifiable|may have multiple subpaths)", re.I),
     re.compile(r"(indentation bug|erasableSyntax|frontispiece|nested project)", re.I),
+    # v0.28.50 — User naming preference (already in RULES.md)
+    re.compile(r"(?i)moe.*(prefer|address|refer|call).*name", re.I),
+    re.compile(r"(?i)(prefer|address|refer|call).*moe.*name", re.I),
     # v0.28.49 — Tasks / feature requests (not durable memories)
     re.compile(r"^(project requirement|feature request|the requested feature)", re.I),
     re.compile(r"(should support|needs to support|must support|wants? .* (feature|support|capability))", re.I),
@@ -8812,7 +8831,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.50</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.51</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10032,6 +10051,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.51', date:'2026-03-08', notes:['Cortex dedup thresholds lowered: .md gate 0.35→0.25, cross-session 0.6→0.45','Suffix stemmer for Jaccard matching (word form normalization)','Workflow history bootstrap: initializes DB rows for all registered workflows on startup','Better duplicate rejection for semantic variants (addressed/address/prefers)'] },
   { ver:'v0.28.50', date:'2026-03-08', notes:['Workflow history shows useful results (not just zeros)','Stale workflow errors auto-clear on next successful run','Extraction progress bar: blue theme with animation','Consolidation result: human-readable (clean or action counts)','Memory extraction reports fact count in history','Heartbeat reports monitored/pinged counts'] },
   { ver:'v0.28.49', date:'2026-03-08', notes:['Universal truth dedup: cortex filter now reads CLAUDE.md + Claude auto-memory (not just persona .md files)','Cross-session dedup: re-extract no longer creates duplicates of facts from other sessions','Added naming rule to RULES.md so persona filter catches it','Cleaned cortex: 56 → 10 high-quality durable memories'] },
   { ver:'v0.28.48', date:'2026-03-08', notes:['Remove Cortex Config button and view (system workflows handle it)','Remove Global filter from inbox (graph icon already filters)','Fix: project scope without real ID falls back to global','Cleaned 84 stale implementation facts from cortex (236 \u2192 61)'] },
@@ -25132,7 +25152,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.50"})
+            self.reply_json({"v": "0.28.51"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25294,7 +25314,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.50"
+                health["porter_version"] = "0.28.51"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27102,7 +27122,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.50'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.51'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31315,6 +31335,17 @@ if __name__ == "__main__":
     _treg_load()  # populate task registry from SQLite (needs _db_init first)
     _wf_restore_intervals()  # Restore saved workflow intervals
     _wf_load_stats()  # Load persisted run counts from DB
+    # v0.28.51 — Bootstrap: ensure all registered workflows have DB rows (prevents "no history")
+    try:
+        _bconn = _db_conn()
+        for _bwf_id in _wf_registry:
+            _bconn.execute(
+                "INSERT OR IGNORE INTO workflow_stats (wf_id, run_count, error_count, last_run, last_error, last_result, last_duration_s, history) "
+                "VALUES (?, 0, 0, NULL, NULL, NULL, 0, '[]')", (_bwf_id,)
+            )
+        _bconn.commit(); _bconn.close()
+    except Exception:
+        pass
     _migrate_checkpoint_to_registry()  # Gap31: one-time migration
     _sched_thread = threading.Thread(target=_scheduler_loop, name="porter-scheduler", daemon=True)
     _sched_thread.start()
@@ -31337,7 +31368,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.50 ready (localhost only)")
+    print(f"\n  Porter v0.28.51 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
