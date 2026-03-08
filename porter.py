@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.35 — Squad awareness, persona restore, interval fix, workflow triggers"""
+"""Porter v0.28.36 — Squad awareness, persona restore, interval fix, workflow triggers"""
 
 
 import email
@@ -189,11 +189,11 @@ def _wf_is_enabled(wf_id):
 _wf_register("cortex_consolidation", "Cortex Consolidation",
     "Merges similar memories and archives stale ones",
     interval="6h", interval_s=6*3600,
-    config_keys=["cortex_consolidate_hours", "cortex_enabled"])
+    )
 _wf_register("context_hygiene", "Context Hygiene",
     "Prunes old logs, caps soul files, archives stale memories",
     interval="12h", interval_s=12*3600,
-    config_keys=["hygiene_interval_hours", "hygiene_enabled"])
+    )
 _wf_register("capability_checks", "Capability Checks",
     "Detects available AI backends and tools",
     interval="30s", interval_s=30)
@@ -206,17 +206,17 @@ _wf_register("telemetry_rollup", "Telemetry Rollup",
 _wf_register("memory_extraction", "Memory Extraction",
     "Extracts facts from chat responses into cortex memory",
     interval="per-response", interval_s=0,
-    config_keys=["cortex_enabled", "cortex_min_response_len"])
+    )
 
 _wf_register("agent_backend_eval", "Agent Backend Eval",
     "Cycles through agents testing each backend for response quality and speed",
     interval="168h", interval_s=604800,
-    config_keys=["agent_eval_enabled", "agent_eval_interval_hours"])
+    )
 
 _wf_register("error_self_heal", "Error Self-Heal",
     "Detects recurring errors in logs and attempts auto-remediation",
     interval="1h", interval_s=3600,
-    config_keys=["self_heal_enabled", "self_heal_max_actions"])
+    )
 
 # Restore persisted workflow intervals from config
 def _wf_restore_intervals():
@@ -6418,7 +6418,7 @@ LOGIN_PAGE = """<!DOCTYPE html>
   --bg: #0F0F0F; --surface: #1C1C1C; --raised: #282828;
   --border: #3A3A3A; --border2: #454545;
   --accent: #f7931a; --accent-d: #d97706;
-  --text: #F0F0F0; --text2: #D4D4D4; --text3: #B0B0B0;
+  --text: #F0F0F0; --text2: #E0E0E0; --text3: #C0C0C0;
   --danger: #dc2626; --radius: 8px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -6614,8 +6614,8 @@ window._mermaidReady = Promise.resolve(mermaid.initialize({
   --accent:   #f7931a;
   --accent-d: #d97706;
   --text:     #F0F0F0;
-  --text2:    #D4D4D4;
-  --text3:    #B0B0B0;
+  --text2:    #E0E0E0;
+  --text3:    #C0C0C0;
   --danger:   #dc2626;
   --success:  #16a34a;
   --bg1:      #171717;
@@ -6657,7 +6657,7 @@ body {
   letter-spacing: -0.4px; display: block; line-height: 1;
 }
 .logo-sub {
-  font-size: 9px; font-weight: 600; letter-spacing: 1.2px;
+  font-size: 10px; font-weight: 600; letter-spacing: 1.2px;
   color: var(--text3); text-transform: uppercase; display: block;
   margin-top: 4px;
 }
@@ -7113,7 +7113,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-row:hover { background:var(--bg2); }
 .mc-row.selected { background:var(--accent)10; border-left:2px solid var(--accent); }
 .mc-ts { color:var(--text3); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:10px; }
-.mc-sev { padding:1px 6px; border-radius:3px; font-size:9px; font-weight:600; text-transform:uppercase; text-align:center; }
+.mc-sev { padding:1px 6px; border-radius:3px; font-size:10px; font-weight:600; text-transform:uppercase; text-align:center; }
 .mc-sev.debug { background:var(--bg2); color:var(--text3); }
 .mc-sev.info { background:#3b82f620; color:#3b82f6; }
 .mc-sev.warn { background:#f59e0b20; color:#f59e0b; }
@@ -7122,7 +7122,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-domain { font-size:10px; color:var(--text2); background:var(--bg2); padding:1px 5px; border-radius:3px; text-align:center; }
 .mc-msg { color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .mc-chips { display:flex; gap:3px; }
-.mc-chip { font-size:9px; padding:1px 4px; border-radius:3px; background:var(--bg2); color:var(--text3); cursor:pointer; white-space:nowrap; }
+.mc-chip { font-size:10px; padding:1px 4px; border-radius:3px; background:var(--bg2); color:var(--text3); cursor:pointer; white-space:nowrap; }
 .mc-chip:hover { color:var(--accent); }
 .mc-dur { font-size:10px; color:var(--text3); text-align:right; font-family:monospace; }
 .mc-status-icon { font-size:12px; text-align:center; }
@@ -7158,7 +7158,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-report-form select { padding:5px 8px; font-size:11px; border:1px solid var(--border); border-radius:6px; background:var(--bg2); color:var(--text); }
 .mc-report-response { font-size:11px; color:var(--text2); white-space:pre-wrap; margin-top:8px; padding:10px; background:var(--bg2); border-radius:6px; max-height:300px; overflow-y:auto; }
 
-.mc-rem-status { display:inline-flex; align-items:center; gap:4px; font-size:9px; font-weight:600; padding:2px 6px; border-radius:3px; text-transform:uppercase; }
+.mc-rem-status { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:600; padding:2px 6px; border-radius:3px; text-transform:uppercase; }
 .mc-rem-status.dispatching { background:#3b82f620; color:#3b82f6; }
 .mc-rem-status.success { background:#10b98120; color:#10b981; }
 .mc-rem-status.failed { background:#ef444420; color:#ef4444; }
@@ -7279,7 +7279,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .rule-item:hover { border-color:var(--accent); }
 .rule-cat {
-  font-size:9px; text-transform:uppercase; letter-spacing:.5px;
+  font-size:10px; text-transform:uppercase; letter-spacing:.5px;
   padding:2px 6px; border-radius:4px; background:var(--bg2);
   color:var(--text3); white-space:nowrap; flex-shrink:0; margin-top:1px;
 }
@@ -8042,7 +8042,7 @@ body.density-compact .file-name { padding: 6px 0; }
   word-wrap:break-word; overflow-wrap:break-word; }
 .persona-card-role { font-size:10px; color:var(--text3); text-align:center;
   word-wrap:break-word; overflow-wrap:break-word; line-height:1.3; }
-.persona-card-status { display:flex; align-items:center; gap:4px; margin-top:4px; font-size:9px; }
+.persona-card-status { display:flex; align-items:center; gap:4px; margin-top:4px; font-size:10px; }
 .persona-card-dot { width:5px; height:5px; border-radius:50%; }
 
 /* ── Persona Detail — slide-out right panel ──────────────── */
@@ -8112,9 +8112,9 @@ body.density-compact .file-name { padding: 6px 0; }
 .mem-coord-item .coord-size { color:var(--text3);font-size:11px; }
 
 /* Nav group label */
-.mnav-group-label { font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;padding:12px 8px 4px;pointer-events:none;user-select:none; }
+.mnav-group-label { font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;padding:12px 8px 4px;pointer-events:none;user-select:none; }
 
-.mem-age-badge { display:inline-block;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600; }
+.mem-age-badge { display:inline-block;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:600; }
 .mem-age-fresh { background:color-mix(in srgb, #22c55e 15%, transparent);color:#22c55e; }
 .mem-age-warm { background:color-mix(in srgb, #d97706 15%, transparent);color:#d97706; }
 .mem-age-stale { background:color-mix(in srgb, #ef4444 15%, transparent);color:#ef4444; }
@@ -8226,10 +8226,10 @@ body.density-compact .file-name { padding: 6px 0; }
 /* Status pills — replace colored dots + colored text */
 .st-pill { font-size:10px; font-weight:600; padding:2px 8px; border-radius:10px; white-space:nowrap; flex-shrink:0; }
 .st-pill-progress  { background:rgba(59,130,246,.12); color:#3b82f6; }
-.st-pill-pending   { background:rgba(148,163,184,.12); color:#94a3b8; }
+.st-pill-pending   { background:rgba(148,163,184,.15); color:#cbd5e1; }
 .st-pill-complete  { background:rgba(34,197,94,.1);  color:#22c55e; }
 .st-pill-failed    { background:rgba(239,68,68,.1);  color:#ef4444; }
-.st-pill-cancelled { background:rgba(107,114,128,.1); color:#6b7280; }
+.st-pill-cancelled { background:rgba(156,163,175,.12); color:#d1d5db; }
 /* Progress bar */
 .proj-progress { display:flex; align-items:center; gap:10px; margin-top:8px; }
 .proj-progress-bar { flex:1; height:4px; background:var(--border); border-radius:2px; overflow:hidden; }
@@ -8282,6 +8282,7 @@ body.density-compact .file-name { padding: 6px 0; }
   font-family: inherit; outline: none; transition: .15s; box-sizing: border-box; min-width: 0; }
 select.settings-input { padding-right: 26px; }
 .settings-input:focus { border-color: var(--accent); }
+input[type="number"].settings-input { min-width: 60px; }
 .avatar-section { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .avatar-large { width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: #000;
   font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center;
@@ -8539,7 +8540,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.35</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.36</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9139,10 +9140,10 @@ select.settings-input { padding-right: 26px; }
         <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border)">
           <div style="font-size:13px;font-weight:600;color:var(--text)">Memory Map</div>
           <div style="display:flex;gap:2px;margin-left:12px">
-            <button class="btn btn-ghost gf-btn active" onclick="_graphFilterScope('all',this)" style="font-size:9px;padding:2px 6px">All</button>
-            <button class="btn btn-ghost gf-btn" onclick="_graphFilterScope('agent',this)" style="font-size:9px;padding:2px 6px">Agent</button>
-            <button class="btn btn-ghost gf-btn" onclick="_graphFilterScope('project',this)" style="font-size:9px;padding:2px 6px">Project</button>
-            <button class="btn btn-ghost gf-btn" onclick="_graphFilterScope('global',this)" style="font-size:9px;padding:2px 6px">Global</button>
+            <button class="btn btn-ghost gf-btn active" onclick="_graphFilterScope('all',this)" style="font-size:10px;padding:2px 6px">All</button>
+            <button class="btn btn-ghost gf-btn" onclick="_graphFilterScope('agent',this)" style="font-size:10px;padding:2px 6px">Agent</button>
+            <button class="btn btn-ghost gf-btn" onclick="_graphFilterScope('project',this)" style="font-size:10px;padding:2px 6px">Project</button>
+            <button class="btn btn-ghost gf-btn" onclick="_graphFilterScope('global',this)" style="font-size:10px;padding:2px 6px">Global</button>
           </div>
           <div style="flex:1"></div>
           <button class="btn btn-ghost" onclick="_graphZoomIn()" style="font-size:10px;padding:2px 8px" title="Zoom in">+</button>
@@ -9170,9 +9171,9 @@ select.settings-input { padding-right: 26px; }
           <span id="cx-inbox-count" style="font-size:10px;color:var(--text3)"></span>
           <div style="flex:1"></div>
           <div style="display:flex;gap:2px">
-            <button class="btn btn-ghost cx-type-filter active" onclick="_filterCortexType('all',this)" style="font-size:9px;padding:2px 6px">All</button>
-            <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('semantic',this)" style="font-size:9px;padding:2px 6px">Facts</button>
-            <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('episodic',this)" style="font-size:9px;padding:2px 6px">Episodes</button>
+            <button class="btn btn-ghost cx-type-filter active" onclick="_filterCortexType('all',this)" style="font-size:10px;padding:2px 6px">All</button>
+            <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('semantic',this)" style="font-size:10px;padding:2px 6px">Facts</button>
+            <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('episodic',this)" style="font-size:10px;padding:2px 6px">Episodes</button>
           </div>
         </div>
         <div style="padding:4px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
@@ -9805,6 +9806,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.36', date:'2026-03-08', notes:['Dark mode overhaul: --text2 → #E0, --text3 → #C0 (45+ elements fixed)','All 9px fonts bumped to 10px (minimum readable size)','Fixed status pills: cancelled/pending now visible','Workflow interval inputs wider (no more cut-off numbers)','Nav group labels brighter'] },
   { ver:'v0.28.35', date:'2026-03-08', notes:['Dark mode readability: brightened --text2 (#C0→#D4), --text3 (#90→#B0)','Raised surfaces and borders for better card separation','All UI labels, descriptions, stats now higher contrast'] },
   { ver:'v0.28.34', date:'2026-03-08', notes:['Restored IDENTITY.md + ROLE_CARD.md separation (reverted hygiene merge)','Squad awareness: agents see teammate roster, propose [HANDOFF: Name]','Fixed interval save crash (null body guard)','Workflow cards show trigger details','Disabled hygiene merge daemon (persona files stay separate)'] },
   { ver:'v0.28.33', date:'2026-03-08', notes:['Fix: error_self_heal + agent_backend_eval runners missing from trigger map','Fix: blink-free workflow refresh (in-place DOM updates, no innerHTML wipe)','Memory extraction: no Run Now button (per-response only)','Workflow cards now have data-wf-id for targeted updates'] },
@@ -11754,10 +11756,10 @@ async function loadWorkflowRegistry() {
       var intervalEditor = '';
       if (wf.interval !== 'per-response') {
         var parsed = _wfParseInterval(wf.interval_s || wf.interval);
-        intervalEditor = '<div style="display:flex;align-items:center;gap:6px;margin-left:auto;font-size:11px;color:var(--text3)">'
+        intervalEditor = '<div style="display:flex;align-items:center;gap:6px;margin-left:auto;font-size:11px;color:var(--text2)">'
           + 'Runs every '
-          + '<input type="number" class="settings-input" id="wf-intval-' + wf.id + '" value="' + parsed.val + '" min="1" style="width:60px;font-size:11px;padding:2px 6px;text-align:center;border-radius:4px">'
-          + '<select class="settings-input" id="wf-intunit-' + wf.id + '" style="font-size:11px;padding:2px 4px;border-radius:4px">'
+          + '<input type="number" class="settings-input" id="wf-intval-' + wf.id + '" value="' + parsed.val + '" min="1" style="width:72px;font-size:13px;padding:4px 6px;text-align:center;border-radius:4px;font-weight:500">'
+          + '<select class="settings-input" id="wf-intunit-' + wf.id + '" style="font-size:13px;padding:4px 6px;border-radius:4px">'
           + '<option value="s"' + (parsed.unit === 's' ? ' selected' : '') + '>seconds</option>'
           + '<option value="m"' + (parsed.unit === 'm' ? ' selected' : '') + '>minutes</option>'
           + '<option value="h"' + (parsed.unit === 'h' ? ' selected' : '') + '>hours</option>'
@@ -11776,7 +11778,7 @@ async function loadWorkflowRegistry() {
         + intervalEditor
         + '</div>'
         + '<div style="font-size:12px;color:var(--text3);margin-bottom:' + (wf.trigger_detail ? '4' : '10') + 'px;line-height:1.4">' + escHtml(wf.description) + '</div>'
-        + (wf.trigger_detail ? '<div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.3;opacity:0.7"><span style="color:var(--accent);font-weight:500">Trigger:</span> ' + escHtml(wf.trigger_detail) + '</div>' : '')
+        + (wf.trigger_detail ? '<div style="font-size:11px;color:var(--text2);margin-bottom:10px;line-height:1.3"><span style="color:var(--accent);font-weight:500">Trigger:</span> ' + escHtml(wf.trigger_detail) + '</div>' : '')
         + '<div class="wf-running-slot">' + runningBar + '</div>'
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:11px;margin-bottom:10px">'
         + '<div style="color:var(--text3)">Last run: <span class="wf-last-run" style="color:var(--text2)">' + lastRun + '</span></div>'
@@ -11790,18 +11792,7 @@ async function loadWorkflowRegistry() {
         + '<div class="wf-btn-slot" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
         + '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfToggle(\'' + wf.id + '\')">' + toggleLabel + '</button>'
         + (canTrigger ? (wf.running ? '<button class="btn btn-ghost" style="font-size:11px;color:#3b82f6" disabled>Running...</button>' : '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfTrigger(\'' + wf.id + '\')">\u25B6 Run Now</button>') : '')
-        + (wf.config_keys && wf.config_keys.length ? '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfShowConfig(\'' + wf.id + '\')">\u2699 Config</button>' : '')
         + '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfShowHistory(\'' + wf.id + '\')">History</button>'
-        + '</div>'
-        + '<div id="wf-config-' + wf.id + '" style="display:none;margin-top:8px;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px">'
-        + (wf.config_keys || []).map(function(k) {
-          var val = (wf.config && wf.config[k] != null) ? wf.config[k] : '';
-          return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px">'
-            + '<label style="min-width:140px;color:var(--text3)">' + escHtml(k) + '</label>'
-            + '<input class="settings-input wf-cfg-input" data-wf="' + wf.id + '" data-key="' + escHtml(k) + '" value="' + escHtml(String(val)) + '" style="flex:1;font-size:12px">'
-            + '</div>';
-        }).join('')
-        + '<button class="btn btn-primary" style="font-size:11px;margin-top:4px" onclick="_wfSaveConfig(\'' + wf.id + '\')">Save</button>'
         + '</div>'
         + '<div id="wf-history-' + wf.id + '" style="display:none;margin-top:8px;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;max-height:200px;overflow-y:auto"></div>'
         + '</div>';
@@ -11982,7 +11973,28 @@ async function _wfToggle(id) {
 async function _wfTrigger(id) {
   try {
     var r = await api('/api/workflows/' + id + '/trigger', {});
-    if (r && r.ok) { toast('Triggered ' + id, 'ok'); setTimeout(loadWorkflowRegistry, 2000); }
+    if (r && r.ok) {
+      toast('Running ' + id + '...', 'ok');
+      // Poll briefly for completion, then refresh
+      var _polls = 0;
+      var _pollFn = function() {
+        _polls++;
+        api('/api/workflows').then(function(data) {
+          if (!data || !data.workflows) return;
+          var wf = data.workflows.find(function(w) { return w.id === id; });
+          if (wf && !wf.running) {
+            var msg = wf.last_error ? 'Error: ' + wf.last_error : (wf.last_result || 'Done');
+            toast(id + ': ' + msg, wf.last_error ? 'err' : 'ok');
+            loadWorkflowRegistry();
+          } else if (_polls < 10) {
+            setTimeout(_pollFn, 1000);
+          } else {
+            loadWorkflowRegistry();
+          }
+        });
+      };
+      setTimeout(_pollFn, 500);
+    }
     else toast((r && r.error) || 'Trigger failed', 'err');
   } catch(e) { toast('Error: ' + e.message, 'err'); }
 }
@@ -12142,8 +12154,8 @@ function _appendSkillBatch(grid, skills) {
     var desc = escHtml(sk.description ? (sk.description.length > 80 ? sk.description.substring(0, 77) + '...' : sk.description) : 'No description');
     var installed = sk.installed;
     var manual = sk.manual;
-    var badge = !installed ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--raised);color:var(--text3);margin-left:auto">not installed</span>'
-      : manual ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);margin-left:auto">manual</span>'
+    var badge = !installed ? '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:var(--raised);color:var(--text3);margin-left:auto">not installed</span>'
+      : manual ? '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);margin-left:auto">manual</span>'
       : '';
     var removeBtn = (installed || manual) ? '<button class="btn-xs" style="font-size:10px;padding:1px 6px;border:1px solid var(--border2);border-radius:3px;background:none;color:var(--text3);cursor:pointer;margin-left:4px" onclick="event.stopPropagation();removeSkill(\'' + escHtml(sk.id) + '\',\'' + name + '\')">' + '\u00d7</button>' : '';
     var installBtn = (!installed && !manual) ? '<button class="btn-xs" style="font-size:10px;padding:2px 8px;border:1px solid var(--accent);border-radius:4px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);cursor:pointer;margin-left:4px" onclick="event.stopPropagation();installSkill(\'' + escHtml(sk.id || sk.name) + '\',\'' + name + '\')">' + (sk.eligible !== false ? 'Install' : 'Setup') + '</button>' : '';
@@ -12932,7 +12944,7 @@ async function _showSessionLearnings(btn, sid, source) {
       if (resp.cached) toast('Loaded cached memory');
     } else if (resp && resp.ok && resp.learnings) {
       el.innerHTML = '<div style="font-size:10px;color:var(--text3);white-space:pre-wrap;padding:4px">' + escHtml(resp.learnings) + '</div>'
-        + '<button class="btn btn-ghost" style="font-size:9px;margin-top:4px" onclick="event.stopPropagation();_reextractMemory(\'' + sid + '\',\'' + source + '\')">\u21bb Re-extract</button>';
+        + '<button class="btn btn-ghost" style="font-size:10px;margin-top:4px" onclick="event.stopPropagation();_reextractMemory(\'' + sid + '\',\'' + source + '\')">\u21bb Re-extract</button>';
     } else {
       el.innerHTML = '<div style="font-size:10px;color:var(--text3);padding:4px">No learnings extracted</div>';
     }
@@ -12955,20 +12967,20 @@ function _renderMemoryFacts(container, facts, sid, source) {
   var html = '<div class="mem-facts-list" style="display:flex;flex-direction:column;gap:4px;padding:4px 0">';
   scopeOrder.forEach(function(scope) {
     if (!grouped[scope] || !grouped[scope].length) return;
-    html += '<div style="font-size:9px;font-weight:600;color:' + (scopeColors[scope] || 'var(--text3)') + ';text-transform:uppercase;letter-spacing:0.5px;margin-top:2px">' + (scopeLabels[scope] || scope) + '</div>';
+    html += '<div style="font-size:10px;font-weight:600;color:' + (scopeColors[scope] || 'var(--text3)') + ';text-transform:uppercase;letter-spacing:0.5px;margin-top:2px">' + (scopeLabels[scope] || scope) + '</div>';
     grouped[scope].forEach(function(f) {
       var imp = f.importance || 5;
       var impDots = imp >= 8 ? ' \u25cf\u25cf\u25cf' : (imp >= 5 ? ' \u25cf\u25cf' : ' \u25cf');
       html += '<div class="mem-fact-row" data-id="' + f.id + '" style="display:flex;align-items:flex-start;gap:4px;font-size:10px;line-height:1.4;padding:3px 0;border-bottom:1px solid var(--border)">'
         + '<span style="flex:1;color:var(--text)">' + escHtml(f.fact) + '</span>'
         + '<span style="font-size:8px;color:var(--text3);white-space:nowrap" title="Importance ' + imp + '/10">' + impDots + '</span>'
-        + '<button class="btn btn-ghost" style="font-size:9px;padding:0 4px;flex-shrink:0" onclick="event.stopPropagation();_editMemoryFact(' + f.id + ',this)" title="Edit">\u270f</button>'
-        + '<button class="btn btn-ghost" style="font-size:9px;padding:0 4px;color:var(--red,#f87171);flex-shrink:0" onclick="event.stopPropagation();_deleteMemoryFact(' + f.id + ',this)" title="Delete">\u00d7</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:0 4px;flex-shrink:0" onclick="event.stopPropagation();_editMemoryFact(' + f.id + ',this)" title="Edit">\u270f</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:0 4px;color:var(--red,#f87171);flex-shrink:0" onclick="event.stopPropagation();_deleteMemoryFact(' + f.id + ',this)" title="Delete">\u00d7</button>'
         + '</div>';
     });
   });
   html += '</div>';
-  html += '<button class="btn btn-ghost" style="font-size:9px;padding:2px 6px;margin-top:4px" onclick="event.stopPropagation();_reextractMemory(\'' + sid + '\',\'' + source + '\')">\u21bb Re-extract</button>';
+  html += '<button class="btn btn-ghost" style="font-size:10px;padding:2px 6px;margin-top:4px" onclick="event.stopPropagation();_reextractMemory(\'' + sid + '\',\'' + source + '\')">\u21bb Re-extract</button>';
   container.innerHTML = html;
 }
 
@@ -16721,7 +16733,7 @@ function _renderCortexMemories(memories) {
         ? '<a href="#" onclick="event.preventDefault();event.stopPropagation();_openCortexSession(\'' + escHtml(m.source_id) + '\')" style="font-size:10px;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:3px" title="Open session"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>session</a>'
         : '')
       + '<div style="flex:1"></div>'
-      + '<span style="font-size:9px;color:var(--text3);white-space:nowrap">' + (m.created_at ? new Date(m.created_at * 1000).toLocaleDateString(undefined, {month:'short',day:'numeric'}) + ' ' + new Date(m.created_at * 1000).toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit'}) : '') + '</span>'
+      + '<span style="font-size:10px;color:var(--text3);white-space:nowrap">' + (m.created_at ? new Date(m.created_at * 1000).toLocaleDateString(undefined, {month:'short',day:'numeric'}) + ' ' + new Date(m.created_at * 1000).toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit'}) : '') + '</span>'
       + (memStatus === 'active'
         ? '<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px;color:var(--text3)" onclick="event.stopPropagation();_archiveCortexMem(' + m.id + ',this)" title="Archive">Archive</button>'
         : '<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px;color:var(--green,#4ade80)" onclick="event.stopPropagation();_restoreCortexMem(' + m.id + ',this)" title="Restore">Restore</button>')
@@ -17200,7 +17212,7 @@ function _setupGraphInteraction(canvas) {
         var typeColors = {cortex:'#8b5cf6', agent:'#22d3ee', project:'#fbbf24', global:'#4ade80'};
         var html = '<div style="font-weight:600;margin-bottom:4px">' + escHtml(hovered.emoji || '') + ' ' + escHtml(hovered.label || '') + '</div>';
         if (hovered.role) html += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px;font-style:italic">' + escHtml(hovered.role) + '</div>';
-        html += '<span style="display:inline-block;font-size:9px;padding:1px 6px;border-radius:3px;background:' + (typeColors[hovered.type]||'#666') + '20;color:' + (typeColors[hovered.type]||'#888') + ';border:1px solid ' + (typeColors[hovered.type]||'#666') + '40">' + (typeLabels[hovered.type]||hovered.type) + '</span>';
+        html += '<span style="display:inline-block;font-size:10px;padding:1px 6px;border-radius:3px;background:' + (typeColors[hovered.type]||'#999') + '20;color:' + (typeColors[hovered.type]||'#ccc') + ';border:1px solid ' + (typeColors[hovered.type]||'#666') + '40">' + (typeLabels[hovered.type]||hovered.type) + '</span>';
         html += '<div style="margin-top:4px;font-size:11px;color:var(--text3)">' + (hovered.count || 0) + ' memories</div>';
         tip.innerHTML = html;
         tip.style.display = 'block';
@@ -17598,7 +17610,7 @@ function _renderModelCards(data, act) {
         var isResolved = m.id === _avResolved;
         _selHtml += '<div class="model-list-row' + (isActive ? ' active' : '') + '" onclick="_selectModelFromList(this,\'' + escHtml(p.id) + '\',\'' + escHtml(m.id) + '\')" title="' + escHtml(m.id) + '">';
         _selHtml += '<span class="model-list-dot" style="background:' + (isResolved ? 'var(--accent)' : 'transparent') + '"></span>';
-        _selHtml += '<span class="model-list-name">' + escHtml(m.name) + (m.default ? ' <span style=\"font-size:9px;color:var(--text3)\">(default)</span>' : '') + '</span>';
+        _selHtml += '<span class="model-list-name">' + escHtml(m.name) + (m.default ? ' <span style=\"font-size:10px;color:var(--text3)\">(default)</span>' : '') + '</span>';
         _selHtml += '</div>';
       });
       _selHtml += '</div></div>';
@@ -17607,9 +17619,9 @@ function _renderModelCards(data, act) {
     // Compact status badge for upper-right
     var _statusBadge = '';
     if (activeRuns.length > 0) {
-      _statusBadge = '<span style="font-size:9px;font-weight:600;color:var(--accent);display:flex;align-items:center;gap:3px"><span class="pulse-dot"></span>WORKING</span>';
+      _statusBadge = '<span style="font-size:10px;font-weight:600;color:var(--accent);display:flex;align-items:center;gap:3px"><span class="pulse-dot"></span>WORKING</span>';
     } else {
-      _statusBadge = '<span style="font-size:9px;color:var(--text3);font-style:italic">Idle</span>';
+      _statusBadge = '<span style="font-size:10px;color:var(--text3);font-style:italic">Idle</span>';
     }
 
     return '<div class="model-card' + offClass + '" data-model-id="' + escHtml(p.id) + '">'
@@ -17956,7 +17968,7 @@ function _ctxToggle(event, type) {
       var gateway = gateways[bk] || bk;
       html += '<div class="chat-ctx-opt' + (_chatModel === bk ? ' selected' : '') + '" onclick="_ctxPick(event,\'model\',\'' + bk + '\')" style="flex-direction:column;align-items:flex-start;gap:1px;padding:6px 10px">'
         + '<span style="font-weight:500">' + escHtml(gateway) + '</span>'
-        + (modelName ? '<span style="font-size:9px;color:var(--text3)">' + escHtml(modelName) + '</span>' : '')
+        + (modelName ? '<span style="font-size:10px;color:var(--text3)">' + escHtml(modelName) + '</span>' : '')
         + '</div>';
     });
   }
@@ -18161,7 +18173,7 @@ function renderPersonaOrg() {
     var isOrch = p.agent_group === 'Orchestrator';
     var grp = p.agent_group || '';
     var grpColor = groupColors[grp] || 'var(--text3)';
-    var grpBadge = grp ? '<div style="font-size:9px;padding:1px 6px;border-radius:3px;background:' + grpColor + '20;color:' + grpColor + ';font-weight:600;margin-top:4px;letter-spacing:.3px">' + grp + '</div>' : '';
+    var grpBadge = grp ? '<div style="font-size:10px;padding:1px 6px;border-radius:3px;background:' + grpColor + '20;color:' + grpColor + ';font-weight:600;margin-top:4px;letter-spacing:.3px">' + grp + '</div>' : '';
     return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + '" draggable="true" data-persona-id="' + p.id + '" ondragstart="_pDragStart(event)" ondragover="_pDragOver(event)" ondrop="_pDrop(event)" ondragend="_pDragEnd(event)" onclick="selectPersona(\'' + p.id + '\')">'
       + '<div class="persona-card-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
@@ -19002,7 +19014,7 @@ function renderOrchestration(agents, providers) {
     if (localCards.length) {
       const localHtml = localCards.map(function(lm) {
         const isOllama = lm.type === 'ollama';
-        const badge = '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);margin-left:auto">detected</span>';
+        const badge = '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);margin-left:auto">detected</span>';
         const sizeInfo = lm.size_gb ? lm.size_gb + 'GB' : '';
         const versionInfo = lm.version || '';
         const quantInfo = lm.quantization || '';
@@ -24858,7 +24870,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.35"})
+            self.reply_json({"v": "0.28.36"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25020,7 +25032,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.35"
+                health["porter_version"] = "0.28.36"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26843,7 +26855,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.35'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.36'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31076,7 +31088,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.35 ready (localhost only)")
+    print(f"\n  Porter v0.28.36 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
