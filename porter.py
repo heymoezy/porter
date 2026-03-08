@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.23 — Leaner prompts, fixed drag-drop, chat polish"""
+"""Porter v0.29.24 — Config cleanup, squad management, skills categories, emoji picker"""
 
 
 import email
@@ -9078,7 +9078,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.23</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.24</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10332,6 +10332,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.24', date:'2026-03-08', notes:['Config tab: removed redundant Info section (raw timestamp, soul hash, status, last active)','Config tab: emoji picker for avatar selection with search','Config tab: fallback chain as ordered dropdowns with none option','Skills tab: organized by Assigned/Recommended/Available with category grouping','Squad management: create/edit/delete squads with member assignment from chip bar'] },
   { ver:'v0.29.23', date:'2026-03-08', notes:['Removed Cortex memories from agent system prompts (faster dispatch)','Prompt budget: SOUL 60%, RULES 25%, MEMORY 15%','Fixed agent drag-and-drop (simplified, working)','Chat: delete message button, improved hover actions'] },
   { ver:'v0.29.22', date:'2026-03-08', notes:['Auto Skill Mining: discovers repeated successful patterns from traces','skill_proposals table + GET/POST API endpoints','Proposed Skills section in Skills tab with approve/dismiss','Skill mining runs every 6h as system workflow'] },
   { ver:'v0.29.21', date:'2026-03-08', notes:['Chat: hover actions (copy, regenerate, edit) on messages','Chat: timestamps shown on hover','Chat: Ctrl/Cmd+Enter to send, Up arrow edits last message','Chat: regenerate resends last prompt to get new response'] },
@@ -19060,6 +19061,8 @@ function renderSquadChips() {
     var active = _activeSquadFilter === s.id;
     chips += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 10px;border-radius:12px;border:1px solid ' + s.color + ';color:' + (active ? '#fff' : s.color) + ';' + (active ? 'background:' + s.color : '') + '" onclick="_filterSquad(\'' + s.id + '\')">' + escHtml(s.name) + ' <span style="font-size:9px;opacity:0.7">' + s.member_count + '</span></button>';
   });
+  // Manage button
+  chips += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;border-radius:12px;color:var(--text3)" onclick="_openSquadManager()" title="Manage Squads">\u2699</button>';
   row.innerHTML = chips;
 }
 
@@ -19067,6 +19070,134 @@ function _filterSquad(squadId) {
   _activeSquadFilter = _activeSquadFilter === squadId ? null : squadId;
   renderSquadChips();
   renderPersonaOrg();
+}
+
+// v0.29.24 — Squad Management UI
+function _openSquadManager() {
+  var overlay = document.getElementById('squad-manager-overlay');
+  if (overlay) { overlay.remove(); }
+  overlay = document.createElement('div');
+  overlay.id = 'squad-manager-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+  var panel = document.createElement('div');
+  panel.style.cssText = 'background:var(--raised);border:1px solid var(--border);border-radius:12px;width:480px;max-height:80vh;overflow-y:auto;padding:24px;box-shadow:0 12px 40px rgba(0,0,0,.4)';
+  panel.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
+    + '<div style="font-size:15px;font-weight:600;color:var(--text)">Manage Squads</div>'
+    + '<button onclick="this.closest(\'#squad-manager-overlay\').remove()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">\u2715</button>'
+    + '</div>'
+    + '<div id="squad-mgr-list"></div>'
+    + '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">'
+    + '  <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">New Squad</div>'
+    + '  <div style="display:flex;gap:8px;align-items:center">'
+    + '    <input class="settings-input" id="sq-new-name" placeholder="Squad name" style="flex:1;font-size:12px;padding:6px 10px">'
+    + '    <input class="settings-input" id="sq-new-color" type="color" value="#6366f1" style="width:36px;height:32px;padding:2px;cursor:pointer">'
+    + '    <button class="btn btn-primary" onclick="_createSquad()" style="font-size:12px;padding:6px 14px;white-space:nowrap">Create</button>'
+    + '  </div>'
+    + '</div>';
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+  _renderSquadMgrList();
+}
+
+function _renderSquadMgrList() {
+  var list = document.getElementById('squad-mgr-list');
+  if (!list) return;
+  if (!_squads.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:12px 0">No squads yet. Create one below.</div>';
+    return;
+  }
+  var html = '';
+  _squads.forEach(function(s) {
+    html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;border-left:3px solid ' + s.color + '">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+      + '  <div style="display:flex;align-items:center;gap:8px">'
+      + '    <span style="font-weight:600;font-size:13px;color:var(--text)">' + escHtml(s.name) + '</span>'
+      + '    <span style="font-size:10px;color:var(--text3)">' + s.member_count + ' member' + (s.member_count !== 1 ? 's' : '') + '</span>'
+      + '  </div>'
+      + '  <div style="display:flex;gap:4px">'
+      + '    <button class="btn btn-ghost" onclick="_editSquad(\'' + s.id + '\')" style="font-size:10px;padding:2px 8px">Edit</button>'
+      + '    <button class="btn btn-ghost" onclick="_deleteSquad(\'' + s.id + '\',\'' + escHtml(s.name) + '\')" style="font-size:10px;padding:2px 8px;color:var(--err,#ef4444)">Delete</button>'
+      + '  </div></div>';
+    // Members
+    if (s.members && s.members.length) {
+      html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+      s.members.forEach(function(m) {
+        html += '<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--text2)">' + (m.avatar || '\u{1F916}') + ' ' + escHtml(m.name) + '</span>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  list.innerHTML = html;
+}
+
+async function _createSquad() {
+  var name = document.getElementById('sq-new-name').value.trim();
+  if (!name) { toast('Name required', 'err'); return; }
+  var color = document.getElementById('sq-new-color').value || '#6366f1';
+  var r = await api('/api/squads', { action:'create', name:name, color:color });
+  if (r && r.ok) {
+    toast('Squad created', 'ok');
+    document.getElementById('sq-new-name').value = '';
+    await loadSquads();
+    _renderSquadMgrList();
+  } else { toast(r && r.error || 'Failed', 'err'); }
+}
+
+async function _deleteSquad(id, name) {
+  if (!confirm('Delete squad "' + name + '"?')) return;
+  var r = await api('/api/squads', { action:'delete', id:id });
+  if (r && r.ok) {
+    toast('Squad deleted', 'ok');
+    await loadSquads();
+    _renderSquadMgrList();
+  } else { toast('Failed', 'err'); }
+}
+
+function _editSquad(id) {
+  var s = _squads.find(function(x) { return x.id === id; });
+  if (!s) return;
+  var list = document.getElementById('squad-mgr-list');
+  if (!list) return;
+  // Replace list with edit form
+  var allAgents = (_personas || []).slice();
+  var memberIds = (s.members || []).map(function(m) { return m.id; });
+  var html = '<div style="padding:12px;border:1px solid var(--accent);border-radius:8px;background:color-mix(in srgb,var(--accent) 4%,transparent)">'
+    + '<div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;margin-bottom:10px">Editing: ' + escHtml(s.name) + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px">'
+    + '  <input class="settings-input" id="sq-edit-name" value="' + escHtml(s.name) + '" style="font-size:12px;padding:6px 10px">'
+    + '  <input class="settings-input" id="sq-edit-color" type="color" value="' + (s.color || '#6366f1') + '" style="width:36px;height:32px;padding:2px;cursor:pointer">'
+    + '</div>'
+    + '<div style="font-size:10px;color:var(--text3);margin-bottom:6px">Members</div>'
+    + '<div style="display:flex;flex-direction:column;gap:3px;max-height:200px;overflow-y:auto">';
+  allAgents.forEach(function(a) {
+    var checked = memberIds.indexOf(a.id) >= 0 ? 'checked' : '';
+    html += '<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:3px 0">'
+      + '<input type="checkbox" class="sq-edit-member" value="' + a.id + '" ' + checked + '>'
+      + '<span>' + (a.avatar || '\u{1F916}') + '</span>'
+      + '<span style="color:var(--text)">' + escHtml(a.name) + '</span>'
+      + '</label>';
+  });
+  html += '</div>'
+    + '<div style="display:flex;gap:8px;margin-top:10px">'
+    + '  <button class="btn btn-primary" onclick="_saveSquadEdit(\'' + id + '\')" style="font-size:11px;padding:4px 14px">Save</button>'
+    + '  <button class="btn btn-ghost" onclick="_renderSquadMgrList()" style="font-size:11px;padding:4px 14px">Cancel</button>'
+    + '</div></div>';
+  list.innerHTML = html;
+}
+
+async function _saveSquadEdit(id) {
+  var name = document.getElementById('sq-edit-name').value.trim();
+  var color = document.getElementById('sq-edit-color').value;
+  var members = [];
+  document.querySelectorAll('.sq-edit-member:checked').forEach(function(cb) { members.push(cb.value); });
+  var r = await api('/api/squads', { action:'update', id:id, name:name, color:color, members:members });
+  if (r && r.ok) {
+    toast('Squad saved', 'ok');
+    await loadSquads();
+    _renderSquadMgrList();
+  } else { toast(r && r.error || 'Failed', 'err'); }
 }
 
 function renderPersonaOrg() {
@@ -19476,7 +19607,13 @@ function switchPdTab(tab) {
     content.innerHTML = '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Profile</div>'
       + '<div style="display:grid;grid-template-columns:60px 1fr 1fr;gap:12px;margin-bottom:16px">'
       + '<div class="settings-field"><label>Avatar</label>'
-      + '  <input class="settings-input" id="pd-edit-avatar" value="' + (p.avatar || '\u{1F916}') + '" style="width:48px;text-align:center;font-size:20px"></div>'
+      + '  <div style="position:relative;display:inline-block">'
+      + '    <button class="settings-input" id="pd-edit-avatar" onclick="_openEmojiPicker(this)" style="width:48px;text-align:center;font-size:20px;cursor:pointer;border:1px solid var(--border);border-radius:6px;background:var(--surface)">' + (p.avatar || '\u{1F916}') + '</button>'
+      + '    <div id="pd-emoji-picker" style="display:none;position:absolute;top:100%;left:0;z-index:100;width:260px;max-height:280px;background:var(--raised);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.3);padding:8px;margin-top:4px">'
+      + '      <input class="settings-input" id="pd-emoji-search" placeholder="Search emoji..." style="width:100%;font-size:12px;padding:4px 8px;margin-bottom:6px" oninput="_filterEmoji(this.value)">'
+      + '      <div id="pd-emoji-grid" style="display:grid;grid-template-columns:repeat(8,1fr);gap:2px;max-height:210px;overflow-y:auto"></div>'
+      + '    </div>'
+      + '  </div></div>'
       + '<div class="settings-field"><label>Name</label>'
       + '  <input class="settings-input" id="pd-edit-name" value="' + escHtml(p.name) + '"></div>'
       + '<div class="settings-field"><label>Role</label>'
@@ -19493,25 +19630,21 @@ function switchPdTab(tab) {
       + '  </select></div>'
       + '<div class="settings-field"><label>Fallback Chain</label>'
       + '  <div id="pd-cfg-fallbacks" style="display:flex;flex-direction:column;gap:4px">'
-      + backends.map(k => '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" value="' + k + '"' + (fb.includes(k) ? ' checked' : '') + '> ' + k + '</label>').join('')
+      + [0,1,2].map(function(i) {
+          var val = fb[i] || '';
+          return '<select class="settings-input pd-fb-select" style="font-size:12px;padding:2px 6px">'
+            + '<option value="">— none —</option>'
+            + backends.map(function(k) { return '<option value="' + k + '"' + (val === k ? ' selected' : '') + '>' + (i+1) + '. ' + k + '</option>'; }).join('')
+            + '</select>';
+        }).join('')
       + '  </div></div>'
       + '</div>'
       + '<div style="margin-top:10px"><button class="btn btn-ghost" onclick="_saveAgentConfig()" style="font-size:11px">Save Routing</button></div>'
       + '<div style="margin-top:20px;padding-top:12px;border-top:1px solid var(--border)">'
-      + '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Info</div>'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
-      + '<div class="settings-field"><label>Status</label>'
-      + '  <div style="font-size:13px;color:var(--text)">' + escHtml(p.status || 'idle') + '</div></div>'
-      + '<div class="settings-field"><label>Soul Hash</label>'
-      + '  <div style="font-size:13px;color:var(--text2);font-family:monospace">' + escHtml(p.soul_hash || 'none') + '</div></div>'
-      + '<div class="settings-field"><label>Created</label>'
-      + '  <div style="font-size:13px;color:var(--text2)">' + escHtml(p.created_at || '?') + '</div></div>'
-      + '<div class="settings-field"><label>Last Active</label>'
-      + '  <div style="font-size:13px;color:var(--text2)">' + (p.last_active ? new Date(p.last_active * 1000).toLocaleString() : 'Never') + '</div></div>'
-      + '</div>'
-      + '<div style="margin-top:12px;display:flex;gap:8px">'
+      + '<div style="display:flex;align-items:center;gap:8px">'
       + '  <button class="btn btn-ghost" onclick="wakePersona(\'' + p.id + '\')" style="font-size:12px">Wake</button>'
       + '  <button class="btn btn-ghost" onclick="sleepPersona(\'' + p.id + '\')" style="font-size:12px">Sleep</button>'
+      + '  <button class="btn btn-ghost" onclick="if(confirm(\'Delete agent?\')) _deletePersona(\'' + p.id + '\')" style="font-size:12px;color:var(--err,#ef4444)">Delete Agent</button>'
       + '</div></div>'
       + '<div id="pd-eval-results" style="margin-top:20px;padding-top:12px;border-top:1px solid var(--border);display:none">'
       + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
@@ -19525,44 +19658,120 @@ function switchPdTab(tab) {
   }
 }
 
+// v0.29.24 — Skill categories inferred from name/description
+function _inferSkillCategory(sk) {
+  var n = ((sk.name || sk.id || '') + ' ' + (sk.description || '')).toLowerCase();
+  if (/git|github|commit|branch|merge|pull.?req/.test(n)) return 'Development';
+  if (/docker|deploy|ci|cd|pipeline|build|release|k8s|kube/.test(n)) return 'DevOps';
+  if (/test|qa|lint|format|eslint|prettier|check/.test(n)) return 'Quality';
+  if (/search|web|fetch|scrape|browse|http|api|curl/.test(n)) return 'Web & API';
+  if (/file|read|write|fs|path|dir|folder/.test(n)) return 'Files';
+  if (/db|sql|database|query|migrate/.test(n)) return 'Database';
+  if (/ai|llm|prompt|model|chat|embed/.test(n)) return 'AI & LLM';
+  if (/doc|readme|mark|note|wiki|write/.test(n)) return 'Documentation';
+  return 'Other';
+}
+// Recommend skills based on agent role
+function _isSkillRecommended(sk, persona) {
+  if (!persona) return false;
+  var role = ((persona.role || '') + ' ' + (persona.agent_group || '')).toLowerCase();
+  var n = ((sk.name || sk.id || '') + ' ' + (sk.description || '')).toLowerCase();
+  // Technical agents → dev/devops/quality skills
+  if (/engineer|technical|cto|backend|frontend|dev/.test(role)) {
+    if (/git|docker|test|lint|build|deploy|db|sql|code/.test(n)) return true;
+  }
+  // Creative agents → docs/web skills
+  if (/design|creative|ux|copy|market/.test(role)) {
+    if (/doc|write|web|search|browse|image/.test(n)) return true;
+  }
+  // Research/strategy → web/ai/search skills
+  if (/research|strateg|analy/.test(role)) {
+    if (/search|web|fetch|ai|llm|doc/.test(n)) return true;
+  }
+  // QA → quality/test skills
+  if (/qa|quality|test|bug/.test(role)) {
+    if (/test|lint|check|format/.test(n)) return true;
+  }
+  return false;
+}
+
 async function _loadPersonaSkills(pid) {
   var container = document.getElementById('pd-skills-list');
   if (!container) return;
   try {
+    var p = window._selectedPersona;
     var [assigned, available] = await Promise.all([
       api('/api/personas/' + pid + '/skills'),
       api('/api/openclaw/skills?action=list').catch(function() { return {skills:[]}; })
     ]);
     var assignedNames = ((assigned && assigned.skills) || []).map(function(s) { return s.name; });
     var allSkills = (available && available.skills) || [];
-    // v0.29.0 — Show ALL skills, sorted: assigned > installed > available
-    allSkills.sort(function(a, b) {
-      var aA = assignedNames.indexOf(a.name || a.id) >= 0 ? 0 : 1;
-      var bA = assignedNames.indexOf(b.name || b.id) >= 0 ? 0 : 1;
-      if (aA !== bA) return aA - bA;
-      return (a.installed ? 0 : 1) - (b.installed ? 0 : 1);
-    });
-    var installed = allSkills;
-    if (!installed.length) {
+    if (!allSkills.length) {
       container.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No skills available.</div>';
       return;
     }
-    var html = '<div style="display:flex;flex-direction:column;gap:6px">';
-    installed.forEach(function(sk) {
-      var name = sk.name || sk.id || sk;
-      var emoji = sk.emoji || '⚡';
-      var desc = sk.description || '';
-      var checked = assignedNames.indexOf(name) >= 0 ? 'checked' : '';
-      html += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface)">';
-      html += '<input type="checkbox" ' + checked + ' onchange="_togglePersonaSkill(\'' + pid + '\',\'' + name + '\',this.checked)" style="width:14px;height:14px;flex-shrink:0">';
-      html += '<span style="font-size:14px">' + emoji + '</span>';
-      var _skBadge = sk.installed ? '<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:#22c55e22;color:#22c55e;margin-left:4px">active</span>' : '<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:#f59e0b22;color:#f59e0b;margin-left:4px">available</span>';
-      html += '<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:2px"><span style="color:var(--text);font-weight:500">' + escHtml(name) + '</span>' + _skBadge + '</div>';
-      if (desc) html += '<div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(desc.slice(0,60)) + '</div>';
-      html += '</div></label>';
+    // Categorize + tag
+    allSkills.forEach(function(sk) {
+      sk._assigned = assignedNames.indexOf(sk.name || sk.id) >= 0;
+      sk._recommended = _isSkillRecommended(sk, p);
+      sk._category = _inferSkillCategory(sk);
     });
-    html += '</div>';
-    html += '<div style="margin-top:8px;font-size:10px;color:var(--text3)">' + allSkills.filter(function(s){return s.installed;}).length + '/' + allSkills.length + ' active · ' + assignedNames.length + ' assigned</div>';
+    // Build sections: Assigned → Recommended → Available (grouped by category)
+    var html = '';
+    var assignedSkills = allSkills.filter(function(s) { return s._assigned; });
+    var recommended = allSkills.filter(function(s) { return !s._assigned && s._recommended; });
+    var rest = allSkills.filter(function(s) { return !s._assigned && !s._recommended; });
+
+    function _renderSkillRow(sk) {
+      var name = sk.name || sk.id || sk;
+      var emoji = sk.emoji || '\u26A1';
+      var desc = sk.description || '';
+      var checked = sk._assigned ? 'checked' : '';
+      var r = '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface)">';
+      r += '<input type="checkbox" ' + checked + ' onchange="_togglePersonaSkill(\'' + pid + '\',\'' + name + '\',this.checked)" style="width:14px;height:14px;flex-shrink:0">';
+      r += '<span style="font-size:14px">' + emoji + '</span>';
+      var badge = sk.installed ? '<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:#22c55e22;color:#22c55e;margin-left:4px">active</span>' : '<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:#f59e0b22;color:#f59e0b;margin-left:4px">available</span>';
+      r += '<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:2px"><span style="color:var(--text);font-weight:500">' + escHtml(name) + '</span>' + badge + '</div>';
+      if (desc) r += '<div style="font-size:10px;color:var(--text3);display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">' + escHtml(desc.slice(0,80)) + '</div>';
+      r += '</div></label>';
+      return r;
+    }
+
+    function _sectionHeader(label, count, color) {
+      return '<div style="font-size:10px;font-weight:600;color:' + (color||'var(--text3)') + ';text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px;padding:0 2px">' + label + ' <span style="font-weight:400;opacity:.6">(' + count + ')</span></div>';
+    }
+
+    // Assigned section
+    if (assignedSkills.length) {
+      html += _sectionHeader('Assigned', assignedSkills.length, 'var(--accent)');
+      html += '<div style="display:flex;flex-direction:column;gap:4px">';
+      assignedSkills.forEach(function(sk) { html += _renderSkillRow(sk); });
+      html += '</div>';
+    }
+    // Recommended section
+    if (recommended.length) {
+      html += _sectionHeader('Recommended', recommended.length, '#22c55e');
+      html += '<div style="display:flex;flex-direction:column;gap:4px">';
+      recommended.forEach(function(sk) { html += _renderSkillRow(sk); });
+      html += '</div>';
+    }
+    // Available — grouped by category
+    if (rest.length) {
+      html += _sectionHeader('Available', rest.length, 'var(--text3)');
+      var cats = {};
+      rest.forEach(function(sk) {
+        if (!cats[sk._category]) cats[sk._category] = [];
+        cats[sk._category].push(sk);
+      });
+      var catNames = Object.keys(cats).sort();
+      catNames.forEach(function(cat) {
+        html += '<div style="font-size:9px;color:var(--text3);padding:6px 2px 3px;opacity:.7">' + cat + '</div>';
+        html += '<div style="display:flex;flex-direction:column;gap:3px">';
+        cats[cat].forEach(function(sk) { html += _renderSkillRow(sk); });
+        html += '</div>';
+      });
+    }
+    html += '<div style="margin-top:8px;font-size:10px;color:var(--text3)">' + assignedSkills.length + ' assigned \u00b7 ' + allSkills.filter(function(s){return s.installed;}).length + '/' + allSkills.length + ' active</div>';
     container.innerHTML = html;
   } catch(e) {
     container.innerHTML = '<div style="font-size:11px;color:var(--text3)">Could not load skills</div>';
@@ -19633,7 +19842,7 @@ async function savePersonaMeta() {
     name: document.getElementById('pd-edit-name').value,
     role: document.getElementById('pd-edit-role').value,
     preferred_backend: (document.getElementById('pd-cfg-backend') || {}).value || '',
-    avatar: document.getElementById('pd-edit-avatar').value,
+    avatar: (document.getElementById('pd-edit-avatar').value || document.getElementById('pd-edit-avatar').textContent || '').trim(),
   };
   const r = await api('/api/personas/' + p.id, data);
   if (r.ok) {
@@ -19644,13 +19853,55 @@ async function savePersonaMeta() {
   }
 }
 
+// v0.29.24 — Emoji picker for avatar
+var _emojiList = [
+  {c:'people',e:['\u{1F916}','\u{1F9E0}','\u{2728}','\u{1F4A1}','\u{1F525}','\u{26A1}','\u{1F680}','\u{1F3AF}','\u{1F47E}','\u{1F4BB}','\u{1F5A5}','\u{2699}','\u{1F527}','\u{1F50D}','\u{1F9EA}','\u{1F9F0}','\u{1F4DA}','\u{1F4D0}','\u{270F}','\u{1F58A}','\u{1F3A8}','\u{1F3AD}','\u{1F3B5}','\u{1F3AE}','\u{1F30D}','\u{1F30E}','\u{1F30F}','\u{2B50}','\u{1F31F}','\u{1F308}','\u{2600}','\u{1F319}','\u{2601}','\u{1F329}']},
+  {c:'animals',e:['\u{1F99E}','\u{1F41B}','\u{1F577}','\u{1F427}','\u{1F43B}','\u{1F431}','\u{1F436}','\u{1F98A}','\u{1F43A}','\u{1F981}','\u{1F985}','\u{1F989}','\u{1F40D}','\u{1F422}','\u{1F419}','\u{1F433}','\u{1F42C}','\u{1F40A}','\u{1F9A5}','\u{1F984}','\u{1F409}']},
+  {c:'symbols',e:['\u2764','\u{1F499}','\u{1F49C}','\u{1F49A}','\u{1F4AF}','\u{1F3C6}','\u{1F3C5}','\u{1F396}','\u{1F48E}','\u{1F451}','\u{1F52E}','\u{1F4A0}','\u{2705}','\u{274C}','\u{26A0}','\u{2B55}','\u{1F6E1}','\u{1F512}','\u{1F513}','\u{1F5DD}','\u{267B}','\u{1F4E6}','\u{1F4E7}','\u{1F4AC}','\u{1F4AD}']},
+  {c:'nature',e:['\u{1F331}','\u{1F332}','\u{1F333}','\u{1F33B}','\u{1F33A}','\u{1F337}','\u{1F339}','\u{1F340}','\u{1F341}','\u{1F342}','\u{1F344}','\u{1F334}','\u{1F335}']},
+  {c:'food',e:['\u{1F34E}','\u{1F34A}','\u{1F34B}','\u{1F349}','\u{1F347}','\u{1F353}','\u{1F352}','\u{1F370}','\u{2615}','\u{1F37A}','\u{1F355}','\u{1F354}','\u{1F32F}','\u{1F363}','\u{1F359}']},
+];
+function _openEmojiPicker(btn) {
+  var picker = document.getElementById('pd-emoji-picker');
+  if (!picker) return;
+  var vis = picker.style.display !== 'none';
+  picker.style.display = vis ? 'none' : 'block';
+  if (!vis) { _renderEmojiGrid(''); var s = document.getElementById('pd-emoji-search'); if(s){s.value='';s.focus();} }
+  // Close on outside click
+  if (!vis) setTimeout(function() {
+    function _close(e) { if (!picker.contains(e.target) && e.target !== btn) { picker.style.display='none'; document.removeEventListener('click',_close); } }
+    document.addEventListener('click', _close);
+  }, 10);
+}
+function _filterEmoji(q) { _renderEmojiGrid(q.toLowerCase()); }
+function _renderEmojiGrid(q) {
+  var grid = document.getElementById('pd-emoji-grid');
+  if (!grid) return;
+  var html = '';
+  _emojiList.forEach(function(cat) {
+    var filtered = q ? cat.e.filter(function(e) { return e.toLowerCase().indexOf(q) >= 0 || cat.c.indexOf(q) >= 0; }) : cat.e;
+    if (!filtered.length) return;
+    html += '<div style="grid-column:1/-1;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;padding:4px 0 2px">' + cat.c + '</div>';
+    filtered.forEach(function(e) {
+      html += '<button onclick="_pickEmoji(this.textContent)" style="font-size:18px;padding:4px;border:none;background:none;cursor:pointer;border-radius:4px;line-height:1" onmouseover="this.style.background=\'var(--surface)\'" onmouseout="this.style.background=\'none\'">' + e + '</button>';
+    });
+  });
+  grid.innerHTML = html || '<div style="grid-column:1/-1;font-size:11px;color:var(--text3);padding:8px;text-align:center">No matches</div>';
+}
+function _pickEmoji(emoji) {
+  var btn = document.getElementById('pd-edit-avatar');
+  if (btn) btn.textContent = emoji;
+  var picker = document.getElementById('pd-emoji-picker');
+  if (picker) picker.style.display = 'none';
+}
+
 async function _saveAgentConfig() {
   const p = window._selectedPersona;
   if (!p) return;
   var backend = document.getElementById('pd-cfg-backend').value;
   var fallbacks = [];
-  document.querySelectorAll('#pd-cfg-fallbacks input[type=checkbox]:checked').forEach(function(cb) {
-    fallbacks.push(cb.value);
+  document.querySelectorAll('#pd-cfg-fallbacks .pd-fb-select').forEach(function(sel) {
+    if (sel.value) fallbacks.push(sel.value);
   });
   const r = await api('/api/personas/' + p.id, {
     preferred_backend: backend,
@@ -26169,7 +26420,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.23"})
+            self.reply_json({"v": "0.29.24"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26331,7 +26582,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.23"
+                health["porter_version"] = "0.29.24"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28165,7 +28416,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.23'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.24'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32667,7 +32918,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.23 ready (localhost only)")
+    print(f"\n  Porter v0.29.24 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
