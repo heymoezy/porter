@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.30 — Agent Skills tab: cards, search, discover"""
+"""Porter v0.29.31 — Pointer-based drag-and-drop"""
 
 
 import email
@@ -7620,8 +7620,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .flush-wizard-impact span { display:flex; flex-direction:column; gap:2px; }
 .flush-wizard-impact strong { font-size:11px; color:var(--text); }
 .flush-wizard-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
-.persona-card[draggable] { cursor:grab; }
-.persona-card[draggable]:active { cursor:grabbing; }
+.persona-card { cursor:grab; user-select:none; -webkit-user-select:none; }
 .persona-card.drag-src { opacity:.25; transform:scale(.96); pointer-events:none; }
 .persona-cards-row { min-height:80px; }
 .persona-cards-row .persona-card { transition:transform .15s ease, margin .15s ease; }
@@ -7636,7 +7635,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   position:fixed; pointer-events:none; z-index:9999;
   opacity:.92; transform:rotate(2deg) scale(1.04);
   box-shadow:0 16px 40px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.2);
-  transition:none;
+  transition:none; will-change:left,top;
 }
 .persona-wizard-overlay { position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.4);z-index:999; }
 .persona-wizard-modal { position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:480px;max-height:80vh;background:var(--surface);border-radius:12px;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.25);z-index:1000;overflow:hidden;display:flex;flex-direction:column; }
@@ -9157,7 +9156,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.30</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.31</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9306,7 +9305,7 @@ input[type="number"].settings-input { min-width: 60px; }
       <span class="module-title">Agents</span>
       <button class="btn btn-primary" onclick="openPersonaWizard()" style="font-size:12px">+ New Agent</button>
       <button class="btn btn-ghost" onclick="openRulesEditor()" style="font-size:12px">📋 Global Rules</button>
-      <button class="btn btn-ghost" onclick="loadPersonas()">&#8635;</button>
+
     </div>
 
     <!-- Agent Grid -->
@@ -9315,7 +9314,7 @@ input[type="number"].settings-input { min-width: 60px; }
         <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">Squads</span>
       </div>
       <div id="persona-org-chart" style="margin-bottom:16px">
-        <div id="persona-cards-row" class="persona-cards-row" ondragover="_pDragOver(event)" ondrop="_pDrop(event)">
+        <div id="persona-cards-row" class="persona-cards-row">
           <div class="loading-indicator">Loading personas...</div>
         </div>
       </div>
@@ -10436,6 +10435,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.31', date:'2026-03-08', notes:['Rewrote drag-and-drop with pointer events (mousedown/mousemove/mouseup)','Replaced unreliable HTML5 Drag and Drop API','5px deadzone before drag activates (prevents accidental drags on click)','Touch support: ontouchstart/touchmove/touchend for mobile','Clone follows cursor at exact grab offset','Click-through: short clicks still select agent (no drag conflict)'] },
   { ver:'v0.29.30', date:'2026-03-08', notes:['Agent Skills tab redesign: cards matching global Skills tab style','Installed/Discover toggle — only assigned skills shown by default','Search input filters skills in both views','Category chips for filtering in Discover view','Recommended skills highlighted with badge in Discover view','Assign/Remove buttons with auto-refresh'] },
   { ver:'v0.29.29', date:'2026-03-08', notes:['Trello-style drag-and-drop: elevated clone with shadow + 2deg tilt follows cursor','Gap placeholder shows where card will land (dashed border, animated)','Cards shuffle apart with 150ms CSS transitions','No more border-left/right color indicators','Container-level drop handler for reliable drop detection'] },
   { ver:'v0.29.28', date:'2026-03-08', notes:['Design consistency: replaced all border-left:3px accent patterns with status dots','Quest items, squad cards, activity runs, live feed events — all use dots now','Summary turns: removed border-left, kept subtle background tints','Skill proposals: replaced dashed accent border with solid border'] },
@@ -19376,7 +19376,7 @@ function renderPersonaOrg() {
     // v0.28.54 — Spatial status class + XP bar
     var statusClass = p.status === 'active' ? ' status-active' : p.status === 'error' ? ' status-error' : p.status === 'sleeping' ? ' status-sleeping' : '';
     var xpBar = '';  // v0.29.19 — removed confusing XP bar (was showing raw Cortex confidence with no context)
-    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + statusClass + '" draggable="true" data-persona-id="' + p.id + '" ondragstart="_pDragStart(event)" ondragend="_pDragEnd(event)" onclick="selectPersona(\'' + p.id + '\')">'
+    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + statusClass + '" data-persona-id="' + p.id + '" onmousedown="_pMouseDown(event)" ontouchstart="_pTouchStart(event)" onclick="selectPersona(\'' + p.id + '\')">'
       + '<div class="persona-card-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
       + '<div class="persona-card-role">' + escHtml(p.role || 'General') + '</div>'
@@ -19391,102 +19391,150 @@ function renderPersonaOrg() {
 }
 
 
-// ── Agent card drag-and-drop (v0.29.29 — Trello-style) ──
-// Elevated clone follows cursor, gap placeholder shows drop position, cards animate apart
-var _pDragId = null, _pClone = null, _pGap = null, _pRAF = 0, _pX = 0, _pY = 0;
+// ── Agent card drag-and-drop (v0.29.31 — pointer-based, not HTML5 DnD) ──
+// mousedown/mousemove/mouseup for reliable cross-browser drag. 5px deadzone.
+var _pDragId = null, _pClone = null, _pGap = null, _pRAF = 0;
+var _pStartX = 0, _pStartY = 0, _pDragging = false, _pCard = null, _pOffX = 0, _pOffY = 0;
 
-function _pDragStart(e) {
+function _pMouseDown(e) {
+  if (e.button !== 0) return;  // left click only
   var card = e.currentTarget;
-  _pDragId = card.dataset.personaId;
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', _pDragId);
-  // Hide default drag image
-  var blank = new Image();
-  blank.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
-  e.dataTransfer.setDragImage(blank, 0, 0);
-  // Create elevated clone (follows cursor with tilt + shadow)
-  var rect = card.getBoundingClientRect();
-  _pClone = card.cloneNode(true);
+  if (!card.dataset.personaId) return;
+  e.preventDefault();
+  _pCard = card;
+  _pStartX = e.clientX;
+  _pStartY = e.clientY;
+  _pDragging = false;
+  document.addEventListener('mousemove', _pMouseMove);
+  document.addEventListener('mouseup', _pMouseUp);
+}
+
+function _pTouchStart(e) {
+  if (e.touches.length !== 1) return;
+  var card = e.currentTarget;
+  if (!card.dataset.personaId) return;
+  _pCard = card;
+  _pStartX = e.touches[0].clientX;
+  _pStartY = e.touches[0].clientY;
+  _pDragging = false;
+  document.addEventListener('touchmove', _pTouchMove, {passive: false});
+  document.addEventListener('touchend', _pTouchEnd);
+  document.addEventListener('touchcancel', _pTouchEnd);
+}
+
+function _pActivateDrag() {
+  if (_pDragging || !_pCard) return;
+  _pDragging = true;
+  _pDragId = _pCard.dataset.personaId;
+  var rect = _pCard.getBoundingClientRect();
+  _pOffX = _pStartX - rect.left;
+  _pOffY = _pStartY - rect.top;
+  // Create clone
+  _pClone = _pCard.cloneNode(true);
   _pClone.className = 'persona-card drag-clone';
   _pClone.style.width = rect.width + 'px';
   _pClone.style.left = rect.left + 'px';
   _pClone.style.top = rect.top + 'px';
   _pClone.removeAttribute('onclick');
-  _pClone.removeAttribute('ondragstart');
+  _pClone.removeAttribute('onmousedown');
+  _pClone.removeAttribute('ontouchstart');
   document.body.appendChild(_pClone);
-  // Ghost the source card
-  card.classList.add('drag-src');
-  // Create gap placeholder
+  // Ghost source
+  _pCard.classList.add('drag-src');
+  // Create gap
   _pGap = document.createElement('div');
   _pGap.className = 'drag-gap';
-  // Track mouse position
-  _pX = e.clientX; _pY = e.clientY;
-  document.addEventListener('dragover', _pTrackMouse);
 }
 
-function _pTrackMouse(e) {
-  _pX = e.clientX; _pY = e.clientY;
+function _pMouseMove(e) {
+  if (!_pCard) return;
+  var dx = e.clientX - _pStartX, dy = e.clientY - _pStartY;
+  if (!_pDragging && (dx*dx + dy*dy) < 25) return;  // 5px deadzone
+  if (!_pDragging) _pActivateDrag();
+  _pUpdatePos(e.clientX, e.clientY);
+  _pUpdateGap(e.clientX, e.clientY);
+}
+
+function _pTouchMove(e) {
+  if (!_pCard) return;
+  var t = e.touches[0];
+  var dx = t.clientX - _pStartX, dy = t.clientY - _pStartY;
+  if (!_pDragging && (dx*dx + dy*dy) < 25) return;
+  e.preventDefault();
+  if (!_pDragging) _pActivateDrag();
+  _pUpdatePos(t.clientX, t.clientY);
+  _pUpdateGap(t.clientX, t.clientY);
+}
+
+function _pUpdatePos(x, y) {
+  if (!_pClone) return;
   if (_pRAF) return;
   _pRAF = requestAnimationFrame(function() {
     _pRAF = 0;
     if (_pClone) {
-      _pClone.style.left = (_pX - 65) + 'px';
-      _pClone.style.top = (_pY - 30) + 'px';
+      _pClone.style.left = (x - _pOffX) + 'px';
+      _pClone.style.top = (y - _pOffY) + 'px';
     }
   });
 }
 
-function _pDragOver(e) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  if (!_pDragId || !_pGap) return;
+function _pUpdateGap(x, y) {
+  if (!_pGap || !_pDragId) return;
   var cont = document.getElementById('persona-cards-row');
   if (!cont) return;
-  var card = e.target.closest('.persona-card:not(.drag-src)');
-  if (!card) {
-    // If dragging over empty space at the end, append gap
-    if (!_pGap.parentNode || _pGap.parentNode !== cont) {
-      cont.appendChild(_pGap);
+  // Find card under cursor
+  var cards = [].slice.call(cont.querySelectorAll('.persona-card:not(.drag-src)'));
+  var target = null;
+  for (var i = 0; i < cards.length; i++) {
+    var r = cards[i].getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+      target = cards[i]; break;
     }
+  }
+  if (!target) {
+    // Over empty space — append gap at end
+    if (!_pGap.parentNode || _pGap.parentNode !== cont) cont.appendChild(_pGap);
     return;
   }
-  // Insert gap before or after the hovered card
-  var r = card.getBoundingClientRect();
-  if (e.clientX < r.left + r.width / 2) {
-    cont.insertBefore(_pGap, card);
+  var r = target.getBoundingClientRect();
+  if (x < r.left + r.width / 2) {
+    cont.insertBefore(_pGap, target);
   } else {
-    cont.insertBefore(_pGap, card.nextSibling);
+    cont.insertBefore(_pGap, target.nextSibling);
   }
 }
 
-function _pDragEnd(e) {
-  document.removeEventListener('dragover', _pTrackMouse);
-  if (_pClone) { _pClone.remove(); _pClone = null; }
-  if (_pGap && _pGap.parentNode) { _pGap.remove(); }
-  _pGap = null;
-  // Brief delay before clearing drag ID so selectPersona click is suppressed
-  var wasDragging = !!_pDragId;
-  _pDragId = null;
-  if (wasDragging) {
-    _pDragId = '__clearing__';
-    setTimeout(function() { _pDragId = null; }, 100);
-  }
-  _pRAF = 0;
-  var cont = document.getElementById('persona-cards-row');
-  if (cont) {
-    [].slice.call(cont.querySelectorAll('.persona-card')).forEach(function(c) {
-      c.classList.remove('drag-src');
-      c.style.opacity = '';
-    });
+function _pMouseUp(e) {
+  document.removeEventListener('mousemove', _pMouseMove);
+  document.removeEventListener('mouseup', _pMouseUp);
+  if (_pDragging) {
+    _pFinishDrop();
+  } else {
+    // Was a click, not a drag — trigger selectPersona
+    var id = _pCard ? _pCard.dataset.personaId : null;
+    _pCleanup();
+    if (id) selectPersona(id);
   }
 }
 
-function _pDrop(e) {
-  e.preventDefault();
-  if (!_pDragId) { _pDragEnd(e); return; }
+function _pTouchEnd(e) {
+  document.removeEventListener('touchmove', _pTouchMove);
+  document.removeEventListener('touchend', _pTouchEnd);
+  document.removeEventListener('touchcancel', _pTouchEnd);
+  if (_pDragging) {
+    _pFinishDrop();
+  } else {
+    var id = _pCard ? _pCard.dataset.personaId : null;
+    _pCleanup();
+    if (id) selectPersona(id);
+  }
+}
+
+function _pFinishDrop() {
+  if (!_pDragId || _pDragId === '__clearing__') { _pCleanup(); return; }
   var cont = document.getElementById('persona-cards-row');
-  if (!cont) { _pDragEnd(e); return; }
-  // Build new order from DOM position of gap
+  if (!cont) { _pCleanup(); return; }
+  // Build new order from DOM gap position
   var sorted = _personas.slice().sort(function(a, b) {
     var oa = typeof a.sort_order === 'number' ? a.sort_order : 50;
     var ob = typeof b.sort_order === 'number' ? b.sort_order : 50;
@@ -19495,11 +19543,8 @@ function _pDrop(e) {
   });
   var ids = sorted.map(function(p) { return p.id; });
   var fromIdx = ids.indexOf(_pDragId);
-  if (fromIdx < 0) { _pDragEnd(e); return; }
-  // Find where gap is in the DOM
+  if (fromIdx < 0) { _pCleanup(); return; }
   var children = [].slice.call(cont.children);
-  var gapIdx = _pGap ? children.indexOf(_pGap) : -1;
-  // Count how many non-gap, non-drag-src cards are before the gap
   var insertAt = 0;
   for (var ci = 0; ci < children.length; ci++) {
     if (children[ci] === _pGap) break;
@@ -19507,21 +19552,30 @@ function _pDrop(e) {
       insertAt++;
     }
   }
-  // Build new order
   ids.splice(fromIdx, 1);
   if (insertAt > ids.length) insertAt = ids.length;
   ids.splice(insertAt, 0, _pDragId);
-  // Update sort_order
   ids.forEach(function(id, i) {
     var p = _personas.find(function(x) { return x.id === id; });
     if (p) p.sort_order = i;
   });
-  _pDragEnd(e);
+  _pCleanup();
   renderPersonaOrg();
-  // Persist
   api('/api/personas/reorder', { order: ids }).then(function(r) {
     if (r && r.ok) toast('Agent order saved', 'ok');
   });
+}
+
+function _pCleanup() {
+  if (_pClone) { _pClone.remove(); _pClone = null; }
+  if (_pGap && _pGap.parentNode) { _pGap.remove(); }
+  _pGap = null; _pDragId = null; _pDragging = false; _pCard = null; _pRAF = 0;
+  var cont = document.getElementById('persona-cards-row');
+  if (cont) {
+    [].slice.call(cont.querySelectorAll('.persona-card')).forEach(function(c) {
+      c.classList.remove('drag-src');
+    });
+  }
 }
 
 // v0.29.20 — Cross-tab agent link: navigate to Agents tab and select agent
@@ -19532,7 +19586,6 @@ function openAgentDetail(personaId) {
 }
 
 async function selectPersona(id) {
-  if (_pDragId) return;  // v0.29.30 — don't select during drag
   _selectedPersonaId = id;
   renderPersonaOrg();
   // v0.29.1 — Show full-page detail, hide grid
@@ -26481,7 +26534,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.30"})
+            self.reply_json({"v": "0.29.31"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26643,7 +26696,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.30"
+                health["porter_version"] = "0.29.31"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28477,7 +28530,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.30'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.31'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32979,7 +33032,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.30 ready (localhost only)")
+    print(f"\n  Porter v0.29.31 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
