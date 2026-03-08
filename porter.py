@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.43 — Squad leaders, chat squad context"""
+"""Porter v0.29.45 — Critical bug fixes (chat lifecycle, grid context menu)"""
 
 
 import email
@@ -2041,7 +2041,7 @@ def _session_update_activity(chat_id):
     try:
         conn = _db_conn()
         conn.execute(
-            "UPDATE chat_sessions SET session_state='active', last_activity=?, paused_at=NULL WHERE id=?",
+            "UPDATE chats SET session_state='active', last_activity=?, paused_at=NULL WHERE id=?",
             (_sa.time(), chat_id))
         conn.commit(); conn.close()
     except Exception:
@@ -2054,11 +2054,11 @@ def _session_lifecycle_sweep():
     try:
         conn = _db_conn()
         conn.execute(
-            "UPDATE chat_sessions SET session_state='paused', paused_at=? "
+            "UPDATE chats SET session_state='paused', paused_at=? "
             "WHERE session_state='active' AND last_activity IS NOT NULL AND last_activity < ?",
             (now, now - _SESSION_PAUSE_SECS))
         conn.execute(
-            "UPDATE chat_sessions SET session_state='archived', archived_at=? "
+            "UPDATE chats SET session_state='archived', archived_at=? "
             "WHERE session_state='paused' AND paused_at IS NOT NULL AND paused_at < ?",
             (now, now - _SESSION_ARCHIVE_SECS))
         conn.commit(); conn.close()
@@ -6393,13 +6393,13 @@ def _init_trace_tables():
     except: pass  # Column already exists
 
     # v0.29.27 — Session Lifecycle: chat session state machine
-    try: conn.execute("ALTER TABLE chat_sessions ADD COLUMN session_state TEXT DEFAULT 'active'")
+    try: conn.execute("ALTER TABLE chats ADD COLUMN session_state TEXT DEFAULT 'active'")
     except: pass
-    try: conn.execute("ALTER TABLE chat_sessions ADD COLUMN last_activity REAL")
+    try: conn.execute("ALTER TABLE chats ADD COLUMN last_activity REAL")
     except: pass
-    try: conn.execute("ALTER TABLE chat_sessions ADD COLUMN paused_at REAL")
+    try: conn.execute("ALTER TABLE chats ADD COLUMN paused_at REAL")
     except: pass
-    try: conn.execute("ALTER TABLE chat_sessions ADD COLUMN archived_at REAL")
+    try: conn.execute("ALTER TABLE chats ADD COLUMN archived_at REAL")
     except: pass
 
     # v0.29.41 — removed auto-seed (squads are user-managed, not derived from agent_group)
@@ -9156,7 +9156,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.43</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.45</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10449,6 +10449,8 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.45', date:'2026-03-08', notes:['FIX: chat_sessions→chats table reference (session lifecycle was dead code)','FIX: chat session timestamps restored when loading history','FIX: deleteChatSession now uses Porter confirm dialog','FIX: grid view file cards now have context menu (right-click or 3-dot button)','Added session_state/last_activity/paused_at/archived_at columns to chats table'] },
+  { ver:'v0.29.44', date:'2026-03-08', notes:['Replaced all remaining system confirm/prompt dialogs with Porter-style overlays','Session archive, file editor unsaved changes, bootstrap command all use Porter dialogs','Zero system dialogs remaining — fully native UX'] },
   { ver:'v0.29.43', date:'2026-03-08', notes:['Squad leaders: Lobster designated leader of Dev + Crypto squads','Squad leader badge shown on agent cards in squad sections','Chat: squad leaders receive squad roster context (roles + skills of all members)','All agents now have proper skills assigned (Dev + Crypto squads)','Squad edit: leader selector in member list'] },
   { ver:'v0.29.42', date:'2026-03-08', notes:['Porter-style dialogs replace system confirm/prompt in Projects + Squads','Squad config panel: mission/description, rename, color, member management','Squad-level skill assignment from squad edit panel','Delete squad + delete project use Porter overlay instead of browser confirm','Assign agent + attach workflow use Porter selection overlay'] },
   { ver:'v0.29.41', date:'2026-03-08', notes:['Agents: removed role filter row — squad filter only','Agents: + Squad button moved to module header left of + New Agent','Removed auto-seed that recreated role-based squads on restart'] },
@@ -12406,7 +12408,7 @@ function switchModule(name) {
               var banner = document.getElementById('cx-extract-banner');
               if (banner) banner.style.display = '';
               // Show extracting indicator in chat
-              var chatMod = document.getElementById('chat-module');
+              var chatMod = document.getElementById('overview-module');
               if (chatMod && chatMod.classList.contains('active')) {
                 var chatMsgs = document.getElementById('chat-messages');
                 if (chatMsgs) {
@@ -14673,15 +14675,16 @@ async function deleteSession(sessionId, source) {
 }
 
 async function archiveSession(sessionId, source) {
-  if (!confirm('Archive this session? It will be hidden from the default list.')) return;
-  var res = await api('/api/sessions/' + encodeURIComponent(sessionId) + '/archive', { source: source });
-  if (res && res.ok) {
-    toast('Session archived');
-    var cards = document.querySelectorAll('.ma-session-card[data-session-id="' + sessionId.toLowerCase() + '"]');
-    cards.forEach(function(c) { c.style.display = 'none'; });
-  } else {
-    toast((res && res.error) || 'Archive failed', 'err');
-  }
+  _porterConfirm('Archive Session', 'This session will be hidden from the default list. You can still find it in archived sessions.', async function() {
+    var res = await api('/api/sessions/' + encodeURIComponent(sessionId) + '/archive', { source: source });
+    if (res && res.ok) {
+      toast('Session archived');
+      var cards = document.querySelectorAll('.ma-session-card[data-session-id="' + sessionId.toLowerCase() + '"]');
+      cards.forEach(function(c) { c.style.display = 'none'; });
+    } else {
+      toast((res && res.error) || 'Archive failed', 'err');
+    }
+  });
 }
 
 
@@ -16375,7 +16378,7 @@ function chatSend() {
         ctx += '\n--- File: ' + f.name + ' ---\n' + f.content + '\n--- End ' + f.name + ' ---\n';
       }
     });
-    fullPrompt = 'Context files:\n' + ctx + '\nUser message:\n' + text;
+    fullPrompt = 'Context files:\n' + ctx + '\n' + fullPrompt;
   }
 
   // Add user message (show original text, not the full context-injected prompt)
@@ -16535,7 +16538,7 @@ async function loadChatSession(id) {
   if (!resp || !resp.ok) { toast('Failed to load chat', 'err'); return; }
   _chatId = id;
   _chatMessages = (resp.chat.messages || []).map(function(m) {
-    return { role: m.role, content: m.content };
+    return { role: m.role, content: m.content, ts: m.timestamp };
   });
   // Restore dispatch bar context from metadata
   var meta = resp.chat.metadata || {};
@@ -16574,9 +16577,11 @@ async function renameChatSession(id, currentTitle) {
 }
 
 async function deleteChatSession(id) {
-  await api('/api/chat', { action: 'delete', chat_id: id });
-  if (id === _chatId) chatNewConversation();
-  loadChatSessions();
+  _porterConfirm('Delete Chat', 'This chat session will be permanently deleted.', async function() {
+    await api('/api/chat', { action: 'delete', chat_id: id });
+    if (id === _chatId) chatNewConversation();
+    loadChatSessions();
+  }, {danger: true, okLabel: 'Delete'});
 }
 // ── Chat Context Injection ──
 let _chatContextFiles = []; // [{path, name, content}]
@@ -24061,6 +24066,55 @@ function _initViewToggle() {
   if (gridBtn) gridBtn.classList.toggle('active', _fileViewMode === 'grid');
 }
 
+
+function _gridCardMenu(e, card) {
+  e.preventDefault();
+  e.stopPropagation();
+  var name = card.dataset.name || '';
+  var isDir = card.dataset.dir === 'true';
+  var menuHtml = [];
+  if (!isDir) {
+    menuHtml.push('<div class="ctx-item" onclick="_gridAction(\'download\',\'' + name + '\')">Download</div>');
+    menuHtml.push('<div class="ctx-item" onclick="_gridAction(\'preview\',\'' + name + '\')">Preview</div>');
+  }
+  menuHtml.push('<div class="ctx-item" onclick="_gridAction(\'rename\',\'' + name + '\')">Rename</div>');
+  menuHtml.push('<div class="ctx-item" onclick="_gridAction(\'delete\',\'' + name + '\')">Delete</div>');
+  var menu = document.createElement('div');
+  menu.style.cssText = 'position:fixed;left:' + e.clientX + 'px;top:' + e.clientY + 'px;z-index:9999;background:var(--raised);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.3);padding:4px;min-width:140px';
+  menu.innerHTML = menuHtml.join('');
+  menu.querySelectorAll('.ctx-item').forEach(function(el) {
+    el.style.cssText = 'padding:6px 12px;font-size:12px;color:var(--text);cursor:pointer;border-radius:4px';
+    el.onmouseenter = function() { this.style.background = 'var(--surface)'; };
+    el.onmouseleave = function() { this.style.background = 'none'; };
+  });
+  document.body.appendChild(menu);
+  var closeMenu = function() { menu.remove(); document.removeEventListener('click', closeMenu); };
+  setTimeout(function() { document.addEventListener('click', closeMenu); }, 50);
+}
+
+function _gridAction(action, name) {
+  var currentPath = window._currentPath || '/';
+  var fullPath = currentPath + (currentPath.endsWith('/') ? '' : '/') + name;
+  if (action === 'download') {
+    window.open('/api/files/download?path=' + encodeURIComponent(fullPath));
+  } else if (action === 'preview') {
+    openPreview(name, fullPath);
+  } else if (action === 'rename') {
+    _porterPrompt('Rename', [{name:'name', label:'New name', value: name}], function(vals) {
+      if (!vals.name || vals.name === name) return;
+      api('/api/files/rename', {path: fullPath, new_name: vals.name}).then(function(r) {
+        if (r && r.ok) { toast('Renamed', 'ok'); loadFiles(currentPath); } else { toast(r && r.error || 'Failed', 'err'); }
+      });
+    });
+  } else if (action === 'delete') {
+    _porterConfirm('Delete File', 'Delete "' + name + '"? This cannot be undone.', function() {
+      api('/api/files/delete', {path: fullPath}).then(function(r) {
+        if (r && r.ok) { toast('Deleted', 'ok'); loadFiles(currentPath); } else { toast(r && r.error || 'Failed', 'err'); }
+      });
+    }, {danger: true, okLabel: 'Delete'});
+  }
+}
+
 function gridCardHTML(e) {
   var icon = e.type === 'dir' ? I.folder : fileIcon(e.name);
   var iconClr = fileIconColor(e.name, e.type === 'dir');
@@ -24068,7 +24122,7 @@ function gridCardHTML(e) {
     ? 'onclick="navigate(\'' + esc(curRoot) + '\',\'' + esc(curPath ? curPath+'/'+e.name : e.name) + '\')"'
     : 'onclick="openPreview(\'' + esc(e.name) + '\')"';
   var checked = selectedItems.has(e.name) ? 'checked' : '';
-  return '<div class="file-grid-card' + (e.type==='dir'?' is-dir':'') + '" ' + click + '>'
+  return '<div class="file-grid-card' + (e.type==='dir'?' is-dir':'') + '" data-name="' + escHtml(e.name) + '" data-dir="' + (e.type==='dir') + '" ' + click + ' oncontextmenu="_gridCardMenu(event,this)">'
     + '<input type="checkbox" class="row-cb grid-cb" ' + checked
     + ' onclick="event.stopPropagation()" onchange="toggleSelect(\'' + esc(e.name) + '\',this.checked)">'
     + '<span class="grid-icon" style="color:' + iconClr + '">' + icon + '</span>'
@@ -27395,7 +27449,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.43"})
+            self.reply_json({"v": "0.29.45"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27557,7 +27611,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.43"
+                health["porter_version"] = "0.29.45"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29392,7 +29446,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.43'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.45'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -33910,7 +33964,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.43 ready (localhost only)")
+    print(f"\n  Porter v0.29.45 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
