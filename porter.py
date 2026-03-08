@@ -14429,14 +14429,12 @@ function renderChatMessages(streamUpdate) {
     // Centered welcome state
     el.classList.add('welcome-state');
     el.innerHTML = '<div class="chat-welcome">'
-      + '<div class="chat-welcome-sub"></div>
-            <div id="quest-log-wrap" style="width:100%;max-width:640px;margin:0 auto 16px">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-                <span style="font-size:13px;font-weight:600;color:var(--text)">⚔️ Quests</span>
-                <span style="font-size:10px;color:var(--text3)">— pending decisions</span>
-              </div>
-              <div id="quest-log"></div>
-            </div>'
+      + '<div class="chat-welcome-sub"></div>'
+      + '<div id="quest-log-wrap" style="width:100%;max-width:640px;margin:0 auto 16px">'
+      + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
+      + '<span style="font-size:13px;font-weight:600;color:var(--text)">\u2694\ufe0f Quests</span>'
+      + '<span style="font-size:10px;color:var(--text3)">\u2014 pending decisions</span>'
+      + '</div><div id="quest-log"></div></div>'
       + '<div class="chat-welcome-input-wrap">'
       + '<div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>'
       + '<div style="display:flex;align-items:flex-end;gap:4px;width:100%" ondragover="_chatDragOver(event)" ondrop="_chatDrop(event)" ondragleave="_chatDragLeave(event)" ondragenter="_chatDragEnter(event)">'
