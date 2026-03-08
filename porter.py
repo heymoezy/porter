@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.51 — Lower dedup thresholds, stemmer, workflow history fix"""
+"""Porter v0.28.52 — Confidence scoring, evidence tracking, Claude Code hooks"""
 
 
 import email
@@ -1452,15 +1452,44 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
         if scope == "agent" and not persona_id:
             scope = "global"
         scope_id = persona_id if scope == "agent" else ""
-        confidence = round(importance / 10.0, 2)
+        confidence = 0.5  # v0.28.52 — new facts start at 0.5, reinforced on re-extraction
+
+        # v0.28.52 — Check for near-duplicate to reinforce instead of insert
+        _reinforced = False
+        try:
+            _rc = _db_conn()
+            _existing = _rc.execute(
+                "SELECT id, fact, confidence, evidence_count, keywords FROM cortex_memories "
+                "WHERE status='active' AND consolidated_into IS NULL LIMIT 200"
+            ).fetchall()
+            for _ex in _existing:
+                _ex_kw = set(k.strip() for k in _ex[4].split(",") if k.strip()) if _ex[4] else _cortex_tokenize(_ex[1])
+                if _jaccard_similarity(new_kw, _ex_kw) > 0.35:
+                    # Reinforce: bump confidence and evidence count
+                    _new_conf = min(0.95, (_ex[2] or 0.5) + 0.15)
+                    _new_ev = (_ex[3] or 1) + 1
+                    _rc.execute(
+                        "UPDATE cortex_memories SET confidence=?, evidence_count=?, "
+                        "updated_at=strftime('%s','now') WHERE id=?",
+                        (_new_conf, _new_ev, _ex[0])
+                    )
+                    _rc.commit()
+                    _reinforced = True
+                    break
+            _rc.close()
+        except Exception:
+            pass
+
+        if _reinforced:
+            continue  # Skip insert — existing fact was strengthened
 
         # Insert into DB with new columns
         try:
             conn = _db_conn()
             conn.execute(
                 """INSERT INTO cortex_memories (fact, scope, scope_id, source_type, source_id,
-                   importance, keywords, routed_to, memory_type, status, confidence)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, '', 'semantic', 'active', ?)""",
+                   importance, keywords, routed_to, memory_type, status, confidence, evidence_count)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, '', 'semantic', 'active', ?, 1)""",
                 (fact_text, scope, scope_id, "dispatch", persona_id or backend,
                  importance, keywords, confidence)
             )
@@ -1515,16 +1544,24 @@ def _cortex_inject_context(message, persona_id="", project_id=""):
     now = _t_inj.time()
     max_age = 90 * 86400  # 90 days normalization window
 
-    # Score each memory — v0.28.0 formula: keyword + importance + recency + use_freq
+    # Score each memory — v0.28.52 formula: keyword + confidence + recency + use_freq
     scored = []
     for row in rows:
         rid, fact, scope, scope_id, importance, kw_str, created_at, use_count = row
         stored_kw = set(k.strip() for k in kw_str.split(",") if k.strip()) if kw_str else _cortex_tokenize(fact)
         keyword_score = _jaccard_similarity(query_kw, stored_kw)
-        importance_score = importance / 10.0
+        # v0.28.52 — confidence replaces raw importance in scoring
+        _conf = 0.5
+        try:
+            _cc = _db_conn()
+            _cr = _cc.execute("SELECT confidence FROM cortex_memories WHERE id=?", (rid,)).fetchone()
+            if _cr: _conf = _cr[0] or 0.5
+            _cc.close()
+        except Exception:
+            pass
         recency = max(0, 1.0 - (now - created_at) / max_age) if created_at else 0.5
         use_freq = min(1.0, (use_count or 0) / 20.0)
-        base_score = 0.4 * keyword_score + 0.25 * importance_score + 0.2 * recency + 0.15 * use_freq
+        base_score = 0.35 * keyword_score + 0.3 * _conf + 0.2 * recency + 0.15 * use_freq
         # Scope bonus
         if scope == "agent" and scope_id == persona_id:
             base_score *= 1.5
@@ -1656,10 +1693,36 @@ def _cortex_consolidate_once():
             if md_deleted:
                 log.info("Cortex deleted %d facts covered by .md files", md_deleted)
                 mlog.emit("info", "cortex", "cortex.md_dedup", f"Deleted {md_deleted} facts already in .md files")
+        # v0.28.52 — Confidence decay: unused facts >7 days old lose 0.05 per cycle
+        decay_threshold = now - (7 * 86400)
+        decayed_count = 0
+        decay_rows = conn.execute(
+            "SELECT id, confidence FROM cortex_memories WHERE status='active' "
+            "AND consolidated_into IS NULL AND use_count = 0 AND created_at < ?",
+            (decay_threshold,)
+        ).fetchall()
+        for dr in decay_rows:
+            new_conf = max(0.1, (dr[1] or 0.5) - 0.05)
+            if new_conf < dr[1]:
+                conn.execute("UPDATE cortex_memories SET confidence=?, updated_at=strftime('%s','now') WHERE id=?",
+                             (round(new_conf, 2), dr[0]))
+                decayed_count += 1
+        # Auto-archive facts with confidence <= 0.15
+        low_conf = conn.execute(
+            "SELECT id FROM cortex_memories WHERE status='active' AND consolidated_into IS NULL AND confidence <= 0.15"
+        ).fetchall()
+        for lc in low_conf:
+            conn.execute("UPDATE cortex_memories SET status='archived', updated_at=strftime('%s','now') WHERE id=?", (lc[0],))
+            archived_count += 1
+
+        if decayed_count or merged_count or archived_count or md_deleted:
+            conn.commit()
+
         _parts = []
         if merged_count: _parts.append(f"merged {merged_count}")
         if archived_count: _parts.append(f"archived {archived_count}")
         if md_deleted: _parts.append(f"cleaned {md_deleted}")
+        if decayed_count: _parts.append(f"decayed {decayed_count}")
         return " | ".join(_parts) if _parts else "clean — nothing to do"
     except Exception as e:
         log.debug("Cortex consolidation error: %s", e)
@@ -6134,6 +6197,7 @@ def _init_trace_tables():
         ("superseded_by_id", "INTEGER DEFAULT NULL"),
         ("last_used_at", "REAL DEFAULT NULL"),
         ("use_count", "INTEGER DEFAULT 0"),
+        ("evidence_count", "INTEGER DEFAULT 1"),
     ]:
         try:
             conn.execute(f"ALTER TABLE cortex_memories ADD COLUMN {_col_def[0]} {_col_def[1]}")
@@ -8831,7 +8895,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.51</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.52</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10051,6 +10115,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.52', date:'2026-03-08', notes:['Confidence scoring: facts start at 0.5, reinforced on re-extraction (+0.15, cap 0.95)','Evidence tracking: evidence_count column tracks independent extractions of same fact','Confidence decay: consolidation reduces confidence by 0.05 for unused facts >7 days old','Injection scoring includes confidence weight (replaces flat importance/10)','Claude Code hooks: PreCompact checkpoint, PostToolUse syntax gate, Stop session log, strategic compact suggester'] },
   { ver:'v0.28.51', date:'2026-03-08', notes:['Cortex dedup thresholds lowered: .md gate 0.35→0.25, cross-session 0.6→0.45','Suffix stemmer for Jaccard matching (word form normalization)','Workflow history bootstrap: initializes DB rows for all registered workflows on startup','Better duplicate rejection for semantic variants (addressed/address/prefers)'] },
   { ver:'v0.28.50', date:'2026-03-08', notes:['Workflow history shows useful results (not just zeros)','Stale workflow errors auto-clear on next successful run','Extraction progress bar: blue theme with animation','Consolidation result: human-readable (clean or action counts)','Memory extraction reports fact count in history','Heartbeat reports monitored/pinged counts'] },
   { ver:'v0.28.49', date:'2026-03-08', notes:['Universal truth dedup: cortex filter now reads CLAUDE.md + Claude auto-memory (not just persona .md files)','Cross-session dedup: re-extract no longer creates duplicates of facts from other sessions','Added naming rule to RULES.md so persona filter catches it','Cleaned cortex: 56 → 10 high-quality durable memories'] },
@@ -25152,7 +25217,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.51"})
+            self.reply_json({"v": "0.28.52"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25314,7 +25379,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.51"
+                health["porter_version"] = "0.28.52"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25867,7 +25932,8 @@ class Handler(BaseHTTPRequestHandler):
                     "keywords": r[7], "routed_to": r[8],
                     "created_at": r[9], "updated_at": r[10],
                     "memory_type": r[11] or "semantic", "status": r[12] or "active",
-                    "confidence": r[13], "use_count": r[14] or 0
+                    "confidence": r[13], "use_count": r[14] or 0,
+                    "evidence_count": 1
                 })
             self.reply_json({"ok": True, "memories": memories, "total": total,
                              "limit": limit_n, "offset": offset_n})
@@ -27122,7 +27188,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.51'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.52'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31368,7 +31434,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.51 ready (localhost only)")
+    print(f"\n  Porter v0.28.52 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

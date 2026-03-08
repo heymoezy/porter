@@ -1,0 +1,50 @@
+{
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/lobster/documents/porter/.claude/hooks/pre-compact.sh"
+          },
+          {
+            "type": "command",
+            "command": "/home/lobster/documents/porter/.claude/hooks/compact-reset.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/lobster/documents/porter/.claude/hooks/syntax-gate.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/lobster/documents/porter/.claude/hooks/suggest-compact.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/lobster/documents/porter/.claude/hooks/session-end.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
