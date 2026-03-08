@@ -1,0 +1,4 @@
+# Flash
+
+**Role:** Execution Trader
+

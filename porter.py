@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.39 — Finance Squad + Kraken integration"""
+"""Porter v0.29.42 — Porter-style dialogs, squad config panel"""
 
 
 import email
@@ -6402,38 +6402,7 @@ def _init_trace_tables():
     try: conn.execute("ALTER TABLE chat_sessions ADD COLUMN archived_at REAL")
     except: pass
 
-    # Auto-seed squads from existing agent_group values
-    try:
-        existing_groups = conn.execute(
-            "SELECT DISTINCT agent_group FROM personas WHERE agent_group != '' AND agent_group IS NOT NULL"
-        ).fetchall()
-        # v0.29.19 — dynamic squad colors (no hardcoded map)
-        import hashlib as _hc
-        def _squad_color(name):
-            h = int(_hc.md5(name.encode()).hexdigest()[:6], 16) % 360
-            return f'hsl({h}, 65%, 55%)'
-        for (grp,) in existing_groups:
-            try:
-                import uuid as _uuid
-                sid = _uuid.uuid4().hex[:16]
-                conn.execute(
-                    "INSERT OR IGNORE INTO squads (id, name, color) VALUES (?, ?, ?)",
-                    (sid, grp, _squad_color(grp))
-                )
-                # Add members from that group
-                members = conn.execute(
-                    "SELECT id FROM personas WHERE agent_group=?", (grp,)
-                ).fetchall()
-                for (pid,) in members:
-                    conn.execute(
-                        "INSERT OR IGNORE INTO squad_members (squad_id, persona_id) VALUES (?, ?)",
-                        (sid, pid)
-                    )
-            except Exception:
-                pass
-        conn.commit()
-    except Exception:
-        pass
+    # v0.29.41 — removed auto-seed (squads are user-managed, not derived from agent_group)
     # v0.28.0 — Cortex memory refactor: add lifecycle columns
     for _col_def in [
         ("memory_type", "TEXT DEFAULT 'semantic'"),
@@ -9105,7 +9074,7 @@ input[type="number"].settings-input { min-width: 60px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
       <span class="mnav-label">Chat</span>
     </button>
-    <div class="mnav-group-label">Squad</div>
+    <div class="mnav-group-label">Squads</div>
     <button class="mnav-item" id="mnav-agents" onclick="switchModule('agents')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
       <span class="mnav-label">Agents</span>
@@ -9187,7 +9156,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.39</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.42</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9342,6 +9311,7 @@ input[type="number"].settings-input { min-width: 60px; }
   <div id="agents-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Agents</span>
+      <button class="btn btn-ghost" onclick="_openSquadManager()" style="font-size:12px">+ Squad</button>
       <button class="btn btn-primary" onclick="openPersonaWizard()" style="font-size:12px">+ New Agent</button>
       <button class="btn btn-ghost" onclick="openRulesEditor()" style="font-size:12px">📋 Global Rules</button>
 
@@ -9349,9 +9319,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
     <!-- Agent Grid -->
     <div id="agents-grid-view">
-      <div id="squad-chips-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
-        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">Squads</span>
-      </div>
+      <div id="squad-chips-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center"></div>
       <div id="persona-org-chart" style="margin-bottom:16px">
         <div id="persona-cards-row" class="persona-cards-row">
           <div class="loading-indicator">Loading personas...</div>
@@ -10481,6 +10449,9 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.42', date:'2026-03-08', notes:['Porter-style dialogs replace system confirm/prompt in Projects + Squads','Squad config panel: mission/description, rename, color, member management','Squad-level skill assignment from squad edit panel','Delete squad + delete project use Porter overlay instead of browser confirm','Assign agent + attach workflow use Porter selection overlay'] },
+  { ver:'v0.29.41', date:'2026-03-08', notes:['Agents: removed role filter row — squad filter only','Agents: + Squad button moved to module header left of + New Agent','Removed auto-seed that recreated role-based squads on restart'] },
+  { ver:'v0.29.40', date:'2026-03-08', notes:['Agents: dual filter bar — filter by Squad and by Role separately','Agents: agents grouped by squad with section headers and color accents','Agents: + New Squad button inline, old role-based squads cleaned up','Roles (Orchestrator/Strategy/Creative/Technical/Operations) are NOT squads'] },
   { ver:'v0.29.39', date:'2026-03-08', notes:['Finance Squad: 4 new agents (MarketWatch, Guardian, Flash, Ledger)','Dev Squad: all 9 dev agents with role-specific skill assignments','Kraken CLI added to Extensions capability detection','Old role squads replaced with Dev Squad + Finance Squad','Skills assigned: Vision/LogicLord get coding-agent+github, Sage/Pretty/Quill get gemini+gog'] },
   { ver:'v0.29.38', date:'2026-03-08', notes:['Files: color-coded file type icons in grid view','Python blue, JS yellow, HTML red, JSON purple, images green, PDFs red','Folders amber, shell green, markdown gray, archives amber','fileIconColor() function maps extensions to language-standard colors'] },
   { ver:'v0.29.37', date:'2026-03-08', notes:['Projects: removed agent icons from front card','Projects: tab counters use parentheses — Agents (9), Workflows (3)','Projects: front card shows plain agent count instead of emoji avatars'] },
@@ -13273,15 +13244,19 @@ function _renderProjList() {
 }
 
 async function _projCreate() {
-  var name = prompt('Project name:');
-  if (!name || !name.trim()) return;
-  try {
-    var r = await api('/api/projects', {action: 'create', name: name.trim(), type: 'manual'});
-    if (r && r.ok) {
-      toast('Project created', 'ok');
-      loadProjects();
-    } else { toast(r && r.error || 'Failed', 'err'); }
-  } catch(e) { toast('Failed to create project', 'err'); }
+  _porterPrompt('New Project', [
+    {name: 'name', label: 'Project Name', placeholder: 'My Project'},
+    {name: 'description', label: 'Description', type: 'textarea', placeholder: 'What is this project about?'}
+  ], async function(vals) {
+    if (!vals.name) { toast('Name required', 'err'); return; }
+    try {
+      var r = await api('/api/projects', {action: 'create', name: vals.name, type: 'manual', description: vals.description || ''});
+      if (r && r.ok) {
+        toast('Project created', 'ok');
+        loadProjects();
+      } else { toast(r && r.error || 'Failed', 'err'); }
+    } catch(e) { toast('Failed to create project', 'err'); }
+  }, {okLabel: 'Create'});
 }
 
 function _projBack() {
@@ -13501,21 +13476,18 @@ async function _projAssignAgent(pid) {
   var assigned = proj.assigned_personas || [];
   var available = (_personas || []).filter(function(p) { return assigned.indexOf(p.id) < 0; });
   if (!available.length) { toast('All agents already assigned'); return; }
-  // Simple select
-  var opts = available.map(function(p) { return (p.avatar || '\u{1f916}') + ' ' + p.name; });
-  var idx = prompt('Select agent to assign (1-' + available.length + '):\n' + opts.map(function(o, i) { return (i+1) + '. ' + o; }).join('\n'));
-  if (!idx) return;
-  var sel = available[parseInt(idx) - 1];
-  if (!sel) { toast('Invalid selection', 'err'); return; }
-  try {
-    var r = await api('/api/projects', {action: 'assign_agent', project_id: pid, persona_id: sel.id});
-    if (r && r.ok) {
-      toast(sel.name + ' assigned', 'ok');
-      await loadProjects();
-      var updated = _projList.find(function(p) { return p.id === pid; });
-      if (updated) { window._projCurrent = updated; _renderProjTabContent(); }
-    } else { toast(r && r.error || 'Failed', 'err'); }
-  } catch(e) { toast('Failed', 'err'); }
+  var items = available.map(function(p) { return {id: p.id, avatar: p.avatar || '\u{1f916}', label: p.name, sub: p.role || p.agent_group || 'Agent'}; });
+  _porterSelect('Assign Agent', items, async function(item) {
+    try {
+      var r = await api('/api/projects', {action: 'assign_agent', project_id: pid, persona_id: item.id});
+      if (r && r.ok) {
+        toast(item.label + ' assigned', 'ok');
+        await loadProjects();
+        var updated = _projList.find(function(p) { return p.id === pid; });
+        if (updated) { window._projCurrent = updated; _renderProjTabContent(); }
+      } else { toast(r && r.error || 'Failed', 'err'); }
+    } catch(e) { toast('Failed', 'err'); }
+  });
 }
 
 async function _projUnassign(pid, agentId) {
@@ -13561,15 +13533,16 @@ async function _projSetActive(pid) {
 }
 
 async function _projDelete(pid) {
-  if (!confirm('Delete this project? This cannot be undone.')) return;
-  try {
-    var r = await api('/api/projects', {action: 'delete', project_id: pid});
-    if (r && r.ok) {
-      toast('Project deleted', 'ok');
-      _projBack();
-      loadProjects();
-    } else { toast(r && r.error || 'Failed', 'err'); }
-  } catch(e) { toast('Failed', 'err'); }
+  _porterConfirm('Delete Project', 'This project will be permanently deleted. This cannot be undone.', async function() {
+    try {
+      var r = await api('/api/projects', {action: 'delete', project_id: pid});
+      if (r && r.ok) {
+        toast('Project deleted', 'ok');
+        _projBack();
+        loadProjects();
+      } else { toast(r && r.error || 'Failed', 'err'); }
+    } catch(e) { toast('Failed', 'err'); }
+  }, {danger: true, okLabel: 'Delete'});
 }
 
 // v0.29.36 — Project workflow attachment
@@ -13612,19 +13585,19 @@ async function _projAttachWf(pid) {
     var allWfs = (data && data.workflows) || [];
     var available = allWfs.filter(function(wf) { return attached.indexOf(wf.id) < 0; });
     if (!available.length) { toast('All workflows already attached'); return; }
-    var opts = available.map(function(wf, i) { return (i+1) + '. ' + (wf.name || wf.id) + ' (' + (wf.status || 'unknown') + ')'; });
-    var idx = prompt('Select workflow to attach:\n' + opts.join('\n'));
-    if (!idx) return;
-    var sel = available[parseInt(idx) - 1];
-    if (!sel) { toast('Invalid selection', 'err'); return; }
-    attached.push(sel.id);
-    var r = await api('/api/projects', {action: 'update', project_id: pid, workflows: attached});
-    if (r && r.ok) {
-      toast('Workflow attached', 'ok');
-      await loadProjects();
-      var updated = _projList.find(function(p) { return p.id === pid; });
-      if (updated) { window._projCurrent = updated; _renderProjTabs(); _renderProjTabContent(); }
-    } else { toast(r && r.error || 'Failed', 'err'); }
+    var wfItems = available.map(function(wf) { return {id: wf.id, label: wf.name || wf.id, sub: wf.status || 'unknown'}; });
+    _porterSelect('Attach Workflow', wfItems, async function(item) {
+      var sel = available.find(function(wf) { return wf.id === item.id; });
+      if (!sel) return;
+      attached.push(sel.id);
+      var r = await api('/api/projects', {action: 'update', project_id: pid, workflows: attached});
+      if (r && r.ok) {
+        toast('Workflow attached', 'ok');
+        await loadProjects();
+        var updated = _projList.find(function(p) { return p.id === pid; });
+        if (updated) { window._projCurrent = updated; _renderProjTabs(); _renderProjTabContent(); }
+      } else { toast(r && r.error || 'Failed', 'err'); }
+    });
   } catch(e) { toast('Failed to load workflows', 'err'); }
 }
 
@@ -19705,6 +19678,95 @@ async function _loadQuestLog() {
 var _squads = [];
 var _activeSquadFilter = null;
 
+
+// ── v0.29.42 — Porter-style dialog system (replaces confirm/prompt) ──
+function _porterConfirm(title, msg, onYes, opts) {
+  opts = opts || {};
+  var ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9500;display:flex;align-items:center;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--raised);border:1px solid var(--border);border-radius:12px;width:380px;padding:24px;box-shadow:0 12px 40px rgba(0,0,0,.4)';
+  box.innerHTML = '<div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">' + (title || 'Confirm') + '</div>'
+    + '<div style="font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.5">' + (msg || '') + '</div>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end">'
+    + '<button class="btn btn-ghost _pc-cancel" style="font-size:12px;padding:6px 16px">Cancel</button>'
+    + '<button class="btn ' + (opts.danger ? 'btn-ghost' : 'btn-primary') + ' _pc-ok" style="font-size:12px;padding:6px 16px;' + (opts.danger ? 'color:var(--err,#ef4444);border-color:var(--err,#ef4444)' : '') + '">' + (opts.okLabel || 'Confirm') + '</button>'
+    + '</div>';
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  ov.onclick = function(e) { if (e.target === ov) { ov.remove(); } };
+  box.querySelector('._pc-cancel').onclick = function() { ov.remove(); };
+  box.querySelector('._pc-ok').onclick = function() { ov.remove(); if (onYes) onYes(); };
+  box.querySelector('._pc-ok').focus();
+}
+
+function _porterPrompt(title, fields, onOk, opts) {
+  opts = opts || {};
+  var ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9500;display:flex;align-items:center;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--raised);border:1px solid var(--border);border-radius:12px;width:420px;padding:24px;box-shadow:0 12px 40px rgba(0,0,0,.4)';
+  var fieldsHtml = '';
+  fields.forEach(function(f) {
+    fieldsHtml += '<div style="margin-bottom:10px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:4px;letter-spacing:.5px">' + f.label + '</div>';
+    if (f.type === 'textarea') {
+      fieldsHtml += '<textarea class="settings-input _pp-field" data-name="' + f.name + '" placeholder="' + (f.placeholder || '') + '" style="width:100%;font-size:12px;padding:6px 10px;min-height:60px;resize:vertical;box-sizing:border-box">' + escHtml(f.value || '') + '</textarea>';
+    } else if (f.type === 'color') {
+      fieldsHtml += '<input class="settings-input _pp-field" data-name="' + f.name + '" type="color" value="' + (f.value || '#6366f1') + '" style="width:48px;height:32px;padding:2px;cursor:pointer">';
+    } else {
+      fieldsHtml += '<input class="settings-input _pp-field" data-name="' + f.name + '" value="' + escHtml(f.value || '') + '" placeholder="' + (f.placeholder || '') + '" style="width:100%;font-size:12px;padding:6px 10px;box-sizing:border-box">';
+    }
+    fieldsHtml += '</div>';
+  });
+  box.innerHTML = '<div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px">' + (title || '') + '</div>'
+    + fieldsHtml
+    + '<div style="display:flex;gap:8px;justify-content:flex-end">'
+    + '<button class="btn btn-ghost _pp-cancel" style="font-size:12px;padding:6px 16px">Cancel</button>'
+    + '<button class="btn btn-primary _pp-ok" style="font-size:12px;padding:6px 16px">' + (opts.okLabel || 'OK') + '</button>'
+    + '</div>';
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  ov.onclick = function(e) { if (e.target === ov) { ov.remove(); } };
+  box.querySelector('._pp-cancel').onclick = function() { ov.remove(); };
+  box.querySelector('._pp-ok').onclick = function() {
+    var result = {};
+    box.querySelectorAll('._pp-field').forEach(function(el) {
+      result[el.dataset.name] = el.tagName === 'TEXTAREA' ? el.value : el.value.trim();
+    });
+    ov.remove();
+    if (onOk) onOk(result);
+  };
+  var first = box.querySelector('input._pp-field');
+  if (first) { first.focus(); first.onkeydown = function(e) { if (e.key === 'Enter') box.querySelector('._pp-ok').click(); }; }
+}
+
+function _porterSelect(title, items, onSelect) {
+  var ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9500;display:flex;align-items:center;justify-content:center';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--raised);border:1px solid var(--border);border-radius:12px;width:400px;max-height:70vh;padding:24px;box-shadow:0 12px 40px rgba(0,0,0,.4);display:flex;flex-direction:column';
+  var listHtml = '<div style="overflow-y:auto;flex:1;margin-top:12px">';
+  items.forEach(function(item, i) {
+    listHtml += '<div class="_ps-item" data-idx="' + i + '" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background .15s" onmouseenter="this.style.background=\'var(--surface)\'" onmouseleave="this.style.background=\'none\'">'
+      + (item.avatar ? '<span style="font-size:16px">' + item.avatar + '</span>' : '')
+      + '<div style="flex:1"><div style="font-size:12px;font-weight:600;color:var(--text)">' + escHtml(item.label) + '</div>'
+      + (item.sub ? '<div style="font-size:10px;color:var(--text3)">' + escHtml(item.sub) + '</div>' : '')
+      + '</div></div>';
+  });
+  listHtml += '</div>';
+  box.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between">'
+    + '<div style="font-size:14px;font-weight:600;color:var(--text)">' + (title || 'Select') + '</div>'
+    + '<button class="btn btn-ghost _ps-close" style="font-size:14px;padding:4px 8px;color:var(--text3)">\u2715</button>'
+    + '</div>' + listHtml;
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  ov.onclick = function(e) { if (e.target === ov) ov.remove(); };
+  box.querySelector('._ps-close').onclick = function() { ov.remove(); };
+  box.querySelectorAll('._ps-item').forEach(function(el) {
+    el.onclick = function() { ov.remove(); if (onSelect) onSelect(items[parseInt(el.dataset.idx)]); };
+  });
+}
+
 async function loadSquads() {
   try {
     var data = await api('/api/squads');
@@ -19716,22 +19778,21 @@ async function loadSquads() {
 function renderSquadChips() {
   var row = document.getElementById('squad-chips-row');
   if (!row) return;
-  var chips = '<span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">Squads</span>';
+  var chips = '<span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">Squad</span>';
   chips += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 10px;border-radius:12px;' + (!_activeSquadFilter ? 'background:var(--accent);color:#fff' : '') + '" onclick="_filterSquad(null)">All</button>';
   _squads.forEach(function(s) {
     var active = _activeSquadFilter === s.id;
     chips += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 10px;border-radius:12px;border:1px solid ' + s.color + ';color:' + (active ? '#fff' : s.color) + ';' + (active ? 'background:' + s.color : '') + '" onclick="_filterSquad(\'' + s.id + '\')">' + escHtml(s.name) + ' <span style="font-size:9px;opacity:0.7">' + s.member_count + '</span></button>';
   });
-  // Manage button
   chips += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;border-radius:12px;color:var(--text3)" onclick="_openSquadManager()" title="Manage Squads">\u2699</button>';
   row.innerHTML = chips;
 }
-
 function _filterSquad(squadId) {
   _activeSquadFilter = _activeSquadFilter === squadId ? null : squadId;
   renderSquadChips();
   renderPersonaOrg();
 }
+
 
 // v0.29.24 — Squad Management UI
 function _openSquadManager() {
@@ -19808,13 +19869,14 @@ async function _createSquad() {
 }
 
 async function _deleteSquad(id, name) {
-  if (!confirm('Delete squad "' + name + '"?')) return;
-  var r = await api('/api/squads', { action:'delete', id:id });
-  if (r && r.ok) {
-    toast('Squad deleted', 'ok');
-    await loadSquads();
-    _renderSquadMgrList();
-  } else { toast('Failed', 'err'); }
+  _porterConfirm('Delete Squad', 'Delete "' + escHtml(name) + '"? Members will be unlinked but agents are not deleted.', async function() {
+    var r = await api('/api/squads', { action:'delete', id:id });
+    if (r && r.ok) {
+      toast('Squad deleted', 'ok');
+      await loadSquads();
+      _renderSquadMgrList();
+    } else { toast('Failed', 'err'); }
+  }, {danger: true, okLabel: 'Delete'});
 }
 
 function _editSquad(id) {
@@ -19822,39 +19884,98 @@ function _editSquad(id) {
   if (!s) return;
   var list = document.getElementById('squad-mgr-list');
   if (!list) return;
-  // Replace list with edit form
   var allAgents = (_personas || []).slice();
   var memberIds = (s.members || []).map(function(m) { return m.id; });
-  var html = '<div style="padding:12px;border:1px solid var(--accent);border-radius:8px;background:color-mix(in srgb,var(--accent) 4%,transparent)">'
-    + '<div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;margin-bottom:10px">Editing: ' + escHtml(s.name) + '</div>'
+  var html = '<div style="padding:16px;border:1px solid var(--accent);border-radius:8px;background:color-mix(in srgb,var(--accent) 4%,transparent)">'
+    + '<div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;margin-bottom:12px">Configure: ' + escHtml(s.name) + '</div>'
+    // Name + Color row
     + '<div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px">'
-    + '  <input class="settings-input" id="sq-edit-name" value="' + escHtml(s.name) + '" style="font-size:12px;padding:6px 10px">'
-    + '  <input class="settings-input" id="sq-edit-color" type="color" value="' + (s.color || '#6366f1') + '" style="width:36px;height:32px;padding:2px;cursor:pointer">'
+    + '  <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">NAME</div><input class="settings-input" id="sq-edit-name" value="' + escHtml(s.name) + '" style="font-size:12px;padding:6px 10px;width:100%;box-sizing:border-box"></div>'
+    + '  <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">COLOR</div><input class="settings-input" id="sq-edit-color" type="color" value="' + (s.color || '#6366f1') + '" style="width:36px;height:32px;padding:2px;cursor:pointer"></div>'
     + '</div>'
-    + '<div style="font-size:10px;color:var(--text3);margin-bottom:6px">Members</div>'
-    + '<div style="display:flex;flex-direction:column;gap:3px;max-height:200px;overflow-y:auto">';
+    // Mission / Description
+    + '<div style="margin-bottom:10px"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">MISSION</div>'
+    + '<textarea class="settings-input" id="sq-edit-desc" placeholder="What does this squad do? Goals, scope, focus areas..." style="width:100%;font-size:12px;padding:6px 10px;min-height:50px;resize:vertical;box-sizing:border-box">' + escHtml(s.description || '') + '</textarea></div>'
+    // Members
+    + '<div style="font-size:10px;color:var(--text3);margin-bottom:6px">MEMBERS</div>'
+    + '<div style="display:flex;flex-direction:column;gap:3px;max-height:180px;overflow-y:auto;margin-bottom:10px">';
   allAgents.forEach(function(a) {
     var checked = memberIds.indexOf(a.id) >= 0 ? 'checked' : '';
     html += '<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:3px 0">'
       + '<input type="checkbox" class="sq-edit-member" value="' + a.id + '" ' + checked + '>'
       + '<span>' + (a.avatar || '\u{1F916}') + '</span>'
       + '<span style="color:var(--text)">' + escHtml(a.name) + '</span>'
+      + '<span style="font-size:10px;color:var(--text3)">' + escHtml(a.role || '') + '</span>'
       + '</label>';
   });
   html += '</div>'
-    + '<div style="display:flex;gap:8px;margin-top:10px">'
+    // Squad Skills section
+    + '<div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:10px">'
+    + '<div style="font-size:10px;color:var(--text3);margin-bottom:6px">SQUAD SKILLS <span style="font-size:9px;opacity:.7">(applied to all members)</span></div>'
+    + '<div id="sq-edit-skills-' + id + '" style="font-size:11px;color:var(--text3)">Loading...</div>'
+    + '</div>'
+    // Buttons
+    + '<div style="display:flex;gap:8px">'
     + '  <button class="btn btn-primary" onclick="_saveSquadEdit(\'' + id + '\')" style="font-size:11px;padding:4px 14px">Save</button>'
     + '  <button class="btn btn-ghost" onclick="_renderSquadMgrList()" style="font-size:11px;padding:4px 14px">Cancel</button>'
     + '</div></div>';
   list.innerHTML = html;
+  // Load common skills across members
+  _loadSquadSkills(id, memberIds);
+}
+
+async function _loadSquadSkills(squadId, memberIds) {
+  var el = document.getElementById('sq-edit-skills-' + squadId);
+  if (!el || !memberIds.length) { if (el) el.innerHTML = '<span style="color:var(--text3)">No members</span>'; return; }
+  try {
+    // Get skills for first member as reference
+    var data = await api('/api/personas/' + memberIds[0] + '/skills');
+    var skills = (data && data.skills) || [];
+    if (!skills.length) {
+      el.innerHTML = '<span style="color:var(--text3)">No skills assigned. Use the Skills tab to assign skills to squad members.</span>';
+      return;
+    }
+    var html = '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+    skills.forEach(function(sk) {
+      html += '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--text2)">' + escHtml(sk.name || sk.skill_id) + '</span>';
+    });
+    html += '</div>';
+    html += '<button class="btn btn-ghost" onclick="_assignSkillToSquadFromEdit(\'' + squadId + '\')" style="font-size:10px;padding:2px 8px;margin-top:6px;color:var(--accent)">+ Assign Skill to All Members</button>';
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<span style="color:var(--text3)">Could not load skills</span>'; }
+}
+
+async function _assignSkillToSquadFromEdit(squadId) {
+  try {
+    var data = await api('/api/skills');
+    var allSkills = (data && data.skills) || [];
+    if (!allSkills.length) { toast('No skills available', 'err'); return; }
+    var items = allSkills.map(function(sk) { return {id: sk.id, label: sk.name || sk.id, sub: sk.description || ''}; });
+    _porterSelect('Assign Skill to Squad', items, async function(item) {
+      var sq = _squads.find(function(s) { return s.id === squadId; });
+      if (!sq) return;
+      var count = 0;
+      for (var i = 0; i < sq.members.length; i++) {
+        var m = sq.members[i];
+        try {
+          var r = await api('/api/personas/' + m.id + '/skills', {action: 'assign', skill_id: item.id});
+          if (r && r.ok) count++;
+        } catch(e) {}
+      }
+      toast('Skill assigned to ' + count + '/' + sq.members.length + ' members', 'ok');
+      var memberIds = sq.members.map(function(m) { return m.id; });
+      _loadSquadSkills(squadId, memberIds);
+    });
+  } catch(e) { toast('Failed to load skills', 'err'); }
 }
 
 async function _saveSquadEdit(id) {
   var name = document.getElementById('sq-edit-name').value.trim();
   var color = document.getElementById('sq-edit-color').value;
+  var desc = (document.getElementById('sq-edit-desc') || {}).value || '';
   var members = [];
   document.querySelectorAll('.sq-edit-member:checked').forEach(function(cb) { members.push(cb.value); });
-  var r = await api('/api/squads', { action:'update', id:id, name:name, color:color, members:members });
+  var r = await api('/api/squads', { action:'update', id:id, name:name, color:color, description:desc, members:members });
   if (r && r.ok) {
     toast('Squad saved', 'ok');
     await loadSquads();
@@ -19870,20 +19991,30 @@ function renderPersonaOrg() {
     return;
   }
   const groupColors = { Orchestrator:'#ef4444', Strategy:'#6366f1', Creative:'#ec4899', Technical:'#06b6d4', Operations:'#f59e0b' };
-  // Sort by sort_order (lower first), then by name
+  // Sort by sort_order then name
   var sorted = _personas.slice().sort(function(a, b) {
     var oa = typeof a.sort_order === 'number' ? a.sort_order : 50;
     var ob = typeof b.sort_order === 'number' ? b.sort_order : 50;
     if (oa !== ob) return oa - ob;
     return (a.name || '').localeCompare(b.name || '');
   });
-  // v0.29.9 — Squad filter
+  // Build squad membership map: persona_id -> [squad objects]
+  var pSquads = {};
+  _squads.forEach(function(s) {
+    (s.members || []).forEach(function(m) {
+      if (!pSquads[m.id]) pSquads[m.id] = [];
+      pSquads[m.id].push(s);
+    });
+  });
+  // Apply squad filter
   if (_activeSquadFilter) {
-    var _sqMembers = {};
-    _squads.forEach(function(s) { s.members.forEach(function(m) { _sqMembers[m.id] = s.id; }); });
-    sorted = sorted.filter(function(p) { return _sqMembers[p.id] === _activeSquadFilter; });
+    sorted = sorted.filter(function(p) {
+      return (pSquads[p.id] || []).some(function(s) { return s.id === _activeSquadFilter; });
+    });
   }
-  row.innerHTML = sorted.map(function(p) {
+
+  // Card renderer
+  function cardHtml(p) {
     var dotColor = p.status === 'active' ? '#22c55e' : p.status === 'sleeping' ? '#f59e0b' : 'var(--text3)';
     var statusLabel = p.status === 'active' ? 'active' : p.status === 'sleeping' ? 'sleeping' : 'idle';
     var isSelected = p.id === _selectedPersonaId;
@@ -19891,9 +20022,7 @@ function renderPersonaOrg() {
     var grp = p.agent_group || '';
     var grpColor = groupColors[grp] || 'var(--text3)';
     var grpBadge = grp ? '<div style="font-size:10px;padding:1px 6px;border-radius:3px;background:' + grpColor + '20;color:' + grpColor + ';font-weight:600;margin-top:4px;letter-spacing:.3px">' + grp + '</div>' : '';
-    // v0.28.54 — Spatial status class + XP bar
     var statusClass = p.status === 'active' ? ' status-active' : p.status === 'error' ? ' status-error' : p.status === 'sleeping' ? ' status-sleeping' : '';
-    var xpBar = '';  // v0.29.19 — removed confusing XP bar (was showing raw Cortex confidence with no context)
     return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + statusClass + '" data-persona-id="' + p.id + '" onmousedown="_pMouseDown(event)" ontouchstart="_pTouchStart(event)" onclick="selectPersona(\'' + p.id + '\')">'
       + '<div class="persona-card-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
@@ -19903,11 +20032,48 @@ function renderPersonaOrg() {
       + '<span class="persona-card-dot" style="background:' + dotColor + '"></span>'
       + '<span style="color:var(--text3)">' + statusLabel + '</span>'
       + '</div>'
-      + xpBar
       + '</div>';
-  }).join('');
+  }
+  // Group by squad — show grouped sections
+  if (!_activeSquadFilter) {
+    var html = '';
+    var rendered = {};
+    _squads.forEach(function(sq) {
+      var members = sorted.filter(function(p) {
+        return (pSquads[p.id] || []).some(function(s) { return s.id === sq.id; });
+      });
+      if (!members.length) return;
+      html += '<div style="margin-bottom:16px">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid ' + sq.color + '">'
+        + '<span style="width:10px;height:10px;border-radius:50%;background:' + sq.color + ';flex-shrink:0"></span>'
+        + '<span style="font-size:13px;font-weight:600;color:var(--text)">' + escHtml(sq.name) + '</span>'
+        + '<span style="font-size:11px;color:var(--text3)">' + members.length + ' agent' + (members.length !== 1 ? 's' : '') + '</span>'
+        + '</div>'
+        + '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">';
+      members.forEach(function(p) {
+        html += cardHtml(p);
+        rendered[p.id] = true;
+      });
+      html += '</div></div>';
+    });
+    // Unassigned agents
+    var unassigned = sorted.filter(function(p) { return !rendered[p.id]; });
+    if (unassigned.length) {
+      html += '<div style="margin-bottom:16px">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border)">'
+        + '<span style="font-size:13px;font-weight:600;color:var(--text3)">Unassigned</span>'
+        + '<span style="font-size:11px;color:var(--text3)">' + unassigned.length + ' agent' + (unassigned.length !== 1 ? 's' : '') + '</span>'
+        + '</div>'
+        + '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">';
+      unassigned.forEach(function(p) { html += cardHtml(p); });
+      html += '</div></div>';
+    }
+    row.innerHTML = html;
+  } else {
+    // Single squad filtered — flat list
+    row.innerHTML = '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">' + sorted.map(cardHtml).join('') + '</div>';
+  }
 }
-
 
 // ── Agent card drag-and-drop (v0.29.31 — pointer-based, not HTML5 DnD) ──
 // mousedown/mousemove/mouseup for reliable cross-browser drag. 5px deadzone.
@@ -25537,7 +25703,7 @@ def _persona_update(persona_id, data):
     """Update persona DB row + optionally SOUL.md."""
     import hashlib
     sets, vals = [], []
-    for field in ("name", "role", "avatar", "preferred_backend", "status", "heartbeat_cron", "hook_profile"):
+    for field in ("name", "role", "avatar", "preferred_backend", "status", "heartbeat_cron", "hook_profile", "agent_group"):
         if field in data:
             sets.append(f"{field}=?")
             vals.append(data[field])
@@ -27174,7 +27340,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.39"})
+            self.reply_json({"v": "0.29.42"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27336,7 +27502,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.32"
+                health["porter_version"] = "0.29.42"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29171,7 +29337,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.39'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.42'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -33678,7 +33844,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.39 ready (localhost only)")
+    print(f"\n  Porter v0.29.42 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
