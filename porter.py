@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.39 — Squad awareness, persona restore, interval fix, workflow triggers"""
+"""Porter v0.28.40 — Squad awareness, persona restore, interval fix, workflow triggers"""
 
 
 import email
@@ -8544,7 +8544,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.39</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.40</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9172,7 +9172,6 @@ input[type="number"].settings-input { min-width: 60px; }
           <button class="btn btn-ghost cx-scope-filter active" onclick="_filterCortexScope('all',this)" style="font-size:10px;padding:2px 7px">All</button>
           <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('unassigned',this)" style="font-size:10px;padding:2px 7px;color:#f87171">Unassigned</button>
           <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('global',this)" style="font-size:10px;padding:2px 7px">Global</button>
-          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('squad',this)" style="font-size:10px;padding:2px 7px">Squad</button>
         </div>
         <div style="padding:4px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
           <input type="text" id="cx-search" placeholder="Search..." oninput="_searchCortexMemories(this.value)" style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none;box-sizing:border-box" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
@@ -9804,6 +9803,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.40', date:'2026-03-08', notes:['Removed squad scope from Cortex (redundant with global)','Fixed count mismatch: load all memories (was limited to 200)','Graph: removed squad node'] },
   { ver:'v0.28.39', date:'2026-03-08', notes:['Cortex: scope filter bar (All/Unassigned/Global/Squad)','Cortex: agent view includes shared squad learnings','Cortex: graph + list refresh after edit save','Removed facts counter from sidebar'] },
   { ver:'v0.28.38', date:'2026-03-08', notes:['System workflows moved to Intelligence > System (separate from user Workflows)','Workflows tab now reserved for user-defined workflow builder'] },
   { ver:'v0.28.37', date:'2026-03-08', notes:['Cortex: removed filter bar, condensed toolbar, icon-only buttons','Agent shows actual name, edit has Squad scope + agent picker','Squad scope for shared learnings, graph strokes thinned'] },
@@ -16669,7 +16669,7 @@ async function _loadCortexTab() {
   } catch(e) {}
   // Load memories
   try {
-    var mems = await api('/api/cortex/memories?limit=200');
+    var mems = await api('/api/cortex/memories?limit=500');
     _cortexMemories = (mems && mems.memories) || [];
     // Ensure persona map is available for scope name resolution
     if (!window._personaMap || Object.keys(window._personaMap).length === 0) {
@@ -16719,7 +16719,7 @@ function _renderCortexMemories(memories) {
     el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text3)"><div style="font-size:28px;margin-bottom:8px">\u2728</div><div style="font-size:13px">No memories yet</div><div style="font-size:12px;margin-top:4px">Dispatch to an agent to start building memory</div></div>';
     return;
   }
-  var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80', squad:'#f0abfc'};
+  var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80'};
   var html = '';
   memories.forEach(function(m) {
     var sc = m.scope || 'global';
@@ -16739,7 +16739,6 @@ function _renderCortexMemories(memories) {
       + (function() {
         var label = sc;
         if (sc === 'agent') { if (m.scope_id) { var pMap = window._personaMap || {}; label = pMap[m.scope_id] || m.scope_id.substring(0, 8); } else { label = 'Unassigned'; } }
-        else if (sc === 'squad') { label = 'Squad'; }
         return '<span style="font-size:10px;font-weight:600;color:' + scColor + ';text-transform:uppercase;background:color-mix(in srgb,' + scColor + ' 12%,transparent);padding:2px 8px;border-radius:4px;letter-spacing:0.5px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle">' + escHtml(label) + '</span>';
       })()
       + '<div style="flex:1"></div>'
@@ -16910,7 +16909,6 @@ async function _editCortexMem(id, btn) {
     + 'Scope'
     + '<select id="cx-edit-scope" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)">'
     + '<option value="global"' + (currentScope === 'global' ? ' selected' : '') + '>Global</option>'
-    + '<option value="squad"' + (currentScope === 'squad' ? ' selected' : '') + '>Squad (shared)</option>'
     + '<option value="agent"' + (currentScope === 'agent' ? ' selected' : '') + '>Agent</option>'
     + '<option value="project"' + (currentScope === 'project' ? ' selected' : '') + '>Project</option>'
     + '</select></label>'
@@ -16954,14 +16952,14 @@ async function _editCortexMem(id, btn) {
         if (textEl) textEl.textContent = newText;
         if (card) {
           card.setAttribute('data-scope', newScope);
-          var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80', squad:'#f0abfc'};
+          var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80'};
           var badge = card.querySelector('span[style*="text-transform:uppercase"]');
-          if (badge) { var _bl = newScope; if (newScope === 'agent' && newScopeId) { var _pm = window._personaMap || {}; _bl = _pm[newScopeId] || newScopeId.substring(0,8); } else if (newScope === 'squad') { _bl = 'Squad'; } badge.textContent = _bl; badge.style.color = scopeColors[newScope] || 'var(--text3)'; badge.style.background = 'color-mix(in srgb,' + (scopeColors[newScope] || '#888') + ' 12%,transparent)'; }
+          if (badge) { var _bl = newScope; if (newScope === 'agent' && newScopeId) { var _pm = window._personaMap || {}; _bl = _pm[newScopeId] || newScopeId.substring(0,8); } badge.textContent = _bl; badge.style.color = scopeColors[newScope] || 'var(--text3)'; badge.style.background = 'color-mix(in srgb,' + (scopeColors[newScope] || '#888') + ' 12%,transparent)'; }
         }
         toast('Memory updated');
         _close();
         // Refresh memories + graph after scope change
-        api('/api/cortex/memories?limit=200').then(function(mems) {
+        api('/api/cortex/memories?limit=500').then(function(mems) {
           if (mems && mems.memories) { _cortexMemories = mems.memories; _renderCortexMemories(_cortexMemories); }
         }).catch(function(){});
         requestAnimationFrame(function() { _initMemoryGraph(); });
@@ -17282,8 +17280,8 @@ function _setupGraphInteraction(canvas) {
       // v0.28.14 — Click node to filter memory list (works when locked too)
       var _nid = (n.id || '').replace(/^(agent|project):/, '');
       if (n.type === 'agent' && _nid) {
-        var f1 = (_cortexMemories || []).filter(function(m) { return (m.scope === 'agent' && m.scope_id === _nid) || m.scope === 'squad'; });
-        if (f1.length) { _renderCortexMemories(f1); _showCortexFilterBar(n.label + ' + Squad — ' + f1.length + ' memories'); }
+        var f1 = (_cortexMemories || []).filter(function(m) { return m.scope === 'agent' && m.scope_id === _nid; });
+        if (f1.length) { _renderCortexMemories(f1); _showCortexFilterBar(n.label + ' — ' + f1.length + ' memories'); }
         else { toast(n.label + ': no memories yet'); }
       } else if (n.type === 'global') {
         var f2 = (_cortexMemories || []).filter(function(m) { return m.scope === 'global'; });
@@ -17291,10 +17289,6 @@ function _setupGraphInteraction(canvas) {
       } else if (n.type === 'project' && n.id) {
         var f3 = (_cortexMemories || []).filter(function(m) { return m.scope === 'project' && m.scope_id === _nid; });
         if (f3.length) { _renderCortexMemories(f3); _showCortexFilterBar(n.label + ' — ' + f3.length + ' memories'); }
-      } else if (n.type === 'squad') {
-        var f4 = (_cortexMemories || []).filter(function(m) { return m.scope === 'squad'; });
-        if (f4.length) { _renderCortexMemories(f4); _showCortexFilterBar('Squad — ' + f4.length + ' memories'); }
-        else { toast('No squad learnings yet'); }
       } else if (n.type === 'cortex') {
         _clearCortexFilter();
       }
@@ -24915,7 +24909,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.39"})
+            self.reply_json({"v": "0.28.40"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25077,7 +25071,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.38"
+                health["porter_version"] = "0.28.40"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25755,14 +25749,6 @@ class Handler(BaseHTTPRequestHandler):
                     # Connect agents to global if global exists
                     if global_node_idx >= 0:
                         edges.append({"source": global_node_idx, "target": node_idx, "weight": 1})
-                # Squad node
-                squad_c = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='squad' AND consolidated_into IS NULL").fetchone()[0]
-                if squad_c > 0:
-                    _si = len(nodes)
-                    nodes.append({"id": "squad", "label": "Squad", "type": "squad", "emoji": "\U0001f91d", "radius": 18 + min(8, squad_c), "count": squad_c})
-                    edges.append({"source": 0, "target": _si, "weight": max(1, min(6, squad_c))})
-                    if global_node_idx >= 0:
-                        edges.append({"source": global_node_idx, "target": _si, "weight": 1})
                 # Project nodes (only if they have memories)
                 projects = conn.execute("SELECT DISTINCT scope_id FROM cortex_memories WHERE scope='project' AND consolidated_into IS NULL AND scope_id != ''").fetchall()
                 for proj in projects:
@@ -26908,7 +26894,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.39'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.40'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29426,7 +29412,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 conn = _db_conn()
                 new_scope = str(data.get("scope", "")).strip()
                 new_scope_id = str(data.get("scope_id", "")).strip()
-                if new_scope and new_scope in ("global", "agent", "project", "squad"):
+                if new_scope and new_scope in ("global", "agent", "project"):
                     conn.execute("UPDATE cortex_memories SET fact=?, scope=?, scope_id=?, keywords=?, updated_at=strftime('%s','now') WHERE id=?",
                                  (new_fact, new_scope, new_scope_id, ",".join(_cortex_tokenize(new_fact)), mem_id))
                 else:
@@ -31142,7 +31128,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.39 ready (localhost only)")
+    print(f"\n  Porter v0.28.40 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
