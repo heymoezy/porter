@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.16 — Shared SSE bus (5 connections → 1)"""
+"""Porter v0.29.17 — Skills summary stats"""
 
 
 import email
@@ -8967,7 +8967,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.16</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.17</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9518,6 +9518,7 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
     </div>
 
+    <div id="wf-skills-summary" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:14px"></div>
     <div id="wf-skills-grid" style="display:flex;flex-direction:column;gap:16px"></div>
   </div>
 
@@ -10220,6 +10221,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.17', date:'2026-03-08', notes:['Skills summary stats bar (total, installed, manual, categories)','GPT-5.4 design audit integration'] },
   { ver:'v0.29.16', date:'2026-03-08', notes:['Shared SSE bus: 5 EventSource connections consolidated to 1','Reduces server thread usage and improves responsiveness'] },
   { ver:'v0.29.15', date:'2026-03-08', notes:['Fix: Chat with Agent button now passes full persona (including avatar)','Uses chatWithPersona() for consistent behavior'] },
   { ver:'v0.29.14', date:'2026-03-08', notes:['Stop model timers and TS polling when leaving their tabs','Complete phantom poller cleanup across all tabs'] },
@@ -12625,6 +12627,27 @@ function _renderSkillsTab() {
   }
 
   if (countEl) countEl.textContent = skills.length + '/' + _wfSkills.length;
+
+  // v0.29.17 — Summary stats bar
+  var summaryEl = document.getElementById('wf-skills-summary');
+  if (summaryEl && _wfSkills.length) {
+    var _sInstalled = _wfSkills.filter(function(s) { return s.installed || s.manual; }).length;
+    var _sManual = _wfSkills.filter(function(s) { return s.manual; }).length;
+    var _sCats = {};
+    _wfSkills.forEach(function(s) { var c = _categorizeSkill(s); _sCats[c] = 1; });
+    var _sCatCount = Object.keys(_sCats).length;
+    var _statCard = function(label, val) {
+      return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">'
+        + '<div style="font-size:18px;font-weight:600;color:var(--text)">' + val + '</div>'
+        + '<div style="font-size:10px;color:var(--text3);margin-top:2px">' + label + '</div></div>';
+    };
+    summaryEl.innerHTML = _statCard('Total', _wfSkills.length)
+      + _statCard('Installed', _sInstalled)
+      + _statCard('Manual', _sManual)
+      + _statCard('Categories', _sCatCount);
+  } else if (summaryEl) {
+    summaryEl.innerHTML = '';
+  }
 
   if (!skills.length) {
     grid.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3);font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">'
@@ -25888,7 +25911,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.16"})
+            self.reply_json({"v": "0.29.17"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26050,7 +26073,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.16"
+                health["porter_version"] = "0.29.17"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27859,7 +27882,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.16'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.17'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32340,7 +32363,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.16 ready (localhost only)")
+    print(f"\n  Porter v0.29.17 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
