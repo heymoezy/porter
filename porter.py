@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.28 — Session counts, image attach, model badge, Cortex live"""
+"""Porter v0.28.29 — Cortex alpha polish (search, filter bar, anim loop, config load, tooltip clamp)"""
 
 
 import email
@@ -8543,7 +8543,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.28</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.29</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9171,12 +9171,23 @@ select.settings-input { padding-right: 26px; }
       <div id="cx-inbox-sidebar" style="width:340px;min-width:0;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg2);overflow:hidden">
         <div style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
           <div style="font-size:13px;font-weight:600;color:var(--text)">Learnings</div>
-          <span id="cx-inbox-count" style="font-size:10px;color:var(--text3);display:none"></span>
+          <span id="cx-inbox-count" style="font-size:10px;color:var(--text3)"></span>
           <div style="flex:1"></div>
           <div style="display:flex;gap:2px">
             <button class="btn btn-ghost cx-type-filter active" onclick="_filterCortexType('all',this)" style="font-size:9px;padding:2px 6px">All</button>
             <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('semantic',this)" style="font-size:9px;padding:2px 6px">Facts</button>
             <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('episodic',this)" style="font-size:9px;padding:2px 6px">Episodes</button>
+          </div>
+        </div>
+        <div style="padding:4px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
+          <input type="text" id="cx-search" placeholder="Search memories..." oninput="_searchCortexMemories(this.value)" style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none;box-sizing:border-box" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <div id="cx-filter-bar" style="display:none;padding:4px 12px;border-bottom:1px solid var(--border);flex-shrink:0;background:color-mix(in srgb,var(--accent) 8%,var(--bg2))">
+          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)">
+            <span>&#x1f50d;</span>
+            <span id="cx-filter-label">Filtered</span>
+            <div style="flex:1"></div>
+            <button class="btn btn-ghost" onclick="_clearCortexFilter()" style="font-size:10px;padding:2px 8px;color:var(--accent)">Show all</button>
           </div>
         </div>
         <div id="cx-memory-list" style="flex:1;overflow-y:auto">
@@ -9798,6 +9809,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.29', date:'2026-03-08', notes:['Cortex: text search in learnings sidebar','Cortex: filter indicator bar with clear button on node click','Cortex: ambient animation loop (pulsing hub ring, particles)','Cortex: config loads archive_days + min_use from saved prefs','Cortex: scope badge updates color on edit','Cortex: tooltip clamped to canvas bounds','Cortex: inbox count badge now visible','Cortex: consistent fact/facts pluralization'] },
   { ver:'v0.28.28', date:'2026-03-07', notes:['Fixed: extraction progress counts match model card session counts','Counts per-source (openclaw/claude/gemini/codex/ollama) excluding archived','No more phantom sessions in total'] },
   { ver:'v0.28.27', date:'2026-03-07', notes:['Models: extraction progress card with play button, correct session counts','Workflows: fixed screen flashing (lightweight refresh, no rebuild)','Workflows: removed skill/ext sections (system workflows only)','Workflows: wider interval input box','Fixed: heartbeat _db() → _db_conn() error','Fixed: cortex stats session counting (uses actual session loaders)'] },
   { ver:'v0.28.26', date:'2026-03-07', notes:['Workflows: skill-based workflows section (OpenClaw installed skills)','Workflows: external schedulers section (Ollama, OpenClaw, systemd)','Workflows: pause stops running workflow immediately','Workflows: fixed screen flashing (smart refresh, 8s interval)','Models: extraction progress indicator on model cards during learning extraction'] },
@@ -11686,7 +11698,7 @@ function switchModule(name) {
                     _cortexMemories = mems.memories;
                     _renderCortexMemories(_cortexMemories);
                     var countEl = document.getElementById('cx-inbox-count');
-                    if (countEl) { countEl.textContent = _cortexMemories.length + ' learning' + (_cortexMemories.length !== 1 ? 's' : ''); countEl.style.display = ''; }
+                    if (countEl) countEl.textContent = _cortexMemories.length + ' fact' + (_cortexMemories.length !== 1 ? 's' : '');
                   }
                 }).catch(function(){});
               }
@@ -16581,6 +16593,8 @@ async function _loadCortexTab() {
     var ij = document.getElementById('cx-inject2'); if (ij) ij.value = prefs.cortex_inject_limit || 5;
 
     var co = document.getElementById('cx-consol2'); if (co) co.value = prefs.cortex_consolidate_hours || 6;
+    var ad = document.getElementById('cx-archive-days'); if (ad) ad.value = prefs.cortex_archive_days || 60;
+    var mu = document.getElementById('cx-min-use'); if (mu) mu.value = prefs.cortex_min_use_count || 3;
   } catch(e) {}
   // Load memories
   try {
@@ -16717,6 +16731,27 @@ function _filterCortexType(type, btn) {
     r.style.display = (type === 'all' || r.getAttribute('data-type') === type) ? '' : 'none';
   });
 }
+function _searchCortexMemories(query) {
+  query = (query || '').toLowerCase().trim();
+  document.querySelectorAll('.cx-mem-row').forEach(function(r) {
+    if (!query) { r.style.display = ''; return; }
+    var text = (r.querySelector('.cx-fact-text') || {}).textContent || '';
+    r.style.display = text.toLowerCase().indexOf(query) >= 0 ? '' : 'none';
+  });
+}
+function _showCortexFilterBar(label) {
+  var bar = document.getElementById('cx-filter-bar');
+  var lbl = document.getElementById('cx-filter-label');
+  if (bar) { bar.style.display = ''; }
+  if (lbl) { lbl.textContent = label; }
+}
+function _clearCortexFilter() {
+  var bar = document.getElementById('cx-filter-bar');
+  if (bar) bar.style.display = 'none';
+  _renderCortexMemories(_cortexMemories || []);
+  var search = document.getElementById('cx-search');
+  if (search) search.value = '';
+}
 
 async function _archiveCortexMem(id, btn) {
   btn.disabled = true;
@@ -16827,7 +16862,12 @@ async function _editCortexMem(id, btn) {
       var r = await api('/api/cortex/memories/' + id + '/update', { fact: newText, scope: newScope });
       if (r && r.ok) {
         if (textEl) textEl.textContent = newText;
-        if (card) card.setAttribute('data-scope', newScope);
+        if (card) {
+          card.setAttribute('data-scope', newScope);
+          var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80'};
+          var badge = card.querySelector('span[style*="text-transform:uppercase"]');
+          if (badge) { badge.textContent = newScope; badge.style.color = scopeColors[newScope] || 'var(--text3)'; badge.style.background = 'color-mix(in srgb,' + (scopeColors[newScope] || '#888') + ' 12%,transparent)'; }
+        }
         toast('Memory updated');
         _close();
       } else { toast('Save failed', 'err'); this.disabled = false; this.textContent = 'Save'; }
@@ -17037,6 +17077,8 @@ async function _initMemoryGraph() {
       _runGraphSimulation(canvas);
       _saveGraphPositions();
     }
+    // Start ambient animation loop (pulsing ring + particles)
+    _startGraphAnimLoop();
   } catch(e) {
     console.debug('Graph init error:', e);
     var ctx = canvas.getContext('2d');
@@ -17045,6 +17087,21 @@ async function _initMemoryGraph() {
     ctx.textAlign = 'center';
     ctx.fillText('Could not load memory graph: ' + e.message, w/2, h/2);
   }
+}
+
+function _startGraphAnimLoop() {
+  if (window._cxAnimFrame) cancelAnimationFrame(window._cxAnimFrame);
+  var lastDraw = 0;
+  function tick(ts) {
+    // Redraw at ~15fps for ambient animations (pulsing, particles)
+    if (ts - lastDraw > 66) { _drawGraph(); lastDraw = ts; }
+    // Only keep looping while cortex tab is visible
+    var panel = document.getElementById('cortex-module');
+    if (panel && panel.style.display !== 'none') {
+      window._cxAnimFrame = requestAnimationFrame(tick);
+    } else { window._cxAnimFrame = null; }
+  }
+  window._cxAnimFrame = requestAnimationFrame(tick);
 }
 
 function _setupGraphInteraction(canvas) {
@@ -17096,8 +17153,15 @@ function _setupGraphInteraction(canvas) {
         html += '<div style="margin-top:4px;font-size:11px;color:var(--text3)">' + (hovered.count || 0) + ' memories</div>';
         tip.innerHTML = html;
         tip.style.display = 'block';
-        tip.style.left = (e.clientX - rect.left + 12) + 'px';
-        tip.style.top = (e.clientY - rect.top - 10) + 'px';
+        var tipX = e.clientX - rect.left + 12;
+        var tipY = e.clientY - rect.top - 10;
+        // Clamp to canvas bounds
+        if (tipX + 220 > rect.width) tipX = e.clientX - rect.left - 230;
+        if (tipY + 100 > rect.height) tipY = rect.height - 110;
+        if (tipX < 0) tipX = 4;
+        if (tipY < 0) tipY = 4;
+        tip.style.left = tipX + 'px';
+        tip.style.top = tipY + 'px';
         canvas.style.cursor = 'pointer';
       } else if (tip) {
         tip.style.display = 'none';
@@ -17115,16 +17179,16 @@ function _setupGraphInteraction(canvas) {
       var _nid = (n.id || '').replace(/^(agent|project):/, '');
       if (n.type === 'agent' && _nid) {
         var f1 = (_cortexMemories || []).filter(function(m) { return m.scope === 'agent' && m.scope_id === _nid; });
-        if (f1.length) { _renderCortexMemories(f1); toast(n.label + ': ' + f1.length + ' memories'); }
+        if (f1.length) { _renderCortexMemories(f1); _showCortexFilterBar(n.label + ' — ' + f1.length + ' memories'); }
         else { toast(n.label + ': no memories yet'); }
       } else if (n.type === 'global') {
         var f2 = (_cortexMemories || []).filter(function(m) { return m.scope === 'global'; });
-        if (f2.length) { _renderCortexMemories(f2); toast('Global: ' + f2.length + ' memories'); }
+        if (f2.length) { _renderCortexMemories(f2); _showCortexFilterBar('Global — ' + f2.length + ' memories'); }
       } else if (n.type === 'project' && n.id) {
         var f3 = (_cortexMemories || []).filter(function(m) { return m.scope === 'project' && m.scope_id === _nid; });
-        if (f3.length) { _renderCortexMemories(f3); toast(n.label + ': ' + f3.length + ' memories'); }
+        if (f3.length) { _renderCortexMemories(f3); _showCortexFilterBar(n.label + ' — ' + f3.length + ' memories'); }
       } else if (n.type === 'cortex') {
-        _renderCortexMemories(_cortexMemories || []); toast('All memories');
+        _clearCortexFilter();
       }
     }
     panning = false;
@@ -24740,7 +24804,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.28"})
+            self.reply_json({"v": "0.28.29"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24902,7 +24966,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.28"
+                health["porter_version"] = "0.28.29"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26722,7 +26786,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.28'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.29'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30940,7 +31004,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.28 ready (localhost only)")
+    print(f"\n  Porter v0.28.29 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
