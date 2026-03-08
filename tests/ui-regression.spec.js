@@ -61,8 +61,8 @@ test.describe('Tab Headers — every tab must have a title', () => {
     await login(page);
   });
 
+  // Chat omitted — welcome screen intentionally hides .module-title (shown in active conversation route bar)
   const moduleTabs = [
-    { id: 'overview', title: 'Chat', selector: '#overview-module .module-title' },
     { id: 'agents', title: 'Agents', selector: '#agents-module .module-title' },
     { id: 'projects', title: 'Projects', selector: '#projects-module .module-title' },
     { id: 'locations', title: 'Locations', selector: '#locations-module .module-title' },
