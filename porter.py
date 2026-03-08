@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.52 — Confidence scoring, evidence tracking, Claude Code hooks"""
+"""Porter v0.28.53 — Dev→QA retry loop, screenshot-evidence QA, agent deliverables"""
 
 
 import email
@@ -8895,7 +8895,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.52</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.53</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10115,6 +10115,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.53', date:'2026-03-08', notes:['Dev→QA retry loop: POST /api/qa/review dispatches task to dev agent then BugBanisher for QA, retries up to 3x on FAIL','Screenshot-evidence QA: POST /api/qa/screenshot runs Playwright on specified tests, returns screenshot paths','Agent DELIVERABLES.md: all 9 agents now have concrete output specs and quality criteria','Local CLAUDE.md: targeted guidance files in tests/ and personas/ directories'] },
   { ver:'v0.28.52', date:'2026-03-08', notes:['Confidence scoring: facts start at 0.5, reinforced on re-extraction (+0.15, cap 0.95)','Evidence tracking: evidence_count column tracks independent extractions of same fact','Confidence decay: consolidation reduces confidence by 0.05 for unused facts >7 days old','Injection scoring includes confidence weight (replaces flat importance/10)','Claude Code hooks: PreCompact checkpoint, PostToolUse syntax gate, Stop session log, strategic compact suggester'] },
   { ver:'v0.28.51', date:'2026-03-08', notes:['Cortex dedup thresholds lowered: .md gate 0.35→0.25, cross-session 0.6→0.45','Suffix stemmer for Jaccard matching (word form normalization)','Workflow history bootstrap: initializes DB rows for all registered workflows on startup','Better duplicate rejection for semantic variants (addressed/address/prefers)'] },
   { ver:'v0.28.50', date:'2026-03-08', notes:['Workflow history shows useful results (not just zeros)','Stale workflow errors auto-clear on next successful run','Extraction progress bar: blue theme with animation','Consolidation result: human-readable (clean or action counts)','Memory extraction reports fact count in history','Heartbeat reports monitored/pinged counts'] },
@@ -25217,7 +25218,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.52"})
+            self.reply_json({"v": "0.28.53"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25379,7 +25380,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.52"
+                health["porter_version"] = "0.28.53"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27188,7 +27189,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.52'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.53'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31258,6 +31259,34 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             else:
                 self.reply_json(result)
 
+
+        # ── QA Review Loop ────────────────────────────────────────────
+        elif parsed.path == "/api/qa/review":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            task = data.get("task", "").strip()
+            dev_id = data.get("dev_persona_id", "").strip()
+            qa_id = data.get("qa_persona_id", "60d1ec01c412e43c").strip()
+            max_retries = min(5, max(1, int(data.get("max_retries", 3))))
+            run_ss = bool(data.get("run_screenshots", False))
+            if not task or not dev_id:
+                self.reply_json({"ok": False, "error": "task and dev_persona_id required"}, 400)
+                return
+            # Run in background thread
+            import threading as _thr
+            def _bg():
+                result = _qa_review_loop(task, dev_id, qa_id, max_retries=max_retries, run_screenshots=run_ss)
+                _emit_event("qa:complete", result)
+            _thr.Thread(target=_bg, daemon=True, name="qa-review").start()
+            self.reply_json({"ok": True, "message": "QA review loop started"})
+
+        elif parsed.path == "/api/qa/screenshot":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            test_filter = data.get("filter", None)
+            result = _qa_run_screenshots(test_filter)
+            self.reply_json(result)
+
         elif parsed.path.startswith("/api/workflows/") and parsed.path.endswith("/toggle"):
             if not self.auth_check(redirect=False): return
             wf_id = parsed.path.split("/")[3]
@@ -31312,6 +31341,154 @@ def _handle_wf_list():
             entry["trigger_detail"] = _wf_triggers.get(wf_id, "")
             result.append(entry)
     return result
+
+# ── Dev→QA Retry Loop ────────────────────────────────────────────────────
+
+def _qa_review_loop(task_description, dev_persona_id, qa_persona_id="60d1ec01c412e43c",
+                    max_retries=3, timeout=180, run_screenshots=False):
+    """Dispatch task to dev agent, then send output to BugBanisher for QA review.
+    If QA returns FAIL, retry with feedback. Max retries before escalation.
+    Returns dict with verdict, attempts, and evidence."""
+    import uuid as _uuid
+    import time as _qtime
+
+    chain_id = "qa-" + _uuid.uuid4().hex[:8]
+    attempts = []
+    dev_output = ""
+
+    for attempt in range(1, max_retries + 1):
+        # Build dev prompt — include QA feedback from previous attempt
+        if attempt == 1:
+            dev_prompt = task_description
+        else:
+            last_feedback = attempts[-1].get("qa_feedback", "No specific feedback")
+            dev_prompt = (
+                f"RETRY (attempt {attempt}/{max_retries}) — QA rejected your previous output.\n\n"
+                f"QA feedback:\n{last_feedback}\n\n"
+                f"Original task:\n{task_description}\n\n"
+                f"Fix the issues identified by QA and resubmit."
+            )
+
+        # Step 1: Dispatch to dev agent
+        _emit_event("qa:step", {"chain_id": chain_id, "attempt": attempt, "phase": "dev", "status": "running"})
+        dev_result = dispatch_to_persona(dev_prompt, dev_persona_id, timeout=timeout,
+                                          chain_id=chain_id, step_num=attempt * 2 - 1)
+        if not dev_result.get("ok"):
+            attempts.append({
+                "attempt": attempt, "phase": "dev_failed",
+                "error": dev_result.get("error", "Dev dispatch failed")
+            })
+            continue
+
+        dev_output = dev_result.get("text", "")
+
+        # Step 2: Dispatch to BugBanisher for QA review
+        qa_prompt = (
+            f"QA REVIEW REQUEST (attempt {attempt}/{max_retries})\n\n"
+            f"Task:\n{task_description[:500]}\n\n"
+            f"Developer output:\n{dev_output[:2000]}\n\n"
+            f"Review this output against the task requirements.\n"
+            f"Respond with EXACTLY one of:\n"
+            f"- PASS: [brief reason] — if the output meets all requirements\n"
+            f"- FAIL: [specific issues to fix] — if there are problems\n"
+            f"Do not hedge. Give a clear verdict."
+        )
+
+        _emit_event("qa:step", {"chain_id": chain_id, "attempt": attempt, "phase": "qa", "status": "running"})
+        qa_result = dispatch_to_persona(qa_prompt, qa_persona_id, timeout=timeout,
+                                         chain_id=chain_id, step_num=attempt * 2)
+        qa_text = qa_result.get("text", "") if qa_result.get("ok") else "QA dispatch failed"
+
+        # Parse verdict
+        verdict = "unknown"
+        qa_text_upper = qa_text.strip().upper()
+        if qa_text_upper.startswith("PASS") or "\nPASS" in qa_text_upper:
+            verdict = "pass"
+        elif qa_text_upper.startswith("FAIL") or "\nFAIL" in qa_text_upper:
+            verdict = "fail"
+
+        attempt_record = {
+            "attempt": attempt,
+            "dev_output_preview": dev_output[:300],
+            "qa_verdict": verdict,
+            "qa_feedback": qa_text[:500],
+        }
+
+        # Run screenshots if requested and QA passed
+        if run_screenshots and verdict == "pass":
+            try:
+                ss_result = _qa_run_screenshots()
+                attempt_record["screenshots"] = ss_result
+            except Exception as e:
+                attempt_record["screenshot_error"] = str(e)[:200]
+
+        attempts.append(attempt_record)
+        _emit_event("qa:step", {"chain_id": chain_id, "attempt": attempt, "phase": "complete",
+                                 "verdict": verdict})
+
+        if verdict == "pass":
+            mlog.emit("info", "qa", "qa.pass", f"QA passed on attempt {attempt}", chain_id=chain_id)
+            return {
+                "ok": True, "verdict": "pass", "attempts": len(attempts),
+                "chain_id": chain_id, "dev_output": dev_output,
+                "history": attempts
+            }
+
+    # All retries exhausted
+    mlog.emit("warn", "qa", "qa.escalate",
+              f"QA failed after {max_retries} attempts — escalating", chain_id=chain_id)
+    return {
+        "ok": False, "verdict": "escalate",
+        "reason": f"QA rejected after {max_retries} attempts",
+        "chain_id": chain_id, "dev_output": dev_output,
+        "history": attempts
+    }
+
+
+def _qa_run_screenshots(test_filter=None):
+    """Run Playwright tests and capture screenshots as QA evidence.
+    Returns dict with test results and screenshot paths."""
+    import subprocess as _sp
+    import time as _t
+
+    test_dir = _DATA_DIR / "tests"
+    screenshot_dir = test_dir / "screenshots"
+
+    cmd = ["npx", "playwright", "test"]
+    if test_filter:
+        cmd.extend(["-g", test_filter])
+
+    _t0 = _t.time()
+    try:
+        result = _sp.run(
+            cmd, capture_output=True, text=True, timeout=180,
+            cwd=str(test_dir)
+        )
+        duration = round(_t.time() - _t0, 1)
+        passed = result.stdout.count("✓") if result.stdout else 0
+        failed = result.stdout.count("✗") if result.stdout else 0
+
+        # Collect screenshot paths
+        screenshots = []
+        if screenshot_dir.exists():
+            for f in sorted(screenshot_dir.iterdir()):
+                if f.suffix == ".png":
+                    screenshots.append(str(f))
+
+        return {
+            "ok": result.returncode == 0,
+            "passed": passed,
+            "failed": failed,
+            "duration_s": duration,
+            "screenshots": screenshots,
+            "stdout_tail": result.stdout[-500:] if result.stdout else "",
+            "stderr_tail": result.stderr[-300:] if result.stderr else ""
+        }
+    except _sp.TimeoutExpired:
+        return {"ok": False, "error": "Playwright timed out after 180s"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:300]}
+
 
 def _handle_wf_trigger(wf_id):
     """POST /api/workflows/<id>/trigger — run a workflow now in background."""
@@ -31434,7 +31611,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.52 ready (localhost only)")
+    print(f"\n  Porter v0.28.53 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
