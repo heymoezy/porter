@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.36 — Squad awareness, persona restore, interval fix, workflow triggers"""
+"""Porter v0.28.37 — Squad awareness, persona restore, interval fix, workflow triggers"""
 
 
 import email
@@ -6880,7 +6880,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   border-color: var(--border2);
 }
 .btn-icon:hover { background: var(--raised); color: var(--text); border-color: #333; }
-.btn[disabled] { opacity: .35; pointer-events: none; }
+.btn[disabled] { opacity: .6; pointer-events: none; }
 .btn-sm { padding:6px 14px; font-size:13px; }
 .btn-xs { padding:4px 10px; font-size:12px; }
 .form-input { padding:8px 10px; font-size:13px; background:var(--raised); border:1px solid var(--border2); border-radius:var(--radius); color:var(--text); font-family:inherit; width:100%; box-sizing:border-box; }
@@ -7115,7 +7115,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-ts { color:var(--text3); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:10px; }
 .mc-sev { padding:1px 6px; border-radius:3px; font-size:10px; font-weight:600; text-transform:uppercase; text-align:center; }
 .mc-sev.debug { background:var(--bg2); color:var(--text3); }
-.mc-sev.info { background:#3b82f620; color:#3b82f6; }
+.mc-sev.info { background:#3b82f620; color:#60a5fa; }
 .mc-sev.warn { background:#f59e0b20; color:#f59e0b; }
 .mc-sev.error { background:#ef444420; color:#ef4444; }
 .mc-sev.critical { background:#ef4444; color:#fff; }
@@ -7159,7 +7159,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-report-response { font-size:11px; color:var(--text2); white-space:pre-wrap; margin-top:8px; padding:10px; background:var(--bg2); border-radius:6px; max-height:300px; overflow-y:auto; }
 
 .mc-rem-status { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:600; padding:2px 6px; border-radius:3px; text-transform:uppercase; }
-.mc-rem-status.dispatching { background:#3b82f620; color:#3b82f6; }
+.mc-rem-status.dispatching { background:#3b82f620; color:#60a5fa; }
 .mc-rem-status.success { background:#10b98120; color:#10b981; }
 .mc-rem-status.failed { background:#ef444420; color:#ef4444; }
 
@@ -8225,7 +8225,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .ptask-row:hover .ptask-row-acts { opacity:1; }
 /* Status pills — replace colored dots + colored text */
 .st-pill { font-size:10px; font-weight:600; padding:2px 8px; border-radius:10px; white-space:nowrap; flex-shrink:0; }
-.st-pill-progress  { background:rgba(59,130,246,.12); color:#3b82f6; }
+.st-pill-progress  { background:rgba(59,130,246,.12); color:#60a5fa; }
 .st-pill-pending   { background:rgba(148,163,184,.15); color:#cbd5e1; }
 .st-pill-complete  { background:rgba(34,197,94,.1);  color:#22c55e; }
 .st-pill-failed    { background:rgba(239,68,68,.1);  color:#ef4444; }
@@ -8540,7 +8540,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.36</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.37</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9105,7 +9105,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <div id="models-backends-tab">
       <div class="module-intro">AI backends available to Porter. Each persona routes through one of these.</div>
       <div id="models-summary" style="margin:12px 0 16px;font-size:13px;color:var(--text2)"></div>
-      <div id="extraction-progress-bar" style="margin:0 0 12px;padding:0"></div>
+      <div id="extraction-progress-bar" style="margin:0 0 12px;padding:0"><div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px"><div style="display:flex;align-items:center;gap:8px"><span class="learn-spinner"></span><span style="font-size:12px;color:var(--text3)">Loading extraction status...</span></div></div></div>
       <div id="models-grid" class="models-grid">
         <div class="loading-indicator">Loading models...</div>
       </div>
@@ -9170,14 +9170,10 @@ input[type="number"].settings-input { min-width: 60px; }
           <div style="font-size:13px;font-weight:600;color:var(--text)">Learnings</div>
           <span id="cx-inbox-count" style="font-size:10px;color:var(--text3)"></span>
           <div style="flex:1"></div>
-          <div style="display:flex;gap:2px">
-            <button class="btn btn-ghost cx-type-filter active" onclick="_filterCortexType('all',this)" style="font-size:10px;padding:2px 6px">All</button>
-            <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('semantic',this)" style="font-size:10px;padding:2px 6px">Facts</button>
-            <button class="btn btn-ghost cx-type-filter" onclick="_filterCortexType('episodic',this)" style="font-size:10px;padding:2px 6px">Episodes</button>
-          </div>
+
         </div>
         <div style="padding:4px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
-          <input type="text" id="cx-search" placeholder="Search memories..." oninput="_searchCortexMemories(this.value)" style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none;box-sizing:border-box" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+          <input type="text" id="cx-search" placeholder="Search..." oninput="_searchCortexMemories(this.value)" style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none;box-sizing:border-box" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
         </div>
         <div id="cx-filter-bar" style="display:none;padding:4px 12px;border-bottom:1px solid var(--border);flex-shrink:0;background:color-mix(in srgb,var(--accent) 8%,var(--bg2))">
           <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)">
@@ -9806,6 +9802,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.37', date:'2026-03-08', notes:['Cortex: removed filter bar, condensed toolbar, icon-only buttons','Agent shows actual name, edit has Squad scope + agent picker','Squad scope for shared learnings, graph strokes thinned'] },
   { ver:'v0.28.36', date:'2026-03-08', notes:['Dark mode overhaul: --text2 → #E0, --text3 → #C0 (45+ elements fixed)','All 9px fonts bumped to 10px (minimum readable size)','Fixed status pills: cancelled/pending now visible','Workflow interval inputs wider (no more cut-off numbers)','Nav group labels brighter'] },
   { ver:'v0.28.35', date:'2026-03-08', notes:['Dark mode readability: brightened --text2 (#C0→#D4), --text3 (#90→#B0)','Raised surfaces and borders for better card separation','All UI labels, descriptions, stats now higher contrast'] },
   { ver:'v0.28.34', date:'2026-03-08', notes:['Restored IDENTITY.md + ROLE_CARD.md separation (reverted hygiene merge)','Squad awareness: agents see teammate roster, propose [HANDOFF: Name]','Fixed interval save crash (null body guard)','Workflow cards show trigger details','Disabled hygiene merge daemon (persona files stay separate)'] },
@@ -11702,7 +11699,7 @@ function switchModule(name) {
                     _cortexMemories = mems.memories;
                     _renderCortexMemories(_cortexMemories);
                     var countEl = document.getElementById('cx-inbox-count');
-                    if (countEl) countEl.textContent = _cortexMemories.length + ' fact' + (_cortexMemories.length !== 1 ? 's' : '');
+                    if (countEl) { var _total = (mems && mems.total) || _cortexMemories.length; countEl.textContent = _total + ' memor' + (_total !== 1 ? 'ies' : 'y'); }
                   }
                 }).catch(function(){});
               }
@@ -11746,9 +11743,9 @@ async function loadWorkflowRegistry() {
       // Running indicator
       var runningBar = '';
       if (wf.running) {
-        runningBar = '<div style="margin:8px 0;padding:6px 8px;background:color-mix(in srgb,#3b82f6 8%,transparent);border:1px solid color-mix(in srgb,#3b82f6 20%,transparent);border-radius:6px;display:flex;align-items:center;gap:8px">'
+        runningBar = '<div style="margin:8px 0;padding:6px 8px;background:color-mix(in srgb,#3b82f6 12%,transparent);border:1px solid color-mix(in srgb,#3b82f6 25%,transparent);border-radius:6px;display:flex;align-items:center;gap:8px">'
           + '<span class="learn-spinner"></span>'
-          + '<span style="font-size:11px;color:#3b82f6;font-weight:500">Running' + (wf.running_for_s ? ' (' + Math.round(wf.running_for_s) + 's)' : '') + '</span>'
+          + '<span style="font-size:12px;color:#93c5fd;font-weight:600">Running' + (wf.running_for_s ? ' (' + Math.round(wf.running_for_s) + 's)' : '') + '</span>'
           + '<div style="flex:1;height:4px;background:rgba(59,130,246,0.15);border-radius:2px;overflow:hidden"><div style="height:100%;background:#3b82f6;border-radius:2px;animation:wf-progress 2s ease-in-out infinite"></div></div>'
           + '</div>';
       }
@@ -11791,7 +11788,7 @@ async function loadWorkflowRegistry() {
         + '<div class="wf-err-slot">' + errBanner + '</div>'
         + '<div class="wf-btn-slot" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
         + '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfToggle(\'' + wf.id + '\')">' + toggleLabel + '</button>'
-        + (canTrigger ? (wf.running ? '<button class="btn btn-ghost" style="font-size:11px;color:#3b82f6" disabled>Running...</button>' : '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfTrigger(\'' + wf.id + '\')">\u25B6 Run Now</button>') : '')
+        + (canTrigger ? (wf.running ? '<span style="font-size:12px;color:#93c5fd;font-weight:600;padding:4px 8px">Running...</span>' : '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfTrigger(\'' + wf.id + '\')">\u25B6 Run Now</button>') : '')
         + '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfShowHistory(\'' + wf.id + '\')">History</button>'
         + '</div>'
         + '<div id="wf-history-' + wf.id + '" style="display:none;margin-top:8px;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;max-height:200px;overflow-y:auto"></div>'
@@ -11920,9 +11917,9 @@ async function _wfRefreshSystemOnly() {
       var rs = card.querySelector('.wf-running-slot');
       if (rs) {
         if (wf.running) {
-          rs.innerHTML = '<div style="margin:8px 0;padding:6px 8px;background:color-mix(in srgb,#3b82f6 8%,transparent);border:1px solid color-mix(in srgb,#3b82f6 20%,transparent);border-radius:6px;display:flex;align-items:center;gap:8px">'
+          rs.innerHTML = '<div style="margin:8px 0;padding:6px 8px;background:color-mix(in srgb,#3b82f6 12%,transparent);border:1px solid color-mix(in srgb,#3b82f6 25%,transparent);border-radius:6px;display:flex;align-items:center;gap:8px">'
             + '<span class="learn-spinner"></span>'
-            + '<span style="font-size:11px;color:#3b82f6;font-weight:500">Running' + (wf.running_for_s ? ' (' + Math.round(wf.running_for_s) + 's)' : '') + '</span>'
+            + '<span style="font-size:12px;color:#93c5fd;font-weight:600">Running' + (wf.running_for_s ? ' (' + Math.round(wf.running_for_s) + 's)' : '') + '</span>'
             + '<div style="flex:1;height:4px;background:rgba(59,130,246,0.15);border-radius:2px;overflow:hidden"><div style="height:100%;background:#3b82f6;border-radius:2px;animation:wf-progress 2s ease-in-out infinite"></div></div>'
             + '</div>';
         } else { rs.innerHTML = ''; }
@@ -11971,11 +11968,22 @@ async function _wfToggle(id) {
 }
 
 async function _wfTrigger(id) {
+  // Immediately show running state client-side
+  var card = document.querySelector('.wf-card[data-wf-id="' + id + '"]');
+  if (card) {
+    var rs = card.querySelector('.wf-running-slot');
+    if (rs) rs.innerHTML = '<div style="margin:8px 0;padding:6px 8px;background:color-mix(in srgb,#3b82f6 12%,transparent);border:1px solid color-mix(in srgb,#3b82f6 25%,transparent);border-radius:6px;display:flex;align-items:center;gap:8px">'
+      + '<span class="learn-spinner"></span>'
+      + '<span style="font-size:12px;color:#93c5fd;font-weight:600">Running...</span>'
+      + '<div style="flex:1;height:4px;background:rgba(59,130,246,0.15);border-radius:2px;overflow:hidden"><div style="height:100%;background:#3b82f6;border-radius:2px;animation:wf-progress 2s ease-in-out infinite"></div></div>'
+      + '</div>';
+    var st = card.querySelector('.wf-status'); if (st) { st.textContent = 'running'; st.style.color = '#93c5fd'; }
+    var dot = card.querySelector('.wf-dot'); if (dot) { dot.style.background = '#3b82f6'; dot.style.animation = 'cx-blink 1s ease-in-out infinite'; }
+  }
   try {
     var r = await api('/api/workflows/' + id + '/trigger', {});
     if (r && r.ok) {
-      toast('Running ' + id + '...', 'ok');
-      // Poll briefly for completion, then refresh
+      // Poll for completion, then show result
       var _polls = 0;
       var _pollFn = function() {
         _polls++;
@@ -11983,20 +11991,21 @@ async function _wfTrigger(id) {
           if (!data || !data.workflows) return;
           var wf = data.workflows.find(function(w) { return w.id === id; });
           if (wf && !wf.running) {
-            var msg = wf.last_error ? 'Error: ' + wf.last_error : (wf.last_result || 'Done');
-            toast(id + ': ' + msg, wf.last_error ? 'err' : 'ok');
+            if (wf.last_error) toast(wf.last_error, 'err');
             loadWorkflowRegistry();
-          } else if (_polls < 10) {
-            setTimeout(_pollFn, 1000);
+          } else if (_polls < 15) {
+            setTimeout(_pollFn, 800);
           } else {
             loadWorkflowRegistry();
           }
         });
       };
-      setTimeout(_pollFn, 500);
+      setTimeout(_pollFn, 300);
+    } else {
+      toast((r && r.error) || 'Trigger failed', 'err');
+      loadWorkflowRegistry();
     }
-    else toast((r && r.error) || 'Trigger failed', 'err');
-  } catch(e) { toast('Error: ' + e.message, 'err'); }
+  } catch(e) { toast('Error: ' + e.message, 'err'); loadWorkflowRegistry(); }
 }
 
 function _wfShowConfig(id) {
@@ -12514,7 +12523,6 @@ async function _preloadSessionCounts() {
       }
     } catch(e) { /* ignore */ }
   });
-  setTimeout(_updateExtractionProgress, 1500);
 }
 
 async function _updateExtractionProgress() {
@@ -12540,7 +12548,7 @@ async function _updateExtractionProgress() {
       + (isRunning
         ? '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:8px;background:color-mix(in srgb,#3b82f6 8%,transparent);border:1px solid color-mix(in srgb,#3b82f6 20%,transparent);border-radius:6px">'
           + '<span class="learn-spinner"></span>'
-          + '<span style="font-size:11px;color:#3b82f6;font-weight:500">Extracting learnings...</span>'
+          + '<span style="font-size:11px;color:#60a5fa;font-weight:500">Extracting learnings...</span>'
           + '<div style="flex:1;height:4px;background:rgba(59,130,246,0.15);border-radius:2px;overflow:hidden"><div style="height:100%;background:#3b82f6;border-radius:2px;animation:wf-progress 2s ease-in-out infinite"></div></div>'
           + '</div>'
         : '')
@@ -12552,7 +12560,7 @@ async function _updateExtractionProgress() {
       + '</div>'
       + '<div style="display:flex;gap:6px">'
       + (isRunning
-        ? '<button class="btn btn-ghost" style="font-size:11px;color:#3b82f6" onclick="_extractAllRunning=false;_updateExtractionProgress()">\u23F8 Stop</button>'
+        ? '<button class="btn btn-ghost" style="font-size:11px;color:#60a5fa" onclick="_extractAllRunning=false;_updateExtractionProgress()">\u23F8 Stop</button>'
         : (remaining > 0
           ? '<button class="btn btn-ghost" style="font-size:11px" onclick="_triggerExtractAll()">\u25B6 Extract All</button>'
           : '<button class="btn btn-ghost" style="font-size:11px;opacity:0.5" disabled>\u2713 Complete</button>'))
@@ -14561,10 +14569,15 @@ function chatSend() {
         if (data && data.backends) {
           Object.keys(data.backends).forEach(function(b) {
             var info = data.backends[b];
-            var status = info.available ? '\u2705' : '\u274c';
-            lines.push('**' + b + '** ' + status);
-            if (info.models && info.models.length) {
-              info.models.forEach(function(m) { lines.push('  - `' + (m.id || m.name || m) + '`'); });
+            var hasModels = info.models && info.models.filter(function(m) { return m.id !== 'auto'; }).length > 0;
+            var status = hasModels ? '\u2705' : '\u274c';
+            var active = info.resolved ? ' \u2192 `' + info.resolved + '`' : '';
+            lines.push('**' + b + '** ' + status + active);
+            if (hasModels) {
+              info.models.forEach(function(m) {
+                if (m.id === 'auto') return;
+                lines.push('  - `' + (m.id || m.name || m) + '`');
+              });
             }
           });
         }
@@ -16569,6 +16582,7 @@ function _elapsedStr(startTs) {
 
 async function loadModels() {
   _preloadSessionCounts();
+  _updateExtractionProgress();
   try {
     var [data, act, avail] = await Promise.all([
       api('/api/providers'),
@@ -16703,7 +16717,7 @@ function _renderCortexMemories(memories) {
     el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text3)"><div style="font-size:28px;margin-bottom:8px">\u2728</div><div style="font-size:13px">No memories yet</div><div style="font-size:12px;margin-top:4px">Dispatch to an agent to start building memory</div></div>';
     return;
   }
-  var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80'};
+  var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80', squad:'#f0abfc'};
   var html = '';
   memories.forEach(function(m) {
     var sc = m.scope || 'global';
@@ -16717,28 +16731,23 @@ function _renderCortexMemories(memories) {
     // Status dot (green=active, gray=archived)
     var statusDot = '<span style="width:6px;height:6px;border-radius:50%;background:' + (memStatus === 'active' ? 'var(--green,#4ade80)' : '#666') + ';display:inline-block" title="' + memStatus + '"></span>';
     // Type pill removed — redundant with scope tag
-    html += '<div class="cx-mem-card cx-mem-row" data-scope="' + sc + '" data-id="' + m.id + '" data-type="' + memType + '" data-status="' + memStatus + '" style="padding:8px 10px">'
+    html += '<div class="cx-mem-card cx-mem-row" data-scope="' + sc + '" data-scope-id="' + (m.scope_id || '') + '" data-id="' + m.id + '" data-type="' + memType + '" data-status="' + memStatus + '" style="padding:8px 10px">'
       + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
       + statusDot
       + (function() {
         var label = sc;
-        if (sc === 'agent' && m.scope_id) {
-          var pMap = window._personaMap || {};
-          label = pMap[m.scope_id] || m.scope_id.substring(0, 8);
-        }
+        if (sc === 'agent') { if (m.scope_id) { var pMap = window._personaMap || {}; label = pMap[m.scope_id] || m.scope_id.substring(0, 8); } else { label = 'Unassigned'; } }
+        else if (sc === 'squad') { label = 'Squad'; }
         return '<span style="font-size:10px;font-weight:600;color:' + scColor + ';text-transform:uppercase;background:color-mix(in srgb,' + scColor + ' 12%,transparent);padding:2px 8px;border-radius:4px;letter-spacing:0.5px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle">' + escHtml(label) + '</span>';
       })()
-      + impBar
-      + (m.source_type === 'session' && m.source_id
-        ? '<a href="#" onclick="event.preventDefault();event.stopPropagation();_openCortexSession(\'' + escHtml(m.source_id) + '\')" style="font-size:10px;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:3px" title="Open session"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>session</a>'
-        : '')
+      )
       + '<div style="flex:1"></div>'
-      + '<span style="font-size:10px;color:var(--text3);white-space:nowrap">' + (m.created_at ? new Date(m.created_at * 1000).toLocaleDateString(undefined, {month:'short',day:'numeric'}) + ' ' + new Date(m.created_at * 1000).toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit'}) : '') + '</span>'
+      + '<span style="font-size:10px;color:var(--text3);white-space:nowrap">' + (m.created_at ? new Date(m.created_at * 1000).toLocaleDateString(undefined, {month:'short',day:'numeric'}) : '') + '</span>'
       + (memStatus === 'active'
-        ? '<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px;color:var(--text3)" onclick="event.stopPropagation();_archiveCortexMem(' + m.id + ',this)" title="Archive">Archive</button>'
-        : '<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px;color:var(--green,#4ade80)" onclick="event.stopPropagation();_restoreCortexMem(' + m.id + ',this)" title="Restore">Restore</button>')
-      + '<button class="btn btn-ghost" style="font-size:14px;padding:4px 10px" onclick="event.stopPropagation();_editCortexMem(' + m.id + ',this)" title="Edit">\u270f\ufe0e</button>'
-      + '<button class="btn btn-ghost" style="font-size:14px;padding:4px 8px;color:var(--red,#f87171);flex-shrink:0" onclick="event.stopPropagation();_deleteCortexMem(' + m.id + ',this)" title="Delete">\u00d7</button>'
+        ? '<button class="btn btn-ghost" style="font-size:11px;padding:2px 5px;color:var(--text3)" onclick="event.stopPropagation();_archiveCortexMem(' + m.id + ',this)" title="Archive">\u2193</button>'
+        : '<button class="btn btn-ghost" style="font-size:11px;padding:2px 5px;color:var(--green,#4ade80)" onclick="event.stopPropagation();_restoreCortexMem(' + m.id + ',this)" title="Restore">\u2191</button>')
+      + '<button class="btn btn-ghost" style="font-size:11px;padding:2px 5px" onclick="event.stopPropagation();_editCortexMem(' + m.id + ',this)" title="Edit">\u270f\ufe0e</button>'
+      + '<button class="btn btn-ghost" style="font-size:11px;padding:2px 5px;color:var(--red,#f87171);flex-shrink:0" onclick="event.stopPropagation();_deleteCortexMem(' + m.id + ',this)" title="Delete">\u00d7</button>'
       + '</div>'
       + '<div class="cx-fact-text" style="font-size:13px;color:var(--text);line-height:1.5;cursor:pointer;word-break:break-word;overflow-wrap:break-word" onclick="_editCortexMem(' + m.id + ',this)" title="Click to edit">' + escHtml(m.fact || '') + '</div>'
       + '</div>';
@@ -16871,6 +16880,7 @@ async function _editCortexMem(id, btn) {
   var oldText = textEl.textContent;
   var scopeEl = card.querySelector('[data-scope]') || card;
   var currentScope = card.getAttribute('data-scope') || 'global';
+  var currentScopeId = card.getAttribute('data-scope-id') || '';
 
   // Build modal
   var overlay = document.createElement('div');
@@ -16883,10 +16893,16 @@ async function _editCortexMem(id, btn) {
     + '<div style="display:flex;gap:12px;margin-top:12px">'
     + '<label style="font-size:12px;color:var(--text3);flex:1">'
     + 'Scope'
-    + '<select id="cx-edit-scope" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)">'
+    + '<select id="cx-edit-scope" onchange="var _l=document.getElementById('cx-edit-sid-wrap');if(_l)_l.style.display=this.value==='agent'?'block':'none'" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)">'
     + '<option value="global"' + (currentScope === 'global' ? ' selected' : '') + '>Global</option>'
+    + '<option value="squad"' + (currentScope === 'squad' ? ' selected' : '') + '>Squad (shared)</option>'
     + '<option value="agent"' + (currentScope === 'agent' ? ' selected' : '') + '>Agent</option>'
     + '<option value="project"' + (currentScope === 'project' ? ' selected' : '') + '>Project</option>'
+    + '</select></label>'
+    + '<label id="cx-edit-sid-wrap" style="font-size:12px;color:var(--text3);flex:1;display:' + (currentScope === 'agent' ? 'block' : 'none') + '">Agent'
+    + '<select id="cx-edit-scope-id" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)">'
+    + '<option value="">\u2014 select \u2014</option>'
+    + (_cortexAgents || []).map(function(a) { return '<option value="' + a.id + '"' + (currentScopeId === a.id ? ' selected' : '') + '>' + escHtml(a.name) + '</option>'; }).join('')
     + '</select></label>'
     + '</div>'
     + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">'
@@ -16909,18 +16925,20 @@ async function _editCortexMem(id, btn) {
   document.getElementById('cx-edit-save').onclick = async function() {
     var newText = textarea.value.trim();
     var newScope = document.getElementById('cx-edit-scope').value;
+    var newScopeId = '';
+    if (newScope === 'agent') { var _sel = document.getElementById('cx-edit-scope-id'); newScopeId = _sel ? _sel.value : ''; }
     if (!newText) { toast('Fact cannot be empty', 'warn'); return; }
     this.disabled = true;
     this.textContent = 'Saving...';
     try {
-      var r = await api('/api/cortex/memories/' + id + '/update', { fact: newText, scope: newScope });
+      var r = await api('/api/cortex/memories/' + id + '/update', { fact: newText, scope: newScope, scope_id: newScopeId });
       if (r && r.ok) {
         if (textEl) textEl.textContent = newText;
         if (card) {
           card.setAttribute('data-scope', newScope);
-          var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80'};
+          var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80', squad:'#f0abfc'};
           var badge = card.querySelector('span[style*="text-transform:uppercase"]');
-          if (badge) { badge.textContent = newScope; badge.style.color = scopeColors[newScope] || 'var(--text3)'; badge.style.background = 'color-mix(in srgb,' + (scopeColors[newScope] || '#888') + ' 12%,transparent)'; }
+          if (badge) { var _bl = newScope; if (newScope === 'agent' && newScopeId) { var _pm = window._personaMap || {}; _bl = _pm[newScopeId] || newScopeId.substring(0,8); } else if (newScope === 'squad') { _bl = 'Squad'; } badge.textContent = _bl; badge.style.color = scopeColors[newScope] || 'var(--text3)'; badge.style.background = 'color-mix(in srgb,' + (scopeColors[newScope] || '#888') + ' 12%,transparent)'; }
         }
         toast('Memory updated');
         _close();
@@ -17428,7 +17446,7 @@ function _drawGraph() {
       ctx.fillStyle = 'rgba('+r+','+g+','+bl+',0.12)';
       ctx.fill();
       ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1;
       ctx.stroke();
     } else if (n.type === 'global') {
       // Hexagon
@@ -17442,7 +17460,7 @@ function _drawGraph() {
       ctx.fillStyle = 'rgba('+r+','+g+','+bl+',0.12)';
       ctx.fill();
       ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1;
       ctx.stroke();
     } else {
       // Circle (agent + cortex/inbox hub)
@@ -17451,7 +17469,7 @@ function _drawGraph() {
       ctx.fillStyle = 'rgba('+r+','+g+','+bl+',0.12)';
       ctx.fill();
       ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1;
       ctx.stroke();
       // Cortex/inbox hub: pulsing ring
       if (n.type === 'cortex') {
@@ -17459,7 +17477,7 @@ function _drawGraph() {
         ctx.beginPath();
         ctx.arc(n.x, n.y, pulseR, 0, Math.PI * 2);
         ctx.strokeStyle = 'rgba('+r+','+g+','+bl+',0.3)';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 0.8;
         ctx.stroke();
       }
     }
@@ -24870,7 +24888,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.36"})
+            self.reply_json({"v": "0.28.37"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25032,7 +25050,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.36"
+                health["porter_version"] = "0.28.37"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -25710,6 +25728,14 @@ class Handler(BaseHTTPRequestHandler):
                     # Connect agents to global if global exists
                     if global_node_idx >= 0:
                         edges.append({"source": global_node_idx, "target": node_idx, "weight": 1})
+                # Squad node
+                squad_c = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE scope='squad' AND consolidated_into IS NULL").fetchone()[0]
+                if squad_c > 0:
+                    _si = len(nodes)
+                    nodes.append({"id": "squad", "label": "Squad", "type": "squad", "emoji": "\U0001f91d", "radius": 18 + min(8, squad_c), "count": squad_c})
+                    edges.append({"source": 0, "target": _si, "weight": max(1, min(6, squad_c))})
+                    if global_node_idx >= 0:
+                        edges.append({"source": global_node_idx, "target": _si, "weight": 1})
                 # Project nodes (only if they have memories)
                 projects = conn.execute("SELECT DISTINCT scope_id FROM cortex_memories WHERE scope='project' AND consolidated_into IS NULL AND scope_id != ''").fetchall()
                 for proj in projects:
@@ -26855,7 +26881,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.36'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.37'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29372,9 +29398,10 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             try:
                 conn = _db_conn()
                 new_scope = str(data.get("scope", "")).strip()
-                if new_scope and new_scope in ("global", "agent", "project"):
-                    conn.execute("UPDATE cortex_memories SET fact=?, scope=?, keywords=?, updated_at=strftime('%s','now') WHERE id=?",
-                                 (new_fact, new_scope, ",".join(_cortex_tokenize(new_fact)), mem_id))
+                new_scope_id = str(data.get("scope_id", "")).strip()
+                if new_scope and new_scope in ("global", "agent", "project", "squad"):
+                    conn.execute("UPDATE cortex_memories SET fact=?, scope=?, scope_id=?, keywords=?, updated_at=strftime('%s','now') WHERE id=?",
+                                 (new_fact, new_scope, new_scope_id, ",".join(_cortex_tokenize(new_fact)), mem_id))
                 else:
                     conn.execute("UPDATE cortex_memories SET fact=?, keywords=?, updated_at=strftime('%s','now') WHERE id=?",
                                  (new_fact, ",".join(_cortex_tokenize(new_fact)), mem_id))
@@ -31088,7 +31115,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.36 ready (localhost only)")
+    print(f"\n  Porter v0.28.37 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
