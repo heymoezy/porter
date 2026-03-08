@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.7 — Remove Quests + welcome title + polish"""
+"""Porter v0.29.8 — Phase 2: Squads foundation (DB + API)"""
 
 
 import email
@@ -6186,6 +6186,57 @@ def _init_trace_tables():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_scope ON cortex_memories(scope, scope_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_active ON cortex_memories(consolidated_into)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_list ON cortex_memories(status, consolidated_into, scope, scope_id, created_at DESC)")
+
+    # v0.29.8 — Squads tables
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS squads (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT DEFAULT '',
+        dispatch_policy TEXT DEFAULT 'best_fit',
+        color TEXT DEFAULT '#6366f1',
+        active INTEGER DEFAULT 1,
+        created_at REAL DEFAULT (strftime('%s','now'))
+    )""")
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS squad_members (
+        squad_id TEXT NOT NULL,
+        persona_id TEXT NOT NULL,
+        role TEXT DEFAULT 'member',
+        position INTEGER DEFAULT 50,
+        PRIMARY KEY (squad_id, persona_id)
+    )""")
+    # Auto-seed squads from existing agent_group values
+    try:
+        existing_groups = conn.execute(
+            "SELECT DISTINCT agent_group FROM personas WHERE agent_group != '' AND agent_group IS NOT NULL"
+        ).fetchall()
+        group_colors = {
+            'Orchestrator': '#ef4444', 'Strategy': '#6366f1',
+            'Creative': '#ec4899', 'Technical': '#06b6d4', 'Operations': '#f59e0b'
+        }
+        for (grp,) in existing_groups:
+            try:
+                import uuid as _uuid
+                sid = _uuid.uuid4().hex[:16]
+                conn.execute(
+                    "INSERT OR IGNORE INTO squads (id, name, color) VALUES (?, ?, ?)",
+                    (sid, grp, group_colors.get(grp, '#6366f1'))
+                )
+                # Add members from that group
+                members = conn.execute(
+                    "SELECT id FROM personas WHERE agent_group=?", (grp,)
+                ).fetchall()
+                for (pid,) in members:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO squad_members (squad_id, persona_id) VALUES (?, ?)",
+                        (sid, pid)
+                    )
+            except Exception:
+                pass
+        conn.commit()
+    except Exception:
+        pass
     # v0.28.0 — Cortex memory refactor: add lifecycle columns
     for _col_def in [
         ("memory_type", "TEXT DEFAULT 'semantic'"),
@@ -8916,7 +8967,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.7</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.8</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10169,6 +10220,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.8', date:'2026-03-08', notes:['Phase 2: Squads foundation \u2014 squads + squad_members tables','Auto-seed squads from existing agent_group values','GET /api/squads with member list + counts','POST /api/squads (create/update/delete + member management)'] },
   { ver:'v0.29.7', date:'2026-03-08', notes:['Removed dead Quests section from chat welcome','Added \u26A1 Porter title above chat input','Cleaned up static + dynamic welcome HTML'] },
   { ver:'v0.29.6', date:'2026-03-08', notes:['Fix: undefined avatar in chat agent selector (null-safe)','XSS escape in chat context selector labels','Optimized persona poll (direct DOM update, no full chat rerender)','Null guard in persona dispatch'] },
   { ver:'v0.29.5', date:'2026-03-08', notes:['Click-to-edit name/role/avatar in agent identity card','Profile editing integrated into header (not separate section)','Saves inline on Enter/blur'] },
@@ -23959,6 +24011,46 @@ def _persona_list():
         log.debug("_persona_list error: %s", e)
         return []
 
+
+def _squad_list():
+    """Return all squads with member counts."""
+    try:
+        conn = _db_conn()
+        squads = conn.execute(
+            "SELECT s.id, s.name, s.description, s.dispatch_policy, s.color, s.active, "
+            "COUNT(sm.persona_id) as member_count "
+            "FROM squads s LEFT JOIN squad_members sm ON s.id = sm.squad_id "
+            "GROUP BY s.id ORDER BY s.name"
+        ).fetchall()
+        result = []
+        for s in squads:
+            members = conn.execute(
+                "SELECT p.id, p.name, p.avatar, p.role, p.status, sm.role as squad_role "
+                "FROM squad_members sm JOIN personas p ON sm.persona_id = p.id "
+                "WHERE sm.squad_id=? ORDER BY sm.position", (s[0],)
+            ).fetchall()
+            result.append({
+                "id": s[0], "name": s[1], "description": s[2] or "",
+                "dispatch_policy": s[3], "color": s[4], "active": bool(s[5]),
+                "member_count": s[6],
+                "members": [{"id": m[0], "name": m[1], "avatar": m[2], "role": m[3],
+                             "status": m[4], "squad_role": m[5]} for m in members]
+            })
+        conn.close()
+        return result
+    except Exception as e:
+        log.error("_squad_list failed: %s", e)
+        return []
+
+def _squad_by_id(squad_id):
+    """Return single squad with members."""
+    squads = _squad_list()
+    for s in squads:
+        if s["id"] == squad_id:
+            return s
+    return None
+
+
 def _persona_create(data):
     """Create a new persona, writing DB row + filesystem."""
     import hashlib
@@ -25518,6 +25610,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": str(e)[:200]}, 500)
             return
 
+        # v0.29.8 — Squads API
+        elif parsed.path == "/api/squads":
+            if not self.auth_check(redirect=False): return
+            self.reply_json({"ok": True, "squads": _squad_list()})
+
         elif parsed.path == "/api/personas/stats":
             # v0.28.54 — Per-agent cortex confidence + evidence stats
             if not self.auth_check(redirect=False): return
@@ -25606,7 +25703,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.7"})
+            self.reply_json({"v": "0.29.8"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25768,7 +25865,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.7"
+                health["porter_version"] = "0.29.8"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27577,7 +27674,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.7'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.8'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -29567,6 +29664,64 @@ class Handler(BaseHTTPRequestHandler):
                     delta = _td(days=val) if unit == "d" else _td(hours=val)
                     result["auth_expires_at"] = (_now + delta).isoformat()
             self.reply_json(result)
+
+        # ── v0.29.8 — Squads POST API ──────────────────────────────────
+        elif parsed.path == "/api/squads":
+            if not self.auth_check(redirect=False): return
+            body = self.read_json_body()
+            if not body:
+                self.reply_json({"ok": False, "error": "Invalid JSON"}, 400); return
+            action = body.get("action", "create")
+            if action == "create":
+                import uuid as _uuid
+                sid = _uuid.uuid4().hex[:16]
+                name = body.get("name", "").strip()
+                if not name:
+                    self.reply_json({"ok": False, "error": "Name required"}, 400); return
+                try:
+                    conn = _db_conn()
+                    conn.execute("INSERT INTO squads (id, name, description, dispatch_policy, color) VALUES (?,?,?,?,?)",
+                                 (sid, name, body.get("description",""), body.get("dispatch_policy","best_fit"), body.get("color","#6366f1")))
+                    for pid in body.get("members", []):
+                        conn.execute("INSERT OR IGNORE INTO squad_members (squad_id, persona_id) VALUES (?,?)", (sid, pid))
+                    conn.commit(); conn.close()
+                    self.reply_json({"ok": True, "id": sid})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)[:200]}, 500)
+            elif action == "update":
+                sid = body.get("id", "")
+                if not sid:
+                    self.reply_json({"ok": False, "error": "id required"}, 400); return
+                sets, vals = [], []
+                for f in ("name", "description", "dispatch_policy", "color"):
+                    if f in body:
+                        sets.append(f"{f}=?"); vals.append(body[f])
+                if "active" in body:
+                    sets.append("active=?"); vals.append(1 if body["active"] else 0)
+                try:
+                    conn = _db_conn()
+                    if sets:
+                        vals.append(sid)
+                        conn.execute(f"UPDATE squads SET {', '.join(sets)} WHERE id=?", vals)
+                    if "members" in body:
+                        conn.execute("DELETE FROM squad_members WHERE squad_id=?", (sid,))
+                        for pid in body["members"]:
+                            conn.execute("INSERT INTO squad_members (squad_id, persona_id) VALUES (?,?)", (sid, pid))
+                    conn.commit(); conn.close()
+                    self.reply_json({"ok": True})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)[:200]}, 500)
+            elif action == "delete":
+                sid = body.get("id", "")
+                try:
+                    conn = _db_conn()
+                    conn.execute("DELETE FROM squad_members WHERE squad_id=?", (sid,))
+                    conn.execute("DELETE FROM squads WHERE id=?", (sid,))
+                    conn.commit(); conn.close()
+                    self.reply_json({"ok": True})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)[:200]}, 500)
+            return
 
         # ── agents CRUD ────────────────────────────────────────────────────
         # ── Persona CRUD (POST) ─────────────────────────────────────
@@ -31999,7 +32154,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.7 ready (localhost only)")
+    print(f"\n  Porter v0.29.8 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
