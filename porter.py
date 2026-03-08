@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.32 — Projects tab: real containers"""
+"""Porter v0.29.33 — Squad skill assignment + Kraken CLI"""
 
 
 import email
@@ -9156,7 +9156,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.32</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.33</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10442,6 +10442,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.33', date:'2026-03-08', notes:['Kraken CLI added to Extensions tool detection','Squad-wide skill assignment: assign a skill to all squad members at once','Recommended skills section shown in Installed view (not just Discover)','Improved skill recommendations: file/deploy/ops agents get matching skills'] },
   { ver:'v0.29.32', date:'2026-03-08', notes:['Projects tab: replaced Coming Soon with real project containers','Project list: card grid with status dots, agent count, token usage','Project detail: tabbed view (Overview, Agents, Workflows, Memory, Settings)','Overview: stats grid, workspace files with exists/size indicators','Agents: assign/unassign with avatar chips','Memory: project-scoped Cortex learnings inline','Settings: edit name, description, type, set active, delete'] },
   { ver:'v0.29.31', date:'2026-03-08', notes:['Rewrote drag-and-drop with pointer events (mousedown/mousemove/mouseup)','Replaced unreliable HTML5 Drag and Drop API','5px deadzone before drag activates (prevents accidental drags on click)','Touch support: ontouchstart/touchmove/touchend for mobile','Clone follows cursor at exact grab offset','Click-through: short clicks still select agent (no drag conflict)'] },
   { ver:'v0.29.30', date:'2026-03-08', notes:['Agent Skills tab redesign: cards matching global Skills tab style','Installed/Discover toggle — only assigned skills shown by default','Search input filters skills in both views','Category chips for filtering in Discover view','Recommended skills highlighted with badge in Discover view','Assign/Remove buttons with auto-refresh'] },
@@ -20289,19 +20290,27 @@ function _isSkillRecommended(sk, persona) {
   var n = ((sk.name || sk.id || '') + ' ' + (sk.description || '')).toLowerCase();
   // Technical agents → dev/devops/quality skills
   if (/engineer|technical|cto|backend|frontend|dev/.test(role)) {
-    if (/git|docker|test|lint|build|deploy|db|sql|code/.test(n)) return true;
+    if (/git|docker|test|lint|build|deploy|db|sql|code|ci|cd|pipeline/.test(n)) return true;
   }
-  // Creative agents → docs/web skills
+  // Creative agents → docs/web/image skills
   if (/design|creative|ux|copy|market/.test(role)) {
-    if (/doc|write|web|search|browse|image/.test(n)) return true;
+    if (/doc|write|web|search|browse|image|figma|design|sketch|css/.test(n)) return true;
   }
   // Research/strategy → web/ai/search skills
   if (/research|strateg|analy/.test(role)) {
-    if (/search|web|fetch|ai|llm|doc/.test(n)) return true;
+    if (/search|web|fetch|ai|llm|doc|scrape|data|report/.test(n)) return true;
   }
-  // QA → quality/test skills
+  // QA → quality/test/security skills
   if (/qa|quality|test|bug/.test(role)) {
-    if (/test|lint|check|format/.test(n)) return true;
+    if (/test|lint|check|format|security|scan|audit/.test(n)) return true;
+  }
+  // DevOps/Release → deploy/infra skills
+  if (/deploy|release|ops|infra|sre/.test(role)) {
+    if (/deploy|docker|k8s|kube|ci|cd|pipeline|build|release|monitor/.test(n)) return true;
+  }
+  // Orchestrator → everything management
+  if (/orchestrat|lead|manage|direct/.test(role)) {
+    if (/ai|llm|deploy|git|search|doc/.test(n)) return true;
   }
   return false;
 }
@@ -20368,7 +20377,7 @@ function _renderPersonaSkills() {
   q = q.toLowerCase().trim();
 
   if (_psView === 'installed') {
-    // Show only assigned skills
+    // Show assigned skills + recommended section
     var shown = assignedSkills;
     if (q) shown = shown.filter(function(s) { return ((s.name||s.id||'')+(s.description||'')).toLowerCase().indexOf(q) >= 0; });
     if (!shown.length) {
@@ -20379,6 +20388,15 @@ function _renderPersonaSkills() {
     } else {
       html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">';
       shown.forEach(function(sk) { html += _psCard(sk, pid); });
+      html += '</div>';
+    }
+    // v0.29.33 — Show recommended skills below assigned ones
+    var recForYou = skills.filter(function(s) { return !s._assigned && s._recommended; });
+    if (q) recForYou = recForYou.filter(function(s) { return ((s.name||s.id||'')+(s.description||'')).toLowerCase().indexOf(q) >= 0; });
+    if (recForYou.length) {
+      html += '<div style="font-size:10px;font-weight:600;color:#22c55e;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 6px">Recommended for ' + escHtml((window._selectedPersona||{}).name||'this agent') + ' (' + recForYou.length + ')</div>';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">';
+      recForYou.forEach(function(sk) { html += _psCard(sk, pid); });
       html += '</div>';
     }
   } else {
@@ -20454,7 +20472,8 @@ function _psCard(sk, pid) {
   if (isAssigned) {
     action = '<button style="font-size:10px;padding:2px 8px;border:1px solid var(--border2);border-radius:4px;background:none;color:var(--text3);cursor:pointer" onclick="event.stopPropagation();_togglePersonaSkill(\x27'+pid+'\x27,\x27'+escHtml(name)+'\x27,false).then(function(){_loadPersonaSkills(\x27'+pid+'\x27)})">Remove</button>';
   } else {
-    action = '<button style="font-size:10px;padding:2px 10px;border:1px solid var(--accent);border-radius:4px;background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();_togglePersonaSkill(\x27'+pid+'\x27,\x27'+escHtml(name)+'\x27,true).then(function(){_loadPersonaSkills(\x27'+pid+'\x27)})">Assign</button>';
+    action = '<button style="font-size:10px;padding:2px 10px;border:1px solid var(--accent);border-radius:4px;background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();_togglePersonaSkill(\x27'+pid+'\x27,\x27'+escHtml(name)+'\x27,true).then(function(){_loadPersonaSkills(\x27'+pid+'\x27)})">Assign</button>'
+      + ' <button style="font-size:10px;padding:2px 6px;border:1px solid var(--border2);border-radius:4px;background:none;color:var(--text3);cursor:pointer" title="Assign to entire squad" onclick="event.stopPropagation();_assignSkillToSquad(\x27'+escHtml(name).replace(/'/g,'\\x27')+'\x27)">Squad</button>';
   }
   return '<div style="padding:10px 12px;border:1px solid ' + (isAssigned ? 'var(--border)' : 'var(--border2)') + ';border-radius:8px;background:' + (isAssigned ? 'var(--surface)' : 'var(--surface2)') + ';opacity:' + (isAssigned ? '1' : '0.8') + '">'
     + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
@@ -20476,6 +20495,52 @@ async function _togglePersonaSkill(pid, skillName, enabled) {
     await api('/api/personas/' + pid + '/skills', {action: 'set', skills: skills});
     toast(enabled ? 'Skill assigned' : 'Skill removed');
   } catch(e) { toast('Failed to update skills', 'err'); }
+}
+
+// v0.29.33 — Assign a skill to all members of a squad
+async function _assignSkillToSquad(skillName) {
+  var squads = _squads || [];
+  if (!squads.length) { toast('No squads defined', 'err'); return; }
+  // Build squad picker overlay
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center';
+  var box = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:280px;max-width:360px">';
+  box += '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">Assign \x22' + escHtml(skillName) + '\x22 to squad</div>';
+  box += '<div style="display:flex;flex-direction:column;gap:6px">';
+  squads.forEach(function(s) {
+    box += '<button onclick="_doSquadSkillAssign(\x27' + s.id + '\x27,\x27' + escHtml(skillName).replace(/'/g,'\x27') + '\x27);this.closest(\x27div[style*=position\x3afixed]\x27).remove()" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text);cursor:pointer;font-size:12px;text-align:left">'
+      + '<span style="width:10px;height:10px;border-radius:50%;background:' + (s.color || '#6366f1') + ';flex-shrink:0"></span>'
+      + escHtml(s.name) + ' <span style="color:var(--text3);font-size:10px">(' + (s.members||[]).length + ' agents)</span>'
+      + '</button>';
+  });
+  box += '</div>';
+  box += '<button onclick="this.closest(\x27div[style*=position\x3afixed]\x27).remove()" style="margin-top:12px;font-size:11px;padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--text3);cursor:pointer;width:100%">Cancel</button>';
+  box += '</div>';
+  overlay.innerHTML = box;
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+  function _sqSkEsc(e) { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', _sqSkEsc); } }
+  document.addEventListener('keydown', _sqSkEsc);
+  document.body.appendChild(overlay);
+}
+
+async function _doSquadSkillAssign(squadId, skillName) {
+  var squad = (_squads || []).find(function(s) { return s.id === squadId; });
+  if (!squad || !squad.members || !squad.members.length) { toast('Squad has no members', 'err'); return; }
+  var count = 0;
+  for (var i = 0; i < squad.members.length; i++) {
+    var m = squad.members[i];
+    try {
+      var current = await api('/api/personas/' + m.id + '/skills');
+      var skills = ((current && current.skills) || []).map(function(s) { return s.name; });
+      if (skills.indexOf(skillName) < 0) {
+        skills.push(skillName);
+        await api('/api/personas/' + m.id + '/skills', {action: 'set', skills: skills});
+        count++;
+      }
+    } catch(e) { console.error('Squad skill assign error for', m.id, e); }
+  }
+  toast('Assigned to ' + count + '/' + squad.members.length + ' agents', 'ok');
+  if (_psPid) _loadPersonaSkills(_psPid);
 }
 
 function switchFileTab(btn, key) {
@@ -26883,7 +26948,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.32"})
+            self.reply_json({"v": "0.29.33"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27090,6 +27155,7 @@ class Handler(BaseHTTPRequestHandler):
                 ("Gemini CLI", "gemini", "npm i -g @google/gemini-cli"),
                 ("OpenClaw CLI", "openclaw", "npm i -g @anthropic-ai/openclaw"),
                 ("Claude CLI", "claude", "npm i -g @anthropic-ai/claude-code"),
+                ("Kraken CLI", "kraken", "cargo install kraken-cli"),
                 ("GitHub CLI", "gh", "apt install gh"),
                 ("Docker", "docker", "apt install docker.io"),
                 ("Node.js", "node", "apt install nodejs"),
@@ -28879,7 +28945,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.32'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.33'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -33384,7 +33450,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.32 ready (localhost only)")
+    print(f"\n  Porter v0.29.33 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
