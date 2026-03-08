@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.31 — Production cleanup: console removal, session accordion, code hygiene"""
+"""Porter v0.28.32 — Fix heartbeat schema + workflow card refresh"""
 
 
 import email
@@ -5925,7 +5925,13 @@ def _init_trace_tables():
         cols = [r[1] for r in conn.execute("PRAGMA table_info(personas)").fetchall()]
         if "sort_order" not in cols:
             conn.execute("ALTER TABLE personas ADD COLUMN sort_order INTEGER DEFAULT 50")
-            conn.commit()
+        if "heartbeat_enabled" not in cols:
+            conn.execute("ALTER TABLE personas ADD COLUMN heartbeat_enabled INTEGER DEFAULT 0")
+        if "heartbeat_cron" not in cols:
+            conn.execute("ALTER TABLE personas ADD COLUMN heartbeat_cron TEXT DEFAULT ''")
+        if "last_heartbeat" not in cols:
+            conn.execute("ALTER TABLE personas ADD COLUMN last_heartbeat TEXT")
+        conn.commit()
     except Exception:
         pass
 
@@ -8543,7 +8549,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.31</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.32</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9809,6 +9815,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.32', date:'2026-03-08', notes:['Fix: heartbeat workflow error (missing DB columns — added migration)','Fix: workflow cards losing content on auto-refresh (was using minimal renderer)'] },
   { ver:'v0.28.31', date:'2026-03-08', notes:['Models: session accordion (opening one closes others)','Removed 7 console.debug/log calls (production hygiene)','Test suite: 38/38 green (fixed Chat module-title check)'] },
   { ver:'v0.28.30', date:'2026-03-08', notes:['Memory map: HiDPI/Retina canvas scaling (devicePixelRatio)','Memory map: crisp text and nodes on 2x+ displays','XSS: escaped graph tooltip labels, error messages','All graph functions use CSS-pixel math (fit, center, simulation)'] },
   { ver:'v0.28.29', date:'2026-03-08', notes:['Cortex: text search in learnings sidebar','Cortex: filter indicator bar with clear button on node click','Cortex: ambient animation loop (pulsing hub ring, particles)','Cortex: config loads archive_days + min_use from saved prefs','Cortex: scope badge updates color on edit','Cortex: tooltip clamped to canvas bounds','Cortex: inbox count badge now visible','Cortex: consistent fact/facts pluralization'] },
@@ -11900,32 +11907,9 @@ async function _loadExternalSchedulers() {
 }
 
 async function _wfRefreshSystemOnly() {
-  var grid = document.getElementById('wf-system-grid');
-  if (!grid) return;
-  try {
-    var data = await api('/api/workflows');
-    if (!data || !data.workflows) return;
-    var wfs = data.workflows;
-    var countEl = document.getElementById('wf-sys-count');
-    if (countEl) countEl.textContent = wfs.length + ' workflow' + (wfs.length !== 1 ? 's' : '');
-    grid.innerHTML = wfs.map(function(wf) {
-      var dotColor = wf.running ? '#3b82f6' : wf.status === 'active' ? '#22c55e' : wf.status === 'paused' ? '#9ca3af' : '#ef4444';
-      return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'
-        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
-        + '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0"></span>'
-        + '<span style="font-weight:600;font-size:13px;color:var(--text)">' + escHtml(wf.name) + '</span>'
-        + '<span style="margin-left:auto;font-size:11px;color:var(--text3)">' + (wf.running ? 'Running...' : escHtml(wf.status)) + '</span>'
-        + '</div>'
-        + (wf.running ? '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:color-mix(in srgb,#3b82f6 8%,transparent);border:1px solid color-mix(in srgb,#3b82f6 20%,transparent);border-radius:6px"><span class="learn-spinner"></span><span style="font-size:11px;color:#3b82f6">Running' + (wf.running_for_s ? ' (' + Math.round(wf.running_for_s) + 's)' : '') + '</span></div>' : '')
-        + '</div>';
-    }).join('');
-    if (wfs.some(function(w) { return w.running; })) {
-      window._wfRefreshTimer = setTimeout(function() {
-        window._wfRefreshTimer = null;
-        _wfRefreshSystemOnly();
-      }, 8000);
-    }
-  } catch(e) {}
+  // Use the full card renderer — avoids stripping content on refresh
+  var wfMod = document.getElementById('workflows-module');
+  if (wfMod && wfMod.classList.contains('active')) loadWorkflowRegistry();
 }
 
 function _wfTimeAgo(ts) {
@@ -24830,7 +24814,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.31"})
+            self.reply_json({"v": "0.28.32"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -24992,7 +24976,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.31"
+                health["porter_version"] = "0.28.32"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26812,7 +26796,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.31'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.32'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31030,7 +31014,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.31 ready (localhost only)")
+    print(f"\n  Porter v0.28.32 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
