@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.34 — Squad awareness, persona restore, interval fix, workflow triggers"""
+"""Porter v0.28.35 — Squad awareness, persona restore, interval fix, workflow triggers"""
 
 
 import email
@@ -6415,10 +6415,10 @@ LOGIN_PAGE = """<!DOCTYPE html>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23F7931A'/><rect x='9' y='8' width='4' height='16' rx='1.5' fill='white'/><rect x='9' y='8' width='10' height='4' rx='1.5' fill='white'/><rect x='9' y='15' width='10' height='4' rx='1.5' fill='white'/><rect x='19' y='8' width='4' height='11' rx='1.5' fill='white'/></svg>">
 <style>
 :root {
-  --bg: #0F0F0F; --surface: #1A1A1A; --raised: #242424;
-  --border: #2E2E2E; --border2: #363636;
+  --bg: #0F0F0F; --surface: #1C1C1C; --raised: #282828;
+  --border: #3A3A3A; --border2: #454545;
   --accent: #f7931a; --accent-d: #d97706;
-  --text: #F0F0F0; --text2: #C0C0C0; --text3: #909090;
+  --text: #F0F0F0; --text2: #D4D4D4; --text3: #B0B0B0;
   --danger: #dc2626; --radius: 8px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -6607,22 +6607,22 @@ window._mermaidReady = Promise.resolve(mermaid.initialize({
 <style>
 :root {
   --bg:       #0F0F0F;
-  --surface:  #1A1A1A;
-  --raised:   #242424;
-  --border:   #2E2E2E;
-  --border2:  #363636;
+  --surface:  #1C1C1C;
+  --raised:   #282828;
+  --border:   #3A3A3A;
+  --border2:  #454545;
   --accent:   #f7931a;
   --accent-d: #d97706;
   --text:     #F0F0F0;
-  --text2:    #C0C0C0;
-  --text3:    #909090;
+  --text2:    #D4D4D4;
+  --text3:    #B0B0B0;
   --danger:   #dc2626;
   --success:  #16a34a;
-  --bg1:      #151515;
-  --bg2:      #1C1C1C;
-  --bg3:      #202020;
-  --panel:    #161616;
-  --surface2: #1E1E1E;
+  --bg1:      #171717;
+  --bg2:      #202020;
+  --bg3:      #262626;
+  --panel:    #181818;
+  --surface2: #222222;
   --radius:   8px;
   --sidebar:  220px;
   --preview:  460px;
@@ -8539,7 +8539,7 @@ select.settings-input { padding-right: 26px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.34</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.35</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9805,6 +9805,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.35', date:'2026-03-08', notes:['Dark mode readability: brightened --text2 (#C0→#D4), --text3 (#90→#B0)','Raised surfaces and borders for better card separation','All UI labels, descriptions, stats now higher contrast'] },
   { ver:'v0.28.34', date:'2026-03-08', notes:['Restored IDENTITY.md + ROLE_CARD.md separation (reverted hygiene merge)','Squad awareness: agents see teammate roster, propose [HANDOFF: Name]','Fixed interval save crash (null body guard)','Workflow cards show trigger details','Disabled hygiene merge daemon (persona files stay separate)'] },
   { ver:'v0.28.33', date:'2026-03-08', notes:['Fix: error_self_heal + agent_backend_eval runners missing from trigger map','Fix: blink-free workflow refresh (in-place DOM updates, no innerHTML wipe)','Memory extraction: no Run Now button (per-response only)','Workflow cards now have data-wf-id for targeted updates'] },
   { ver:'v0.28.32', date:'2026-03-08', notes:['Fix: heartbeat workflow error (missing DB columns — added migration)','Fix: workflow cards losing content on auto-refresh (was using minimal renderer)'] },
@@ -24857,7 +24858,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.34"})
+            self.reply_json({"v": "0.28.35"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25019,7 +25020,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.34"
+                health["porter_version"] = "0.28.35"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26842,7 +26843,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.34'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.35'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31075,7 +31076,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.34 ready (localhost only)")
+    print(f"\n  Porter v0.28.35 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
