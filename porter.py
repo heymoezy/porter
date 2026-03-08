@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.11 — Startup + polling performance"""
+"""Porter v0.29.12 — Skills tab redesign"""
 
 
 import email
@@ -8967,7 +8967,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.11</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.12</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9482,46 +9482,43 @@ input[type="number"].settings-input { min-width: 60px; }
   <div id="skills-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Skills</span>
-      <button class="btn btn-ghost" onclick="loadSkills()">&#8635; Refresh</button>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span id="wf-skills-count" style="font-size:11px;color:var(--text3)"></span>
+        <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="loadSkills()">&#8635;</button>
+      </div>
     </div>
-    <div class="module-intro">Browse, install, and manage OpenClaw skills.</div>
 
-    <div style="margin-bottom:24px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:600;color:var(--text2);padding:0 4px">Skills</div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span id="wf-skills-count" style="font-size:11px;color:var(--text3)"></span>
-          <button id="wf-show-all-btn" class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="toggleShowAllSkills()">Show all</button>
-          <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="toggleCreateSkillForm()">+ Create</button>
-        </div>
-      </div>
-      <div id="wf-create-form" style="display:none;margin-bottom:14px;padding:16px 20px;border:1px solid var(--accent);border-radius:8px;background:color-mix(in srgb,var(--accent) 4%,var(--bg))">
-        <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:12px">New manual skill</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div style="grid-column:1/-1">
-            <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:3px;display:block">Name *</label>
-            <input type="text" id="wf-new-skill-name" placeholder="e.g. deploy-staging" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;background:var(--raised);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:inherit">
-          </div>
-          <div style="grid-column:1/-1">
-            <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:3px;display:block">Description</label>
-            <input type="text" id="wf-new-skill-desc" placeholder="What does this skill do?" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;background:var(--raised);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:inherit">
-          </div>
-          <div>
-            <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:3px;display:block">Emoji</label>
-            <input type="text" id="wf-new-skill-emoji" placeholder="\u2699" style="width:80px;box-sizing:border-box;padding:8px 10px;font-size:13px;background:var(--raised);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:inherit">
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:14px">
-          <button class="btn btn-accent" style="font-size:12px;padding:6px 16px" onclick="createSkill()">Create skill</button>
-          <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;color:var(--text3)" onclick="toggleCreateSkillForm()">Cancel</button>
-        </div>
-      </div>
-      <div id="wf-skills-search" style="margin-bottom:10px">
-        <input type="text" id="wf-skill-filter" placeholder="Filter skills..." oninput="filterWorkflowSkills()"
-          style="width:100%;padding:6px 10px;font-size:12px;background:var(--raised);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:inherit">
-      </div>
-      <div id="wf-skills-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <input type="text" id="wf-skill-filter" placeholder="Search skills..." oninput="filterWorkflowSkills()"
+        style="flex:1;padding:7px 12px;font-size:12px;background:var(--raised);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:inherit">
+      <div id="wf-cat-chips" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+      <button id="wf-show-all-btn" class="btn btn-ghost" style="font-size:11px;padding:3px 10px;white-space:nowrap" onclick="toggleShowAllSkills()">Show all</button>
+      <button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;white-space:nowrap" onclick="toggleCreateSkillForm()">+ New</button>
     </div>
+
+    <div id="wf-create-form" style="display:none;margin-bottom:14px;padding:16px 20px;border:1px solid var(--accent);border-radius:8px;background:color-mix(in srgb,var(--accent) 4%,var(--bg))">
+      <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:12px">New manual skill</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div style="grid-column:1/-1">
+          <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:3px;display:block">Name *</label>
+          <input type="text" id="wf-new-skill-name" placeholder="e.g. deploy-staging" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;background:var(--raised);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:inherit">
+        </div>
+        <div style="grid-column:1/-1">
+          <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:3px;display:block">Description</label>
+          <input type="text" id="wf-new-skill-desc" placeholder="What does this skill do?" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;background:var(--raised);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:3px;display:block">Emoji</label>
+          <input type="text" id="wf-new-skill-emoji" placeholder="\u2699" style="width:80px;box-sizing:border-box;padding:8px 10px;font-size:13px;background:var(--raised);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:inherit">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn btn-accent" style="font-size:12px;padding:6px 16px" onclick="createSkill()">Create skill</button>
+        <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;color:var(--text3)" onclick="toggleCreateSkillForm()">Cancel</button>
+      </div>
+    </div>
+
+    <div id="wf-skills-grid" style="display:flex;flex-direction:column;gap:16px"></div>
   </div>
 
   <!-- Workflows panel — automations only -->
@@ -10223,6 +10220,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.12', date:'2026-03-08', notes:['Skills tab redesign with categories','Use in Chat button on installed skills','Category filter chips + better card layout'] },
   { ver:'v0.29.11', date:'2026-03-08', notes:['Deferred startup threads (3s faster boot)','Stop phantom pollers on tab switch','MC metrics polling 5s→15s'] },
   { ver:'v0.29.10', date:'2026-03-08', notes:['@squad mentions in chat (e.g. @technical, @creative)','Squad dispatch routes to best-fit member','Squad names in autocomplete alongside agent names'] },
   { ver:'v0.29.9', date:'2026-03-08', notes:['Squads UI: colored chip bar above agent grid','Click squad to filter agents by membership','All/squad toggle with member counts','Squads auto-loaded on Agents tab open'] },
@@ -12542,10 +12540,29 @@ function _wfShowHistory(id) {
   });
 }
 
+var _skillCatFilter = '';
+var _skillCategories = {
+  'ai': { label: 'AI Tools', icon: '\u2728', match: /gemini|openai|whisper|vision|translate|research|coding|summarize|oracle|nano-banana|skill-creator/ },
+  'comm': { label: 'Communication', icon: '\ud83d\udcac', match: /slack|discord|imsg|bluebubbles|wacli|voice-call|blucli/ },
+  'prod': { label: 'Productivity', icon: '\ud83d\udccb', match: /notion|obsidian|bear|apple-note|apple-remind|things|trello|1password/ },
+  'dev': { label: 'Development', icon: '\u2699', match: /github|gh-issue|coding-agent|tmux|session-log|model-usage|healthcheck|eightctl|clawhub|mcporter/ },
+  'media': { label: 'Media', icon: '\ud83c\udfa8', match: /image|video|camera|camsnap|peekaboo|gifgrep|songsee|spotify|sonos|sherpa|tts/ },
+  'web': { label: 'Web & Search', icon: '\ud83c\udf10', match: /brave|search|blog|weather|gog|goplaces|ordercli|sag/ }
+};
+
+function _categorizeSkill(sk) {
+  var id = (sk.id || '').toLowerCase();
+  var desc = (sk.description || '').toLowerCase();
+  var combined = id + ' ' + desc;
+  for (var cat in _skillCategories) {
+    if (_skillCategories[cat].match.test(combined)) return cat;
+  }
+  return 'other';
+}
+
 async function loadSkills() {
   var grid = document.getElementById('wf-skills-grid');
   var countEl = document.getElementById('wf-skills-count');
-  // Show skeleton placeholders immediately
   if (grid) grid.innerHTML = _skillSkeletons(8);
   if (countEl) countEl.textContent = 'loading...';
 
@@ -12553,44 +12570,163 @@ async function loadSkills() {
     var data = await api('/api/openclaw/skills');
     if (data && data.skills) {
       _wfSkills = data.skills;
-      // Render progressively — batch 6 at a time for visual effect
-      var skills = _wfShowAll ? _wfSkills : _wfSkills.filter(function(s) { return s.installed || s.manual; });
-      if (grid) grid.innerHTML = '';
-      var batchSize = 6;
-      for (var i = 0; i < skills.length; i += batchSize) {
-        var batch = skills.slice(i, i + batchSize);
-        _appendSkillBatch(grid, batch);
-        if (i + batchSize < skills.length) {
-          await new Promise(function(r) { setTimeout(r, 50); });
-        }
-      }
-      if (countEl) countEl.textContent = skills.length + ' skill' + (skills.length !== 1 ? 's' : '');
-      if (!skills.length && grid) {
-        grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--text3);font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">'
-          + (_wfShowAll ? 'No skills match your filter.' : 'No installed skills found. Click "Show all" to see available skills.')
-          + '</div>';
-      }
+      _renderSkillsTab();
     }
   } catch(e) {
-    if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--text3);font-size:12px">Could not load skills</div>';
-    /* loadSkills error silenced */
+    if (grid) grid.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text3);font-size:12px">Could not load skills</div>';
   }
+}
+
+function _renderSkillsTab() {
+  var grid = document.getElementById('wf-skills-grid');
+  var countEl = document.getElementById('wf-skills-count');
+  var chipBar = document.getElementById('wf-cat-chips');
+  if (!grid) return;
+
+  var skills = _wfShowAll ? _wfSkills : _wfSkills.filter(function(s) { return s.installed || s.manual; });
+  var q = (document.getElementById('wf-skill-filter') || {}).value || '';
+  q = q.toLowerCase().trim();
+  if (q) {
+    skills = skills.filter(function(s) {
+      return (s.name || '').toLowerCase().indexOf(q) >= 0 || (s.description || '').toLowerCase().indexOf(q) >= 0;
+    });
+  }
+  if (_skillCatFilter) {
+    skills = skills.filter(function(s) { return _categorizeSkill(s) === _skillCatFilter; });
+  }
+
+  // Build category counts for chip bar
+  var catCounts = {};
+  var allSkills = _wfShowAll ? _wfSkills : _wfSkills.filter(function(s) { return s.installed || s.manual; });
+  allSkills.forEach(function(s) { var c = _categorizeSkill(s); catCounts[c] = (catCounts[c] || 0) + 1; });
+  if (chipBar) {
+    var chipHtml = '';
+    for (var cat in _skillCategories) {
+      if (!catCounts[cat]) continue;
+      var active = _skillCatFilter === cat;
+      chipHtml += '<button onclick="_filterSkillCat(\'' + cat + '\')" style="font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid ' + (active ? 'var(--accent)' : 'var(--border2)') + ';background:' + (active ? 'color-mix(in srgb,var(--accent) 15%,transparent)' : 'transparent') + ';color:' + (active ? 'var(--accent)' : 'var(--text3)') + ';cursor:pointer;white-space:nowrap">'
+        + _skillCategories[cat].icon + ' ' + catCounts[cat] + '</button>';
+    }
+    if (catCounts['other']) {
+      var otherActive = _skillCatFilter === 'other';
+      chipHtml += '<button onclick="_filterSkillCat(\'other\')" style="font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid ' + (otherActive ? 'var(--accent)' : 'var(--border2)') + ';background:' + (otherActive ? 'color-mix(in srgb,var(--accent) 15%,transparent)' : 'transparent') + ';color:' + (otherActive ? 'var(--accent)' : 'var(--text3)') + ';cursor:pointer;white-space:nowrap">\u2026 ' + catCounts['other'] + '</button>';
+    }
+    chipBar.innerHTML = chipHtml;
+  }
+
+  if (countEl) countEl.textContent = skills.length + '/' + _wfSkills.length;
+
+  if (!skills.length) {
+    grid.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3);font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">'
+      + (_wfShowAll ? 'No skills match your filter.' : 'No installed skills. Click \u201cShow all\u201d to browse available skills.')
+      + '</div>';
+    return;
+  }
+
+  // Group by category
+  var groups = {};
+  skills.forEach(function(s) {
+    var cat = _categorizeSkill(s);
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(s);
+  });
+
+  // Render sections — installed first within each group
+  var html = '';
+  var catOrder = ['ai', 'comm', 'prod', 'dev', 'media', 'web', 'other'];
+  catOrder.forEach(function(cat) {
+    if (!groups[cat]) return;
+    var catInfo = _skillCategories[cat] || { label: 'Other', icon: '\ud83d\udce6' };
+    var catSkills = groups[cat].sort(function(a, b) {
+      var ai = a.installed || a.manual ? 1 : 0;
+      var bi = b.installed || b.manual ? 1 : 0;
+      return bi - ai || (a.name || '').localeCompare(b.name || '');
+    });
+    html += '<div>'
+      + '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;padding:0 2px">'
+      + catInfo.icon + ' ' + catInfo.label + ' <span style="font-weight:400;opacity:.6">(' + catSkills.length + ')</span></div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px">';
+    catSkills.forEach(function(sk) {
+      html += _buildSkillCard(sk);
+    });
+    html += '</div></div>';
+  });
+  grid.innerHTML = html;
+}
+
+function _buildSkillCard(sk) {
+  var emoji = sk.emoji || '\u2699';
+  var name = escHtml(sk.name || sk.id || '');
+  var desc = escHtml(sk.description || 'No description');
+  var installed = sk.installed || sk.manual;
+  var isManual = sk.manual;
+
+  var statusBadge = '';
+  if (installed && isManual) {
+    statusBadge = '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">manual</span>';
+  } else if (installed) {
+    statusBadge = '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:color-mix(in srgb,#22c55e 15%,transparent);color:#22c55e">active</span>';
+  } else {
+    statusBadge = '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:var(--raised);color:var(--text3)">available</span>';
+  }
+
+  var actions = '';
+  if (installed) {
+    actions += '<button class="btn-xs" style="font-size:10px;padding:2px 10px;border:1px solid var(--accent);border-radius:4px;background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();_useSkillInChat(\'' + escHtml(sk.name || sk.id) + '\')">'
+      + '\u25B6 Use</button>';
+    actions += '<button class="btn-xs" style="font-size:10px;padding:2px 8px;border:1px solid var(--border2);border-radius:4px;background:none;color:var(--text3);cursor:pointer" onclick="event.stopPropagation();removeSkill(\'' + escHtml(sk.id) + '\',\'' + name + '\')">'
+      + '\u00d7</button>';
+  } else {
+    actions += '<button class="btn-xs" style="font-size:10px;padding:2px 10px;border:1px solid var(--accent);border-radius:4px;background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();installSkill(\'' + escHtml(sk.id || sk.name) + '\',\'' + name + '\')">'
+      + (sk.eligible !== false ? 'Install' : 'Setup') + '</button>';
+  }
+
+  var reqs = '';
+  if (sk.requires && sk.requires.length) {
+    reqs = '<div style="font-size:10px;color:var(--text3);margin-top:4px">Needs: ' + sk.requires.map(function(r){return escHtml(r)}).join(', ') + '</div>';
+  }
+  if (sk.missing && sk.missing.bins && sk.missing.bins.length) {
+    reqs += '<div style="font-size:10px;color:var(--danger,#ef4444);margin-top:2px">Missing: ' + sk.missing.bins.join(', ') + '</div>';
+  }
+
+  return '<div style="padding:10px 14px;border:1px solid ' + (installed ? 'var(--border)' : 'var(--border2)') + ';border-radius:8px;background:' + (installed ? 'var(--surface)' : 'var(--surface2)') + ';opacity:' + (installed ? '1' : '0.8') + ';transition:opacity 0.15s">'
+    + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+    + '<span style="font-size:16px">' + emoji + '</span>'
+    + '<span style="font-weight:500;font-size:13px;color:var(--text);flex:1;min-width:0;overflow-wrap:break-word">' + name + '</span>'
+    + statusBadge
+    + '</div>'
+    + '<div style="font-size:11px;color:var(--text3);line-height:1.4;margin-bottom:6px">' + desc + '</div>'
+    + reqs
+    + '<div style="display:flex;gap:6px;margin-top:6px">' + actions + '</div>'
+    + '</div>';
+}
+
+function _useSkillInChat(skillName) {
+  // Switch to Chat tab and pre-fill the /command
+  switchModule('overview');
+  setTimeout(function() {
+    var input = document.getElementById('chat-input');
+    if (input) {
+      input.value = '/' + skillName + ' ';
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
+  }, 200);
+}
+
+function _filterSkillCat(cat) {
+  _skillCatFilter = (_skillCatFilter === cat) ? '' : cat;
+  _renderSkillsTab();
 }
 
 function toggleShowAllSkills() {
   _wfShowAll = !_wfShowAll;
   var btn = document.getElementById('wf-show-all-btn');
   if (btn) btn.textContent = _wfShowAll ? 'Installed only' : 'Show all';
-  loadSkills();
+  _renderSkillsTab();
 }
 function filterWorkflowSkills() {
-  var q = (document.getElementById('wf-skill-filter') || {}).value || '';
-  q = q.toLowerCase().trim();
-  document.querySelectorAll('#wf-skills-grid > div').forEach(function(card) {
-    var name = (card.getAttribute('data-name') || '').toLowerCase();
-    var desc = (card.getAttribute('data-desc') || '').toLowerCase();
-    card.style.display = (!q || name.indexOf(q) >= 0 || desc.indexOf(q) >= 0) ? '' : 'none';
-  });
+  _renderSkillsTab();
 }
 function _skillSkeletons(n) {
   var html = '';
@@ -12606,38 +12742,7 @@ function _skillSkeletons(n) {
   return html;
 }
 
-function _appendSkillBatch(grid, skills) {
-  if (!grid) return;
-  skills.forEach(function(sk) {
-    var card = document.createElement('div');
-    card.className = 'wf-skill-card';
-    card.setAttribute('data-name', sk.name || '');
-    card.setAttribute('data-desc', sk.description || '');
-    card.style.opacity = '0';
-    card.style.transition = 'opacity 0.2s';
-    var emoji = sk.emoji || '\u2699';
-    var name = escHtml(sk.name);
-    var desc = escHtml(sk.description ? (sk.description.length > 80 ? sk.description.substring(0, 77) + '...' : sk.description) : 'No description');
-    var installed = sk.installed;
-    var manual = sk.manual;
-    var badge = !installed ? '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:var(--raised);color:var(--text3);margin-left:auto">not installed</span>'
-      : manual ? '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);margin-left:auto">manual</span>'
-      : '';
-    var removeBtn = (installed || manual) ? '<button class="btn-xs" style="font-size:10px;padding:1px 6px;border:1px solid var(--border2);border-radius:3px;background:none;color:var(--text3);cursor:pointer;margin-left:4px" onclick="event.stopPropagation();removeSkill(\'' + escHtml(sk.id) + '\',\'' + name + '\')">' + '\u00d7</button>' : '';
-    var installBtn = (!installed && !manual) ? '<button class="btn-xs" style="font-size:10px;padding:2px 8px;border:1px solid var(--accent);border-radius:4px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);cursor:pointer;margin-left:4px" onclick="event.stopPropagation();installSkill(\'' + escHtml(sk.id || sk.name) + '\',\'' + name + '\')">' + (sk.eligible !== false ? 'Install' : 'Setup') + '</button>' : '';
-    card.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
-      + '<span style="font-size:16px">' + emoji + '</span>'
-      + '<span style="font-weight:500;font-size:13px;color:var(--text)">' + name + '</span>'
-      + badge + installBtn + removeBtn
-      + '</div>'
-      + '<div style="font-size:11px;color:var(--text3);line-height:1.4">' + desc + '</div>'
-      + (sk.requires && sk.requires.length ? '<div style="font-size:10px;color:var(--text3);margin-top:4px">Requires: ' + sk.requires.join(', ') + '</div>' : '')
-      + (sk.missing && sk.missing.bins && sk.missing.bins.length ? '<div style="font-size:10px;color:var(--danger,#ef4444);margin-top:3px">Missing: ' + sk.missing.bins.join(', ') + '</div>' : '');
-    if (!installed && !manual) { card.style.borderColor = 'var(--border2)'; card.style.opacity = '0'; }
-    grid.appendChild(card);
-    requestAnimationFrame(function() { card.style.opacity = installed || manual ? '1' : '0.7'; });
-  });
-}
+// _appendSkillBatch removed in v0.29.12 — replaced by _buildSkillCard
 
 
 
@@ -25775,7 +25880,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.11"})
+            self.reply_json({"v": "0.29.12"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25937,7 +26042,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.11"
+                health["porter_version"] = "0.29.12"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27746,7 +27851,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.11'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.12'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32227,7 +32332,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.11 ready (localhost only)")
+    print(f"\n  Porter v0.29.12 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
