@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.49 — Agent delete fix, skill refresh, cleanup"""
+"""Porter v0.29.50 — Last system confirms replaced, cortex filter fix"""
 
 
 import email
@@ -9157,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.49</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.50</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10451,6 +10451,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.50', date:'2026-03-08', notes:['FIX: agent card delete uses Porter confirm instead of system confirm','FIX: project delete uses Porter confirm instead of system confirm','FIX: cortex memory filter defaults to show all (cx-show-routed ghost element removed)','Removed dead code references'] },
   { ver:'v0.29.49', date:'2026-03-08', notes:['FIX: agent delete button now calls correct function','FIX: skill install/remove refreshes Skills tab (was calling nonexistent loadWorkflows)','FIX: agent card delete calls correct function'] },
   { ver:'v0.29.48', date:'2026-03-08', notes:['FIX: persona dispatch responses now saved to chat history (was broken stub)','FIX: file preview checks HTTP status before rendering content','FIX: files home button resets curRoot/curPath state','Removed dead flush wizard CSS (2KB savings)','Added /api/chat/save endpoint for client-side message persistence'] },
   { ver:'v0.29.47', date:'2026-03-08', notes:['Deep-links: clicking squad name in section header opens squad manager','Chat: route preview shows which model/agent will handle the message','Grid view: skeleton loader shows grid-shaped placeholders','Agent cards: clicking role badge filters by that role'] },
@@ -12444,8 +12445,7 @@ function switchModule(name) {
               // If on Cortex tab, refresh inbox
               var cxMod = document.getElementById('cortex-module');
               if (cxMod && cxMod.classList.contains('active')) {
-                var showRouted = document.getElementById('cx-show-routed');
-                var url = '/api/cortex/memories' + (showRouted && showRouted.checked ? '' : '?routed=false');
+                var url = '/api/cortex/memories';
                 api(url).then(function(mems) {
                   if (mems && mems.memories) {
                     _cortexMemories = mems.memories;
@@ -20669,7 +20669,7 @@ function switchPdTab(tab) {
       + '<div style="display:flex;align-items:center;gap:8px">'
       + '  <button class="btn btn-ghost" onclick="wakePersona(\'' + p.id + '\')" style="font-size:12px">Wake</button>'
       + '  <button class="btn btn-ghost" onclick="sleepPersona(\'' + p.id + '\')" style="font-size:12px">Sleep</button>'
-      + '  <button class="btn btn-ghost" onclick="if(confirm(\'Delete agent?\')) _deletePersona(\'' + p.id + '\')" style="font-size:12px;color:var(--err,#ef4444)">Delete Agent</button>'
+      + '  <button class="btn btn-ghost" onclick="_deletePersona(\'' + p.id + '\')" style="font-size:12px;color:var(--err,#ef4444)">Delete Agent</button>'
       + '</div></div>'
       + '<div id="pd-eval-results" style="margin-top:20px;padding-top:12px;border-top:1px solid var(--border);display:none">'
       + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
@@ -21939,7 +21939,7 @@ function openProjectConfig(projId) {
       <button class="btn btn-sm btn-ghost" onclick="closeConfigPanel()">Cancel</button>
     </div>
     <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
-      <button class="btn btn-sm btn-ghost" style="color:#ef4444;width:100%" onclick="if(confirm('Delete this project?'))deleteProject('${projId}')">Delete project</button>
+      <button class="btn btn-sm btn-ghost" style="color:#ef4444;width:100%" onclick="_projDelete('${projId}')">Delete project</button>
     </div>`;
 
   panel.classList.add('open');
@@ -27505,7 +27505,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.49"})
+            self.reply_json({"v": "0.29.50"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27667,7 +27667,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.49"
+                health["porter_version"] = "0.29.50"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29502,7 +29502,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.49'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.50'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34042,7 +34042,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.49 ready (localhost only)")
+    print(f"\n  Porter v0.29.50 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
