@@ -16740,7 +16740,6 @@ function _renderCortexMemories(memories) {
         else if (sc === 'squad') { label = 'Squad'; }
         return '<span style="font-size:10px;font-weight:600;color:' + scColor + ';text-transform:uppercase;background:color-mix(in srgb,' + scColor + ' 12%,transparent);padding:2px 8px;border-radius:4px;letter-spacing:0.5px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle">' + escHtml(label) + '</span>';
       })()
-      )
       + '<div style="flex:1"></div>'
       + '<span style="font-size:10px;color:var(--text3);white-space:nowrap">' + (m.created_at ? new Date(m.created_at * 1000).toLocaleDateString(undefined, {month:'short',day:'numeric'}) : '') + '</span>'
       + (memStatus === 'active'
@@ -16893,7 +16892,7 @@ async function _editCortexMem(id, btn) {
     + '<div style="display:flex;gap:12px;margin-top:12px">'
     + '<label style="font-size:12px;color:var(--text3);flex:1">'
     + 'Scope'
-    + '<select id="cx-edit-scope" onchange="var _l=document.getElementById('cx-edit-sid-wrap');if(_l)_l.style.display=this.value==='agent'?'block':'none'" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)">'
+    + '<select id="cx-edit-scope" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)">'
     + '<option value="global"' + (currentScope === 'global' ? ' selected' : '') + '>Global</option>'
     + '<option value="squad"' + (currentScope === 'squad' ? ' selected' : '') + '>Squad (shared)</option>'
     + '<option value="agent"' + (currentScope === 'agent' ? ' selected' : '') + '>Agent</option>'
@@ -16911,6 +16910,9 @@ async function _editCortexMem(id, btn) {
     + '</div>';
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
+
+  var _scopeSel = document.getElementById('cx-edit-scope');
+  if (_scopeSel) { _scopeSel.onchange = function() { var _l = document.getElementById('cx-edit-sid-wrap'); if (_l) _l.style.display = this.value === 'agent' ? 'block' : 'none'; }; }
 
   var textarea = document.getElementById('cx-edit-fact');
   if (textarea) { textarea.focus(); textarea.setSelectionRange(textarea.value.length, textarea.value.length); }
