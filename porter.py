@@ -166,8 +166,10 @@ def _wf_record_run(wf_id, success=True, result=None, error=None, duration_s=0):
             wf["error_count"] += 1
             wf["last_error"] = str(error) if error else "Unknown error"
             wf["status"] = "error"
-        elif wf["status"] == "error":
-            wf["status"] = "active"
+        else:
+            wf["last_error"] = None  # v0.28.49 — clear stale error on success
+            if wf["status"] == "error":
+                wf["status"] = "active"
         if wf["interval_s"] > 0:
             wf["next_run"] = now + wf["interval_s"]
         entry = {"ts": now, "ok": success, "duration_s": round(duration_s, 3)}
