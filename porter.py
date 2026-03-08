@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.54 — Chat welcome quick actions, agent suggestions"""
+"""Porter v0.29.55 — Dead code removal, cleanup"""
 
 
 import email
@@ -9157,7 +9157,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.54</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.55</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10083,9 +10083,7 @@ input[type="number"].settings-input { min-width: 60px; }
         <div class="settings-page-title">Agents</div>
         <div style="font-size:13px;color:var(--text3);margin-bottom:18px">API clients that connect to Porter. Each agent gets a unique key.</div>
         <div id="agent-list"></div>
-        <div style="margin-top:18px">
-          <button class="btn btn-primary" onclick="openCreateAgent()">+ Create agent</button>
-        </div>
+        
         <!-- create form -->
         <div id="agent-form" style="display:none;margin-top:20px;padding:16px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
           <div class="settings-page-title" style="font-size:14px;margin-bottom:14px">New agent</div>
@@ -10451,6 +10449,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.55', date:'2026-03-08', notes:['Removed dead openCreateAgent button (function no longer exists)','Removed dead renderOperatorConfigSummary call','Code cleanup pass'] },
   { ver:'v0.29.54', date:'2026-03-08', notes:['Chat welcome shows quick-start agent chips and recent chats','Clicking agent chip pre-selects that agent for chat','Recent chats in welcome are clickable to resume'] },
   { ver:'v0.29.53', date:'2026-03-08', notes:['Project agent cards now show role, backend, skills count, and squad','Upload response validated (was silently ignoring errors)','Upload error now shown as toast notification'] },
   { ver:'v0.29.52', date:'2026-03-08', notes:['8 Kraken public market data skills created (ticker, OHLC, orderbook, spread, assets, pairs, status, trades)','Crypto Squad agents assigned appropriate Kraken skills','Dev Squad agents assigned coding/github/research skills','Skill recommendation engine now includes crypto/trading patterns'] },
@@ -17912,7 +17911,6 @@ async function saveOperatorConfig() {
     if (state) state.textContent = 'Saved';
     toast('Operator config saved', 'ok');
     window._operatorPrefs = body;
-    renderOperatorConfigSummary(body);
   } else {
     if (state) state.textContent = 'Save failed';
     toast((res && res.error) || 'Failed to save config', 'err');
@@ -27586,7 +27584,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.54"})
+            self.reply_json({"v": "0.29.55"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27748,7 +27746,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.54"
+                health["porter_version"] = "0.29.55"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29592,7 +29590,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.54'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.55'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34132,7 +34130,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.54 ready (localhost only)")
+    print(f"\n  Porter v0.29.55 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
