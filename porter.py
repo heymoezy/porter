@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.42 — Squad awareness, persona restore, interval fix, workflow triggers"""
+"""Porter v0.28.43 — Squad awareness, persona restore, interval fix, workflow triggers"""
 
 
 import email
@@ -178,12 +178,45 @@ def _wf_record_run(wf_id, success=True, result=None, error=None, duration_s=0):
         wf["history"].append(entry)
         if len(wf["history"]) > 20:
             wf["history"] = wf["history"][-20:]
+        # Persist to DB
+        import json as _j
+        try:
+            conn = _db_conn()
+            conn.execute(
+                "INSERT OR REPLACE INTO workflow_stats (wf_id, run_count, error_count, last_run, last_error, last_result, last_duration_s, history) VALUES (?,?,?,?,?,?,?,?)",
+                (wf_id, wf["run_count"], wf["error_count"], wf["last_run"],
+                 wf.get("last_error"), str(wf.get("last_result",""))[:500],
+                 wf["last_duration_s"], _j.dumps(wf["history"]))
+            )
+            conn.commit(); conn.close()
+        except Exception:
+            pass
 
 def _wf_is_enabled(wf_id):
     """Check if a workflow is active (not paused)."""
     with _wf_lock:
         wf = _wf_registry.get(wf_id)
         return wf["status"] != "paused" if wf else True
+
+def _wf_load_stats():
+    """Load persisted workflow stats from DB into registry."""
+    import json as _j
+    try:
+        conn = _db_conn()
+        for row in conn.execute("SELECT wf_id, run_count, error_count, last_run, last_error, last_result, last_duration_s, history FROM workflow_stats").fetchall():
+            wf = _wf_registry.get(row[0])
+            if wf:
+                wf["run_count"] = row[1] or 0
+                wf["error_count"] = row[2] or 0
+                wf["last_run"] = row[3]
+                wf["last_error"] = row[4]
+                wf["last_result"] = row[5]
+                wf["last_duration_s"] = row[6] or 0
+                try: wf["history"] = _j.loads(row[7]) if row[7] else []
+                except: wf["history"] = []
+        conn.close()
+    except Exception:
+        pass
 
 # Register 6 system workflows
 _wf_register("cortex_consolidation", "Cortex Consolidation",
@@ -1379,10 +1412,7 @@ def _cortex_consolidate_once():
                         # Keep the one with higher importance
                         keep = members[i] if members[i][4] >= members[j][4] else members[j]
                         discard = members[j] if keep == members[i] else members[i]
-                        conn.execute(
-                            "UPDATE cortex_memories SET consolidated_into=?, updated_at=strftime('%s','now') WHERE id=?",
-                            (keep[0], discard[0])
-                        )
+                        conn.execute("DELETE FROM cortex_memories WHERE id=?", (discard[0],))
                         merged_ids.add(discard[0])
                         merged_count += 1
 
@@ -5919,6 +5949,19 @@ def _init_trace_tables():
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_aer_pid ON agent_eval_results(persona_id)")
 
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS workflow_stats (
+        wf_id TEXT PRIMARY KEY,
+        run_count INTEGER DEFAULT 0,
+        error_count INTEGER DEFAULT 0,
+        last_run REAL,
+        last_error TEXT,
+        last_result TEXT,
+        last_duration_s REAL DEFAULT 0,
+        history TEXT DEFAULT '[]'
+    )
+    """)
+
     # Migration: add sort_order to personas if missing
     try:
         cols = [r[1] for r in conn.execute("PRAGMA table_info(personas)").fetchall()]
@@ -8553,7 +8596,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.42</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.43</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9812,6 +9855,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.43', date:'2026-03-08', notes:['System workflow run counts persist to DB (survive restarts)','Consolidation deletes duplicates instead of chaining consolidated_into','Memory map shows Loading... while graph fetches'] },
   { ver:'v0.28.42', date:'2026-03-08', notes:['Consolidation: lowered Jaccard threshold 0.5→0.4, skip already-merged pairs','Fixed API limit cap (200→1000) — graph counters now match inbox','Merged 9 duplicate memories (including 3x Moe name facts)'] },
   { ver:'v0.28.41', date:'2026-03-08', notes:['Fix memory extraction: agent-scoped facts without persona_id fall back to global','Migrated 47 orphaned agent memories to global (were invisible to injection)','Prevents future orphan memories from scope assignment bug'] },
   { ver:'v0.28.40', date:'2026-03-08', notes:['Removed squad scope from Cortex (redundant with global)','Fixed count mismatch: load all memories (was limited to 200)','Graph: removed squad node'] },
@@ -16701,6 +16745,9 @@ async function _loadCortexTab() {
   // Always init the graph (defer to let layout settle)
   requestAnimationFrame(function() { setTimeout(function() {
     _initMemoryGraph();
+    // Show loading while graph fetches
+    var _gCanvas = document.getElementById('cx-graph-canvas');
+    if (_gCanvas) { var _gCtx = _gCanvas.getContext('2d'); if (_gCtx) { _gCtx.fillStyle = 'var(--text3)'; _gCtx.font = '13px sans-serif'; _gCtx.textAlign = 'center'; _gCtx.fillText('Loading...', _gCanvas.width/2, _gCanvas.height/2); } }
     // Init graph as locked
     window._cxGraphLocked = true;
     var lockBtn = document.getElementById('cx-lock-btn');
@@ -24920,7 +24967,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.42"})
+            self.reply_json({"v": "0.28.43"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26905,7 +26952,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.42'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.43'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31117,6 +31164,7 @@ if __name__ == "__main__":
     _db_migrate_chats()  # Migrate JSON chats to SQLite
     _treg_load()  # populate task registry from SQLite (needs _db_init first)
     _wf_restore_intervals()  # Restore saved workflow intervals
+    _wf_load_stats()  # Load persisted run counts from DB
     _migrate_checkpoint_to_registry()  # Gap31: one-time migration
     _sched_thread = threading.Thread(target=_scheduler_loop, name="porter-scheduler", daemon=True)
     _sched_thread.start()
@@ -31139,7 +31187,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.42 ready (localhost only)")
+    print(f"\n  Porter v0.28.43 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
