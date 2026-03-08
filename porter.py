@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.62 — Light theme fixes, panel transitions, loading timeouts"""
+"""Porter v0.29.63 — Better empty states across tabs"""
 
 
 import email
@@ -9169,7 +9169,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.62</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.63</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10416,6 +10416,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.63', date:'2026-03-08', notes:['Better empty states with icons for Workflows, Skills, Capabilities tabs'] },
   { ver:'v0.29.62', date:'2026-03-08', notes:['Light theme: fix hardcoded dark colors (autocomplete, menus, borders)','Panel fade-in animation on tab switch','Loading timeouts with retry buttons on Models, Workflows, Cortex'] },
   { ver:'v0.29.61', date:'2026-03-08', notes:['FIX: workflow interval save now works (handler moved from GET to POST)','FIX: skill proposal approve/dismiss now works (handler moved from GET to POST)'] },
   { ver:'v0.29.60', date:'2026-03-08', notes:['FIX: locations module Add Location form now works (moved from dead settings page)','Removed dead spage-locations, spage-apikeys settings pages','Fixed duplicate id=pd-content (renamed slide-out to pd-content-slideout)','Removed orphaned orchestration cleanup code'] },
@@ -12455,7 +12456,7 @@ async function loadWorkflowRegistry() {
   grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--text3);font-size:12px">Loading workflows...</div>';
   try {
     var data = await api('/api/workflows');
-    if (!data || !data.workflows) { grid.innerHTML = '<div style="padding:16px;color:var(--text3);text-align:center">No workflows</div>'; return; }
+    if (!data || !data.workflows) { grid.innerHTML = '<div class="empty-state" style="padding:40px 20px"><div style="font-size:28px;opacity:.4">\u2699\ufe0f</div><p>No workflows registered</p><p style="font-size:12px;color:var(--text3);margin-top:-4px">System workflows appear here when configured</p></div>'; return; }
     var wfs = data.workflows;
     if (countEl) countEl.textContent = wfs.length + ' workflow' + (wfs.length !== 1 ? 's' : '');
     grid.innerHTML = wfs.map(function(wf) {
@@ -12548,7 +12549,7 @@ async function _loadSkillWorkflows() {
     var installed = skills.filter(function(s) { return s.installed; });
     if (countEl) countEl.textContent = installed.length + ' skill' + (installed.length !== 1 ? 's' : '');
     if (!installed.length) {
-      grid.innerHTML = '<div style="padding:12px;color:var(--text3);font-size:12px">No installed skills. Install skills from the Skills tab.</div>';
+      grid.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px"><div style="font-size:20px;opacity:.4;margin-bottom:6px">\u26a1</div>No installed skills<br><span style="font-size:11px">Install skills from the Skills tab</span></div>';
       return;
     }
     grid.innerHTML = installed.map(function(sk) {
@@ -12932,7 +12933,7 @@ function _renderSkillsTab() {
 
   if (!skills.length) {
     grid.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3);font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">'
-      + (_wfShowAll ? 'No skills match your filter.' : 'No installed skills. Click \u201cShow all\u201d to browse available skills.')
+      + '<div style="font-size:20px;opacity:.4;margin-bottom:6px">\u26a1</div>' + (_wfShowAll ? 'No skills match your filter.' : 'No installed skills<br><span style="font-size:11px">Click \u201cShow all\u201d to browse available skills</span>')
       + '</div>';
     return;
   }
@@ -13803,7 +13804,7 @@ function renderCapabilities(caps) {
   const el = document.getElementById('capabilities-list');
   if (!el) return;
   if (!caps.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:13px">No capabilities registered.</div>';
+    el.innerHTML = '<div class="empty-state" style="padding:40px 20px"><div style="font-size:28px;opacity:.4">\U0001f50c</div><p>No capabilities detected</p><p style="font-size:12px;color:var(--text3);margin-top:-4px">Porter auto-detects installed tools and integrations</p></div>';
     return;
   }
   el.innerHTML = caps.map(c => {
@@ -27561,7 +27562,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.62"})
+            self.reply_json({"v": "0.29.63"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27723,7 +27724,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.62"
+                health["porter_version"] = "0.29.63"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29523,7 +29524,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.62'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.63'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34108,7 +34109,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.62 ready (localhost only)")
+    print(f"\n  Porter v0.29.63 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
