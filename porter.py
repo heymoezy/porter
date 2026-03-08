@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.43 — Squad awareness, persona restore, interval fix, workflow triggers"""
+"""Porter v0.28.45 — Squad awareness, persona restore, interval fix, workflow triggers"""
 
 
 import email
@@ -1097,6 +1097,127 @@ def _is_duplicate(new_fact, existing_facts):
             return True
     return False
 
+# ── .md-aware deduplication (v0.28.45) ──────────────────────────────────────
+
+_MD_KNOWLEDGE_CACHE = {}  # persona_id -> list of keyword sets
+_MD_KNOWLEDGE_CACHE_TS = 0  # last load time
+
+def _load_md_knowledge_lines(persona_id=""):
+    """Load all .md file lines for a persona (or global) as keyword sets.
+    Cached for 5 minutes to avoid re-reading files on every fact."""
+    import time as _t
+    global _MD_KNOWLEDGE_CACHE, _MD_KNOWLEDGE_CACHE_TS
+    now = _t.time()
+    if now - _MD_KNOWLEDGE_CACHE_TS < 300 and persona_id in _MD_KNOWLEDGE_CACHE:
+        return _MD_KNOWLEDGE_CACHE[persona_id]
+
+    kw_sets = []
+    md_files = []
+
+    # Global rules
+    global_rules = PERSONAS_DIR / "RULES.md"
+    if global_rules.exists():
+        md_files.append(global_rules)
+
+    # Persona-specific .md files
+    if persona_id:
+        pdir = PERSONAS_DIR / persona_id
+        if pdir.is_dir():
+            for f in pdir.iterdir():
+                if f.suffix == ".md" and f.name not in ("heartbeat.md",):
+                    md_files.append(f)
+
+    # Also load all other persona .md files for global scope
+    if not persona_id:
+        for pdir in PERSONAS_DIR.iterdir():
+            if pdir.is_dir() and len(pdir.name) > 10:  # UUID dirs
+                for f in pdir.iterdir():
+                    if f.suffix == ".md" and f.name not in ("heartbeat.md",):
+                        md_files.append(f)
+
+    for fpath in md_files:
+        try:
+            text = fpath.read_text(errors="replace")
+            for line in text.splitlines():
+                line = line.strip()
+                if len(line) > 15:  # skip short lines like headers
+                    kw = _cortex_tokenize(line)
+                    if len(kw) >= 3:  # need at least 3 meaningful keywords
+                        kw_sets.append(kw)
+        except Exception:
+            pass
+
+    _MD_KNOWLEDGE_CACHE[persona_id] = kw_sets
+    _MD_KNOWLEDGE_CACHE_TS = now
+    return kw_sets
+
+def _fact_covered_by_md(fact_text, scope="global", scope_id=""):
+    """Check if a fact is already covered by persona .md files (Jaccard >= 0.35)."""
+    fact_kw = _cortex_tokenize(fact_text)
+    if len(fact_kw) < 3:
+        return False
+    # Check persona-specific .md files
+    if scope == "agent" and scope_id:
+        for md_kw in _load_md_knowledge_lines(scope_id):
+            if _jaccard_similarity(fact_kw, md_kw) >= 0.35:
+                return True
+    # Always check global .md files
+    for md_kw in _load_md_knowledge_lines(""):
+        if _jaccard_similarity(fact_kw, md_kw) >= 0.35:
+            return True
+    return False
+
+# Low-value fact patterns — meta-commentary, apologies, generic knowledge, stale details
+_LOW_VALUE_PATTERNS = [
+    re.compile(r"^(i apologize|thank you|sorry for)", re.I),
+    re.compile(r"^(the agent|this agent|the assistant) (needed|adapted|identified|used|is framed|cannot)", re.I),
+    re.compile(r"^(a prior tool|the acting agent|when blocked by|a prior assistant)", re.I),
+    re.compile(r"(is available|is installed|already had|already existed)", re.I),
+    re.compile(r"^(the environment|this environment|the workspace|the host environment) (has|had|includes|for)", re.I),
+    re.compile(r"(patch.*applied|patch script|patch.*created)", re.I),
+    re.compile(r"^(playwright|test results|verification|post-patch)", re.I),
+    # Stale version/release details
+    re.compile(r"^(project release|release completion|version.related|the v0\.\d)", re.I),
+    re.compile(r"v0\.\d+\.\d+ (was|focused|patch|release|work|touched|produced|created)", re.I),
+    re.compile(r"(phase \d+ of|phase \d+ planning)", re.I),
+    # Session-specific meta-commentary
+    re.compile(r"^(this session|in this session|the session|a concrete|in the referenced)", re.I),
+    re.compile(r"(prior session|referenced session|during the .* review)", re.I),
+    re.compile(r"(working style|agent.*adapted|agent.*identified itself)", re.I),
+    # Generic/obvious statements
+    re.compile(r"^(porter is a|porter is an|porter is designed|porter is the project)", re.I),
+    re.compile(r"^(file management|agent personas|project workflows)", re.I),
+    # Self-referential agent identity (covered by .md files)
+    re.compile(r"^(this assistant identifies|this agent is|the assistant persona)", re.I),
+    re.compile(r"(presents? (itself|herself|himself)|identifies as)", re.I),
+    re.compile(r"^(sage is|vision is|lobster is|codex is|pixel is)", re.I),
+    re.compile(r"persona directory UUID", re.I),
+    # Environment details (covered by CLAUDE.md)
+    re.compile(r"(python\s*`?3\.12|node.*v22|vite with scripts)", re.I),
+    re.compile(r"^(the active project appears|the frontend package)", re.I),
+    re.compile(r"^(there (was|were|appear)|there was an additional)", re.I),
+    # Stale one-off requests
+    re.compile(r"^the user (asked|wants to create|wants to review|asked for a formal)", re.I),
+    re.compile(r"^(the user expects backend|the exact backend)", re.I),
+    # Stale implementation observations
+    re.compile(r"(was diagnosed|was discovered|was identified|was described)", re.I),
+    re.compile(r"^(the implementation|the fix in|the repository state|the updated)", re.I),
+    re.compile(r"^(debugging this|an already-sent|existing persona)", re.I),
+    re.compile(r"(touched.*api endpoint|touched.*javascript|touched.*sse)", re.I),
+    re.compile(r"^(no other persona|the service under test)", re.I),
+    re.compile(r"(may not be directly verifiable|may have multiple subpaths)", re.I),
+    re.compile(r"(indentation bug|erasableSyntax|frontispiece|nested project)", re.I),
+]
+
+def _fact_is_low_value(fact_text):
+    """Filter out meta-commentary, apologies, and session-specific noise."""
+    if len(fact_text) < 15:
+        return True
+    for pat in _LOW_VALUE_PATTERNS:
+        if pat.search(fact_text):
+            return True
+    return False
+
 def _cortex_distill_session(session_id, task_desc, model_info, msg_count, outcome="completed", project_id="", scope="global"):
     """Distill a session into an episodic memory in Cortex DB.
 
@@ -1233,6 +1354,9 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
 
         # Duplicate check + supersession (v0.28.3)
         if _is_duplicate(fact_text, existing_facts):
+            continue
+        # v0.28.45 — skip facts covered by persona .md files or low-value
+        if _fact_is_low_value(fact_text) or _fact_covered_by_md(fact_text, scope, scope_id):
             continue
 
         # Supersession: Jaccard 0.6-0.8 → supersede older if new is higher importance
@@ -1444,7 +1568,18 @@ def _cortex_consolidate_once():
             conn.execute("UPDATE cortex_memories SET status='archived', updated_at=strftime('%s','now') WHERE id=?", (row[0],))
             archived_count += 1
 
-        if merged_count or archived_count:
+        # v0.28.45 — .md dedup: delete facts already covered by persona .md files
+        md_deleted = 0
+        all_active = conn.execute(
+            "SELECT id, fact, scope, scope_id FROM cortex_memories "
+            "WHERE consolidated_into IS NULL AND status='active'"
+        ).fetchall()
+        for mem in all_active:
+            if _fact_is_low_value(mem[1]) or _fact_covered_by_md(mem[1], mem[2], mem[3] or ""):
+                conn.execute("DELETE FROM cortex_memories WHERE id=?", (mem[0],))
+                md_deleted += 1
+
+        if merged_count or archived_count or md_deleted:
             conn.commit()
             if merged_count:
                 log.info("Cortex consolidated %d memories", merged_count)
@@ -1452,7 +1587,10 @@ def _cortex_consolidate_once():
             if archived_count:
                 log.info("Cortex auto-archived %d stale memories", archived_count)
                 mlog.emit("info", "cortex", "cortex.staleness", f"Auto-archived {archived_count} stale memories")
-        return f"merged={merged_count}, archived={archived_count}"
+            if md_deleted:
+                log.info("Cortex deleted %d facts covered by .md files", md_deleted)
+                mlog.emit("info", "cortex", "cortex.md_dedup", f"Deleted {md_deleted} facts already in .md files")
+        return f"merged={merged_count}, archived={archived_count}, md_dedup={md_deleted}"
     except Exception as e:
         log.debug("Cortex consolidation error: %s", e)
         raise
@@ -3620,6 +3758,9 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
                 if scope not in ("global", "agent", "project"):
                     scope = "global"
                 importance = max(1, min(10, int(fact_obj.get("importance", 5))))
+                # v0.28.45 — skip facts covered by .md files or low-value
+                if _fact_is_low_value(fact_text) or _fact_covered_by_md(fact_text, scope, ""):
+                    continue
                 keywords = ",".join(_cortex_tokenize(fact_text))
                 conn.execute(
                     """INSERT INTO cortex_memories (fact, scope, scope_id, source_type, source_id,
@@ -8596,7 +8737,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.43</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.45</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9855,6 +9996,8 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.45', date:'2026-03-08', notes:['.md-aware memory dedup — skip facts already in persona files','Low-value fact filter (meta-commentary, session noise)','Consolidation deletes facts covered by .md files'] },
+  { ver:'v0.28.44', date:'2026-03-08', notes:['Sessions auto-archive after extraction','Session list: pending prominent, extracted collapsed + dimmed with checkmark','Progress bar refreshes after extraction completes'] },
   { ver:'v0.28.43', date:'2026-03-08', notes:['System workflow run counts persist to DB (survive restarts)','Consolidation deletes duplicates instead of chaining consolidated_into','Memory map shows Loading... while graph fetches'] },
   { ver:'v0.28.42', date:'2026-03-08', notes:['Consolidation: lowered Jaccard threshold 0.5→0.4, skip already-merged pairs','Fixed API limit cap (200→1000) — graph counters now match inbox','Merged 9 duplicate memories (including 3x Moe name facts)'] },
   { ver:'v0.28.41', date:'2026-03-08', notes:['Fix memory extraction: agent-scoped facts without persona_id fall back to global','Migrated 47 orphaned agent memories to global (were invisible to injection)','Prevents future orphan memories from scope assignment bug'] },
@@ -12801,36 +12944,47 @@ function _renderInlineSessions(sessions, source, container) {
     container.innerHTML = '<div style="padding:8px;font-size:11px;color:var(--text3)">No sessions</div>';
     return;
   }
-  var shown = sessions.slice(0, 20);
-  container.innerHTML = '<div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">'
-    + shown.map(function(s) {
-      var ageBadge = _memAgeBadge(s.last_ts || s.first_ts);
-      var sid = escHtml(s.id);
-      var shortId = sid.substring(0, 8);
-      var sname = escHtml(s.name || s.id.substring(0, 12));
-      var ssrc = escHtml(s.source || source);
-      return '<div class="inline-sess-card">'
-        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
-        + '<span class="sess-name-label" style="font-size:11px;font-weight:500;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sname + '</span>'
-        + ageBadge
-        + '</div>'
-        + '<div style="display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text3)">'
-        + '<span style="font-family:monospace">' + shortId + '</span>'
-        + '<span>' + (s.messages || 0) + ' msgs</span>'
-        + '</div>'
-        + '<div style="display:flex;gap:4px;margin-top:3px">'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_showSessionLearnings(this,\'' + sid + '\',\'' + ssrc + '\')">' + (s.learnings ? '\u25be Memory' : 'Memory') + '</button>'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px;color:var(--red,#f87171)" onclick="event.stopPropagation();deleteSession(\'' + sid + '\',\'' + ssrc + '\')">Delete</button>'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_renameSession(this,\'' + sid + '\',\'' + ssrc + '\')">\u270f</button>'
-        + '</div>'
-        + '<div class="sess-learnings-inline" style="margin-top:3px;display:none;overflow:visible" data-sid="' + sid + '"></div>'
-        + '</div>';
-    }).join('')
-    + (sessions.length > 20 ? '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:4px">Showing 20 of ' + sessions.length + '</div>' : '')
-    + '</div>';
+  var pending = sessions.filter(function(s) { return !s.learnings; });
+  var extracted = sessions.filter(function(s) { return !!s.learnings; });
+  function _sc(s, dim) {
+    var ageBadge = _memAgeBadge(s.last_ts || s.first_ts);
+    var sid = escHtml(s.id), shortId = sid.substring(0, 8);
+    var sname = escHtml(s.name || s.id.substring(0, 12));
+    var ssrc = escHtml(s.source || source);
+    return '<div class="inline-sess-card" style="' + (dim ? 'opacity:.5;' : '') + '">'
+      + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
+      + (dim ? '<span style="font-size:10px;color:var(--green,#4ade80)">\u2713</span>' : '')
+      + '<span class="sess-name-label" style="font-size:11px;font-weight:500;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sname + '</span>'
+      + ageBadge + '</div>'
+      + '<div style="display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text3)">'
+      + '<span style="font-family:monospace">' + shortId + '</span>'
+      + '<span>' + (s.messages || 0) + ' msgs</span></div>'
+      + '<div style="display:flex;gap:4px;margin-top:3px">'
+      + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_showSessionLearnings(this,\'' + sid + '\',\'' + ssrc + '\')">' + (s.learnings ? '\u25be Memory' : 'Memory') + '</button>'
+      + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px;color:var(--red,#f87171)" onclick="event.stopPropagation();deleteSession(\'' + sid + '\',\'' + ssrc + '\')">Del</button>'
+      + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_maSessionChat(\'' + sid + '\',\'' + ssrc + '\',\'' + sname + '\')">Resume</button>'
+      + '</div>'
+      + '<div class="sess-learnings-inline" style="margin-top:3px;display:none;overflow:visible" data-sid="' + sid + '"></div>'
+      + '</div>';
+  }
+  var html = '<div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">';
+  if (pending.length) {
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text2);padding:2px 0">Pending (' + pending.length + ')</div>';
+    html += pending.slice(0, 20).map(function(s) { return _sc(s, false); }).join('');
+  }
+  if (extracted.length) {
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);padding:4px 0 2px;margin-top:4px;cursor:pointer" onclick="var n=this.nextElementSibling;n.style.display=n.style.display===\'none\'?\'\':\'none\'">'
+      + '\u25b8 Extracted (' + extracted.length + ')</div>';
+    html += '<div style="display:none">';
+    html += extracted.slice(0, 20).map(function(s) { return _sc(s, true); }).join('');
+    html += '</div>';
+  }
+  if (!pending.length && extracted.length) {
+    html += '<div style="padding:8px;text-align:center;font-size:11px;color:var(--green,#4ade80)">\u2713 All sessions extracted</div>';
+  }
+  html += '</div>';
+  container.innerHTML = html;
 }
-
 var _showArchivedSessions = false;
 
 async function _loadActivitySessions(source) {
@@ -24967,7 +25121,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.43"})
+            self.reply_json({"v": "0.28.45"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25129,7 +25283,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.42"
+                health["porter_version"] = "0.28.45"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -26952,7 +27106,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.43'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.45'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31187,7 +31341,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.43 ready (localhost only)")
+    print(f"\n  Porter v0.28.45 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
