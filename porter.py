@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.27 — Verification Loops, Session Lifecycle"""
+"""Porter v0.29.28 — Design consistency: remove left-border accents"""
 
 
 import email
@@ -8629,8 +8629,8 @@ body.density-compact .file-name { padding: 6px 0; }
 .ma-summary-modal { position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10010;display:flex;align-items:center;justify-content:center; }
 .ma-summary-box { background:var(--bg);border:1px solid var(--border);border-radius:12px;width:520px;max-height:80vh;overflow-y:auto;padding:20px; }
 .ma-summary-turn { padding:8px 12px;margin-bottom:4px;border-radius:6px;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word; }
-.ma-summary-turn.user { background:color-mix(in srgb, var(--accent) 10%, transparent);border-left:3px solid var(--accent); }
-.ma-summary-turn.assistant { background:var(--surface2);border-left:3px solid #22c55e; }
+.ma-summary-turn.user { background:color-mix(in srgb, var(--accent) 8%, transparent); }
+.ma-summary-turn.assistant { background:var(--surface2); }
 .ma-summary-role { font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text3);margin-bottom:2px; }
 .model-card-activity .pulse-dot { width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse-dot .8s ease-in-out infinite alternate; }
 .model-card-selector { margin-top:8px; }
@@ -9142,7 +9142,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.27</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.28</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10427,6 +10427,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.29.28', date:'2026-03-08', notes:['Design consistency: replaced all border-left:3px accent patterns with status dots','Quest items, squad cards, activity runs, live feed events — all use dots now','Summary turns: removed border-left, kept subtle background tints','Skill proposals: replaced dashed accent border with solid border'] },
   { ver:'v0.29.27', date:'2026-03-08', notes:['Verification Loops: strict hook profile agents get post-dispatch response quality checks','Verification scoring: length, echo detection, hedging patterns, keyword overlap','Session Lifecycle: chat sessions auto-pause after 30min, archive after 24h','DB migration: session_state, last_activity, paused_at, archived_at columns'] },
   { ver:'v0.29.26', date:'2026-03-08', notes:['Graceful failure: api() returns better error messages (offline/timeout/server error)','uiFail() centralized error display with retry button','Loading timeout: stuck Loading... auto-replaced with retry after 10s','Iterative Retrieval: 2-pass keyword-based context from agent memory files for chat dispatch'] },
   { ver:'v0.29.25', date:'2026-03-08', notes:['Deleted obsolete setup wizard (~400 lines CSS/JS/HTML removed)','Workflow history: shows run stats, last error, last run time even without detailed entries','Hook Profiles: per-agent dispatch strictness (relaxed/balanced/strict) in Config tab','DB migration: hook_profile column added to personas table'] },
@@ -12940,7 +12941,7 @@ function _renderSkillsTab() {
       + '\u{1F4A1} Proposed Skills <span style="font-weight:400;opacity:.6">(' + proposed.length + ' from patterns)</span></div>'
       + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">'
       + proposed.map(function(p) {
-        return '<div style="padding:10px 14px;border:1px dashed var(--accent);border-radius:8px;background:color-mix(in srgb,var(--accent) 4%,transparent)">'
+        return '<div style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">'
           + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
           + '<span style="font-size:14px">\u{2728}</span>'
           + '<span style="font-weight:500;font-size:13px;color:var(--text)">' + escHtml(p.title) + '</span>'
@@ -19153,8 +19154,9 @@ async function _loadQuestLog() {
   }
   el.innerHTML = quests.map(function(q) {
     var color = q.type === 'error' ? '#ef4444' : q.type === 'agent' ? '#f59e0b' : '#3b82f6';
-    return '<div style="padding:8px 12px;border-left:3px solid ' + color + ';background:var(--bg2);border-radius:4px;margin-bottom:6px">'
+    return '<div style="padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">'
       + '<div style="display:flex;align-items:center;gap:6px">'
+      + '<span style="width:6px;height:6px;border-radius:50%;background:' + color + ';flex-shrink:0"></span>'
       + '<span>' + q.icon + '</span>'
       + '<span style="font-size:12px;font-weight:500;color:var(--text)">' + escHtml(q.title) + '</span></div>'
       + (q.detail ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;padding-left:22px">' + escHtml(q.detail) + '</div>' : '')
@@ -19231,9 +19233,10 @@ function _renderSquadMgrList() {
   }
   var html = '';
   _squads.forEach(function(s) {
-    html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;border-left:3px solid ' + s.color + '">'
+    html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--surface)">'
       + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
       + '  <div style="display:flex;align-items:center;gap:8px">'
+      + '    <span style="width:8px;height:8px;border-radius:50%;background:' + s.color + ';flex-shrink:0"></span>'
       + '    <span style="font-weight:600;font-size:13px;color:var(--text)">' + escHtml(s.name) + '</span>'
       + '    <span style="font-size:10px;color:var(--text3)">' + s.member_count + ' member' + (s.member_count !== 1 ? 's' : '') + '</span>'
       + '  </div>'
@@ -19570,8 +19573,8 @@ function switchPdTab(tab) {
             totalTokens += r.tokens_total || 0;
             var st = r.status === 'complete' ? '#22c55e' : r.status === 'failed' ? '#ef4444' : '#f59e0b';
             var ago = r.created_at ? new Date(r.created_at * 1000).toLocaleString() : '';
-            return '<div style="padding:6px 8px;border-left:3px solid ' + st + ';background:var(--bg);border-radius:4px;margin-bottom:4px">'
-              + '<div style="display:flex;justify-content:space-between"><span style="color:var(--text)">' + escHtml((r.message || '').substring(0, 80)) + '</span>'
+            return '<div style="padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:4px">'
+              + '<div style="display:flex;align-items:center;gap:6px;justify-content:space-between"><span style="display:flex;align-items:center;gap:6px;color:var(--text)"><span style="width:5px;height:5px;border-radius:50%;background:' + st + ';flex-shrink:0"></span>' + escHtml((r.message || '').substring(0, 80)) + '</span></span>'
               + '<span style="font-size:10px;color:var(--text3)">' + ago + '</span></div></div>';
           }).join('');
           var dEl = document.getElementById('ov-dispatches');
@@ -19654,8 +19657,9 @@ function switchPdTab(tab) {
             : eventType.includes('complete') || eventType.includes('pass') ? '#22c55e' : '#3b82f6';
           var detail = data.text ? data.text.substring(0, 200) : (data.output_summary || data.prompt || data.message || '').substring(0, 200);
           var el = document.createElement('div');
-          el.style.cssText = 'padding:8px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;border-left:3px solid ' + color;
+          el.style.cssText = 'padding:8px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px';
           el.innerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">'
+            + '<span style="width:6px;height:6px;border-radius:50%;background:' + color + ';flex-shrink:0"></span>'
             + '<span style="font-size:10px;color:' + color + ';font-weight:600">' + escHtml(eventType) + '</span>'
             + '<span style="font-size:9px;color:var(--text3);margin-left:auto">' + ts + '</span></div>'
             + (detail ? '<div style="color:var(--text2);word-break:break-word">' + escHtml(detail) + '</div>' : '');
@@ -26329,7 +26333,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.27"})
+            self.reply_json({"v": "0.29.28"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -26491,7 +26495,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.27"
+                health["porter_version"] = "0.29.28"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28325,7 +28329,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.27'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.28'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32827,7 +32831,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.27 ready (localhost only)")
+    print(f"\n  Porter v0.29.28 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
