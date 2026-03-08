@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.49 — Universal truth dedup: CLAUDE.md + auto-memory in cortex filter, cross-session dedup"""
+"""Porter v0.28.50 — Workflow history polish, extraction bar blue, stale error fix"""
 
 
 import email
@@ -1295,8 +1295,8 @@ def _cortex_extract_and_route(message, response_text, persona_id="", backend="")
     _CORTEX_EXTRACT_GUARD.active = True
     _t0 = _ext_t.time()
     try:
-        _cortex_extract_and_route_inner(message, response_text, persona_id, backend)
-        _wf_record_run("memory_extraction", success=True, duration_s=_ext_t.time()-_t0)
+        _n_inserted = _cortex_extract_and_route_inner(message, response_text, persona_id, backend)
+        _wf_record_run("memory_extraction", success=True, result=f"{_n_inserted or 0} facts extracted", duration_s=_ext_t.time()-_t0)
     except Exception as _ext_e:
         _wf_record_run("memory_extraction", success=False, error=_ext_e, duration_s=_ext_t.time()-_t0)
         raise
@@ -1465,6 +1465,7 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
             _emit_event("cortex:update", {"new_facts": inserted, "new_1h": new_1h, "persona_id": persona_id, "backend": backend})
         except Exception:
             pass
+    return inserted
 
 def _cortex_inject_context(message, persona_id="", project_id=""):
     """Inject relevant memories before a persona dispatch. Pure SQL + keyword matching, no LLM."""
@@ -1636,7 +1637,11 @@ def _cortex_consolidate_once():
             if md_deleted:
                 log.info("Cortex deleted %d facts covered by .md files", md_deleted)
                 mlog.emit("info", "cortex", "cortex.md_dedup", f"Deleted {md_deleted} facts already in .md files")
-        return f"merged={merged_count}, archived={archived_count}, md_dedup={md_deleted}"
+        _parts = []
+        if merged_count: _parts.append(f"merged {merged_count}")
+        if archived_count: _parts.append(f"archived {archived_count}")
+        if md_deleted: _parts.append(f"cleaned {md_deleted}")
+        return " | ".join(_parts) if _parts else "clean — nothing to do"
     except Exception as e:
         log.debug("Cortex consolidation error: %s", e)
         raise
@@ -1828,8 +1833,8 @@ def _context_hygiene_loop():
     # Run once on startup
     try:
         _t0 = _t.time()
-        _hygiene_run()
-        _wf_record_run("context_hygiene", success=True, result="startup run", duration_s=_t.time()-_t0)
+        _hr = _hygiene_run()
+        _wf_record_run("context_hygiene", success=True, result=f"logs={_hr.get('logs_pruned',0)}, souls={_hr.get('souls_capped',0)}, archived={_hr.get('memories_archived',0)}", duration_s=_t.time()-_t0)
     except Exception as e:
         log.warning("Hygiene startup run failed: %s", e)
         _wf_record_run("context_hygiene", success=False, error=e)
@@ -1843,8 +1848,8 @@ def _context_hygiene_loop():
             continue
         _t0 = _t.time()
         try:
-            _hygiene_run()
-            _wf_record_run("context_hygiene", success=True, duration_s=_t.time()-_t0)
+            _hr2 = _hygiene_run()
+            _wf_record_run("context_hygiene", success=True, result=f"logs={_hr2.get('logs_pruned',0)}, souls={_hr2.get('souls_capped',0)}, archived={_hr2.get('memories_archived',0)}", duration_s=_t.time()-_t0)
         except Exception as e:
             log.warning("Hygiene loop error: %s", e)
             _wf_record_run("context_hygiene", success=False, error=e, duration_s=_t.time()-_t0)
@@ -4540,6 +4545,7 @@ def _heartbeat_tick():
     rows = conn.execute(
         "SELECT id, name, heartbeat_cron, last_heartbeat FROM personas WHERE heartbeat_enabled = 1 AND heartbeat_cron != ''"
     ).fetchall()
+    _hb_pinged = 0
     for row in rows:
         pid, pname, cron_expr, last_hb = row["id"], row["name"], row["heartbeat_cron"], row["last_heartbeat"]
         try:
@@ -4547,11 +4553,13 @@ def _heartbeat_tick():
             due = _cron_next(cron_expr, from_dt=from_dt)
             if due and due <= now:
                 _run_heartbeat(pid, pname)
+                _hb_pinged += 1
                 conn.execute("UPDATE personas SET last_heartbeat = ? WHERE id = ?",
                              (now.isoformat(), pid))
                 conn.commit()
         except Exception as e:
             log.debug("Heartbeat skip %s: %s", pid, e)
+    return len(rows), _hb_pinged
 
 
 def _run_heartbeat(persona_id, persona_name):
@@ -4605,8 +4613,8 @@ def _heartbeat_loop():
         _wf_start_run("heartbeat")
         _t0 = _htime.time()
         try:
-            _heartbeat_tick()
-            _wf_record_run("heartbeat", success=True, duration_s=_htime.time()-_t0)
+            _hb_total, _hb_sent = _heartbeat_tick()
+            _wf_record_run("heartbeat", success=True, result=f"{_hb_total} monitored, {_hb_sent} pinged", duration_s=_htime.time()-_t0)
         except Exception as e:
             log.debug("Heartbeat loop error: %s", e)
             _wf_record_run("heartbeat", success=False, error=e, duration_s=_htime.time()-_t0)
@@ -6396,7 +6404,7 @@ def _telemetry_rollup_loop():
             hour = int((_t.time() % 86400) / 3600)
             if hour == 0:
                 _rollup_daily()
-            _wf_record_run("telemetry_rollup", success=True, duration_s=_t.time()-_t0)
+            _wf_record_run("telemetry_rollup", success=True, result="rollup complete", duration_s=_t.time()-_t0)
         except Exception as e:
             log.error("Telemetry rollup loop error: %s", e)
             _wf_record_run("telemetry_rollup", success=False, error=e, duration_s=_t.time()-_t0)
@@ -8804,7 +8812,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.49</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.50</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10024,6 +10032,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.50', date:'2026-03-08', notes:['Workflow history shows useful results (not just zeros)','Stale workflow errors auto-clear on next successful run','Extraction progress bar: blue theme with animation','Consolidation result: human-readable (clean or action counts)','Memory extraction reports fact count in history','Heartbeat reports monitored/pinged counts'] },
   { ver:'v0.28.49', date:'2026-03-08', notes:['Universal truth dedup: cortex filter now reads CLAUDE.md + Claude auto-memory (not just persona .md files)','Cross-session dedup: re-extract no longer creates duplicates of facts from other sessions','Added naming rule to RULES.md so persona filter catches it','Cleaned cortex: 56 → 10 high-quality durable memories'] },
   { ver:'v0.28.48', date:'2026-03-08', notes:['Remove Cortex Config button and view (system workflows handle it)','Remove Global filter from inbox (graph icon already filters)','Fix: project scope without real ID falls back to global','Cleaned 84 stale implementation facts from cortex (236 \u2192 61)'] },
   { ver:'v0.28.47', date:'2026-03-08', notes:['Fix: Loading indicator visible on memory map (CSS var resolved properly)','Fix: Memory map resizes with browser even when locked (lock = freeze nodes only)','Lock no longer disables zoom/fit/center controls'] },
@@ -12769,7 +12778,7 @@ async function _updateExtractionProgress() {
     if (!bar) return;
     var pct = total > 0 ? Math.min(100, Math.round(extracted / total * 100)) : 0;
     var isRunning = _extractAllRunning;
-    var dotColor = isRunning ? '#3b82f6' : (remaining > 0 ? '#22c55e' : '#9ca3af');
+    var dotColor = isRunning ? '#3b82f6' : (remaining > 0 ? '#3b82f6' : '#22c55e');
     var dotAnim = isRunning ? ';animation:cx-blink 1s ease-in-out infinite' : '';
     var statusLabel = isRunning ? 'Extracting...' : (remaining > 0 ? remaining + ' pending' : 'All extracted');
     bar.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px">'
@@ -12787,7 +12796,7 @@ async function _updateExtractionProgress() {
         : '')
       + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
       + '<div style="flex:1;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden">'
-      + '<div style="height:100%;width:' + pct + '%;background:' + (pct >= 100 ? '#22c55e' : 'var(--accent)') + ';border-radius:3px;transition:width 0.3s"></div>'
+      + '<div style="height:100%;width:' + pct + '%;background:' + (pct >= 100 ? '#22c55e' : '#3b82f6') + ';border-radius:3px;transition:width 0.3s' + (isRunning ? ';animation:wf-progress 2s ease-in-out infinite' : '') + '"></div>'
       + '</div>'
       + '<span style="font-size:11px;color:var(--text3);white-space:nowrap">' + extracted + '/' + total + ' (' + pct + '%)</span>'
       + '</div>'
@@ -25117,7 +25126,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.49"})
+            self.reply_json({"v": "0.28.50"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25279,7 +25288,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.49"
+                health["porter_version"] = "0.28.50"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27087,7 +27096,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.49'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.50'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31322,7 +31331,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.49 ready (localhost only)")
+    print(f"\n  Porter v0.28.50 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
