@@ -1229,6 +1229,13 @@ _LOW_VALUE_PATTERNS = [
     re.compile(r"^(no other persona|the service under test)", re.I),
     re.compile(r"(may not be directly verifiable|may have multiple subpaths)", re.I),
     re.compile(r"(indentation bug|erasableSyntax|frontispiece|nested project)", re.I),
+    # v0.28.49 — Tasks / feature requests (not durable memories)
+    re.compile(r"^(project requirement|feature request|the requested feature)", re.I),
+    re.compile(r"(should support|needs to support|must support|wants? .* (feature|support|capability))", re.I),
+    re.compile(r"(requested a .*(workflow|feature|tool|system|endpoint|UI))", re.I),
+    re.compile(r"^(the user (wants|needs|asked for|requested) (a|an|the))", re.I),
+    re.compile(r"(should be (built|added|implemented|created|developed))", re.I),
+    re.compile(r"(needs (backend|frontend|API|UI) (plumbing|work|changes|implementation))", re.I),
 ]
 
 def _fact_is_low_value(fact_text):
@@ -1336,7 +1343,9 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
         "- Environment facts (what tools are installed, file paths)\n"
         "- Task status (what was completed, what is pending)\n"
         "- Generic knowledge (what a tool does, what a format looks like)\n"
-        "- Response style preferences (already in persona SOUL.md files)\n\n"
+        "- Response style preferences (already in persona SOUL.md files)\n"
+        "- Feature requests or tasks to build (these belong in task trackers, not memory)\n"
+        "- Project requirements or specs (e.g. \'should support X\', \'needs Y\')\n\n"
         "ONLY extract:\n"
         "- Durable user preferences that affect future interactions\n"
         "- Architectural decisions that won't change session-to-session\n"
@@ -3739,7 +3748,9 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
             "- Environment facts (what tools are installed, file paths, versions)\n"
             "- Task status or progress (what was completed, what is pending)\n"
             "- Generic/obvious knowledge anyone would know\n"
-            "- Response style preferences (already in SOUL.md files)\n\n"
+            "- Response style preferences (already in SOUL.md files)\n"
+            "- Feature requests or tasks to build (these go in task trackers, not memory)\n"
+            "- Project requirements or specs (e.g. \'should support X\', \'needs Y feature\')\n\n"
             "ONLY extract:\n"
             "- Durable user preferences that affect future interactions\n"
             "- Architectural decisions that won't change session-to-session\n"
@@ -16854,6 +16865,27 @@ var _wfSkills = [];
 var _wfShowAll = false;
 var _cortexAgents = [];
 async function _loadCortexTab() {
+  // v0.28.49 — Show loading indicator immediately on canvas
+  var _lcCanvas = document.getElementById('cx-graph-canvas');
+  if (_lcCanvas) {
+    var _lcDpr = window.devicePixelRatio || 1;
+    var _lcP = _lcCanvas.parentElement;
+    var _lcW = _lcP ? _lcP.clientWidth : 700;
+    var _lcH = _lcP ? _lcP.clientHeight : 400;
+    if (_lcW < 100) _lcW = 700;
+    if (_lcH < 100) _lcH = 400;
+    _lcCanvas.width = _lcW * _lcDpr; _lcCanvas.height = _lcH * _lcDpr;
+    _lcCanvas.style.width = _lcW + 'px'; _lcCanvas.style.height = _lcH + 'px';
+    var _lcCtx = _lcCanvas.getContext('2d');
+    if (_lcCtx) {
+      _lcCtx.setTransform(_lcDpr, 0, 0, _lcDpr, 0, 0);
+      var _lcBg = getComputedStyle(document.documentElement).getPropertyValue('--bg2').trim() || '#111';
+      var _lcFg = getComputedStyle(document.documentElement).getPropertyValue('--text3').trim() || '#888';
+      _lcCtx.fillStyle = _lcBg; _lcCtx.fillRect(0, 0, _lcW, _lcH);
+      _lcCtx.fillStyle = _lcFg; _lcCtx.font = '14px system-ui'; _lcCtx.textAlign = 'center';
+      _lcCtx.fillText('Loading memory map\u2026', _lcW/2, _lcH/2);
+    }
+  }
   // Load agents list for routing dropdowns
   try {
     var aData = await api('/api/personas');
@@ -16909,11 +16941,15 @@ function _updateCortexBadge(count) {
 
 // _toggleShowRouted removed in v0.28.1 — routing concept eliminated
 
-function _renderCortexMemories(memories) {
+function _renderCortexMemories(memories, isFiltered) {
   var el = document.getElementById('cx-memory-list');
   if (!el) return;
   if (!memories.length) {
-    el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text3)"><div style="font-size:28px;margin-bottom:8px">\u2728</div><div style="font-size:13px">No memories yet</div><div style="font-size:12px;margin-top:4px">Dispatch to an agent to start building memory</div></div>';
+    if (isFiltered) {
+      el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text3)"><div style="font-size:13px">No matches</div></div>';
+    } else {
+      el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text3)"><div style="font-size:28px;margin-bottom:8px">\u2728</div><div style="font-size:13px">No memories yet</div><div style="font-size:12px;margin-top:4px">Dispatch to an agent to start building memory</div></div>';
+    }
     return;
   }
   var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80'};
@@ -17009,7 +17045,7 @@ function _filterCortexScope(scope, btn) {
   } else {
     filtered = (_cortexMemories || []).filter(function(m) { return m.scope === scope; });
   }
-  _renderCortexMemories(filtered);
+  _renderCortexMemories(filtered, true);
   _showCortexFilterBar(scope.charAt(0).toUpperCase() + scope.slice(1) + ' — ' + filtered.length);
 }
 function _showCortexFilterBar(label) {
@@ -17557,7 +17593,7 @@ function _drawGraph() {
   _graphEdges.forEach(function(e) {
     var a = _graphNodes[e.source], b = _graphNodes[e.target];
     if (!a || !b) return;
-    var weight = Math.min(5, Math.max(0.5, (e.weight || 1) * 0.8));
+    var weight = Math.min(5, Math.max(1, (e.weight || 1) * 1.2)); // v0.28.49 — thicker min weight
     var isCollab = e.type === 'collab';
     // Filter opacity
     var edgeOpacity = 1;
@@ -17567,7 +17603,7 @@ function _drawGraph() {
       if (!aMatch && !bMatch) edgeOpacity = 0.08;
       else if (!aMatch || !bMatch) edgeOpacity = 0.25;
     }
-    var pulse = (0.3 + 0.2 * Math.sin(time * 1.5 + (e.source || 0))) * edgeOpacity;
+    var pulse = (0.5 + 0.25 * Math.sin(time * 1.5 + (e.source || 0))) * edgeOpacity; // v0.28.49 — brighter flow lines
     // Calculate border intersection points
     var dx = b.x - a.x, dy = b.y - a.y;
     var dist = Math.sqrt(dx*dx + dy*dy) || 1;
