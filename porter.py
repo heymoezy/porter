@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.28.47 — Squad awareness, persona restore, interval fix, workflow triggers"""
+"""Porter v0.28.48 — Squad awareness, persona restore, interval fix, workflow triggers"""
 
 
 import email
@@ -3780,8 +3780,8 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
                 if not fact_text or len(fact_text) < 5:
                     continue
                 scope = fact_obj.get("scope", "global")
-                if scope not in ("global", "agent", "project"):
-                    scope = "global"
+                if scope not in ("global", "agent"):
+                    scope = "global"  # v0.28.48 — no generic "project" scope, must have real ID
                 importance = max(1, min(10, int(fact_obj.get("importance", 5))))
                 # v0.28.45 — skip facts covered by .md files or low-value
                 if _fact_is_low_value(fact_text) or _fact_covered_by_md(fact_text, scope, ""):
@@ -8762,7 +8762,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.47</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.28.48</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9331,7 +9331,6 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="module-hdr">
       <span class="module-title">Cortex</span>
       <div style="flex:1"></div>
-      <button class="btn btn-ghost cx-view-btn" id="cx-view-config-btn" onclick="_switchCortexView('config')" style="font-size:11px;padding:3px 10px;border-radius:4px">Config</button>
       <button class="btn btn-ghost" style="margin-left:4px" onclick="_loadCortexTab()">&#8635;</button>
     </div>
 
@@ -9389,7 +9388,6 @@ input[type="number"].settings-input { min-width: 60px; }
         <div style="padding:4px 12px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;gap:3px;flex-wrap:wrap">
           <button class="btn btn-ghost cx-scope-filter active" onclick="_filterCortexScope('all',this)" style="font-size:10px;padding:2px 7px">All</button>
           <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('unassigned',this)" style="font-size:10px;padding:2px 7px;color:#f87171">Unassigned</button>
-          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('global',this)" style="font-size:10px;padding:2px 7px">Global</button>
         </div>
         <div style="padding:4px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
           <input type="text" id="cx-search" placeholder="Search..." oninput="_searchCortexMemories(this.value)" style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none;box-sizing:border-box" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
@@ -9408,44 +9406,7 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
     </div>
 
-    <!-- CONFIG VIEW (hidden by default) -->
-    <div id="cx-config-view" style="display:none;padding:16px 28px 28px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-        <button class="btn btn-ghost" onclick="_switchCortexView('main')" style="font-size:12px;padding:4px 10px">&larr; Back</button>
-        <div style="font-size:14px;font-weight:600;color:var(--text)">Cortex Configuration</div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:600px">
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer">
-          <input type="checkbox" id="cx-toggle2" onchange="_saveCortexConfig2()" checked>
-          <span>Auto-extract enabled</span>
-        </label>
 
-        <label style="font-size:13px;color:var(--text2)">
-          Min response length
-          <input type="number" id="cx-min2" value="100" min="20" max="1000" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
-        </label>
-        <label style="font-size:13px;color:var(--text2)">
-          Max facts per extraction
-          <input type="number" id="cx-max2" value="8" min="1" max="20" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
-        </label>
-        <label style="font-size:13px;color:var(--text2)">
-          Context injection limit
-          <input type="number" id="cx-inject2" value="5" min="1" max="20" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
-        </label>
-        <label style="font-size:13px;color:var(--text2)">
-          Consolidation interval (hours)
-          <input type="number" id="cx-consol2" value="6" min="1" max="48" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
-        </label>
-        <label style="font-size:13px;color:var(--text2)">
-          Auto-archive after (days)
-          <input type="number" id="cx-archive-days" value="60" min="7" max="365" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
-        </label>
-        <label style="font-size:13px;color:var(--text2)">
-          Min uses before archive
-          <input type="number" id="cx-min-use" value="3" min="0" max="50" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)" onchange="_saveCortexConfig2()">
-        </label>
-      </div>
-    </div>
   </div>
 
   <div id="admin-module" class="module-panel">
@@ -10021,6 +9982,7 @@ const CHANGELOG = [
   { ver:'v0.28.15', date:'2026-03-07', notes:['Fixed all chat commands: removed italic markdown from loading messages','Fixed /models: uses API instead of DOM (works on any tab)','Fixed Skills tab: restored _wfShowAll, _wfSkills globals + toggleShowAllSkills + filterWorkflowSkills','Fixed capability_checks workflow: now records runs and errors','Last Prompt → Last Dispatch: filters out cortex extraction calls'] },
   { ver:'v0.28.16', date:'2026-03-07', notes:['Nav: renamed AI group to Intelligence (Models + Cortex)'] },
   { ver:'v0.28.17', date:'2026-03-07', notes:['Lock now freezes container size (prevents CSS flex resize)','Load all cortex memories (limit=200) so click-filter works','Inbox → Learnings','Filters: Learned→Facts, Sessions→Episodes','Removed Workflows refresh button'] },
+  { ver:'v0.28.48', date:'2026-03-08', notes:['Remove Cortex Config button and view (system workflows handle it)','Remove Global filter from inbox (graph icon already filters)','Fix: project scope without real ID falls back to global','Cleaned 84 stale implementation facts from cortex (236 \u2192 61)'] },
   { ver:'v0.28.47', date:'2026-03-08', notes:['Fix: Loading indicator visible on memory map (CSS var resolved properly)','Fix: Memory map resizes with browser even when locked (lock = freeze nodes only)','Lock no longer disables zoom/fit/center controls'] },
   { ver:'v0.28.46', date:'2026-03-08', notes:['Disciplined extraction prompt — only durable knowledge, not session artifacts','Max facts reduced from 8 to 5','DO NOT extract list: implementation details, session observations, agent identity, task status','Strengthened low-value patterns for consolidation cleanup'] },
   { ver:'v0.28.45', date:'2026-03-08', notes:['.md-aware memory dedup — skip facts already in persona files','Low-value fact filter (meta-commentary, session noise)','Consolidation deletes facts covered by .md files'] },
@@ -16855,17 +16817,7 @@ async function loadModels() {
   } catch(e) { /* loadModels error silenced */ }
 }
 
-function _switchCortexView(view) {
-  var mainView = document.getElementById('cx-main-view');
-  var configView = document.getElementById('cx-config-view');
-  if (view === 'config') {
-    if (mainView) mainView.style.display = 'none';
-    if (configView) configView.style.display = '';
-  } else {
-    if (mainView) mainView.style.display = '';
-    if (configView) configView.style.display = 'none';
-  }
-}
+
 
 var _cortexMemories = [];
 var _wfSkills = [];
@@ -16884,24 +16836,12 @@ async function _loadCortexTab() {
       var t = document.getElementById('cx-total2'); if (t) t.textContent = stats.total_active || 0;
       var h = document.getElementById('cx-24h2'); if (h) h.textContent = stats.last_24h || 0;
       var st = document.getElementById('cx-status2'); if (st) { st.innerHTML = stats.enabled ? '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:var(--green,#4ade80);animation:cx-blink 1.5s ease-in-out infinite"></span>Live</span>' : '<span style="color:var(--red,#f87171)">Off</span>'; }
-      var tog = document.getElementById('cx-toggle2'); if (tog) tog.checked = stats.enabled !== false;
       // Unrouted count
       var new1h = stats.new_1h || 0;
       var n1El = document.getElementById('cx-new1h2'); if (n1El) n1El.textContent = new1h;
       // Nav badge — show hourly count
       _updateCortexBadge(new1h);
     }
-  } catch(e) {}
-  // Load config
-  try {
-    var prefs = window._currentPrefs || {};
-    var m2 = document.getElementById('cx-min2'); if (m2) m2.value = prefs.cortex_min_response_len || 100;
-    var mx = document.getElementById('cx-max2'); if (mx) mx.value = prefs.cortex_max_facts || 8;
-    var ij = document.getElementById('cx-inject2'); if (ij) ij.value = prefs.cortex_inject_limit || 5;
-
-    var co = document.getElementById('cx-consol2'); if (co) co.value = prefs.cortex_consolidate_hours || 6;
-    var ad = document.getElementById('cx-archive-days'); if (ad) ad.value = prefs.cortex_archive_days || 60;
-    var mu = document.getElementById('cx-min-use'); if (mu) mu.value = prefs.cortex_min_use_count || 3;
   } catch(e) {}
   // Load memories
   try {
@@ -17195,20 +17135,7 @@ async function _editCortexMem(id, btn) {
   };
 }
 
-async function _saveCortexConfig2() {
-  var payload = {
-    cortex_enabled: document.getElementById('cx-toggle2').checked,
-    cortex_min_response_len: parseInt(document.getElementById('cx-min2').value) || 100,
-    cortex_max_facts: parseInt(document.getElementById('cx-max2').value) || 8,
-    cortex_inject_limit: parseInt(document.getElementById('cx-inject2').value) || 5,
-    cortex_consolidate_hours: parseInt((document.getElementById('cx-consol2') || {}).value) || 6,
-    cortex_archive_days: parseInt((document.getElementById('cx-archive-days') || {}).value) || 60,
-    cortex_min_use_count: parseInt((document.getElementById('cx-min-use') || {}).value) || 3,
-  };
-  var r = await api('/api/cortex/config', payload);
-  if (r && r.ok) toast('Cortex config saved');
-  else toast('Save failed', 'err');
-}
+
 
 // ── Memory Graph — Force-directed visualization ──
 var _graphNodes = [];
@@ -25122,7 +25049,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.28.47"})
+            self.reply_json({"v": "0.28.48"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -25284,7 +25211,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.28.47"
+                health["porter_version"] = "0.28.48"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27092,7 +27019,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.47'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.28.48'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31327,7 +31254,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.28.47 ready (localhost only)")
+    print(f"\n  Porter v0.28.48 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
