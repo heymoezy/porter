@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.92 — Models structural hydrate stability"""
+"""Porter v0.29.93 — Models grid churn removal"""
 
 
 import email
@@ -9179,7 +9179,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.92</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.93</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10531,8 +10531,7 @@ function _modelsStructureSignature(snap) {
     var providers = (snap && snap.providers ? snap.providers : []).map(function(p) {
       return {
         id: p.id,
-        available: !!p.available,
-        label: p.label || '',
+        type: p.type || '',
       };
     });
     var backends = {};
@@ -10540,13 +10539,9 @@ function _modelsStructureSignature(snap) {
     Object.keys((snap && snap.backends) || {}).sort().forEach(function(bk) {
       var info = (snap.backends || {})[bk] || {};
       backends[bk] = {
-        active: info.active || '',
-        resolved: info.resolved || '',
         models: (info.models || []).map(function(m) {
           return {
             id: m.id || '',
-            name: m.name || '',
-            default: !!m.default,
           };
         }),
       };
@@ -10555,8 +10550,7 @@ function _modelsStructureSignature(snap) {
       var info = (snap.runtimes || {})[bk] || {};
       runtimes[bk] = {
         auth_mode: info.auth_mode || '',
-        supports_json_output: !!info.supports_json_output,
-        supports_model_flag: !!info.supports_model_flag,
+        mode: info.mode || '',
       };
     });
     return JSON.stringify({ providers: providers, backends: backends, runtimes: runtimes });
@@ -10591,6 +10585,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.93', date:'2026-03-09', notes:['Removed the post-response full Models grid rerender that was still rebuilding cards after backend activity completed','Models activity refresh now updates state without calling _renderModelCards on every response event','Combined with structural hydrate checks, the Models tab now keeps a stable DOM unless the actual card structure changes'] },
   { ver:'v0.29.92', date:'2026-03-09', notes:['Models live hydration now compares a structural signature before redrawing cards, so stable snapshots stop causing visible reloads','Cached bootstrap/snapshot renders now preserve the existing grid when only versions or backend status changed','Models load path keeps the fast seeded render and only rebuilds card DOM when provider/model/runtime structure actually changes'] },
   { ver:'v0.29.91', date:'2026-03-09', notes:['Fixed Models fast-path repaint churn so cached snapshot loads no longer redraw through bootstrap before live hydration','Live Models refresh now keeps the seeded cache render on screen and only applies one network snapshot update','Bootstrap fetch is skipped when a cached snapshot is already good enough to seed the tab'] },
   { ver:'v0.29.90', date:'2026-03-09', notes:['Models tab now reuses the last good bootstrap/snapshot from session storage so repeat visits render instantly before the network round-trip','Bootstrap and snapshot activity payloads stop querying recent-run history that the card grid does not use, reducing first-load database work','Model activity slide-outs lazily hydrate recent runs only when opened, preserving detail without penalizing initial card render'] },
@@ -20151,18 +20146,11 @@ function _handleModelResponse(data) {
     var traceBox = document.getElementById('ma-trace');
     if (traceBox && traceBox.textContent === 'Streaming...') { traceBox.className = 'ma-trace-box empty'; traceBox.textContent = 'Dispatch complete'; }
   }
-  // Refresh activity — update status in-place instead of full re-render
   setTimeout(function() {
-    api('/api/models/activity').then(function(act) {
+    api('/api/models/activity?detail=0').then(function(act) {
       if (act && act.activity) {
         _modelActivityData = act.activity;
-        // Only do a full re-render if no inline sessions are expanded
-        var anyExpanded = Object.keys(_inlineSessionsExpanded).some(function(k) { return _inlineSessionsExpanded[k]; });
-        if (!anyExpanded) {
-          api('/api/providers').then(function(pdata) {
-            _renderModelCards(pdata, _modelActivityData);
-          });
-        }
+        if (_modelActivityBackend === bk) _openModelActivity(bk);
       }
     });
   }, 500);
@@ -29646,7 +29634,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.92"})
+            self.reply_json({"v": "0.29.93"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -29984,7 +29972,8 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/models/activity":
             if not self.auth_check(redirect=False): return
-            self.reply_json({"ok": True, "activity": _models_activity_payload()})
+            detail = parse_qs(parsed.query).get("detail", ["1"])[0] not in ("0", "false", "no")
+            self.reply_json({"ok": True, "activity": _models_activity_payload(include_recent=detail)})
 
         elif parsed.path == "/api/gateway/status":
             if not self.auth_check(redirect=False): return
@@ -31584,7 +31573,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.92'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.93'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36261,7 +36250,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.92 ready (localhost only)")
+    print(f"\n  Porter v0.29.93 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

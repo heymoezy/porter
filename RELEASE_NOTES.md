@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.29.93 (2026-03-09)
+
+**Models Grid Churn Removal**
+
+- Removed the post-response full Models grid rerender that was still rebuilding cards after backend activity completed
+- Models activity refresh now updates state without calling `_renderModelCards()` on every response event
+- Structural hydrate comparison is also stricter now, so live snapshots only rebuild cards when provider or model shape truly changed
+
+---
+
 ## v0.29.92 (2026-03-09)
 
 **Models Structural Hydrate Stability**
