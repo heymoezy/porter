@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.74 — Fix Test All endpoint, Auto row becomes per-card Test All"""
+"""Porter v0.29.75 — Fix OpenClaw/Gemini tests, visual Test All, remove redundant status"""
 
 
 import email
@@ -9112,7 +9112,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.74</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.75</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10416,6 +10416,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.75', date:'2026-03-09', notes:['Fix OpenClaw test (--agent main)','Gemini test: strip YOLO stderr','Remove redundant CLI ready / Server running status','Test All triggers each button visually','Log all test failures','Truncate error messages in cards','Per-backend config button (auth, host, port)'] },
   { ver:'v0.29.74', date:'2026-03-09', notes:['Fix Test All (POST + 90s timeout)','Auto row replaced with per-card Test All button','No Test button on Auto selector row'] },
   { ver:'v0.29.73', date:'2026-03-09', notes:['Dynamic model detection (Codex reads models_cache.json, real Claude/Gemini models)','Test All button, removed useless Refresh','Removed redundant model sub-header from cards','Auto only shown when 2+ models','CLI health status for all backends','Gateway vs model testing separated'] },
   { ver:'v0.29.72', date:'2026-03-09', notes:['Purge hardcoded model data — models/descriptions/tags now config-backed','Fix all model tests: OpenClaw uses CLI not HTTP, Claude removes --no-input, Gemini adds -y flag, auto resolves before test','Remove best_for tags from cards (were hardcoded)','Remove stale KNOWN_LATEST version comparisons'] },
@@ -18099,20 +18100,8 @@ function _checkBackendStatuses(providers) {
     if (!el) return;
     if (p.type === 'gateway') {
       _checkGatewayCardStatus(p.id, el);
-    } else if (p.type === 'cli') {
-      if (p.available) {
-        var vStr = (window._modelVersions && window._modelVersions[p.id] && window._modelVersions[p.id].version) ? ' \u00b7 ' + window._modelVersions[p.id].version : '';
-        el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#22c55e;flex-shrink:0"></span><span style="color:var(--text2)">CLI ready' + escHtml(vStr) + '</span></div>';
-      } else {
-        el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0"></span><span style="color:var(--text3)">CLI not found</span></div>';
-      }
-    } else if (p.type === 'local') {
-      if (p.available) {
-        el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#22c55e;flex-shrink:0"></span><span style="color:var(--text2)">Server running</span></div>';
-      } else {
-        el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0"></span><span style="color:var(--text3)">Server down</span></div>';
-      }
     }
+    // CLI and local backends: dot is sufficient. No extra status text.
   });
 }
 
@@ -18172,18 +18161,77 @@ async function _testModel(event, backendId, modelId, testId) {
   if (resultEl) resultEl.innerHTML = '<span class="learn-spinner" style="width:10px;height:10px"></span>';
   var t0 = Date.now();
   try {
-    var r = await api('/api/models/test', {backend: backendId, model: modelId});
+    var r = await api('/api/models/test', {backend: backendId, model: modelId}, 60000);
     var elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     if (r && r.ok) {
       if (resultEl) resultEl.innerHTML = '<span style="color:#22c55e">\u2713 ' + elapsed + 's</span>';
     } else {
-      if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">\u2717 ' + escHtml(r && r.error || 'Failed') + '</span>';
+      if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">\u2717 ' + escHtml((r && r.error || 'Failed').substring(0, 40)) + '</span>';
     }
   } catch(e) {
-    if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">\u2717 ' + escHtml(e.message || 'Error') + '</span>';
+    if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">\u2717 ' + escHtml((e.message || 'Error').substring(0, 40)) + '</span>';
   }
   btn.disabled = false;
   btn.textContent = 'Test';
+}
+
+async function _openBackendConfig(backendId) {
+  var card = document.querySelector('.model-card[data-model-id="' + backendId + '"]');
+  if (!card) return;
+  var panel = card.querySelector('.backend-config-panel');
+  if (panel) { panel.style.display = panel.style.display === 'none' ? 'block' : 'none'; return; }
+  // Create config panel
+  var div = document.createElement('div');
+  div.className = 'backend-config-panel';
+  div.style.cssText = 'margin:8px 0;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:11px';
+  div.innerHTML = '<div style="font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><span>Config</span><button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="this.closest(\'.backend-config-panel\').style.display=\'none\'">Close</button></div>'
+    + '<div style="display:grid;gap:6px">'
+    + '<label style="color:var(--text3)">Description<input id="bcfg-desc-' + backendId + '" class="form-input" style="font-size:11px;padding:3px 6px;margin-top:2px;width:100%" /></label>'
+    + '<label style="color:var(--text3)">Auth Token<input id="bcfg-token-' + backendId + '" class="form-input" style="font-size:11px;padding:3px 6px;margin-top:2px;width:100%" type="password" placeholder="Leave blank to keep current" /></label>'
+    + '<label style="color:var(--text3)">Host<input id="bcfg-host-' + backendId + '" class="form-input" style="font-size:11px;padding:3px 6px;margin-top:2px;width:100%" placeholder="127.0.0.1" /></label>'
+    + '<label style="color:var(--text3)">Port<input id="bcfg-port-' + backendId + '" class="form-input" style="font-size:11px;padding:3px 6px;margin-top:2px;width:100%" placeholder="e.g. 18789" /></label>'
+    + '</div>'
+    + '<button class="btn btn-primary" style="font-size:11px;padding:4px 12px;margin-top:8px;width:100%" onclick="_saveBackendConfig(\'' + backendId + '\')">Save</button>';
+  // Insert before divider
+  var divider = card.querySelector('.model-card-divider');
+  if (divider) card.insertBefore(div, divider);
+  else card.appendChild(div);
+  // Load current config
+  var r = await api('/api/backend/config?backend=' + backendId);
+  if (r && r.config) {
+    var c = r.config;
+    var descEl = document.getElementById('bcfg-desc-' + backendId);
+    var hostEl = document.getElementById('bcfg-host-' + backendId);
+    var portEl = document.getElementById('bcfg-port-' + backendId);
+    if (descEl) descEl.value = c.description || '';
+    if (hostEl) hostEl.value = c.host || '';
+    if (portEl) portEl.value = c.port || c.gateway_port || '';
+    if (c.has_auth_token) {
+      var tokenEl = document.getElementById('bcfg-token-' + backendId);
+      if (tokenEl) tokenEl.placeholder = 'Set (' + (c.auth_token_masked || '****') + ')';
+    }
+  }
+}
+
+async function _saveBackendConfig(backendId) {
+  var payload = { backend: backendId };
+  var descEl = document.getElementById('bcfg-desc-' + backendId);
+  var tokenEl = document.getElementById('bcfg-token-' + backendId);
+  var hostEl = document.getElementById('bcfg-host-' + backendId);
+  var portEl = document.getElementById('bcfg-port-' + backendId);
+  if (descEl && descEl.value) payload.description = descEl.value;
+  if (tokenEl && tokenEl.value) payload.auth_token = tokenEl.value;
+  if (hostEl && hostEl.value) payload.host = hostEl.value;
+  if (portEl && portEl.value) payload.port = parseInt(portEl.value) || portEl.value;
+  var r = await api('/api/backend/config', payload);
+  if (r && r.ok) {
+    toast('Config saved', 'ok');
+    var panel = document.querySelector('.model-card[data-model-id="' + backendId + '"] .backend-config-panel');
+    if (panel) panel.style.display = 'none';
+    loadModels();
+  } else {
+    toast((r && r.error) || 'Failed to save', 'err');
+  }
 }
 
 async function _testCardModels(backendId) {
@@ -18195,32 +18243,16 @@ async function _testCardModels(backendId) {
 }
 
 async function _testAllBackends() {
-  var resEl = document.getElementById('test-all-result');
-  if (resEl) resEl.innerHTML = '<span class="learn-spinner" style="width:12px;height:12px"></span> Testing...';
-  var t0 = Date.now();
-  try {
-    var r = await api('/api/models/test-all', {}, 90000);
-    var elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-    if (!r || !r.results) { if (resEl) resEl.innerHTML = '<span style="color:#ef4444">Failed</span>'; return; }
-    var ok = 0, fail = 0;
-    Object.keys(r.results).forEach(function(bk) {
-      var tr = r.results[bk];
-      // Update per-model test result spans if they exist
-      var tid = (bk + '_' + (tr.model || '')).replace(/[^a-zA-Z0-9_-]/g, '_');
-      var mEl = document.getElementById('test-r-' + tid);
-      if (mEl) {
-        if (tr.ok) mEl.innerHTML = '<span style="color:#22c55e">\u2713 ' + ((tr.latency_ms || 0) / 1000).toFixed(1) + 's</span>';
-        else mEl.innerHTML = '<span style="color:#ef4444">\u2717 ' + escHtml(tr.error || 'Failed') + '</span>';
-      }
-      if (tr.ok) ok++; else fail++;
+  // Trigger each card's Test All button visually
+  var cards = document.querySelectorAll('.model-card');
+  cards.forEach(function(card) {
+    var testAllBtn = card.querySelector('.model-list-row button');
+    // Find the Test All button (on Auto row) or first test button
+    var btns = card.querySelectorAll('.model-list-row button.btn-ghost');
+    btns.forEach(function(b) {
+      if (b.textContent.trim() === 'Test All') b.click();
     });
-    if (resEl) {
-      if (fail === 0) resEl.innerHTML = '<span style="color:#22c55e">\u2713 All ' + ok + ' passed (' + elapsed + 's)</span>';
-      else resEl.innerHTML = '<span style="color:#f59e0b">' + ok + ' ok, ' + fail + ' failed (' + elapsed + 's)</span>';
-    }
-  } catch(e) {
-    if (resEl) resEl.innerHTML = '<span style="color:#ef4444">' + escHtml(e.message || 'Error') + '</span>';
-  }
+  });
 }
 
 async function loadModels() {
@@ -18239,8 +18271,7 @@ async function loadModels() {
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(vers) {
         window._modelVersions = (vers && vers.versions) ? vers.versions : {};
-        // Re-check CLI statuses now that versions are available
-        if (data && data.providers) _checkBackendStatuses(data.providers);
+
         // Populate version badge placeholders
         Object.keys(window._modelVersions).forEach(function(bk) {
           var vd = window._modelVersions[bk];
@@ -19291,8 +19322,9 @@ function _renderModelCards(data, act) {
       + '<div class="model-card-head" style="justify-content:space-between">'
       + '<div style="display:flex;align-items:center;gap:10px"><span class="model-card-dot" style="background:' + dotColor + '"></span>'
       + '<span class="model-card-name">' + escHtml(p.label || p.id) + '</span></div>'
-      + _statusBadge
-      + '</div>'
+      + '<div style="display:flex;align-items:center;gap:6px">' + _statusBadge
+      + '<button class="btn btn-ghost" style="font-size:12px;padding:1px 4px;line-height:1" onclick="event.stopPropagation();_openBackendConfig(\'' + escHtml(p.id) + '\')" title="Config">&#9881;</button>'
+      + '</div></div>'
 
       + '<div class="model-ver-badge" id="ver-badge-' + escHtml(p.id) + '"></div>'
       + '<div id="backend-status-' + escHtml(p.id) + '"></div>'
@@ -25913,7 +25945,7 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
             oc_bin = _resolve_cli("openclaw")
             if not oc_bin:
                 return {"ok": False, "model": model, "error": "openclaw CLI not found"}
-            cmd = [oc_bin, "agent", "--message", "Reply with just the word OK", "--json"]
+            cmd = [oc_bin, "agent", "--agent", "main", "--message", "Reply with just the word OK", "--json"]
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=15, env=_agent_env(), cwd=str(Path.home()))
             latency_ms = int((time.time() - t0) * 1000)
             out = (r.stdout or "").strip()
@@ -25943,6 +25975,7 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                     continue
             if not err:
                 err = (r.stderr or "").strip()[:200] or "No response from gateway"
+            log.warning("Model test fail [openclaw]: model=%s err=%s stderr=%s", model, err, (r.stderr or "").strip()[:500])
             return {"ok": False, "model": model, "error": err[:200]}
 
         if backend == "codex":
@@ -25974,7 +26007,9 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                     continue
             if text:
                 return {"ok": True, "model": model, "response": text.strip()[:200], "latency_ms": latency_ms}
-            return {"ok": False, "model": model, "error": (r.stderr or "").strip()[:200] or "Codex returned no text"}
+            _cdx_err = (r.stderr or "").strip()[:200] or "Codex returned no text"
+            log.warning("Model test fail [codex]: model=%s err=%s stdout=%s", model, _cdx_err, (r.stdout or "").strip()[:500])
+            return {"ok": False, "model": model, "error": _cdx_err}
 
         if backend == "ollama":
             bc = _config.get("backend_config", {}).get("ollama", {})
@@ -26000,9 +26035,16 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
             cmd = [gem, "-p", "Reply with just OK", "-y"]
             if model and model != "auto" and model != "gemini":
                 cmd.extend(["-m", model])
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30, env=_agent_env(), cwd=str(Path.home()))
+            _gem_env = _agent_env()
+            _gem_env["GEMINI_CLI_YOLO"] = "1"  # suppress YOLO prompts
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=45, env=_gem_env, cwd=str(Path.home()))
             if r.returncode != 0:
-                return {"ok": False, "model": model, "error": (r.stderr or r.stdout or "Gemini failed").strip()[:200]}
+                _gem_err = (r.stderr or "").strip()
+                # Filter out YOLO mode info lines
+                _gem_err = "\n".join(l for l in _gem_err.split("\n") if "YOLO" not in l and "cached credentials" not in l.lower()).strip()
+                _gem_fail_msg = (_gem_err or r.stdout or "Gemini failed").strip()[:200]
+                log.warning("Model test fail [gemini]: model=%s rc=%s err=%s stdout=%s", model, r.returncode, _gem_fail_msg, (r.stdout or "").strip()[:500])
+                return {"ok": False, "model": model, "error": _gem_fail_msg}
             latency_ms = int((time.time() - t0) * 1000)
             return {"ok": True, "model": model, "response": (r.stdout or "OK").strip()[:200], "latency_ms": latency_ms}
 
@@ -26018,14 +26060,18 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
             _env.pop("CLAUDECODE", None)
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=30, env=_env, cwd=str(Path.home()))
             if r.returncode != 0:
-                return {"ok": False, "model": model, "error": (r.stderr or r.stdout or "Claude failed").strip()[:200]}
+                _cl_fail_msg = (r.stderr or r.stdout or "Claude failed").strip()[:200]
+                log.warning("Model test fail [claude]: model=%s rc=%s err=%s stdout=%s", model, r.returncode, _cl_fail_msg, (r.stdout or "").strip()[:500])
+                return {"ok": False, "model": model, "error": _cl_fail_msg}
             latency_ms = int((time.time() - t0) * 1000)
             return {"ok": True, "model": model, "response": (r.stdout or "OK").strip()[:200], "latency_ms": latency_ms}
 
         return {"ok": False, "model": model, "error": f"Unknown backend: {backend}"}
     except subprocess.TimeoutExpired:
-        return {"ok": False, "model": model, "error": "Timed out (30s)"}
+        log.warning("Model test timeout: backend=%s model=%s", backend, model)
+        return {"ok": False, "model": model, "error": "Timed out"}
     except Exception as e:
+        log.warning("Model test error: backend=%s model=%s err=%s", backend, model, str(e))
         return {"ok": False, "model": model, "error": str(e)[:200]}
 
 
@@ -27972,7 +28018,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.74"})
+            self.reply_json({"v": "0.29.75"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -28134,7 +28180,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.74"
+                health["porter_version"] = "0.29.75"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28273,6 +28319,27 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "dispatches": dispatches, "count": len(dispatches)})
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)})
+
+        elif parsed.path == "/api/backend/config":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            _cfg_bk = qs.get("backend", [""])[0].strip()
+            if not _cfg_bk:
+                self.reply_json({"ok": False, "error": "backend param required"}, 400); return
+            bc = _config.get("backend_config", {}).get(_cfg_bk, {})
+            # Mask auth token for display (show last 4 chars only)
+            _masked_token = ""
+            if bc.get("auth_token"):
+                t = str(bc["auth_token"])
+                _masked_token = ("*" * max(0, len(t) - 4)) + t[-4:] if len(t) > 4 else t
+            self.reply_json({"ok": True, "backend": _cfg_bk, "config": {
+                "description": bc.get("description", ""),
+                "auth_token_masked": _masked_token,
+                "has_auth_token": bool(bc.get("auth_token")),
+                "gateway_port": bc.get("gateway_port", ""),
+                "host": bc.get("host", ""),
+                "port": bc.get("port", ""),
+            }})
 
         elif parsed.path == "/api/providers":
             if not self.auth_check(redirect=False): return
@@ -29938,7 +30005,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.74'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.75'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34582,7 +34649,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.74 ready (localhost only)")
+    print(f"\n  Porter v0.29.75 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
