@@ -33238,6 +33238,7 @@ class Handler(BaseHTTPRequestHandler):
 
             try:
                 data = self.read_json_body()
+                if data is None: return
                 username = data.get("username", "").strip()
                 password = data.get("password", "")
                 cfg = _config
@@ -33504,6 +33505,7 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/coordination/run":
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
+            if not data: return
             prompt = str(data.get("prompt", "")).strip()
             raw_backends = data.get("backends", [])
             if isinstance(raw_backends, list):
