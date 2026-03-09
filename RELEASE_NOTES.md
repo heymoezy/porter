@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.4 (2026-03-09)
+
+**Runtime Gateway Activity**
+
+- Runtime now shows a unified Gateway Activity feed backed by real `agent_messages` dispatch data across all associated backends
+- Gateway activity rows now carry persona, project, and task identity so autonomous work is visible in operational context instead of as anonymous backend traffic
+- The admin dispatch-log API now returns project, task, persona, and backend error metadata, making Porter’s operator view usable for supervision and diagnosis
+
+---
+
 ## v0.30.3 (2026-03-09)
 
 **Project-Aware Persona Dispatch**

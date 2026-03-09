@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.3 — Project-aware persona dispatch"""
+"""Porter v0.30.4 — Runtime gateway activity visibility"""
 
 
 import email
@@ -9356,7 +9356,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.3</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.4</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10032,6 +10032,17 @@ input[type="number"].settings-input { min-width: 60px; }
       <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">This is a temporary holding area until session provenance and memory extraction move into Cortex.</div>
       <div id="runtime-extraction-progress" style="margin:0 0 12px;padding:0"><div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px"><div style="display:flex;align-items:center;gap:8px"><span class="learn-spinner"></span><span style="font-size:12px;color:var(--text3)">Loading extraction status...</span></div></div></div>
       <div id="runtime-session-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px"></div>
+    </div>
+    <div id="runtime-gateway-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">Gateway Activity</span>
+          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Live Ops</span>
+        </div>
+        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadGatewayActivity(true)">Refresh</button>
+      </div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Recent real dispatch activity across all model gateways. If it is not here, Porter is not seeing it.</div>
+      <div id="runtime-gateway-activity" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <span id="wf-sys-count" style="font-size:11px;color:var(--text3)"></span>
@@ -10755,6 +10766,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.4', date:'2026-03-09', notes:['Runtime now shows a unified Gateway Activity feed backed by real agent_messages dispatch data across all associated backends','Gateway activity rows now carry persona, project, and task identity so model work is visible in operational context instead of as anonymous backend traffic','The admin dispatch-log API now returns project/task/persona metadata and backend errors, making Porter\'s operator view useful for autonomous supervision'] },
   { ver:'v0.30.3', date:'2026-03-09', notes:['Persona dispatch can now resolve an active project and task, inject project brief/decisions/tasks into the prompt context, and persist project identity into trace data','Task-targeted persona dispatches now update task ownership and completion state automatically, so assigned work can move through Porter without a second manual status pass','Cortex extraction now defaults to project scope when a persona dispatch belongs to a project, making project learning first-class instead of a loose tag'] },
   { ver:'v0.30.2', date:'2026-03-09', notes:['Removed the legacy models-grid timeout wrapper that could replace the entire Models grid with a retry block after 10s','Models load failures now stay on the top loading rail instead of blanking the grid, preserving any rendered cards','This restores the rule that nothing should ever wipe the whole Models grid during refresh or timeout handling'] },
   { ver:'v0.30.1', date:'2026-03-09', notes:['Models bootstrap is now structure-only and no longer runs activity aggregation on the critical first-paint path','Bootstrap and full snapshot now start in parallel, so Porter renders whichever live payload lands first instead of waiting on sequential hydration','Backend status checks are deferred until after first paint, keeping gateway probes off the initial render path'] },
@@ -14372,6 +14384,66 @@ async function _loadRuntimeOperations() {
   _renderRuntimeSessionSummary();
   _preloadSessionCounts();
   _updateExtractionProgress('runtime-extraction-progress');
+  _loadGatewayActivity();
+}
+
+var _gatewayActivityPoller = null;
+
+function _gatewayActivityChip(text, tone) {
+  if (!text) return '';
+  return '<span class="model-card-chip ' + (tone || 'dim') + '" style="font-size:10px">' + escHtml(text) + '</span>';
+}
+
+async function _loadGatewayActivity(force) {
+  var host = document.getElementById('runtime-gateway-activity');
+  if (!host) return;
+  if (!force && !host.innerHTML.trim()) {
+    host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">Loading gateway activity…</div>';
+  }
+  try {
+    var qs = force ? '?limit=18&_=' + Date.now() : '?limit=18';
+    var res = await api('/api/admin/dispatch-log' + qs);
+    if (!res || !res.ok) {
+      host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:#ef4444">Failed to load gateway activity.</div>';
+      return;
+    }
+    var rows = res.dispatches || [];
+    if (!rows.length) {
+      host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">No gateway activity recorded yet.</div>';
+      return;
+    }
+    host.innerHTML = rows.map(function(r) {
+      var tone = r.status === 'complete' ? 'ok' : (r.status === 'failed' ? 'err' : 'warn');
+      var chips = [
+        _gatewayActivityChip(r.to || '', tone),
+        _gatewayActivityChip(r.model || '', 'dim'),
+        _gatewayActivityChip(r.persona_id ? ('agent ' + r.persona_id) : '', 'dim'),
+        _gatewayActivityChip(r.project_id ? ('project ' + r.project_id) : '', 'dim'),
+        _gatewayActivityChip(r.task_id ? ('task ' + r.task_id) : '', 'dim'),
+        _gatewayActivityChip(r.duration_ms ? _formatDuration(r.duration_ms) : '', 'dim'),
+        _gatewayActivityChip(_relativeTime(r.created_at), 'dim')
+      ].filter(Boolean).join('');
+      var detail = r.status === 'failed'
+        ? (r.error || r.response_preview || 'Dispatch failed')
+        : (r.response_preview || r.prompt || '');
+      return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">'
+        + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + chips + '</div>'
+        + '<span style="font-size:10px;color:' + (tone === 'ok' ? '#22c55e' : (tone === 'err' ? '#ef4444' : '#f59e0b')) + ';font-weight:600">' + escHtml((r.status || 'unknown').toUpperCase()) + '</span>'
+        + '</div>'
+        + '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">' + escHtml((r.prompt || '').substring(0, 180) || '(no prompt recorded)') + '</div>'
+        + '<div style="font-size:11px;color:var(--text3)">' + escHtml((detail || '').substring(0, 220)) + '</div>'
+        + '</div>';
+    }).join('');
+  } catch (e) {
+    _reportModelsClientError('runtime-gateway-activity', e);
+    host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:#ef4444">Gateway activity load failed.</div>';
+  }
+  if (!_gatewayActivityPoller) {
+    _gatewayActivityPoller = setInterval(function() {
+      if (_currentModule === 'system') _loadGatewayActivity(true);
+    }, 5000);
+  }
 }
 
 var _inlineSessionsExpanded = {};
@@ -29934,7 +30006,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.3"})
+            self.reply_json({"v": "0.30.4"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -30096,7 +30168,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.3"
+                health["porter_version"] = "0.30.4"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -30212,11 +30284,11 @@ class Handler(BaseHTTPRequestHandler):
                 conn = _db_conn()
                 if backend_filter:
                     rows = conn.execute(
-                        "SELECT run_id, from_agent, to_agent, message, response, status, model, tokens_total, duration_ms, created_at "
+                        "SELECT run_id, from_agent, to_agent, message, response, status, model, tokens_total, duration_ms, created_at, error, persona_id, project_id, task_id "
                         "FROM agent_messages WHERE to_agent=? AND message NOT LIKE '%memory extraction system%' ORDER BY created_at DESC LIMIT ?", (backend_filter, limit)).fetchall()
                 else:
                     rows = conn.execute(
-                        "SELECT run_id, from_agent, to_agent, message, response, status, model, tokens_total, duration_ms, created_at "
+                        "SELECT run_id, from_agent, to_agent, message, response, status, model, tokens_total, duration_ms, created_at, error, persona_id, project_id, task_id "
                         "FROM agent_messages ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
                 conn.close()
                 dispatches = []
@@ -30227,7 +30299,8 @@ class Handler(BaseHTTPRequestHandler):
                         "response_preview": (r[4] or "")[:200], "response_len": len(r[4] or ""),
                         "status": r[5], "model": r[6],
                         "tokens": r[7], "duration_ms": r[8],
-                        "created_at": r[9],
+                        "created_at": r[9], "error": r[10] or "",
+                        "persona_id": r[11] or "", "project_id": r[12] or "", "task_id": r[13] or "",
                     })
                 self.reply_json({"ok": True, "dispatches": dispatches, "count": len(dispatches)})
             except Exception as e:
@@ -31873,7 +31946,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.3'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.4'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36557,7 +36630,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.3 ready (localhost only)")
+    print(f"\n  Porter v0.30.4 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
