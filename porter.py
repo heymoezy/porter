@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.71 — Model cards: proper labels, install hints, per-model test"""
+"""Porter v0.29.72 — Config-backed backends, fix all model tests, remove hardcoded data"""
 
 
 import email
@@ -9112,7 +9112,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.71</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.72</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10415,6 +10415,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.72', date:'2026-03-09', notes:['Purge hardcoded model data — models/descriptions/tags now config-backed','Fix all model tests: OpenClaw uses CLI not HTTP, Claude removes --no-input, Gemini adds -y flag, auto resolves before test','Remove best_for tags from cards (were hardcoded)','Remove stale KNOWN_LATEST version comparisons'] },
   { ver:'v0.29.71', date:'2026-03-09', notes:['Model cards: OpenAI Codex/Google Gemini labels, install hints for missing backends, per-model test buttons'] },
   { ver:'v0.29.70', date:'2026-03-09', notes:['Models tab redesign — cards show gateway/provider name, per-card inline status with restart, codex test separated from openclaw'] },
   { ver:'v0.29.69', date:'2026-03-09', notes:['Gateway health banner on Models tab (status, crash-loop detection, restart button)','Model test button — sends real prompt, shows latency','New APIs: /api/gateway/status, /api/gateway/action, /api/models/test'] },
@@ -19143,9 +19144,7 @@ function _renderModelCards(data, act) {
   grid.innerHTML = data.providers.map(function(p) {
     var dotColor = p.available ? '#22c55e' : '#ef4444';
     var offClass = p.available ? '' : ' offline';
-    var tags = (p.best_for || []).map(function(t) {
-      return '<span class="model-card-tag">' + escHtml(t) + '</span>';
-    }).join('');
+
 
 
     // Activity data
@@ -19245,7 +19244,7 @@ function _renderModelCards(data, act) {
       + '<div class="model-ver-badge" id="ver-badge-' + escHtml(p.id) + '"></div>'
       + '<div id="backend-status-' + escHtml(p.id) + '"></div>'
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
-      + (tags ? '<div class="model-card-tags">' + tags + '</div>' : '')
+
       + (p.available ? _selHtml : _installHtml)
       + '<div class="model-card-divider"></div>'
       + statsHtml
@@ -25572,36 +25571,37 @@ INSTALL_HINTS = {
     "ollama": "curl -fsSL https://ollama.com/install.sh | sh",
 }
 
-MODEL_METADATA = {
-    "openclaw": {
-        "description": "Multi-model gateway — routes to GPT-5.4 and other OpenAI models.",
-        "best_for": ["reasoning", "code generation", "automation"],
-    },
-    "claude": {
-        "description": "Deep reasoning, architecture, and security analysis via Anthropic CLI.",
-        "best_for": ["analysis", "architecture", "planning", "writing"],
-    },
-    "codex": {
-        "description": "Agentic coding — long-running tasks with tool use via OpenAI CLI.",
-        "best_for": ["code generation", "refactoring", "debugging"],
-    },
-    "gemini": {
-        "description": "Extended context (1M tokens), multimodal research via Google CLI.",
-        "best_for": ["research", "summarization", "multimodal"],
-    },
-    "ollama": {
-        "description": "Local model inference via Ollama. No data leaves the machine.",
-        "best_for": ["privacy", "fast prototyping", "offline"],
-    },
-}
+
+def _ensure_backend_config():
+    """Seed backend_config in porter_config.json on first run. User-editable after that."""
+    if "backend_config" not in _config:
+        _config["backend_config"] = {}
+    bc = _config["backend_config"]
+    changed = False
+    # Only seed if backend key is completely missing (never overwrite user edits)
+    _defaults = {
+        "openclaw": {"description": "Multi-model gateway", "models": [{"id": "gpt-5.4", "name": "GPT-5.4", "default": True}]},
+        "codex": {"description": "OpenAI agentic coding CLI", "models": [{"id": "gpt-5.4", "name": "GPT-5.4", "default": True}]},
+        "claude": {"description": "Anthropic reasoning CLI", "models": [{"id": "claude-opus-4-6", "name": "Claude Opus 4.6", "default": True}]},
+        "gemini": {"description": "Google multimodal CLI", "models": [{"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "default": True}]},
+        "ollama": {"description": "Local model inference", "models": []},
+    }
+    for bk, default in _defaults.items():
+        if bk not in bc:
+            bc[bk] = default
+            changed = True
+    if changed:
+        save_config(_config)
+        log.info("Backend config seeded for first run")
+
+def _backend_meta(name):
+    """Read backend description from config. No hardcoded metadata."""
+    bc = _config.get("backend_config", {}).get(name, {})
+    return {"description": bc.get("description", ""), "best_for": []}
 
 # ── Backend Version Probing ─────────────────────────────────────────────
 _backend_version_cache = {"data": None, "ts": 0}
 
-KNOWN_LATEST = {
-    "openclaw": "2026.3.2",
-    "ollama": "0.17.6",
-}
 
 def _probe_backend_versions():
     """Detect version strings for each backend. Cached 5 minutes."""
@@ -25665,48 +25665,22 @@ def _probe_backend_versions():
     # Google Workspace CLI
     versions["gws"] = _cli_version("gws")
 
-    # Check for updates
-    for bk, latest in KNOWN_LATEST.items():
-        if bk in versions and versions[bk]["detected"] and versions[bk]["version"]:
-            detected = versions[bk]["version"]
-            if detected != latest:
-                versions[bk]["update_available"] = latest
+
 
     _backend_version_cache["data"] = versions
     _backend_version_cache["ts"] = now
     return versions
 
 
-AVAILABLE_MODELS = {
-    "openclaw": [
-        {"id": "gpt-5.4", "name": "GPT-5.4", "default": True},
-        {"id": "gpt-5.3-codex", "name": "GPT-5.3 Codex"},
-        {"id": "o3-pro", "name": "o3 Pro"},
-    ],
-    "claude":   [
-        {"id": "claude-opus-4-6", "name": "Claude Opus 4.6", "default": True},
-        {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
-        {"id": "claude-haiku-4-5", "name": "Claude Haiku 4.5"},
-    ],
-    "codex":    [
-        {"id": "gpt-5.4", "name": "GPT-5.4", "default": True},
-        {"id": "gpt-5.4-thinking", "name": "GPT-5.4 Thinking"},
-        {"id": "o3-pro", "name": "o3 Pro"},
-    ],
-    "gemini":   [
-        {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "default": True},
-        {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash"},
-    ],
-    "ollama":   [],  # Runtime-detected via /api/tags
-}
-
-
 def _get_available_models(backend):
-    """Return list of available models for a backend. Ollama queries live."""
+    """Return models for a backend. Ollama: runtime discovery. Others: from config."""
     if backend == "ollama":
         try:
             import urllib.request, json as _j
-            req = urllib.request.Request("http://127.0.0.1:11434/api/tags", method="GET")
+            bc = _config.get("backend_config", {}).get("ollama", {})
+            _oll_host = bc.get("host", "127.0.0.1")
+            _oll_port = bc.get("port", 11434)
+            req = urllib.request.Request(f"http://{_oll_host}:{_oll_port}/api/tags", method="GET")
             with urllib.request.urlopen(req, timeout=3) as resp:
                 data = _j.loads(resp.read())
                 models = []
@@ -25717,7 +25691,9 @@ def _get_available_models(backend):
                 return models
         except Exception:
             return []
-    return AVAILABLE_MODELS.get(backend, [])
+    # All other backends: read from config
+    bc = _config.get("backend_config", {}).get(backend, {})
+    return bc.get("models", [])
 
 
 def _get_active_model(backend):
@@ -25735,17 +25711,21 @@ def _get_active_model(backend):
 
 
 def _openclaw_gateway_settings() -> dict:
-    """Load local OpenClaw gateway port/token from ~/.openclaw/openclaw.json."""
-    port = 18789
-    token = ""
-    try:
-        oc_cfg = json.loads((OPENCLAW_STATE_DIR / "openclaw.json").read_text(encoding="utf-8"))
-        gw = oc_cfg.get("gateway", {}) if isinstance(oc_cfg, dict) else {}
-        port = int(gw.get("port") or oc_cfg.get("gatewayPort") or 18789)
-        auth = gw.get("auth", {}) if isinstance(gw, dict) else {}
-        token = str(auth.get("token") or gw.get("token") or oc_cfg.get("authToken") or "").strip()
-    except Exception as e:
-        log.debug("OpenClaw gateway config read failed: %s", e)
+    """Load OpenClaw gateway port/token. Config priority: porter_config > ~/.openclaw."""
+    bc = _config.get("backend_config", {}).get("openclaw", {})
+    port = int(bc.get("gateway_port", 0)) or 18789
+    token = str(bc.get("auth_token", "")).strip()
+    # Fall back to ~/.openclaw/openclaw.json if no token in porter config
+    if not token:
+        try:
+            oc_cfg = json.loads((OPENCLAW_STATE_DIR / "openclaw.json").read_text(encoding="utf-8"))
+            gw = oc_cfg.get("gateway", {}) if isinstance(oc_cfg, dict) else {}
+            if not port or port == 18789:
+                port = int(gw.get("port") or oc_cfg.get("gatewayPort") or 18789)
+            auth = gw.get("auth", {}) if isinstance(gw, dict) else {}
+            token = str(auth.get("token") or gw.get("token") or oc_cfg.get("authToken") or "").strip()
+        except Exception as e:
+            log.debug("OpenClaw gateway config read failed: %s", e)
     return {"port": port, "token": token}
 
 
@@ -25819,90 +25799,100 @@ def _gateway_restart() -> dict:
         return {"ok": False, "error": str(e)[:200]}
 
 
-def _test_model_connectivity(model_id: str, model: str = "") -> dict:
-    """Run a lightweight connectivity test for model backends used in Models tab cards."""
+def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
+    """Test connectivity for a specific backend + model. All config from porter_config.json."""
     import urllib.request
 
-    model_id = str(model_id or "").strip()
-    if not model_id:
-        return {"ok": False, "model": model_id, "error": "model_id required"}
+    backend_id = str(backend_id or "").strip()
+    if not backend_id:
+        return {"ok": False, "model": "", "error": "backend required"}
 
-    backend = model_id.lower()
-    alias = {
-        "openclaw-gateway": "openclaw",
-        "gemini_cli": "gemini",
-        "claude_code": "claude",
-    }
+    backend = backend_id.lower()
+    alias = {"openclaw-gateway": "openclaw", "gemini_cli": "gemini", "claude_code": "claude"}
     backend = alias.get(backend, backend)
+
+    # Resolve "auto" to actual model
+    if not model or model == "auto":
+        model = _get_active_model(backend) or ""
 
     t0 = time.time()
     try:
         if backend == "openclaw":
-            gw = _openclaw_gateway_settings()
-            model_name = model or _get_active_model("openclaw") or "gpt-5.4"
-            payload = {
-                "model": model_name,
-                "messages": [{"role": "user", "content": "Reply with just the word OK"}],
-                "max_tokens": 5,
-            }
-            req = urllib.request.Request(
-                f"http://127.0.0.1:{gw['port']}/v1/chat/completions",
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            if gw.get("token"):
-                req.add_header("Authorization", f"Bearer {gw['token']}")
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                body = json.loads(resp.read().decode("utf-8", errors="replace") or "{}")
-            response_text = ""
-            choices = body.get("choices", []) if isinstance(body, dict) else []
-            if choices and isinstance(choices[0], dict):
-                msg = choices[0].get("message", {})
-                if isinstance(msg, dict):
-                    response_text = msg.get("content", "") or ""
-            if isinstance(response_text, list):
-                response_text = "".join([(p.get("text", "") if isinstance(p, dict) else str(p)) for p in response_text])
+            # OpenClaw gateway is WebSocket — use CLI, not HTTP
+            oc_bin = _resolve_cli("openclaw")
+            if not oc_bin:
+                return {"ok": False, "model": model, "error": "openclaw CLI not found"}
+            cmd = [oc_bin, "agent", "--message", "Reply with just the word OK", "--json"]
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=15, env=_agent_env(), cwd=str(Path.home()))
             latency_ms = int((time.time() - t0) * 1000)
-            return {"ok": True, "model": model_id, "response": (response_text or "OK").strip()[:200], "latency_ms": latency_ms}
+            out = (r.stdout or "").strip()
+            # Parse JSONL for response text
+            text = ""
+            for line in out.split("\n"):
+                if not line.strip():
+                    continue
+                try:
+                    evt = json.loads(line)
+                    if evt.get("type") == "item.completed":
+                        item = evt.get("item", {})
+                        if item.get("type") == "agent_message":
+                            text = item.get("text", "") or ""
+                except Exception:
+                    continue
+            if text:
+                return {"ok": True, "model": model, "response": text.strip()[:200], "latency_ms": latency_ms}
+            # Check for errors
+            err = ""
+            for line in out.split("\n"):
+                try:
+                    evt = json.loads(line)
+                    if evt.get("type") in ("error", "turn.failed"):
+                        err = evt.get("message", "") or str(evt.get("error", {}).get("message", ""))
+                except Exception:
+                    continue
+            if not err:
+                err = (r.stderr or "").strip()[:200] or "No response from gateway"
+            return {"ok": False, "model": model, "error": err[:200]}
 
         if backend == "codex":
             cdx = _resolve_cli("codex")
             if not cdx:
-                return {"ok": False, "model": model_id, "error": "codex CLI not found"}
-            _cdx_model = model or _get_active_model("codex") or "gpt-5.4"
-            _cdx_cmd = [cdx, "exec", "--ephemeral", "--json", "--skip-git-repo-check",
-                        "-m", _cdx_model, "Reply with just the word OK"]
-            _cdx_r = subprocess.run(_cdx_cmd, capture_output=True, text=True,
-                                    timeout=15, env=_agent_env(), cwd=str(Path.home()))
-            _cdx_text = ""
-            for _cdx_ln in (_cdx_r.stdout or "").strip().split("\n"):
-                if not _cdx_ln.strip():
+                return {"ok": False, "model": model, "error": "codex CLI not found"}
+            _cdx_model = model or "gpt-5.4"
+            cmd = [cdx, "exec", "--ephemeral", "--json", "--skip-git-repo-check",
+                   "-m", _cdx_model, "Reply with just the word OK"]
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30, env=_agent_env(), cwd=str(Path.home()))
+            latency_ms = int((time.time() - t0) * 1000)
+            text = ""
+            for line in (r.stdout or "").strip().split("\n"):
+                if not line.strip():
                     continue
                 try:
-                    _cdx_evt = json.loads(_cdx_ln)
-                    if _cdx_evt.get("type") == "item.completed":
-                        _cdx_item = _cdx_evt.get("item", {})
-                        if _cdx_item.get("type") == "agent_message":
-                            _cdx_msg = _cdx_item.get("text", "") or ""
-                            if not _cdx_msg:
-                                _cdx_parts = [_cp.get("text", "") for _cp in (_cdx_item.get("content", []) or []) if isinstance(_cp, dict) and _cp.get("text")]
-                                if _cdx_parts:
-                                    _cdx_msg = "".join(_cdx_parts).strip()
-                            if _cdx_msg:
-                                _cdx_text = _cdx_msg
+                    evt = json.loads(line)
+                    if evt.get("type") == "item.completed":
+                        item = evt.get("item", {})
+                        if item.get("type") == "agent_message":
+                            msg = item.get("text", "") or ""
+                            if not msg:
+                                parts = [p.get("text", "") for p in (item.get("content", []) or []) if isinstance(p, dict) and p.get("text")]
+                                if parts:
+                                    msg = "".join(parts).strip()
+                            if msg:
+                                text = msg
                 except Exception:
                     continue
-            latency_ms = int((time.time() - t0) * 1000)
-            if _cdx_text:
-                return {"ok": True, "model": model_id, "response": _cdx_text.strip()[:200], "latency_ms": latency_ms}
-            return {"ok": False, "model": model_id, "error": (_cdx_r.stderr or "").strip()[:200] or "Codex returned no text"}
+            if text:
+                return {"ok": True, "model": model, "response": text.strip()[:200], "latency_ms": latency_ms}
+            return {"ok": False, "model": model, "error": (r.stderr or "").strip()[:200] or "Codex returned no text"}
 
         if backend == "ollama":
-            model_name = model or _get_active_model("ollama") or "qwen2.5-coder:1.5b"
+            bc = _config.get("backend_config", {}).get("ollama", {})
+            _oll_host = bc.get("host", "127.0.0.1")
+            _oll_port = bc.get("port", 11434)
+            model_name = model or "qwen2.5-coder:1.5b"
             payload = {"model": model_name, "prompt": "Reply OK", "stream": False}
             req = urllib.request.Request(
-                "http://127.0.0.1:11434/api/generate",
+                f"http://{_oll_host}:{_oll_port}/api/generate",
                 data=json.dumps(payload).encode("utf-8"),
                 headers={"Content-Type": "application/json"},
                 method="POST",
@@ -25910,33 +25900,42 @@ def _test_model_connectivity(model_id: str, model: str = "") -> dict:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 body = json.loads(resp.read().decode("utf-8", errors="replace") or "{}")
             latency_ms = int((time.time() - t0) * 1000)
-            return {"ok": True, "model": model_id, "response": str(body.get("response", "OK")).strip()[:200], "latency_ms": latency_ms}
+            return {"ok": True, "model": model, "response": str(body.get("response", "OK")).strip()[:200], "latency_ms": latency_ms}
 
         if backend == "gemini":
             gem = _resolve_cli("gemini")
             if not gem:
-                return {"ok": False, "model": model_id, "error": "gemini CLI not found"}
-            r = subprocess.run([gem, "-p", "Reply with just OK"] + (["-m", model] if model and model != "auto" else []), capture_output=True, text=True, timeout=10, env=_agent_env(), cwd=str(Path.home()))
+                return {"ok": False, "model": model, "error": "gemini CLI not found"}
+            cmd = [gem, "-p", "Reply with just OK", "-y"]
+            if model and model != "auto" and model != "gemini":
+                cmd.extend(["-m", model])
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30, env=_agent_env(), cwd=str(Path.home()))
             if r.returncode != 0:
-                return {"ok": False, "model": model_id, "error": (r.stderr or r.stdout or "Gemini failed").strip()[:200]}
+                return {"ok": False, "model": model, "error": (r.stderr or r.stdout or "Gemini failed").strip()[:200]}
             latency_ms = int((time.time() - t0) * 1000)
-            return {"ok": True, "model": model_id, "response": (r.stdout or "OK").strip()[:200], "latency_ms": latency_ms}
+            return {"ok": True, "model": model, "response": (r.stdout or "OK").strip()[:200], "latency_ms": latency_ms}
 
         if backend == "claude":
-            claude = _resolve_cli("claude")
-            if not claude:
-                return {"ok": False, "model": model_id, "error": "claude CLI not found"}
-            r = subprocess.run([claude, "-p", "Reply with just OK", "--no-input"] + (["--model", model] if model and model != "auto" else []), capture_output=True, text=True, timeout=15, env=_agent_env(), cwd=str(Path.home()))
+            claude_bin = _resolve_cli("claude")
+            if not claude_bin:
+                return {"ok": False, "model": model, "error": "claude CLI not found"}
+            cmd = [claude_bin, "-p", "Reply with just OK"]
+            if model and model != "auto" and model != "claude":
+                cmd.extend(["--model", model])
+            # Unset CLAUDECODE to allow nested invocation from within Claude Code
+            _env = _agent_env()
+            _env.pop("CLAUDECODE", None)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30, env=_env, cwd=str(Path.home()))
             if r.returncode != 0:
-                return {"ok": False, "model": model_id, "error": (r.stderr or r.stdout or "Claude failed").strip()[:200]}
+                return {"ok": False, "model": model, "error": (r.stderr or r.stdout or "Claude failed").strip()[:200]}
             latency_ms = int((time.time() - t0) * 1000)
-            return {"ok": True, "model": model_id, "response": (r.stdout or "OK").strip()[:200], "latency_ms": latency_ms}
+            return {"ok": True, "model": model, "response": (r.stdout or "OK").strip()[:200], "latency_ms": latency_ms}
 
-        return {"ok": False, "model": model_id, "error": f"Unsupported model_id: {model_id}"}
+        return {"ok": False, "model": model, "error": f"Unknown backend: {backend}"}
     except subprocess.TimeoutExpired:
-        return {"ok": False, "model": model_id, "error": "Timed out after 15s"}
+        return {"ok": False, "model": model, "error": "Timed out (30s)"}
     except Exception as e:
-        return {"ok": False, "model": model_id, "error": str(e)[:200]}
+        return {"ok": False, "model": model, "error": str(e)[:200]}
 
 
 # ── Active Streams (for live trace) ───────────────────────────────────────
@@ -27882,7 +27881,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.71"})
+            self.reply_json({"v": "0.29.72"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -28044,7 +28043,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.71"
+                health["porter_version"] = "0.29.72"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28188,14 +28187,13 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             providers = []
             for name, info in PROVIDER_REGISTRY.items():
-                _meta = MODEL_METADATA.get(name, {})
+                _meta = _backend_meta(name)
                 providers.append({
                     "id": name,
                     "available": _probe_provider(name),
                     "type": info["type"],
                     "label": info["label"],
                     "description": _meta.get("description", ""),
-                    "best_for": _meta.get("best_for", []),
                     "install_hint": INSTALL_HINTS.get(name, ""),
                 })
             self.reply_json({"ok": True, "providers": providers})
@@ -29849,7 +29847,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.71'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.72'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30673,10 +30671,28 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             body = self.read_json_body()
             if body is None: return
-            _test_bk = body.get("backend", body.get("model_id", ""))
-            _test_model = body.get("model", "")
+            _test_bk = str(body.get("backend", body.get("model_id", ""))).strip()
+            _test_model = str(body.get("model", "")).strip()
             result = _test_model_connectivity(_test_bk, _test_model)
             self.reply_json(result)
+
+        elif parsed.path == "/api/backend/config":
+            if not self.auth_check(redirect=False): return
+            body = self.read_json_body()
+            if body is None: return
+            _cfg_bk = str(body.get("backend", "")).strip()
+            if not _cfg_bk:
+                self.reply_json({"ok": False, "error": "backend required"}, 400); return
+            if "backend_config" not in _config:
+                _config["backend_config"] = {}
+            if _cfg_bk not in _config["backend_config"]:
+                _config["backend_config"][_cfg_bk] = {}
+            # Merge provided fields (description, auth_token, gateway_port, host, port, models)
+            for _cfg_key in ("description", "auth_token", "gateway_port", "host", "port", "models"):
+                if _cfg_key in body:
+                    _config["backend_config"][_cfg_bk][_cfg_key] = body[_cfg_key]
+            save_config(_config)
+            self.reply_json({"ok": True, "backend": _cfg_bk, "config": _config["backend_config"][_cfg_bk]})
 
         elif parsed.path == "/api/bridge/dispatch":
             if not self.auth_check_cap("orch_write"): return
@@ -34457,7 +34473,8 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.71 ready (localhost only)")
+    _ensure_backend_config()
+    print(f"\n  Porter v0.29.72 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
