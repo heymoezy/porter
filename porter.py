@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.27 — Auto-fallback dispatch + rate-limit retry + leader/contributor modes"""
+"""Porter v0.30.28 — Auto-fallback dispatch + rate-limit retry + leader/contributor modes"""
 
 
 import email
@@ -1425,17 +1425,26 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
         "Return ONLY valid JSON, no explanation."
     )
 
-    # Try extraction via dispatch (reuse existing backends)
+    # Try extraction via dispatch — prefer local Ollama (no rate limits) for extraction
+    _extract_backends = ["ollama"]  # Local first, no rate limit risk
+    # Add non-rate-limited cloud backends as fallback
+    for _eb in ["gemini", "openclaw", "claude", "codex"]:
+        if _eb != backend and _backend_is_available(_eb):
+            _extract_backends.append(_eb)
+    # If original backend is available and not in list, add it
+    if backend and backend not in _extract_backends and _backend_is_available(backend):
+        _extract_backends.insert(1, backend)
+
+    result = None
     try:
-        result = dispatch_agent(extract_prompt, backend or "openclaw", timeout=30)
-        if not result.get("ok"):
-            # Fallback: try other backends
-            for fb in ["gemini", "claude", "ollama"]:
-                if fb != backend:
-                    result = dispatch_agent(extract_prompt, fb, timeout=30)
-                    if result.get("ok"):
-                        break
-        if not result.get("ok"):
+        for _ext_bk in _extract_backends:
+            if _ext_bk not in PROVIDER_REGISTRY:
+                continue
+            result = dispatch_agent(extract_prompt, _ext_bk, timeout=30)
+            if result.get("ok"):
+                break
+            log.debug("Cortex extraction failed on %s: %s", _ext_bk, result.get("error", "?")[:80])
+        if not result or not result.get("ok"):
             return
     except Exception as e:
         log.debug("Cortex extraction dispatch failed: %s", e)
@@ -1569,6 +1578,38 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
         except Exception:
             pass
     return inserted
+
+def _cortex_batch_extract(limit=20):
+    """Extract facts from recent dispatches that haven't been processed yet."""
+    try:
+        conn = _db_conn()
+        # Get recent complete dispatches with response text
+        rows = conn.execute("""
+            SELECT run_id, to_agent, message, response, persona_id, model, created_at
+            FROM agent_messages 
+            WHERE status='complete' AND response IS NOT NULL AND length(response) > 100
+            AND run_id NOT IN (SELECT DISTINCT source_id FROM cortex_memories WHERE source_type='dispatch')
+            ORDER BY created_at DESC LIMIT ?
+        """, (limit,)).fetchall()
+        conn.close()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    extracted = 0
+    for row in rows:
+        try:
+            _cortex_extract_and_route(
+                row["message"] or "", row["response"] or "",
+                persona_id=row["persona_id"] or "",
+                backend=row["to_agent"] or ""
+            )
+            extracted += 1
+        except Exception as e:
+            log.debug("Batch extraction failed for %s: %s", row["run_id"], e)
+        time.sleep(2)  # Don't spam backends
+
+    return {"ok": True, "processed": len(rows), "extracted": extracted}
+
 
 def _cortex_inject_context(message, persona_id="", project_id=""):
     """Inject relevant memories before a persona dispatch. Pure SQL + keyword matching, no LLM."""
@@ -9599,7 +9640,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.27</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.28</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10282,6 +10323,7 @@ input[type="number"].settings-input { min-width: 60px; }
       <span class="module-title">Cortex</span>
       <div style="flex:1"></div>
       <button class="btn btn-ghost" style="margin-left:4px" onclick="_loadCortexTab()">&#8635;</button>
+      <button class="btn btn-ghost" style="margin-left:4px;font-size:11px" onclick="_cortexBatchExtract(this)">Extract Now</button>
     </div>
 
     <!-- Extraction progress banner -->
@@ -10965,6 +11007,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.28', date:'2026-03-09', notes:['Cortex extraction now prefers local Ollama (no rate limits) before trying cloud backends','Batch extraction: Extract Now button processes recent unextracted dispatches on demand','Cortex squad filter wired up — filter memories by squad membership','Backend health-aware extraction skips rate-limited backends automatically'] },
   { ver:'v0.30.27', date:'2026-03-09', notes:['Backend health tracking: rate-limited backends enter cooldown and auto-recover when watchdog confirms they are back','Dispatch skips rate-limited backends immediately instead of wasting a timeout discovering the limit again','Rate limits hidden in successful response text are now caught and trigger auto-fallback','Watchdog probes recovering backends every 30s and marks them available when they respond','New API: GET /api/backend-health shows cooldown status and failure counts per backend'] },
   { ver:'v0.30.26', date:'2026-03-09', notes:['Auto-fallback: when a backend fails or hits rate limits, Porter tries fallback backends automatically — agents never give up','Rate-limit retry: dispatch_agent retries with 30/60/120s exponential backoff before failing','All agents now have fallback backend chains (primary fails → try next in chain)','Leader/Contributor dispatch mode: Lobster and Vision are leaders, others are contributors','Cortex squad filter: click a squad to see only memories from its agents'] },
   { ver:'v0.30.25', date:'2026-03-09', notes:['Orchestration executor selection now applies squad dispatch_policy instead of treating squads as display-only metadata','Leader-first, backend-specialist, and balanced squad policies now influence which assigned persona gets the work inside a project lane','This makes squad structure affect real autonomous routing instead of only enriching prompts after the route was already chosen'] },
@@ -20065,6 +20108,18 @@ var _cortexMemories = [];
 var _wfSkills = [];
 var _wfShowAll = false;
 var _cortexAgents = [];
+async function _cortexBatchExtract(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Extracting...'; }
+  try {
+    await api('/api/cortex/batch-extract', {});
+    if (btn) { btn.textContent = 'Started!'; setTimeout(function() { btn.textContent = 'Extract Now'; btn.disabled = false; }, 3000); }
+    // Refresh after a delay
+    setTimeout(function() { _loadCortexTab(); }, 10000);
+  } catch(e) {
+    if (btn) { btn.textContent = 'Failed'; btn.disabled = false; }
+  }
+}
+
 async function _loadCortexTab() {
   // v0.28.49 — Show loading indicator immediately on canvas
   var _lcCanvas = document.getElementById('cx-graph-canvas');
@@ -20087,6 +20142,8 @@ async function _loadCortexTab() {
       _lcCtx.fillText('Loading memory map\u2026', _lcW/2, _lcH/2);
     }
   }
+  // Load squads for filtering
+  _loadCortexSquads();
   // Load agents list for routing dropdowns
   try {
     var aData = await api('/api/personas');
@@ -32342,7 +32399,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.27"})
+            self.reply_json({"v": "0.30.28"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32504,7 +32561,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.27"
+                health["porter_version"] = "0.30.28"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34197,6 +34254,16 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             self.reply_json({"ok": True, "processes": _process_list()})
 
+        elif parsed.path == "/api/cortex/batch-extract":
+            if not self.auth_check(redirect=False): return
+            # Run in background thread
+            def _do_batch():
+                result = _cortex_batch_extract(limit=10)
+                mlog.emit("info", "cortex", "cortex.batch_extract",
+                    f"Batch extraction: {result.get('processed', 0)} dispatches, {result.get('extracted', 0)} extracted")
+            threading.Thread(target=_do_batch, daemon=True, name="cortex-batch").start()
+            self.reply_json({"ok": True, "message": "Batch extraction started in background"})
+
         elif parsed.path == "/api/backend-health":
             if not self.auth_check(redirect=False): return
             self.reply_json({"ok": True, "backends": _backend_health_status()})
@@ -34338,7 +34405,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.27'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.28'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39101,7 +39168,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.27 ready (localhost only)")
+    print(f"\n  Porter v0.30.28 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
