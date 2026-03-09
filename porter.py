@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.19 — Project-aware orchestration context"""
+"""Porter v0.30.20 — Project-aware orchestration context"""
 
 
 import email
@@ -257,6 +257,9 @@ _wf_register("memory_extraction", "Memory Extraction",
     interval="per-response", interval_s=0,
     )
 
+_wf_register("agent_watchdog", "Agent Watchdog",
+    "Auto-detects stalled agents and orchestration steps, validates responses, reboots failures",
+    interval_minutes=0, auto_start=True, status="active")
 _wf_register("agent_backend_eval", "Agent Backend Eval",
     "Cycles through agents testing each backend for response quality and speed",
     interval="168h", interval_s=604800,
@@ -9593,7 +9596,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.19</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.20</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11031,6 +11034,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.20', date:'2026-03-09', notes:['Agent Watchdog: background thread monitors running dispatches and orchestration steps, detects stalls, auto-reboots by reassigning to next-best backend','Response validation catches empty, repetitive, or refusal responses especially from OpenClaw','OpenClaw gateway health check: watchdog pings gateway every 30s, attempts auto-restart if unresponsive','New API: GET /api/watchdog returns live stats (checks, reboots, validation failures)'] },
   { ver:'v0.30.19', date:'2026-03-09', notes:['Orchestration runs now inherit active project/task context, prefer personas assigned to the active project, and pass project/task identity through persona execution','Runtime orchestration cards now surface project/task chips so autonomous runs stay tied to the real project lane instead of floating as generic jobs','This closes a core autonomy gap where the orchestration engine could execute outside project-aware dispatch and Cortex scoping'] },
   { ver:'v0.30.18', date:'2026-03-09', notes:['Orchestration Engine: Porter now plans goals into executable DAG steps, scores each backend by capability fit, dispatches to the best available model, and auto-reassigns on failure','New DB tables: orchestration_runs, orchestration_steps, orchestration_events — full execution history with dependency tracking','Capability taxonomy: each backend scored for implementation/research/analysis/synthesis/verification/debugging — routing is data-driven not keyword-heuristic','API: POST /api/orchestration/run (plan+execute), GET /api/orchestration/runs, GET/DELETE /api/orchestration/<id>','System tab: Orchestration Engine panel with live progress bars, run status, cancel/detail controls','Steps execute in parallel when dependencies allow, with ThreadPoolExecutor — independent branches run concurrently'] },
   { ver:'v0.30.17', date:'2026-03-09', notes:['Runtime now has live Coordination Bridge and Orchestration Engine panels showing active claims, conflicts, recent coordination results, and recent orchestration runs','Filled in the missing orchestration UI functions and fixed the orchestration runs API query parsing so the new runtime lane is real instead of a dead shell','This makes Porter Bridge orchestration inspectable from the operator view instead of leaving coordination state hidden in backend tables or half-landed UI hooks'] },
@@ -30389,6 +30393,267 @@ def _ledger_conflicts() -> list:
 
 
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AGENT WATCHDOG — auto-detect stalls, validate responses, reboot agents
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_watchdog_running = False
+_watchdog_stats = {"checks": 0, "reboots": 0, "validations_failed": 0, "last_check": 0}
+_WATCHDOG_INTERVAL = 30  # seconds between checks
+_STALL_THRESHOLD = 180   # seconds before a step is considered stalled
+_DISPATCH_STALL = 120    # seconds before a dispatch is considered stalled
+
+
+def _validate_response(text: str, backend: str = "") -> dict:
+    """Check if a model response is actually useful or garbage.
+    Returns {"valid": bool, "reason": str, "confidence": float}
+    """
+    if not text or not text.strip():
+        return {"valid": False, "reason": "empty response", "confidence": 1.0}
+
+    text = text.strip()
+
+    # Too short to be useful
+    if len(text) < 10:
+        return {"valid": False, "reason": "response too short", "confidence": 0.9}
+
+    # Repetition detection: same sentence repeated 3+ times
+    sentences = [s.strip() for s in text.split('.') if s.strip()]
+    if len(sentences) >= 3:
+        from collections import Counter
+        counts = Counter(sentences)
+        most_common = counts.most_common(1)
+        if most_common and most_common[0][1] >= 3:
+            return {"valid": False, "reason": "repetitive output", "confidence": 0.95}
+
+    # Refusal/error patterns
+    refusal_patterns = [
+        "i cannot", "i can't", "i'm unable", "as an ai", "i don't have access",
+        "error:", "exception:", "traceback", "connection refused", "timed out",
+        "rate limit", "quota exceeded", "unauthorized", "forbidden",
+    ]
+    text_lower = text.lower()
+    for p in refusal_patterns:
+        if p in text_lower and len(text) < 200:
+            return {"valid": False, "reason": f"refusal/error: {p}", "confidence": 0.8}
+
+    # OpenClaw-specific: sometimes returns HTML instead of text
+    if backend == "openclaw" and text.startswith("<!") and "<html" in text_lower[:100]:
+        return {"valid": False, "reason": "HTML response instead of text", "confidence": 1.0}
+
+    # Looks valid
+    return {"valid": True, "reason": "ok", "confidence": 1.0}
+
+
+def _reboot_stalled_step(step: dict, run_id: str) -> dict:
+    """Reassign a stalled orchestration step to a different backend."""
+    step_id = step["id"]
+    old_backend = step.get("assigned_backend", "")
+    kind = step.get("kind", "general")
+
+    # Find next best backend
+    _raw_rc = step.get("required_capabilities", [])
+    req_caps = json.loads(_raw_rc) if isinstance(_raw_rc, str) else (_raw_rc if isinstance(_raw_rc, list) else [])
+
+    scored = []
+    for bk in PROVIDER_REGISTRY:
+        if bk == old_backend:
+            continue
+        s = _orch_score_backend(bk, kind, req_caps)
+        if s > 0.0:
+            scored.append((s, bk))
+    scored.sort(key=lambda x: -x[0])
+
+    if not scored:
+        return {"ok": False, "reason": "no alternative backends available"}
+
+    new_backend = scored[0][1]
+    try:
+        conn = _db_conn()
+        conn.execute(
+            "UPDATE orchestration_steps SET status='pending', assigned_backend=?, progress_pct=0 WHERE id=?",
+            (new_backend, step_id)
+        )
+        conn.execute(
+            "INSERT INTO orchestration_events (run_id, step_id, event_type, backend, message) VALUES (?, ?, 'watchdog_reboot', ?, ?)",
+            (run_id, step_id, new_backend, f"Watchdog rebooted: {old_backend} stalled, reassigned to {new_backend}")
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        return {"ok": False, "reason": str(e)}
+
+    _emit_event("watchdog:reboot", {"run_id": run_id, "step_id": step_id, "from": old_backend, "to": new_backend})
+    mlog.emit("warn", "watchdog", "watchdog.reboot",
+        f"Step {step_id} rebooted: {old_backend} -> {new_backend}", run_id=run_id, backend=new_backend)
+    _watchdog_stats["reboots"] += 1
+    return {"ok": True, "from": old_backend, "to": new_backend}
+
+
+def _openclaw_health_check() -> dict:
+    """Check if OpenClaw gateway is responsive and restart if stalled."""
+    try:
+        import urllib.request
+        req = urllib.request.Request("http://127.0.0.1:18789/api/status",
+            headers={"Authorization": "Bearer lobster-2026"})
+        resp = urllib.request.urlopen(req, timeout=5)
+        data = json.loads(resp.read())
+        return {"ok": True, "status": data}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def _openclaw_restart() -> dict:
+    """Attempt to restart the OpenClaw gateway."""
+    import subprocess
+    try:
+        # Try systemd first
+        r = subprocess.run(["systemctl", "--user", "restart", "openclaw-gateway.service"],
+            capture_output=True, text=True, timeout=10)
+        if r.returncode == 0:
+            return {"ok": True, "method": "systemd"}
+        # Try direct start
+        r2 = subprocess.run([str(Path.home() / ".npm-global/bin/openclaw"), "gateway", "start"],
+            capture_output=True, text=True, timeout=15)
+        return {"ok": r2.returncode == 0, "method": "direct", "output": r2.stdout[:200]}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def _agent_watchdog_loop():
+    """Background loop: detect stalled steps and dispatches, reboot them."""
+    global _watchdog_running
+    _watchdog_running = True
+    log.info("Agent watchdog started (interval=%ds, stall=%ds)", _WATCHDOG_INTERVAL, _STALL_THRESHOLD)
+
+    while _watchdog_running:
+        try:
+            time.sleep(_WATCHDOG_INTERVAL)
+            _watchdog_stats["checks"] += 1
+            _watchdog_stats["last_check"] = time.time()
+            now = time.time()
+
+            conn = _db_conn()
+
+            # 1. Check for stalled orchestration steps
+            stalled_steps = conn.execute(
+                "SELECT os.*, or2.id as run_id FROM orchestration_steps os "
+                "JOIN orchestration_runs or2 ON os.run_id = or2.id "
+                "WHERE os.status = 'running' AND os.started_at > 0 AND os.started_at < ? "
+                "AND or2.status = 'running'",
+                (now - _STALL_THRESHOLD,)
+            ).fetchall()
+
+            for step in stalled_steps:
+                step_d = dict(step)
+                log.warning("Watchdog: stalled step %s (backend=%s, running for %ds)",
+                    step_d["id"], step_d.get("assigned_backend", "?"),
+                    int(now - step_d.get("started_at", now)))
+                _reboot_stalled_step(step_d, step_d["run_id"])
+
+            # 2. Check for stalled persona dispatches (agent_messages stuck in_progress)
+            stalled_dispatches = conn.execute(
+                "SELECT run_id, to_agent, message, ts FROM agent_messages "
+                "WHERE status = 'in_progress' AND ts < ?",
+                (now - _DISPATCH_STALL,)
+            ).fetchall()
+
+            for disp in stalled_dispatches:
+                log.warning("Watchdog: stalled dispatch %s to %s (running for %ds)",
+                    disp["run_id"], disp["to_agent"],
+                    int(now - disp["ts"]))
+                # Mark as failed so it doesn't block
+                conn.execute(
+                    "UPDATE agent_messages SET status='failed', error='Watchdog: stall timeout' WHERE run_id=? AND status='in_progress'",
+                    (disp["run_id"],)
+                )
+                mlog.emit("warn", "watchdog", "watchdog.dispatch_stall",
+                    f"Dispatch {disp['run_id']} to {disp['to_agent']} timed out",
+                    run_id=disp["run_id"], backend=disp["to_agent"])
+
+            # 3. Check for expired orchestration run leases
+            expired_leases = conn.execute(
+                "SELECT id, run_id, assigned_backend FROM orchestration_steps "
+                "WHERE status = 'running' AND lease_expires_at > 0 AND lease_expires_at < ?",
+                (now,)
+            ).fetchall()
+
+            for exp in expired_leases:
+                exp_d = dict(exp)
+                log.warning("Watchdog: lease expired for step %s", exp_d["id"])
+                _reboot_stalled_step(exp_d, exp_d["run_id"])
+
+            # 4. Validate recent responses from untrusted backends (OpenClaw)
+            recent_responses = conn.execute(
+                "SELECT run_id, to_agent, response, status FROM agent_messages "
+                "WHERE status = 'complete' AND to_agent = 'openclaw' "
+                "AND completed_at > ? AND response IS NOT NULL",
+                (now - _WATCHDOG_INTERVAL * 2,)
+            ).fetchall()
+
+            for resp in recent_responses:
+                validation = _validate_response(resp["response"] or "", backend="openclaw")
+                if not validation["valid"]:
+                    log.warning("Watchdog: invalid openclaw response for %s: %s",
+                        resp["run_id"], validation["reason"])
+                    conn.execute(
+                        "UPDATE agent_messages SET status='failed', error=? WHERE run_id=? AND to_agent='openclaw' AND status='complete'",
+                        (f"Watchdog validation failed: {validation['reason']}", resp["run_id"])
+                    )
+                    _watchdog_stats["validations_failed"] += 1
+                    mlog.emit("warn", "watchdog", "watchdog.validation_failed",
+                        f"OpenClaw response invalid: {validation['reason']}",
+                        run_id=resp["run_id"], backend="openclaw")
+
+            conn.commit()
+            conn.close()
+
+
+            # 5. OpenClaw gateway health check
+            oc_health = _openclaw_health_check()
+            if not oc_health.get("ok"):
+                log.warning("Watchdog: OpenClaw gateway unresponsive: %s", oc_health.get("error", "?"))
+                mlog.emit("warn", "watchdog", "watchdog.openclaw_down",
+                    f"OpenClaw gateway unresponsive: {oc_health.get('error', '?')[:100]}")
+                _emit_event("watchdog:openclaw_down", {"error": oc_health.get("error", "?")[:200]})
+                # Attempt restart
+                restart = _openclaw_restart()
+                if restart.get("ok"):
+                    mlog.emit("info", "watchdog", "watchdog.openclaw_restarted",
+                        f"OpenClaw gateway restarted via {restart.get('method', '?')}")
+                    _emit_event("watchdog:openclaw_restarted", {"method": restart.get("method", "?")})
+                else:
+                    mlog.emit("error", "watchdog", "watchdog.openclaw_restart_failed",
+                        f"OpenClaw restart failed: {restart.get('error', '?')[:100]}")
+
+
+        except Exception as e:
+            log.debug("Watchdog loop error: %s", e)
+
+    log.info("Agent watchdog stopped")
+
+
+def _start_watchdog():
+    """Start the agent watchdog in a background thread."""
+    global _watchdog_running
+    if _watchdog_running:
+        return
+    t = threading.Thread(target=_agent_watchdog_loop, daemon=True, name="agent-watchdog")
+    t.start()
+
+
+def _watchdog_status() -> dict:
+    """Return current watchdog status."""
+    return {
+        "running": _watchdog_running,
+        "interval": _WATCHDOG_INTERVAL,
+        "stall_threshold": _STALL_THRESHOLD,
+        "dispatch_stall": _DISPATCH_STALL,
+        "stats": dict(_watchdog_stats),
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # ORCHESTRATION ENGINE — Task planning, capability routing, execution, reassignment
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -31661,7 +31926,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.19"})
+            self.reply_json({"v": "0.30.20"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -31823,7 +32088,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.19"
+                health["porter_version"] = "0.30.20"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -33512,6 +33777,10 @@ class Handler(BaseHTTPRequestHandler):
             conflicts = _ledger_conflicts()
             self.reply_json({"ok": True, "active_claims": active, "recent": recent, "conflicts": conflicts})
 
+        elif parsed.path == "/api/watchdog":
+            if not self.auth_check(redirect=False): return
+            self.reply_json({"ok": True, **_watchdog_status()})
+
         elif parsed.path == "/api/orchestration/runs":
             if not self.auth_check(redirect=False): return
             qs = parse_qs(parsed.query)
@@ -33645,7 +33914,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.19'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.20'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38375,13 +38644,14 @@ if __name__ == "__main__":
             (_error_self_heal_loop, "porter-self-heal"),
         ]:
             threading.Thread(target=_tgt, name=_tn, daemon=True).start()
+        _start_watchdog()  # Agent watchdog: stall detection + auto-reboot
     threading.Thread(target=_deferred_boot, name="porter-deferred-boot", daemon=True).start()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.19 ready (localhost only)")
+    print(f"\n  Porter v0.30.20 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
