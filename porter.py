@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.81 — Dynamic model catalogs and Runtime split"""
+"""Porter v0.29.82 — Models design/status pass and OpenClaw config recovery"""
 
 
 import email
@@ -8537,22 +8537,29 @@ body.density-compact .file-name { padding: 6px 0; }
 /* Model cards v2 */
 .models-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:14px; }
 @media (max-width:700px) { .models-grid { grid-template-columns:1fr; } }
-.model-card { padding:18px 20px;background:var(--raised);border:1px solid var(--border);border-radius:10px;transition:border-color .15s; }
+.model-card { padding:16px 18px;background:var(--raised);border:1px solid var(--border);border-radius:10px;transition:border-color .15s;display:flex;flex-direction:column;gap:10px;min-height:0; }
 .model-card:hover { border-color:var(--accent); }
 .model-card.offline { opacity:.55; }
-.model-card-head { display:flex;align-items:center;gap:10px;margin-bottom:4px; }
+.model-card-head { display:flex;align-items:center;gap:10px; }
 .model-card-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
 .model-card-name { font-size:15px;font-weight:600;color:var(--text); }
-.model-card-type { font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px; }
-.model-card-desc { font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px; }
+.model-card-type { font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px; }
+.model-card-desc { font-size:12px;color:var(--text2);line-height:1.45; }
 .model-card-tags { display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px; }
 .model-card-tag { font-size:11px;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,var(--accent) 12%,var(--bg));color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border)); }
-
-.model-card-divider { border-top:1px solid var(--border);margin:10px 0;padding-top:10px; }
+.model-card-meta { display:flex;flex-wrap:wrap;gap:6px;align-items:center; }
+.model-card-state { display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:24px; }
+.model-card-chip { display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid var(--border);font-size:10px;color:var(--text2);background:var(--bg);white-space:nowrap; }
+.model-card-chip.ok { border-color:color-mix(in srgb,#22c55e 35%,var(--border)); color:#22c55e; }
+.model-card-chip.warn { border-color:color-mix(in srgb,#f59e0b 40%,var(--border)); color:#f59e0b; }
+.model-card-chip.err { border-color:color-mix(in srgb,#ef4444 40%,var(--border)); color:#ef4444; }
+.model-card-chip.dim { color:var(--text3); }
+.model-card-chip button { all:unset; cursor:pointer; }
+.model-card-footer { margin-top:auto; display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding-top:8px; border-top:1px solid var(--border); }
 .model-card-activity { display:flex;align-items:center;gap:8px;font-size:12px; }
 .model-card-activity.working { color:var(--accent);font-weight:500; }
 .model-card-activity.idle { color:var(--text3);font-style:italic; }
-.model-card-stats { font-size:11px;color:var(--text3);margin-top:6px; }
+.model-card-stats { font-size:11px;color:var(--text3); }
 .model-card-recent { margin-top:8px; }
 .model-card-run { display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0;color:var(--text2); }
 .model-card-run-dot { width:5px;height:5px;border-radius:50%;flex-shrink:0; }
@@ -9119,7 +9126,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.81</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.82</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10430,6 +10437,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.82', date:'2026-03-09', notes:['Models cards redesigned with compact runtime chips and reduced dead space','Gateway dots now reflect backend state instead of staying neutral gray','OpenClaw config modal shows effective runtime settings, diagnosis, and a reset-to-discovered recovery path','Filtered synthetic model IDs from dynamic discovery and gave Gemini preview tests a longer timeout budget'] },
   { ver:'v0.29.81', date:'2026-03-09', notes:['Model catalogs now resolve dynamically at runtime instead of shipping stale Claude/Gemini/OpenClaw lists','Models tab is narrowed to control-plane truth: health, config, model selection, and tests','Sessions and extraction state moved out of Models into Runtime as a temporary holding surface','Model display names/optimized hints now normalize newer versions instead of pinning old labels'] },
   { ver:'v0.29.80', date:'2026-03-09', notes:['Test All now covers backends without an Auto row (including single-model cards)','Per-model test results persist across card refreshes instead of disappearing','OpenClaw failures attach runtime diagnosis from doctor/gateway checks','Sharper repair hints for gateway-down vs embedded-timeout scenarios'] },
   { ver:'v0.29.79', date:'2026-03-09', notes:['Models tab frontend errors report to Mission Control with context','Model tests + gateway actions emit structured logs with diagnostics','Mission Log preserves frontend error metadata (source, stack, backend)','Version parsing hardened for OpenClaw, Claude, Gemini, Codex','OpenClaw failures now return repair/reinstall guidance'] },
@@ -18159,6 +18167,21 @@ function _elapsedStr(startTs) {
   return Math.floor(diff / 60) + 'm ' + Math.round(diff % 60) + 's';
 }
 
+function _modelCardStateColor(state) {
+  if (state === 'ok') return '#22c55e';
+  if (state === 'warn') return '#f59e0b';
+  if (state === 'err') return '#ef4444';
+  return '#6b7280';
+}
+
+function _setModelCardState(backendId, state) {
+  var card = document.querySelector('.model-card[data-model-id="' + backendId + '"]');
+  if (!card) return;
+  var dot = card.querySelector('.model-card-dot');
+  if (dot) dot.style.background = _modelCardStateColor(state);
+  card.setAttribute('data-health-state', state || 'unknown');
+}
+
 function _checkBackendStatuses(providers) {
   if (!providers) return;
   providers.forEach(function(p) {
@@ -18166,45 +18189,57 @@ function _checkBackendStatuses(providers) {
     if (!el) return;
     if (p.type === 'gateway') {
       _checkGatewayCardStatus(p.id, el);
+      return;
     }
-    // CLI and local backends: dot is sufficient. No extra status text.
+    var state = p.available ? 'ok' : 'err';
+    _setModelCardState(p.id, state);
+    el.innerHTML = '<div class="model-card-state">'
+      + '<span class="model-card-chip ' + (p.available ? 'ok' : 'err') + '">' + (p.available ? 'Ready' : 'Unavailable') + '</span>'
+      + '</div>';
   });
 }
 
 async function _checkGatewayCardStatus(backendId, el) {
-  el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--text3)">Checking gateway...</div>';
+  _setModelCardState(backendId, 'unknown');
+  el.innerHTML = '<div class="model-card-state"><span class="model-card-chip dim">Checking gateway…</span></div>';
   try {
     var r = await api('/api/gateway/status');
     if (!r || !r.ok) {
-      el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0"></span><span style="color:var(--text3)">Status unavailable</span></div>';
+      _setModelCardState(backendId, 'err');
+      el.innerHTML = '<div class="model-card-state"><span class="model-card-chip err">Status unavailable</span></div>';
       return;
     }
-    var dotC = '#ef4444', statusText = 'Down';
-    if (r.crash_looping) {
-      dotC = '#f59e0b';
-      statusText = 'Crash-looping (' + (r.restart_count_60s || 0) + ' restarts in 60s)';
-    } else if (r.running) {
-      dotC = '#22c55e';
-      var parts = ['Running'];
-      if (r.pid) parts.push('PID ' + r.pid);
+    var state = 'err';
+    if (r.running) state = (r.diagnosis_summary && r.diagnosis_summary.length) ? 'warn' : 'ok';
+    else if (r.crash_looping || (r.diagnosis_summary && r.diagnosis_summary.length)) state = 'warn';
+    _setModelCardState(backendId, state);
+    var chips = [];
+    if (r.running) {
+      chips.push('<span class="model-card-chip ' + (state === 'warn' ? 'warn' : 'ok') + '">Running</span>');
+      if (r.pid) chips.push('<span class="model-card-chip dim">PID ' + escHtml(String(r.pid)) + '</span>');
       if (typeof r.uptime_s === 'number') {
         var up = Number(r.uptime_s || 0);
-        if (up >= 60) parts.push('up ' + Math.floor(up / 60) + 'm');
-        else parts.push('up ' + Math.max(0, Math.floor(up)) + 's');
+        chips.push('<span class="model-card-chip dim">Up ' + (up >= 60 ? Math.floor(up / 60) + 'm' : Math.max(0, Math.floor(up)) + 's') + '</span>');
       }
-      if (r.version) parts.push(String(r.version));
-      statusText = parts.join(' \u00b7 ');
+    } else if (r.crash_looping) {
+      chips.push('<span class="model-card-chip warn">Crash loop</span>');
+    } else {
+      chips.push('<span class="model-card-chip err">Gateway down</span>');
     }
-    el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
-      + '<span style="width:6px;height:6px;border-radius:50%;background:' + dotC + ';flex-shrink:0"></span>'
-      + '<span style="color:var(--text2)">' + statusText + '</span>'
-      + '<div style="margin-left:auto;display:flex;gap:4px">'
-      + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 8px" onclick="_restartBackend(\'' + backendId + '\')">Restart</button>'
-      + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 8px" onclick="_recheckGw(\'' + backendId + '\')">Check</button>'
-      + '</div></div>';
+    if (r.version_short) chips.push('<span class="model-card-chip dim">' + escHtml(r.version_short) + '</span>');
+    if (r.config_source) chips.push('<span class="model-card-chip dim">' + escHtml(r.config_source) + '</span>');
+    if (r.auth_configured === false) chips.push('<span class="model-card-chip warn">No auth token</span>');
+    if (r.node_issue) chips.push('<span class="model-card-chip warn">Node runtime</span>');
+    if (r.diagnosis_summary && r.diagnosis_summary.length) {
+      chips.push('<span class="model-card-chip warn" title="' + escHtml(r.diagnosis_summary.join(' ')) + '">Needs repair</span>');
+    }
+    chips.push('<span class="model-card-chip dim"><button onclick="_restartBackend(\'' + backendId + '\')">Restart</button></span>');
+    chips.push('<span class="model-card-chip dim"><button onclick="_recheckGw(\'' + backendId + '\')">Check</button></span>');
+    el.innerHTML = '<div class="model-card-state">' + chips.join('') + '</div>';
   } catch(e) {
     _reportClientError('gateway-status', e, { backend: backendId });
-    el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0"></span><span style="color:var(--text3)">Error checking status</span></div>';
+    _setModelCardState(backendId, 'err');
+    el.innerHTML = '<div class="model-card-state"><span class="model-card-chip err">Error checking status</span></div>';
   }
 }
 
@@ -18232,9 +18267,12 @@ async function _testModel(event, backendId, modelId, testId) {
     var r = await api('/api/models/test', {backend: backendId, model: modelId}, 60000);
     var elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     if (r && r.ok) {
+      _setModelCardState(backendId, 'ok');
       _modelTestResults[testId] = { state: 'ok', backend: backendId, model: modelId, label: elapsed + 's', title: 'Passed in ' + elapsed + 's' };
       if (resultEl) resultEl.innerHTML = '<span style="color:#22c55e">\u2713 ' + elapsed + 's</span>';
     } else {
+      var _errText = ((r && r.error) || 'Failed').toLowerCase();
+      _setModelCardState(backendId, (_errText.indexOf('time') >= 0 || _errText.indexOf('auth') >= 0) ? 'warn' : 'err');
       _modelTestResults[testId] = {
         state: 'fail',
         backend: backendId,
@@ -18246,6 +18284,7 @@ async function _testModel(event, backendId, modelId, testId) {
       if (r && r.repair_hint) toast(r.repair_hint, 'warn');
     }
   } catch(e) {
+    _setModelCardState(backendId, 'err');
     _modelTestResults[testId] = {
       state: 'fail',
       backend: backendId,
@@ -18276,6 +18315,7 @@ async function _openBackendConfig(backendId) {
   modal.className = 'modal';
   modal.innerHTML = '<h3>' + escHtml(label) + ' Config</h3>'
     + '<p style="margin-bottom:14px">Configure connection settings for this backend.</p>'
+    + '<div id="bcfg-runtime" style="margin-bottom:14px;font-size:12px;color:var(--text3)">Loading runtime diagnosis…</div>'
     + '<div style="display:grid;gap:12px">'
     + '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Description</label>'
     + '<input id="bcfg-desc" class="form-input" style="margin-bottom:0" /></div>'
@@ -18289,6 +18329,7 @@ async function _openBackendConfig(backendId) {
     + '</div></div>'
     + '<div class="modal-actions" style="margin-top:18px">'
     + '<button class="btn btn-ghost" onclick="document.getElementById(\'bcfg-overlay\').remove()">Cancel</button>'
+    + (backendId === 'openclaw' ? '<button class="btn btn-ghost" onclick="_resetBackendConfigToDiscovered(\'' + escHtml(backendId) + '\')">Use Discovered</button>' : '')
     + '<button class="btn btn-primary" onclick="_saveBackendConfig(\'' + escHtml(backendId) + '\')">Save</button>'
     + '</div>';
   overlay.appendChild(modal);
@@ -18306,6 +18347,25 @@ async function _openBackendConfig(backendId) {
     if (portEl) portEl.value = c.port || c.gateway_port || '';
     if (c.has_auth_token && tokenEl) {
       tokenEl.placeholder = 'Current: ' + (c.auth_token_masked || '****') + ' (leave blank to keep)';
+    }
+    var runtimeEl = document.getElementById('bcfg-runtime');
+    if (runtimeEl) {
+      var diagHtml = '';
+      if (c.effective) {
+        diagHtml += '<div style="margin-bottom:8px"><strong style="color:var(--text2)">Effective:</strong> '
+          + escHtml((c.effective.host || '127.0.0.1') + ':' + (c.effective.port || '18789'))
+          + ' · ' + escHtml(c.effective.source || 'config') + '</div>';
+      }
+      if (c.runtime_issues && c.runtime_issues.length) {
+        diagHtml += '<div style="color:#f59e0b;margin-bottom:6px">' + escHtml(c.runtime_issues.join(' · ')) + '</div>';
+      }
+      if (c.repair_hint) {
+        diagHtml += '<div style="margin-bottom:6px">' + escHtml(c.repair_hint) + '</div>';
+      }
+      if (c.reinstall_cmd) {
+        diagHtml += '<code style="font-size:11px;background:var(--bg);padding:4px 8px;border-radius:6px;display:inline-block">' + escHtml(c.reinstall_cmd) + '</code>';
+      }
+      runtimeEl.innerHTML = diagHtml || 'No additional runtime diagnosis.';
     }
   }
   else {
@@ -18332,6 +18392,18 @@ async function _saveBackendConfig(backendId) {
   } else {
     _reportClientError('backend-config-save', new Error((r && r.error) || 'Failed to save backend config'), { backend: backendId });
     toast((r && r.error) || 'Failed to save', 'err');
+  }
+}
+
+async function _resetBackendConfigToDiscovered(backendId) {
+  var r = await api('/api/backend/config', { backend: backendId, reset_to_discovered: true });
+  if (r && r.ok) {
+    toast('Overrides cleared', 'ok');
+    var overlay = document.getElementById('bcfg-overlay');
+    if (overlay) overlay.remove();
+    loadModels();
+  } else {
+    toast((r && r.error) || 'Failed to clear overrides', 'err');
   }
 }
 
@@ -19402,6 +19474,8 @@ function _renderModelCards(data, act) {
       _statusBadge = '<span style="font-size:10px;color:var(--text3);font-style:italic">Idle</span>';
     }
 
+    var footerHtml = (statsHtml || liveTraceBtn || lastPromptBtn) ? '<div class="model-card-footer">' + statsHtml + liveTraceBtn + lastPromptBtn + '</div>' : '';
+
     return '<div class="model-card' + offClass + '" data-model-id="' + escHtml(p.id) + '">'
       + '<div class="model-card-head" style="justify-content:space-between">'
       + '<div style="display:flex;align-items:center;gap:10px"><span class="model-card-dot" style="background:' + dotColor + '"></span>'
@@ -19409,16 +19483,13 @@ function _renderModelCards(data, act) {
       + '<div style="display:flex;align-items:center;gap:6px">' + _statusBadge
       + '<button class="btn btn-ghost" style="font-size:12px;padding:1px 4px;line-height:1" onclick="event.stopPropagation();_openBackendConfig(\'' + escHtml(p.id) + '\')" title="Config">&#9881;</button>'
       + '</div></div>'
-
+      + '<div class="model-card-meta">'
       + '<div class="model-ver-badge" id="ver-badge-' + escHtml(p.id) + '"></div>'
-      + '<div id="backend-status-' + escHtml(p.id) + '"></div>'
+      + '<div id="backend-status-' + escHtml(p.id) + '" style="flex:1"></div>'
+      + '</div>'
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
-
       + (p.available ? _selHtml : _installHtml)
-      + '<div class="model-card-divider"></div>'
-      + statsHtml
-      + liveTraceBtn
-      + lastPromptBtn
+      + footerHtml
       + '</div>';
   }).join('');
 
@@ -25899,6 +25970,18 @@ def _model_display_name(model_id: str) -> str:
     return pretty
 
 
+def _clean_runtime_model_id(model_id: str) -> str:
+    model_id = str(model_id or "").strip()
+    if not model_id:
+        return ""
+    low = model_id.lower()
+    if low.startswith("<") and low.endswith(">"):
+        return ""
+    if low in {"synthetic", "<synthetic>", "auto"}:
+        return ""
+    return model_id
+
+
 def _unique_model_catalog(entries, preferred_id=""):
     """Dedupe model entries while preserving order and honoring a preferred active ID."""
     preferred_id = str(preferred_id or "").strip()
@@ -25908,7 +25991,7 @@ def _unique_model_catalog(entries, preferred_id=""):
     for entry in entries or []:
         if not isinstance(entry, dict):
             continue
-        model_id = str(entry.get("id", "")).strip()
+        model_id = _clean_runtime_model_id(entry.get("id", ""))
         if not model_id or model_id in seen:
             continue
         seen.add(model_id)
@@ -25940,7 +26023,7 @@ def _discover_openclaw_models(active_choice=""):
             for item in payload.get("models", []):
                 if not isinstance(item, dict):
                     continue
-                model_id = str(item.get("key") or item.get("id") or "").strip()
+                model_id = _clean_runtime_model_id(item.get("key") or item.get("id") or "")
                 if not model_id or item.get("missing"):
                     continue
                 models.append({
@@ -25974,9 +26057,9 @@ def _discover_models_from_claude_history(active_choice=""):
                     model_id = ""
                     msg = entry.get("message", {})
                     if isinstance(msg, dict):
-                        model_id = str(msg.get("model") or "").strip()
+                        model_id = _clean_runtime_model_id(msg.get("model") or "")
                     if not model_id:
-                        model_id = str(entry.get("model") or "").strip()
+                        model_id = _clean_runtime_model_id(entry.get("model") or "")
                     if model_id:
                         observed.setdefault(model_id, {"id": model_id, "name": _model_display_name(model_id) or model_id})
         except Exception as e:
@@ -26000,7 +26083,7 @@ def _discover_models_from_gemini_history(active_choice=""):
             if isinstance(cur, dict):
                 for k, v in cur.items():
                     if k == "model" and isinstance(v, str) and v.strip():
-                        model_id = v.strip()
+                        model_id = _clean_runtime_model_id(v)
                         observed.setdefault(model_id, {"id": model_id, "name": _model_display_name(model_id) or model_id})
                     elif isinstance(v, (dict, list)):
                         stack.append(v)
@@ -26012,7 +26095,17 @@ def _discover_models_from_gemini_history(active_choice=""):
 def _legacy_config_models(backend):
     bc = _config.get("backend_config", {}).get(backend, {})
     models = bc.get("models", [])
-    return [m for m in models if isinstance(m, dict) and str(m.get("id", "")).strip()]
+    cleaned = []
+    for m in models:
+        if not isinstance(m, dict):
+            continue
+        model_id = _clean_runtime_model_id(m.get("id", ""))
+        if not model_id:
+            continue
+        item = dict(m)
+        item["id"] = model_id
+        cleaned.append(item)
+    return cleaned
 
 
 def _get_available_models(backend):
@@ -26106,20 +26199,26 @@ def _get_active_model(backend):
 def _openclaw_gateway_settings() -> dict:
     """Load OpenClaw gateway port/token. Config priority: porter_config > ~/.openclaw."""
     bc = _config.get("backend_config", {}).get("openclaw", {})
-    port = int(bc.get("gateway_port", 0)) or 18789
+    port = int(bc.get("gateway_port", 0) or bc.get("port", 0) or 0) or 18789
+    host = str(bc.get("host", "")).strip() or "127.0.0.1"
     token = str(bc.get("auth_token", "")).strip()
+    source = "porter override" if any(str(bc.get(k, "")).strip() for k in ("auth_token", "host")) or int(bc.get("gateway_port", 0) or bc.get("port", 0) or 0) else "~/.openclaw"
     # Fall back to ~/.openclaw/openclaw.json if no token in porter config
-    if not token:
+    if not token or source == "~/.openclaw":
         try:
             oc_cfg = json.loads((OPENCLAW_STATE_DIR / "openclaw.json").read_text(encoding="utf-8"))
             gw = oc_cfg.get("gateway", {}) if isinstance(oc_cfg, dict) else {}
-            if not port or port == 18789:
+            if not int(bc.get("gateway_port", 0) or bc.get("port", 0) or 0):
                 port = int(gw.get("port") or oc_cfg.get("gatewayPort") or 18789)
+            if not str(bc.get("host", "")).strip():
+                bind = str(gw.get("bind") or oc_cfg.get("gatewayBind") or "").strip().lower()
+                host = "127.0.0.1" if bind in ("", "loopback", "127.0.0.1", "localhost") else (bind or host)
             auth = gw.get("auth", {}) if isinstance(gw, dict) else {}
-            token = str(auth.get("token") or gw.get("token") or oc_cfg.get("authToken") or "").strip()
+            if not token:
+                token = str(auth.get("token") or gw.get("token") or oc_cfg.get("authToken") or "").strip()
         except Exception as e:
             log.debug("OpenClaw gateway config read failed: %s", e)
-    return {"port": port, "token": token}
+    return {"host": host, "port": port, "token": token, "source": source}
 
 
 def _model_repair_hint(backend: str, detail: str = "") -> dict:
@@ -26254,6 +26353,15 @@ def _check_gateway_status() -> dict:
             log.debug("Gateway uptime parse failed: %s", e)
 
     version = _capabilities_cache.get("openclaw", {}).get("version")
+    version_short = ""
+    if version:
+        version_short = str(version).splitlines()[0].strip()
+        version_short = re.sub(r"^openclaw\s+", "", version_short, flags=re.IGNORECASE)
+        version_short = version_short[:40]
+    settings = _openclaw_gateway_settings()
+    diagnosis = _openclaw_runtime_diagnosis()
+    diag_summary = list(diagnosis.get("doctor_summary") or [])
+    node_issue = any(issue in diagnosis.get("issues", []) for issue in ("node_below_22", "doctor_node_requirement"))
     return {
         "ok": True,
         "running": pid is not None,
@@ -26262,6 +26370,13 @@ def _check_gateway_status() -> dict:
         "crash_looping": crash_looping,
         "restart_count_60s": restart_count_60s,
         "version": version,
+        "version_short": version_short,
+        "host": settings.get("host"),
+        "port": settings.get("port"),
+        "config_source": settings.get("source"),
+        "auth_configured": bool(settings.get("token")),
+        "diagnosis_summary": diag_summary[:3],
+        "node_issue": node_issue,
     }
 
 
@@ -26415,7 +26530,8 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                 cmd.extend(["-m", model])
             _gem_env = _agent_env()
             _gem_env["GEMINI_CLI_YOLO"] = "1"  # suppress YOLO prompts
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=45, env=_gem_env, cwd=str(Path.home()))
+            _gem_timeout = 75 if "preview" in str(model or "").lower() else 45
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=_gem_timeout, env=_gem_env, cwd=str(Path.home()))
             if r.returncode != 0:
                 _gem_err = (r.stderr or "").strip()
                 # Filter out YOLO mode info lines
@@ -28408,7 +28524,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.81"})
+            self.reply_json({"v": "0.29.82"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -28570,7 +28686,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.81"
+                health["porter_version"] = "0.29.82"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28722,14 +28838,25 @@ class Handler(BaseHTTPRequestHandler):
             if bc.get("auth_token"):
                 t = str(bc["auth_token"])
                 _masked_token = ("*" * max(0, len(t) - 4)) + t[-4:] if len(t) > 4 else t
-            self.reply_json({"ok": True, "backend": _cfg_bk, "config": {
+            _cfg_payload = {
                 "description": bc.get("description", ""),
                 "auth_token_masked": _masked_token,
                 "has_auth_token": bool(bc.get("auth_token")),
                 "gateway_port": bc.get("gateway_port", ""),
                 "host": bc.get("host", ""),
                 "port": bc.get("port", ""),
-            }})
+            }
+            if _cfg_bk == "openclaw":
+                settings = _openclaw_gateway_settings()
+                diagnosis = _openclaw_runtime_diagnosis()
+                _cfg_payload["effective"] = {
+                    "host": settings.get("host", "127.0.0.1"),
+                    "port": settings.get("port", 18789),
+                    "source": settings.get("source", "~/.openclaw"),
+                }
+                _cfg_payload["runtime_issues"] = diagnosis.get("doctor_summary") or []
+                _cfg_payload.update(_model_repair_hint("openclaw", " ".join(diagnosis.get("doctor_summary") or diagnosis.get("issues") or [])))
+            self.reply_json({"ok": True, "backend": _cfg_bk, "config": _cfg_payload})
 
         elif parsed.path == "/api/providers":
             if not self.auth_check(redirect=False): return
@@ -30399,7 +30526,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.81'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.82'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -31281,10 +31408,21 @@ class Handler(BaseHTTPRequestHandler):
                 _config["backend_config"] = {}
             if _cfg_bk not in _config["backend_config"]:
                 _config["backend_config"][_cfg_bk] = {}
+            if body.get("reset_to_discovered") and _cfg_bk == "openclaw":
+                for _cfg_key in ("auth_token", "gateway_port", "host", "port"):
+                    _config["backend_config"][_cfg_bk].pop(_cfg_key, None)
+                save_config(_config)
+                self.reply_json({"ok": True, "backend": _cfg_bk, "config": _config["backend_config"][_cfg_bk]})
+                return
             # Merge provided fields (description, auth_token, gateway_port, host, port, models)
             for _cfg_key in ("description", "auth_token", "gateway_port", "host", "port", "models"):
                 if _cfg_key in body:
                     _config["backend_config"][_cfg_bk][_cfg_key] = body[_cfg_key]
+            if _cfg_bk == "openclaw":
+                if "port" in body and "gateway_port" not in body:
+                    _config["backend_config"][_cfg_bk]["gateway_port"] = body.get("port", 0)
+                if not str(_config["backend_config"][_cfg_bk].get("host", "")).strip():
+                    _config["backend_config"][_cfg_bk].pop("host", None)
             save_config(_config)
             self.reply_json({"ok": True, "backend": _cfg_bk, "config": _config["backend_config"][_cfg_bk]})
 
@@ -35068,7 +35206,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.81 ready (localhost only)")
+    print(f"\n  Porter v0.29.82 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

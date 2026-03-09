@@ -1,5 +1,16 @@
 # Porter Release Notes
 
+## v0.29.82 (2026-03-09)
+
+**Models Status Design + OpenClaw Recovery**
+
+- Models cards now use compact status chips, cleaner spacing, and colored health dots instead of leaving large dead areas
+- OpenClaw gateway runtime details are rendered as structured chips rather than a noisy sentence embedded in the card
+- OpenClaw config now supports a reset-to-discovered path and shows effective runtime settings plus diagnosis in the config modal
+- Synthetic model IDs are filtered out of dynamic discovery, and Gemini preview model tests get a larger timeout budget
+
+---
+
 ## v0.29.81 (2026-03-09)
 
 **Dynamic Model Catalogs + Runtime Split**
