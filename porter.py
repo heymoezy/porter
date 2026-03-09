@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.16 — Surface coordination events live"""
+"""Porter v0.30.18 — Orchestration engine with capability-scored multi-model dispatch"""
 
 
 import email
@@ -6685,6 +6685,64 @@ def _init_trace_tables():
     CREATE INDEX IF NOT EXISTS idx_cl_active ON coordination_ledger(resolved, expires_at);
     CREATE INDEX IF NOT EXISTS idx_cl_scope ON coordination_ledger(scope, entry_type);
 
+    CREATE TABLE IF NOT EXISTS orchestration_runs (
+        id TEXT PRIMARY KEY,
+        goal TEXT NOT NULL,
+        context TEXT DEFAULT '',
+        status TEXT DEFAULT 'planning',
+        requested_by TEXT DEFAULT 'user',
+        plan_version INTEGER DEFAULT 1,
+        total_steps INTEGER DEFAULT 0,
+        completed_steps INTEGER DEFAULT 0,
+        failed_steps INTEGER DEFAULT 0,
+        result TEXT DEFAULT '',
+        error TEXT DEFAULT '',
+        created_at REAL DEFAULT (strftime('%s','now')),
+        updated_at REAL DEFAULT (strftime('%s','now')),
+        completed_at REAL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS orchestration_steps (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        step_num INTEGER DEFAULT 0,
+        kind TEXT DEFAULT 'general',
+        title TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        required_capabilities TEXT DEFAULT '[]',
+        preferred_backend TEXT DEFAULT '',
+        preferred_persona_id TEXT DEFAULT '',
+        depends_on TEXT DEFAULT '[]',
+        status TEXT DEFAULT 'pending',
+        assigned_backend TEXT DEFAULT '',
+        assigned_persona_id TEXT DEFAULT '',
+        attempt INTEGER DEFAULT 0,
+        max_attempts INTEGER DEFAULT 3,
+        input_data TEXT DEFAULT '',
+        output_data TEXT DEFAULT '',
+        error TEXT DEFAULT '',
+        progress_pct INTEGER DEFAULT 0,
+        lease_expires_at REAL DEFAULT 0,
+        started_at REAL DEFAULT 0,
+        completed_at REAL DEFAULT 0,
+        duration_ms INTEGER DEFAULT 0,
+        tokens_used INTEGER DEFAULT 0,
+        FOREIGN KEY (run_id) REFERENCES orchestration_runs(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_os_run ON orchestration_steps(run_id);
+    CREATE INDEX IF NOT EXISTS idx_os_status ON orchestration_steps(status);
+    CREATE TABLE IF NOT EXISTS orchestration_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL,
+        step_id TEXT DEFAULT '',
+        event_type TEXT NOT NULL,
+        backend TEXT DEFAULT '',
+        persona_id TEXT DEFAULT '',
+        message TEXT DEFAULT '',
+        data TEXT DEFAULT '',
+        ts REAL DEFAULT (strftime('%s','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_oe_run ON orchestration_events(run_id);
+
     CREATE TABLE IF NOT EXISTS telemetry_hourly (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         hour_ts REAL NOT NULL,
@@ -9522,7 +9580,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.16</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.18</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10209,6 +10267,31 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
       <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Recent real dispatch activity across all model gateways. If it is not here, Porter is not seeing it.</div>
       <div id="runtime-gateway-activity" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+    <div id="runtime-orch-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">Orchestration Engine</span>
+          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Multi-Model</span>
+        </div>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_newOrchRun()">+ New Run</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadOrchRuns()">Refresh</button>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Real orchestration: Porter plans goals into steps, scores backends by capability, dispatches to the best model, retries failures, and reassigns stalled work.</div>
+      <div id="runtime-orch-runs" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+    <div id="runtime-coordination-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">Coordination Bridge</span>
+          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Live Ledger</span>
+        </div>
+        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadCoordinationPanel(true)">Refresh</button>
+      </div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Active model claims, coordination conflicts, and recent bridge-native coordination results. If autonomous work is happening through Porter Bridge, it should show up here.</div>
+      <div id="runtime-coordination-panel" style="display:flex;flex-direction:column;gap:10px"></div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <span id="wf-sys-count" style="font-size:11px;color:var(--text3)"></span>
@@ -10935,6 +11018,8 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.18', date:'2026-03-09', notes:['Orchestration Engine: Porter now plans goals into executable DAG steps, scores each backend by capability fit, dispatches to the best available model, and auto-reassigns on failure','New DB tables: orchestration_runs, orchestration_steps, orchestration_events — full execution history with dependency tracking','Capability taxonomy: each backend scored for implementation/research/analysis/synthesis/verification/debugging — routing is data-driven not keyword-heuristic','API: POST /api/orchestration/run (plan+execute), GET /api/orchestration/runs, GET/DELETE /api/orchestration/<id>','System tab: Orchestration Engine panel with live progress bars, run status, cancel/detail controls','Steps execute in parallel when dependencies allow, with ThreadPoolExecutor — independent branches run concurrently'] },
+  { ver:'v0.30.17', date:'2026-03-09', notes:['Runtime now has a live Coordination Bridge panel showing active claims, conflicts, and recent bridge-native coordination results from the ledger and runtime log','System-level runtime refresh now updates coordination state directly instead of only causing indirect surface refreshes','This makes Porter Bridge orchestration inspectable from the operator view instead of leaving coordination state hidden in backend tables'] },
   { ver:'v0.30.16', date:'2026-03-09', notes:['Overview, Projects, Runtime, and orchestration surfaces now react to live coordination:* SSE events instead of ignoring bridge-native coordination work','System tab now maintains its own runtime SSE refresh path and correctly checks system-module when refreshing workflow cards','This closes a visibility gap where coordinated work could happen through Porter Bridge without updating the operator surfaces watching it'] },
   { ver:'v0.30.15', date:'2026-03-09', notes:['Coordination runs now fan out across selected backends in parallel through the bridge instead of walking them sequentially','Added coordination:start, coordination:result, and coordination:complete SSE events plus Mission Control entries so multi-model runs are visible live','This makes the coordination runner behave more like a real bridge orchestrator instead of a serialized loop'] },
   { ver:'v0.30.14', date:'2026-03-09', notes:['Fixed live coordination ledger updates by restoring an SSE compatibility wrapper for the new claim/progress/handoff events','This removes the runtime NameError on coordination claims and gets the shared work board emitting events again','Keeps the newer coordination layer compatible with Porter’s existing shared event bus instead of introducing a second SSE path'] },
@@ -12938,6 +13023,8 @@ function switchModule(name) {
     if (_gatewayActivityPoller) { clearInterval(_gatewayActivityPoller); _gatewayActivityPoller = null; }
     if (_gatewayActivityRefreshTimer) { clearTimeout(_gatewayActivityRefreshTimer); _gatewayActivityRefreshTimer = null; }
     if (_gatewayActivitySseId) { _sseUnsubscribe(_gatewayActivitySseId); _gatewayActivitySseId = null; }
+    if (_coordinationPanelPoller) { clearInterval(_coordinationPanelPoller); _coordinationPanelPoller = null; }
+    if (_coordinationPanelRefreshTimer) { clearTimeout(_coordinationPanelRefreshTimer); _coordinationPanelRefreshTimer = null; }
     if (window._systemRuntimeSseId) { _sseUnsubscribe(window._systemRuntimeSseId); window._systemRuntimeSseId = null; }
     if (window._systemRuntimeRefreshTimer) { clearTimeout(window._systemRuntimeRefreshTimer); window._systemRuntimeRefreshTimer = null; }
     if (window._wfRefreshTimer) { clearTimeout(window._wfRefreshTimer); window._wfRefreshTimer = null; }
@@ -14809,11 +14896,14 @@ async function _loadRuntimeOperations() {
   _updateExtractionProgress('runtime-extraction-progress');
   _connectGatewayActivitySse();
   _loadGatewayActivity();
+  _loadCoordinationPanel();
 }
 
 var _gatewayActivityPoller = null;
 var _gatewayActivitySseId = null;
 var _gatewayActivityRefreshTimer = null;
+var _coordinationPanelPoller = null;
+var _coordinationPanelRefreshTimer = null;
 
 function _gatewayActivityChip(text, tone) {
   if (!text) return '';
@@ -14872,7 +14962,7 @@ function _scheduleGatewayActivityRefresh(delayMs) {
   if (_gatewayActivityRefreshTimer) return;
   _gatewayActivityRefreshTimer = setTimeout(function() {
     _gatewayActivityRefreshTimer = null;
-    if (_currentModule === 'system') _loadGatewayActivity(true);
+    if (_currentModule === 'system') _loadGatewayActivity(true); _loadOrchRuns();
   }, Math.max(50, delayMs || 250));
 }
 
@@ -14883,6 +14973,7 @@ function _connectGatewayActivitySse() {
     if (d.type === 'bridge:dispatch') _scheduleGatewayActivityRefresh(120);
     else if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleGatewayActivityRefresh(220);
     else if (_isCoordinationEventType(d.type)) _scheduleGatewayActivityRefresh(180);
+    if (d.type && d.type.indexOf('orch:') === 0) { _loadOrchRuns(); }
   });
   if (!_gatewayActivityPoller) {
     _gatewayActivityPoller = setInterval(function() {
@@ -14891,12 +14982,146 @@ function _connectGatewayActivitySse() {
   }
 }
 
+function _coordinationTone(type) {
+  if (type === 'complete' || type === 'result') return 'ok';
+  if (type === 'block') return 'err';
+  if (type === 'handoff' || type === 'progress' || type === 'start') return 'warn';
+  return 'dim';
+}
+
+function _coordinationEntryLabel(type) {
+  var t = String(type || '').toLowerCase();
+  if (t === 'claim') return 'Claim';
+  if (t === 'progress') return 'Progress';
+  if (t === 'complete') return 'Complete';
+  if (t === 'handoff') return 'Handoff';
+  if (t === 'block') return 'Blocked';
+  if (t === 'release') return 'Release';
+  if (t === 'start') return 'Run start';
+  if (t === 'result') return 'Run result';
+  return t || 'event';
+}
+
+function _coordinationPanelCard(title, bodyHtml, tone) {
+  var border = tone === 'err' ? 'color-mix(in srgb,#ef4444 28%,var(--border))'
+    : (tone === 'ok' ? 'color-mix(in srgb,#22c55e 28%,var(--border))'
+    : (tone === 'warn' ? 'color-mix(in srgb,#f59e0b 28%,var(--border))' : 'var(--border)'));
+  return '<div style="padding:12px 14px;border:1px solid ' + border + ';border-radius:10px;background:var(--bg)">'
+    + '<div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:8px">' + escHtml(title) + '</div>'
+    + bodyHtml
+    + '</div>';
+}
+
+async function _loadCoordinationPanel(force) {
+  var host = document.getElementById('runtime-coordination-panel');
+  if (!host) return;
+  if (!force && !host.innerHTML.trim()) {
+    host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">Loading coordination bridge…</div>';
+  }
+  try {
+    var nonce = force ? '&_=' + Date.now() : '';
+    var ledgerReq = api('/api/coordination/ledger?limit=20' + nonce);
+    var recentReq = api('/api/coordination?limit=10' + nonce);
+    var pair = await Promise.all([ledgerReq, recentReq]);
+    var ledger = pair[0] || {};
+    var recentRuns = pair[1] || {};
+    var active = ledger.active_claims || [];
+    var conflicts = ledger.conflicts || [];
+    var recent = ledger.recent || [];
+    var runEvents = recentRuns.events || [];
+
+    var sections = [];
+    var activeHtml = active.length
+      ? active.slice(0, 6).map(function(r) {
+          var expiresIn = r.expires_at ? _relativeFutureTime(r.expires_at) : '';
+          return '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--border)">' 
+            + '<div style="min-width:0">'
+            + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px">'
+            + '<span class="model-card-chip warn" style="font-size:10px">' + escHtml(r.model || 'unknown') + '</span>'
+            + '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(r.scope || 'no scope') + '</span>'
+            + '</div>'
+            + '<div style="font-size:11px;color:var(--text2)">' + escHtml((r.message || 'No claim message').substring(0, 180)) + '</div>'
+            + '</div>'
+            + '<div style="font-size:10px;color:var(--text3);white-space:nowrap">' + escHtml(expiresIn ? ('expires ' + expiresIn) : '') + '</div>'
+            + '</div>';
+        }).join('')
+      : '<div style="font-size:12px;color:var(--text3)">No active claims. The bridge is idle or work is not claiming scopes.</div>';
+    sections.push(_coordinationPanelCard('Active Claims', activeHtml, active.length ? 'warn' : 'dim'));
+
+    var conflictHtml = conflicts.length
+      ? conflicts.slice(0, 4).map(function(c) {
+          var summary = c.type === 'version_collision'
+            ? ('Version ' + (c.version || 'unknown') + ' completed by ' + (c.models || 'multiple models'))
+            : ('Scope ' + (c.scope || 'unknown') + ' is claimed by ' + (c.models || 'multiple models'));
+          return '<div style="font-size:11px;color:var(--text2);padding:8px 0;border-top:1px solid var(--border)">' + escHtml(summary) + '</div>';
+        }).join('')
+      : '<div style="font-size:12px;color:var(--text3)">No coordination conflicts detected.</div>';
+    sections.push(_coordinationPanelCard('Conflicts', conflictHtml, conflicts.length ? 'err' : 'ok'));
+
+    var recentItems = [];
+    recent.slice(0, 6).forEach(function(r) {
+      recentItems.push({
+        label: _coordinationEntryLabel(r.entry_type),
+        model: r.model || '',
+        scope: r.scope || '',
+        message: r.message || r.context || '',
+        ts: r.ts || 0,
+        tone: _coordinationTone(r.entry_type)
+      });
+    });
+    runEvents.slice(0, 4).forEach(function(r) {
+      recentItems.push({
+        label: _coordinationEntryLabel(r.ok ? 'result' : 'block'),
+        model: r.backend || '',
+        scope: r.run_id || '',
+        message: r.ok ? (r.text || 'Run completed') : (r.error || 'Run failed'),
+        ts: r.ts || 0,
+        tone: r.ok ? 'ok' : 'err'
+      });
+    });
+    recentItems.sort(function(a, b) { return Number(b.ts || 0) - Number(a.ts || 0); });
+    var recentHtml = recentItems.length
+      ? recentItems.slice(0, 8).map(function(r) {
+          return '<div style="padding:8px 0;border-top:1px solid var(--border)">'
+            + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">'
+            + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+            + '<span class="model-card-chip ' + escHtml(r.tone || 'dim') + '" style="font-size:10px">' + escHtml(r.label) + '</span>'
+            + (r.model ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(r.model) + '</span>' : '')
+            + (r.scope ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(r.scope) + '</span>' : '')
+            + '</div>'
+            + '<span style="font-size:10px;color:var(--text3)">' + escHtml(_relativeTime(r.ts)) + '</span>'
+            + '</div>'
+            + '<div style="font-size:11px;color:var(--text2)">' + escHtml((r.message || '').substring(0, 200) || '(no detail)') + '</div>'
+            + '</div>';
+        }).join('')
+      : '<div style="font-size:12px;color:var(--text3)">No recent coordination events recorded yet.</div>';
+    sections.push(_coordinationPanelCard('Recent Coordination', recentHtml, recentItems.length ? 'dim' : 'dim'));
+
+    host.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">' + sections.join('') + '</div>';
+  } catch (e) {
+    _reportModelsClientError('runtime-coordination-panel', e);
+    host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:#ef4444">Coordination bridge load failed.</div>';
+  }
+}
+
+function _scheduleCoordinationPanelRefresh(delayMs) {
+  if (_currentModule !== 'system') return;
+  if (_coordinationPanelRefreshTimer) return;
+  _coordinationPanelRefreshTimer = setTimeout(function() {
+    _coordinationPanelRefreshTimer = null;
+    if (_currentModule === 'system') _loadCoordinationPanel(true);
+  }, Math.max(60, delayMs || 220));
+}
+
 function _scheduleSystemRuntimeRefresh(delayMs) {
   if (_currentModule !== 'system') return;
   if (window._systemRuntimeRefreshTimer) return;
   window._systemRuntimeRefreshTimer = setTimeout(function() {
     window._systemRuntimeRefreshTimer = null;
-    if (_currentModule === 'system') _wfRefreshSystemOnly();
+    if (_currentModule === 'system') {
+      _wfRefreshSystemOnly();
+      _loadCoordinationPanel(true);
+    }
   }, Math.max(80, delayMs || 250));
 }
 
@@ -14906,8 +15131,16 @@ function _connectSystemRuntimeSse() {
     if (!d || !d.type) return;
     if (d.type === 'bridge:dispatch') _scheduleSystemRuntimeRefresh(120);
     else if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleSystemRuntimeRefresh(220);
-    else if (_isCoordinationEventType(d.type)) _scheduleSystemRuntimeRefresh(180);
+    else if (_isCoordinationEventType(d.type)) {
+      _scheduleSystemRuntimeRefresh(180);
+      _scheduleCoordinationPanelRefresh(120);
+    }
   });
+  if (!_coordinationPanelPoller) {
+    _coordinationPanelPoller = setInterval(function() {
+      if (_currentModule === 'system') _loadCoordinationPanel(true);
+    }, 30000);
+  }
 }
 
 var _inlineSessionsExpanded = {};
@@ -19010,6 +19243,16 @@ function _relativeTime(ts) {
   if (diff < 3600) return Math.round(diff / 60) + 'm ago';
   if (diff < 86400) return Math.round(diff / 3600) + 'h ago';
   return Math.round(diff / 86400) + 'd ago';
+}
+
+function _relativeFutureTime(ts) {
+  if (!ts) return '';
+  var now = Date.now() / 1000;
+  var diff = Math.max(0, ts - now);
+  if (diff < 60) return Math.round(diff) + 's';
+  if (diff < 3600) return Math.round(diff / 60) + 'm';
+  if (diff < 86400) return Math.round(diff / 3600) + 'h';
+  return Math.round(diff / 86400) + 'd';
 }
 
 function _renderStoredTestResult(testId) {
@@ -29980,6 +30223,413 @@ def _ledger_conflicts() -> list:
     return conflicts
 
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ORCHESTRATION ENGINE — Task planning, capability routing, execution, reassignment
+# ═══════════════════════════════════════════════════════════════════════════════
+
+BACKEND_CAPABILITIES = {
+    "codex": {
+        "score_weights": {"implementation": 0.95, "code_generation": 0.95, "debugging": 0.9,
+                         "refactoring": 0.85, "testing": 0.8, "research": 0.4, "analysis": 0.6,
+                         "synthesis": 0.6, "verification": 0.7, "general": 0.7},
+        "speed": "medium", "cost_tier": 2,
+    },
+    "claude": {
+        "score_weights": {"analysis": 0.95, "synthesis": 0.9, "verification": 0.9,
+                         "research": 0.85, "implementation": 0.85, "code_generation": 0.8,
+                         "debugging": 0.8, "refactoring": 0.75, "testing": 0.7, "general": 0.85},
+        "speed": "medium", "cost_tier": 3,
+    },
+    "gemini": {
+        "score_weights": {"research": 0.95, "analysis": 0.85, "synthesis": 0.85,
+                         "general": 0.8, "verification": 0.7, "implementation": 0.5,
+                         "code_generation": 0.5, "debugging": 0.4, "refactoring": 0.4, "testing": 0.4},
+        "speed": "fast", "cost_tier": 1,
+    },
+    "openclaw": {
+        "score_weights": {"code_generation": 0.85, "analysis": 0.8, "implementation": 0.8,
+                         "debugging": 0.75, "verification": 0.7, "research": 0.6,
+                         "synthesis": 0.6, "refactoring": 0.7, "testing": 0.65, "general": 0.65},
+        "speed": "fast", "cost_tier": 1,
+    },
+    "ollama": {
+        "score_weights": {"general": 0.4, "research": 0.3, "analysis": 0.3, "implementation": 0.2,
+                         "code_generation": 0.2, "debugging": 0.2, "synthesis": 0.3,
+                         "verification": 0.2, "refactoring": 0.2, "testing": 0.2},
+        "speed": "slow", "cost_tier": 0,
+    },
+}
+
+_orch_lock = threading.Lock()
+
+
+def _orch_score_backend(backend: str, step_kind: str, required_caps: list) -> float:
+    """Score a backend for a step based on capability fit + health."""
+    caps = BACKEND_CAPABILITIES.get(backend, {})
+    weights = caps.get("score_weights", {})
+    if not weights:
+        return 0.0
+    scores = []
+    for cap in (required_caps or [step_kind]):
+        scores.append(weights.get(cap, 0.3))
+    base_score = sum(scores) / max(len(scores), 1)
+    try:
+        if _backend_is_circuit_open(backend):
+            return 0.0
+    except Exception:
+        pass
+    speed = caps.get("speed", "medium")
+    speed_bonus = {"fast": 0.05, "medium": 0.0, "slow": -0.1}.get(speed, 0.0)
+    return min(1.0, max(0.0, base_score + speed_bonus))
+
+
+def _orch_select_executor(step: dict) -> tuple:
+    """Pick the best (backend, persona_id) for an orchestration step."""
+    kind = step.get("kind", "general")
+    required_caps = json.loads(step.get("required_capabilities", "[]") or "[]")
+    preferred_backend = step.get("preferred_backend", "")
+    preferred_persona = step.get("preferred_persona_id", "")
+    if preferred_backend and preferred_backend in PROVIDER_REGISTRY:
+        score = _orch_score_backend(preferred_backend, kind, required_caps)
+        if score > 0.3:
+            return (preferred_backend, preferred_persona)
+    scored = []
+    for bk in PROVIDER_REGISTRY:
+        s = _orch_score_backend(bk, kind, required_caps)
+        if s > 0.0:
+            scored.append((s, bk))
+    scored.sort(key=lambda x: -x[0])
+    if not scored:
+        return (None, None)
+    best_backend = scored[0][1]
+    persona_id = preferred_persona
+    if not persona_id:
+        try:
+            conn = _db_conn()
+            rows = conn.execute(
+                "SELECT id FROM personas WHERE preferred_backend=? AND status != 'disabled' ORDER BY last_active DESC LIMIT 1",
+                (best_backend,)
+            ).fetchall()
+            conn.close()
+            if rows:
+                persona_id = rows[0]["id"]
+        except Exception:
+            pass
+    return (best_backend, persona_id)
+
+
+def _orch_plan_goal(goal: str, context: str = "") -> list:
+    """Break a goal into executable steps. Rule-based planner."""
+    goal_lower = goal.lower().strip()
+    steps = []
+    is_code = any(w in goal_lower for w in ["implement", "build", "code", "fix", "debug", "refactor", "add feature", "create function", "write", "patch", "deploy"])
+    is_research = any(w in goal_lower for w in ["research", "investigate", "compare", "analyze", "evaluate", "review", "assess", "explore", "find"])
+    is_multi = any(w in goal_lower for w in ["and then", "after that", "followed by", "plan", "strategy", "roadmap", "from start to finish", "end to end", "full"])
+    if is_code and not is_research and not is_multi:
+        steps = [
+            {"kind": "analysis", "title": "Analyze requirements", "description": f"Understand what needs to be done: {goal[:300]}", "depends_on": [], "required_capabilities": ["analysis"]},
+            {"kind": "implementation", "title": "Implement changes", "description": f"Build the solution: {goal[:300]}", "depends_on": [0], "required_capabilities": ["implementation", "code_generation"]},
+            {"kind": "verification", "title": "Verify implementation", "description": "Check correctness, run tests, validate output", "depends_on": [1], "required_capabilities": ["verification", "testing"]},
+        ]
+    elif is_research and not is_code:
+        steps = [
+            {"kind": "research", "title": "Research the topic", "description": f"Gather information: {goal[:300]}", "depends_on": [], "required_capabilities": ["research"]},
+            {"kind": "analysis", "title": "Analyze findings", "description": "Process and evaluate the research results", "depends_on": [0], "required_capabilities": ["analysis"]},
+            {"kind": "synthesis", "title": "Synthesize conclusions", "description": "Combine findings into actionable insights", "depends_on": [1], "required_capabilities": ["synthesis"]},
+        ]
+    elif is_multi or (is_code and is_research):
+        steps = [
+            {"kind": "research", "title": "Research and gather context", "description": f"Understand the landscape: {goal[:300]}", "depends_on": [], "required_capabilities": ["research"]},
+            {"kind": "analysis", "title": "Plan the approach", "description": "Break down the strategy and identify key decisions", "depends_on": [0], "required_capabilities": ["analysis"]},
+            {"kind": "implementation", "title": "Execute the plan", "description": f"Build/implement: {goal[:300]}", "depends_on": [1], "required_capabilities": ["implementation", "code_generation"]},
+            {"kind": "verification", "title": "Verify and test", "description": "Validate the implementation against requirements", "depends_on": [2], "required_capabilities": ["verification", "testing"]},
+            {"kind": "synthesis", "title": "Summarize results", "description": "Final report: what was done, outcomes, next steps", "depends_on": [3], "required_capabilities": ["synthesis"]},
+        ]
+    else:
+        kind = "research" if is_research else "implementation" if is_code else "general"
+        caps = {"research": ["research"], "implementation": ["implementation", "code_generation"]}.get(kind, ["general"])
+        steps = [{"kind": kind, "title": goal[:100], "description": goal[:500], "depends_on": [], "required_capabilities": caps}]
+    return steps
+
+
+def _orch_create_run(goal: str, context: str = "", requested_by: str = "user") -> dict:
+    """Create and plan an orchestration run."""
+    run_id = f"orch-{int(time.time())}-{uuid.uuid4().hex[:8]}"
+    planned_steps = _orch_plan_goal(goal, context)
+    if not planned_steps:
+        return {"ok": False, "error": "Could not plan goal into steps"}
+    try:
+        conn = _db_conn()
+        conn.execute(
+            "INSERT INTO orchestration_runs (id, goal, context, status, requested_by, total_steps) VALUES (?, ?, ?, 'planned', ?, ?)",
+            (run_id, goal[:2000], context[:2000], requested_by, len(planned_steps))
+        )
+        for i, step in enumerate(planned_steps):
+            step_id = f"{run_id}-s{i}"
+            deps = [f"{run_id}-s{d}" for d in step.get("depends_on", [])]
+            backend, persona_id = _orch_select_executor(step)
+            conn.execute(
+                """INSERT INTO orchestration_steps
+                (id, run_id, step_num, kind, title, description, required_capabilities,
+                 preferred_backend, preferred_persona_id, depends_on, assigned_backend, assigned_persona_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (step_id, run_id, i, step.get("kind", "general"),
+                 step.get("title", "")[:200], step.get("description", "")[:1000],
+                 json.dumps(step.get("required_capabilities", [])),
+                 backend or "", persona_id or "", json.dumps(deps), backend or "", persona_id or "")
+            )
+        conn.execute(
+            "INSERT INTO orchestration_events (run_id, event_type, message, data) VALUES (?, 'planned', ?, ?)",
+            (run_id, f"Goal planned into {len(planned_steps)} steps", json.dumps({"steps": len(planned_steps)}))
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.error("Orchestration create run failed: %s", e)
+        return {"ok": False, "error": str(e)}
+    _emit_event("orch:planned", {"run_id": run_id, "goal": goal[:200], "steps": len(planned_steps)})
+    mlog.emit("info", "orchestration", "orch.planned", f"Run {run_id}: {goal[:100]} ({len(planned_steps)} steps)", run_id=run_id)
+    return {"ok": True, "run_id": run_id, "steps": len(planned_steps), "status": "planned"}
+
+
+def _orch_get_run(run_id: str) -> dict:
+    """Get full orchestration run with steps and events."""
+    try:
+        conn = _db_conn()
+        run = conn.execute("SELECT * FROM orchestration_runs WHERE id=?", (run_id,)).fetchone()
+        if not run:
+            conn.close()
+            return {"ok": False, "error": "Run not found"}
+        steps = [dict(r) for r in conn.execute(
+            "SELECT * FROM orchestration_steps WHERE run_id=? ORDER BY step_num", (run_id,)
+        ).fetchall()]
+        events = [dict(r) for r in conn.execute(
+            "SELECT * FROM orchestration_events WHERE run_id=? ORDER BY ts DESC LIMIT 50", (run_id,)
+        ).fetchall()]
+        conn.close()
+        return {"ok": True, "run": dict(run), "steps": steps, "events": events}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def _orch_list_runs(limit: int = 20) -> dict:
+    """List recent orchestration runs."""
+    try:
+        conn = _db_conn()
+        runs = [dict(r) for r in conn.execute(
+            "SELECT * FROM orchestration_runs ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()]
+        conn.close()
+        return {"ok": True, "runs": runs}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def _orch_step_runnable(step: dict, all_steps: list) -> bool:
+    """Check if a step's dependencies are all completed."""
+    if step.get("status") != "pending":
+        return False
+    deps = json.loads(step.get("depends_on", "[]") or "[]")
+    if not deps:
+        return True
+    completed_ids = {s["id"] for s in all_steps if s.get("status") in ("completed", "complete")}
+    return all(d in completed_ids for d in deps)
+
+
+def _orch_execute_step(run_id: str, step: dict) -> dict:
+    """Execute a single orchestration step via dispatch."""
+    step_id = step["id"]
+    backend = step.get("assigned_backend", "")
+    persona_id = step.get("assigned_persona_id", "")
+    attempt = step.get("attempt", 0) + 1
+    prompt = step.get("description", step.get("title", ""))
+    try:
+        conn = _db_conn()
+        deps = json.loads(step.get("depends_on", "[]") or "[]")
+        for dep_id in deps:
+            dep = conn.execute("SELECT title, output_data FROM orchestration_steps WHERE id=?", (dep_id,)).fetchone()
+            if dep and dep["output_data"]:
+                prompt += f"\n\n--- Prior step: {dep['title']} ---\n{dep['output_data'][:2000]}"
+        lease_expires = time.time() + 180
+        conn.execute(
+            "UPDATE orchestration_steps SET status='running', attempt=?, started_at=?, lease_expires_at=?, assigned_backend=?, assigned_persona_id=? WHERE id=?",
+            (attempt, time.time(), lease_expires, backend, persona_id or "", step_id)
+        )
+        conn.execute(
+            "INSERT INTO orchestration_events (run_id, step_id, event_type, backend, persona_id, message) VALUES (?, ?, 'step_started', ?, ?, ?)",
+            (run_id, step_id, backend, persona_id or "", f"Attempt {attempt}: dispatching to {backend}")
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.error("Orch step %s setup failed: %s", step_id, e)
+    _emit_event("orch:step_started", {"run_id": run_id, "step_id": step_id, "backend": backend, "attempt": attempt})
+    result = None
+    t0 = time.time()
+    try:
+        if persona_id:
+            result = dispatch_to_persona(prompt, persona_id, timeout=120, backend_override=backend)
+        elif backend:
+            result = dispatch_agent(prompt, backend, timeout=120)
+        else:
+            result = {"ok": False, "error": "No backend assigned"}
+    except Exception as e:
+        result = {"ok": False, "error": str(e)}
+    ok = result.get("ok", False) if result else False
+    output = (result.get("text", "") or "")[:5000] if result else ""
+    error = (result.get("error", "") or "")[:500] if result else "dispatch returned None"
+    duration = int((time.time() - t0) * 1000)
+    tokens = result.get("tokens_total", 0) if result else 0
+    try:
+        conn = _db_conn()
+        if ok:
+            conn.execute(
+                "UPDATE orchestration_steps SET status='completed', output_data=?, completed_at=?, duration_ms=?, tokens_used=?, progress_pct=100 WHERE id=?",
+                (output, time.time(), duration, tokens, step_id)
+            )
+            conn.execute("UPDATE orchestration_runs SET completed_steps = completed_steps + 1, updated_at=? WHERE id=?", (time.time(), run_id))
+            conn.execute(
+                "INSERT INTO orchestration_events (run_id, step_id, event_type, backend, message) VALUES (?, ?, 'step_completed', ?, ?)",
+                (run_id, step_id, backend, f"Completed in {duration}ms, {tokens} tokens")
+            )
+        else:
+            new_status = "failed" if attempt >= step.get("max_attempts", 3) else "pending"
+            conn.execute("UPDATE orchestration_steps SET status=?, error=?, progress_pct=0 WHERE id=?", (new_status, error, step_id))
+            if new_status == "failed":
+                conn.execute("UPDATE orchestration_runs SET failed_steps = failed_steps + 1, updated_at=? WHERE id=?", (time.time(), run_id))
+            conn.execute(
+                "INSERT INTO orchestration_events (run_id, step_id, event_type, backend, message) VALUES (?, ?, 'step_failed', ?, ?)",
+                (run_id, step_id, backend, f"Attempt {attempt} failed: {error[:200]}")
+            )
+            if new_status == "pending":
+                scored = []
+                kind = step.get("kind", "general")
+                req_caps = json.loads(step.get("required_capabilities", "[]") or "[]")
+                for bk in PROVIDER_REGISTRY:
+                    if bk == backend:
+                        continue
+                    s = _orch_score_backend(bk, kind, req_caps)
+                    if s > 0.0:
+                        scored.append((s, bk))
+                scored.sort(key=lambda x: -x[0])
+                if scored:
+                    new_backend = scored[0][1]
+                    conn.execute("UPDATE orchestration_steps SET assigned_backend=? WHERE id=?", (new_backend, step_id))
+                    conn.execute(
+                        "INSERT INTO orchestration_events (run_id, step_id, event_type, backend, message) VALUES (?, ?, 'step_reassigned', ?, ?)",
+                        (run_id, step_id, new_backend, f"Reassigned from {backend} to {new_backend}")
+                    )
+                    _emit_event("orch:reassigned", {"run_id": run_id, "step_id": step_id, "from": backend, "to": new_backend})
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.error("Orch step %s result recording failed: %s", step_id, e)
+    _emit_event("orch:step_done", {"run_id": run_id, "step_id": step_id, "ok": ok, "backend": backend})
+    return {"ok": ok, "output": output[:500], "error": error}
+
+
+def _orch_execute_run(run_id: str) -> dict:
+    """Execute an orchestration run: process all steps respecting dependencies."""
+    try:
+        conn = _db_conn()
+        run = conn.execute("SELECT * FROM orchestration_runs WHERE id=?", (run_id,)).fetchone()
+        if not run:
+            conn.close()
+            return {"ok": False, "error": "Run not found"}
+        if run["status"] not in ("planned", "running"):
+            conn.close()
+            return {"ok": False, "error": f"Run status is {run['status']}, cannot execute"}
+        conn.execute("UPDATE orchestration_runs SET status='running', updated_at=? WHERE id=?", (time.time(), run_id))
+        conn.execute("INSERT INTO orchestration_events (run_id, event_type, message) VALUES (?, 'run_started', 'Execution started')", (run_id,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    _emit_event("orch:run_started", {"run_id": run_id})
+    mlog.emit("info", "orchestration", "orch.run_started", f"Run {run_id} execution started", run_id=run_id)
+    max_iterations = 50
+    iteration = 0
+    while iteration < max_iterations:
+        iteration += 1
+        try:
+            conn = _db_conn()
+            run_check = conn.execute("SELECT status FROM orchestration_runs WHERE id=?", (run_id,)).fetchone()
+            if run_check and run_check["status"] == "cancelled":
+                conn.close()
+                break
+            steps = [dict(r) for r in conn.execute(
+                "SELECT * FROM orchestration_steps WHERE run_id=? ORDER BY step_num", (run_id,)
+            ).fetchall()]
+            conn.close()
+        except Exception:
+            break
+        pending_or_running = [s for s in steps if s["status"] in ("pending", "running")]
+        if not pending_or_running:
+            break
+        runnable = [s for s in steps if _orch_step_runnable(s, steps)]
+        if not runnable:
+            running = [s for s in steps if s["status"] == "running"]
+            if running:
+                time.sleep(2)
+                continue
+            else:
+                break
+        # Execute runnable steps in parallel via ThreadPoolExecutor
+        import concurrent.futures as _cf
+        with _cf.ThreadPoolExecutor(max_workers=min(3, len(runnable))) as ex:
+            futures = {ex.submit(_orch_execute_step, run_id, s): s for s in runnable}
+            for f in _cf.as_completed(futures, timeout=300):
+                try:
+                    f.result()
+                except Exception as e:
+                    log.error("Orch step execution error: %s", e)
+    # Finalize
+    try:
+        conn = _db_conn()
+        steps = [dict(r) for r in conn.execute("SELECT * FROM orchestration_steps WHERE run_id=? ORDER BY step_num", (run_id,)).fetchall()]
+        completed = [s for s in steps if s["status"] in ("completed", "complete")]
+        failed = [s for s in steps if s["status"] == "failed"]
+        if len(completed) == len(steps):
+            final_status = "completed"
+            result_parts = [s.get("output_data", "")[:1000] for s in steps if s.get("output_data")]
+            result = "\n---\n".join(result_parts)[:5000]
+        elif failed:
+            final_status = "failed"
+            result = f"{len(failed)} of {len(steps)} steps failed"
+        else:
+            final_status = "stalled"
+            result = "Run stalled"
+        conn.execute(
+            "UPDATE orchestration_runs SET status=?, result=?, completed_at=?, updated_at=? WHERE id=?",
+            (final_status, result[:5000], time.time(), time.time(), run_id)
+        )
+        conn.execute("INSERT INTO orchestration_events (run_id, event_type, message) VALUES (?, ?, ?)",
+            (run_id, f"run_{final_status}", f"{len(completed)}/{len(steps)} steps completed"))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.error("Orch run %s finalization failed: %s", run_id, e)
+    _emit_event(f"orch:run_{final_status}", {"run_id": run_id, "completed": len(completed), "total": len(steps)})
+    mlog.emit("info", "orchestration", f"orch.run_{final_status}", f"Run {run_id}: {len(completed)}/{len(steps)}", run_id=run_id)
+    return {"ok": final_status == "completed", "status": final_status, "completed": len(completed), "total": len(steps)}
+
+
+def _orch_cancel_run(run_id: str) -> dict:
+    """Cancel an orchestration run."""
+    try:
+        conn = _db_conn()
+        conn.execute("UPDATE orchestration_runs SET status='cancelled', updated_at=? WHERE id=?", (time.time(), run_id))
+        conn.execute("UPDATE orchestration_steps SET status='cancelled' WHERE run_id=? AND status IN ('pending','running')", (run_id,))
+        conn.execute("INSERT INTO orchestration_events (run_id, event_type, message) VALUES (?, 'run_cancelled', 'Cancelled by user')", (run_id,))
+        conn.commit()
+        conn.close()
+        _emit_event("orch:run_cancelled", {"run_id": run_id})
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 def _run_coordination(prompt: str, backends: list[str] | None = None, timeout: int = 45) -> dict:
     """Run the same prompt across selected backends through Porter's agent bridge."""
     prompt = (prompt or "").strip()
@@ -30797,7 +31447,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.16"})
+            self.reply_json({"v": "0.30.18"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -30959,7 +31609,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.16"
+                health["porter_version"] = "0.30.18"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -32648,6 +33298,35 @@ class Handler(BaseHTTPRequestHandler):
             conflicts = _ledger_conflicts()
             self.reply_json({"ok": True, "active_claims": active, "recent": recent, "conflicts": conflicts})
 
+        elif parsed.path == "/api/orchestration/run" and self.command == "POST":
+            if not self.auth_check(redirect=False): return
+            body = self.read_json_body()
+            if not body: return
+            goal = (body.get("goal") or "").strip()
+            if not goal:
+                self.reply_json({"ok": False, "error": "goal required"}, 400); return
+            context = (body.get("context") or "").strip()
+            requested_by = (body.get("requested_by") or "user").strip()
+            result = _orch_create_run(goal, context, requested_by)
+            if result.get("ok") and body.get("execute", True):
+                run_id = result["run_id"]
+                threading.Thread(target=_orch_execute_run, args=(run_id,), daemon=True, name=f"orch-{run_id}").start()
+                result["executing"] = True
+            self.reply_json(result)
+
+        elif parsed.path == "/api/orchestration/runs":
+            if not self.auth_check(redirect=False): return
+            limit = int(qs.get("limit", ["20"])[0])
+            self.reply_json(_orch_list_runs(limit))
+
+        elif parsed.path.startswith("/api/orchestration/") and parsed.path.count("/") == 3:
+            if not self.auth_check(redirect=False): return
+            _orch_run_id = parsed.path.split("/")[3]
+            if self.command == "DELETE":
+                self.reply_json(_orch_cancel_run(_orch_run_id))
+            else:
+                self.reply_json(_orch_get_run(_orch_run_id))
+
         elif parsed.path == "/api/coordination/conflicts":
             if not self.auth_check(redirect=False): return
             self.reply_json({"ok": True, "conflicts": _ledger_conflicts()})
@@ -32764,7 +33443,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.16'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.18'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -37482,7 +38161,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.16 ready (localhost only)")
+    print(f"\n  Porter v0.30.18 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
