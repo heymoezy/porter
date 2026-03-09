@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.29.96 (2026-03-09)
+
+**Models Single-Flight Rendering**
+
+- Models loading is now single-flight, so duplicate `loadModels()` calls cannot replace an already-rendered grid with skeletons or bootstrap state
+- Once the Models grid has rendered in a visit, later loads refresh in the background without clearing cards
+- Stale async bootstrap and snapshot responses are ignored if a newer Models load started afterward
+
+---
+
 ## v0.29.95 (2026-03-09)
 
 **Models Grid Persistence Guarantee**

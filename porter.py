@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.95 — Models cached-view stability"""
+"""Porter v0.29.96 — Models single-flight rendering"""
 
 
 import email
@@ -9179,7 +9179,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.95</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.96</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10508,6 +10508,8 @@ var _modelsClientCacheKeys = {
 };
 var _modelsActivityHydrate = {};
 var _modelStructureSignature = '';
+var _modelsLoadSeq = 0;
+var _modelsRenderedOnce = false;
 function _readModelsClientCache(key, maxAgeMs) {
   try {
     var raw = sessionStorage.getItem(key);
@@ -10585,6 +10587,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.96', date:'2026-03-09', notes:['Models loading is now single-flight: duplicate loadModels calls cannot replace an already-rendered grid with skeletons or bootstrap state','Once the grid has rendered in a visit, later loads refresh in the background without clearing cards','Stale async bootstrap/snapshot responses are dropped if a newer Models load started afterward'] },
   { ver:'v0.29.95', date:'2026-03-09', notes:['Once Models cards are on screen, no same-visit background refresh is allowed to replace the whole grid','Cached snapshot loads now refresh cache and versions in the background without applying the live snapshot DOM update','This hardens the invariant that the Models grid never disappears after a successful render'] },
   { ver:'v0.29.94', date:'2026-03-09', notes:['Removed the post-response Models activity fetch so ordinary backend responses no longer trigger any Models-tab refresh path','Models live UI now relies on existing SSE updates and explicit reloads instead of hidden activity polling after each response','This eliminates the remaining automatic Models refresh caused by background backend traffic'] },
   { ver:'v0.29.93', date:'2026-03-09', notes:['Removed the post-response full Models grid rerender that was still rebuilding cards after backend activity completed','Models activity refresh now updates state without calling _renderModelCards on every response event','Combined with structural hydrate checks, the Models tab now keeps a stable DOM unless the actual card structure changes'] },
@@ -18833,6 +18836,7 @@ function _applyModelsSnapshot(snap, opts) {
   if (shouldRenderCards) {
     _renderModelCards({ providers: window._modelProviders }, _modelActivityData);
     _modelStructureSignature = nextSig;
+    _modelsRenderedOnce = true;
   }
   _applyModelVersions(snap.versions || {});
   _checkBackendStatuses(window._modelProviders);
@@ -18881,6 +18885,7 @@ function _renderModelsLoading(stage, opts) {
 }
 
 async function loadModels() {
+  var loadSeq = ++_modelsLoadSeq;
   try {
     var cachedSnapshot = _readModelsClientCache(_modelsClientCacheKeys.snapshot, 120000);
     var cachedBootstrap = cachedSnapshot ? null : _readModelsClientCache(_modelsClientCacheKeys.bootstrap, 60000);
@@ -18897,10 +18902,15 @@ async function loadModels() {
       seededBootstrap = true;
       _renderModelsLoading('Hydrating live model catalogs...', { detail: 'Using cached bootstrap state while Porter refreshes the live catalog.', keepCards: true });
     } else {
-      _renderModelsLoading('Bootstrapping model runtimes...', { detail: 'Fast cached state first, then live catalog hydration.', count: 4 });
+      if (!_modelsRenderedOnce) {
+        _renderModelsLoading('Bootstrapping model runtimes...', { detail: 'Fast cached state first, then live catalog hydration.', count: 4 });
+      } else {
+        _renderModelsLoading('Refreshing live model state...', { detail: 'Models is already rendered; refreshing in the background without replacing the grid.', keepCards: true });
+      }
     }
     if (!seededSnapshot) {
       var boot = await api('/api/models/bootstrap');
+      if (loadSeq !== _modelsLoadSeq) return;
       if (boot && boot.providers) {
         _writeModelsClientCache(_modelsClientCacheKeys.bootstrap, boot);
         if (!seededBootstrap) _applyModelsSnapshot(boot, { preferStable: true });
@@ -18910,12 +18920,14 @@ async function loadModels() {
     _renderModelsLoading('Hydrating live model catalogs...', { detail: 'Refreshing dynamic models, backend health, and version checks.', keepCards: true });
     setTimeout(function() {
       api('/api/models/snapshot').then(function(snap) {
+        if (loadSeq !== _modelsLoadSeq) return;
         if (snap && snap.providers) {
           _writeModelsClientCache(_modelsClientCacheKeys.snapshot, snap);
           if (!seededSnapshot) _applyModelsSnapshot(snap, { preferStable: true });
         }
         _renderModelsLoading('');
       }).catch(function(e) {
+        if (loadSeq !== _modelsLoadSeq) return;
         _reportModelsClientError('models-snapshot-hydrate', e || new Error('Snapshot hydrate failed'));
         _renderModelsLoading('');
       });
@@ -29628,7 +29640,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.95"})
+            self.reply_json({"v": "0.29.96"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -31567,7 +31579,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.95'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.96'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36244,7 +36256,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.95 ready (localhost only)")
+    print(f"\n  Porter v0.29.96 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
