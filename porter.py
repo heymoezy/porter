@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.80 — Models test persistence and OpenClaw diagnosis"""
+"""Porter v0.29.81 — Dynamic model catalogs and Runtime split"""
 
 
 import email
@@ -9077,7 +9077,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </button>
     <button class="mnav-item" id="mnav-system" onclick="switchModule('system')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-      <span class="mnav-label">System</span>
+      <span class="mnav-label">Runtime</span>
     </button>
     <div class="mnav-group-label">Config</div>
     <button class="mnav-item" id="mnav-capabilities" onclick="switchModule('capabilities')">
@@ -9119,7 +9119,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.80</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.81</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9784,9 +9784,18 @@ input[type="number"].settings-input { min-width: 60px; }
   <!-- Workflows panel — automations only -->
   <div id="system-module" class="module-panel">
     <div class="module-hdr">
-      <span class="module-title">System</span>
+      <span class="module-title">Runtime</span>
     </div>
-    <div class="module-intro">Background daemons that maintain intelligence, health, and hygiene.</div>
+    <div class="module-intro">Background runtimes, workflows, and session ingestion plumbing behind Porter Bridge.</div>
+    <div id="runtime-session-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:13px;font-weight:600;color:var(--text)">Sessions + Extraction</span>
+        <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Temporary</span>
+      </div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">This is a temporary holding area until session provenance and memory extraction move into Cortex.</div>
+      <div id="runtime-extraction-progress" style="margin:0 0 12px;padding:0"><div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px"><div style="display:flex;align-items:center;gap:8px"><span class="learn-spinner"></span><span style="font-size:12px;color:var(--text3)">Loading extraction status...</span></div></div></div>
+      <div id="runtime-session-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px"></div>
+    </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <span id="wf-sys-count" style="font-size:11px;color:var(--text3)"></span>
     </div>
@@ -9817,8 +9826,6 @@ input[type="number"].settings-input { min-width: 60px; }
     <!-- Backends sub-tab -->
     <div id="models-backends-tab">
       <div class="module-intro">AI backends available to Porter. Each persona routes through one of these.</div>
-
-      <div id="extraction-progress-bar" style="margin:0 0 12px;padding:0"><div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px"><div style="display:flex;align-items:center;gap:8px"><span class="learn-spinner"></span><span style="font-size:12px;color:var(--text3)">Loading extraction status...</span></div></div></div>
       <div id="models-grid" class="models-grid">
         <div class="loading-indicator">Loading models...</div>
       </div>
@@ -10423,6 +10430,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.81', date:'2026-03-09', notes:['Model catalogs now resolve dynamically at runtime instead of shipping stale Claude/Gemini/OpenClaw lists','Models tab is narrowed to control-plane truth: health, config, model selection, and tests','Sessions and extraction state moved out of Models into Runtime as a temporary holding surface','Model display names/optimized hints now normalize newer versions instead of pinning old labels'] },
   { ver:'v0.29.80', date:'2026-03-09', notes:['Test All now covers backends without an Auto row (including single-model cards)','Per-model test results persist across card refreshes instead of disappearing','OpenClaw failures attach runtime diagnosis from doctor/gateway checks','Sharper repair hints for gateway-down vs embedded-timeout scenarios'] },
   { ver:'v0.29.79', date:'2026-03-09', notes:['Models tab frontend errors report to Mission Control with context','Model tests + gateway actions emit structured logs with diagnostics','Mission Log preserves frontend error metadata (source, stack, backend)','Version parsing hardened for OpenClaw, Claude, Gemini, Codex','OpenClaw failures now return repair/reinstall guidance'] },
   { ver:'v0.29.78', date:'2026-03-09', notes:['All model test results logged (WARNING level)','Removed backends detected summary','Neutral dots (gray) until tests verify','Version display: always prefixed with v','Fix OpenClaw/Claude/Gemini version parsing'] },
@@ -12476,11 +12484,12 @@ function switchModule(name) {
 async function loadWorkflowRegistry() {
   var grid = document.getElementById('wf-system-grid');
   var countEl = document.getElementById('wf-sys-count');
+  _loadRuntimeOperations();
   if (!grid) return;
   grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--text3);font-size:12px">Loading workflows...</div>';
   try {
     var data = await api('/api/workflows');
-    if (!data || !data.workflows) { grid.innerHTML = '<div class="empty-state" style="padding:40px 20px"><div style="font-size:28px;opacity:.4">\u2699\ufe0f</div><p>No workflows registered</p><p style="font-size:12px;color:var(--text3);margin-top:-4px">System workflows appear here when configured</p></div>'; return; }
+    if (!data || !data.workflows) { grid.innerHTML = '<div class="empty-state" style="padding:40px 20px"><div style="font-size:28px;opacity:.4">\u2699\ufe0f</div><p>No workflows registered</p><p style="font-size:12px;color:var(--text3);margin-top:-4px">Runtime workflows appear here when configured</p></div>'; return; }
     var wfs = data.workflows;
     if (countEl) countEl.textContent = wfs.length + ' workflow' + (wfs.length !== 1 ? 's' : '');
     grid.innerHTML = wfs.map(function(wf) {
@@ -13924,25 +13933,36 @@ async function _preloadSessionCounts() {
       var resp = await api('/api/sessions?source=' + src);
       if (resp && resp.ok !== false) {
         _maSessionCounts[src] = { count: resp.count || 0 };
-        // Update toggle button label if visible
-        var btn = document.querySelector('[data-model-id="' + src + '"] .model-sessions-toggle');
-        if (btn) {
-          var c = resp.count || 0;
-          btn.textContent = '\u25bc ' + c + ' session' + (c !== 1 ? 's' : '');
-        }
+        _renderRuntimeSessionSummary();
       }
     } catch(e) { /* ignore */ }
   });
 }
 
-async function _updateExtractionProgress() {
+function _renderRuntimeSessionSummary() {
+  var wrap = document.getElementById('runtime-session-summary');
+  if (!wrap) return;
+  var labels = {claude:'Claude', openclaw:'OpenClaw', gemini:'Gemini', codex:'Codex', ollama:'Ollama'};
+  wrap.innerHTML = ['claude','openclaw','gemini','codex','ollama'].map(function(src) {
+    var count = ((_maSessionCounts || {})[src] || {}).count || 0;
+    return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+      + '<span style="font-size:12px;font-weight:600;color:var(--text)">' + escHtml(labels[src] || src) + '</span>'
+      + '<span style="margin-left:auto;font-size:11px;color:' + (count > 0 ? 'var(--accent)' : 'var(--text3)') + '">' + count + ' session' + (count !== 1 ? 's' : '') + '</span>'
+      + '</div>'
+      + '<div style="font-size:11px;color:var(--text3)">Extraction and review will migrate into Cortex.</div>'
+      + '</div>';
+  }).join('');
+}
+
+async function _updateExtractionProgress(targetId) {
   try {
     var resp = await api('/api/cortex/stats');
     if (!resp) return;
     var total = resp.sessions_total || 0;
     var extracted = resp.sessions_extracted || 0;
     var remaining = Math.max(0, total - extracted);
-    var bar = document.getElementById('extraction-progress-bar');
+    var bar = document.getElementById(targetId || 'runtime-extraction-progress');
     if (!bar) return;
     var pct = total > 0 ? Math.min(100, Math.round(extracted / total * 100)) : 0;
     var isRunning = _extractAllRunning;
@@ -13970,14 +13990,14 @@ async function _updateExtractionProgress() {
       + '</div>'
       + '<div style="display:flex;gap:6px">'
       + (isRunning
-        ? '<button class="btn btn-ghost" style="font-size:11px;color:#60a5fa" onclick="_extractAllRunning=false;_updateExtractionProgress()">\u23F8 Stop</button>'
+        ? '<button class="btn btn-ghost" style="font-size:11px;color:#60a5fa" onclick="_extractAllRunning=false;_updateExtractionProgress(\'' + (targetId || 'runtime-extraction-progress') + '\')">\u23F8 Stop</button>'
         : (remaining > 0
           ? '<button class="btn btn-ghost" style="font-size:11px" onclick="_triggerExtractAll()">\u25B6 Extract All</button>'
           : '<button class="btn btn-ghost" style="font-size:11px;opacity:0.5" disabled>\u2713 Complete</button>'))
       + '</div>'
       + '</div>';
     // Auto-refresh while extracting
-    if (isRunning) setTimeout(_updateExtractionProgress, 3000);
+    if (isRunning) setTimeout(function() { _updateExtractionProgress(targetId || 'runtime-extraction-progress'); }, 3000);
   } catch(e) {}
 }
 
@@ -13993,13 +14013,19 @@ async function _triggerExtractAll() {
         if (resp && resp.sessions) {
           _maSessionsData = resp.sessions;
           _extractAllLearnings(sources[i]);
-          _updateExtractionProgress();
+          _updateExtractionProgress('runtime-extraction-progress');
           return; // one source at a time
         }
       } catch(e) {}
     }
   }
   toast('No sessions to extract');
+}
+
+async function _loadRuntimeOperations() {
+  _renderRuntimeSessionSummary();
+  _preloadSessionCounts();
+  _updateExtractionProgress('runtime-extraction-progress');
 }
 
 var _inlineSessionsExpanded = {};
@@ -17895,16 +17921,15 @@ function renderInfraCards(providers, agents) {
 // ── Orchestration flow rendering ──────────────────────────────────────────
 
 const MODEL_OPTIMIZED = {
-  'gpt-5.3-codex':    'Agentic coding, long-running tasks, tool use',
-  'gpt-5.4':          'Most capable — reasoning, computer use, 1M context',
-  'gpt-5.4-thinking': 'Deep reasoning, chain-of-thought, complex analysis',
-  'o3-pro':           'Advanced reasoning, math, science, competition-grade',
+  'gpt-5':            'Most capable reasoning, coding, and tool use',
+  'gpt-5-thinking':   'Deep reasoning and complex analysis',
+  'o3':               'Advanced reasoning, math, and science',
   'codex':            'Agentic coding, long-running tasks, tool use',
-  'claude-opus-4-6':  'Deep reasoning, security audits, architecture',
-  'claude-sonnet-4-6':'Implementation, debugging, tool calling',
-  'claude-haiku-4-5': 'Fast responses, classification, simple tasks',
-  'gemini-2.5-pro':   'Research, extended context (1M tokens), multimodal',
-  'gemini-2.5-flash': 'Fast inference, cost-efficient, large context',
+  'claude-opus':      'Deep reasoning, security audits, architecture',
+  'claude-sonnet':    'Implementation, debugging, tool calling',
+  'claude-haiku':     'Fast responses, classification, simple tasks',
+  'gemini-pro':       'Research, extended context, multimodal',
+  'gemini-flash':     'Fast inference, cost-efficient, large context',
 };
 
 function _modelOptLine(modelId) {
@@ -17918,17 +17943,14 @@ function _modelOptLine(modelId) {
 
 function _modelDisplayName(modelId) {
   if (!modelId) return 'Unknown';
-  const mid = modelId.toLowerCase();
-  if (mid.includes('o3-pro') || mid.includes('o3_pro')) return 'o3 Pro';
-  if (mid.includes('gpt-5.4-thinking')) return 'GPT-5.4 Thinking';
-  if (mid.includes('gpt-5.4')) return 'GPT-5.4';
-  if (mid.includes('codex') || mid.includes('gpt-5.3')) return 'GPT-5.3 Codex';
-  if (mid.includes('opus')) return 'Claude Opus 4.6';
-  if (mid.includes('sonnet')) return 'Claude Sonnet 4.6';
-  if (mid.includes('haiku')) return 'Claude Haiku 4.5';
-  if (mid.includes('gemini-2.5-flash') || mid.includes('flash')) return 'Gemini 2.5 Flash';
-  if (mid.includes('gemini')) return 'Gemini 2.5 Pro';
-  return modelId;
+  const raw = String(modelId);
+  const slug = raw.includes('/') ? raw.split('/').pop() : raw;
+  if (!slug) return raw;
+  if (slug.startsWith('gpt-')) return slug.toUpperCase();
+  if (slug.startsWith('claude-')) return 'Claude ' + slug.slice(7).replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  if (slug.startsWith('gemini-')) return 'Gemini ' + slug.slice(7).replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  if (slug.startsWith('o3-')) return slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return slug;
 }
 
 function _agentConnectionMethod(a) {
@@ -18342,8 +18364,6 @@ async function _testAllBackends() {
 }
 
 async function loadModels() {
-  _preloadSessionCounts();
-  _updateExtractionProgress();
   try {
     var [data, act, avail] = await Promise.all([
       api('/api/providers'),
@@ -19328,27 +19348,6 @@ function _renderModelCards(data, act) {
         + '</div>';
     }
 
-    // Inline expandable sessions + Live Trace button
-    var _maSourceMap2 = {claude:'claude', openclaw:'openclaw', gemini:'gemini', ollama:'ollama', codex:'codex'};
-    var _maCardSource = _maSourceMap2[p.id] || null;
-    var sessionsBtn = '';
-    if (_maCardSource) {
-      var _cachedCount = ((_maSessionCounts || {})[_maCardSource] || {}).count;
-      var countLabel = typeof _cachedCount === 'number' ? '\u25bc ' + _cachedCount + ' session' + (_cachedCount !== 1 ? 's' : '') : '\u25bc Sessions';
-      sessionsBtn = '<div style="margin-top:8px">';
-      // Show extraction progress if running for this source
-      if (_extractAllRunning && _extractAllSource === _maCardSource) {
-        sessionsBtn += '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:6px;background:color-mix(in srgb,var(--accent) 8%,transparent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);border-radius:6px">'
-          + '<span class="learn-spinner"></span>'
-          + '<span style="font-size:11px;color:var(--accent);font-weight:500">Extracting learnings...</span>'
-          + '<div style="flex:1;height:4px;background:rgba(247,147,26,0.15);border-radius:2px;overflow:hidden"><div style="height:100%;background:var(--accent);border-radius:2px;animation:wf-progress 2s ease-in-out infinite"></div></div>'
-          + '</div>';
-      }
-      sessionsBtn += '<button class="btn btn-ghost model-sessions-toggle" style="font-size:11px;width:100%" '
-        + 'onclick="_toggleInlineSessions(this,\'' + escHtml(p.id) + '\',\'' + escHtml(_maCardSource) + '\')">' + countLabel + '</button>'
-        + '<div class="model-inline-sessions" id="inline-sess-' + escHtml(p.id) + '" style="display:none"></div>'
-        + '</div>';
-    }
     // Live Trace button (only when actively dispatching)
     var liveTraceBtn = '';
     if (activeRuns.length > 0) {
@@ -19418,8 +19417,6 @@ function _renderModelCards(data, act) {
       + (p.available ? _selHtml : _installHtml)
       + '<div class="model-card-divider"></div>'
       + statsHtml
-
-      + sessionsBtn
       + liveTraceBtn
       + lastPromptBtn
       + '</div>';
@@ -25750,33 +25747,20 @@ def _ensure_backend_config():
     changed = False
     # Only seed if backend key is completely missing (never overwrite user edits)
     _defaults = {
-        "openclaw": {"description": "Multi-model gateway", "models": [
-            {"id": "gpt-5.4", "name": "GPT-5.4", "default": True},
-            {"id": "gpt-5.3-codex", "name": "GPT-5.3 Codex", "default": False},
-        ]},
+        "openclaw": {"description": "Multi-model gateway", "models": []},
         "codex": {"description": "OpenAI agentic coding CLI", "models": []},
-        "claude": {"description": "Anthropic reasoning CLI", "models": [
-            {"id": "opus", "name": "Claude Opus", "default": True},
-            {"id": "sonnet", "name": "Claude Sonnet", "default": False},
-            {"id": "haiku", "name": "Claude Haiku", "default": False},
-        ]},
-        "gemini": {"description": "Google multimodal CLI", "models": [
-            {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "default": True},
-            {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "default": False},
-            {"id": "gemini-3-pro-preview", "name": "Gemini 3 Pro", "default": False},
-            {"id": "gemini-3-flash-preview", "name": "Gemini 3 Flash", "default": False},
-        ]},
+        "claude": {"description": "Anthropic reasoning CLI", "models": []},
+        "gemini": {"description": "Google multimodal CLI", "models": []},
         "ollama": {"description": "Local model inference", "models": []},
     }
     for bk, default in _defaults.items():
         if bk not in bc:
             bc[bk] = default
             changed = True
-        elif bk != "ollama" and bk != "codex":
-            # Refresh model list if it was a single hardcoded entry from previous version
+        elif bk not in ("ollama", "codex"):
             existing = bc[bk].get("models", [])
-            if len(existing) <= 1 and len(default.get("models", [])) > 1:
-                bc[bk]["models"] = default["models"]
+            if existing:
+                bc[bk]["models"] = []
                 changed = True
     if changed:
         save_config(_config)
@@ -25789,6 +25773,7 @@ def _backend_meta(name):
 
 # ── Backend Version Probing ─────────────────────────────────────────────
 _backend_version_cache = {"data": None, "ts": 0}
+_backend_model_cache = {"data": {}, "ts": {}}
 
 
 def _probe_backend_versions():
@@ -25898,8 +25883,149 @@ def _probe_backend_versions():
     return versions
 
 
+def _model_display_name(model_id: str) -> str:
+    """Prefer runtime IDs over stale marketing labels; lightly normalize when obvious."""
+    text = str(model_id or "").strip()
+    if not text:
+        return ""
+    slug = text.split("/")[-1]
+    pretty = slug.replace("_", "-")
+    if pretty.startswith("gpt-"):
+        return pretty.upper()
+    if pretty.startswith("claude-"):
+        return "Claude " + pretty[len("claude-"):].replace("-", " ").title()
+    if pretty.startswith("gemini-"):
+        return "Gemini " + pretty[len("gemini-"):].replace("-", " ").title()
+    return pretty
+
+
+def _unique_model_catalog(entries, preferred_id=""):
+    """Dedupe model entries while preserving order and honoring a preferred active ID."""
+    preferred_id = str(preferred_id or "").strip()
+    seen = set()
+    ordered = []
+    pending = []
+    for entry in entries or []:
+        if not isinstance(entry, dict):
+            continue
+        model_id = str(entry.get("id", "")).strip()
+        if not model_id or model_id in seen:
+            continue
+        seen.add(model_id)
+        item = {
+            "id": model_id,
+            "name": str(entry.get("name") or _model_display_name(model_id) or model_id),
+            "default": False,
+        }
+        if model_id == preferred_id:
+            ordered.insert(0, item)
+        else:
+            pending.append(item)
+    ordered.extend(pending)
+    if ordered:
+        ordered[0]["default"] = True
+    return ordered
+
+
+def _discover_openclaw_models(active_choice=""):
+    oc_bin = _resolve_cli("openclaw")
+    if not oc_bin:
+        return []
+    try:
+        result = subprocess.run([oc_bin, "models", "list", "--json"], capture_output=True, text=True, timeout=15, env=_agent_env(), cwd=str(Path.home()))
+        raw = ((result.stdout or "").strip() or (result.stderr or "").strip())
+        if result.returncode == 0 and raw:
+            payload = json.loads(raw[raw.find("{"):]) if "{" in raw else {}
+            models = []
+            for item in payload.get("models", []):
+                if not isinstance(item, dict):
+                    continue
+                model_id = str(item.get("key") or item.get("id") or "").strip()
+                if not model_id or item.get("missing"):
+                    continue
+                models.append({
+                    "id": model_id,
+                    "name": str(item.get("name") or _model_display_name(model_id) or model_id),
+                    "default": "default" in (item.get("tags") or []) or "configured" in (item.get("tags") or []),
+                })
+            if models:
+                preferred = next((m["id"] for m in models if m.get("default")), "") or active_choice
+                return _unique_model_catalog(models, preferred)
+    except Exception as e:
+        log.debug("OpenClaw model discovery failed: %s", e)
+    return []
+
+
+def _discover_models_from_claude_history(active_choice=""):
+    claude_dir = Path.home() / ".claude" / "projects"
+    if not claude_dir.exists():
+        return []
+    observed = {}
+    for jsonl_file in sorted(claude_dir.rglob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)[:80]:
+        try:
+            with open(jsonl_file, "r", encoding="utf-8") as fh:
+                for idx, line in enumerate(fh):
+                    if idx >= 400:
+                        break
+                    try:
+                        entry = json.loads(line)
+                    except Exception:
+                        continue
+                    model_id = ""
+                    msg = entry.get("message", {})
+                    if isinstance(msg, dict):
+                        model_id = str(msg.get("model") or "").strip()
+                    if not model_id:
+                        model_id = str(entry.get("model") or "").strip()
+                    if model_id:
+                        observed.setdefault(model_id, {"id": model_id, "name": _model_display_name(model_id) or model_id})
+        except Exception as e:
+            log.debug("Claude model scan skip %s: %s", jsonl_file, e)
+    return _unique_model_catalog(list(observed.values()), active_choice)
+
+
+def _discover_models_from_gemini_history(active_choice=""):
+    gemini_root = Path.home() / ".gemini" / "tmp"
+    if not gemini_root.exists():
+        return []
+    observed = {}
+    for json_file in sorted(gemini_root.rglob("chats/*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:80]:
+        try:
+            data = json.loads(json_file.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        stack = [data]
+        while stack:
+            cur = stack.pop()
+            if isinstance(cur, dict):
+                for k, v in cur.items():
+                    if k == "model" and isinstance(v, str) and v.strip():
+                        model_id = v.strip()
+                        observed.setdefault(model_id, {"id": model_id, "name": _model_display_name(model_id) or model_id})
+                    elif isinstance(v, (dict, list)):
+                        stack.append(v)
+            elif isinstance(cur, list):
+                stack.extend(cur)
+    return _unique_model_catalog(list(observed.values()), active_choice)
+
+
+def _legacy_config_models(backend):
+    bc = _config.get("backend_config", {}).get(backend, {})
+    models = bc.get("models", [])
+    return [m for m in models if isinstance(m, dict) and str(m.get("id", "")).strip()]
+
+
 def _get_available_models(backend):
-    """Return models for a backend. Codex + Ollama: runtime discovery. Others: from config."""
+    """Return models for a backend. Runtime discovery is authoritative; config is fallback only."""
+    prefs = _config.get("preferences", {})
+    active_models = prefs.get("active_models", {})
+    active_choice = str(active_models.get(backend, "")).strip()
+    now = time.time()
+    cached = _backend_model_cache["data"].get(backend)
+    cache_ts = float(_backend_model_cache["ts"].get(backend) or 0)
+    if cached is not None and (now - cache_ts) < 90:
+        return cached
+
     if backend == "codex":
         # Read from Codex CLI models cache (auto-updated by codex)
         try:
@@ -25914,12 +26040,15 @@ def _get_available_models(backend):
                     if slug:
                         models.append({"id": slug, "name": m.get("display_name", slug), "default": len(models) == 0})
                 if models:
+                    _backend_model_cache["data"][backend] = models
+                    _backend_model_cache["ts"][backend] = now
                     return models
         except Exception:
             pass
-        # Fallback to config
-        bc = _config.get("backend_config", {}).get("codex", {})
-        return bc.get("models", [])
+        models = _unique_model_catalog(_legacy_config_models("codex"), active_choice)
+        _backend_model_cache["data"][backend] = models
+        _backend_model_cache["ts"][backend] = now
+        return models
     if backend == "ollama":
         try:
             import urllib.request, json as _j
@@ -25934,12 +26063,30 @@ def _get_available_models(backend):
                     name = m.get("name", "")
                     if name:
                         models.append({"id": name, "name": name, "default": len(models) == 0})
+                _backend_model_cache["data"][backend] = models
+                _backend_model_cache["ts"][backend] = now
                 return models
         except Exception:
-            return []
-    # All other backends: read from config
-    bc = _config.get("backend_config", {}).get(backend, {})
-    return bc.get("models", [])
+            models = _unique_model_catalog(_legacy_config_models("ollama"), active_choice)
+            _backend_model_cache["data"][backend] = models
+            _backend_model_cache["ts"][backend] = now
+            return models
+    if backend == "openclaw":
+        models = _discover_openclaw_models(active_choice)
+    elif backend == "claude":
+        models = _discover_models_from_claude_history(active_choice)
+    elif backend == "gemini":
+        models = _discover_models_from_gemini_history(active_choice)
+    else:
+        models = []
+
+    fallback = _legacy_config_models(backend)
+    if active_choice and not any(m.get("id") == active_choice for m in models):
+        fallback = ([{"id": active_choice, "name": _model_display_name(active_choice) or active_choice}] + fallback)
+    models = _unique_model_catalog(models + fallback, active_choice)
+    _backend_model_cache["data"][backend] = models
+    _backend_model_cache["ts"][backend] = now
+    return models
 
 
 def _get_active_model(backend):
@@ -28261,7 +28408,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.80"})
+            self.reply_json({"v": "0.29.81"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -28423,7 +28570,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.80"
+                health["porter_version"] = "0.29.81"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -30252,7 +30399,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.80'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.81'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34921,7 +35068,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.80 ready (localhost only)")
+    print(f"\n  Porter v0.29.81 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

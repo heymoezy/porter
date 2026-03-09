@@ -1,5 +1,16 @@
 # Porter Release Notes
 
+## v0.29.81 (2026-03-09)
+
+**Dynamic Model Catalogs + Runtime Split**
+
+- Claude, Gemini, and OpenClaw model catalogs now resolve from live runtime state instead of Porter-shipped static lists
+- Runtime-discovered model IDs are preserved so newer model versions do not disappear behind stale labels
+- Models tab is narrowed to backend health, config, selection, and testing; session/extraction state is moved out of the tab
+- `System` is relabeled as `Runtime` and now temporarily hosts session/extraction status until that workflow is merged into Cortex
+
+---
+
 ## v0.29.80 (2026-03-09)
 
 **Models Test Reliability + OpenClaw Diagnosis**

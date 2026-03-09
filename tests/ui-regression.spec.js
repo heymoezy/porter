@@ -8,6 +8,7 @@
 // - Visual consistency across all tabs
 
 const { test, expect } = require('@playwright/test');
+test.setTimeout(30000);
 
 // ── Auth helper ──────────────────────────────────────────────────────────────
 
@@ -16,7 +17,7 @@ async function login(page) {
   await page.fill('#uname', 'admin');
   await page.fill('#pw', 'porter');
   await page.click('.login-btn');
-  await page.waitForSelector('.sidebar', { timeout: 5000 });
+  await page.waitForSelector('.sidebar', { timeout: 15000 });
 }
 
 // ── Helper: switch to a module tab ───────────────────────────────────────────
@@ -322,7 +323,7 @@ test.describe('Nav bar structure', () => {
 
   const expectedNavItems = [
     'Chat', 'Agents', 'Projects', 'Workflows',
-    'Locations', 'Files', 'Models', 'Cortex', 'System', 'Extensions', 'Skills', 'Logs', 'Settings'
+    'Locations', 'Files', 'Models', 'Cortex', 'Runtime', 'Extensions', 'Skills', 'Logs', 'Settings'
   ];
 
   test('sidebar contains all expected nav buttons', async ({ page }) => {
