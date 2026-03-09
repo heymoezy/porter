@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.7 (2026-03-09)
+
+**Unified Project Activity Stream**
+
+- Projects overview now shows a real recent activity stream merged from `trace_steps` and `agent_messages`, so project work is visible without tab-hopping
+- Added a lightweight `/api/projects/<id>/activity` endpoint backed by live trace and dispatch data instead of synthetic summaries
+- This makes autonomous project work legible while reusing the indexed data paths already added for speed
+
+---
+
 ## v0.30.6 (2026-03-09)
 
 **Backend Circuit Breaker Routing**

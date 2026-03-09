@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.6 — Backend circuit breaker routing"""
+"""Porter v0.30.7 — Unified project activity stream"""
 
 
 import email
@@ -4772,6 +4772,55 @@ def _load_projects_dashboard() -> dict:
     }
 
 
+def _project_activity_feed(project_id: str, limit: int = 20) -> list:
+    """Return a merged recent activity feed for one project from trace + dispatch data."""
+    pid = str(project_id or "").strip()
+    if not pid:
+        return []
+    limit = max(1, min(int(limit or 20), 100))
+    items = []
+    try:
+        conn = _db_conn()
+        trace_rows = conn.execute(
+            """SELECT ts, agent_name, action, status, output_summary, task_id, trace_id
+               FROM trace_steps WHERE project_id=? ORDER BY ts DESC LIMIT ?""",
+            (pid, limit)
+        ).fetchall()
+        dispatch_rows = conn.execute(
+            """SELECT created_at, persona_id, to_agent, status, response, error, task_id, run_id
+               FROM agent_messages WHERE project_id=? ORDER BY created_at DESC LIMIT ?""",
+            (pid, limit)
+        ).fetchall()
+        conn.close()
+        for r in trace_rows:
+            items.append({
+                "ts": r[0] or 0,
+                "source": "trace",
+                "agent_name": r[1] or "",
+                "action": r[2] or "",
+                "status": r[3] or "",
+                "summary": (r[4] or "")[:220],
+                "task_id": r[5] or "",
+                "ref_id": r[6] or "",
+            })
+        for r in dispatch_rows:
+            items.append({
+                "ts": r[0] or 0,
+                "source": "dispatch",
+                "agent_name": r[1] or "",
+                "action": r[2] or "",
+                "status": r[3] or "",
+                "summary": ((r[5] or "") if (r[3] or "") == "failed" else (r[4] or ""))[:220],
+                "task_id": r[6] or "",
+                "ref_id": r[7] or "",
+            })
+    except Exception as e:
+        log.debug("Project activity feed failed for %s: %s", pid, e)
+        return []
+    items.sort(key=lambda x: float(x.get("ts") or 0), reverse=True)
+    return items[:limit]
+
+
 POLICY_PRESETS: list = [
     {
         "id":          "cost-sensitive",
@@ -9358,7 +9407,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.6</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.7</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10768,6 +10817,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.7', date:'2026-03-09', notes:['Projects overview now shows a real recent activity stream merged from trace_steps and agent_messages, so project work is visible without tab-hopping','Added a lightweight /api/projects/<id>/activity endpoint backed by live trace and dispatch data instead of synthetic summaries','This makes autonomous project work legible while reusing the indexed data paths already added for speed'] },
   { ver:'v0.30.6', date:'2026-03-09', notes:['Dispatch now tracks consecutive backend failures and opens a short circuit breaker window after repeated failures, so Porter routes around bad gateways automatically','The breaker counts both thrown exceptions and returned {ok:false} backend failures, closing a real control-plane blind spot in bridge dispatch','This improves autonomy and speed together by stopping Porter from wasting time on obviously failing backends'] },
   { ver:'v0.30.5', date:'2026-03-09', notes:['Smart routing now respects project/task context when a dispatch belongs to an assigned project, so fallback no longer ignores the project operating lane','Hot agent_messages query paths now have created_at and backend+created_at indexes, making runtime gateway activity and recent dispatch views cheaper under load','This keeps autonomous project work visible and faster without reintroducing stale cache shortcuts'] },
   { ver:'v0.30.4', date:'2026-03-09', notes:['Runtime now shows a unified Gateway Activity feed backed by real agent_messages dispatch data across all associated backends','Gateway activity rows now carry persona, project, and task identity so model work is visible in operational context instead of as anonymous backend traffic','The admin dispatch-log API now returns project/task/persona metadata and backend errors, making Porter\'s operator view useful for autonomous supervision'] },
@@ -13723,6 +13773,13 @@ async function _renderProjTabContent() {
     html += '<span>' + (proj.assigned_personas || []).length + ' agents</span>';
     html += '<span>' + (proj.tokens_used || 0).toLocaleString() + ' tokens</span>';
     html += '</div>';
+    html += '<div style="margin-top:14px">';
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Recent Activity</div>';
+    html += '<div id="proj-activity-list" style="display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--text3)">Loading...</div>';
+    html += '</div>';
+    content.innerHTML = html;
+    _projLoadActivity(proj.id);
+    return;
 
   } else if (_projTab === 'agents') {
     var assigned = proj.assigned_personas || [];
@@ -13820,6 +13877,39 @@ async function _renderProjTabContent() {
   }
 
   content.innerHTML = html;
+}
+
+async function _projLoadActivity(pid) {
+  var el = document.getElementById('proj-activity-list');
+  if (!el) return;
+  try {
+    var data = await api('/api/projects/' + pid + '/activity?limit=18');
+    var rows = (data && data.activity) || [];
+    if (!rows.length) {
+      el.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);text-align:center;color:var(--text3)">No project activity yet.</div>';
+      return;
+    }
+    el.innerHTML = rows.map(function(r) {
+      var tone = r.status === 'complete' || r.status === 'done' ? '#22c55e' : (r.status === 'failed' || r.status === 'error' ? '#ef4444' : '#f59e0b');
+      var actor = r.agent_name || 'Porter';
+      var action = r.action || (r.source === 'dispatch' ? 'dispatch' : 'activity');
+      var summary = r.summary || '';
+      return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">'
+        + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+        + '<span style="font-size:11px;font-weight:600;color:var(--text)">' + escHtml(actor) + '</span>'
+        + '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(action) + '</span>'
+        + (r.task_id ? '<span class="model-card-chip dim" style="font-size:10px">task ' + escHtml(r.task_id) + '</span>' : '')
+        + '</div>'
+        + '<span style="font-size:10px;color:' + tone + ';font-weight:600">' + escHtml((r.status || 'unknown').toUpperCase()) + '</span>'
+        + '</div>'
+        + '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">' + escHtml(summary.substring(0, 220) || '(no summary recorded)') + '</div>'
+        + '<div style="font-size:10px;color:var(--text3)">' + escHtml(_relativeTime(r.ts)) + '</div>'
+        + '</div>';
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);text-align:center;color:#ef4444">Could not load project activity.</div>';
+  }
 }
 
 async function _projLoadFiles(pid) {
@@ -30087,7 +30177,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.6"})
+            self.reply_json({"v": "0.30.7"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -30249,7 +30339,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.6"
+                health["porter_version"] = "0.30.7"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -31643,6 +31733,14 @@ class Handler(BaseHTTPRequestHandler):
             exists_count = sum(1 for f in chain if f["exists"])
             self.reply_json({"ok": True, "files": chain, "exists_count": exists_count, "total": len(chain)})
 
+        elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/activity"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path[len("/api/projects/"):-len("/activity")]
+            if not any(p.get("id") == pid for p in _config.get("projects", [])):
+                self.reply_json({"ok": False, "error": "project not found"}, 404); return
+            limit = max(1, min(int(parse_qs(parsed.query).get("limit", ["20"])[0] or 20), 100))
+            self.reply_json({"ok": True, "project_id": pid, "activity": _project_activity_feed(pid, limit=limit)})
+
         # ── G1: task registry (GET list + GET single) ──────────────────────────
         elif parsed.path == "/api/task-registry" or parsed.path.startswith("/api/task-registry/"):
             token = self.get_session_token()
@@ -32027,7 +32125,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.6'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.7'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36711,7 +36809,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.6 ready (localhost only)")
+    print(f"\n  Porter v0.30.7 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
