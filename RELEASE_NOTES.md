@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.29.94 (2026-03-09)
+
+**Models Response Refresh Removal**
+
+- Removed the post-response Models activity fetch so ordinary backend responses no longer trigger any hidden Models-tab refresh path
+- Models now rely on existing SSE updates and explicit reloads instead of background activity polling after each response
+- This removes the last automatic Models refresh source caused by unrelated backend traffic
+
+---
+
 ## v0.29.93 (2026-03-09)
 
 **Models Grid Churn Removal**
