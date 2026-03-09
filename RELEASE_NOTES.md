@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.8 (2026-03-09)
+
+**Faster Live Models Bootstrap**
+
+- Models bootstrap and snapshot now use short server-side caches keyed by config and CLI fingerprints, so opening the tab no longer forces the same heavy runtime introspection every time
+- Removed the dead browser-side Models snapshot/bootstrap reuse branch, keeping Models live-truth only while simplifying the client load path
+- Runtime metadata now caches server-side for one minute and invalidates on config or binary changes, cutting repeated CLI help/version work without hiding upgrades behind stale browser state
+
+---
+
 ## v0.30.7 (2026-03-09)
 
 **Unified Project Activity Stream**

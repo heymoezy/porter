@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.7 — Unified project activity stream"""
+"""Porter v0.30.8 — Faster live models bootstrap"""
 
 
 import email
@@ -5303,6 +5303,11 @@ def _save_config(cfg: dict) -> None:
     global _config
     CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
     _config = cfg
+    try:
+        _invalidate_models_payload_cache()
+        _invalidate_backend_version_cache()
+    except Exception:
+        pass
 
 def load_config() -> dict:
     cfg: dict = {}
@@ -5400,6 +5405,11 @@ def load_config() -> dict:
 
 def save_config(cfg: dict) -> None:
     CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+    try:
+        _invalidate_models_payload_cache()
+        _invalidate_backend_version_cache()
+    except Exception:
+        pass
 
 def _load_serve_dirs(cfg: dict) -> None:
     """Repopulate global SERVE_DIRS from nodes[*].mounts (local nodes only)."""
@@ -9407,7 +9417,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.7</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.8</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10817,6 +10827,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.8', date:'2026-03-09', notes:['Models bootstrap and snapshot now use short server-side caches keyed by config and CLI fingerprints instead of forcing heavy runtime introspection on every open','Removed the dead browser-side Models snapshot/bootstrap reuse path so the tab stays live-truth only while still rendering from a much cheaper first payload','Models runtime metadata is now cached server-side for one minute and invalidated on config or binary changes, cutting repeated CLI help/version work without reintroducing stale browser truth'] },
   { ver:'v0.30.7', date:'2026-03-09', notes:['Projects overview now shows a real recent activity stream merged from trace_steps and agent_messages, so project work is visible without tab-hopping','Added a lightweight /api/projects/<id>/activity endpoint backed by live trace and dispatch data instead of synthetic summaries','This makes autonomous project work legible while reusing the indexed data paths already added for speed'] },
   { ver:'v0.30.6', date:'2026-03-09', notes:['Dispatch now tracks consecutive backend failures and opens a short circuit breaker window after repeated failures, so Porter routes around bad gateways automatically','The breaker counts both thrown exceptions and returned {ok:false} backend failures, closing a real control-plane blind spot in bridge dispatch','This improves autonomy and speed together by stopping Porter from wasting time on obviously failing backends'] },
   { ver:'v0.30.5', date:'2026-03-09', notes:['Smart routing now respects project/task context when a dispatch belongs to an assigned project, so fallback no longer ignores the project operating lane','Hot agent_messages query paths now have created_at and backend+created_at indexes, making runtime gateway activity and recent dispatch views cheaper under load','This keeps autonomous project work visible and faster without reintroducing stale cache shortcuts'] },
@@ -19248,38 +19259,21 @@ function _showModelsLoadFailure(message) {
 async function loadModels() {
   var loadSeq = ++_modelsLoadSeq;
   try {
-    var cachedSnapshot = _readModelsClientCache(_modelsClientCacheKeys.snapshot, 120000);
-    var cachedBootstrap = cachedSnapshot ? null : _readModelsClientCache(_modelsClientCacheKeys.bootstrap, 60000);
-    var seededSnapshot = false;
-    var seededBootstrap = false;
-    if (cachedSnapshot && cachedSnapshot.providers) {
-      _applyModelsSnapshot(cachedSnapshot, { preferStable: true });
-      _connectModelSSE();
-      seededSnapshot = true;
-      _renderModelsLoading('Refreshing live model state...', { detail: 'Using the last good snapshot while Porter refreshes health, catalogs, and versions.', keepCards: true });
-    } else if (cachedBootstrap && cachedBootstrap.providers) {
-      _applyModelsSnapshot(cachedBootstrap, { preferStable: true });
-      _connectModelSSE();
-      seededBootstrap = true;
-      _renderModelsLoading('Hydrating live model catalogs...', { detail: 'Using cached bootstrap state while Porter refreshes the live catalog.', keepCards: true });
+    if (!_modelsRenderedOnce) {
+      _renderModelsLoading('Bootstrapping model runtimes...', { detail: 'Loading lightweight live structure first, then hydrating dynamic catalogs and health.', count: 4 });
     } else {
-      if (!_modelsRenderedOnce) {
-        _renderModelsLoading('Bootstrapping model runtimes...', { detail: 'Fast cached state first, then live catalog hydration.', count: 4 });
-      } else {
-        _renderModelsLoading('Refreshing live model state...', { detail: 'Models is already rendered; refreshing in the background without replacing the grid.', keepCards: true });
-      }
+      _renderModelsLoading('Refreshing live model state...', { detail: 'Models is already rendered; refreshing in the background without replacing the grid.', keepCards: true });
     }
     if (!_modelSseId) _connectModelSSE();
     _renderModelsLoading('Hydrating live model catalogs...', { detail: 'Refreshing dynamic models, backend health, and version checks.', keepCards: true });
     var snapshotApplied = false;
     var bootstrapApplied = false;
-    var bootPromise = seededSnapshot ? Promise.resolve(null) : api('/api/models/bootstrap');
+    var bootPromise = api('/api/models/bootstrap');
     var snapPromise = api('/api/models/snapshot');
     bootPromise.then(function(boot) {
       if (loadSeq !== _modelsLoadSeq || snapshotApplied) return;
       if (boot && boot.providers) {
-        _writeModelsClientCache(_modelsClientCacheKeys.bootstrap, boot);
-        if (!seededBootstrap) _applyModelsSnapshot(boot, { preferStable: true });
+        _applyModelsSnapshot(boot, { preferStable: true });
         bootstrapApplied = true;
       }
     }).catch(function(e) {
@@ -19290,7 +19284,6 @@ async function loadModels() {
       if (loadSeq !== _modelsLoadSeq) return;
       if (snap && snap.providers) {
         snapshotApplied = true;
-        _writeModelsClientCache(_modelsClientCacheKeys.snapshot, snap);
         _applyModelsSnapshot(snap, { preferStable: true });
       }
       _renderModelsLoading('');
@@ -26701,6 +26694,9 @@ def _backend_meta(name):
 _backend_version_cache = {"data": None, "ts": 0}
 _backend_latest_cache = {"data": {}, "ts": 0}
 _backend_model_cache = {"data": {}, "ts": {}}
+_backend_runtime_cache = {"data": {}, "ts": {}, "fp": {}}
+_models_bootstrap_cache = {"data": None, "ts": 0.0, "fp": ""}
+_models_snapshot_cache = {"data": None, "ts": 0.0, "fp": ""}
 _cli_help_cache = {}
 _cli_binary_fingerprints = {}
 
@@ -26708,6 +26704,18 @@ _cli_binary_fingerprints = {}
 def _invalidate_backend_version_cache():
     _backend_version_cache["data"] = None
     _backend_version_cache["ts"] = 0
+
+
+def _invalidate_models_payload_cache() -> None:
+    _models_bootstrap_cache["data"] = None
+    _models_bootstrap_cache["ts"] = 0.0
+    _models_bootstrap_cache["fp"] = ""
+    _models_snapshot_cache["data"] = None
+    _models_snapshot_cache["ts"] = 0.0
+    _models_snapshot_cache["fp"] = ""
+    _backend_runtime_cache["data"].clear()
+    _backend_runtime_cache["ts"].clear()
+    _backend_runtime_cache["fp"].clear()
 
 
 def _cli_binary_fingerprint(binary: str) -> str:
@@ -26731,6 +26739,7 @@ def _refresh_cli_cache_fingerprints(binaries=None) -> bool:
             changed = True
     if changed:
         _invalidate_backend_version_cache()
+        _invalidate_models_payload_cache()
         _cli_help_cache.clear()
         _backend_model_cache["data"].pop("gemini", None)
         _backend_model_cache["ts"].pop("gemini", None)
@@ -26855,6 +26864,15 @@ def _normalize_gemini_model_id(model_id: str, auth_mode: str = "") -> str:
 
 def _backend_runtime_info(backend: str) -> dict:
     backend = str(backend or "").strip().lower()
+    now = time.time()
+    fp = _cli_binary_fingerprint(backend)
+    if backend == "gemini":
+        fp = f"{fp}|{_gemini_auth_mode()}"
+    cached = _backend_runtime_cache["data"].get(backend)
+    cache_ts = float(_backend_runtime_cache["ts"].get(backend) or 0.0)
+    cache_fp = _backend_runtime_cache["fp"].get(backend, "")
+    if cached and cache_fp == fp and (now - cache_ts) < 60:
+        return dict(cached)
     spec = dict(BACKEND_RUNTIME_SPECS.get(backend) or {})
     info = {"backend": backend, "spec": spec}
     if backend == "gemini":
@@ -26894,6 +26912,9 @@ def _backend_runtime_info(backend: str) -> dict:
             "supports_model_flag": True,
             "supports_headless": True,
         })
+    _backend_runtime_cache["data"][backend] = dict(info)
+    _backend_runtime_cache["ts"][backend] = now
+    _backend_runtime_cache["fp"][backend] = fp
     return info
 
 
@@ -27689,14 +27710,31 @@ def _check_gateway_status() -> dict:
     }
 
 
+def _models_cache_fingerprint() -> str:
+    try:
+        cfg_stat = CONFIG_PATH.stat()
+        cfg_fp = f"{cfg_stat.st_size}:{cfg_stat.st_mtime_ns}"
+    except Exception:
+        cfg_fp = "cfg:missing"
+    cli_fp = "|".join(f"{bk}:{_cli_binary_fingerprints.get(bk, '')}" for bk in sorted(PROVIDER_REGISTRY))
+    return f"{cfg_fp}|{cli_fp}"
+
+
+def _lightweight_provider_available(name: str) -> bool:
+    cap = _capabilities_cache.get(name) or {}
+    if isinstance(cap, dict) and "ok" in cap:
+        return bool(cap.get("ok"))
+    if name == "ollama":
+        return _resolve_cli("ollama") is not None
+    return _resolve_cli(name) is not None
+
+
 def _providers_payload(lightweight: bool = False) -> list:
     providers = []
     availability = {}
     if lightweight:
         for name in PROVIDER_REGISTRY:
-            cap = _capabilities_cache.get(name) or {}
-            if isinstance(cap, dict) and "ok" in cap:
-                availability[name] = bool(cap.get("ok"))
+            availability[name] = _lightweight_provider_available(name)
     else:
         import concurrent.futures as _cf
         with _cf.ThreadPoolExecutor(max_workers=min(5, len(PROVIDER_REGISTRY))) as ex:
@@ -27801,8 +27839,14 @@ def _models_available_payload(lightweight: bool = False) -> dict:
 
 def _models_snapshot(force_versions: bool = False) -> dict:
     _refresh_cli_cache_fingerprints()
-    _run_cap_checks(force=True)
-    return {
+    _run_cap_checks(force=False)
+    now = time.time()
+    fp = _models_cache_fingerprint()
+    if (not force_versions and _models_snapshot_cache.get("data")
+            and _models_snapshot_cache.get("fp") == fp
+            and (now - float(_models_snapshot_cache.get("ts") or 0.0)) < 10.0):
+        return dict(_models_snapshot_cache["data"])
+    payload = {
         "ok": True,
         "providers": _providers_payload(),
         "activity": {},
@@ -27810,12 +27854,22 @@ def _models_snapshot(force_versions: bool = False) -> dict:
         "versions": _probe_backend_versions(force=force_versions),
         "runtimes": {bk: _backend_runtime_info(bk) for bk in PROVIDER_REGISTRY},
     }
+    _models_snapshot_cache["data"] = dict(payload)
+    _models_snapshot_cache["ts"] = now
+    _models_snapshot_cache["fp"] = fp
+    return payload
 
 
 def _models_bootstrap() -> dict:
     _refresh_cli_cache_fingerprints()
-    _run_cap_checks(force=True)
-    return {
+    _run_cap_checks(force=False)
+    now = time.time()
+    fp = _models_cache_fingerprint()
+    if (_models_bootstrap_cache.get("data")
+            and _models_bootstrap_cache.get("fp") == fp
+            and (now - float(_models_bootstrap_cache.get("ts") or 0.0)) < 10.0):
+        return dict(_models_bootstrap_cache["data"])
+    payload = {
         "ok": True,
         "providers": _providers_payload(lightweight=True),
         "activity": {},
@@ -27823,6 +27877,10 @@ def _models_bootstrap() -> dict:
         "versions": _bootstrap_backend_versions(),
         "runtimes": {bk: _backend_runtime_info(bk) for bk in PROVIDER_REGISTRY},
     }
+    _models_bootstrap_cache["data"] = dict(payload)
+    _models_bootstrap_cache["ts"] = now
+    _models_bootstrap_cache["fp"] = fp
+    return payload
 
 
 def _gateway_stop() -> dict:
@@ -30177,7 +30235,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.7"})
+            self.reply_json({"v": "0.30.8"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -30339,7 +30397,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.7"
+                health["porter_version"] = "0.30.8"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -32125,7 +32183,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.7'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.8'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36809,7 +36867,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.7 ready (localhost only)")
+    print(f"\n  Porter v0.30.8 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
