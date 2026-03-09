@@ -220,6 +220,22 @@ def _wf_load_stats():
     except Exception:
         pass
 
+
+def _run_if_due(wf_id, fn):
+    """Run a workflow callback when its interval is due."""
+    try:
+        wf = _workflow_def(wf_id) or {}
+        every = int(wf.get("every_min") or 0)
+        if every <= 0:
+            return False
+        last = _wf_last_run_ts(wf_id)
+        if last and (time.time() - float(last)) < (every * 60):
+            return False
+        fn()
+        return True
+    except Exception:
+        raise
+
 # Register 6 system workflows
 _wf_register("cortex_consolidation", "Cortex Consolidation",
     "Merges similar memories and archives stale ones",
@@ -26509,9 +26525,9 @@ def _model_repair_hint(backend: str, detail: str = "") -> dict:
     text = str(detail or "").lower()
     hint = {}
     if backend == "openclaw":
-        hint["reinstall_cmd"] = "npm uninstall -g openclaw && npm i -g openclaw"
         if any(tok in text for tok in ("cannot find module", "module not found", "err_module_not_found", "syntaxerror", "typeerror", "node:internal")):
             hint["repair_hint"] = "OpenClaw CLI install appears broken. Reinstall the CLI, then re-open/auth the gateway."
+            hint["reinstall_cmd"] = "npm uninstall -g openclaw && npm i -g openclaw"
         elif "duplicate_service_units" in text or "competing service units" in text or "supervisor conflict" in text:
             hint["repair_hint"] = "OpenClaw has competing service units or supervisors. Reinstall will not fix that; disable the duplicate unit so only one gateway service owns the port."
             hint["repair_cmd"] = "systemctl status openclaw-gateway"
@@ -26536,7 +26552,7 @@ def _model_repair_hint(backend: str, detail: str = "") -> dict:
         elif "timed out" in text or "timeout" in text:
             hint["repair_hint"] = "OpenClaw did not answer in time. Check whether the gateway is crash-looping or blocked on startup."
         else:
-            hint["repair_hint"] = "Check OpenClaw CLI health, gateway status, and auth. Reinstall if the binary looks unhealthy."
+            hint["repair_hint"] = "Check OpenClaw bridge health, agent execution, and auth before changing the install."
     elif backend == "claude":
         hint["reinstall_cmd"] = "npm i -g @anthropic-ai/claude-code"
     elif backend == "gemini":
@@ -26788,7 +26804,13 @@ def _check_gateway_status() -> dict:
     diagnosis = _openclaw_runtime_diagnosis()
     diag_summary = list(diagnosis.get("doctor_summary") or [])
     node_issue = any(issue in diagnosis.get("issues", []) for issue in ("node_below_22", "doctor_node_requirement"))
-    repair = _model_repair_hint("openclaw", " ".join(diag_summary or diagnosis.get("issues", [])))
+    repair_detail = " ".join(diag_summary or diagnosis.get("issues", []))
+    if (diagnosis.get("gateway_running") or diagnosis.get("gateway_listening")) and diagnosis.get("recent_agent_failure"):
+        if diagnosis.get("recent_agent_success"):
+            repair_detail = "agent_path_flaky"
+        else:
+            repair_detail = "agent execution failed timeout"
+    repair = _model_repair_hint("openclaw", repair_detail)
     return {
         "ok": True,
         "running": pid is not None,
