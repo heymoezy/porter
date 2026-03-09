@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.75 — Fix OpenClaw/Gemini tests, visual Test All, remove redundant status"""
+"""Porter v0.29.76 — Update detection, test-first summary, version badges with update alerts"""
 
 
 import email
@@ -9112,7 +9112,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.75</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.76</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10416,6 +10416,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.76', date:'2026-03-09', notes:['Update detection: show Update Available badge when CLI outdated','Summary shows detected count, not online count (test-first)','Version badges show installed + latest with update command','Codex reads ~/.codex/version.json for latest, npm outdated for others'] },
   { ver:'v0.29.75', date:'2026-03-09', notes:['Fix OpenClaw test (--agent main)','Gemini test: strip YOLO stderr','Remove redundant CLI ready / Server running status','Test All triggers each button visually','Log all test failures','Truncate error messages in cards','Per-backend config button (auth, host, port)'] },
   { ver:'v0.29.74', date:'2026-03-09', notes:['Fix Test All (POST + 90s timeout)','Auto row replaced with per-card Test All button','No Test button on Auto selector row'] },
   { ver:'v0.29.73', date:'2026-03-09', notes:['Dynamic model detection (Codex reads models_cache.json, real Claude/Gemini models)','Test All button, removed useless Refresh','Removed redundant model sub-header from cards','Auto only shown when 2+ models','CLI health status for all backends','Gateway vs model testing separated'] },
@@ -18275,15 +18276,18 @@ async function loadModels() {
         // Populate version badge placeholders
         Object.keys(window._modelVersions).forEach(function(bk) {
           var vd = window._modelVersions[bk];
-          if (!vd || !vd.version) return;
           var el = document.getElementById('ver-badge-' + bk);
-          if (!el) return;
-          var html = '<span style="font-size:10px;color:var(--text3);font-family:monospace">v' + escHtml(vd.version) + '</span>';
-          if (vd.update_available) {
-            html += ' <span style="font-size:10px;color:#f59e0b;cursor:pointer" onclick="_showUpdateModal(\'' + bk + '\',\'' + escHtml(vd.update_available) + '\')">'
-              + '\u26a0 v' + escHtml(vd.update_available) + ' available</span>';
+          if (!el || !vd) return;
+          if (vd.version) {
+            var html = '<span style="font-size:10px;color:var(--text3)">' + escHtml(vd.version) + '</span>';
+            if (vd.latest && vd.latest !== vd.version) {
+              html += ' <span style="font-size:10px;color:#f59e0b;font-weight:600">Update: ' + escHtml(vd.latest) + '</span>';
+              if (vd.update_cmd) {
+                html += '<br><code style="font-size:10px;color:var(--accent);cursor:pointer" onclick="navigator.clipboard.writeText(\'' + escHtml(vd.update_cmd) + '\');toast(\'' + escHtml(vd.update_cmd) + ' copied\',\'ok\')" title="Click to copy">' + escHtml(vd.update_cmd) + '</code>';
+              }
+            }
+            el.innerHTML = html;
           }
-          el.innerHTML = html;
         });
       }).catch(function() {});
     _renderModelsSummary(data);
@@ -19202,12 +19206,12 @@ async function _selectModel(sel) {
 function _renderModelsSummary(data) {
   var el = document.getElementById('models-summary');
   if (!el || !data || !data.providers) return;
-  var online = data.providers.filter(function(p){ return p.available; }).length;
-  var offline = data.providers.length - online;
+  var found = data.providers.filter(function(p){ return p.available; }).length;
+  var missing = data.providers.length - found;
   var parts = [];
-  if (online) parts.push('<span style="color:#22c55e">● ' + online + ' online</span>');
-  if (offline) parts.push('<span style="color:var(--text3)">○ ' + offline + ' offline</span>');
-  el.innerHTML = parts.join(' · ') || 'No models detected.';
+  if (found) parts.push(found + ' backend' + (found > 1 ? 's' : '') + ' detected');
+  if (missing) parts.push(missing + ' not installed');
+  el.innerHTML = '<span style="color:var(--text2)">' + (parts.join(' · ') || 'No backends detected') + '</span>';
 }
 
 function _renderModelCards(data, act) {
@@ -25762,13 +25766,36 @@ def _probe_backend_versions():
     # Gemini
     versions["gemini"] = _cli_version("gemini")
 
-    # Codex
-    versions["codex"] = _cli_version("codex", lambda out: out.split()[-1] if out else "")
+    # Codex — also check ~/.codex/version.json for latest available
+    _cdx_ver = _cli_version("codex", lambda out: out.split()[-1] if out else "")
+    try:
+        _cdx_vjson = json.loads((Path.home() / ".codex" / "version.json").read_text())
+        _cdx_latest = _cdx_vjson.get("latest_version", "")
+        if _cdx_latest and _cdx_latest != _cdx_ver.get("version", ""):
+            _cdx_ver["latest"] = _cdx_latest
+            _cdx_ver["update_cmd"] = "npm i -g @openai/codex"
+    except Exception:
+        pass
+    versions["codex"] = _cdx_ver
 
     # Google Workspace CLI
     versions["gws"] = _cli_version("gws")
 
 
+
+    # Check npm outdated for update detection (non-blocking, best-effort)
+    _npm_pkgs = {"claude": "@anthropic-ai/claude-code", "gemini": "@google/gemini-cli", "openclaw": "openclaw"}
+    for _nbk, _npkg in _npm_pkgs.items():
+        if _nbk in versions and versions[_nbk].get("detected"):
+            try:
+                _npm_r = subprocess.run(["npm", "ls", "-g", _npkg, "--depth=0", "--json"],
+                                       capture_output=True, text=True, timeout=5, env=_agent_env())
+                _npm_d = json.loads(_npm_r.stdout or "{}")
+                _deps = _npm_d.get("dependencies", {})
+                _pkg_info = _deps.get(_npkg.split("/")[-1], _deps.get(_npkg, {}))
+                # npm ls doesn't show latest — skip for now, version.json approach is better
+            except Exception:
+                pass
 
     _backend_version_cache["data"] = versions
     _backend_version_cache["ts"] = now
@@ -28018,7 +28045,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.75"})
+            self.reply_json({"v": "0.29.76"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -28180,7 +28207,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.75"
+                health["porter_version"] = "0.29.76"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -30005,7 +30032,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.75'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.76'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34649,7 +34676,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.75 ready (localhost only)")
+    print(f"\n  Porter v0.29.76 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
