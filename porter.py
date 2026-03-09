@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.9 — SSE runtime activity refresh"""
+"""Porter v0.30.10 — Project knowledge browser + Cortex scope filters"""
 
 
 import email
@@ -9417,7 +9417,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.9</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.10</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10831,7 +10831,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 
 const CHANGELOG = [
   { ver:'v0.30.9', date:'2026-03-09', notes:['Runtime gateway activity now refreshes from live bridge SSE events instead of a tight 5-second poll loop, reducing background load while making backend activity feel more immediate','Kept a light 30-second fallback poll so the Runtime activity feed still self-heals if SSE events are missed','This cuts unnecessary repeat queries on the same dispatch log path while preserving the rule that gateway activity must stay visible'] },
-  { ver:'v0.30.9', date:'2026-03-09', notes:['Projects Memory sub-tab upgraded to full knowledge browser with confidence bars, importance indicators, timestamps, agent attribution, search, archive/restore/delete','Cortex tab now has Agent/Project/Global scope filter buttons for viewing knowledge by scope','Project memories show reinforcement count, injection frequency, and relative age for each fact'] },
+  { ver:'v0.30.10', date:'2026-03-09', notes:['Projects Memory sub-tab upgraded to full knowledge browser with confidence bars, importance indicators, timestamps, agent attribution, search, archive/restore/delete','Cortex tab now has Agent/Project/Global scope filter buttons for viewing knowledge by scope','Project memories show reinforcement count, injection frequency, and relative age for each fact'] },
   { ver:'v0.30.8', date:'2026-03-09', notes:['Models bootstrap and snapshot now use short server-side caches keyed by config and CLI fingerprints instead of forcing heavy runtime introspection on every open','Removed the dead browser-side Models snapshot/bootstrap reuse path so the tab stays live-truth only while still rendering from a much cheaper first payload','Models runtime metadata is now cached server-side for one minute and invalidated on config or binary changes, cutting repeated CLI help/version work without reintroducing stale browser truth'] },
   { ver:'v0.30.7', date:'2026-03-09', notes:['Projects overview now shows a real recent activity stream merged from trace_steps and agent_messages, so project work is visible without tab-hopping','Added a lightweight /api/projects/<id>/activity endpoint backed by live trace and dispatch data instead of synthetic summaries','This makes autonomous project work legible while reusing the indexed data paths already added for speed'] },
   { ver:'v0.30.6', date:'2026-03-09', notes:['Dispatch now tracks consecutive backend failures and opens a short circuit breaker window after repeated failures, so Porter routes around bad gateways automatically','The breaker counts both thrown exceptions and returned {ok:false} backend failures, closing a real control-plane blind spot in bridge dispatch','This improves autonomy and speed together by stopping Porter from wasting time on obviously failing backends'] },
@@ -30335,7 +30335,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.9"})
+            self.reply_json({"v": "0.30.10"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -30497,7 +30497,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.9"
+                health["porter_version"] = "0.30.10"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -32283,7 +32283,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.9'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.10'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36967,7 +36967,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.9 ready (localhost only)")
+    print(f"\n  Porter v0.30.10 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
