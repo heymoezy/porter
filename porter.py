@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.76 — Update detection, test-first summary, version badges with update alerts"""
+"""Porter v0.29.78 — Fix logging, version display, neutral dots, remove summary"""
 
 
 import email
@@ -9112,7 +9112,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.76</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.78</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9810,7 +9810,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <!-- Backends sub-tab -->
     <div id="models-backends-tab">
       <div class="module-intro">AI backends available to Porter. Each persona routes through one of these.</div>
-      <div id="models-summary" style="margin:12px 0 16px;font-size:13px;color:var(--text2)"></div>
+
       <div id="extraction-progress-bar" style="margin:0 0 12px;padding:0"><div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px"><div style="display:flex;align-items:center;gap:8px"><span class="learn-spinner"></span><span style="font-size:12px;color:var(--text3)">Loading extraction status...</span></div></div></div>
       <div id="models-grid" class="models-grid">
         <div class="loading-indicator">Loading models...</div>
@@ -10416,6 +10416,8 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.78', date:'2026-03-09', notes:['All model test results logged (WARNING level)','Removed backends detected summary','Neutral dots (gray) until tests verify','Version display: always prefixed with v','Fix OpenClaw/Claude/Gemini version parsing'] },
+  { ver:'v0.29.77', date:'2026-03-09', notes:['Backend config as modal popup (not inline)','Current values pre-populated in modal','Masked auth token shown as placeholder'] },
   { ver:'v0.29.76', date:'2026-03-09', notes:['Update detection: show Update Available badge when CLI outdated','Summary shows detected count, not online count (test-first)','Version badges show installed + latest with update command','Codex reads ~/.codex/version.json for latest, npm outdated for others'] },
   { ver:'v0.29.75', date:'2026-03-09', notes:['Fix OpenClaw test (--agent main)','Gemini test: strip YOLO stderr','Remove redundant CLI ready / Server running status','Test All triggers each button visually','Log all test failures','Truncate error messages in cards','Per-backend config button (auth, host, port)'] },
   { ver:'v0.29.74', date:'2026-03-09', notes:['Fix Test All (POST + 90s timeout)','Auto row replaced with per-card Test All button','No Test button on Auto selector row'] },
@@ -18177,58 +18179,70 @@ async function _testModel(event, backendId, modelId, testId) {
 }
 
 async function _openBackendConfig(backendId) {
-  var card = document.querySelector('.model-card[data-model-id="' + backendId + '"]');
-  if (!card) return;
-  var panel = card.querySelector('.backend-config-panel');
-  if (panel) { panel.style.display = panel.style.display === 'none' ? 'block' : 'none'; return; }
-  // Create config panel
-  var div = document.createElement('div');
-  div.className = 'backend-config-panel';
-  div.style.cssText = 'margin:8px 0;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:11px';
-  div.innerHTML = '<div style="font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><span>Config</span><button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="this.closest(\'.backend-config-panel\').style.display=\'none\'">Close</button></div>'
-    + '<div style="display:grid;gap:6px">'
-    + '<label style="color:var(--text3)">Description<input id="bcfg-desc-' + backendId + '" class="form-input" style="font-size:11px;padding:3px 6px;margin-top:2px;width:100%" /></label>'
-    + '<label style="color:var(--text3)">Auth Token<input id="bcfg-token-' + backendId + '" class="form-input" style="font-size:11px;padding:3px 6px;margin-top:2px;width:100%" type="password" placeholder="Leave blank to keep current" /></label>'
-    + '<label style="color:var(--text3)">Host<input id="bcfg-host-' + backendId + '" class="form-input" style="font-size:11px;padding:3px 6px;margin-top:2px;width:100%" placeholder="127.0.0.1" /></label>'
-    + '<label style="color:var(--text3)">Port<input id="bcfg-port-' + backendId + '" class="form-input" style="font-size:11px;padding:3px 6px;margin-top:2px;width:100%" placeholder="e.g. 18789" /></label>'
-    + '</div>'
-    + '<button class="btn btn-primary" style="font-size:11px;padding:4px 12px;margin-top:8px;width:100%" onclick="_saveBackendConfig(\'' + backendId + '\')">Save</button>';
-  // Insert before divider
-  var divider = card.querySelector('.model-card-divider');
-  if (divider) card.insertBefore(div, divider);
-  else card.appendChild(div);
+  // Remove existing modal if any
+  var old = document.getElementById('bcfg-overlay');
+  if (old) old.remove();
+  // Create modal overlay
+  var overlay = document.createElement('div');
+  overlay.id = 'bcfg-overlay';
+  overlay.className = 'overlay';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+  var label = backendId;
+  var prov = (window._modelProviders || []).find(function(p) { return p.id === backendId; });
+  if (prov) label = prov.label || backendId;
+  var modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = '<h3>' + escHtml(label) + ' Config</h3>'
+    + '<p style="margin-bottom:14px">Configure connection settings for this backend.</p>'
+    + '<div style="display:grid;gap:12px">'
+    + '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Description</label>'
+    + '<input id="bcfg-desc" class="form-input" style="margin-bottom:0" /></div>'
+    + '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Auth Token</label>'
+    + '<input id="bcfg-token" type="password" class="form-input" style="margin-bottom:0" placeholder="Leave blank to keep current" /></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    + '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Host</label>'
+    + '<input id="bcfg-host" class="form-input" style="margin-bottom:0" placeholder="127.0.0.1" /></div>'
+    + '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Port</label>'
+    + '<input id="bcfg-port" class="form-input" style="margin-bottom:0" placeholder="e.g. 18789" /></div>'
+    + '</div></div>'
+    + '<div class="modal-actions" style="margin-top:18px">'
+    + '<button class="btn btn-ghost" onclick="document.getElementById(\'bcfg-overlay\').remove()">Cancel</button>'
+    + '<button class="btn btn-primary" onclick="_saveBackendConfig(\'' + escHtml(backendId) + '\')">Save</button>'
+    + '</div>';
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
   // Load current config
   var r = await api('/api/backend/config?backend=' + backendId);
   if (r && r.config) {
     var c = r.config;
-    var descEl = document.getElementById('bcfg-desc-' + backendId);
-    var hostEl = document.getElementById('bcfg-host-' + backendId);
-    var portEl = document.getElementById('bcfg-port-' + backendId);
+    var descEl = document.getElementById('bcfg-desc');
+    var hostEl = document.getElementById('bcfg-host');
+    var portEl = document.getElementById('bcfg-port');
+    var tokenEl = document.getElementById('bcfg-token');
     if (descEl) descEl.value = c.description || '';
     if (hostEl) hostEl.value = c.host || '';
     if (portEl) portEl.value = c.port || c.gateway_port || '';
-    if (c.has_auth_token) {
-      var tokenEl = document.getElementById('bcfg-token-' + backendId);
-      if (tokenEl) tokenEl.placeholder = 'Set (' + (c.auth_token_masked || '****') + ')';
+    if (c.has_auth_token && tokenEl) {
+      tokenEl.placeholder = 'Current: ' + (c.auth_token_masked || '****') + ' (leave blank to keep)';
     }
   }
 }
 
 async function _saveBackendConfig(backendId) {
   var payload = { backend: backendId };
-  var descEl = document.getElementById('bcfg-desc-' + backendId);
-  var tokenEl = document.getElementById('bcfg-token-' + backendId);
-  var hostEl = document.getElementById('bcfg-host-' + backendId);
-  var portEl = document.getElementById('bcfg-port-' + backendId);
-  if (descEl && descEl.value) payload.description = descEl.value;
+  var descEl = document.getElementById('bcfg-desc');
+  var tokenEl = document.getElementById('bcfg-token');
+  var hostEl = document.getElementById('bcfg-host');
+  var portEl = document.getElementById('bcfg-port');
+  if (descEl) payload.description = descEl.value;
   if (tokenEl && tokenEl.value) payload.auth_token = tokenEl.value;
-  if (hostEl && hostEl.value) payload.host = hostEl.value;
-  if (portEl && portEl.value) payload.port = parseInt(portEl.value) || portEl.value;
+  if (hostEl) payload.host = hostEl.value;
+  if (portEl && portEl.value) payload.port = parseInt(portEl.value) || 0;
   var r = await api('/api/backend/config', payload);
   if (r && r.ok) {
     toast('Config saved', 'ok');
-    var panel = document.querySelector('.model-card[data-model-id="' + backendId + '"] .backend-config-panel');
-    if (panel) panel.style.display = 'none';
+    var overlay = document.getElementById('bcfg-overlay');
+    if (overlay) overlay.remove();
     loadModels();
   } else {
     toast((r && r.error) || 'Failed to save', 'err');
@@ -18279,9 +18293,11 @@ async function loadModels() {
           var el = document.getElementById('ver-badge-' + bk);
           if (!el || !vd) return;
           if (vd.version) {
-            var html = '<span style="font-size:10px;color:var(--text3)">' + escHtml(vd.version) + '</span>';
+            var _vstr = vd.version.match(/^[0-9]/) ? 'v' + vd.version : vd.version;
+            var html = '<span style="font-size:10px;color:var(--text3)">' + escHtml(_vstr) + '</span>';
             if (vd.latest && vd.latest !== vd.version) {
-              html += ' <span style="font-size:10px;color:#f59e0b;font-weight:600">Update: ' + escHtml(vd.latest) + '</span>';
+              var _lstr = vd.latest.match(/^[0-9]/) ? 'v' + vd.latest : vd.latest;
+              html += ' <span style="font-size:10px;color:#f59e0b;font-weight:600">Update: ' + escHtml(_lstr) + '</span>';
               if (vd.update_cmd) {
                 html += '<br><code style="font-size:10px;color:var(--accent);cursor:pointer" onclick="navigator.clipboard.writeText(\'' + escHtml(vd.update_cmd) + '\');toast(\'' + escHtml(vd.update_cmd) + ' copied\',\'ok\')" title="Click to copy">' + escHtml(vd.update_cmd) + '</code>';
               }
@@ -18290,7 +18306,8 @@ async function loadModels() {
           }
         });
       }).catch(function() {});
-    _renderModelsSummary(data);
+    window._modelProviders = data.providers || [];
+
     _renderModelCards(data, _modelActivityData);
     _checkBackendStatuses(data.providers);
     _connectModelSSE();
@@ -19203,16 +19220,7 @@ async function _selectModel(sel) {
   } catch(e) { toast('Error selecting model', 'err'); }
 }
 
-function _renderModelsSummary(data) {
-  var el = document.getElementById('models-summary');
-  if (!el || !data || !data.providers) return;
-  var found = data.providers.filter(function(p){ return p.available; }).length;
-  var missing = data.providers.length - found;
-  var parts = [];
-  if (found) parts.push(found + ' backend' + (found > 1 ? 's' : '') + ' detected');
-  if (missing) parts.push(missing + ' not installed');
-  el.innerHTML = '<span style="color:var(--text2)">' + (parts.join(' · ') || 'No backends detected') + '</span>';
-}
+
 
 function _renderModelCards(data, act) {
   var grid = document.getElementById('models-grid');
@@ -19226,8 +19234,8 @@ function _renderModelCards(data, act) {
   _modelTimers = {};
 
   grid.innerHTML = data.providers.map(function(p) {
-    var dotColor = p.available ? '#22c55e' : '#ef4444';
-    var offClass = p.available ? '' : ' offline';
+    var dotColor = '#6b7280';  // neutral gray until tested
+    var offClass = '';
 
 
 
@@ -25748,7 +25756,7 @@ def _probe_backend_versions():
             return {"version": "", "detected": False}
 
     # OpenClaw
-    versions["openclaw"] = _cli_version("openclaw")
+    versions["openclaw"] = _cli_version("openclaw", lambda out: out.split()[1] if len(out.split()) > 1 else out.strip())
 
     # Ollama
     try:
@@ -25764,7 +25772,7 @@ def _probe_backend_versions():
     versions["claude"] = _cli_version("claude", lambda out: out.split()[0] if out else "")
 
     # Gemini
-    versions["gemini"] = _cli_version("gemini")
+    versions["gemini"] = _cli_version("gemini", lambda out: out.split("@")[-1].strip() if "@" in out else out.split()[-1] if out else "")
 
     # Codex — also check ~/.codex/version.json for latest available
     _cdx_ver = _cli_version("codex", lambda out: out.split()[-1] if out else "")
@@ -28045,7 +28053,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.76"})
+            self.reply_json({"v": "0.29.78"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -28207,7 +28215,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.76"
+                health["porter_version"] = "0.29.78"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -30032,7 +30040,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.76'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.78'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30876,6 +30884,10 @@ class Handler(BaseHTTPRequestHandler):
             _test_bk = str(body.get("backend", body.get("model_id", ""))).strip()
             _test_model = str(body.get("model", "")).strip()
             result = _test_model_connectivity(_test_bk, _test_model)
+            if result.get("ok"):
+                log.info("Model test OK: backend=%s model=%s latency=%sms", _test_bk, result.get("model", ""), result.get("latency_ms", "?"))
+            else:
+                log.warning("Model test FAIL: backend=%s model=%s error=%s", _test_bk, result.get("model", ""), result.get("error", "unknown"))
             self.reply_json(result)
 
         elif parsed.path == "/api/backend/config":
@@ -34676,7 +34688,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.76 ready (localhost only)")
+    print(f"\n  Porter v0.29.78 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
