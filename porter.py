@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.4 — Runtime gateway activity visibility"""
+"""Porter v0.30.5 — Project-aware routing + dispatch feed indexing"""
 
 
 import email
@@ -459,6 +459,7 @@ def _db_init():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_run ON agent_messages(run_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_status ON agent_messages(status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_chain ON agent_messages(chain_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_created ON agent_messages(created_at DESC)")
 
     # v0.28.4 — Job proposals from agents
     conn.execute("""
@@ -513,6 +514,7 @@ def _db_init():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_persona ON agent_messages(persona_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_project ON agent_messages(project_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_task ON agent_messages(task_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_backend_created ON agent_messages(to_agent, created_at DESC)")
     
     # 1. Migrate users from _config if table is empty
     count = conn.execute("SELECT count(*) FROM users").fetchone()[0]
@@ -9356,7 +9358,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.4</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.5</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10766,6 +10768,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.5', date:'2026-03-09', notes:['Smart routing now respects project/task context when a dispatch belongs to an assigned project, so fallback no longer ignores the project operating lane','Hot agent_messages query paths now have created_at and backend+created_at indexes, making runtime gateway activity and recent dispatch views cheaper under load','This keeps autonomous project work visible and faster without reintroducing stale cache shortcuts'] },
   { ver:'v0.30.4', date:'2026-03-09', notes:['Runtime now shows a unified Gateway Activity feed backed by real agent_messages dispatch data across all associated backends','Gateway activity rows now carry persona, project, and task identity so model work is visible in operational context instead of as anonymous backend traffic','The admin dispatch-log API now returns project/task/persona metadata and backend errors, making Porter\'s operator view useful for autonomous supervision'] },
   { ver:'v0.30.3', date:'2026-03-09', notes:['Persona dispatch can now resolve an active project and task, inject project brief/decisions/tasks into the prompt context, and persist project identity into trace data','Task-targeted persona dispatches now update task ownership and completion state automatically, so assigned work can move through Porter without a second manual status pass','Cortex extraction now defaults to project scope when a persona dispatch belongs to a project, making project learning first-class instead of a loose tag'] },
   { ver:'v0.30.2', date:'2026-03-09', notes:['Removed the legacy models-grid timeout wrapper that could replace the entire Models grid with a retry block after 10s','Models load failures now stay on the top loading rail instead of blanking the grid, preserving any rendered cards','This restores the rule that nothing should ever wipe the whole Models grid during refresh or timeout handling'] },
@@ -28103,10 +28106,43 @@ def _resolve_with_fallback(preferred, message=""):
     return (preferred, None)
 
 
-def _smart_route(message):
+def _project_route_hint(project_id="", task_id="", persona_id=""):
+    """Return a project/task-aware preferred backend when one is obvious."""
+    task = _task_by_id(task_id)
+    if task:
+        assigned_persona = str(task.get("assigned_persona_id") or "").strip()
+        if assigned_persona:
+            persona = _persona_by_id(assigned_persona)
+            preferred = str((persona or {}).get("preferred_backend") or "").strip().lower()
+            if preferred in PROVIDER_REGISTRY:
+                return preferred
+    pid = str(project_id or "").strip()
+    proj = _project_by_id(pid) if pid else None
+    assigned = [str(x).strip() for x in (proj or {}).get("assigned_personas", []) if str(x).strip()]
+    if persona_id and persona_id in assigned:
+        persona = _persona_by_id(persona_id)
+        preferred = str((persona or {}).get("preferred_backend") or "").strip().lower()
+        if preferred in PROVIDER_REGISTRY:
+            return preferred
+    preferreds = []
+    for assigned_persona in assigned:
+        persona = _persona_by_id(assigned_persona)
+        preferred = str((persona or {}).get("preferred_backend") or "").strip().lower()
+        if preferred in PROVIDER_REGISTRY:
+            preferreds.append(preferred)
+    unique = sorted(set(preferreds))
+    if len(unique) == 1:
+        return unique[0]
+    return ""
+
+
+def _smart_route(message, project_id="", task_id="", persona_id=""):
     """Decide which backend to use based on message content.
     Returns (backend, model) tuple. Probes health + walks fallback chain.
     """
+    project_hint = _project_route_hint(project_id=project_id, task_id=task_id, persona_id=persona_id)
+    if project_hint:
+        return _resolve_with_fallback(project_hint, message)
     # If routing_mode is "ranked", use user-configured rankings
     prefs = _config.get("preferences", {})
     if prefs.get("routing_mode") == "ranked":
@@ -28659,7 +28695,7 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
                 break
         if not backend or backend not in PROVIDER_REGISTRY:
             # Smart route as last resort
-            backend, model_override = _smart_route(message)
+            backend, model_override = _smart_route(message, project_id=resolved_project_id, task_id=task_id, persona_id=persona_id)
 
     # Update persona status
     try:
@@ -30006,7 +30042,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.4"})
+            self.reply_json({"v": "0.30.5"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -30168,7 +30204,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.4"
+                health["porter_version"] = "0.30.5"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -31946,7 +31982,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.4'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.5'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36630,7 +36666,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.4 ready (localhost only)")
+    print(f"\n  Porter v0.30.5 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

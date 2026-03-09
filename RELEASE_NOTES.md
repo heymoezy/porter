@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.5 (2026-03-09)
+
+**Project-Aware Routing + Dispatch Feed Indexing**
+
+- Smart routing now respects project and task context when a dispatch belongs to an assigned project, so fallback no longer ignores the project operating lane
+- Hot `agent_messages` query paths now have `created_at` and `(to_agent, created_at)` indexes, making runtime gateway activity and recent dispatch views cheaper under load
+- This keeps autonomous project work visible and faster without reintroducing stale cache shortcuts
+
+---
+
 ## v0.30.4 (2026-03-09)
 
 **Runtime Gateway Activity**
