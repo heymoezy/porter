@@ -1440,7 +1440,7 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
         for _ext_bk in _extract_backends:
             if _ext_bk not in PROVIDER_REGISTRY:
                 continue
-            result = dispatch_agent(extract_prompt, _ext_bk, timeout=30)
+            result = dispatch_agent(extract_prompt, _ext_bk, timeout=60)
             if result.get("ok"):
                 break
             log.debug("Cortex extraction failed on %s: %s", _ext_bk, result.get("error", "?")[:80])
@@ -1584,11 +1584,16 @@ def _cortex_batch_extract(limit=20):
     try:
         conn = _db_conn()
         # Get recent complete dispatches with response text
+        # Get recent dispatches that haven't been extracted
+        # Exclude extraction dispatches themselves (message contains 'memory extraction')
+        # Only extract from dispatches with persona_id (real agent work, not system ops)
         rows = conn.execute("""
             SELECT run_id, to_agent, message, response, persona_id, model, created_at
             FROM agent_messages 
             WHERE status='complete' AND response IS NOT NULL AND length(response) > 100
-            AND run_id NOT IN (SELECT DISTINCT source_id FROM cortex_memories WHERE source_type='dispatch')
+            AND message NOT LIKE '%memory extraction%'
+            AND message NOT LIKE '%Extract ONLY durable%'
+            AND persona_id IS NOT NULL AND persona_id != ''
             ORDER BY created_at DESC LIMIT ?
         """, (limit,)).fetchall()
         conn.close()
