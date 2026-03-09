@@ -7105,66 +7105,6 @@ async function doLogin() {
   }
 }
 </script>
-<div id="create-task-modal" style="display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.55);align-items:center;justify-content:center" onclick="if(event.target===this)closeCreateTaskModal()">
-  <div style="background:var(--bg1);border:1px solid var(--border);border-radius:12px;padding:24px;width:460px;max-width:96vw;box-shadow:0 12px 40px rgba(0,0,0,.4)">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-      <span style="font-size:15px;font-weight:700;color:var(--text)">New task</span>
-      <button onclick="closeCreateTaskModal()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;padding:0 2px">&#x2715;</button>
-    </div>
-    <div style="margin-bottom:14px">
-      <input id="ct-title" type="text" placeholder="Task title" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:14px;font-weight:500" onkeydown="if(event.key==='Enter')submitCreateTask()">
-    </div>
-    <div style="margin-bottom:14px">
-      <select id="ct-project" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:13px">
-        <option value="">No project</option>
-      </select>
-    </div>
-    <div style="margin-bottom:14px">
-      <textarea id="ct-desc" rows="2" placeholder="Description (optional)" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:13px;resize:vertical"></textarea>
-    </div>
-    <div style="margin-bottom:14px">
-      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Priority</div>
-      <div style="display:flex;gap:6px">
-        <button class="ct-prio-btn treg-stab" data-prio="low"    onclick="ctSetPrio(this)">Low</button>
-        <button class="ct-prio-btn treg-stab active" data-prio="normal"  onclick="ctSetPrio(this)">Normal</button>
-        <button class="ct-prio-btn treg-stab" data-prio="high"   onclick="ctSetPrio(this)">High</button>
-        <button class="ct-prio-btn treg-stab" data-prio="urgent" onclick="ctSetPrio(this)" style="color:#ef4444">Urgent</button>
-      </div>
-    </div>
-    <div style="margin-bottom:20px">
-      <input id="ct-tags" type="text" placeholder="Tags: backend, sprint6  (comma-separated)" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:13px">
-    </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn btn-ghost" onclick="closeCreateTaskModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitCreateTask()">Create</button>
-    </div>
-  </div>
-</div>
-
-
-
-
-<!-- Keyboard shortcuts overlay -->
-<div class="kb-overlay" id="kbOverlay" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="kb-dialog">
-    <div class="kb-title">Keyboard Shortcuts</div>
-    <div class="kb-row"><span class="kb-key">Ctrl+K</span><span class="kb-desc">Focus chat input</span></div>
-    <div class="kb-row"><span class="kb-key">1</span>-<span class="kb-key">9</span><span class="kb-desc">Switch tabs (Chat, Agents, Skills, Projects, Workflows, Locations, Files, Models, Cortex)</span></div>
-    <div class="kb-row"><span class="kb-key">Esc</span><span class="kb-desc">Close panel / cancel</span></div>
-    <div class="kb-row"><span class="kb-key">?</span><span class="kb-desc">Show this help</span></div>
-    <div class="kb-row"><span class="kb-key">Enter</span><span class="kb-desc">Send message</span></div>
-    <div class="kb-row"><span class="kb-key">Shift+Enter</span><span class="kb-desc">New line in chat</span></div>
-    <div class="kb-row"><span class="kb-key">/</span><span class="kb-desc">Slash commands (in chat)</span></div>
-    <div class="kb-row"><span class="kb-key">@</span><span class="kb-desc">Target model (in chat)</span></div>
-    <div class="kb-action">
-      <button class="btn-tour" onclick="startTour()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        Start Guided Tour
-      </button>
-    </div>
-    <div style="margin-top:12px;text-align:center;font-size:11px;color:var(--text3)">Press Esc or click outside to close</div>
-  </div>
-</div>
 
 </body>
 </html>
@@ -9171,7 +9111,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.67</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.68</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10474,6 +10414,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.68', date:'2026-03-09', notes:['FIX: login page was rendering keyboard shortcuts overlay and task modal (belonged in main page only)'] },
   { ver:'v0.29.67', date:'2026-03-08', notes:['Squad creation wizard (3-step)','Per-squad config buttons replace global modal','Agents tab UX cleanup'] },
   { ver:'v0.29.66', date:'2026-03-08', notes:['Remove agent chips and recent chats from chat welcome screen (declutter per user request)'] },
   { ver:'v0.29.65', date:'2026-03-08', notes:['FIX: squad skill assign now uses correct /api/openclaw/skills endpoint','FIX: project rename API call was double-wrapped (never worked)','FIX: capability check duration timing was always ~0s'] },
@@ -27623,7 +27564,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.67"})
+            self.reply_json({"v": "0.29.68"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27785,7 +27726,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.67"
+                health["porter_version"] = "0.29.68"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29585,7 +29526,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.67'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.68'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34170,7 +34111,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.67 ready (localhost only)")
+    print(f"\n  Porter v0.29.68 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
