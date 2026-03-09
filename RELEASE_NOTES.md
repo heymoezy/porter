@@ -1,5 +1,26 @@
 # Porter Release Notes
 
+## v0.29.84 (2026-03-09)
+
+**OpenClaw Pairing-State Diagnosis**
+
+- OpenClaw runtime diagnosis now detects paired devices with a down gateway and surfaces reconnect-loop repair guidance
+- More OpenClaw call paths now use shared config/state helpers instead of legacy top-level `authToken` / `gatewayPort` assumptions
+- OpenClaw cards now show paired/pending counts and clearer follow-up hints when gateway state is stale
+
+---
+
+## v0.29.83 (2026-03-09)
+
+**Gateway Version Labels + Repair UX**
+
+- Gateway cards now show `Installed` plus `Latest`, `Latest <version>`, or `Latest unknown` instead of a bare version string
+- OpenClaw install and repair commands are corrected to use `npm i -g openclaw`
+- Gateway repair state is separated from passive status chips so actions are easier to see and less visually messy
+- OpenClaw reinstall alone does not mark the gateway healthy; Porter now keeps surfacing runtime issues like gateway-down and Node-runtime problems
+
+---
+
 ## v0.29.82 (2026-03-09)
 
 **Models Status Design + OpenClaw Recovery**
