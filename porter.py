@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.21 — Project-aware orchestration context"""
+"""Porter v0.30.22 — Project-aware orchestration engine"""
 
 
 import email
@@ -9596,7 +9596,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.21</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.22</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11034,6 +11034,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.22', date:'2026-03-09', notes:['Orchestration executor selection now prefers personas assigned to the active project or task instead of choosing a raw backend first and hoping context survives','Project-backed orchestration steps now always carry project brief, decision log, task state, recent project activity, and Cortex context even when a step falls back to direct backend dispatch','Failed orchestration steps now reassign through the same project-aware selector, so retries stay inside the project lane instead of degrading into generic backend swaps'] },
   { ver:'v0.30.21', date:'2026-03-09', notes:['Process Manager: Porter now tracks all model gateway processes (OpenClaw, Gemini, Codex, Ollama) with CPU, memory, runtime, and stall detection','Auto-kill: watchdog automatically kills processes stalled for 2+ hours with 0% CPU or zombies','API: GET /api/processes lists running gateways, POST /api/processes/kill and /restart for manual control','Watchdog integration: stalled processes auto-detected and terminated every 30 seconds'] },
   { ver:'v0.30.20', date:'2026-03-09', notes:['Agent Watchdog: background thread monitors running dispatches and orchestration steps, detects stalls, auto-reboots by reassigning to next-best backend','Response validation catches empty, repetitive, or refusal responses especially from OpenClaw','OpenClaw gateway health check: watchdog pings gateway every 30s, attempts auto-restart if unresponsive','New API: GET /api/watchdog returns live stats (checks, reboots, validation failures)'] },
   { ver:'v0.30.19', date:'2026-03-09', notes:['Orchestration runs now inherit active project/task context, prefer personas assigned to the active project, and pass project/task identity through persona execution','Runtime orchestration cards now surface project/task chips so autonomous runs stay tied to the real project lane instead of floating as generic jobs','This closes a core autonomy gap where the orchestration engine could execute outside project-aware dispatch and Cortex scoping'] },
@@ -30459,15 +30460,15 @@ def _process_list() -> list:
 
 
 def _is_process_stalled(pid: int, cpu: float, runtime_s: int, state: str) -> bool:
-    """Heuristic: is this process stalled?"""
-    # Running for over 2 hours with 0% CPU = likely stalled
-    if runtime_s > 7200 and cpu < 0.1:
-        return True
-    # Sleeping for over 1 hour in a terminal (interactive process stuck)
-    if "S" in state and runtime_s > 3600:
-        return True
-    # Zombie
+    """Heuristic: is this process stalled?
+    Only flags terminal-attached interactive processes (TUI) as stalled.
+    Background daemons sleeping at 0% CPU is normal.
+    """
+    # Zombie process = always stalled
     if "Z" in state:
+        return True
+    # Terminal-attached ('+' in state) and sleeping for 4+ hours with 0% CPU = stalled TUI
+    if "+" in state and runtime_s > 14400 and cpu < 0.1:
         return True
     return False
 
@@ -32126,7 +32127,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.21"})
+            self.reply_json({"v": "0.30.22"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32288,7 +32289,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.21"
+                health["porter_version"] = "0.30.22"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34118,7 +34119,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.21'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.22'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38873,7 +38874,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.21 ready (localhost only)")
+    print(f"\n  Porter v0.30.22 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

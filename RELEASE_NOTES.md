@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.22 (2026-03-09)
+
+**Project-Lane Orchestration**
+
+- Orchestration executor selection now prefers personas assigned to the active project or task instead of choosing a generic backend first and hoping project context survives
+- Project-backed orchestration steps now always carry project brief, decision log, task state, recent project activity, and Cortex context even when a step falls back to direct backend dispatch
+- Failed orchestration steps now reassign through the same project-aware selector, so retries stay inside the project lane instead of degrading into generic backend swaps
+
+---
+
 ## v0.30.19 (2026-03-09)
 
 **Project-Aware Orchestration Context**
