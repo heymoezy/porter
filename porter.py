@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.1 — Faster staged Models hydration"""
+"""Porter v0.30.3 — Project-aware persona dispatch"""
 
 
 import email
@@ -503,7 +503,16 @@ def _db_init():
         conn.execute("ALTER TABLE agent_messages ADD COLUMN chain_id TEXT")
     if "step_num" not in _am_cols:
         conn.execute("ALTER TABLE agent_messages ADD COLUMN step_num INTEGER DEFAULT 0")
+    if "persona_id" not in _am_cols:
+        conn.execute("ALTER TABLE agent_messages ADD COLUMN persona_id TEXT")
+    if "project_id" not in _am_cols:
+        conn.execute("ALTER TABLE agent_messages ADD COLUMN project_id TEXT")
+    if "task_id" not in _am_cols:
+        conn.execute("ALTER TABLE agent_messages ADD COLUMN task_id TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_chain ON agent_messages(chain_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_persona ON agent_messages(persona_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_project ON agent_messages(project_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_task ON agent_messages(task_id)")
     
     # 1. Migrate users from _config if table is empty
     count = conn.execute("SELECT count(*) FROM users").fetchone()[0]
@@ -1339,7 +1348,7 @@ def _cortex_distill_session(session_id, task_desc, model_info, msg_count, outcom
         log.debug("Cortex distill failed: %s", e)
         return {"ok": False, "error": str(e)}
 
-def _cortex_extract_and_route(message, response_text, persona_id="", backend=""):
+def _cortex_extract_and_route(message, response_text, persona_id="", backend="", project_id="", task_id=""):
     """Extract facts from a dispatch response and route to memory. Runs in background thread."""
     import time as _ext_t
     # Guard against circular extraction
@@ -1348,7 +1357,7 @@ def _cortex_extract_and_route(message, response_text, persona_id="", backend="")
     _CORTEX_EXTRACT_GUARD.active = True
     _t0 = _ext_t.time()
     try:
-        _n_inserted = _cortex_extract_and_route_inner(message, response_text, persona_id, backend)
+        _n_inserted = _cortex_extract_and_route_inner(message, response_text, persona_id, backend, project_id=project_id, task_id=task_id)
         _wf_record_run("memory_extraction", success=True, result=f"{_n_inserted or 0} facts extracted", duration_s=_ext_t.time()-_t0)
     except Exception as _ext_e:
         _wf_record_run("memory_extraction", success=False, error=_ext_e, duration_s=_ext_t.time()-_t0)
@@ -1356,7 +1365,7 @@ def _cortex_extract_and_route(message, response_text, persona_id="", backend="")
     finally:
         _CORTEX_EXTRACT_GUARD.active = False
 
-def _cortex_extract_and_route_inner(message, response_text, persona_id="", backend=""):
+def _cortex_extract_and_route_inner(message, response_text, persona_id="", backend="", project_id="", task_id=""):
     """Inner extraction logic."""
     prefs = _config.get("preferences", {})
     if not prefs.get("cortex_enabled", True):
@@ -1377,6 +1386,7 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
     except Exception:
         pass
     _name_rule = f"\n- Always refer to the user as \"{_user_name}\" (never \"the user\" or \"user\")\n" if _user_name else ""
+    _default_scope = "project" if str(project_id or "").strip() else ("agent" if str(persona_id or "").strip() else "global")
     extract_prompt = (
         "You are a memory extraction system. Extract ONLY durable knowledge worth "
         "remembering months from now. Be extremely selective.\n\n"
@@ -1389,6 +1399,7 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
         "- scope=agent for agent-specific behavior\n"
         "- scope=project for project-specific info\n"
         "- scope=global for universally useful knowledge\n"
+        f"- default to scope={_default_scope} for this dispatch unless the fact clearly belongs elsewhere\n"
         "- importance: 1=trivial, 5=moderate, 10=critical\n"
         + _name_rule +
         "\nDO NOT extract:\n"
@@ -1445,15 +1456,20 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
         fact_text = str(fact_obj.get("text", "")).strip()
         if not fact_text or len(fact_text) < 10:
             continue
-        scope = fact_obj.get("scope", "global")
+        scope = fact_obj.get("scope", _default_scope)
         if scope not in ("global", "agent", "project"):
-            scope = "global"
+            scope = _default_scope
         importance = max(1, min(10, int(fact_obj.get("importance", 5))))
         keywords = str(fact_obj.get("keywords", ""))
         # v0.29.19 — compute scope_id early (was NameError before)
         if scope == "agent" and not persona_id:
             scope = "global"
-        scope_id = persona_id if scope == "agent" else ""
+        if scope == "project" and str(project_id or "").strip():
+            scope_id = str(project_id or "").strip()
+        elif scope == "agent":
+            scope_id = str(persona_id or "").strip()
+        else:
+            scope_id = ""
 
         # Duplicate check + supersession (v0.28.3)
         if _is_duplicate(fact_text, existing_facts):
@@ -2149,7 +2165,112 @@ def _iterative_retrieve(message, persona_id="", max_chunks=3):
         return ""
 
 
-def _build_context_suffix(persona_id, message=""):
+def _build_project_dispatch_context(project_id, persona_id="", task_id="", message=""):
+    """Build compact project-specific context for persona dispatch."""
+    pid = str(project_id or "").strip()
+    if not pid:
+        return ""
+    proj = _project_by_id(pid)
+    if not proj:
+        return ""
+
+    parts = []
+    pname = str(proj.get("name") or pid).strip()
+    pdesc = str(proj.get("description") or "").strip()
+    if pname:
+        parts.append(f"--- Active Project ---\n{pname} [{pid}]")
+        if pdesc:
+            parts.append(f"Project summary: {pdesc[:300]}")
+
+    project_dir = AGENT_WORKSPACE_DIR / "projects" / pid / "00_SHARED"
+    brief_path = project_dir / "PROJECT_BRIEF.md"
+    if brief_path.exists():
+        try:
+            brief = brief_path.read_text(encoding="utf-8", errors="replace").strip()
+            if brief:
+                parts.append("Project brief:\n" + brief[:1200])
+        except Exception:
+            pass
+
+    decision_path = project_dir / "DECISION_LOG.md"
+    if decision_path.exists():
+        try:
+            decisions = [ln.strip() for ln in decision_path.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()]
+            decision_rows = [ln for ln in decisions if ln.startswith("|") and "------" not in ln]
+            if len(decision_rows) > 1:
+                parts.append("Recent decisions:\n" + "\n".join(decision_rows[-4:]))
+        except Exception:
+            pass
+
+    task = _task_by_id(task_id)
+    if task:
+        ttitle = str(task.get("title") or "Untitled").strip()
+        tdesc = str(task.get("description") or "").strip()
+        tstatus = str(task.get("status") or "pending").strip()
+        parts.append(f"Current task:\n- [{tstatus}] {ttitle}")
+        if tdesc:
+            parts.append("Task details:\n" + tdesc[:700])
+
+    try:
+        with _treg_lock:
+            project_tasks = [dict(t) for t in _treg.values() if str(t.get("project_id") or "").strip() == pid]
+        assigned = []
+        backlog = []
+        for t in project_tasks:
+            status = str(t.get("status") or "").strip()
+            if status in {"complete", "completed", "done", "cancelled"}:
+                continue
+            bucket = assigned if str(t.get("assigned_persona_id") or "").strip() == str(persona_id or "").strip() else backlog
+            bucket.append(t)
+        assigned.sort(key=lambda t: (str(t.get("priority") or ""), -(float(t.get("updated_at") or 0))))
+        backlog.sort(key=lambda t: (str(t.get("priority") or ""), -(float(t.get("updated_at") or 0))))
+        if assigned:
+            lines = [f"- [{str(t.get('status') or 'pending')}] {str(t.get('title') or 'Untitled')[:120]}" for t in assigned[:4]]
+            parts.append("Your pending tasks:\n" + "\n".join(lines))
+        if backlog:
+            lines = [f"- [{str(t.get('status') or 'pending')}] {str(t.get('title') or 'Untitled')[:120]}" for t in backlog[:4]]
+            parts.append("Other project tasks in flight:\n" + "\n".join(lines))
+    except Exception:
+        pass
+
+    try:
+        conn = _db_conn()
+        rows = conn.execute(
+            "SELECT agent_name, action, status, output_summary, ts FROM trace_steps "
+            "WHERE project_id=? ORDER BY ts DESC LIMIT 5",
+            (pid,)
+        ).fetchall()
+        conn.close()
+        if rows:
+            lines = []
+            for r in rows:
+                who = str(r[0] or "Agent").strip()
+                action = str(r[1] or "work").strip()
+                status = str(r[2] or "").strip()
+                summary = str(r[3] or "").strip()
+                line = f"- {who}: {action}"
+                if status:
+                    line += f" [{status}]"
+                if summary:
+                    line += f" — {summary[:140]}"
+                lines.append(line)
+            parts.append("Recent project activity:\n" + "\n".join(lines))
+    except Exception:
+        pass
+
+    try:
+        cortex_ctx = _cortex_inject_context(message, persona_id=persona_id, project_id=pid)
+        if cortex_ctx:
+            parts.append(cortex_ctx[:1000])
+    except Exception:
+        pass
+
+    if not parts:
+        return ""
+    return "\n\n".join(parts)[:3200]
+
+
+def _build_context_suffix(persona_id, message="", project_id="", task_id=""):
     """Build a lean context suffix for persona dispatch.
     v0.29.18: Trimmed from ~4.5KB to ~2KB by dropping redundant files."""
     prefs = _config.get("preferences", {})
@@ -2208,6 +2329,12 @@ def _build_context_suffix(persona_id, message=""):
             )
             if roster:
                 parts.append(f"Squad: {roster}\nIf outside scope: [HANDOFF: AgentName] reason")
+    except Exception:
+        pass
+    try:
+        proj_ctx = _build_project_dispatch_context(project_id, persona_id=persona_id, task_id=task_id, message=message)
+        if proj_ctx:
+            parts.append(proj_ctx)
     except Exception:
         pass
     return "\n\n".join(parts)
@@ -2357,6 +2484,56 @@ def _find_projects_file():
         if candidate.exists():
             return candidate
     return None
+
+
+def _project_by_id(project_id: str | None) -> dict | None:
+    pid = str(project_id or "").strip()
+    if not pid:
+        return None
+    for proj in _config.get("projects", []):
+        if str(proj.get("id") or "").strip() == pid:
+            return proj
+    return None
+
+
+def _task_by_id(task_id: str | None) -> dict | None:
+    tid = str(task_id or "").strip()
+    if not tid:
+        return None
+    with _treg_lock:
+        task = _treg.get(tid)
+        return dict(task) if task else None
+
+
+def _persona_project_ids(persona_id: str) -> list[str]:
+    pid = str(persona_id or "").strip()
+    if not pid:
+        return []
+    matches = []
+    for proj in _config.get("projects", []):
+        assigned = [str(x).strip() for x in (proj.get("assigned_personas") or []) if str(x).strip()]
+        if pid in assigned:
+            matches.append(str(proj.get("id") or "").strip())
+    return [m for m in matches if m]
+
+
+def _resolve_persona_project(persona_id: str, explicit_project_id: str | None = None, task_id: str | None = None) -> str:
+    task = _task_by_id(task_id)
+    if task and str(task.get("project_id") or "").strip():
+        return str(task.get("project_id") or "").strip()
+    explicit = str(explicit_project_id or "").strip()
+    if explicit and _project_by_id(explicit):
+        return explicit
+    active = str(_config.get("active_project_id") or "").strip()
+    if active:
+        active_proj = _project_by_id(active)
+        assigned = [str(x).strip() for x in (active_proj or {}).get("assigned_personas", []) if str(x).strip()]
+        if not assigned or str(persona_id or "").strip() in assigned:
+            return active
+    matches = _persona_project_ids(persona_id)
+    if len(matches) == 1:
+        return matches[0]
+    return ""
 
 
 def _parse_kv_table(block: str) -> dict:
@@ -9179,7 +9356,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.1</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.3</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10578,6 +10755,8 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.3', date:'2026-03-09', notes:['Persona dispatch can now resolve an active project and task, inject project brief/decisions/tasks into the prompt context, and persist project identity into trace data','Task-targeted persona dispatches now update task ownership and completion state automatically, so assigned work can move through Porter without a second manual status pass','Cortex extraction now defaults to project scope when a persona dispatch belongs to a project, making project learning first-class instead of a loose tag'] },
+  { ver:'v0.30.2', date:'2026-03-09', notes:['Removed the legacy models-grid timeout wrapper that could replace the entire Models grid with a retry block after 10s','Models load failures now stay on the top loading rail instead of blanking the grid, preserving any rendered cards','This restores the rule that nothing should ever wipe the whole Models grid during refresh or timeout handling'] },
   { ver:'v0.30.1', date:'2026-03-09', notes:['Models bootstrap is now structure-only and no longer runs activity aggregation on the critical first-paint path','Bootstrap and full snapshot now start in parallel, so Porter renders whichever live payload lands first instead of waiting on sequential hydration','Backend status checks are deferred until after first paint, keeping gateway probes off the initial render path'] },
   { ver:'v0.30.0', date:'2026-03-09', notes:['Models bootstrap is fast again without falling back to stale browser truth: first paint uses fresh lightweight provider/model data, then full live snapshot hydrates afterward','Non-lightweight provider probing now runs in parallel instead of sequentially, reducing server-side wait on the Models endpoints','Control-plane truth remains live, but preliminary loading no longer pays the full dynamic catalog cost up front'] },
   { ver:'v0.29.99', date:'2026-03-09', notes:['Models no longer uses browser sessionStorage at all for backend truth','Models bootstrap and snapshot now force fresh capability checks and invalidate CLI-derived caches when binary fingerprints change','Porter control-plane surfaces now prefer live runtime truth over cached bootstrap state after CLI upgrades like Gemini'] },
@@ -12640,7 +12819,7 @@ function switchModule(name) {
       }, 30000);
     }, tasks: function() { /* tasks merged into projects */ }, agents: function() { loadAgents(); }, projects: function() { loadProjects(); }, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
-    models: function(){ withLoadTimeout('models-grid','loadModels()'); loadModels(); }, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, cortex: function(){ withLoadTimeout('cx-memory-list','_loadCortexTab()'); _loadCortexTab(); }, system: function(){ withLoadTimeout('wf-system-grid','loadWorkflowRegistry()'); loadWorkflowRegistry(); }, workflows: function(){}, settings: syncSettingsUI,
+    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, cortex: function(){ withLoadTimeout('cx-memory-list','_loadCortexTab()'); _loadCortexTab(); }, system: function(){ withLoadTimeout('wf-system-grid','loadWorkflowRegistry()'); loadWorkflowRegistry(); }, workflows: function(){}, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -18892,6 +19071,14 @@ function _renderModelsLoading(stage, opts) {
   }
 }
 
+function _showModelsLoadFailure(message) {
+  var rail = document.getElementById('models-load-status');
+  if (!rail) return;
+  rail.classList.add('show');
+  rail.innerHTML = '<strong>Models load issue</strong><span>' + escHtml(message || 'Porter could not refresh model state.') + '</span>'
+    + '<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="loadModels()">Retry</button>';
+}
+
 async function loadModels() {
   var loadSeq = ++_modelsLoadSeq;
   try {
@@ -18919,6 +19106,7 @@ async function loadModels() {
     if (!_modelSseId) _connectModelSSE();
     _renderModelsLoading('Hydrating live model catalogs...', { detail: 'Refreshing dynamic models, backend health, and version checks.', keepCards: true });
     var snapshotApplied = false;
+    var bootstrapApplied = false;
     var bootPromise = seededSnapshot ? Promise.resolve(null) : api('/api/models/bootstrap');
     var snapPromise = api('/api/models/snapshot');
     bootPromise.then(function(boot) {
@@ -18926,6 +19114,7 @@ async function loadModels() {
       if (boot && boot.providers) {
         _writeModelsClientCache(_modelsClientCacheKeys.bootstrap, boot);
         if (!seededBootstrap) _applyModelsSnapshot(boot, { preferStable: true });
+        bootstrapApplied = true;
       }
     }).catch(function(e) {
       if (loadSeq !== _modelsLoadSeq) return;
@@ -18942,11 +19131,15 @@ async function loadModels() {
     }).catch(function(e) {
       if (loadSeq !== _modelsLoadSeq) return;
       _reportModelsClientError('models-snapshot-hydrate', e || new Error('Snapshot hydrate failed'));
-      _renderModelsLoading('');
+      if (!bootstrapApplied && !_modelsRenderedOnce) {
+        _showModelsLoadFailure('Live snapshot timed out before any Models data rendered.');
+      } else {
+        _renderModelsLoading('');
+      }
     });
     _refreshModelVersions(true);
   } catch(e) {
-    _renderModelsLoading('');
+    _showModelsLoadFailure((e && e.message) || 'Models failed to load');
     _reportModelsClientError('load-models', e);
   }
 }
@@ -28249,7 +28442,8 @@ def _verify_dispatch_response(original_message, response_text, agent_name="", ba
     return {"passed": passed, "score": score, "reason": reason, "duration_s": _v_dur}
 
 
-def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=None, step_num=0, personality_mode=False, backend_override=""):
+def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=None, step_num=0,
+                        personality_mode=False, backend_override="", project_id="", task_id=""):
     """Dispatch a message to a persona: load SOUL, resolve backend, call dispatch_agent."""
     import uuid as _uuid
     import time as _ptime
@@ -28287,9 +28481,11 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
 
     pname = persona.get('name', 'Agent')
     prole = persona.get('role', '')
+    resolved_project_id = _resolve_persona_project(persona_id, explicit_project_id=project_id, task_id=task_id)
+    task = _task_by_id(task_id)
 
     # v0.28.9 — Budgeted context suffix (replaces uncapped assembly)
-    _ctx_suffix = _build_context_suffix(persona_id, message=message)
+    _ctx_suffix = _build_context_suffix(persona_id, message=message, project_id=resolved_project_id, task_id=task_id)
 
     # v0.28.9 — History trimmer: keep last 3 turns, cap at 3000 chars
     _MAX_HISTORY_CHARS = 3000
@@ -28402,6 +28598,21 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     except Exception:
         pass
 
+    if task:
+        _task_to_save = None
+        with _treg_lock:
+            live_task = _treg.get(str(task.get("id") or task_id).strip())
+            if live_task:
+                live_task["assigned_persona_id"] = persona_id
+                if resolved_project_id and not live_task.get("project_id"):
+                    live_task["project_id"] = resolved_project_id
+                if live_task.get("status") == "pending":
+                    live_task["status"] = "in_progress"
+                live_task["updated_at"] = _ptime.time()
+                _task_to_save = dict(live_task)
+        if _task_to_save:
+            _treg_save(_task_to_save)
+
     log.info("Persona dispatch: %s (%s) → %s", persona.get("name", "?"), persona_id, backend)
     mlog.emit("info", "bridge", "persona.dispatch", f"Persona {persona.get('name', '?')} → {backend}", persona_id=persona_id, backend=backend, run_id=run_id)
 
@@ -28409,6 +28620,7 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     emit_trace_step("persona.dispatch",
         agent_id=persona_id, agent_name=persona.get("name", "?"),
         stage="dispatch", input_summary=message[:200], status="running",
+        project_id=resolved_project_id or None, task_id=str(task_id or "").strip() or None,
         trace_id=_get_trace_id())
 
     _dtp_t0 = _ptime.time()
@@ -28424,7 +28636,10 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     # Tag the agent_message with persona_id
     try:
         conn = _db_conn()
-        conn.execute("UPDATE agent_messages SET persona_id=? WHERE run_id=?", (persona_id, run_id))
+        conn.execute(
+            "UPDATE agent_messages SET persona_id=?, project_id=?, task_id=? WHERE run_id=?",
+            (persona_id, resolved_project_id or None, str(task_id or "").strip() or None, run_id)
+        )
         conn.commit()
         conn.close()
     except Exception:
@@ -28475,8 +28690,10 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
         stage="complete", output_summary=(result.get("text", "") or "")[:200],
         status="complete" if _dtp_ok else "failed",
         duration_ms=_dtp_dur, tokens_out=_dtp_tokens,
+        project_id=resolved_project_id or None, task_id=str(task_id or "").strip() or None,
         trace_id=_get_trace_id())
     record_telemetry(
+        project_id=resolved_project_id or None,
         agent_id=persona_id, agent_name=persona.get("name", "?"),
         status="complete" if _dtp_ok else "failed",
         tokens_out=_dtp_tokens, latency_ms=_dtp_dur,
@@ -28520,11 +28737,29 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
         _cortex_resp = result.get("text", "")
         _cortex_pid = persona_id
         _cortex_be = backend
+        _cortex_project = resolved_project_id
+        _cortex_task = str(task_id or "").strip()
         def _cortex_bg():
-            _cortex_extract_and_route(_cortex_msg, _cortex_resp, _cortex_pid, _cortex_be)
+            _cortex_extract_and_route(_cortex_msg, _cortex_resp, _cortex_pid, _cortex_be, project_id=_cortex_project, task_id=_cortex_task)
         threading.Thread(target=_cortex_bg, name="cortex-extract", daemon=True).start()
 
+    if task:
+        _task_to_save = None
+        with _treg_lock:
+            live_task = _treg.get(str(task.get("id") or task_id).strip())
+            if live_task:
+                live_task["status"] = "complete" if result.get("ok") else "failed"
+                live_task["result"] = (result.get("text", "") if result.get("ok") else result.get("error", ""))[:2000] or None
+                live_task["updated_at"] = _ptime.time()
+                if result.get("ok"):
+                    live_task["completed_at"] = _ptime.time()
+                _task_to_save = dict(live_task)
+        if _task_to_save:
+            _treg_save(_task_to_save)
+
     result["persona_id"] = persona_id
+    result["project_id"] = resolved_project_id
+    result["task_id"] = str(task_id or "").strip()
     return result
 
 
@@ -29699,7 +29934,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.1"})
+            self.reply_json({"v": "0.30.3"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -29861,7 +30096,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.1"
+                health["porter_version"] = "0.30.3"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -31638,7 +31873,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.1'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.3'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -32542,6 +32777,8 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check_cap("orch_write"): return
             data = self.read_json_body()
             prompt = str(data.get("prompt", "")).strip()
+            _project_id = str(data.get("project_id", "") or "").strip()
+            _task_id = str(data.get("task_id", "") or "").strip()
             # Persona-first: if persona_id provided, dispatch via persona layer
             _dispatch_persona_id = data.get("persona_id", "").strip()
             if _dispatch_persona_id:
@@ -32551,10 +32788,11 @@ class Handler(BaseHTTPRequestHandler):
                 import uuid as _uuid
                 run_id = _uuid.uuid4().hex[:12]
                 def _persona_bridge_run():
-                    dispatch_to_persona(prompt, _dispatch_persona_id, timeout=timeout, run_id=run_id)
+                    dispatch_to_persona(prompt, _dispatch_persona_id, timeout=timeout, run_id=run_id,
+                                        project_id=_project_id, task_id=_task_id)
                 t = _threading.Thread(target=_persona_bridge_run, daemon=True)
                 t.start()
-                self.reply_json({"ok": True, "run_id": run_id, "persona_id": _dispatch_persona_id, "status": "dispatched"})
+                self.reply_json({"ok": True, "run_id": run_id, "persona_id": _dispatch_persona_id, "project_id": _project_id, "task_id": _task_id, "status": "dispatched"})
                 return
             backend = str(data.get("backend", "")).strip().lower()
             model_override = data.get("model")
@@ -33885,15 +34123,19 @@ class Handler(BaseHTTPRequestHandler):
             timeout = max(10, min(300, int(data.get("timeout", 60) or 60)))
             _personality_mode = bool(data.get("personality_mode"))
             _backend_override = str(data.get("backend_override", "")).strip()
+            _project_id = str(data.get("project_id", "") or "").strip()
+            _task_id = str(data.get("task_id", "") or "").strip()
             import uuid as _uuid
             run_id = _uuid.uuid4().hex[:12]
             def _persona_run():
                 dispatch_to_persona(prompt, pid, timeout=timeout, run_id=run_id,
                                     personality_mode=_personality_mode,
-                                    backend_override=_backend_override)
+                                    backend_override=_backend_override,
+                                    project_id=_project_id,
+                                    task_id=_task_id)
             t = _threading.Thread(target=_persona_run, daemon=True)
             t.start()
-            self.reply_json({"ok": True, "run_id": run_id, "persona_id": pid, "status": "dispatched"})
+            self.reply_json({"ok": True, "run_id": run_id, "persona_id": pid, "project_id": _project_id, "task_id": _task_id, "status": "dispatched"})
 
         elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/wake"):
             if not self.auth_check(redirect=False): return
@@ -36315,7 +36557,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.1 ready (localhost only)")
+    print(f"\n  Porter v0.30.3 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

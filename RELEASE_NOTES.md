@@ -1,5 +1,25 @@
 # Porter Release Notes
 
+## v0.30.3 (2026-03-09)
+
+**Project-Aware Persona Dispatch**
+
+- Persona dispatch can now resolve an active project and task, inject project brief, decisions, tasks, and recent activity into the dispatch context, and persist project identity into trace data
+- Task-targeted persona dispatches now update task ownership and completion state automatically, making project work executable through Porter instead of decorative
+- Cortex extraction now defaults to project scope when a persona dispatch belongs to a project, so project learning accumulates in project memory by default
+
+---
+
+## v0.30.2 (2026-03-09)
+
+**Models Grid Persistence Fix**
+
+- Removed the legacy `withLoadTimeout('models-grid', ...)` wrapper that could replace the entire Models grid with a retry block after 10 seconds
+- Models load failures now stay on the top loading rail instead of blanking the grid, preserving any already-rendered cards
+- This restores the rule that nothing should ever wipe the whole Models grid during refresh or timeout handling
+
+---
+
 ## v0.30.1 (2026-03-09)
 
 **Faster Staged Models Hydration**
