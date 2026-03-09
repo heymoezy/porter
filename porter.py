@@ -22182,7 +22182,8 @@ function renderPersonaOrg() {
     var grpColor = groupColors[grp] || 'var(--text3)';
     var grpBadge = grp ? '<div style="font-size:10px;padding:1px 6px;border-radius:3px;background:' + grpColor + '20;color:' + grpColor + ';font-weight:600;margin-top:4px;letter-spacing:.3px">' + grp + '</div>' : '';
     var statusClass = p.status === 'active' ? ' status-active' : p.status === 'error' ? ' status-error' : p.status === 'sleeping' ? ' status-sleeping' : '';
-    var leaderBadge = p._isLeader ? '<div style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f59e0b20;color:#f59e0b;font-weight:700;margin-top:2px;letter-spacing:.3px">LEADER</div>' : '';
+    var _dm = p.dispatch_mode || 'contributor';
+    var leaderBadge = (p._isLeader || _dm === 'leader') ? '<div style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f59e0b20;color:#f59e0b;font-weight:700;margin-top:2px;letter-spacing:.3px">LEADER</div>' : '';
     return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + statusClass + '" data-persona-id="' + p.id + '" onmousedown="_pMouseDown(event)" ontouchstart="_pTouchStart(event)" onclick="selectPersona(\'' + p.id + '\')">'
       + '<div class="persona-card-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
@@ -29434,7 +29435,7 @@ def _persona_update(persona_id, data):
     """Update persona DB row + optionally SOUL.md."""
     import hashlib
     sets, vals = [], []
-    for field in ("name", "role", "avatar", "preferred_backend", "status", "heartbeat_cron", "hook_profile", "agent_group"):
+    for field in ("name", "role", "avatar", "preferred_backend", "status", "heartbeat_cron", "hook_profile", "agent_group", "dispatch_mode"):
         if field in data:
             sets.append(f"{field}=?")
             vals.append(data[field])

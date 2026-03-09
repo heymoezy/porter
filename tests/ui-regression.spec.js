@@ -66,7 +66,7 @@ test.describe('Tab Headers — every tab must have a title', () => {
   const moduleTabs = [
     { id: 'agents', title: 'Agents', selector: '#agents-module .module-title' },
     { id: 'projects', title: 'Projects', selector: '#projects-module .module-title' },
-    { id: 'locations', title: 'Locations', selector: '#locations-module .module-title' },
+    // Locations removed for beta — saved for future release
     { id: 'capabilities', title: 'Extensions', selector: '#capabilities-module .module-title' },
   ];
 
@@ -140,7 +140,7 @@ test.describe('Header alignment — all headers same height', () => {
   });
 
   test('all module-hdr elements have consistent height', async ({ page }) => {
-    const tabs = ['agents', 'projects', 'locations', 'capabilities'];
+    const tabs = ['agents', 'projects', 'capabilities'];
     const heights = [];
     for (const tab of tabs) {
       await switchTab(page, tab);
@@ -236,24 +236,7 @@ test.describe('Projects tab', () => {
   });
 });
 
-test.describe('Locations tab', () => {
-  test.beforeEach(async ({ page }) => {
-    await login(page);
-    await switchTab(page, 'locations');
-    await page.waitForTimeout(500); // allow render
-  });
-
-  test('no redundant "Devices" section label', async ({ page }) => {
-    const devicesLabel = await page.evaluate(() => {
-      const els = document.querySelectorAll('#loc-list div');
-      for (const el of els) {
-        if (el.textContent.trim() === 'Devices') return true;
-      }
-      return false;
-    });
-    expect(devicesLabel).toBe(false);
-  });
-});
+// Locations tab removed for beta — saved for future release
 
 test.describe('Tab switching — no stale elements', () => {
   test.beforeEach(async ({ page }) => {
@@ -272,7 +255,7 @@ test.describe('Tab switching — no stale elements', () => {
   });
 
   test('only one module-panel is active at a time', async ({ page }) => {
-    const tabs = ['overview', 'agents', 'projects', 'locations', 'capabilities'];
+    const tabs = ['overview', 'agents', 'projects', 'capabilities'];
     for (const tab of tabs) {
       await switchTab(page, tab);
       const activeCount = await page.evaluate(() =>
@@ -288,7 +271,7 @@ test.describe('Nav regression — all tabs render content', () => {
     await login(page);
   });
 
-  const allTabs = ['overview', 'agents', 'models', 'capabilities', 'projects', 'workflows', 'locations', 'admin', 'system'];
+  const allTabs = ['overview', 'agents', 'models', 'capabilities', 'projects', 'workflows', 'admin', 'system'];
 
   test('every tab shows content when clicked', async ({ page }) => {
     for (const tab of allTabs) {
@@ -323,7 +306,7 @@ test.describe('Nav bar structure', () => {
 
   const expectedNavItems = [
     'Chat', 'Agents', 'Projects', 'Workflows',
-    'Locations', 'Files', 'Models', 'Cortex', 'Runtime', 'Extensions', 'Skills', 'Logs', 'Settings'
+    'Files', 'Models', 'Cortex', 'Runtime', 'Extensions', 'Skills', 'Logs', 'Settings'
   ];
 
   test('sidebar contains all expected nav buttons', async ({ page }) => {
@@ -393,7 +376,7 @@ test.describe('Screenshot baseline', () => {
     { id: 'agents', name: 'agents' },
     { id: 'projects', name: 'projects' },
     { id: 'files', name: 'files' },
-    { id: 'locations', name: 'locations' },
+    // locations removed for beta
     { id: 'capabilities', name: 'extensions' },
   ];
 
