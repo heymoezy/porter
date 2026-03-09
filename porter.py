@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.15 — Parallel bridge coordination runs"""
+"""Porter v0.30.16 — Surface coordination events live"""
 
 
 import email
@@ -9522,7 +9522,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.15</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.16</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10935,6 +10935,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.16', date:'2026-03-09', notes:['Overview, Projects, Runtime, and orchestration surfaces now react to live coordination:* SSE events instead of ignoring bridge-native coordination work','System tab now maintains its own runtime SSE refresh path and correctly checks system-module when refreshing workflow cards','This closes a visibility gap where coordinated work could happen through Porter Bridge without updating the operator surfaces watching it'] },
   { ver:'v0.30.15', date:'2026-03-09', notes:['Coordination runs now fan out across selected backends in parallel through the bridge instead of walking them sequentially','Added coordination:start, coordination:result, and coordination:complete SSE events plus Mission Control entries so multi-model runs are visible live','This makes the coordination runner behave more like a real bridge orchestrator instead of a serialized loop'] },
   { ver:'v0.30.14', date:'2026-03-09', notes:['Fixed live coordination ledger updates by restoring an SSE compatibility wrapper for the new claim/progress/handoff events','This removes the runtime NameError on coordination claims and gets the shared work board emitting events again','Keeps the newer coordination layer compatible with Porter’s existing shared event bus instead of introducing a second SSE path'] },
   { ver:'v0.30.13', date:'2026-03-09', notes:['Overview persona and quest-log refresh now follow live cortex and bridge SSE events instead of relying on a blind 30-second loop','Kept a lighter 60-second fallback refresh while Overview is active, with timer teardown when leaving the tab','This reduces idle homepage churn while keeping agent/squad state visibly current during autonomous work'] },
@@ -12903,6 +12904,9 @@ function renderConfigSummary(d) {
 let _currentModule = 'overview';
 let _overviewRefreshTimer = null;
 window._lastAgents = [];
+function _isCoordinationEventType(type) {
+  return typeof type === 'string' && type.indexOf('coordination:') === 0;
+}
 function switchModule(name) {
   // v0.29.11 — Stop phantom pollers when leaving their tabs
   if (_currentModule === 'admin' && name !== 'admin') {
@@ -12929,6 +12933,14 @@ function switchModule(name) {
     if (_projActivityRefreshTimer) { clearTimeout(_projActivityRefreshTimer); _projActivityRefreshTimer = null; }
     if (_projActivitySseId) { _sseUnsubscribe(_projActivitySseId); _projActivitySseId = null; }
     window._projActivityCurrent = '';
+  }
+  if (_currentModule === 'system' && name !== 'system') {
+    if (_gatewayActivityPoller) { clearInterval(_gatewayActivityPoller); _gatewayActivityPoller = null; }
+    if (_gatewayActivityRefreshTimer) { clearTimeout(_gatewayActivityRefreshTimer); _gatewayActivityRefreshTimer = null; }
+    if (_gatewayActivitySseId) { _sseUnsubscribe(_gatewayActivitySseId); _gatewayActivitySseId = null; }
+    if (window._systemRuntimeSseId) { _sseUnsubscribe(window._systemRuntimeSseId); window._systemRuntimeSseId = null; }
+    if (window._systemRuntimeRefreshTimer) { clearTimeout(window._systemRuntimeRefreshTimer); window._systemRuntimeRefreshTimer = null; }
+    if (window._wfRefreshTimer) { clearTimeout(window._wfRefreshTimer); window._wfRefreshTimer = null; }
   }
   if (_currentModule === 'locations' && name !== 'locations') {
     if (typeof stopTsPolling === 'function') stopTsPolling();
@@ -13021,6 +13033,7 @@ function switchModule(name) {
             }
             if (d.type === 'bridge:dispatch') _scheduleOverviewRefresh(120);
             if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleOverviewRefresh(220);
+            if (_isCoordinationEventType(d.type)) _scheduleOverviewRefresh(200);
           } catch(ex) {}
         });
       }
@@ -13042,6 +13055,7 @@ function switchModule(name) {
 async function loadWorkflowRegistry() {
   var grid = document.getElementById('wf-system-grid');
   var countEl = document.getElementById('wf-sys-count');
+  _connectSystemRuntimeSse();
   _loadRuntimeOperations();
   if (!grid) return;
   grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--text3);font-size:12px">Loading workflows...</div>';
@@ -13255,7 +13269,7 @@ async function _wfRefreshSystemOnly() {
     if (anyRunning) {
       window._wfRefreshTimer = setTimeout(function() {
         window._wfRefreshTimer = null;
-        var wfMod = document.getElementById('workflows-module');
+        var wfMod = document.getElementById('system-module');
         if (wfMod && wfMod.classList.contains('active')) _wfRefreshSystemOnly();
       }, 8000);
     }
@@ -14090,6 +14104,7 @@ function _connectProjActivityLive() {
     if (!d || !d.type) return;
     if (d.type === 'bridge:dispatch') _scheduleProjActivityRefresh(120);
     else if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleProjActivityRefresh(220);
+    else if (_isCoordinationEventType(d.type)) _scheduleProjActivityRefresh(200);
   });
   if (!_projActivityPoller) {
     _projActivityPoller = setInterval(function() {
@@ -14867,12 +14882,32 @@ function _connectGatewayActivitySse() {
     if (!d || !d.type) return;
     if (d.type === 'bridge:dispatch') _scheduleGatewayActivityRefresh(120);
     else if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleGatewayActivityRefresh(220);
+    else if (_isCoordinationEventType(d.type)) _scheduleGatewayActivityRefresh(180);
   });
   if (!_gatewayActivityPoller) {
     _gatewayActivityPoller = setInterval(function() {
       if (_currentModule === 'system') _loadGatewayActivity(true);
     }, 30000);
   }
+}
+
+function _scheduleSystemRuntimeRefresh(delayMs) {
+  if (_currentModule !== 'system') return;
+  if (window._systemRuntimeRefreshTimer) return;
+  window._systemRuntimeRefreshTimer = setTimeout(function() {
+    window._systemRuntimeRefreshTimer = null;
+    if (_currentModule === 'system') _wfRefreshSystemOnly();
+  }, Math.max(80, delayMs || 250));
+}
+
+function _connectSystemRuntimeSse() {
+  if (window._systemRuntimeSseId) return;
+  window._systemRuntimeSseId = _sseSubscribe(function(d) {
+    if (!d || !d.type) return;
+    if (d.type === 'bridge:dispatch') _scheduleSystemRuntimeRefresh(120);
+    else if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleSystemRuntimeRefresh(220);
+    else if (_isCoordinationEventType(d.type)) _scheduleSystemRuntimeRefresh(180);
+  });
 }
 
 var _inlineSessionsExpanded = {};
@@ -18935,6 +18970,7 @@ function _ensureOrchHubPolling(agentCount, modelCount) {
       if (!d || !d.type) return;
       if (d.type === 'bridge:dispatch') _scheduleOrchHubRefresh(120);
       else if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleOrchHubRefresh(220);
+      else if (_isCoordinationEventType(d.type)) _scheduleOrchHubRefresh(180);
     });
   }
   if (_orchHubPollTimer) return;
@@ -30761,7 +30797,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.15"})
+            self.reply_json({"v": "0.30.16"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -30923,7 +30959,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.15"
+                health["porter_version"] = "0.30.16"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -32728,7 +32764,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.15'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.16'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -37446,7 +37482,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.15 ready (localhost only)")
+    print(f"\n  Porter v0.30.16 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

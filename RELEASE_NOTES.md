@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.16 (2026-03-09)
+
+**Live Coordination Visibility**
+
+- Overview, Projects, Runtime, and orchestration surfaces now react to live `coordination:*` SSE events instead of ignoring bridge-native coordination work
+- System tab now keeps its own runtime SSE refresh path and correctly refreshes against `system-module`, so workflow/runtime cards stay in the loop
+- This closes a visibility gap where coordinated work could happen through Porter Bridge without updating the operator surfaces watching it
+
+---
+
 ## v0.30.15 (2026-03-09)
 
 **Parallel Bridge Coordination Runs**
