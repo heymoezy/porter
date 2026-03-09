@@ -7525,20 +7525,33 @@ async function doLogin() {
   const password = document.getElementById('pw').value;
   const errEl = document.getElementById('loginErr');
   errEl.style.display = 'none';
+  const reqId = `${Date.now()}-${Math.random().toString(16).slice(2,8)}`;
   try {
     const res = await fetch('/login', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', 'X-Req-Id': reqId},
       body: JSON.stringify({username, password})
     });
-    const data = await res.json();
-    if (data.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    const raw = await res.text();
+    let data = null;
+    if (contentType.includes('application/json')) {
+      try {
+        data = JSON.parse(raw);
+      } catch (parseErr) {
+        console.warn('[login] invalid JSON response', { reqId, status: res.status, contentType, bodyPreview: raw.slice(0, 240) });
+      }
+    } else {
+      console.warn('[login] non-JSON response', { reqId, status: res.status, contentType, bodyPreview: raw.slice(0, 240) });
+    }
+    if (data && data.ok) {
       window.location.href = '/';
     } else {
-      errEl.textContent = data.error || 'Invalid username or password';
+      errEl.textContent = (data && data.error) || `Login failed (${res.status})`;
       errEl.style.display = 'block';
     }
   } catch(e) {
+    console.warn('[login] fetch failed', { reqId, error: String(e) });
     errEl.textContent = 'Network error — try again';
     errEl.style.display = 'block';
   }
@@ -11019,7 +11032,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 
 const CHANGELOG = [
   { ver:'v0.30.18', date:'2026-03-09', notes:['Orchestration Engine: Porter now plans goals into executable DAG steps, scores each backend by capability fit, dispatches to the best available model, and auto-reassigns on failure','New DB tables: orchestration_runs, orchestration_steps, orchestration_events — full execution history with dependency tracking','Capability taxonomy: each backend scored for implementation/research/analysis/synthesis/verification/debugging — routing is data-driven not keyword-heuristic','API: POST /api/orchestration/run (plan+execute), GET /api/orchestration/runs, GET/DELETE /api/orchestration/<id>','System tab: Orchestration Engine panel with live progress bars, run status, cancel/detail controls','Steps execute in parallel when dependencies allow, with ThreadPoolExecutor — independent branches run concurrently'] },
-  { ver:'v0.30.17', date:'2026-03-09', notes:['Runtime now has a live Coordination Bridge panel showing active claims, conflicts, and recent bridge-native coordination results from the ledger and runtime log','System-level runtime refresh now updates coordination state directly instead of only causing indirect surface refreshes','This makes Porter Bridge orchestration inspectable from the operator view instead of leaving coordination state hidden in backend tables'] },
+  { ver:'v0.30.17', date:'2026-03-09', notes:['Runtime now has live Coordination Bridge and Orchestration Engine panels showing active claims, conflicts, recent coordination results, and recent orchestration runs','Filled in the missing orchestration UI functions and fixed the orchestration runs API query parsing so the new runtime lane is real instead of a dead shell','This makes Porter Bridge orchestration inspectable from the operator view instead of leaving coordination state hidden in backend tables or half-landed UI hooks'] },
   { ver:'v0.30.16', date:'2026-03-09', notes:['Overview, Projects, Runtime, and orchestration surfaces now react to live coordination:* SSE events instead of ignoring bridge-native coordination work','System tab now maintains its own runtime SSE refresh path and correctly checks system-module when refreshing workflow cards','This closes a visibility gap where coordinated work could happen through Porter Bridge without updating the operator surfaces watching it'] },
   { ver:'v0.30.15', date:'2026-03-09', notes:['Coordination runs now fan out across selected backends in parallel through the bridge instead of walking them sequentially','Added coordination:start, coordination:result, and coordination:complete SSE events plus Mission Control entries so multi-model runs are visible live','This makes the coordination runner behave more like a real bridge orchestrator instead of a serialized loop'] },
   { ver:'v0.30.14', date:'2026-03-09', notes:['Fixed live coordination ledger updates by restoring an SSE compatibility wrapper for the new claim/progress/handoff events','This removes the runtime NameError on coordination claims and gets the shared work board emitting events again','Keeps the newer coordination layer compatible with Porter’s existing shared event bus instead of introducing a second SSE path'] },
@@ -13023,6 +13036,8 @@ function switchModule(name) {
     if (_gatewayActivityPoller) { clearInterval(_gatewayActivityPoller); _gatewayActivityPoller = null; }
     if (_gatewayActivityRefreshTimer) { clearTimeout(_gatewayActivityRefreshTimer); _gatewayActivityRefreshTimer = null; }
     if (_gatewayActivitySseId) { _sseUnsubscribe(_gatewayActivitySseId); _gatewayActivitySseId = null; }
+    if (_orchRunsPoller) { clearInterval(_orchRunsPoller); _orchRunsPoller = null; }
+    if (_orchRunsRefreshTimer) { clearTimeout(_orchRunsRefreshTimer); _orchRunsRefreshTimer = null; }
     if (_coordinationPanelPoller) { clearInterval(_coordinationPanelPoller); _coordinationPanelPoller = null; }
     if (_coordinationPanelRefreshTimer) { clearTimeout(_coordinationPanelRefreshTimer); _coordinationPanelRefreshTimer = null; }
     if (window._systemRuntimeSseId) { _sseUnsubscribe(window._systemRuntimeSseId); window._systemRuntimeSseId = null; }
@@ -14896,12 +14911,15 @@ async function _loadRuntimeOperations() {
   _updateExtractionProgress('runtime-extraction-progress');
   _connectGatewayActivitySse();
   _loadGatewayActivity();
+  _loadOrchRuns();
   _loadCoordinationPanel();
 }
 
 var _gatewayActivityPoller = null;
 var _gatewayActivitySseId = null;
 var _gatewayActivityRefreshTimer = null;
+var _orchRunsPoller = null;
+var _orchRunsRefreshTimer = null;
 var _coordinationPanelPoller = null;
 var _coordinationPanelRefreshTimer = null;
 
@@ -14962,7 +14980,10 @@ function _scheduleGatewayActivityRefresh(delayMs) {
   if (_gatewayActivityRefreshTimer) return;
   _gatewayActivityRefreshTimer = setTimeout(function() {
     _gatewayActivityRefreshTimer = null;
-    if (_currentModule === 'system') _loadGatewayActivity(true); _loadOrchRuns();
+    if (_currentModule === 'system') {
+      _loadGatewayActivity(true);
+      _loadOrchRuns();
+    }
   }, Math.max(50, delayMs || 250));
 }
 
@@ -14973,13 +14994,146 @@ function _connectGatewayActivitySse() {
     if (d.type === 'bridge:dispatch') _scheduleGatewayActivityRefresh(120);
     else if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleGatewayActivityRefresh(220);
     else if (_isCoordinationEventType(d.type)) _scheduleGatewayActivityRefresh(180);
-    if (d.type && d.type.indexOf('orch:') === 0) { _loadOrchRuns(); }
+    if (d.type && d.type.indexOf('orch:') === 0 && _currentModule === 'system') { _scheduleOrchRunsRefresh(120); }
   });
   if (!_gatewayActivityPoller) {
     _gatewayActivityPoller = setInterval(function() {
       if (_currentModule === 'system') _loadGatewayActivity(true);
     }, 30000);
   }
+}
+
+function _orchRunStatusTone(status) {
+  var s = String(status || '').toLowerCase();
+  if (s === 'completed' || s === 'complete') return 'ok';
+  if (s === 'failed' || s === 'cancelled') return 'err';
+  if (s === 'running' || s === 'planned' || s === 'stalled') return 'warn';
+  return 'dim';
+}
+
+function _renderOrchRunCard(run) {
+  var status = String(run.status || 'unknown');
+  var tone = _orchRunStatusTone(status);
+  var progress = Math.max(0, Math.min(100, Math.round(((run.completed_steps || 0) / Math.max(1, run.total_steps || 0)) * 100)));
+  var chips = [
+    '<span class="model-card-chip ' + tone + '" style="font-size:10px">' + escHtml(status) + '</span>',
+    '<span class="model-card-chip dim" style="font-size:10px">' + escHtml((run.completed_steps || 0) + '/' + (run.total_steps || 0) + ' steps') + '</span>',
+    run.requested_by ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(run.requested_by) + '</span>' : '',
+    run.created_at ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(_relativeTime(run.created_at)) + '</span>' : ''
+  ].filter(Boolean).join('');
+  return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">'
+    + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">'
+    + '<div style="min-width:0">'
+    + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + escHtml((run.goal || 'Untitled run').substring(0, 160)) + '</div>'
+    + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + chips + '</div>'
+    + '</div>'
+    + '<div style="display:flex;gap:4px;flex-shrink:0">'
+    + '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="_showOrchRun(\'' + escHtml(run.id) + '\')">Details</button>'
+    + ((status === 'running' || status === 'planned') ? '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px;color:#ef4444" onclick="_cancelOrchRun(\'' + escHtml(run.id) + '\')">Cancel</button>' : '')
+    + '</div>'
+    + '</div>'
+    + '<div style="height:5px;border-radius:999px;background:var(--border);overflow:hidden;margin-bottom:6px"><div style="height:100%;width:' + progress + '%;background:' + (tone === 'ok' ? '#22c55e' : (tone === 'err' ? '#ef4444' : '#f59e0b')) + ';transition:width .25s ease"></div></div>'
+    + '<div style="font-size:11px;color:var(--text3)">' + escHtml((run.result || run.error || run.context || '').substring(0, 180) || 'Run planned. Waiting for updates.') + '</div>'
+    + '</div>';
+}
+
+async function _loadOrchRuns(force) {
+  var host = document.getElementById('runtime-orch-runs');
+  if (!host) return;
+  if (!force && !host.innerHTML.trim()) {
+    host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">Loading orchestration runs…</div>';
+  }
+  try {
+    var suffix = force ? ('?_=' + Date.now()) : '';
+    var data = await api('/api/orchestration/runs' + suffix);
+    var runs = (data && data.runs) || [];
+    if (!runs.length) {
+      host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">No orchestration runs yet. Create one to have Porter plan and route multi-step work.</div>';
+      return;
+    }
+    host.innerHTML = runs.slice(0, 8).map(_renderOrchRunCard).join('');
+  } catch (e) {
+    _reportModelsClientError('runtime-orch-runs', e);
+    host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:#ef4444">Failed to load orchestration runs.</div>';
+  }
+}
+
+function _scheduleOrchRunsRefresh(delayMs) {
+  if (_currentModule !== 'system') return;
+  if (_orchRunsRefreshTimer) return;
+  _orchRunsRefreshTimer = setTimeout(function() {
+    _orchRunsRefreshTimer = null;
+    if (_currentModule === 'system') _loadOrchRuns(true);
+  }, Math.max(60, delayMs || 220));
+}
+
+async function _showOrchRun(runId) {
+  try {
+    var data = await api('/api/orchestration/' + enc(runId));
+    if (!data || !data.ok || !data.run) {
+      toast((data && data.error) || 'Run unavailable', 'err');
+      return;
+    }
+    var run = data.run || {};
+    var steps = data.steps || [];
+    var events = data.events || [];
+    var stepsHtml = steps.map(function(s) {
+      var tone = _orchRunStatusTone(s.status);
+      return '<div style="padding:8px 0;border-top:1px solid var(--border)">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">'
+        + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+        + '<span class="model-card-chip ' + tone + '" style="font-size:10px">' + escHtml(s.kind || 'step') + '</span>'
+        + (s.assigned_backend ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(s.assigned_backend) + '</span>' : '')
+        + '<span style="font-size:11px;color:var(--text)">' + escHtml(s.title || '') + '</span>'
+        + '</div>'
+        + '<span style="font-size:10px;color:var(--text3)">' + escHtml(String(s.status || 'unknown')) + '</span>'
+        + '</div>'
+        + '<div style="font-size:11px;color:var(--text2)">' + escHtml((s.output_data || s.error || s.description || '').substring(0, 220) || '(no detail)') + '</div>'
+        + '</div>';
+    }).join('');
+    var eventsHtml = events.slice(0, 10).map(function(ev) {
+      return '<div style="padding:6px 0;border-top:1px solid var(--border);font-size:11px;color:var(--text2)">'
+        + '<span class="model-card-chip dim" style="font-size:10px;margin-right:6px">' + escHtml(ev.event_type || 'event') + '</span>'
+        + escHtml((ev.message || '').substring(0, 180))
+        + '</div>';
+    }).join('');
+    _showModal('Orchestration Run', '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">' + escHtml(run.goal || '') + '</div>'
+      + '<div style="font-size:11px;font-weight:600;color:var(--text);margin:10px 0 6px">Steps</div>'
+      + '<div>' + (stepsHtml || '<div style="font-size:12px;color:var(--text3)">No steps</div>') + '</div>'
+      + '<div style="font-size:11px;font-weight:600;color:var(--text);margin:12px 0 6px">Events</div>'
+      + '<div>' + (eventsHtml || '<div style="font-size:12px;color:var(--text3)">No events</div>') + '</div>');
+  } catch (e) {
+    toast('Failed to load orchestration run', 'err');
+  }
+}
+
+async function _cancelOrchRun(runId) {
+  _porterConfirm('Cancel Orchestration Run', 'Cancel this run and stop any pending steps?', async function() {
+    var res = await fetch('/api/orchestration/' + enc(runId), {method: 'DELETE', credentials: 'same-origin'});
+    var data = await res.json().catch(function() { return {}; });
+    if (data && data.ok) {
+      toast('Run cancelled', 'ok');
+      _loadOrchRuns(true);
+    } else {
+      toast((data && data.error) || 'Failed to cancel run', 'err');
+    }
+  }, {danger: true, okLabel: 'Cancel Run'});
+}
+
+function _newOrchRun() {
+  _porterPrompt('New Orchestration Run', [
+    {name: 'goal', label: 'Goal', placeholder: 'Fix the bridge visibility gaps and verify end to end'},
+    {name: 'context', label: 'Context', type: 'textarea', placeholder: 'Optional context, constraints, or project scope'}
+  ], async function(vals) {
+    if (!vals.goal) { toast('Goal required', 'err'); return; }
+    var res = await api('/api/orchestration/run', {goal: vals.goal, context: vals.context || '', requested_by: 'operator', execute: true}, 120000);
+    if (res && res.ok) {
+      toast('Orchestration run started', 'ok');
+      _loadOrchRuns(true);
+    } else {
+      toast((res && res.error) || 'Failed to start orchestration run', 'err');
+    }
+  }, {okLabel: 'Start Run'});
 }
 
 function _coordinationTone(type) {
@@ -33316,7 +33470,11 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/orchestration/runs":
             if not self.auth_check(redirect=False): return
-            limit = int(qs.get("limit", ["20"])[0])
+            qs = parse_qs(parsed.query)
+            try:
+                limit = int(qs.get("limit", ["20"])[0] or "20")
+            except Exception:
+                limit = 20
             self.reply_json(_orch_list_runs(limit))
 
         elif parsed.path.startswith("/api/orchestration/") and parsed.path.count("/") == 3:
