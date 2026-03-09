@@ -259,7 +259,7 @@ _wf_register("memory_extraction", "Memory Extraction",
 
 _wf_register("agent_watchdog", "Agent Watchdog",
     "Auto-detects stalled agents and orchestration steps, validates responses, reboots failures",
-    interval_minutes=0, auto_start=True, status="active")
+    interval_s=30)
 _wf_register("agent_backend_eval", "Agent Backend Eval",
     "Cycles through agents testing each backend for response quality and speed",
     interval="168h", interval_s=604800,
