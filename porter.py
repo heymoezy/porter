@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.67 — Squad wizard, per-squad config, agents UX cleanup"""
+"""Porter v0.29.69 — Gateway health + model test from Models tab"""
 
 
 import email
@@ -626,6 +626,7 @@ AUDIT_LOG           = RUNTIME_DIR / "audit.jsonl"
 # Each entry: id, label, install URL, features list, check lambda → {ok, version}
 _capabilities_cache: dict = {}  # id -> result dict, refreshed on startup + /api/capabilities
 _capabilities_cache_ts: float = 0.0  # last check timestamp
+_gw_pid_history: list = []  # [(pid, timestamp), ...]
 
 
 def _cap_check_bin(binary: str) -> dict:
@@ -9111,7 +9112,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.68</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.69</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9808,6 +9809,15 @@ input[type="number"].settings-input { min-width: 60px; }
     <!-- Backends sub-tab -->
     <div id="models-backends-tab">
       <div class="module-intro">AI backends available to Porter. Each persona routes through one of these.</div>
+      <div id="gateway-health-bar" style="margin-bottom:12px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);display:flex;align-items:center;gap:12px;font-size:12px">
+        <span id="gw-status-dot" class="status-dot" style="background:var(--text3)"></span>
+        <span id="gw-status-label" style="font-weight:600;color:var(--text)">Gateway</span>
+        <span id="gw-status-detail" style="color:var(--text3)">Checking...</span>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button class="btn btn-ghost" style="font-size:11px;padding:2px 10px" onclick="_gwRestart()">Restart</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:2px 10px" onclick="_gwCheck()">Check</button>
+        </div>
+      </div>
       <div id="models-summary" style="margin:12px 0 16px;font-size:13px;color:var(--text2)"></div>
       <div id="extraction-progress-bar" style="margin:0 0 12px;padding:0"><div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px"><div style="display:flex;align-items:center;gap:8px"><span class="learn-spinner"></span><span style="font-size:12px;color:var(--text3)">Loading extraction status...</span></div></div></div>
       <div id="models-grid" class="models-grid">
@@ -10414,6 +10424,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.69', date:'2026-03-09', notes:['Gateway health banner on Models tab (status, crash-loop detection, restart button)','Model test button — sends real prompt, shows latency','New APIs: /api/gateway/status, /api/gateway/action, /api/models/test'] },
   { ver:'v0.29.68', date:'2026-03-09', notes:['FIX: login page was rendering keyboard shortcuts overlay and task modal (belonged in main page only)'] },
   { ver:'v0.29.67', date:'2026-03-08', notes:['Squad creation wizard (3-step)','Per-squad config buttons replace global modal','Agents tab UX cleanup'] },
   { ver:'v0.29.66', date:'2026-03-08', notes:['Remove agent chips and recent chats from chat welcome screen (declutter per user request)'] },
@@ -18084,9 +18095,84 @@ function _elapsedStr(startTs) {
   return Math.floor(diff / 60) + 'm ' + Math.round(diff % 60) + 's';
 }
 
+async function _gwCheck() {
+  var dot = document.getElementById('gw-status-dot');
+  var label = document.getElementById('gw-status-label');
+  var detail = document.getElementById('gw-status-detail');
+  if (!dot || !label || !detail) return;
+  detail.textContent = 'Checking...';
+  dot.style.background = 'var(--text3)';
+  try {
+    var r = await api('/api/gateway/status');
+    if (!r || !r.ok) {
+      label.textContent = 'Gateway';
+      detail.textContent = 'Status unavailable';
+      dot.style.background = '#ef4444';
+      return;
+    }
+    if (r.crash_looping) {
+      label.textContent = 'Gateway';
+      detail.textContent = 'Crash-looping (' + (r.restart_count_60s || 0) + ' restarts in last 60s)';
+      dot.style.background = '#f59e0b';
+      return;
+    }
+    if (r.running) {
+      var parts = ['Running'];
+      if (r.pid) parts.push('PID ' + r.pid);
+      if (typeof r.uptime_s === 'number') {
+        var up = Number(r.uptime_s || 0);
+        if (up >= 60) parts.push('up ' + Math.floor(up / 60) + 'm');
+        else parts.push('up ' + Math.max(0, Math.floor(up)) + 's');
+      }
+      if (r.version) parts.push(String(r.version));
+      label.textContent = 'Gateway';
+      detail.textContent = parts.join(' · ');
+      dot.style.background = '#22c55e';
+    } else {
+      label.textContent = 'Gateway';
+      detail.textContent = 'Down';
+      dot.style.background = '#ef4444';
+    }
+  } catch (e) {
+    label.textContent = 'Gateway';
+    detail.textContent = 'Status unavailable';
+    dot.style.background = '#ef4444';
+  }
+}
+
+async function _gwRestart() {
+  var r = await api('/api/gateway/action', {action: 'restart'});
+  if (r && r.ok) toast(r.message || 'Gateway restart signal sent', 'ok');
+  else toast((r && r.error) || 'Failed to restart gateway', 'err');
+  setTimeout(function() { _gwCheck(); }, 2000);
+}
+
+async function _testModel(event, modelId) {
+  var btn = event.target;
+  var resultEl = document.getElementById('test-result-' + modelId);
+  btn.disabled = true;
+  btn.textContent = 'Testing...';
+  if (resultEl) resultEl.innerHTML = '<span class="learn-spinner" style="width:12px;height:12px"></span>';
+  var t0 = Date.now();
+  try {
+    var r = await api('/api/models/test', {model_id: modelId});
+    var elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    if (r && r.ok) {
+      if (resultEl) resultEl.innerHTML = '<span style="color:#22c55e">✓ ' + elapsed + 's</span>';
+    } else {
+      if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">✗ ' + escHtml(r && r.error || 'Failed') + '</span>';
+    }
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">✗ ' + escHtml(e.message || 'Error') + '</span>';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Test';
+}
+
 async function loadModels() {
   _preloadSessionCounts();
   _updateExtractionProgress();
+  _gwCheck();
   try {
     var [data, act, avail] = await Promise.all([
       api('/api/providers'),
@@ -19144,7 +19230,8 @@ function _renderModelCards(data, act) {
       + _selHtml
       + '<div class="model-card-divider"></div>'
       + statsHtml
-      + ''
+      + '<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;margin-top:6px" onclick="_testModel(event, \'' + escHtml(p.id) + '\')">Test</button>'
+      + '<span id="test-result-' + escHtml(p.id) + '" style="font-size:11px;margin-left:6px"></span>'
       + sessionsBtn
       + liveTraceBtn
       + lastPromptBtn
@@ -25621,6 +25708,179 @@ def _get_active_model(backend):
     return choice
 
 
+def _openclaw_gateway_settings() -> dict:
+    """Load local OpenClaw gateway port/token from ~/.openclaw/openclaw.json."""
+    port = 18789
+    token = ""
+    try:
+        oc_cfg = json.loads((OPENCLAW_STATE_DIR / "openclaw.json").read_text(encoding="utf-8"))
+        gw = oc_cfg.get("gateway", {}) if isinstance(oc_cfg, dict) else {}
+        port = int(gw.get("port") or oc_cfg.get("gatewayPort") or 18789)
+        auth = gw.get("auth", {}) if isinstance(gw, dict) else {}
+        token = str(auth.get("token") or gw.get("token") or oc_cfg.get("authToken") or "").strip()
+    except Exception as e:
+        log.debug("OpenClaw gateway config read failed: %s", e)
+    return {"port": port, "token": token}
+
+
+def _check_gateway_status() -> dict:
+    """Check openclaw-gateway process state and detect rapid PID churn."""
+    global _gw_pid_history
+    now = time.time()
+    pid = None
+    try:
+        r = subprocess.run(["pgrep", "-f", "openclaw-gateway"], capture_output=True, text=True, timeout=3)
+        if r.returncode == 0:
+            pids = []
+            for line in (r.stdout or "").splitlines():
+                line = line.strip()
+                if line.isdigit():
+                    pids.append(int(line))
+            if pids:
+                pid = max(pids)
+    except Exception as e:
+        log.debug("Gateway pgrep failed: %s", e)
+
+    if pid is not None:
+        if not _gw_pid_history or _gw_pid_history[-1][0] != pid:
+            _gw_pid_history.append((pid, now))
+
+    _gw_pid_history = [(p, ts) for (p, ts) in _gw_pid_history if (now - ts) <= 60]
+    recent_pids = sorted({p for (p, _) in _gw_pid_history})
+    restart_count_60s = len(recent_pids)
+    crash_looping = restart_count_60s >= 3
+
+    uptime_s = None
+    if pid is not None:
+        try:
+            proc_stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace").split()
+            start_ticks = float(proc_stat[21])
+            clk_tck = float(os.sysconf("SC_CLK_TCK"))
+            sys_uptime = float(Path("/proc/uptime").read_text(encoding="utf-8").split()[0])
+            boot_ts = now - sys_uptime
+            proc_start_ts = boot_ts + (start_ticks / clk_tck)
+            uptime_s = max(0.0, now - proc_start_ts)
+        except Exception as e:
+            log.debug("Gateway uptime parse failed: %s", e)
+
+    version = _capabilities_cache.get("openclaw", {}).get("version")
+    return {
+        "ok": True,
+        "running": pid is not None,
+        "pid": pid,
+        "uptime_s": uptime_s,
+        "crash_looping": crash_looping,
+        "restart_count_60s": restart_count_60s,
+        "version": version,
+    }
+
+
+def _gateway_stop() -> dict:
+    """Stop gateway process; supervisor/TUI may respawn it depending on host setup."""
+    try:
+        subprocess.run(["pkill", "-f", "openclaw-gateway"], timeout=5, capture_output=True)
+        return {"ok": True, "message": "Gateway stop signal sent"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+def _gateway_restart() -> dict:
+    """Restart gateway by killing process; runtime supervisor should respawn it."""
+    try:
+        subprocess.run(["pkill", "-f", "openclaw-gateway"], timeout=5, capture_output=True)
+        return {"ok": True, "message": "Gateway restart signal sent"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+def _test_model_connectivity(model_id: str) -> dict:
+    """Run a lightweight connectivity test for model backends used in Models tab cards."""
+    import urllib.request
+
+    model_id = str(model_id or "").strip()
+    if not model_id:
+        return {"ok": False, "model": model_id, "error": "model_id required"}
+
+    backend = model_id.lower()
+    alias = {
+        "openclaw-gateway": "openclaw",
+        "gemini_cli": "gemini",
+        "claude_code": "claude",
+    }
+    backend = alias.get(backend, backend)
+
+    t0 = time.time()
+    try:
+        if backend in ("openclaw", "codex"):
+            gw = _openclaw_gateway_settings()
+            model_name = _get_active_model("openclaw" if backend == "openclaw" else "codex") or "gpt-5.4"
+            payload = {
+                "model": model_name,
+                "messages": [{"role": "user", "content": "Reply with just the word OK"}],
+                "max_tokens": 5,
+            }
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{gw['port']}/v1/chat/completions",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            if gw.get("token"):
+                req.add_header("Authorization", f"Bearer {gw['token']}")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                body = json.loads(resp.read().decode("utf-8", errors="replace") or "{}")
+            response_text = ""
+            choices = body.get("choices", []) if isinstance(body, dict) else []
+            if choices and isinstance(choices[0], dict):
+                msg = choices[0].get("message", {})
+                if isinstance(msg, dict):
+                    response_text = msg.get("content", "") or ""
+            if isinstance(response_text, list):
+                response_text = "".join([(p.get("text", "") if isinstance(p, dict) else str(p)) for p in response_text])
+            latency_ms = int((time.time() - t0) * 1000)
+            return {"ok": True, "model": model_id, "response": (response_text or "OK").strip()[:200], "latency_ms": latency_ms}
+
+        if backend == "ollama":
+            model_name = _get_active_model("ollama") or "qwen2.5-coder:1.5b"
+            payload = {"model": model_name, "prompt": "Reply OK", "stream": False}
+            req = urllib.request.Request(
+                "http://127.0.0.1:11434/api/generate",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                body = json.loads(resp.read().decode("utf-8", errors="replace") or "{}")
+            latency_ms = int((time.time() - t0) * 1000)
+            return {"ok": True, "model": model_id, "response": str(body.get("response", "OK")).strip()[:200], "latency_ms": latency_ms}
+
+        if backend == "gemini":
+            gem = _resolve_cli("gemini")
+            if not gem:
+                return {"ok": False, "model": model_id, "error": "gemini CLI not found"}
+            r = subprocess.run([gem, "-p", "Reply with just OK"], capture_output=True, text=True, timeout=10, env=_agent_env(), cwd=str(Path.home()))
+            if r.returncode != 0:
+                return {"ok": False, "model": model_id, "error": (r.stderr or r.stdout or "Gemini failed").strip()[:200]}
+            latency_ms = int((time.time() - t0) * 1000)
+            return {"ok": True, "model": model_id, "response": (r.stdout or "OK").strip()[:200], "latency_ms": latency_ms}
+
+        if backend == "claude":
+            claude = _resolve_cli("claude")
+            if not claude:
+                return {"ok": False, "model": model_id, "error": "claude CLI not found"}
+            r = subprocess.run([claude, "-p", "Reply with just OK", "--no-input"], capture_output=True, text=True, timeout=15, env=_agent_env(), cwd=str(Path.home()))
+            if r.returncode != 0:
+                return {"ok": False, "model": model_id, "error": (r.stderr or r.stdout or "Claude failed").strip()[:200]}
+            latency_ms = int((time.time() - t0) * 1000)
+            return {"ok": True, "model": model_id, "response": (r.stdout or "OK").strip()[:200], "latency_ms": latency_ms}
+
+        return {"ok": False, "model": model_id, "error": f"Unsupported model_id: {model_id}"}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "model": model_id, "error": "Timed out after 15s"}
+    except Exception as e:
+        return {"ok": False, "model": model_id, "error": str(e)[:200]}
+
+
 # ── Active Streams (for live trace) ───────────────────────────────────────
 _active_streams = {}  # {run_id: {"backend": str, "chunks": [], "started_at": float}}
 _streams_lock = __import__("threading").Lock()
@@ -27564,7 +27824,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.68"})
+            self.reply_json({"v": "0.29.69"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27726,7 +27986,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.68"
+                health["porter_version"] = "0.29.69"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -27935,6 +28195,10 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
             self.reply_json({"ok": True, "activity": activity})
+
+        elif parsed.path == "/api/gateway/status":
+            if not self.auth_check(redirect=False): return
+            self.reply_json(_check_gateway_status())
 
         elif parsed.path.startswith("/api/models/") and parsed.path.endswith("/trace"):
             if not self.auth_check(redirect=False): return
@@ -29526,7 +29790,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.68'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.69'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30331,6 +30595,28 @@ class Handler(BaseHTTPRequestHandler):
             resolved = _get_active_model(_sel_bk)
             log.info("Model selected: %s → %s (resolved: %s)", _sel_bk, _sel_model, resolved)
             self.reply_json({"ok": True, "backend": _sel_bk, "model": _sel_model, "resolved": resolved})
+
+        elif parsed.path == "/api/gateway/action":
+            if not self.auth_check(redirect=False): return
+            body = self.read_json_body()
+            if body is None: return
+            action = body.get("action", "")
+            if action == "restart":
+                result = _gateway_restart()
+                self.reply_json(result)
+            elif action == "stop":
+                result = _gateway_stop()
+                self.reply_json(result)
+            else:
+                self.reply_json({"ok": False, "error": "Unknown action"}, 400)
+
+        elif parsed.path == "/api/models/test":
+            if not self.auth_check(redirect=False): return
+            body = self.read_json_body()
+            if body is None: return
+            model_id = body.get("model_id", "")
+            result = _test_model_connectivity(model_id)
+            self.reply_json(result)
 
         elif parsed.path == "/api/bridge/dispatch":
             if not self.auth_check_cap("orch_write"): return
@@ -34111,7 +34397,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.68 ready (localhost only)")
+    print(f"\n  Porter v0.29.69 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
