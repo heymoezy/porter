@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.23 — Project-aware bridge coordination"""
+"""Porter v0.30.24 — Project-aware watchdog recovery"""
 
 
 import email
@@ -9596,7 +9596,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.23</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.24</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11034,6 +11034,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.24', date:'2026-03-09', notes:['Watchdog reboot of stalled orchestration steps now reselects executors through the same project-aware selector instead of doing a blind backend swap','Recovered steps now keep project_id, task_id, and any reassigned persona identity attached to the reboot event and recovery logs','This keeps failure recovery inside the project lane so autonomous work does not lose squad/project context during a stall'] },
   { ver:'v0.30.23', date:'2026-03-09', notes:['Coordination Bridge runs now inherit active project/task context automatically instead of behaving like generic prompt fanout','Bridge coordination prompts now get the same project brief, decision log, task state, recent activity, and Cortex memory injection used by project-aware persona dispatch','coordination:start/result/complete events and API responses now carry project_id and task_id so live bridge activity stays tied to the project lane'] },
   { ver:'v0.30.22', date:'2026-03-09', notes:['Orchestration executor selection now prefers personas assigned to the active project or task instead of choosing a raw backend first and hoping context survives','Project-backed orchestration steps now always carry project brief, decision log, task state, recent project activity, and Cortex context even when a step falls back to direct backend dispatch','Failed orchestration steps now reassign through the same project-aware selector, so retries stay inside the project lane instead of degrading into generic backend swaps'] },
   { ver:'v0.30.21', date:'2026-03-09', notes:['Process Manager: Porter now tracks all model gateway processes (OpenClaw, Gemini, Codex, Ollama) with CPU, memory, runtime, and stall detection','Auto-kill: watchdog automatically kills processes stalled for 2+ hours with 0% CPU or zombies','API: GET /api/processes lists running gateways, POST /api/processes/kill and /restart for manual control','Watchdog integration: stalled processes auto-detected and terminated every 30 seconds'] },
@@ -30588,30 +30589,33 @@ def _reboot_stalled_step(step: dict, run_id: str) -> dict:
     """Reassign a stalled orchestration step to a different backend."""
     step_id = step["id"]
     old_backend = step.get("assigned_backend", "")
-    kind = step.get("kind", "general")
-
-    # Find next best backend
-    _raw_rc = step.get("required_capabilities", [])
-    req_caps = json.loads(_raw_rc) if isinstance(_raw_rc, str) else (_raw_rc if isinstance(_raw_rc, list) else [])
-
-    scored = []
-    for bk in PROVIDER_REGISTRY:
-        if bk == old_backend:
-            continue
-        s = _orch_score_backend(bk, kind, req_caps)
-        if s > 0.0:
-            scored.append((s, bk))
-    scored.sort(key=lambda x: -x[0])
-
-    if not scored:
-        return {"ok": False, "reason": "no alternative backends available"}
-
-    new_backend = scored[0][1]
+    project_id = ""
+    task_id = ""
+    try:
+        step_ctx = json.loads(step.get("input_data", "") or "{}")
+        project_id = str(step_ctx.get("project_id") or "").strip()
+        task_id = str(step_ctx.get("task_id") or "").strip()
+    except Exception:
+        step_ctx = {}
+    if not project_id:
+        try:
+            conn = _db_conn()
+            run_row = conn.execute("SELECT context FROM orchestration_runs WHERE id=?", (run_id,)).fetchone()
+            conn.close()
+            if run_row and run_row["context"]:
+                run_ctx = json.loads(run_row["context"] or "{}")
+                project_id = str(run_ctx.get("project_id") or "").strip()
+                task_id = task_id or str(run_ctx.get("task_id") or "").strip()
+        except Exception:
+            pass
+    new_backend, new_persona_id = _orch_select_executor(step, project_id=project_id, task_id=task_id, exclude_backends=[old_backend])
+    if not new_backend:
+        return {"ok": False, "reason": "no alternative executors available"}
     try:
         conn = _db_conn()
         conn.execute(
-            "UPDATE orchestration_steps SET status='pending', assigned_backend=?, progress_pct=0 WHERE id=?",
-            (new_backend, step_id)
+            "UPDATE orchestration_steps SET status='pending', assigned_backend=?, assigned_persona_id=?, progress_pct=0 WHERE id=?",
+            (new_backend, new_persona_id or "", step_id)
         )
         conn.execute(
             "INSERT INTO orchestration_events (run_id, step_id, event_type, backend, message) VALUES (?, ?, 'watchdog_reboot', ?, ?)",
@@ -30622,11 +30626,12 @@ def _reboot_stalled_step(step: dict, run_id: str) -> dict:
     except Exception as e:
         return {"ok": False, "reason": str(e)}
 
-    _emit_event("watchdog:reboot", {"run_id": run_id, "step_id": step_id, "from": old_backend, "to": new_backend})
+    _emit_event("watchdog:reboot", {"run_id": run_id, "step_id": step_id, "from": old_backend, "to": new_backend, "persona_id": new_persona_id or "", "project_id": project_id, "task_id": task_id})
     mlog.emit("warn", "watchdog", "watchdog.reboot",
-        f"Step {step_id} rebooted: {old_backend} -> {new_backend}", run_id=run_id, backend=new_backend)
+        f"Step {step_id} rebooted: {old_backend} -> {new_backend}", run_id=run_id, backend=new_backend,
+        extra={"persona_id": new_persona_id or "", "project_id": project_id, "task_id": task_id})
     _watchdog_stats["reboots"] += 1
-    return {"ok": True, "from": old_backend, "to": new_backend}
+    return {"ok": True, "from": old_backend, "to": new_backend, "persona_id": new_persona_id or "", "project_id": project_id, "task_id": task_id}
 
 
 def _openclaw_health_check() -> dict:
@@ -32162,7 +32167,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.23"})
+            self.reply_json({"v": "0.30.24"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32324,7 +32329,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.23"
+                health["porter_version"] = "0.30.24"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34154,7 +34159,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.23'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.24'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38911,7 +38916,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.23 ready (localhost only)")
+    print(f"\n  Porter v0.30.24 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

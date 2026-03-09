@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.24 (2026-03-09)
+
+**Project-Aware Watchdog Recovery**
+
+- Watchdog reboot of stalled orchestration steps now reselects executors through the same project-aware selector instead of doing a blind backend swap
+- Recovered steps now keep `project_id`, `task_id`, and any reassigned persona identity attached to the reboot event and Mission Control logging
+- This keeps failure recovery inside the project lane so autonomous work does not lose squad/project context during a stall
+
+---
+
 ## v0.30.23 (2026-03-09)
 
 **Project-Aware Coordination Bridge**
