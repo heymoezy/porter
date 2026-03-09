@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.70 — Models tab redesign: gateway cards, per-card status, codex test fix"""
+"""Porter v0.29.71 — Model cards: proper labels, install hints, per-model test"""
 
 
 import email
@@ -9112,7 +9112,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.70</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.71</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10415,6 +10415,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.71', date:'2026-03-09', notes:['Model cards: OpenAI Codex/Google Gemini labels, install hints for missing backends, per-model test buttons'] },
   { ver:'v0.29.70', date:'2026-03-09', notes:['Models tab redesign — cards show gateway/provider name, per-card inline status with restart, codex test separated from openclaw'] },
   { ver:'v0.29.69', date:'2026-03-09', notes:['Gateway health banner on Models tab (status, crash-loop detection, restart button)','Model test button — sends real prompt, shows latency','New APIs: /api/gateway/status, /api/gateway/action, /api/models/test'] },
   { ver:'v0.29.68', date:'2026-03-09', notes:['FIX: login page was rendering keyboard shortcuts overlay and task modal (belonged in main page only)'] },
@@ -18152,23 +18153,23 @@ async function _restartBackend(backendId) {
   setTimeout(function() { _recheckGw(backendId); }, 2000);
 }
 
-async function _testModel(event, modelId) {
+async function _testModel(event, backendId, modelId, testId) {
   var btn = event.target;
-  var resultEl = document.getElementById('test-result-' + modelId);
+  var resultEl = document.getElementById('test-r-' + testId);
   btn.disabled = true;
-  btn.textContent = 'Testing...';
-  if (resultEl) resultEl.innerHTML = '<span class="learn-spinner" style="width:12px;height:12px"></span>';
+  btn.textContent = '...';
+  if (resultEl) resultEl.innerHTML = '<span class="learn-spinner" style="width:10px;height:10px"></span>';
   var t0 = Date.now();
   try {
-    var r = await api('/api/models/test', {model_id: modelId});
+    var r = await api('/api/models/test', {backend: backendId, model: modelId});
     var elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     if (r && r.ok) {
-      if (resultEl) resultEl.innerHTML = '<span style="color:#22c55e">✓ ' + elapsed + 's</span>';
+      if (resultEl) resultEl.innerHTML = '<span style="color:#22c55e">\u2713 ' + elapsed + 's</span>';
     } else {
-      if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">✗ ' + escHtml(r && r.error || 'Failed') + '</span>';
+      if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">\u2717 ' + escHtml(r && r.error || 'Failed') + '</span>';
     }
   } catch(e) {
-    if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">✗ ' + escHtml(e.message || 'Error') + '</span>';
+    if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">\u2717 ' + escHtml(e.message || 'Error') + '</span>';
   }
   btn.disabled = false;
   btn.textContent = 'Test';
@@ -19191,6 +19192,15 @@ function _renderModelCards(data, act) {
     }
     var lastPromptBtn = '';
 
+    // Install hint for unavailable backends
+    var _installHtml = '';
+    if (!p.available && p.install_hint) {
+      _installHtml = '<div style="padding:12px;margin:8px 0;border:1px dashed var(--border);border-radius:6px;text-align:center">'
+        + '<div style="font-size:12px;color:var(--text3);margin-bottom:6px">Not installed</div>'
+        + '<code style="font-size:11px;background:var(--bg);padding:4px 10px;border-radius:4px;color:var(--accent);display:inline-block">' + escHtml(p.install_hint) + '</code>'
+        + '</div>';
+    }
+
     // Model selector: active model shown in card subtitle
     var _avBk = (_modelAvailableData || {})[p.id] || {};
     var _avResolved = _avBk.resolved || '';
@@ -19209,6 +19219,9 @@ function _renderModelCards(data, act) {
         _selHtml += '<div class="model-list-row' + (isActive ? ' active' : '') + '" onclick="_selectModelFromList(this,\'' + escHtml(p.id) + '\',\'' + escHtml(m.id) + '\')" title="' + escHtml(m.id) + '">';
         _selHtml += '<span class="model-list-dot" style="background:' + (isResolved ? 'var(--accent)' : 'transparent') + '"></span>';
         _selHtml += '<span class="model-list-name">' + escHtml(m.name) + (m.default ? ' <span style=\"font-size:10px;color:var(--text3)\">(default)</span>' : '') + '</span>';
+        var _mTid = (p.id + '_' + m.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+        _selHtml += '<span id="test-r-' + _mTid + '" style="font-size:10px;margin-left:auto;white-space:nowrap"></span>';
+        _selHtml += '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_testModel(event,\'' + escHtml(p.id) + '\',\'' + escHtml(m.id) + '\',\'' + _mTid + '\')">Test</button>';
         _selHtml += '</div>';
       });
       _selHtml += '</div></div>';
@@ -19233,11 +19246,10 @@ function _renderModelCards(data, act) {
       + '<div id="backend-status-' + escHtml(p.id) + '"></div>'
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
       + (tags ? '<div class="model-card-tags">' + tags + '</div>' : '')
-      + _selHtml
+      + (p.available ? _selHtml : _installHtml)
       + '<div class="model-card-divider"></div>'
       + statsHtml
-      + '<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;margin-top:6px" onclick="_testModel(event, \'' + escHtml(p.id) + '\')">Test</button>'
-      + '<span id="test-result-' + escHtml(p.id) + '" style="font-size:11px;margin-left:6px"></span>'
+
       + sessionsBtn
       + liveTraceBtn
       + lastPromptBtn
@@ -25544,13 +25556,21 @@ When you need to perform a Workspace action, output a ```gws code block and Port
 
 
 PROVIDER_REGISTRY = {
-    "codex":    {"dispatch": _dispatch_codex,    "probe": _probe_codex,    "type": "cli",     "label": "Codex"},
+    "codex":    {"dispatch": _dispatch_codex,    "probe": _probe_codex,    "type": "cli",     "label": "OpenAI Codex"},
     "claude":   {"dispatch": _dispatch_claude,   "probe": _probe_claude,   "type": "cli",     "label": "Claude Code"},
-    "gemini":   {"dispatch": _dispatch_gemini,   "probe": _probe_gemini,   "type": "cli",     "label": "Gemini"},
+    "gemini":   {"dispatch": _dispatch_gemini,   "probe": _probe_gemini,   "type": "cli",     "label": "Google Gemini"},
     "openclaw": {"dispatch": _dispatch_openclaw, "probe": _probe_openclaw, "type": "gateway", "label": "OpenClaw"},
     "ollama":   {"dispatch": _dispatch_ollama,   "probe": _probe_ollama,   "type": "local",   "label": "Ollama"},
 }
 AGENT_DISPATCHERS = {k: v["dispatch"] for k, v in PROVIDER_REGISTRY.items()}
+
+INSTALL_HINTS = {
+    "codex": "npm i -g @openai/codex",
+    "claude": "npm i -g @anthropic-ai/claude-code",
+    "gemini": "npm i -g @google/gemini-cli",
+    "openclaw": "npm i -g @anthropic-ai/openclaw",
+    "ollama": "curl -fsSL https://ollama.com/install.sh | sh",
+}
 
 MODEL_METADATA = {
     "openclaw": {
@@ -25799,7 +25819,7 @@ def _gateway_restart() -> dict:
         return {"ok": False, "error": str(e)[:200]}
 
 
-def _test_model_connectivity(model_id: str) -> dict:
+def _test_model_connectivity(model_id: str, model: str = "") -> dict:
     """Run a lightweight connectivity test for model backends used in Models tab cards."""
     import urllib.request
 
@@ -25819,7 +25839,7 @@ def _test_model_connectivity(model_id: str) -> dict:
     try:
         if backend == "openclaw":
             gw = _openclaw_gateway_settings()
-            model_name = _get_active_model("openclaw") or "gpt-5.4"
+            model_name = model or _get_active_model("openclaw") or "gpt-5.4"
             payload = {
                 "model": model_name,
                 "messages": [{"role": "user", "content": "Reply with just the word OK"}],
@@ -25850,7 +25870,7 @@ def _test_model_connectivity(model_id: str) -> dict:
             cdx = _resolve_cli("codex")
             if not cdx:
                 return {"ok": False, "model": model_id, "error": "codex CLI not found"}
-            _cdx_model = _get_active_model("codex") or "gpt-5.4"
+            _cdx_model = model or _get_active_model("codex") or "gpt-5.4"
             _cdx_cmd = [cdx, "exec", "--ephemeral", "--json", "--skip-git-repo-check",
                         "-m", _cdx_model, "Reply with just the word OK"]
             _cdx_r = subprocess.run(_cdx_cmd, capture_output=True, text=True,
@@ -25879,7 +25899,7 @@ def _test_model_connectivity(model_id: str) -> dict:
             return {"ok": False, "model": model_id, "error": (_cdx_r.stderr or "").strip()[:200] or "Codex returned no text"}
 
         if backend == "ollama":
-            model_name = _get_active_model("ollama") or "qwen2.5-coder:1.5b"
+            model_name = model or _get_active_model("ollama") or "qwen2.5-coder:1.5b"
             payload = {"model": model_name, "prompt": "Reply OK", "stream": False}
             req = urllib.request.Request(
                 "http://127.0.0.1:11434/api/generate",
@@ -25896,7 +25916,7 @@ def _test_model_connectivity(model_id: str) -> dict:
             gem = _resolve_cli("gemini")
             if not gem:
                 return {"ok": False, "model": model_id, "error": "gemini CLI not found"}
-            r = subprocess.run([gem, "-p", "Reply with just OK"], capture_output=True, text=True, timeout=10, env=_agent_env(), cwd=str(Path.home()))
+            r = subprocess.run([gem, "-p", "Reply with just OK"] + (["-m", model] if model and model != "auto" else []), capture_output=True, text=True, timeout=10, env=_agent_env(), cwd=str(Path.home()))
             if r.returncode != 0:
                 return {"ok": False, "model": model_id, "error": (r.stderr or r.stdout or "Gemini failed").strip()[:200]}
             latency_ms = int((time.time() - t0) * 1000)
@@ -25906,7 +25926,7 @@ def _test_model_connectivity(model_id: str) -> dict:
             claude = _resolve_cli("claude")
             if not claude:
                 return {"ok": False, "model": model_id, "error": "claude CLI not found"}
-            r = subprocess.run([claude, "-p", "Reply with just OK", "--no-input"], capture_output=True, text=True, timeout=15, env=_agent_env(), cwd=str(Path.home()))
+            r = subprocess.run([claude, "-p", "Reply with just OK", "--no-input"] + (["--model", model] if model and model != "auto" else []), capture_output=True, text=True, timeout=15, env=_agent_env(), cwd=str(Path.home()))
             if r.returncode != 0:
                 return {"ok": False, "model": model_id, "error": (r.stderr or r.stdout or "Claude failed").strip()[:200]}
             latency_ms = int((time.time() - t0) * 1000)
@@ -27862,7 +27882,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.70"})
+            self.reply_json({"v": "0.29.71"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -28024,7 +28044,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.70"
+                health["porter_version"] = "0.29.71"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28176,6 +28196,7 @@ class Handler(BaseHTTPRequestHandler):
                     "label": info["label"],
                     "description": _meta.get("description", ""),
                     "best_for": _meta.get("best_for", []),
+                    "install_hint": INSTALL_HINTS.get(name, ""),
                 })
             self.reply_json({"ok": True, "providers": providers})
 
@@ -29828,7 +29849,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.70'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.71'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30652,8 +30673,9 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             body = self.read_json_body()
             if body is None: return
-            model_id = body.get("model_id", "")
-            result = _test_model_connectivity(model_id)
+            _test_bk = body.get("backend", body.get("model_id", ""))
+            _test_model = body.get("model", "")
+            result = _test_model_connectivity(_test_bk, _test_model)
             self.reply_json(result)
 
         elif parsed.path == "/api/bridge/dispatch":
@@ -34435,7 +34457,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.70 ready (localhost only)")
+    print(f"\n  Porter v0.29.71 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
