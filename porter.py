@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.73 — Models tab: dynamic model detection, Test All, gateway health, UX cleanup"""
+"""Porter v0.29.74 — Fix Test All endpoint, Auto row becomes per-card Test All"""
 
 
 import email
@@ -9112,7 +9112,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.73</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.74</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10416,6 +10416,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.74', date:'2026-03-09', notes:['Fix Test All (POST + 90s timeout)','Auto row replaced with per-card Test All button','No Test button on Auto selector row'] },
   { ver:'v0.29.73', date:'2026-03-09', notes:['Dynamic model detection (Codex reads models_cache.json, real Claude/Gemini models)','Test All button, removed useless Refresh','Removed redundant model sub-header from cards','Auto only shown when 2+ models','CLI health status for all backends','Gateway vs model testing separated'] },
   { ver:'v0.29.72', date:'2026-03-09', notes:['Purge hardcoded model data — models/descriptions/tags now config-backed','Fix all model tests: OpenClaw uses CLI not HTTP, Claude removes --no-input, Gemini adds -y flag, auto resolves before test','Remove best_for tags from cards (were hardcoded)','Remove stale KNOWN_LATEST version comparisons'] },
   { ver:'v0.29.71', date:'2026-03-09', notes:['Model cards: OpenAI Codex/Google Gemini labels, install hints for missing backends, per-model test buttons'] },
@@ -18185,12 +18186,20 @@ async function _testModel(event, backendId, modelId, testId) {
   btn.textContent = 'Test';
 }
 
+async function _testCardModels(backendId) {
+  // Find all test buttons within this backend's card and click them
+  var card = document.querySelector('.model-card[data-model-id="' + backendId + '"]');
+  if (!card) return;
+  var btns = card.querySelectorAll('.model-list-row button.btn-ghost');
+  btns.forEach(function(btn) { if (btn.textContent.trim() === 'Test') btn.click(); });
+}
+
 async function _testAllBackends() {
   var resEl = document.getElementById('test-all-result');
   if (resEl) resEl.innerHTML = '<span class="learn-spinner" style="width:12px;height:12px"></span> Testing...';
   var t0 = Date.now();
   try {
-    var r = await api('/api/models/test-all');
+    var r = await api('/api/models/test-all', {}, 90000);
     var elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     if (!r || !r.results) { if (resEl) resEl.innerHTML = '<span style="color:#ef4444">Failed</span>'; return; }
     var ok = 0, fail = 0;
@@ -19258,9 +19267,13 @@ function _renderModelCards(data, act) {
         _selHtml += '<div class="model-list-row' + (isActive ? ' active' : '') + '" onclick="_selectModelFromList(this,\'' + escHtml(p.id) + '\',\'' + escHtml(m.id) + '\')" title="' + escHtml(m.id) + '">';
         _selHtml += '<span class="model-list-dot" style="background:' + (isResolved ? 'var(--accent)' : 'transparent') + '"></span>';
         _selHtml += '<span class="model-list-name">' + escHtml(m.name) + (m.default ? ' <span style=\"font-size:10px;color:var(--text3)\">(default)</span>' : '') + '</span>';
-        var _mTid = (p.id + '_' + m.id).replace(/[^a-zA-Z0-9_-]/g, '_');
-        _selHtml += '<span id="test-r-' + _mTid + '" style="font-size:10px;margin-left:auto;white-space:nowrap"></span>';
-        _selHtml += '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_testModel(event,\'' + escHtml(p.id) + '\',\'' + escHtml(m.id) + '\',\'' + _mTid + '\')">Test</button>';
+        if (m.id === 'auto') {
+          _selHtml += '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px;margin-left:auto" onclick="event.stopPropagation();_testCardModels(\'' + escHtml(p.id) + '\')">Test All</button>';
+        } else {
+          var _mTid = (p.id + '_' + m.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+          _selHtml += '<span id="test-r-' + _mTid + '" style="font-size:10px;margin-left:auto;white-space:nowrap"></span>';
+          _selHtml += '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_testModel(event,\'' + escHtml(p.id) + '\',\'' + escHtml(m.id) + '\',\'' + _mTid + '\')">Test</button>';
+        }
         _selHtml += '</div>';
       });
       _selHtml += '</div></div>';
@@ -27959,7 +27972,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.73"})
+            self.reply_json({"v": "0.29.74"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -28121,7 +28134,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.73"
+                health["porter_version"] = "0.29.74"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29925,7 +29938,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.73'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.74'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30754,7 +30767,7 @@ class Handler(BaseHTTPRequestHandler):
                 return bk, _test_model_connectivity(bk, model)
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
                 futures = [pool.submit(_run_test, bk) for bk in PROVIDER_REGISTRY]
-                for f in concurrent.futures.as_completed(futures, timeout=60):
+                for f in concurrent.futures.as_completed(futures, timeout=90):
                     try:
                         bk, result = f.result()
                         results[bk] = result
@@ -34569,7 +34582,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.73 ready (localhost only)")
+    print(f"\n  Porter v0.29.74 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
