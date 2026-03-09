@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.5 — Project-aware routing + dispatch feed indexing"""
+"""Porter v0.30.6 — Backend circuit breaker routing"""
 
 
 import email
@@ -9358,7 +9358,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.5</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.6</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10768,6 +10768,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.6', date:'2026-03-09', notes:['Dispatch now tracks consecutive backend failures and opens a short circuit breaker window after repeated failures, so Porter routes around bad gateways automatically','The breaker counts both thrown exceptions and returned {ok:false} backend failures, closing a real control-plane blind spot in bridge dispatch','This improves autonomy and speed together by stopping Porter from wasting time on obviously failing backends'] },
   { ver:'v0.30.5', date:'2026-03-09', notes:['Smart routing now respects project/task context when a dispatch belongs to an assigned project, so fallback no longer ignores the project operating lane','Hot agent_messages query paths now have created_at and backend+created_at indexes, making runtime gateway activity and recent dispatch views cheaper under load','This keeps autonomous project work visible and faster without reintroducing stale cache shortcuts'] },
   { ver:'v0.30.4', date:'2026-03-09', notes:['Runtime now shows a unified Gateway Activity feed backed by real agent_messages dispatch data across all associated backends','Gateway activity rows now carry persona, project, and task identity so model work is visible in operational context instead of as anonymous backend traffic','The admin dispatch-log API now returns project/task/persona metadata and backend errors, making Porter\'s operator view useful for autonomous supervision'] },
   { ver:'v0.30.3', date:'2026-03-09', notes:['Persona dispatch can now resolve an active project and task, inject project brief/decisions/tasks into the prompt context, and persist project identity into trace data','Task-targeted persona dispatches now update task ownership and completion state automatically, so assigned work can move through Porter without a second manual status pass','Cortex extraction now defaults to project scope when a persona dispatch belongs to a project, making project learning first-class instead of a loose tag'] },
@@ -28079,12 +28080,47 @@ def _ranked_route():
 
 
 _DEFAULT_FALLBACK_CHAIN = ["codex", "claude", "gemini", "openclaw", "ollama"]
+_backend_breakers = {}
+
+
+def _backend_breaker_state(backend: str) -> dict:
+    bk = str(backend or "").strip().lower()
+    if not bk:
+        return {"failures": 0, "open_until": 0.0, "last_error": ""}
+    state = _backend_breakers.get(bk)
+    if not state:
+        state = {"failures": 0, "open_until": 0.0, "last_error": "", "last_failure_at": 0.0, "last_success_at": 0.0}
+        _backend_breakers[bk] = state
+    return state
+
+
+def _record_backend_dispatch_result(backend: str, ok: bool, error: str = "") -> None:
+    state = _backend_breaker_state(backend)
+    now = time.time()
+    if ok:
+        state["failures"] = 0
+        state["open_until"] = 0.0
+        state["last_error"] = ""
+        state["last_success_at"] = now
+        return
+    if state.get("last_failure_at") and (now - float(state.get("last_failure_at") or 0)) > 300:
+        state["failures"] = 0
+    state["failures"] = int(state.get("failures") or 0) + 1
+    state["last_failure_at"] = now
+    state["last_error"] = str(error or "")[:240]
+    if state["failures"] >= 3:
+        state["open_until"] = now + 90.0
+
+
+def _backend_is_circuit_open(backend: str) -> bool:
+    state = _backend_breaker_state(backend)
+    return float(state.get("open_until") or 0) > time.time()
 
 def _resolve_with_fallback(preferred, message=""):
     """Try preferred backend; if unavailable, walk fallback chain.
     Returns (backend, model) tuple.
     """
-    if _probe_provider(preferred):
+    if _probe_provider(preferred) and not _backend_is_circuit_open(preferred):
         mlog.emit("info", "routing", "route.decision", f"Route → {preferred} (preferred, available)", backend=preferred)
         return (preferred, None)
     # Walk fallback chain
@@ -28095,7 +28131,7 @@ def _resolve_with_fallback(preferred, message=""):
     for backend in chain:
         if backend == preferred:
             continue
-        if _probe_provider(backend):
+        if _probe_provider(backend) and not _backend_is_circuit_open(backend):
             mlog.emit("warn", "routing", "route.fallback",
                        f"Route fallback: {preferred} unavailable → {backend}",
                        preferred=preferred, fallback=backend)
@@ -29066,18 +29102,27 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None, chain
     try:
         _result = fn(message, model=model, timeout=timeout)
         dur_ms = int((_dt.time() - _dt_start) * 1000)
+        _ok = bool(_result.get("ok", True))
+        _err = str(_result.get("error", "") or "")
+        _record_backend_dispatch_result(backend, _ok, _err)
         _log_delegation(backend, message, _result, dur_ms)
         # Record response
         _update_agent_message(run_id, response=_result.get("text", "")[:5000],
-                              status="complete", model=_result.get("model", ""),
+                              status="complete" if _ok else "failed", model=_result.get("model", ""),
                               tokens=_result.get("tokens", {}).get("total", 0), duration_ms=dur_ms)
-        _emit_event("bridge:response", {"run_id": run_id, "backend": backend, "ok": True, "duration_ms": dur_ms})
-        mlog.emit("info", "bridge", "bridge.complete", f"Bridge {backend} OK ({dur_ms}ms)", run_id=run_id, backend=backend, duration_ms=dur_ms, status="ok", trace_id=_get_trace_id())
+        if not _ok and _err:
+            _update_agent_message(run_id, error=_err[:500], status="failed", duration_ms=dur_ms)
+            _emit_event("bridge:error", {"run_id": run_id, "backend": backend, "error": _err[:200]})
+            mlog.emit("warn", "bridge", "bridge.fail", f"Bridge {backend} returned failure: {_err[:100]}", run_id=run_id, backend=backend, duration_ms=dur_ms, status="error", trace_id=_get_trace_id())
+        else:
+            _emit_event("bridge:response", {"run_id": run_id, "backend": backend, "ok": True, "duration_ms": dur_ms})
+            mlog.emit("info", "bridge", "bridge.complete", f"Bridge {backend} OK ({dur_ms}ms)", run_id=run_id, backend=backend, duration_ms=dur_ms, status="ok", trace_id=_get_trace_id())
         _result["run_id"] = run_id
         return _result
     except Exception as e:
         dur_ms = int((_dt.time() - _dt_start) * 1000)
         log.error("Agent bridge [%s] exception: %s", backend, e)
+        _record_backend_dispatch_result(backend, False, str(e))
         _update_agent_message(run_id, error=str(e)[:500], status="failed", duration_ms=dur_ms)
         _emit_event("bridge:error", {"run_id": run_id, "backend": backend, "error": str(e)[:200]})
         mlog.emit("error", "bridge", "bridge.fail", f"Bridge {backend} failed: {str(e)[:100]}", run_id=run_id, backend=backend, duration_ms=dur_ms, status="error", trace_id=_get_trace_id())
@@ -30042,7 +30087,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.5"})
+            self.reply_json({"v": "0.30.6"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -30204,7 +30249,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.5"
+                health["porter_version"] = "0.30.6"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -31982,7 +32027,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.5'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.6'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36666,7 +36711,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.5 ready (localhost only)")
+    print(f"\n  Porter v0.30.6 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.6 (2026-03-09)
+
+**Backend Circuit Breaker Routing**
+
+- Dispatch now tracks consecutive backend failures and opens a short circuit-breaker window after repeated failures, so Porter routes around bad gateways automatically
+- The breaker counts both thrown exceptions and returned `ok:false` backend failures, closing a real control-plane blind spot in bridge dispatch
+- This improves autonomy and speed together by stopping Porter from wasting time on obviously failing backends
+
+---
+
 ## v0.30.5 (2026-03-09)
 
 **Project-Aware Routing + Dispatch Feed Indexing**
