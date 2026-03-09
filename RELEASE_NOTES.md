@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.29.95 (2026-03-09)
+
+**Models Grid Persistence Guarantee**
+
+- Once Models cards are on screen, same-visit background refreshes no longer apply a second snapshot DOM update
+- Cached snapshot loads now refresh cache and versions in the background without replacing the visible grid
+- This hardens the invariant that the Models grid never disappears after a successful render
+
+---
+
 ## v0.29.94 (2026-03-09)
 
 **Models Response Refresh Removal**

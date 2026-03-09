@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.94 — Models response refresh removal"""
+"""Porter v0.29.95 — Models cached-view stability"""
 
 
 import email
@@ -9179,7 +9179,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.94</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.95</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10585,6 +10585,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.95', date:'2026-03-09', notes:['Once Models cards are on screen, no same-visit background refresh is allowed to replace the whole grid','Cached snapshot loads now refresh cache and versions in the background without applying the live snapshot DOM update','This hardens the invariant that the Models grid never disappears after a successful render'] },
   { ver:'v0.29.94', date:'2026-03-09', notes:['Removed the post-response Models activity fetch so ordinary backend responses no longer trigger any Models-tab refresh path','Models live UI now relies on existing SSE updates and explicit reloads instead of hidden activity polling after each response','This eliminates the remaining automatic Models refresh caused by background backend traffic'] },
   { ver:'v0.29.93', date:'2026-03-09', notes:['Removed the post-response full Models grid rerender that was still rebuilding cards after backend activity completed','Models activity refresh now updates state without calling _renderModelCards on every response event','Combined with structural hydrate checks, the Models tab now keeps a stable DOM unless the actual card structure changes'] },
   { ver:'v0.29.92', date:'2026-03-09', notes:['Models live hydration now compares a structural signature before redrawing cards, so stable snapshots stop causing visible reloads','Cached bootstrap/snapshot renders now preserve the existing grid when only versions or backend status changed','Models load path keeps the fast seeded render and only rebuilds card DOM when provider/model/runtime structure actually changes'] },
@@ -18911,7 +18912,7 @@ async function loadModels() {
       api('/api/models/snapshot').then(function(snap) {
         if (snap && snap.providers) {
           _writeModelsClientCache(_modelsClientCacheKeys.snapshot, snap);
-          _applyModelsSnapshot(snap, { preferStable: true });
+          if (!seededSnapshot) _applyModelsSnapshot(snap, { preferStable: true });
         }
         _renderModelsLoading('');
       }).catch(function(e) {
@@ -29627,7 +29628,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.94"})
+            self.reply_json({"v": "0.29.95"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -31566,7 +31567,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.94'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.95'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36243,7 +36244,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.94 ready (localhost only)")
+    print(f"\n  Porter v0.29.95 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
