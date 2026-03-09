@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.8 — Faster live models bootstrap"""
+"""Porter v0.30.9 — SSE runtime activity refresh"""
 
 
 import email
@@ -9417,7 +9417,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.8</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.9</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10203,6 +10203,9 @@ input[type="number"].settings-input { min-width: 60px; }
         </div>
         <div style="padding:4px 12px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;gap:3px;flex-wrap:wrap">
           <button class="btn btn-ghost cx-scope-filter active" onclick="_filterCortexScope('all',this)" style="font-size:10px;padding:2px 7px">All</button>
+          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('agent',this)" style="font-size:10px;padding:2px 7px;color:#06b6d4">Agent</button>
+          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('project',this)" style="font-size:10px;padding:2px 7px;color:#f59e0b">Project</button>
+          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('global',this)" style="font-size:10px;padding:2px 7px;color:#22c55e">Global</button>
           <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('unassigned',this)" style="font-size:10px;padding:2px 7px;color:#f87171">Unassigned</button>
         </div>
         <div style="padding:4px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
@@ -10827,6 +10830,8 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.9', date:'2026-03-09', notes:['Runtime gateway activity now refreshes from live bridge SSE events instead of a tight 5-second poll loop, reducing background load while making backend activity feel more immediate','Kept a light 30-second fallback poll so the Runtime activity feed still self-heals if SSE events are missed','This cuts unnecessary repeat queries on the same dispatch log path while preserving the rule that gateway activity must stay visible'] },
+  { ver:'v0.30.9', date:'2026-03-09', notes:['Projects Memory sub-tab upgraded to full knowledge browser with confidence bars, importance indicators, timestamps, agent attribution, search, archive/restore/delete','Cortex tab now has Agent/Project/Global scope filter buttons for viewing knowledge by scope','Project memories show reinforcement count, injection frequency, and relative age for each fact'] },
   { ver:'v0.30.8', date:'2026-03-09', notes:['Models bootstrap and snapshot now use short server-side caches keyed by config and CLI fingerprints instead of forcing heavy runtime introspection on every open','Removed the dead browser-side Models snapshot/bootstrap reuse path so the tab stays live-truth only while still rendering from a much cheaper first payload','Models runtime metadata is now cached server-side for one minute and invalidated on config or binary changes, cutting repeated CLI help/version work without reintroducing stale browser truth'] },
   { ver:'v0.30.7', date:'2026-03-09', notes:['Projects overview now shows a real recent activity stream merged from trace_steps and agent_messages, so project work is visible without tab-hopping','Added a lightweight /api/projects/<id>/activity endpoint backed by live trace and dispatch data instead of synthetic summaries','This makes autonomous project work legible while reusing the indexed data paths already added for speed'] },
   { ver:'v0.30.6', date:'2026-03-09', notes:['Dispatch now tracks consecutive backend failures and opens a short circuit breaker window after repeated failures, so Porter routes around bad gateways automatically','The breaker counts both thrown exceptions and returned {ok:false} backend failures, closing a real control-plane blind spot in bridge dispatch','This improves autonomy and speed together by stopping Porter from wasting time on obviously failing backends'] },
@@ -13863,7 +13868,12 @@ async function _renderProjTabContent() {
     }
 
   } else if (_projTab === 'memory') {
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Project Memory</div>';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">';
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Project Knowledge</div>';
+    html += '<div style="flex:1"></div>';
+    html += '<input type="text" id="proj-mem-search" placeholder="Search memories..." oninput="_projFilterMemory(this.value)" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);width:180px;outline:none">';
+    html += '<span id="proj-mem-count" style="font-size:10px;color:var(--text3)"></span>';
+    html += '</div>';
     html += '<div id="proj-memory-list" style="font-size:12px;color:var(--text3)">Loading...</div>';
     content.innerHTML = html;
     _projLoadMemory(proj.id);
@@ -13946,25 +13956,94 @@ async function _projLoadFiles(pid) {
   } catch(e) { el.innerHTML = '<span style="color:var(--text3)">Could not load files</span>'; }
 }
 
+var _projMemories = [];
+function _projFilterMemory(query) {
+  var q = (query || '').toLowerCase().trim();
+  var filtered = q ? _projMemories.filter(function(m) { return ((m.fact || '') + ' ' + (m.keywords || '')).toLowerCase().indexOf(q) >= 0; }) : _projMemories;
+  _renderProjMemories(filtered);
+}
+function _renderProjMemories(memories) {
+  var el = document.getElementById('proj-memory-list');
+  if (!el) return;
+  var countEl = document.getElementById('proj-mem-count');
+  if (countEl) countEl.textContent = memories.length + ' memor' + (memories.length === 1 ? 'y' : 'ies');
+  if (!memories.length) {
+    el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text3)">No memories match.<br><span style="font-size:10px">Memories are created when agents work on this project.</span></div>';
+    return;
+  }
+  var html = '<div style="display:flex;flex-direction:column;gap:6px">';
+  memories.forEach(function(m) {
+    var conf = Math.round((m.confidence || 0.5) * 100);
+    var imp = Math.min(10, Math.max(1, m.importance || 5));
+    var impBars = '';
+    for (var i = 1; i <= 5; i++) {
+      var filled = i <= Math.ceil(imp / 2);
+      impBars += '<span style="display:inline-block;width:8px;height:4px;border-radius:1px;margin-right:1px;background:' + (filled ? 'var(--accent,#3b82f6)' : 'var(--border)') + '"></span>';
+    }
+    var statusDot = (m.status === 'archived') ? '#6b7280' : '#22c55e';
+    var age = '';
+    if (m.created_at) {
+      var secs = Math.floor(Date.now()/1000 - m.created_at);
+      if (secs < 3600) age = Math.floor(secs/60) + 'm ago';
+      else if (secs < 86400) age = Math.floor(secs/3600) + 'h ago';
+      else age = Math.floor(secs/86400) + 'd ago';
+    }
+    html += '<div style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)" data-mem-id="' + (m.id || '') + '">';
+    html += '<div style="display:flex;align-items:flex-start;gap:6px">';
+    html += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + statusDot + ';margin-top:5px;flex-shrink:0"></span>';
+    html += '<div style="flex:1;min-width:0">';
+    html += '<div style="font-size:12px;color:var(--text);line-height:1.4">' + escHtml(m.fact || m.content || '') + '</div>';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">';
+    html += '<span style="font-size:10px;color:var(--text3)" title="Confidence: ' + conf + '%">' + impBars + ' ' + conf + '%</span>';
+    if (m.evidence_count > 1) html += '<span style="font-size:10px;color:var(--text3)" title="Reinforced ' + m.evidence_count + ' times">' + m.evidence_count + 'x</span>';
+    if (m.use_count) html += '<span style="font-size:10px;color:var(--text3)" title="Injected ' + m.use_count + ' times">used ' + m.use_count + 'x</span>';
+    if (age) html += '<span style="font-size:10px;color:var(--text3)">' + age + '</span>';
+    if (m.source_id) {
+      var persona = (_personas || []).find(function(p) { return p.id === m.source_id; });
+      if (persona) html += '<span style="font-size:10px;color:var(--text3)">' + escHtml((persona.avatar || '') + ' ' + persona.name) + '</span>';
+    }
+    html += '</div></div>';
+    html += '<div style="display:flex;gap:4px;flex-shrink:0">';
+    if (m.status !== 'archived') html += '<button onclick="_projArchiveMem(' + m.id + ',this)" class="btn btn-ghost" style="font-size:9px;padding:1px 5px" title="Archive">arc</button>';
+    else html += '<button onclick="_projRestoreMem(' + m.id + ',this)" class="btn btn-ghost" style="font-size:9px;padding:1px 5px" title="Restore">rst</button>';
+    html += '<button onclick="_projDeleteMem(' + m.id + ',this)" class="btn btn-ghost" style="font-size:9px;padding:1px 5px;color:#ef4444" title="Delete">del</button>';
+    html += '</div></div></div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+async function _projArchiveMem(id, btn) {
+  btn.disabled = true;
+  var r = await api('/api/cortex/memories/' + id + '/status', {status: 'archived'});
+  if (r && r.ok) { toast('Archived', 'ok'); var proj = window._projCurrent; if (proj) _projLoadMemory(proj.id); }
+  else { toast('Failed', 'err'); btn.disabled = false; }
+}
+async function _projRestoreMem(id, btn) {
+  btn.disabled = true;
+  var r = await api('/api/cortex/memories/' + id + '/status', {status: 'active'});
+  if (r && r.ok) { toast('Restored', 'ok'); var proj = window._projCurrent; if (proj) _projLoadMemory(proj.id); }
+  else { toast('Failed', 'err'); btn.disabled = false; }
+}
+async function _projDeleteMem(id, btn) {
+  if (!confirm('Delete this memory permanently?')) return;
+  btn.disabled = true;
+  var r = await api('/api/cortex/memories/' + id + '/delete', {});
+  if (r && r.ok) { toast('Deleted', 'ok'); var proj = window._projCurrent; if (proj) _projLoadMemory(proj.id); }
+  else { toast('Failed', 'err'); btn.disabled = false; }
+}
 async function _projLoadMemory(pid) {
   var el = document.getElementById('proj-memory-list');
   if (!el) return;
   try {
     var data = await api('/api/cortex/memories?scope=project&scope_id=' + pid);
-    var memories = (data && data.memories) || [];
-    if (!memories.length) {
+    _projMemories = (data && data.memories) || [];
+    if (!_projMemories.length) {
       el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text3)">No project-scoped memories yet.<br><span style="font-size:10px">Memories are created when agents work on this project.</span></div>';
+      var countEl = document.getElementById('proj-mem-count');
+      if (countEl) countEl.textContent = '0 memories';
       return;
     }
-    var html = '<div style="display:flex;flex-direction:column;gap:6px">';
-    memories.forEach(function(m) {
-      html += '<div style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">';
-      html += '<div style="font-size:12px;color:var(--text)">' + escHtml(m.fact || m.content || '') + '</div>';
-      if (m.source) html += '<div style="font-size:10px;color:var(--text3);margin-top:2px">Source: ' + escHtml(m.source) + '</div>';
-      html += '</div>';
-    });
-    html += '</div>';
-    el.innerHTML = html;
+    _renderProjMemories(_projMemories);
   } catch(e) { el.innerHTML = '<span style="color:var(--text3)">Could not load memories</span>'; }
 }
 
@@ -14489,10 +14568,13 @@ async function _loadRuntimeOperations() {
   _renderRuntimeSessionSummary();
   _preloadSessionCounts();
   _updateExtractionProgress('runtime-extraction-progress');
+  _connectGatewayActivitySse();
   _loadGatewayActivity();
 }
 
 var _gatewayActivityPoller = null;
+var _gatewayActivitySseId = null;
+var _gatewayActivityRefreshTimer = null;
 
 function _gatewayActivityChip(text, tone) {
   if (!text) return '';
@@ -14544,10 +14626,28 @@ async function _loadGatewayActivity(force) {
     _reportModelsClientError('runtime-gateway-activity', e);
     host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:#ef4444">Gateway activity load failed.</div>';
   }
+}
+
+function _scheduleGatewayActivityRefresh(delayMs) {
+  if (_currentModule !== 'system') return;
+  if (_gatewayActivityRefreshTimer) return;
+  _gatewayActivityRefreshTimer = setTimeout(function() {
+    _gatewayActivityRefreshTimer = null;
+    if (_currentModule === 'system') _loadGatewayActivity(true);
+  }, Math.max(50, delayMs || 250));
+}
+
+function _connectGatewayActivitySse() {
+  if (_gatewayActivitySseId) return;
+  _gatewayActivitySseId = _sseSubscribe(function(d) {
+    if (!d || !d.type) return;
+    if (d.type === 'bridge:dispatch') _scheduleGatewayActivityRefresh(120);
+    else if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleGatewayActivityRefresh(220);
+  });
   if (!_gatewayActivityPoller) {
     _gatewayActivityPoller = setInterval(function() {
       if (_currentModule === 'system') _loadGatewayActivity(true);
-    }, 5000);
+    }, 30000);
   }
 }
 
@@ -30235,7 +30335,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.8"})
+            self.reply_json({"v": "0.30.9"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -30397,7 +30497,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.8"
+                health["porter_version"] = "0.30.9"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -32183,7 +32283,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.8'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.9'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36867,7 +36967,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.8 ready (localhost only)")
+    print(f"\n  Porter v0.30.9 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

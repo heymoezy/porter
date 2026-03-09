@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.9 (2026-03-09)
+
+**SSE Runtime Activity Refresh**
+
+- Runtime gateway activity now refreshes from live bridge SSE events instead of a tight 5-second polling loop, cutting repeat load on the dispatch log path
+- Kept a light 30-second fallback poll so the activity feed still self-heals if events are missed
+- This preserves visible cross-gateway runtime activity while spending much less time polling for it
+
+---
+
 ## v0.30.8 (2026-03-09)
 
 **Faster Live Models Bootstrap**
