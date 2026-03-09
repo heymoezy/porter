@@ -10846,6 +10846,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.12', date:'2026-03-09', notes:['Orchestration hub activity now refreshes from live bridge SSE events instead of polling admin endpoints every 15 seconds','Kept a much lighter 60-second fallback refresh, and the hub tears down its poller/SSE subscription when leaving Agents','This reduces repeat admin polling while keeping squad routing activity visible in real time'] },
   { ver:'v0.30.9', date:'2026-03-09', notes:['Runtime gateway activity now refreshes from live bridge SSE events instead of a tight 5-second poll loop, reducing background load while making backend activity feel more immediate','Kept a light 30-second fallback poll so the Runtime activity feed still self-heals if SSE events are missed','This cuts unnecessary repeat queries on the same dispatch log path while preserving the rule that gateway activity must stay visible'] },
   { ver:'v0.30.11', date:'2026-03-09', notes:['Projects overview activity now refreshes from live bridge SSE events instead of staying static until manual reload','Added a light 30-second fallback refresh for project activity while the overview is open, with teardown when leaving Projects','This keeps autonomous project work visible in real time without adding another tight polling loop'] },
   { ver:'v0.30.11', date:'2026-03-09', notes:['Coordination ledger: shared work board so models (Claude, GPT-5.4, Gemini, OpenClaw) claim scopes before working, report progress, hand off tasks, and detect version/scope collisions','New API: /api/coordination/ledger (read), /api/coordination/claim (claim scope), /api/coordination/update (progress/complete/handoff/block/release), /api/coordination/conflicts','System tab shows live ledger panel with active claims, conflict alerts, and recent coordination activity color-coded by model'] },
@@ -33004,55 +33005,60 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": f"Too many attempts. Try again in {remaining}s."}, 429)
                 return
 
-            data = self.read_json_body()
-            username = data.get("username", "").strip()
-            password = data.get("password", "")
-            cfg = _config
-            salt = cfg.get("salt", "")
-            stored_hash = cfg.get("password_hash", "")
+            try:
+                data = self.read_json_body()
+                username = data.get("username", "").strip()
+                password = data.get("password", "")
+                cfg = _config
+                salt = cfg.get("salt", "")
+                stored_hash = cfg.get("password_hash", "")
 
-            # Check scrypt hash first, then legacy SHA-256 for migration
-            scrypt_hash = _hash_password(password, salt)
-            legacy_hash = _hash_password_legacy(password, salt)
-            password_ok = (scrypt_hash == stored_hash) or (legacy_hash == stored_hash)
+                # Check scrypt hash first, then legacy SHA-256 for migration
+                scrypt_hash = _hash_password(password, salt)
+                legacy_hash = _hash_password_legacy(password, salt)
+                password_ok = (scrypt_hash == stored_hash) or (legacy_hash == stored_hash)
 
-            if username == cfg.get("username") and password_ok:
-                # Auto-migrate from SHA-256 to scrypt on successful login
-                if legacy_hash == stored_hash and scrypt_hash != stored_hash:
-                    cfg["password_hash"] = scrypt_hash
-                    _save_config(cfg)
-                    log.info("Password hash migrated from SHA-256 to scrypt for %s", username)
+                if username == cfg.get("username") and password_ok:
+                    # Auto-migrate from SHA-256 to scrypt on successful login
+                    if legacy_hash == stored_hash and scrypt_hash != stored_hash:
+                        cfg["password_hash"] = scrypt_hash
+                        _save_config(cfg)
+                        log.info("Password hash migrated from SHA-256 to scrypt for %s", username)
 
-                # Clear rate limit on success
-                _login_attempts.pop(client_ip, None)
+                    # Clear rate limit on success
+                    _login_attempts.pop(client_ip, None)
 
-                user_agent = self.headers.get("User-Agent", "")
-                token = create_session(username, ip=client_ip, ua=user_agent)
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                ttl = SESSION_TTL
-                self.send_header(
-                    "Set-Cookie",
-                    f"porter_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={ttl}" + ("; Secure" if self.headers.get("X-Forwarded-Proto") == "https" else "")
-                )
-                self.send_header("Cache-Control", "no-store")
-                body = json.dumps({"ok": True}).encode()
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-                log.info("Login OK: %s from %s", username, client_ip)
-                mlog.emit("info", "auth", "auth.login.ok", f"Login OK: {username} from {client_ip}", extra={"username": username, "ip": client_ip})
-            else:
-                attempts["count"] = attempts.get("count", 0) + 1
-                if attempts["count"] >= _LOGIN_MAX_ATTEMPTS:
-                    lockout = _LOGIN_LOCKOUT_BASE * (2 ** (attempts["count"] - _LOGIN_MAX_ATTEMPTS))
-                    lockout = min(lockout, 900)  # cap at 15 minutes
-                    attempts["locked_until"] = now + lockout
-                    log.warning("Login locked: %s after %d attempts (lockout %ds)", client_ip, attempts["count"], lockout)
-                _login_attempts[client_ip] = attempts
-                log.warning("Login failed: %s from %s (attempt %d)", username, client_ip, attempts["count"])
-                mlog.emit("warn", "auth", "auth.login.fail", f"Login failed: {username} from {client_ip}", extra={"username": username, "ip": client_ip, "attempt": attempts["count"]})
-                self.reply_json({"ok": False, "error": "Invalid username or password"}, 401)
+                    user_agent = self.headers.get("User-Agent", "")
+                    token = create_session(username, ip=client_ip, ua=user_agent)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    ttl = SESSION_TTL
+                    self.send_header(
+                        "Set-Cookie",
+                        f"porter_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={ttl}" + ("; Secure" if self.headers.get("X-Forwarded-Proto") == "https" else "")
+                    )
+                    self.send_header("Cache-Control", "no-store")
+                    body = json.dumps({"ok": True}).encode()
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    log.info("Login OK: %s from %s", username, client_ip)
+                    mlog.emit("info", "auth", "auth.login.ok", f"Login OK: {username} from {client_ip}", extra={"username": username, "ip": client_ip})
+                else:
+                    attempts["count"] = attempts.get("count", 0) + 1
+                    if attempts["count"] >= _LOGIN_MAX_ATTEMPTS:
+                        lockout = _LOGIN_LOCKOUT_BASE * (2 ** (attempts["count"] - _LOGIN_MAX_ATTEMPTS))
+                        lockout = min(lockout, 900)  # cap at 15 minutes
+                        attempts["locked_until"] = now + lockout
+                        log.warning("Login locked: %s after %d attempts (lockout %ds)", client_ip, attempts["count"], lockout)
+                    _login_attempts[client_ip] = attempts
+                    log.warning("Login failed: %s from %s (attempt %d)", username, client_ip, attempts["count"])
+                    mlog.emit("warn", "auth", "auth.login.fail", f"Login failed: {username} from {client_ip}", extra={"username": username, "ip": client_ip, "attempt": attempts["count"]})
+                    self.reply_json({"ok": False, "error": "Invalid username or password"}, 401)
+            except Exception as e:
+                log.exception("Login handler failed")
+                self.reply_json({"ok": False, "error": f"Login failed: {type(e).__name__}"}, 500)
+            return
 
         elif parsed.path == "/logout":
             token = self.get_session_token()

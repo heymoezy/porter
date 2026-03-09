@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.12 (2026-03-09)
+
+**SSE Orchestration Hub Refresh**
+
+- The orchestration hub now refreshes from live bridge SSE events instead of polling `/api/admin/delegations` and `/api/admin/health` every 15 seconds
+- Kept a much lighter 60-second fallback refresh, and the hub tears down its poller and SSE subscription when leaving Agents
+- This cuts repeat admin polling while keeping live routing and squad activity visible
+
+---
+
 ## v0.30.11 (2026-03-09)
 
 **Live Project Activity Refresh**
