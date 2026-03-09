@@ -1,5 +1,17 @@
 # Porter Release Notes
 
+## v0.29.79 (2026-03-09)
+
+**Models Control Plane Hardening**
+
+- Models tab frontend failures now POST structured errors into Mission Control instead of failing silently
+- Mission Log preserves extra frontend metadata like `source`, `stack`, `backend`, and `model`
+- `POST /api/models/test`, `POST /api/models/test-all`, and gateway actions now emit structured model-domain log events
+- CLI version parsing is more robust across OpenClaw, Claude, Gemini, and Codex output formats
+- OpenClaw model-test failures now return operator-facing repair guidance, including reinstall direction when the CLI looks broken
+
+---
+
 ## v0.25.48 (2026-03-02)
 
 **Fix: All panels showing at once**

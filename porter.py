@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.78 — Fix logging, version display, neutral dots, remove summary"""
+"""Porter v0.29.79 — Models logging, diagnostics, and version hardening"""
 
 
 import email
@@ -5881,6 +5881,13 @@ class MissionLog:
 
     def emit(self, severity, domain, event_type, message, **kwargs):
         import uuid
+        extra = kwargs.get("extra")
+        if not isinstance(extra, dict):
+            extra = {}
+        for k, v in kwargs.items():
+            if k in ("trace_id", "run_id", "session_id", "backend", "duration_ms", "status", "extra"):
+                continue
+            extra[k] = v
         event = {
             "event_id": uuid.uuid4().hex[:16],
             "ts": time.time(),
@@ -5894,7 +5901,7 @@ class MissionLog:
             "backend": kwargs.get("backend"),
             "duration_ms": kwargs.get("duration_ms"),
             "status": kwargs.get("status"),
-            "extra": kwargs.get("extra"),
+            "extra": extra or None,
         }
         try:
             self._queue.put_nowait(event)
@@ -9112,7 +9119,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.78</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.79</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10416,6 +10423,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.79', date:'2026-03-09', notes:['Models tab frontend errors report to Mission Control with context','Model tests + gateway actions emit structured logs with diagnostics','Mission Log preserves frontend error metadata (source, stack, backend)','Version parsing hardened for OpenClaw, Claude, Gemini, Codex','OpenClaw failures now return repair/reinstall guidance'] },
   { ver:'v0.29.78', date:'2026-03-09', notes:['All model test results logged (WARNING level)','Removed backends detected summary','Neutral dots (gray) until tests verify','Version display: always prefixed with v','Fix OpenClaw/Claude/Gemini version parsing'] },
   { ver:'v0.29.77', date:'2026-03-09', notes:['Backend config as modal popup (not inline)','Current values pre-populated in modal','Masked auth token shown as placeholder'] },
   { ver:'v0.29.76', date:'2026-03-09', notes:['Update detection: show Update Available badge when CLI outdated','Summary shows detected count, not online count (test-first)','Version badges show installed + latest with update command','Codex reads ~/.codex/version.json for latest, npm outdated for others'] },
@@ -18090,6 +18098,22 @@ function _formatDuration(ms) {
   return Math.floor(s / 60) + 'm ' + Math.round(s % 60) + 's';
 }
 
+function _reportClientError(context, err, extra) {
+  try {
+    var payload = Object.assign({
+      message: '[' + context + '] ' + ((err && err.message) || String(err) || 'Unknown error'),
+      source: 'models-tab',
+      stack: (err && err.stack) || '',
+    }, extra || {});
+    fetch('/api/logs/client-error', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    }).catch(function() {});
+  } catch (_) {}
+}
+
 function _elapsedStr(startTs) {
   var diff = Math.max(0, Date.now() / 1000 - startTs);
   if (diff < 60) return Math.round(diff) + 's';
@@ -18140,6 +18164,7 @@ async function _checkGatewayCardStatus(backendId, el) {
       + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 8px" onclick="_recheckGw(\'' + backendId + '\')">Check</button>'
       + '</div></div>';
   } catch(e) {
+    _reportClientError('gateway-status', e, { backend: backendId });
     el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0"></span><span style="color:var(--text3)">Error checking status</span></div>';
   }
 }
@@ -18169,9 +18194,11 @@ async function _testModel(event, backendId, modelId, testId) {
     if (r && r.ok) {
       if (resultEl) resultEl.innerHTML = '<span style="color:#22c55e">\u2713 ' + elapsed + 's</span>';
     } else {
-      if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">\u2717 ' + escHtml((r && r.error || 'Failed').substring(0, 40)) + '</span>';
+      if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444" title="' + escHtml((r && (r.repair_hint || r.error) || 'Failed')) + '">\u2717 ' + escHtml((r && r.error || 'Failed').substring(0, 40)) + '</span>';
+      if (r && r.repair_hint) toast(r.repair_hint, 'warn');
     }
   } catch(e) {
+    _reportClientError('model-test', e, { backend: backendId, model: modelId });
     if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">\u2717 ' + escHtml((e.message || 'Error').substring(0, 40)) + '</span>';
   }
   btn.disabled = false;
@@ -18226,6 +18253,9 @@ async function _openBackendConfig(backendId) {
       tokenEl.placeholder = 'Current: ' + (c.auth_token_masked || '****') + ' (leave blank to keep)';
     }
   }
+  else {
+    _reportClientError('backend-config-load', new Error('Missing backend config response'), { backend: backendId });
+  }
 }
 
 async function _saveBackendConfig(backendId) {
@@ -18245,6 +18275,7 @@ async function _saveBackendConfig(backendId) {
     if (overlay) overlay.remove();
     loadModels();
   } else {
+    _reportClientError('backend-config-save', new Error((r && r.error) || 'Failed to save backend config'), { backend: backendId });
     toast((r && r.error) || 'Failed to save', 'err');
   }
 }
@@ -18311,7 +18342,9 @@ async function loadModels() {
     _renderModelCards(data, _modelActivityData);
     _checkBackendStatuses(data.providers);
     _connectModelSSE();
-  } catch(e) { /* loadModels error silenced */ }
+  } catch(e) {
+    _reportClientError('load-models', e);
+  }
 }
 
 
@@ -25727,6 +25760,21 @@ def _probe_backend_versions():
 
     versions = {}
 
+    def _extract_semverish(text):
+        text = str(text or "").strip()
+        if not text:
+            return ""
+        m = re.search(r"\b\d{4}\.\d+\.\d+\b", text)
+        if m:
+            return m.group(0)
+        m = re.search(r"\bv?\d+\.\d+\.\d+\b", text)
+        if m:
+            return m.group(0).lstrip("v")
+        m = re.search(r"\bv?\d+\.\d+\b", text)
+        if m:
+            return m.group(0).lstrip("v")
+        return ""
+
     def _resolve_bin(name):
         """Find binary via shutil.which + common user-local paths."""
         p = shutil.which(name)
@@ -25756,7 +25804,7 @@ def _probe_backend_versions():
             return {"version": "", "detected": False}
 
     # OpenClaw
-    versions["openclaw"] = _cli_version("openclaw", lambda out: out.split()[1] if len(out.split()) > 1 else out.strip())
+    versions["openclaw"] = _cli_version("openclaw", _extract_semverish)
 
     # Ollama
     try:
@@ -25769,13 +25817,13 @@ def _probe_backend_versions():
         versions["ollama"] = {"version": "", "detected": False}
 
     # Claude CLI — "2.1.70 (Claude Code)" → extract version number
-    versions["claude"] = _cli_version("claude", lambda out: out.split()[0] if out else "")
+    versions["claude"] = _cli_version("claude", _extract_semverish)
 
     # Gemini
-    versions["gemini"] = _cli_version("gemini", lambda out: out.split("@")[-1].strip() if "@" in out else out.split()[-1] if out else "")
+    versions["gemini"] = _cli_version("gemini", _extract_semverish)
 
     # Codex — also check ~/.codex/version.json for latest available
-    _cdx_ver = _cli_version("codex", lambda out: out.split()[-1] if out else "")
+    _cdx_ver = _cli_version("codex", _extract_semverish)
     try:
         _cdx_vjson = json.loads((Path.home() / ".codex" / "version.json").read_text())
         _cdx_latest = _cdx_vjson.get("latest_version", "")
@@ -25887,6 +25935,30 @@ def _openclaw_gateway_settings() -> dict:
     return {"port": port, "token": token}
 
 
+def _model_repair_hint(backend: str, detail: str = "") -> dict:
+    """Return operator-facing repair hints for known backend failure modes."""
+    backend = str(backend or "").strip().lower()
+    text = str(detail or "").lower()
+    hint = {}
+    if backend == "openclaw":
+        hint["reinstall_cmd"] = "npm uninstall -g openclaw && npm i -g openclaw"
+        if any(tok in text for tok in ("cannot find module", "module not found", "err_module_not_found", "syntaxerror", "typeerror", "node:internal")):
+            hint["repair_hint"] = "OpenClaw CLI install appears broken. Reinstall the CLI, then re-open/auth the gateway."
+        elif "auth" in text or "token" in text or "unauthorized" in text:
+            hint["repair_hint"] = "OpenClaw auth looks invalid. Refresh the auth token or reconnect the gateway profile."
+        elif "timed out" in text or "timeout" in text:
+            hint["repair_hint"] = "OpenClaw did not answer in time. Check whether the gateway is crash-looping or blocked on startup."
+        else:
+            hint["repair_hint"] = "Check OpenClaw CLI health, gateway status, and auth. Reinstall if the binary looks unhealthy."
+    elif backend == "claude":
+        hint["reinstall_cmd"] = "npm i -g @anthropic-ai/claude-code"
+    elif backend == "gemini":
+        hint["reinstall_cmd"] = "npm i -g @google/gemini-cli"
+    elif backend == "codex":
+        hint["reinstall_cmd"] = "npm i -g @openai/codex"
+    return hint
+
+
 def _check_gateway_status() -> dict:
     """Check openclaw-gateway process state and detect rapid PID churn."""
     global _gw_pid_history
@@ -25979,7 +26051,9 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
             # OpenClaw gateway is WebSocket — use CLI, not HTTP
             oc_bin = _resolve_cli("openclaw")
             if not oc_bin:
-                return {"ok": False, "model": model, "error": "openclaw CLI not found"}
+                result = {"ok": False, "backend": backend, "model": model, "error": "openclaw CLI not found"}
+                result.update(_model_repair_hint(backend, result["error"]))
+                return result
             cmd = [oc_bin, "agent", "--agent", "main", "--message", "Reply with just the word OK", "--json"]
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=15, env=_agent_env(), cwd=str(Path.home()))
             latency_ms = int((time.time() - t0) * 1000)
@@ -26011,12 +26085,16 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
             if not err:
                 err = (r.stderr or "").strip()[:200] or "No response from gateway"
             log.warning("Model test fail [openclaw]: model=%s err=%s stderr=%s", model, err, (r.stderr or "").strip()[:500])
-            return {"ok": False, "model": model, "error": err[:200]}
+            result = {"ok": False, "backend": backend, "model": model, "error": err[:200]}
+            result.update(_model_repair_hint(backend, (r.stderr or "") + "\n" + err))
+            return result
 
         if backend == "codex":
             cdx = _resolve_cli("codex")
             if not cdx:
-                return {"ok": False, "model": model, "error": "codex CLI not found"}
+                result = {"ok": False, "backend": backend, "model": model, "error": "codex CLI not found"}
+                result.update(_model_repair_hint(backend, result["error"]))
+                return result
             _cdx_model = model or "gpt-5.4"
             cmd = [cdx, "exec", "--ephemeral", "--json", "--skip-git-repo-check",
                    "-m", _cdx_model, "Reply with just the word OK"]
@@ -26044,7 +26122,9 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                 return {"ok": True, "model": model, "response": text.strip()[:200], "latency_ms": latency_ms}
             _cdx_err = (r.stderr or "").strip()[:200] or "Codex returned no text"
             log.warning("Model test fail [codex]: model=%s err=%s stdout=%s", model, _cdx_err, (r.stdout or "").strip()[:500])
-            return {"ok": False, "model": model, "error": _cdx_err}
+            result = {"ok": False, "backend": backend, "model": model, "error": _cdx_err}
+            result.update(_model_repair_hint(backend, _cdx_err))
+            return result
 
         if backend == "ollama":
             bc = _config.get("backend_config", {}).get("ollama", {})
@@ -26061,12 +26141,14 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 body = json.loads(resp.read().decode("utf-8", errors="replace") or "{}")
             latency_ms = int((time.time() - t0) * 1000)
-            return {"ok": True, "model": model, "response": str(body.get("response", "OK")).strip()[:200], "latency_ms": latency_ms}
+            return {"ok": True, "backend": backend, "model": model, "response": str(body.get("response", "OK")).strip()[:200], "latency_ms": latency_ms}
 
         if backend == "gemini":
             gem = _resolve_cli("gemini")
             if not gem:
-                return {"ok": False, "model": model, "error": "gemini CLI not found"}
+                result = {"ok": False, "backend": backend, "model": model, "error": "gemini CLI not found"}
+                result.update(_model_repair_hint(backend, result["error"]))
+                return result
             cmd = [gem, "-p", "Reply with just OK", "-y"]
             if model and model != "auto" and model != "gemini":
                 cmd.extend(["-m", model])
@@ -26079,14 +26161,18 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                 _gem_err = "\n".join(l for l in _gem_err.split("\n") if "YOLO" not in l and "cached credentials" not in l.lower()).strip()
                 _gem_fail_msg = (_gem_err or r.stdout or "Gemini failed").strip()[:200]
                 log.warning("Model test fail [gemini]: model=%s rc=%s err=%s stdout=%s", model, r.returncode, _gem_fail_msg, (r.stdout or "").strip()[:500])
-                return {"ok": False, "model": model, "error": _gem_fail_msg}
+                result = {"ok": False, "backend": backend, "model": model, "error": _gem_fail_msg}
+                result.update(_model_repair_hint(backend, _gem_fail_msg))
+                return result
             latency_ms = int((time.time() - t0) * 1000)
-            return {"ok": True, "model": model, "response": (r.stdout or "OK").strip()[:200], "latency_ms": latency_ms}
+            return {"ok": True, "backend": backend, "model": model, "response": (r.stdout or "OK").strip()[:200], "latency_ms": latency_ms}
 
         if backend == "claude":
             claude_bin = _resolve_cli("claude")
             if not claude_bin:
-                return {"ok": False, "model": model, "error": "claude CLI not found"}
+                result = {"ok": False, "backend": backend, "model": model, "error": "claude CLI not found"}
+                result.update(_model_repair_hint(backend, result["error"]))
+                return result
             cmd = [claude_bin, "-p", "Reply with just OK"]
             if model and model != "auto" and model != "claude":
                 cmd.extend(["--model", model])
@@ -26097,17 +26183,25 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
             if r.returncode != 0:
                 _cl_fail_msg = (r.stderr or r.stdout or "Claude failed").strip()[:200]
                 log.warning("Model test fail [claude]: model=%s rc=%s err=%s stdout=%s", model, r.returncode, _cl_fail_msg, (r.stdout or "").strip()[:500])
-                return {"ok": False, "model": model, "error": _cl_fail_msg}
+                result = {"ok": False, "backend": backend, "model": model, "error": _cl_fail_msg}
+                result.update(_model_repair_hint(backend, _cl_fail_msg))
+                return result
             latency_ms = int((time.time() - t0) * 1000)
-            return {"ok": True, "model": model, "response": (r.stdout or "OK").strip()[:200], "latency_ms": latency_ms}
+            return {"ok": True, "backend": backend, "model": model, "response": (r.stdout or "OK").strip()[:200], "latency_ms": latency_ms}
 
-        return {"ok": False, "model": model, "error": f"Unknown backend: {backend}"}
+        result = {"ok": False, "backend": backend, "model": model, "error": f"Unknown backend: {backend}"}
+        result.update(_model_repair_hint(backend, result["error"]))
+        return result
     except subprocess.TimeoutExpired:
         log.warning("Model test timeout: backend=%s model=%s", backend, model)
-        return {"ok": False, "model": model, "error": "Timed out"}
+        result = {"ok": False, "backend": backend, "model": model, "error": "Timed out"}
+        result.update(_model_repair_hint(backend, result["error"]))
+        return result
     except Exception as e:
         log.warning("Model test error: backend=%s model=%s err=%s", backend, model, str(e))
-        return {"ok": False, "model": model, "error": str(e)[:200]}
+        result = {"ok": False, "backend": backend, "model": model, "error": str(e)[:200]}
+        result.update(_model_repair_hint(backend, result["error"]))
+        return result
 
 
 # ── Active Streams (for live trace) ───────────────────────────────────────
@@ -28053,7 +28147,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.78"})
+            self.reply_json({"v": "0.29.79"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -28215,7 +28309,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.78"
+                health["porter_version"] = "0.29.79"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28468,6 +28562,10 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/models/versions":
             if not self.auth_check(redirect=False): return
             versions = _probe_backend_versions()
+            _detected = sorted([bk for bk, info in versions.items() if isinstance(info, dict) and info.get("detected") and bk in PROVIDER_REGISTRY])
+            mlog.emit("info", "models", "models.versions.probed",
+                      f"Version probe complete for {len(_detected)} backends",
+                      extra={"detected_backends": _detected, "versions": {bk: versions.get(bk, {}).get("version", "") for bk in _detected}})
             self.reply_json({"ok": True, "versions": versions})
 
         elif parsed.path == "/api/models/available":
@@ -30040,7 +30138,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.78'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.79'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30853,9 +30951,17 @@ class Handler(BaseHTTPRequestHandler):
             action = body.get("action", "")
             if action == "restart":
                 result = _gateway_restart()
+                mlog.emit("warning" if result.get("ok") else "error", "models", "gateway.restart",
+                          result.get("message") or result.get("error") or "Gateway restart",
+                          backend="openclaw", status="ok" if result.get("ok") else "failed",
+                          extra={"action": action, "result": result})
                 self.reply_json(result)
             elif action == "stop":
                 result = _gateway_stop()
+                mlog.emit("warning" if result.get("ok") else "error", "models", "gateway.stop",
+                          result.get("message") or result.get("error") or "Gateway stop",
+                          backend="openclaw", status="ok" if result.get("ok") else "failed",
+                          extra={"action": action, "result": result})
                 self.reply_json(result)
             else:
                 self.reply_json({"ok": False, "error": "Unknown action"}, 400)
@@ -30875,6 +30981,11 @@ class Handler(BaseHTTPRequestHandler):
                         results[bk] = result
                     except Exception as e:
                         pass
+            _failed = sorted([bk for bk, result in results.items() if not result.get("ok")])
+            mlog.emit("info" if not _failed else "warning", "models", "models.test_all",
+                      "Model test-all completed" if not _failed else f"Model test-all completed with failures: {', '.join(_failed)}",
+                      status="ok" if not _failed else "partial",
+                      extra={"results": results, "failed_backends": _failed})
             self.reply_json({"ok": True, "results": results})
 
         elif parsed.path == "/api/models/test":
@@ -30886,8 +30997,16 @@ class Handler(BaseHTTPRequestHandler):
             result = _test_model_connectivity(_test_bk, _test_model)
             if result.get("ok"):
                 log.info("Model test OK: backend=%s model=%s latency=%sms", _test_bk, result.get("model", ""), result.get("latency_ms", "?"))
+                mlog.emit("info", "models", "models.test.ok",
+                          f"Model test succeeded for {_test_bk}",
+                          backend=_test_bk, duration_ms=result.get("latency_ms"), status="ok",
+                          extra={"result": result})
             else:
                 log.warning("Model test FAIL: backend=%s model=%s error=%s", _test_bk, result.get("model", ""), result.get("error", "unknown"))
+                mlog.emit("error", "models", "models.test.fail",
+                          f"Model test failed for {_test_bk}: {result.get('error', 'unknown')}",
+                          backend=_test_bk, duration_ms=result.get("latency_ms"), status="failed",
+                          extra={"result": result})
             self.reply_json(result)
 
         elif parsed.path == "/api/backend/config":
@@ -34688,7 +34807,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.78 ready (localhost only)")
+    print(f"\n  Porter v0.29.79 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
