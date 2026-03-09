@@ -10,6 +10,7 @@
 - `Test All` now runs with controlled concurrency across different backends instead of full serialization
 - Test scheduling prevents multiple tests from hammering the same backend at once
 - Providers, activity, and available-model payloads now share backend helpers instead of duplicating logic in route handlers
+- Gemini startup load no longer spawns `gemini --version` during capability checks, and Models version bootstrap now reuses cached Gemini capability state correctly
 
 ---
 

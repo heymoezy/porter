@@ -667,6 +667,22 @@ def _cap_check_bin(binary: str) -> dict:
     return {"ok": True, "version": ver or binary}
 
 
+def _cap_check_exists(binary: str) -> dict:
+    """Cheap binary presence check without spawning the CLI."""
+    path = shutil.which(binary)
+    if not path:
+        for extra in (
+            str(Path.home() / ".local" / "bin"),
+            str(Path.home() / ".npm-global" / "bin"),
+            "/usr/local/bin",
+        ):
+            candidate = Path(extra) / binary
+            if candidate.exists():
+                path = str(candidate)
+                break
+    return {"ok": bool(path), "version": binary if path else None}
+
+
 def _cap_check_http(url: str, timeout: int = 3) -> dict:
     """Check if an HTTP service responds at url."""
     import urllib.request
@@ -728,7 +744,7 @@ AI_PROVIDERS: list = [
     {"id": "gemini_cli",  "label": "Gemini CLI",
      "install": "https://github.com/google-gemini/gemini-cli",
      "features": ["Research tasks", "Extended context queries"],
-     "check": lambda: _cap_check_bin("gemini")},
+     "check": lambda: _cap_check_exists("gemini")},
 ]
 
 
@@ -10494,7 +10510,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.29.87', date:'2026-03-09', notes:['Models tab now paints from a lightweight bootstrap payload, then hydrates the full snapshot in the background','Cached version state renders immediately from the snapshot, then refreshes in the background','Test All now runs with controlled concurrency across different backends instead of full serialization','Test scheduling prevents multiple tests from hammering the same backend at once','Providers, activity, and available-model payloads now share backend helpers instead of duplicating route logic'] },
+  { ver:'v0.29.87', date:'2026-03-09', notes:['Models tab now paints from a lightweight bootstrap payload, then hydrates the full snapshot in the background','Cached version state renders immediately from the snapshot, then refreshes in the background','Test All now runs with controlled concurrency across different backends instead of full serialization','Test scheduling prevents multiple tests from hammering the same backend at once','Providers, activity, and available-model payloads now share backend helpers instead of duplicating route logic','Gemini startup no longer spawns gemini --version during capability checks, and Models bootstrap now reuses cached Gemini capability state correctly'] },
   { ver:'v0.29.86', date:'2026-03-09', notes:['Installed-version probes now prefer the real user-local CLI path and can be force-refreshed on Models load','Cards stop rendering Version unknown / Latest unknown noise when a probe has not completed','OpenClaw diagnosis now reads its runtime log and surfaces service-restart loops and token mismatches explicitly','Ollama and Codex latest-version checks are more robust so update labels do not disappear as easily','OpenClaw warning actions now sit on the bottom rail and gateway-only clutter was removed from the middle of the card','OpenClaw config uses a visible Gateway Token field instead of masking typed input','Shared client-side request failures now log through the common api() path','Test All now runs as a queued sequence instead of firing every backend at once','OpenClaw model tests now parse the current CLI JSON result format instead of failing successful runs','OpenClaw supervisor-conflict diagnosis now requires active restart evidence instead of only seeing two service files','Models page loading now tolerates partial API failures instead of blanking the whole tab'] },
   { ver:'v0.29.85', date:'2026-03-09', notes:['Models cards no longer show stale latest-version data as an update when installed is newer','OpenClaw duplicate model rows are deduped on canonical model keys','Gateway state and request activity are no longer presented as contradictory status labels','Repair commands stay in config/repair flows instead of cluttering the card body'] },
   { ver:'v0.29.84', date:'2026-03-09', notes:['OpenClaw diagnosis now detects paired devices with a down gateway and surfaces reconnect-loop repair guidance','More OpenClaw reads now normalize through shared config/state helpers instead of legacy top-level fields','OpenClaw cards show paired/pending counts and clearer repair follow-up when gateway pairing state is stale'] },
@@ -26117,6 +26133,44 @@ def _invalidate_backend_version_cache():
     _backend_version_cache["ts"] = 0
 
 
+def _cached_capability_version(name: str) -> dict:
+    cap_key = {
+        "gemini": "gemini_cli",
+    }.get(name, name)
+    cap = _capabilities_cache.get(cap_key) or {}
+    if not isinstance(cap, dict):
+        return {"version": "", "detected": False, "path": ""}
+    ver = str(cap.get("version") or "").strip()
+    if not cap.get("ok") or not ver:
+        return {"version": "", "detected": False, "path": ""}
+    m = re.search(r"\b\d{4}\.\d+\.\d+\b|\bv?\d+\.\d+\.\d+\b|\bv?\d+\.\d+\b", ver)
+    parsed = m.group(0).lstrip("v") if m else ver.split()[-1].lstrip("v")
+    return {"version": parsed or "", "detected": bool(parsed), "path": ""}
+
+
+def _bootstrap_backend_versions() -> dict:
+    versions = {}
+    cached = _backend_version_cache.get("data") or {}
+    latest_cache = dict(_backend_latest_cache.get("data") or {})
+    for bk in ("openclaw", "ollama", "claude", "gemini", "codex"):
+        base = dict(cached.get(bk) or {})
+        if not base:
+            if bk == "ollama":
+                cap = _capabilities_cache.get("ollama") or {}
+                ver = str(cap.get("version") or "").strip()
+                sem = ""
+                m = re.search(r"\b\d{4}\.\d+\.\d+\b|\bv?\d+\.\d+\.\d+\b|\bv?\d+\.\d+\b", ver)
+                if m:
+                    sem = m.group(0).lstrip("v")
+                base = {"version": sem, "detected": bool(sem), "path": ""}
+            else:
+                base = _cached_capability_version(bk)
+        if bk in latest_cache and isinstance(latest_cache[bk], dict):
+            base.update({k: v for k, v in latest_cache[bk].items() if v})
+        versions[bk] = base
+    return versions
+
+
 def _probe_backend_versions(force: bool = False):
     """Detect installed/current versions quickly and refresh latest checks on a slower cadence."""
     import time as _t
@@ -26196,7 +26250,9 @@ def _probe_backend_versions(force: bool = False):
         return _extract_semverish(data.get("tag_name", ""))
 
     # OpenClaw
-    versions["openclaw"] = _cli_version("openclaw", _extract_semverish)
+    versions["openclaw"] = _cached_capability_version("openclaw")
+    if not versions["openclaw"].get("detected"):
+        versions["openclaw"] = _cli_version("openclaw", _extract_semverish)
 
     # Ollama
     versions["ollama"] = _cli_version("ollama", _extract_semverish)
@@ -26212,14 +26268,20 @@ def _probe_backend_versions(force: bool = False):
     except Exception:
         pass
 
-    # Claude CLI — "2.1.70 (Claude Code)" → extract version number
-    versions["claude"] = _cli_version("claude", _extract_semverish)
+    # Claude CLI — prefer cached capability result to avoid redundant process spawn on tab load
+    versions["claude"] = _cached_capability_version("claude")
+    if not versions["claude"].get("detected"):
+        versions["claude"] = _cli_version("claude", _extract_semverish)
 
-    # Gemini
-    versions["gemini"] = _cli_version("gemini", _extract_semverish)
+    # Gemini — CLI startup is relatively slow, so reuse capability cache when available
+    versions["gemini"] = _cached_capability_version("gemini")
+    if not versions["gemini"].get("detected"):
+        versions["gemini"] = _cli_version("gemini", _extract_semverish)
 
     # Codex — also check ~/.codex/version.json for latest available
-    _cdx_ver = _cli_version("codex", _extract_semverish)
+    _cdx_ver = _cached_capability_version("codex")
+    if not _cdx_ver.get("detected"):
+        _cdx_ver = _cli_version("codex", _extract_semverish)
     try:
         _cdx_vjson = json.loads((Path.home() / ".codex" / "version.json").read_text())
         _cdx_latest = _cdx_vjson.get("latest_version", "")
@@ -27002,7 +27064,7 @@ def _models_bootstrap() -> dict:
         "providers": _providers_payload(lightweight=True),
         "activity": _models_activity_payload(),
         "backends": _models_available_payload(lightweight=True),
-        "versions": _probe_backend_versions(force=False),
+        "versions": _bootstrap_backend_versions(),
     }
 
 
