@@ -1,5 +1,25 @@
 # Porter Release Notes
 
+## v0.29.99 (2026-03-09)
+
+**Models No-Cache Control Plane**
+
+- Models no longer uses browser `sessionStorage` for backend truth
+- Models bootstrap and snapshot now force fresh capability checks and invalidate CLI-derived caches when binary fingerprints change
+- Added a new Porter global rule: control-plane surfaces must prefer live runtime truth over cached browser or stale bootstrap state
+
+---
+
+## v0.29.97 (2026-03-09)
+
+**Models Grid No-Blank Guarantee**
+
+- Models loading no longer writes skeleton cards into the grid at all; only the top loading rail changes during refresh
+- This guarantees background loads cannot blank or replace the visible grid once real cards have rendered
+- The Models grid DOM is now reserved for real card renders and the explicit empty-state only
+
+---
+
 ## v0.29.96 (2026-03-09)
 
 **Models Single-Flight Rendering**

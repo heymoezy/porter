@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.96 — Models single-flight rendering"""
+"""Porter v0.29.99 — Models no-cache control plane"""
 
 
 import email
@@ -664,7 +664,7 @@ def _cap_check_bin(binary: str) -> dict:
     except Exception as e:
         log.debug("Ignored: %s", e)
         ver = ""
-    return {"ok": True, "version": ver or binary}
+    return {"ok": True, "version": ver or None, "path": path}
 
 
 def _cap_check_exists(binary: str) -> dict:
@@ -680,7 +680,7 @@ def _cap_check_exists(binary: str) -> dict:
             if candidate.exists():
                 path = str(candidate)
                 break
-    return {"ok": bool(path), "version": binary if path else None}
+    return {"ok": bool(path), "version": None, "path": path or ""}
 
 
 def _cap_check_http(url: str, timeout: int = 3) -> dict:
@@ -9179,7 +9179,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.96</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.99</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10511,22 +10511,10 @@ var _modelStructureSignature = '';
 var _modelsLoadSeq = 0;
 var _modelsRenderedOnce = false;
 function _readModelsClientCache(key, maxAgeMs) {
-  try {
-    var raw = sessionStorage.getItem(key);
-    if (!raw) return null;
-    var parsed = JSON.parse(raw);
-    if (!parsed || !parsed.ts || !parsed.data) return null;
-    if (maxAgeMs && (Date.now() - parsed.ts) > maxAgeMs) return null;
-    return parsed.data;
-  } catch (_) {
-    return null;
-  }
+  return null;
 }
 function _writeModelsClientCache(key, data) {
-  try {
-    if (!data || !data.providers) return;
-    sessionStorage.setItem(key, JSON.stringify({ ts: Date.now(), data: data }));
-  } catch (_) {}
+  return;
 }
 function _modelsStructureSignature(snap) {
   try {
@@ -10587,6 +10575,8 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.99', date:'2026-03-09', notes:['Models no longer uses browser sessionStorage at all for backend truth','Models bootstrap and snapshot now force fresh capability checks and invalidate CLI-derived caches when binary fingerprints change','Porter control-plane surfaces now prefer live runtime truth over cached bootstrap state after CLI upgrades like Gemini'] },
+  { ver:'v0.29.97', date:'2026-03-09', notes:['Models loading no longer writes skeleton cards into the grid at all; only the top loading rail changes during refresh','This guarantees background loads cannot blank or replace the visible grid once real cards have rendered','Grid DOM is now reserved for real card renders and the explicit empty-state only'] },
   { ver:'v0.29.96', date:'2026-03-09', notes:['Models loading is now single-flight: duplicate loadModels calls cannot replace an already-rendered grid with skeletons or bootstrap state','Once the grid has rendered in a visit, later loads refresh in the background without clearing cards','Stale async bootstrap/snapshot responses are dropped if a newer Models load started afterward'] },
   { ver:'v0.29.95', date:'2026-03-09', notes:['Once Models cards are on screen, no same-visit background refresh is allowed to replace the whole grid','Cached snapshot loads now refresh cache and versions in the background without applying the live snapshot DOM update','This hardens the invariant that the Models grid never disappears after a successful render'] },
   { ver:'v0.29.94', date:'2026-03-09', notes:['Removed the post-response Models activity fetch so ordinary backend responses no longer trigger any Models-tab refresh path','Models live UI now relies on existing SSE updates and explicit reloads instead of hidden activity polling after each response','This eliminates the remaining automatic Models refresh caused by background backend traffic'] },
@@ -18823,6 +18813,9 @@ function _applyModelsSnapshot(snap, opts) {
     throw new Error('Models snapshot unavailable');
   }
   opts = opts || {};
+  if (_modelsRenderedOnce && Array.isArray(snap.providers) && snap.providers.length === 0) {
+    return;
+  }
   var nextSig = _modelsStructureSignature(snap);
   var grid = document.getElementById('models-grid');
   var shouldRenderCards = true;
@@ -18843,7 +18836,6 @@ function _applyModelsSnapshot(snap, opts) {
 }
 
 function _renderModelsLoading(stage, opts) {
-  var grid = document.getElementById('models-grid');
   var rail = document.getElementById('models-load-status');
   opts = opts || {};
   if (rail) {
@@ -18855,33 +18847,6 @@ function _renderModelsLoading(stage, opts) {
       rail.innerHTML = '';
     }
   }
-  if (!grid || opts.keepCards) return;
-  var count = opts.count || 4;
-  var cards = [];
-  for (var i = 0; i < count; i += 1) {
-    cards.push(
-      '<div class="models-skeleton-card">'
-        + '<div class="models-skeleton-row">'
-          + '<span class="models-skeleton-dot"></span>'
-          + '<div class="models-skeleton-line" style="width:120px"></div>'
-          + '<div class="models-skeleton-line sm" style="width:56px;margin-left:auto"></div>'
-        + '</div>'
-        + '<div class="models-skeleton-row">'
-          + '<div class="models-skeleton-line sm" style="width:168px"></div>'
-        + '</div>'
-        + '<div class="models-skeleton-runtime">'
-          + '<div class="models-skeleton-line pill"></div>'
-          + '<div class="models-skeleton-line pill" style="width:112px"></div>'
-        + '</div>'
-        + '<div class="models-skeleton-list">'
-          + '<div class="models-skeleton-item"><div class="models-skeleton-line" style="width:96px"></div><div class="models-skeleton-line sm" style="width:42px"></div></div>'
-          + '<div class="models-skeleton-item"><div class="models-skeleton-line" style="width:124px"></div><div class="models-skeleton-line sm" style="width:42px"></div></div>'
-          + '<div class="models-skeleton-item"><div class="models-skeleton-line" style="width:84px"></div><div class="models-skeleton-line sm" style="width:42px"></div></div>'
-        + '</div>'
-      + '</div>'
-    );
-  }
-  grid.innerHTML = cards.join('');
 }
 
 async function loadModels() {
@@ -19851,6 +19816,7 @@ function _renderModelCards(data, act) {
   var grid = document.getElementById('models-grid');
   if (!grid || !data || !data.providers) return;
   if (!data.providers.length) {
+    if (_modelsRenderedOnce && grid.children.length > 0) return;
     grid.innerHTML = '<div style="color:var(--text3);font-size:13px;grid-column:1/-1">No model backends detected.</div>';
     return;
   }
@@ -25898,6 +25864,7 @@ DEFAULT_RULES = [
     {"id": "agnostic", "text": "Everything about Porter must be agnostic and configurable. No model-specific bridges.", "category": "architecture"},
     {"id": "router", "text": "Porter is always the router. All model calls flow through Porter.", "category": "architecture"},
     {"id": "no-hardcode", "text": "No hardcoded paths, hosts, ports, tokens, or project IDs. Everything from config or runtime detection.", "category": "architecture"},
+    {"id": "live-truth", "text": "Control-plane surfaces must prefer live runtime truth over cached browser or stale bootstrap state. Never rely on cached backend truth after upgrades or config changes.", "category": "architecture"},
     {"id": "brief", "text": "Brief is always better. Short labels, short hints, short copy.", "category": "ux"},
     {"id": "no-hidden", "text": "No hidden or hardcoded pathways. Everything exposed in the UI.", "category": "ux"},
     {"id": "trust-ux", "text": "Show real capability state only. Never label incomplete features as active.", "category": "ux"},
@@ -26329,11 +26296,41 @@ _backend_version_cache = {"data": None, "ts": 0}
 _backend_latest_cache = {"data": {}, "ts": 0}
 _backend_model_cache = {"data": {}, "ts": {}}
 _cli_help_cache = {}
+_cli_binary_fingerprints = {}
 
 
 def _invalidate_backend_version_cache():
     _backend_version_cache["data"] = None
     _backend_version_cache["ts"] = 0
+
+
+def _cli_binary_fingerprint(binary: str) -> str:
+    path = _resolve_cli(binary)
+    if not path:
+        return ""
+    try:
+        st = Path(path).stat()
+        return f"{path}:{st.st_size}:{st.st_mtime_ns}"
+    except Exception:
+        return path
+
+
+def _refresh_cli_cache_fingerprints(binaries=None) -> bool:
+    binaries = tuple(binaries or ("openclaw", "claude", "gemini", "codex", "ollama"))
+    changed = False
+    for binary in binaries:
+        fp = _cli_binary_fingerprint(binary)
+        if _cli_binary_fingerprints.get(binary, "") != fp:
+            _cli_binary_fingerprints[binary] = fp
+            changed = True
+    if changed:
+        _invalidate_backend_version_cache()
+        _cli_help_cache.clear()
+        _backend_model_cache["data"].pop("gemini", None)
+        _backend_model_cache["ts"].pop("gemini", None)
+        global _capabilities_cache_ts
+        _capabilities_cache_ts = 0.0
+    return changed
 
 
 def _cached_capability_version(name: str) -> dict:
@@ -27386,6 +27383,8 @@ def _models_available_payload(lightweight: bool = False) -> dict:
 
 
 def _models_snapshot(force_versions: bool = False) -> dict:
+    _refresh_cli_cache_fingerprints()
+    _run_cap_checks(force=True)
     return {
         "ok": True,
         "providers": _providers_payload(),
@@ -27397,11 +27396,13 @@ def _models_snapshot(force_versions: bool = False) -> dict:
 
 
 def _models_bootstrap() -> dict:
+    _refresh_cli_cache_fingerprints()
+    _run_cap_checks(force=True)
     return {
         "ok": True,
-        "providers": _providers_payload(lightweight=True),
+        "providers": _providers_payload(lightweight=False),
         "activity": _models_activity_payload(include_recent=False),
-        "backends": _models_available_payload(lightweight=True),
+        "backends": _models_available_payload(lightweight=False),
         "versions": _bootstrap_backend_versions(),
         "runtimes": {bk: _backend_runtime_info(bk) for bk in PROVIDER_REGISTRY},
     }
@@ -29640,7 +29641,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.96"})
+            self.reply_json({"v": "0.29.99"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -31579,7 +31580,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.96'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.99'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36256,7 +36257,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.96 ready (localhost only)")
+    print(f"\n  Porter v0.29.99 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
