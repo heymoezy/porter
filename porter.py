@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.10 — Project knowledge browser + Cortex scope filters"""
+"""Porter v0.30.11 — Live project activity refresh"""
 
 
 import email
@@ -9417,7 +9417,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.10</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.11</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10831,6 +10831,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 
 const CHANGELOG = [
   { ver:'v0.30.9', date:'2026-03-09', notes:['Runtime gateway activity now refreshes from live bridge SSE events instead of a tight 5-second poll loop, reducing background load while making backend activity feel more immediate','Kept a light 30-second fallback poll so the Runtime activity feed still self-heals if SSE events are missed','This cuts unnecessary repeat queries on the same dispatch log path while preserving the rule that gateway activity must stay visible'] },
+  { ver:'v0.30.11', date:'2026-03-09', notes:['Projects overview activity now refreshes from live bridge SSE events instead of staying static until manual reload','Added a light 30-second fallback refresh for project activity while the overview is open, with teardown when leaving Projects','This keeps autonomous project work visible in real time without adding another tight polling loop'] },
   { ver:'v0.30.10', date:'2026-03-09', notes:['Projects Memory sub-tab upgraded to full knowledge browser with confidence bars, importance indicators, timestamps, agent attribution, search, archive/restore/delete','Cortex tab now has Agent/Project/Global scope filter buttons for viewing knowledge by scope','Project memories show reinforcement count, injection frequency, and relative age for each fact'] },
   { ver:'v0.30.8', date:'2026-03-09', notes:['Models bootstrap and snapshot now use short server-side caches keyed by config and CLI fingerprints instead of forcing heavy runtime introspection on every open','Removed the dead browser-side Models snapshot/bootstrap reuse path so the tab stays live-truth only while still rendering from a much cheaper first payload','Models runtime metadata is now cached server-side for one minute and invalidated on config or binary changes, cutting repeated CLI help/version work without reintroducing stale browser truth'] },
   { ver:'v0.30.7', date:'2026-03-09', notes:['Projects overview now shows a real recent activity stream merged from trace_steps and agent_messages, so project work is visible without tab-hopping','Added a lightweight /api/projects/<id>/activity endpoint backed by live trace and dispatch data instead of synthetic summaries','This makes autonomous project work legible while reusing the indexed data paths already added for speed'] },
@@ -12803,6 +12804,12 @@ function switchModule(name) {
     _modelTimers = {};
     if (_modelActivityPoller) { clearInterval(_modelActivityPoller); _modelActivityPoller = null; }
   }
+  if (_currentModule === 'projects' && name !== 'projects') {
+    if (_projActivityPoller) { clearInterval(_projActivityPoller); _projActivityPoller = null; }
+    if (_projActivityRefreshTimer) { clearTimeout(_projActivityRefreshTimer); _projActivityRefreshTimer = null; }
+    if (_projActivitySseId) { _sseUnsubscribe(_projActivitySseId); _projActivitySseId = null; }
+    window._projActivityCurrent = '';
+  }
   if (_currentModule === 'locations' && name !== 'locations') {
     if (typeof stopTsPolling === 'function') stopTsPolling();
   }
@@ -13619,6 +13626,9 @@ function toggleCreateSkillForm() {
 
 // ── Projects (v0.29.32 — real project containers) ─────────────────────
 var _projList = [], _projActive = null, _projTab = 'overview';
+var _projActivitySseId = null;
+var _projActivityPoller = null;
+var _projActivityRefreshTimer = null;
 
 function _projFmtDate(ms) {
   var d = new Date(ms);
@@ -13752,6 +13762,10 @@ function _renderProjTabs() {
 
 function _projSwitchTab(t) {
   _projTab = t;
+  if (t !== 'overview' && _projActivityRefreshTimer) {
+    clearTimeout(_projActivityRefreshTimer);
+    _projActivityRefreshTimer = null;
+  }
   _renderProjTabs();
   _renderProjTabContent();
 }
@@ -13903,6 +13917,8 @@ async function _renderProjTabContent() {
 async function _projLoadActivity(pid) {
   var el = document.getElementById('proj-activity-list');
   if (!el) return;
+  window._projActivityCurrent = pid;
+  _connectProjActivityLive();
   try {
     var data = await api('/api/projects/' + pid + '/activity?limit=18');
     var rows = (data && data.activity) || [];
@@ -13930,6 +13946,33 @@ async function _projLoadActivity(pid) {
     }).join('');
   } catch (e) {
     el.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);text-align:center;color:#ef4444">Could not load project activity.</div>';
+  }
+}
+
+function _scheduleProjActivityRefresh(delayMs) {
+  if (_currentModule !== 'projects' || _projTab !== 'overview' || !window._projActivityCurrent) return;
+  if (_projActivityRefreshTimer) return;
+  _projActivityRefreshTimer = setTimeout(function() {
+    _projActivityRefreshTimer = null;
+    if (_currentModule === 'projects' && _projTab === 'overview' && window._projActivityCurrent) {
+      _projLoadActivity(window._projActivityCurrent);
+    }
+  }, Math.max(80, delayMs || 250));
+}
+
+function _connectProjActivityLive() {
+  if (_projActivitySseId) return;
+  _projActivitySseId = _sseSubscribe(function(d) {
+    if (!d || !d.type) return;
+    if (d.type === 'bridge:dispatch') _scheduleProjActivityRefresh(120);
+    else if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleProjActivityRefresh(220);
+  });
+  if (!_projActivityPoller) {
+    _projActivityPoller = setInterval(function() {
+      if (_currentModule === 'projects' && _projTab === 'overview' && window._projActivityCurrent) {
+        _projLoadActivity(window._projActivityCurrent);
+      }
+    }, 30000);
   }
 }
 
@@ -30335,7 +30378,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.10"})
+            self.reply_json({"v": "0.30.11"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -30497,7 +30540,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.10"
+                health["porter_version"] = "0.30.11"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -32283,7 +32326,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.10'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.11'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36967,7 +37010,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.10 ready (localhost only)")
+    print(f"\n  Porter v0.30.11 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

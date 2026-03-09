@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.11 (2026-03-09)
+
+**Live Project Activity Refresh**
+
+- Projects overview activity now refreshes from live bridge SSE events instead of staying stale until you reopen the project
+- Added a light 30-second fallback refresh while the project overview is open, with teardown when leaving Projects
+- This keeps autonomous project work visible in real time without reintroducing another tight polling loop
+
+---
+
 ## v0.30.9 (2026-03-09)
 
 **SSE Runtime Activity Refresh**
