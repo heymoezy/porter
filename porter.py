@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.20 — Project-aware orchestration context"""
+"""Porter v0.30.21 — Project-aware orchestration context"""
 
 
 import email
@@ -9596,7 +9596,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.20</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.21</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11034,6 +11034,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.21', date:'2026-03-09', notes:['Process Manager: Porter now tracks all model gateway processes (OpenClaw, Gemini, Codex, Ollama) with CPU, memory, runtime, and stall detection','Auto-kill: watchdog automatically kills processes stalled for 2+ hours with 0% CPU or zombies','API: GET /api/processes lists running gateways, POST /api/processes/kill and /restart for manual control','Watchdog integration: stalled processes auto-detected and terminated every 30 seconds'] },
   { ver:'v0.30.20', date:'2026-03-09', notes:['Agent Watchdog: background thread monitors running dispatches and orchestration steps, detects stalls, auto-reboots by reassigning to next-best backend','Response validation catches empty, repetitive, or refusal responses especially from OpenClaw','OpenClaw gateway health check: watchdog pings gateway every 30s, attempts auto-restart if unresponsive','New API: GET /api/watchdog returns live stats (checks, reboots, validation failures)'] },
   { ver:'v0.30.19', date:'2026-03-09', notes:['Orchestration runs now inherit active project/task context, prefer personas assigned to the active project, and pass project/task identity through persona execution','Runtime orchestration cards now surface project/task chips so autonomous runs stay tied to the real project lane instead of floating as generic jobs','This closes a core autonomy gap where the orchestration engine could execute outside project-aware dispatch and Cortex scoping'] },
   { ver:'v0.30.18', date:'2026-03-09', notes:['Orchestration Engine: Porter now plans goals into executable DAG steps, scores each backend by capability fit, dispatches to the best available model, and auto-reassigns on failure','New DB tables: orchestration_runs, orchestration_steps, orchestration_events — full execution history with dependency tracking','Capability taxonomy: each backend scored for implementation/research/analysis/synthesis/verification/debugging — routing is data-driven not keyword-heuristic','API: POST /api/orchestration/run (plan+execute), GET /api/orchestration/runs, GET/DELETE /api/orchestration/<id>','System tab: Orchestration Engine panel with live progress bars, run status, cancel/detail controls','Steps execute in parallel when dependencies allow, with ThreadPoolExecutor — independent branches run concurrently'] },
@@ -30395,6 +30396,141 @@ def _ledger_conflicts() -> list:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PROCESS MANAGER — detect, kill, restart model gateway processes
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_MANAGED_PROCESSES = {
+    "openclaw": {"patterns": ["openclaw", "openclaw-tui", "openclaw-gateway"], "restart_cmd": None},
+    "gemini": {"patterns": ["gemini"], "restart_cmd": None},
+    "codex": {"patterns": ["codex"], "restart_cmd": None},
+    "ollama": {"patterns": ["ollama"], "restart_cmd": ["systemctl", "--user", "restart", "ollama"]},
+}
+
+def _process_list() -> list:
+    """List all model-related processes with status info."""
+    import subprocess
+    results = []
+    try:
+        ps = subprocess.run(
+            ["ps", "aux"], capture_output=True, text=True, timeout=5
+        )
+        lines = ps.stdout.strip().split("\n")
+        for line in lines[1:]:  # Skip header
+            parts = line.split(None, 10)
+            if len(parts) < 11:
+                continue
+            cmd = parts[10].lower()
+            pid = int(parts[1])
+            # Check if this is a managed process
+            for svc, info in _MANAGED_PROCESSES.items():
+                for pattern in info["patterns"]:
+                    if pattern in cmd:
+                        cpu = float(parts[2])
+                        mem = float(parts[3])
+                        stat = parts[7]
+                        # Calculate runtime from /proc
+                        runtime_s = 0
+                        try:
+                            with open(f"/proc/{pid}/stat") as f:
+                                stat_parts = f.read().split()
+                                starttime = int(stat_parts[21])
+                                with open("/proc/uptime") as uf:
+                                    uptime = float(uf.read().split()[0])
+                                clk_tck = 100  # SC_CLK_TCK
+                                runtime_s = int(uptime - (starttime / clk_tck))
+                        except Exception:
+                            pass
+                        results.append({
+                            "service": svc,
+                            "pid": pid,
+                            "cpu_pct": cpu,
+                            "mem_pct": mem,
+                            "state": stat,
+                            "runtime_s": runtime_s,
+                            "cmd": parts[10][:100],
+                            "stalled": _is_process_stalled(pid, cpu, runtime_s, stat),
+                        })
+                        break
+    except Exception as e:
+        log.debug("Process list error: %s", e)
+    return results
+
+
+def _is_process_stalled(pid: int, cpu: float, runtime_s: int, state: str) -> bool:
+    """Heuristic: is this process stalled?"""
+    # Running for over 2 hours with 0% CPU = likely stalled
+    if runtime_s > 7200 and cpu < 0.1:
+        return True
+    # Sleeping for over 1 hour in a terminal (interactive process stuck)
+    if "S" in state and runtime_s > 3600:
+        return True
+    # Zombie
+    if "Z" in state:
+        return True
+    return False
+
+
+def _process_kill(pid: int, force: bool = False) -> dict:
+    """Kill a process safely."""
+    import signal, os
+    try:
+        # Verify the process is a managed one
+        procs = _process_list()
+        target = None
+        for p in procs:
+            if p["pid"] == pid:
+                target = p
+                break
+        if not target:
+            return {"ok": False, "error": f"PID {pid} is not a managed process"}
+        sig = signal.SIGKILL if force else signal.SIGTERM
+        os.kill(pid, sig)
+        mlog.emit("warn", "process", "process.kill",
+            f"Killed {target['service']} PID {pid} ({'SIGKILL' if force else 'SIGTERM'})",
+            backend=target["service"])
+        _emit_event("process:kill", {"pid": pid, "service": target["service"], "force": force})
+        return {"ok": True, "pid": pid, "service": target["service"], "signal": "SIGKILL" if force else "SIGTERM"}
+    except ProcessLookupError:
+        return {"ok": True, "pid": pid, "note": "process already dead"}
+    except PermissionError:
+        return {"ok": False, "error": f"Permission denied for PID {pid}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def _process_restart(service: str) -> dict:
+    """Restart a managed service."""
+    import subprocess
+    if service not in _MANAGED_PROCESSES:
+        return {"ok": False, "error": f"Unknown service: {service}"}
+
+    # First kill all existing processes for this service
+    procs = _process_list()
+    killed = 0
+    for p in procs:
+        if p["service"] == service:
+            _process_kill(p["pid"], force=True)
+            killed += 1
+
+    # Try to restart
+    info = _MANAGED_PROCESSES[service]
+    if info.get("restart_cmd"):
+        try:
+            r = subprocess.run(info["restart_cmd"], capture_output=True, text=True, timeout=15)
+            return {"ok": r.returncode == 0, "method": "command", "killed": killed,
+                    "output": (r.stdout + r.stderr)[:200]}
+        except Exception as e:
+            return {"ok": False, "error": str(e), "killed": killed}
+
+    # For services without restart commands, just kill and let them be restarted externally
+    mlog.emit("info", "process", "process.restart",
+        f"Restarted {service} (killed {killed} processes)", backend=service)
+    return {"ok": True, "method": "kill_only", "killed": killed,
+            "note": f"Killed {killed} {service} processes. External restart needed."}
+
+
 # AGENT WATCHDOG — auto-detect stalls, validate responses, reboot agents
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -30610,6 +30746,20 @@ def _agent_watchdog_loop():
             conn.close()
 
 
+            # 4b. Auto-kill stalled processes
+            try:
+                stalled_procs = [p for p in _process_list() if p.get("stalled")]
+                for sp in stalled_procs:
+                    log.warning("Watchdog: stalled process %s (PID %d, service=%s, runtime=%ds)",
+                        sp["cmd"][:40], sp["pid"], sp["service"], sp["runtime_s"])
+                    _process_kill(sp["pid"], force=False)
+                    mlog.emit("warn", "watchdog", "watchdog.process_stall",
+                        f"Killed stalled {sp['service']} PID {sp['pid']} (runtime {sp['runtime_s']}s)",
+                        backend=sp["service"])
+                    _watchdog_stats["reboots"] += 1
+            except Exception as e:
+                log.debug("Watchdog process check error: %s", e)
+
             # 5. OpenClaw gateway health check
             oc_health = _openclaw_health_check()
             if not oc_health.get("ok"):
@@ -30714,19 +30864,100 @@ def _orch_score_backend(backend: str, step_kind: str, required_caps: list) -> fl
     return min(1.0, max(0.0, base_score + speed_bonus))
 
 
-def _orch_select_executor(step: dict, project_id: str = "", task_id: str = "") -> tuple:
+def _project_assigned_persona_ids(project_id: str = "", task_id: str = "") -> list[str]:
+    task = _task_by_id(task_id)
+    if task:
+        assigned_persona = str(task.get("assigned_persona_id") or "").strip()
+        if assigned_persona:
+            return [assigned_persona]
+    pid = str(project_id or "").strip()
+    proj = _project_by_id(pid) if pid else None
+    return [str(x).strip() for x in (proj or {}).get("assigned_personas", []) if str(x).strip()]
+
+
+def _orch_select_executor(step: dict, project_id: str = "", task_id: str = "", exclude_backends: list | None = None) -> tuple:
     """Pick the best (backend, persona_id) for an orchestration step."""
     kind = step.get("kind", "general")
     _raw_caps = step.get("required_capabilities", [])
     required_caps = json.loads(_raw_caps) if isinstance(_raw_caps, str) else (_raw_caps if isinstance(_raw_caps, list) else [])
     preferred_backend = step.get("preferred_backend", "")
     preferred_persona = step.get("preferred_persona_id", "")
-    if preferred_backend and preferred_backend in PROVIDER_REGISTRY:
+    exclude = {str(x).strip().lower() for x in (exclude_backends or []) if str(x).strip()}
+    project_assigned = _project_assigned_persona_ids(project_id=project_id, task_id=task_id)
+    leader_ids = set()
+    try:
+        for squad in _squad_list():
+            members = squad.get("members") or []
+            member_ids = {str(m.get("id") or "").strip() for m in members if str(m.get("id") or "").strip()}
+            if project_assigned and not (member_ids & set(project_assigned)):
+                continue
+            for member in members:
+                if str(member.get("squad_role") or "").strip().lower() == "leader":
+                    mid = str(member.get("id") or "").strip()
+                    if mid:
+                        leader_ids.add(mid)
+    except Exception:
+        pass
+    if preferred_backend and preferred_backend in PROVIDER_REGISTRY and preferred_backend not in exclude:
         score = _orch_score_backend(preferred_backend, kind, required_caps)
         if score > 0.3:
             return (preferred_backend, preferred_persona)
+    persona_candidates = []
+    seen_personas = set()
+    persona_order = list(project_assigned)
+    if preferred_persona and preferred_persona not in persona_order:
+        persona_order.insert(0, preferred_persona)
+    try:
+        for persona in _persona_list():
+            pid = str(persona.get("id") or "").strip()
+            if not pid or pid in seen_personas:
+                continue
+            if project_assigned and pid not in project_assigned:
+                continue
+            seen_personas.add(pid)
+            persona_order.append(pid)
+    except Exception:
+        pass
+    for pid in persona_order:
+        if not pid:
+            continue
+        persona = _persona_by_id(pid) or {}
+        if str(persona.get("status") or "").strip().lower() == "disabled":
+            continue
+        backend = str(persona.get("preferred_backend") or "").strip().lower()
+        fallback_backends = []
+        try:
+            fallback_backends = [str(x).strip().lower() for x in json.loads(persona.get("fallback_backends", "[]")) if str(x).strip()]
+        except Exception:
+            fallback_backends = []
+        options = [backend] + [bk for bk in fallback_backends if bk and bk != backend]
+        best_local = None
+        for bk in options:
+            if bk not in PROVIDER_REGISTRY or bk in exclude:
+                continue
+            score = _orch_score_backend(bk, kind, required_caps)
+            if score <= 0.0:
+                continue
+            bonus = 0.0
+            if pid in project_assigned:
+                bonus += 0.22
+            if pid in leader_ids and kind in ("research", "analysis", "synthesis", "general"):
+                bonus += 0.08
+            if kind in ("implementation", "verification") and bk in ("codex", "openclaw", "ollama"):
+                bonus += 0.05
+            total = score + bonus
+            if not best_local or total > best_local[0]:
+                best_local = (total, bk, pid)
+        if best_local:
+            persona_candidates.append(best_local)
+    if persona_candidates:
+        persona_candidates.sort(key=lambda x: (-x[0], x[1], x[2]))
+        _, best_backend, persona_id = persona_candidates[0]
+        return (best_backend, persona_id)
     scored = []
     for bk in PROVIDER_REGISTRY:
+        if bk in exclude:
+            continue
         s = _orch_score_backend(bk, kind, required_caps)
         if s > 0.0:
             scored.append((s, bk))
@@ -30734,33 +30965,7 @@ def _orch_select_executor(step: dict, project_id: str = "", task_id: str = "") -
     if not scored:
         return (None, None)
     best_backend = scored[0][1]
-    persona_id = preferred_persona
-    resolved_project_id = _resolve_persona_project(preferred_persona or "", explicit_project_id=project_id, task_id=task_id) if preferred_persona else (str(project_id or "").strip() or "")
-    project_assigned = []
-    if resolved_project_id:
-        proj = _project_by_id(resolved_project_id) or {}
-        project_assigned = [str(x).strip() for x in (proj.get("assigned_personas") or []) if str(x).strip()]
-    if not persona_id:
-        try:
-            conn = _db_conn()
-            if project_assigned:
-                placeholders = ",".join("?" for _ in project_assigned)
-                rows = conn.execute(
-                    f"SELECT id FROM personas WHERE preferred_backend=? AND id IN ({placeholders}) AND status != 'disabled' ORDER BY last_active DESC LIMIT 1",
-                    [best_backend] + project_assigned
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT id FROM personas WHERE preferred_backend=? AND status != 'disabled' ORDER BY last_active DESC LIMIT 1",
-                    (best_backend,)
-                ).fetchall()
-            conn.close()
-            if rows:
-                persona_id = rows[0]["id"]
-        except Exception:
-            pass
-    if not persona_id and project_assigned:
-        persona_id = project_assigned[0]
+    persona_id = project_assigned[0] if project_assigned else (preferred_persona or None)
     return (best_backend, persona_id)
 
 
@@ -30929,6 +31134,12 @@ def _orch_execute_step(run_id: str, step: dict) -> dict:
             dep = conn.execute("SELECT title, output_data FROM orchestration_steps WHERE id=?", (dep_id,)).fetchone()
             if dep and dep["output_data"]:
                 prompt += f"\n\n--- Prior step: {dep['title']} ---\n{dep['output_data'][:2000]}"
+        if project_id:
+            if not persona_id:
+                backend, persona_id = _orch_select_executor(step, project_id=project_id, task_id=task_id, exclude_backends=[])
+            project_ctx = _build_project_dispatch_context(project_id, persona_id=persona_id or "", task_id=task_id, message=prompt)
+            if project_ctx:
+                prompt = f"{prompt}\n\n--- Project Context ---\n{project_ctx}"
         lease_expires = time.time() + 180
         conn.execute(
             "UPDATE orchestration_steps SET status='running', attempt=?, started_at=?, lease_expires_at=?, assigned_backend=?, assigned_persona_id=? WHERE id=?",
@@ -30981,25 +31192,14 @@ def _orch_execute_step(run_id: str, step: dict) -> dict:
                 (run_id, step_id, backend, f"Attempt {attempt} failed: {error[:200]}")
             )
             if new_status == "pending":
-                scored = []
-                kind = step.get("kind", "general")
-                _raw_rc = step.get("required_capabilities", [])
-                req_caps = json.loads(_raw_rc) if isinstance(_raw_rc, str) else (_raw_rc if isinstance(_raw_rc, list) else [])
-                for bk in PROVIDER_REGISTRY:
-                    if bk == backend:
-                        continue
-                    s = _orch_score_backend(bk, kind, req_caps)
-                    if s > 0.0:
-                        scored.append((s, bk))
-                scored.sort(key=lambda x: -x[0])
-                if scored:
-                    new_backend = scored[0][1]
-                    conn.execute("UPDATE orchestration_steps SET assigned_backend=? WHERE id=?", (new_backend, step_id))
+                new_backend, new_persona_id = _orch_select_executor(step, project_id=project_id, task_id=task_id, exclude_backends=[backend])
+                if new_backend:
+                    conn.execute("UPDATE orchestration_steps SET assigned_backend=?, assigned_persona_id=? WHERE id=?", (new_backend, new_persona_id or "", step_id))
                     conn.execute(
                         "INSERT INTO orchestration_events (run_id, step_id, event_type, backend, message) VALUES (?, ?, 'step_reassigned', ?, ?)",
                         (run_id, step_id, new_backend, f"Reassigned from {backend} to {new_backend}")
                     )
-                    _emit_event("orch:reassigned", {"run_id": run_id, "step_id": step_id, "from": backend, "to": new_backend})
+                    _emit_event("orch:reassigned", {"run_id": run_id, "step_id": step_id, "from": backend, "to": new_backend, "persona_id": new_persona_id or ""})
         conn.commit()
         conn.close()
     except Exception as e:
@@ -31926,7 +32126,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.20"})
+            self.reply_json({"v": "0.30.21"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32088,7 +32288,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.20"
+                health["porter_version"] = "0.30.21"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -33777,6 +33977,10 @@ class Handler(BaseHTTPRequestHandler):
             conflicts = _ledger_conflicts()
             self.reply_json({"ok": True, "active_claims": active, "recent": recent, "conflicts": conflicts})
 
+        elif parsed.path == "/api/processes":
+            if not self.auth_check(redirect=False): return
+            self.reply_json({"ok": True, "processes": _process_list()})
+
         elif parsed.path == "/api/watchdog":
             if not self.auth_check(redirect=False): return
             self.reply_json({"ok": True, **_watchdog_status()})
@@ -33914,7 +34118,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.20'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.21'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34687,6 +34891,24 @@ class Handler(BaseHTTPRequestHandler):
                 context=str(data.get("context", "")).strip()
             )
             self.reply_json(result, 200 if result.get("ok") else 400)
+
+        elif parsed.path == "/api/processes/kill":
+            if not self.auth_check(redirect=False): return
+            body = self.read_json_body()
+            if not body: return
+            pid = int(body.get("pid", 0))
+            if not pid:
+                self.reply_json({"ok": False, "error": "pid required"}, 400); return
+            self.reply_json(_process_kill(pid, force=bool(body.get("force"))))
+
+        elif parsed.path == "/api/processes/restart":
+            if not self.auth_check(redirect=False): return
+            body = self.read_json_body()
+            if not body: return
+            service = str(body.get("service", "")).strip()
+            if not service:
+                self.reply_json({"ok": False, "error": "service required"}, 400); return
+            self.reply_json(_process_restart(service))
 
         elif parsed.path == "/api/orchestration/run":
             if not self.auth_check(redirect=False): return
@@ -38651,7 +38873,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.20 ready (localhost only)")
+    print(f"\n  Porter v0.30.21 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
