@@ -1,5 +1,25 @@
 # Porter Release Notes
 
+## v0.29.90 (2026-03-09)
+
+**Models Fast-Path Caching + Partial Hydration**
+
+- Models tab now reuses the last good bootstrap and snapshot from session storage so repeat visits render immediately before the network round-trip finishes
+- Bootstrap and snapshot activity payloads stop querying recent-run history that the card grid does not use, reducing first-load database work
+- Model activity slide-outs lazily hydrate recent runs only when opened, preserving detail without penalizing initial card render
+
+---
+
+## v0.29.89 (2026-03-09)
+
+**Animated Staged Models Loading**
+
+- Models tab now shows an animated staged loading rail instead of appearing stalled during bootstrap and snapshot hydration
+- Bootstrap load paints skeleton cards immediately, then preserves the first card render while live catalogs hydrate in the background
+- Models load states now distinguish fast cached runtime bootstrap from slower live catalog hydration so the page feels responsive even when backends are slow
+
+---
+
 ## v0.29.88 (2026-03-09)
 
 **Backend Runtime Profiles + Gemini Auth-Aware Testing**

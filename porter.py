@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.88 — Backend runtime profiles and Gemini auth-aware testing"""
+"""Porter v0.29.90 — Models fast-path caching and partial hydration"""
 
 
 import email
@@ -8565,8 +8565,23 @@ body.density-compact .file-name { padding: 6px 0; }
 .task-board-item { padding:6px 10px;font-size:11px;color:var(--text2);border-bottom:1px solid color-mix(in srgb, var(--border) 40%, transparent); }
 .task-board-item:last-child { border-bottom:none; }
 /* Model cards v2 */
+.models-load-status { display:none; align-items:center; justify-content:space-between; gap:12px; margin:0 0 12px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:linear-gradient(90deg,color-mix(in srgb,var(--surface) 80%, transparent),color-mix(in srgb,var(--accent) 7%, var(--surface)),color-mix(in srgb,var(--surface) 80%, transparent)); background-size:200% 100%; animation:shimmer 1.6s ease infinite; }
+.models-load-status.show { display:flex; }
+.models-load-status strong { font-size:12px; color:var(--text); }
+.models-load-status span { font-size:11px; color:var(--text3); }
 .models-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:14px; }
 @media (max-width:700px) { .models-grid { grid-template-columns:1fr; } }
+.models-skeleton-card { position:relative; overflow:hidden; min-height:240px; border:1px solid var(--border); border-radius:14px; padding:14px; background:linear-gradient(180deg,color-mix(in srgb,var(--bg2) 86%, transparent),color-mix(in srgb,var(--surface) 70%, transparent)); }
+.models-skeleton-row { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.models-skeleton-dot { width:10px; height:10px; border-radius:999px; background:color-mix(in srgb,var(--text3) 20%, transparent); }
+.models-skeleton-line { height:10px; border-radius:999px; background:linear-gradient(90deg,color-mix(in srgb,var(--surface) 70%, transparent),color-mix(in srgb,var(--surface2) 95%, transparent),color-mix(in srgb,var(--surface) 70%, transparent)); background-size:200% 100%; animation:shimmer 1.4s ease infinite; }
+.models-skeleton-line.sm { height:8px; }
+.models-skeleton-line.pill { width:88px; }
+.models-skeleton-runtime { display:flex; gap:6px; margin:10px 0 14px; }
+.models-skeleton-list { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+.models-skeleton-item { display:flex; align-items:center; gap:8px; }
+.models-skeleton-item .models-skeleton-line:last-child { margin-left:auto; width:52px; }
+.models-load-stage { grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:linear-gradient(90deg,color-mix(in srgb,var(--surface) 80%, transparent),color-mix(in srgb,var(--accent) 7%, var(--surface)),color-mix(in srgb,var(--surface) 80%, transparent)); background-size:200% 100%; animation:shimmer 1.6s ease infinite; }
 .model-card { padding:16px 18px;background:var(--raised);border:1px solid var(--border);border-radius:10px;transition:border-color .15s;display:flex;flex-direction:column;gap:10px;min-height:0; }
 .model-card:hover { border-color:var(--accent); }
 .model-card.offline { opacity:.55; }
@@ -9164,7 +9179,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.88</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.90</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9871,6 +9886,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <!-- Backends sub-tab -->
     <div id="models-backends-tab">
       <div class="module-intro">AI backends available to Porter. Each persona routes through one of these.</div>
+      <div id="models-load-status" class="models-load-status"></div>
       <div id="models-grid" class="models-grid">
         <div class="loading-indicator">Loading models...</div>
       </div>
@@ -10486,6 +10502,30 @@ async function api(url, body, timeout_ms = 15000) {
   }
 }
 
+var _modelsClientCacheKeys = {
+  bootstrap: 'porter.models.bootstrap.v2',
+  snapshot: 'porter.models.snapshot.v2'
+};
+var _modelsActivityHydrate = {};
+function _readModelsClientCache(key, maxAgeMs) {
+  try {
+    var raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    var parsed = JSON.parse(raw);
+    if (!parsed || !parsed.ts || !parsed.data) return null;
+    if (maxAgeMs && (Date.now() - parsed.ts) > maxAgeMs) return null;
+    return parsed.data;
+  } catch (_) {
+    return null;
+  }
+}
+function _writeModelsClientCache(key, data) {
+  try {
+    if (!data || !data.providers) return;
+    sessionStorage.setItem(key, JSON.stringify({ ts: Date.now(), data: data }));
+  } catch (_) {}
+}
+
 // v0.29.26 — Centralized UI failure display with retry
 function uiFail(containerId, msg, retryFn) {
   var el = document.getElementById(containerId);
@@ -10512,6 +10552,8 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.90', date:'2026-03-09', notes:['Models tab now reuses the last good bootstrap/snapshot from session storage so repeat visits render instantly before the network round-trip','Bootstrap and snapshot activity payloads stop querying recent-run history that the card grid does not use, reducing first-load database work','Model activity slide-outs lazily hydrate recent runs only when opened, preserving detail without penalizing initial card render'] },
+  { ver:'v0.29.89', date:'2026-03-09', notes:['Models tab now shows an animated staged loading rail instead of appearing stalled during bootstrap and snapshot hydration','Bootstrap load paints skeleton cards immediately, then preserves the first card render while live catalogs hydrate in the background','Models load states now distinguish fast cached runtime bootstrap from slower live catalog hydration so the page feels responsive even when backends are slow'] },
   { ver:'v0.29.88', date:'2026-03-09', notes:['Backend runtime profiles now capture documented CLI capabilities instead of scattering per-backend assumptions','Gemini runtime detects OAuth vs API-key control mode and normalizes model testing accordingly','Gemini and Claude tests now prefer documented headless/structured-output flags when supported by the installed CLI','Gemini tests now detect OAuth re-authorization prompts explicitly instead of misclassifying them as generic model failures','Models snapshot/bootstrap now carry runtime metadata so UI and tests share the same backend truth','Gemini startup no longer spawns gemini --version during capability checks, and Models bootstrap reuses cached Gemini capability state correctly'] },
   { ver:'v0.29.87', date:'2026-03-09', notes:['Models tab now paints from a lightweight bootstrap payload, then hydrates the full snapshot in the background','Cached version state renders immediately from the snapshot, then refreshes in the background','Test All now runs with controlled concurrency across different backends instead of full serialization','Test scheduling prevents multiple tests from hammering the same backend at once','Providers, activity, and available-model payloads now share backend helpers instead of duplicating route logic','Gemini startup no longer spawns gemini --version during capability checks, and Models bootstrap now reuses cached Gemini capability state correctly'] },
   { ver:'v0.29.86', date:'2026-03-09', notes:['Installed-version probes now prefer the real user-local CLI path and can be force-refreshed on Models load','Cards stop rendering Version unknown / Latest unknown noise when a probe has not completed','OpenClaw diagnosis now reads its runtime log and surfaces service-restart loops and token mismatches explicitly','Ollama and Codex latest-version checks are more robust so update labels do not disappear as easily','OpenClaw warning actions now sit on the bottom rail and gateway-only clutter was removed from the middle of the card','OpenClaw config uses a visible Gateway Token field instead of masking typed input','Shared client-side request failures now log through the common api() path','Test All now runs as a queued sequence instead of firing every backend at once','OpenClaw model tests now parse the current CLI JSON result format instead of failing successful runs','OpenClaw supervisor-conflict diagnosis now requires active restart evidence instead of only seeing two service files','Models page loading now tolerates partial API failures instead of blanking the whole tab'] },
@@ -18748,20 +18790,85 @@ function _applyModelsSnapshot(snap) {
   _checkBackendStatuses(window._modelProviders);
 }
 
+function _renderModelsLoading(stage, opts) {
+  var grid = document.getElementById('models-grid');
+  var rail = document.getElementById('models-load-status');
+  opts = opts || {};
+  if (rail) {
+    if (stage) {
+      rail.classList.add('show');
+      rail.innerHTML = '<strong>' + escHtml(stage) + '</strong><span>' + escHtml(opts.detail || 'Porter is checking runtimes, models, and versions in the background.') + '</span>';
+    } else {
+      rail.classList.remove('show');
+      rail.innerHTML = '';
+    }
+  }
+  if (!grid || opts.keepCards) return;
+  var count = opts.count || 4;
+  var cards = [];
+  for (var i = 0; i < count; i += 1) {
+    cards.push(
+      '<div class="models-skeleton-card">'
+        + '<div class="models-skeleton-row">'
+          + '<span class="models-skeleton-dot"></span>'
+          + '<div class="models-skeleton-line" style="width:120px"></div>'
+          + '<div class="models-skeleton-line sm" style="width:56px;margin-left:auto"></div>'
+        + '</div>'
+        + '<div class="models-skeleton-row">'
+          + '<div class="models-skeleton-line sm" style="width:168px"></div>'
+        + '</div>'
+        + '<div class="models-skeleton-runtime">'
+          + '<div class="models-skeleton-line pill"></div>'
+          + '<div class="models-skeleton-line pill" style="width:112px"></div>'
+        + '</div>'
+        + '<div class="models-skeleton-list">'
+          + '<div class="models-skeleton-item"><div class="models-skeleton-line" style="width:96px"></div><div class="models-skeleton-line sm" style="width:42px"></div></div>'
+          + '<div class="models-skeleton-item"><div class="models-skeleton-line" style="width:124px"></div><div class="models-skeleton-line sm" style="width:42px"></div></div>'
+          + '<div class="models-skeleton-item"><div class="models-skeleton-line" style="width:84px"></div><div class="models-skeleton-line sm" style="width:42px"></div></div>'
+        + '</div>'
+      + '</div>'
+    );
+  }
+  grid.innerHTML = cards.join('');
+}
+
 async function loadModels() {
   try {
+    var cachedSnapshot = _readModelsClientCache(_modelsClientCacheKeys.snapshot, 120000);
+    var cachedBootstrap = cachedSnapshot ? null : _readModelsClientCache(_modelsClientCacheKeys.bootstrap, 60000);
+    if (cachedSnapshot && cachedSnapshot.providers) {
+      _applyModelsSnapshot(cachedSnapshot);
+      _connectModelSSE();
+      _renderModelsLoading('Refreshing live model state...', { detail: 'Using the last good snapshot while Porter refreshes health, catalogs, and versions.', keepCards: true });
+    } else if (cachedBootstrap && cachedBootstrap.providers) {
+      _applyModelsSnapshot(cachedBootstrap);
+      _connectModelSSE();
+      _renderModelsLoading('Hydrating live model catalogs...', { detail: 'Using cached bootstrap state while Porter refreshes the live catalog.', keepCards: true });
+    } else {
+      _renderModelsLoading('Bootstrapping model runtimes...', { detail: 'Fast cached state first, then live catalog hydration.', count: 4 });
+    }
     var boot = await api('/api/models/bootstrap');
-    _applyModelsSnapshot(boot);
-    _connectModelSSE();
+    if (boot && boot.providers) {
+      _writeModelsClientCache(_modelsClientCacheKeys.bootstrap, boot);
+      if (!cachedSnapshot) _applyModelsSnapshot(boot);
+    }
+    if (!_modelSseId) _connectModelSSE();
+    _renderModelsLoading('Hydrating live model catalogs...', { detail: 'Refreshing dynamic models, backend health, and version checks.', keepCards: true });
     setTimeout(function() {
       api('/api/models/snapshot').then(function(snap) {
-        if (snap && snap.providers) _applyModelsSnapshot(snap);
+        if (snap && snap.providers) {
+          _writeModelsClientCache(_modelsClientCacheKeys.snapshot, snap);
+          _applyModelsSnapshot(snap);
+        }
+        _renderModelsLoading('');
       }).catch(function(e) {
         _reportModelsClientError('models-snapshot-hydrate', e || new Error('Snapshot hydrate failed'));
+        _renderModelsLoading('');
       });
       _refreshModelVersions(true);
     }, 150);
   } catch(e) {
+    _renderModelsLoading('');
     _reportModelsClientError('load-models', e);
   }
 }
@@ -19844,6 +19951,17 @@ function _openModelActivity(backend) {
   var body = document.getElementById('ma-body');
   var stats = ba.stats || {};
   var recent = ba.recent || [];
+  if (ba._partial && !_modelsActivityHydrate[backend]) {
+    _modelsActivityHydrate[backend] = true;
+    api('/api/models/activity?detail=1').then(function(act) {
+      if (act && act.activity) {
+        _modelActivityData = act.activity;
+        if (_modelActivityBackend === backend) _openModelActivity(backend);
+      }
+    }).finally(function() {
+      delete _modelsActivityHydrate[backend];
+    });
+  }
 
   // Live Trace section
   var traceContent = '<div class="ma-section">'
@@ -27139,7 +27257,7 @@ def _providers_payload(lightweight: bool = False) -> list:
     return providers
 
 
-def _models_activity_payload() -> dict:
+def _models_activity_payload(include_recent: bool = True) -> dict:
     import time as _act_t
     _act_now = _act_t.time()
     _act_since = _act_now - 86400
@@ -27167,12 +27285,14 @@ def _models_activity_payload() -> dict:
                 "FROM agent_messages WHERE to_agent=? AND created_at>?",
                 (_bk, _act_since)
             ).fetchone()
-            _act_recent = _act_conn.execute(
-                "SELECT run_id, status, substr(message,1,80) as preview, "
-                "duration_ms, created_at FROM agent_messages "
-                "WHERE to_agent=? ORDER BY created_at DESC LIMIT 5",
-                (_bk,)
-            ).fetchall()
+            _act_recent = []
+            if include_recent:
+                _act_recent = _act_conn.execute(
+                    "SELECT run_id, status, substr(message,1,80) as preview, "
+                    "duration_ms, created_at FROM agent_messages "
+                    "WHERE to_agent=? ORDER BY created_at DESC LIMIT 5",
+                    (_bk,)
+                ).fetchall()
             activity[_bk] = {
                 "active": [{"run_id": r[0], "prompt": r[1][:80] if r[1] else "", "started_at": r[2]} for r in _act_active],
                 "stats": {
@@ -27183,6 +27303,7 @@ def _models_activity_payload() -> dict:
                 },
                 "recent": [{"run_id": r[0], "status": r[1], "preview": r[2] or "",
                            "duration_ms": r[3] or 0, "created_at": r[4]} for r in _act_recent],
+                "_partial": not include_recent,
             }
         _act_conn.close()
     except Exception:
@@ -27217,7 +27338,7 @@ def _models_snapshot(force_versions: bool = False) -> dict:
     return {
         "ok": True,
         "providers": _providers_payload(),
-        "activity": _models_activity_payload(),
+        "activity": _models_activity_payload(include_recent=False),
         "backends": _models_available_payload(),
         "versions": _probe_backend_versions(force=force_versions),
         "runtimes": {bk: _backend_runtime_info(bk) for bk in PROVIDER_REGISTRY},
@@ -27228,7 +27349,7 @@ def _models_bootstrap() -> dict:
     return {
         "ok": True,
         "providers": _providers_payload(lightweight=True),
-        "activity": _models_activity_payload(),
+        "activity": _models_activity_payload(include_recent=False),
         "backends": _models_available_payload(lightweight=True),
         "versions": _bootstrap_backend_versions(),
         "runtimes": {bk: _backend_runtime_info(bk) for bk in PROVIDER_REGISTRY},
@@ -29468,7 +29589,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.88"})
+            self.reply_json({"v": "0.29.90"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -31406,7 +31527,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.88'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.90'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36083,7 +36204,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.88 ready (localhost only)")
+    print(f"\n  Porter v0.29.90 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
