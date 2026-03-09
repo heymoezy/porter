@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.12 — Coordination ledger for model deconfliction"""
+"""Porter v0.30.13 — Event-driven overview refresh"""
 
 
 import email
@@ -9433,7 +9433,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.12</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.13</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10846,6 +10846,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.13', date:'2026-03-09', notes:['Overview persona and quest-log refresh now follow live cortex and bridge SSE events instead of relying on a blind 30-second loop','Kept a lighter 60-second fallback refresh while Overview is active, with timer teardown when leaving the tab','This reduces idle homepage churn while keeping agent/squad state visibly current during autonomous work'] },
   { ver:'v0.30.12', date:'2026-03-09', notes:['Orchestration hub activity now refreshes from live bridge SSE events instead of polling admin endpoints every 15 seconds','Kept a much lighter 60-second fallback refresh, and the hub tears down its poller/SSE subscription when leaving Agents','This reduces repeat admin polling while keeping squad routing activity visible in real time'] },
   { ver:'v0.30.9', date:'2026-03-09', notes:['Runtime gateway activity now refreshes from live bridge SSE events instead of a tight 5-second poll loop, reducing background load while making backend activity feel more immediate','Kept a light 30-second fallback poll so the Runtime activity feed still self-heals if SSE events are missed','This cuts unnecessary repeat queries on the same dispatch log path while preserving the rule that gateway activity must stay visible'] },
   { ver:'v0.30.11', date:'2026-03-09', notes:['Projects overview activity now refreshes from live bridge SSE events instead of staying static until manual reload','Added a light 30-second fallback refresh for project activity while the overview is open, with teardown when leaving Projects','This keeps autonomous project work visible in real time without adding another tight polling loop'] },
@@ -12809,12 +12810,17 @@ function renderConfigSummary(d) {
 
 // ── module system ──
 let _currentModule = 'overview';
+let _overviewRefreshTimer = null;
 window._lastAgents = [];
 function switchModule(name) {
   // v0.29.11 — Stop phantom pollers when leaving their tabs
   if (_currentModule === 'admin' && name !== 'admin') {
     if (_mcMetricsTimer) { clearInterval(_mcMetricsTimer); _mcMetricsTimer = null; }
     if (_mcSseId) { _sseUnsubscribe(_mcSseId); _mcSseId = null; }
+  }
+  if (_currentModule === 'overview' && name !== 'overview') {
+    if (_overviewRefreshTimer) { clearTimeout(_overviewRefreshTimer); _overviewRefreshTimer = null; }
+    if (window._personaRefreshTimer) { clearInterval(window._personaRefreshTimer); window._personaRefreshTimer = null; }
   }
   if (_currentModule === 'agents' && name !== 'agents') {
     if (_orchHubPollTimer) { clearInterval(_orchHubPollTimer); _orchHubPollTimer = null; }
@@ -12894,6 +12900,7 @@ function switchModule(name) {
             }
             if (d.type === 'cortex:update' && d.data) {
               _updateCortexBadge(d.data.new_1h || 0);
+              _scheduleOverviewRefresh(180);
               var banner2 = document.getElementById('cx-extract-banner');
               if (banner2) banner2.style.display = 'none';
               // Update chat extraction indicator
@@ -12921,6 +12928,8 @@ function switchModule(name) {
                 }).catch(function(){});
               }
             }
+            if (d.type === 'bridge:dispatch') _scheduleOverviewRefresh(120);
+            if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleOverviewRefresh(220);
           } catch(ex) {}
         });
       }
@@ -12928,7 +12937,7 @@ function switchModule(name) {
       window._personaRefreshTimer = setInterval(function() {
         if (document.getElementById('overview-module') && document.getElementById('overview-module').classList.contains('active')) { loadPersonas(); if (typeof _loadQuestLog === 'function') _loadQuestLog(); }
         else clearInterval(window._personaRefreshTimer);
-      }, 30000);
+      }, 60000);
     }, tasks: function() { /* tasks merged into projects */ }, agents: function() { loadAgents(); }, projects: function() { loadProjects(); }, admin: loadAdmin,
     files: loadLocations, locations: loadLocations, policies: loadPolicy,
     models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, cortex: function(){ withLoadTimeout('cx-memory-list','_loadCortexTab()'); _loadCortexTab(); }, system: function(){ withLoadTimeout('wf-system-grid','loadWorkflowRegistry()'); loadWorkflowRegistry(); }, workflows: function(){}, settings: syncSettingsUI,
@@ -25113,6 +25122,17 @@ function _sseUnsubscribe(id) {
   }
 }
 
+function _scheduleOverviewRefresh(delayMs) {
+  if (_currentModule !== 'overview') return;
+  if (_overviewRefreshTimer) return;
+  _overviewRefreshTimer = setTimeout(function() {
+    _overviewRefreshTimer = null;
+    if (_currentModule !== 'overview') return;
+    loadPersonas();
+    if (typeof _loadQuestLog === 'function') _loadQuestLog();
+  }, Math.max(80, delayMs || 250));
+}
+
 async function init() {
   switchModule('overview');
   loadSettings();
@@ -30538,7 +30558,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.12"})
+            self.reply_json({"v": "0.30.13"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -30700,7 +30720,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.12"
+                health["porter_version"] = "0.30.13"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -32497,7 +32517,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.12'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.13'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -37213,7 +37233,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.12 ready (localhost only)")
+    print(f"\n  Porter v0.30.13 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
