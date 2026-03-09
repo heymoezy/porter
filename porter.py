@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.14 — Coordination SSE compatibility fix"""
+"""Porter v0.30.15 — Parallel bridge coordination runs"""
 
 
 import email
@@ -2165,6 +2165,95 @@ def _iterative_retrieve(message, persona_id="", max_chunks=3):
         return "\n".join(result_parts)
     except Exception:
         return ""
+
+
+
+def _project_knowledge_brief(project_id: str) -> dict:
+    """Summarize all knowledge Porter has about a project: memories, agents, tasks, decisions."""
+    pid = str(project_id or "").strip()
+    if not pid:
+        return {"ok": False, "error": "project_id required"}
+    # Get project metadata
+    proj = None
+    for p in _config.get("projects", []):
+        if p.get("id") == pid:
+            proj = p
+            break
+    if not proj:
+        return {"ok": False, "error": "project not found"}
+    brief = {
+        "ok": True,
+        "project": {"id": pid, "name": proj.get("name", ""), "description": proj.get("description", "")},
+        "knowledge": {"facts": [], "total": 0, "by_agent": {}, "top_keywords": {}},
+        "agents": [],
+        "tasks": {"pending": 0, "in_progress": 0, "complete": 0, "items": []},
+        "recent_activity": [],
+    }
+    try:
+        conn = _db_conn()
+        # Project-scoped Cortex memories
+        rows = conn.execute(
+            "SELECT fact, source_id, importance, confidence, evidence_count, keywords, use_count, created_at "
+            "FROM cortex_memories WHERE scope='project' AND scope_id=? AND status='active' "
+            "ORDER BY confidence DESC, importance DESC LIMIT 50", (pid,)
+        ).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) FROM cortex_memories WHERE scope='project' AND scope_id=? AND status='active'", (pid,)
+        ).fetchone()[0]
+        brief["knowledge"]["total"] = total
+        kw_counts = {}
+        for r in rows:
+            fact = {"fact": r["fact"], "confidence": r["confidence"], "importance": r["importance"],
+                    "evidence_count": r["evidence_count"], "use_count": r["use_count"]}
+            # Agent attribution
+            if r["source_id"]:
+                agent_name = r["source_id"]
+                persona = conn.execute("SELECT name FROM personas WHERE id=?", (r["source_id"],)).fetchone()
+                if persona:
+                    agent_name = persona["name"]
+                fact["agent"] = agent_name
+                brief["knowledge"]["by_agent"][agent_name] = brief["knowledge"]["by_agent"].get(agent_name, 0) + 1
+            brief["knowledge"]["facts"].append(fact)
+            # Keyword frequency
+            for kw in (r["keywords"] or "").split(","):
+                kw = kw.strip()
+                if kw and len(kw) > 2:
+                    kw_counts[kw] = kw_counts.get(kw, 0) + 1
+        # Top 10 keywords
+        brief["knowledge"]["top_keywords"] = dict(sorted(kw_counts.items(), key=lambda x: -x[1])[:10])
+        # Assigned agents
+        for aid in (proj.get("assigned_personas") or []):
+            persona = conn.execute("SELECT id, name, avatar, role, preferred_backend, status FROM personas WHERE id=?", (aid,)).fetchone()
+            if persona:
+                brief["agents"].append(dict(persona))
+        # Tasks
+        task_rows = conn.execute(
+            "SELECT id, title, status, priority, assigned_persona_id FROM tasks WHERE project_id=? ORDER BY updated_at DESC LIMIT 20", (pid,)
+        ).fetchall()
+        if not task_rows:
+            # Try task registry files
+            pass
+        for t in task_rows:
+            status = t["status"] or "pending"
+            if status == "pending": brief["tasks"]["pending"] += 1
+            elif status == "in_progress": brief["tasks"]["in_progress"] += 1
+            elif status in ("complete", "completed"): brief["tasks"]["complete"] += 1
+            brief["tasks"]["items"].append({"title": t["title"], "status": status, "priority": t["priority"]})
+        # Recent activity (last 10 trace steps for this project)
+        traces = conn.execute(
+            "SELECT agent_name, action, status, output_summary, ts FROM trace_steps "
+            "WHERE project_id=? ORDER BY ts DESC LIMIT 10", (pid,)
+        ).fetchall()
+        for tr in traces:
+            brief["recent_activity"].append({
+                "agent": tr["agent_name"], "action": tr["action"],
+                "status": tr["status"], "summary": (tr["output_summary"] or "")[:100],
+                "ts": tr["ts"]
+            })
+        conn.close()
+    except Exception as e:
+        brief["_error"] = str(e)
+    return brief
 
 
 def _build_project_dispatch_context(project_id, persona_id="", task_id="", message=""):
@@ -9433,7 +9522,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.14</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.15</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10846,6 +10935,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.15', date:'2026-03-09', notes:['Coordination runs now fan out across selected backends in parallel through the bridge instead of walking them sequentially','Added coordination:start, coordination:result, and coordination:complete SSE events plus Mission Control entries so multi-model runs are visible live','This makes the coordination runner behave more like a real bridge orchestrator instead of a serialized loop'] },
   { ver:'v0.30.14', date:'2026-03-09', notes:['Fixed live coordination ledger updates by restoring an SSE compatibility wrapper for the new claim/progress/handoff events','This removes the runtime NameError on coordination claims and gets the shared work board emitting events again','Keeps the newer coordination layer compatible with Porter’s existing shared event bus instead of introducing a second SSE path'] },
   { ver:'v0.30.13', date:'2026-03-09', notes:['Overview persona and quest-log refresh now follow live cortex and bridge SSE events instead of relying on a blind 30-second loop','Kept a lighter 60-second fallback refresh while Overview is active, with timer teardown when leaving the tab','This reduces idle homepage churn while keeping agent/squad state visibly current during autonomous work'] },
   { ver:'v0.30.12', date:'2026-03-09', notes:['Orchestration hub activity now refreshes from live bridge SSE events instead of polling admin endpoints every 15 seconds','Kept a much lighter 60-second fallback refresh, and the hub tears down its poller/SSE subscription when leaving Agents','This reduces repeat admin polling while keeping squad routing activity visible in real time'] },
@@ -13917,6 +14007,7 @@ async function _renderProjTabContent() {
   } else if (_projTab === 'memory') {
     html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">';
     html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Project Knowledge</div>';
+    html += '<button class="btn btn-ghost" onclick="_projShowBrief(\x27' + proj.id + '\x27)" style="font-size:10px;padding:2px 8px">Brief</button>';
     html += '<div style="flex:1"></div>';
     html += '<input type="text" id="proj-mem-search" placeholder="Search memories..." oninput="_projFilterMemory(this.value)" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);width:180px;outline:none">';
     html += '<span id="proj-mem-count" style="font-size:10px;color:var(--text3)"></span>';
@@ -14032,6 +14123,63 @@ async function _projLoadFiles(pid) {
   } catch(e) { el.innerHTML = '<span style="color:var(--text3)">Could not load files</span>'; }
 }
 
+async function _projShowBrief(pid) {
+  try {
+    var data = await api('/api/projects/' + pid + '/brief');
+    if (!data || !data.ok) { toast('Brief unavailable', 'warn'); return; }
+    var b = data;
+    var html = '<div style="max-width:500px">';
+    html += '<div style="font-size:13px;font-weight:600;margin-bottom:8px">' + escHtml(b.project.name || 'Project') + ' — Knowledge Brief</div>';
+    // Knowledge stats
+    html += '<div style="font-size:11px;color:var(--text2);margin-bottom:8px">';
+    html += '<strong>' + b.knowledge.total + '</strong> memories';
+    if (b.agents.length) html += ' · <strong>' + b.agents.length + '</strong> agents';
+    var taskTotal = b.tasks.pending + b.tasks.in_progress + b.tasks.complete;
+    if (taskTotal) html += ' · <strong>' + taskTotal + '</strong> tasks (' + b.tasks.complete + ' done)';
+    html += '</div>';
+    // Top keywords
+    var kws = Object.entries(b.knowledge.top_keywords || {}).slice(0, 8);
+    if (kws.length) {
+      html += '<div style="margin-bottom:8px;display:flex;gap:4px;flex-wrap:wrap">';
+      kws.forEach(function(kv) {
+        html += '<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:var(--raised);color:var(--text2)">' + escHtml(kv[0]) + ' (' + kv[1] + ')</span>';
+      });
+      html += '</div>';
+    }
+    // By agent
+    var byAgent = Object.entries(b.knowledge.by_agent || {});
+    if (byAgent.length) {
+      html += '<div style="font-size:10px;font-weight:600;color:var(--text3);margin-bottom:4px">KNOWLEDGE BY AGENT</div>';
+      byAgent.forEach(function(kv) {
+        html += '<div style="font-size:11px;color:var(--text2)">' + escHtml(kv[0]) + ': ' + kv[1] + ' facts</div>';
+      });
+      html += '<div style="margin-bottom:8px"></div>';
+    }
+    // Top facts
+    var facts = (b.knowledge.facts || []).slice(0, 5);
+    if (facts.length) {
+      html += '<div style="font-size:10px;font-weight:600;color:var(--text3);margin-bottom:4px">TOP KNOWLEDGE</div>';
+      facts.forEach(function(f) {
+        var conf = Math.round((f.confidence || 0.5) * 100);
+        html += '<div style="font-size:11px;color:var(--text);padding:4px 0;border-bottom:1px solid var(--border)">';
+        html += escHtml(f.fact);
+        html += ' <span style="color:var(--text3);font-size:10px">(' + conf + '%';
+        if (f.agent) html += ', ' + escHtml(f.agent);
+        html += ')</span></div>';
+      });
+      html += '<div style="margin-bottom:8px"></div>';
+    }
+    // Recent activity
+    if (b.recent_activity && b.recent_activity.length) {
+      html += '<div style="font-size:10px;font-weight:600;color:var(--text3);margin-bottom:4px">RECENT ACTIVITY</div>';
+      b.recent_activity.slice(0, 5).forEach(function(a) {
+        html += '<div style="font-size:11px;color:var(--text2)">' + escHtml(a.agent || '?') + ': ' + escHtml(a.action || '') + ' [' + escHtml(a.status || '') + ']</div>';
+      });
+    }
+    html += '</div>';
+    porterAlert('Knowledge Brief', html);
+  } catch(e) { toast('Failed to load brief', 'err'); }
+}
 var _projMemories = [];
 function _projFilterMemory(query) {
   var q = (query || '').toLowerCase().trim();
@@ -29810,7 +29958,14 @@ def _run_coordination(prompt: str, backends: list[str] | None = None, timeout: i
     run_id = f"coord-{int(time.time())}-{uuid.uuid4().hex[:8]}"
     ts = datetime.now(timezone.utc).isoformat()
     results = {}
-    for b in selected:
+    started = time.time()
+    _emit_event("coordination:start", {"run_id": run_id, "backends": selected, "prompt": prompt[:200]})
+    mlog.emit("info", "coordination", "coordination.start",
+              f"Coordination run started across {len(selected)} backends",
+              run_id=run_id, status="running",
+              extra={"backends": selected, "prompt": prompt[:200]})
+
+    def _run_backend(b):
         r = dispatch_agent(prompt, b, timeout=timeout)
         out = {
             "ok": bool(r.get("ok", False)),
@@ -29818,17 +29973,48 @@ def _run_coordination(prompt: str, backends: list[str] | None = None, timeout: i
             "text": (r.get("text", "") or "")[:800],
             "error": (r.get("error", "") or "")[:500],
             "tokens": r.get("tokens", {}),
+            "run_id": r.get("run_id", ""),
         }
-        results[b] = out
-        _append_coordination_event({
-            "ts": ts,
-            "run_id": run_id,
-            "backend": b,
-            "prompt": prompt[:500],
-            **out,
-        })
+        return b, out
+
+    import concurrent.futures as _cf
+    with _cf.ThreadPoolExecutor(max_workers=min(5, len(selected))) as pool:
+        futures = [pool.submit(_run_backend, b) for b in selected]
+        for fut in _cf.as_completed(futures, timeout=max(30, timeout + 15)):
+            try:
+                b, out = fut.result()
+            except Exception as e:
+                b = "unknown"
+                out = {"ok": False, "model": "", "text": "", "error": str(e)[:500], "tokens": {}, "run_id": ""}
+            results[b] = out
+            _append_coordination_event({
+                "ts": ts,
+                "run_id": run_id,
+                "backend": b,
+                "prompt": prompt[:500],
+                **out,
+            })
+            _emit_event("coordination:result", {
+                "run_id": run_id,
+                "backend": b,
+                "ok": bool(out.get("ok")),
+                "error": out.get("error", "")[:200],
+                "model": out.get("model", ""),
+            })
     ok_count = sum(1 for v in results.values() if v.get("ok"))
-    return {"ok": True, "run_id": run_id, "prompt": prompt, "ok_count": ok_count, "results": results}
+    duration_ms = int((time.time() - started) * 1000)
+    _emit_event("coordination:complete", {
+        "run_id": run_id,
+        "ok_count": ok_count,
+        "backend_count": len(selected),
+        "duration_ms": duration_ms,
+    })
+    mlog.emit("info", "coordination", "coordination.complete",
+              f"Coordination run complete: {ok_count}/{len(selected)} ok",
+              run_id=run_id, duration_ms=duration_ms,
+              status="ok" if ok_count == len(selected) else "partial",
+              extra={"results": results})
+    return {"ok": True, "run_id": run_id, "prompt": prompt, "ok_count": ok_count, "results": results, "duration_ms": duration_ms}
 
 
 def _coordination_recent(limit: int = 20) -> list[dict]:
@@ -30575,7 +30761,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.14"})
+            self.reply_json({"v": "0.30.15"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -30737,7 +30923,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.14"
+                health["porter_version"] = "0.30.15"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -32131,6 +32317,14 @@ class Handler(BaseHTTPRequestHandler):
             exists_count = sum(1 for f in chain if f["exists"])
             self.reply_json({"ok": True, "files": chain, "exists_count": exists_count, "total": len(chain)})
 
+        elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/brief"):
+            if not self.auth_check(redirect=False): return
+            _parts = parsed.path.split("/")
+            _brief_pid = _parts[3] if len(_parts) >= 5 else ""
+            if not _brief_pid:
+                self.reply_json({"ok": False, "error": "project_id required"}, 400); return
+            self.reply_json(_project_knowledge_brief(_brief_pid))
+
         elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/activity"):
             if not self.auth_check(redirect=False): return
             pid = parsed.path[len("/api/projects/"):-len("/activity")]
@@ -32534,7 +32728,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.14'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.15'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -37250,7 +37444,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.14 ready (localhost only)")
+    print(f"\n  Porter v0.30.15 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

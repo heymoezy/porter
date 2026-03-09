@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.15 (2026-03-09)
+
+**Parallel Bridge Coordination Runs**
+
+- Coordination runs now fan out across selected backends in parallel through Porter Bridge instead of walking them one at a time
+- Added `coordination:start`, `coordination:result`, and `coordination:complete` SSE events plus Mission Control entries so multi-model runs are visible live
+- This makes the coordination runner behave like a real bridge orchestrator instead of a serialized loop
+
+---
+
 ## v0.30.14 (2026-03-09)
 
 **Coordination SSE Compatibility Fix**
