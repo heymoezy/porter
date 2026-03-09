@@ -1,5 +1,17 @@
 # Porter Release Notes
 
+## v0.29.87 (2026-03-09)
+
+**Models Snapshot Loading + Faster Controlled Test-All**
+
+- Models tab now loads from a unified snapshot payload instead of composing multiple API calls on first render
+- Cached version state is rendered immediately from the snapshot, then refreshed in the background
+- `Test All` now runs with controlled concurrency across different backends instead of full serialization
+- Test scheduling prevents multiple tests from hammering the same backend at once
+- Providers, activity, and available-model payloads now share backend helpers instead of duplicating logic in route handlers
+
+---
+
 ## v0.29.86 (2026-03-09)
 
 **Models Probe Truthfulness + OpenClaw Restart-Loop Diagnosis**

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.86 — Models probe truthfulness and OpenClaw restart-loop diagnosis"""
+"""Porter v0.29.87 — Models snapshot loading and faster controlled test-all"""
 
 
 import email
@@ -223,18 +223,16 @@ def _wf_load_stats():
 
 def _run_if_due(wf_id, fn):
     """Run a workflow callback when its interval is due."""
-    try:
-        wf = _workflow_def(wf_id) or {}
-        every = int(wf.get("every_min") or 0)
-        if every <= 0:
-            return False
-        last = _wf_last_run_ts(wf_id)
-        if last and (time.time() - float(last)) < (every * 60):
-            return False
-        fn()
-        return True
-    except Exception:
-        raise
+    with _wf_lock:
+        wf = dict(_wf_registry.get(wf_id) or {})
+    interval_s = int(wf.get("interval_s") or 0)
+    if interval_s <= 0:
+        return False
+    last = float(wf.get("last_run") or 0)
+    if last and (time.time() - last) < interval_s:
+        return False
+    fn()
+    return True
 
 # Register 6 system workflows
 _wf_register("cortex_consolidation", "Cortex Consolidation",
@@ -9148,7 +9146,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.86</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.87</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10496,6 +10494,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.87', date:'2026-03-09', notes:['Models tab now loads from a unified snapshot payload instead of composing multiple API calls on first render','Cached version state renders immediately from the snapshot, then refreshes in the background','Test All now runs with controlled concurrency across different backends instead of full serialization','Test scheduling prevents multiple tests from hammering the same backend at once','Providers, activity, and available-model payloads now share backend helpers instead of duplicating route logic'] },
   { ver:'v0.29.86', date:'2026-03-09', notes:['Installed-version probes now prefer the real user-local CLI path and can be force-refreshed on Models load','Cards stop rendering Version unknown / Latest unknown noise when a probe has not completed','OpenClaw diagnosis now reads its runtime log and surfaces service-restart loops and token mismatches explicitly','Ollama and Codex latest-version checks are more robust so update labels do not disappear as easily','OpenClaw warning actions now sit on the bottom rail and gateway-only clutter was removed from the middle of the card','OpenClaw config uses a visible Gateway Token field instead of masking typed input','Shared client-side request failures now log through the common api() path','Test All now runs as a queued sequence instead of firing every backend at once','OpenClaw model tests now parse the current CLI JSON result format instead of failing successful runs','OpenClaw supervisor-conflict diagnosis now requires active restart evidence instead of only seeing two service files','Models page loading now tolerates partial API failures instead of blanking the whole tab'] },
   { ver:'v0.29.85', date:'2026-03-09', notes:['Models cards no longer show stale latest-version data as an update when installed is newer','OpenClaw duplicate model rows are deduped on canonical model keys','Gateway state and request activity are no longer presented as contradictory status labels','Repair commands stay in config/repair flows instead of cluttering the card body'] },
   { ver:'v0.29.84', date:'2026-03-09', notes:['OpenClaw diagnosis now detects paired devices with a down gateway and surfaces reconnect-loop repair guidance','More OpenClaw reads now normalize through shared config/state helpers instead of legacy top-level fields','OpenClaw cards show paired/pending counts and clearer repair follow-up when gateway pairing state is stale'] },
@@ -18585,12 +18584,15 @@ function _collectCardModelTests(card) {
   });
 }
 
-async function _runQueuedModelTests(tasks, triggerBtn, label) {
+async function _runQueuedModelTests(tasks, triggerBtn, label, opts) {
+  opts = opts || {};
   if (_modelTestBatchRunning) {
     toast('Model tests already running', 'warn');
     return;
   }
   if (!tasks || !tasks.length) return;
+  var maxConcurrent = Math.max(1, parseInt(opts.maxConcurrent || 1, 10) || 1);
+  var uniqueBackend = opts.uniqueBackend !== false;
   _modelTestBatchRunning = true;
   var prevText = triggerBtn ? triggerBtn.textContent : '';
   if (triggerBtn) {
@@ -18598,9 +18600,44 @@ async function _runQueuedModelTests(tasks, triggerBtn, label) {
     triggerBtn.textContent = 'Running…';
   }
   try {
-    for (var i = 0; i < tasks.length; i++) {
-      var task = tasks[i];
-      await _runModelTest(task.button, task.backendId, task.modelId, task.testId);
+    var pending = tasks.slice();
+    var activeBackends = {};
+    var running = [];
+    function _release(promiseRef, backendId) {
+      delete activeBackends[backendId];
+      var idx = running.indexOf(promiseRef);
+      if (idx >= 0) running.splice(idx, 1);
+    }
+    while (pending.length || running.length) {
+      while (pending.length && running.length < maxConcurrent) {
+        var nextIdx = -1;
+        for (var i = 0; i < pending.length; i++) {
+          if (!uniqueBackend || !activeBackends[pending[i].backendId]) {
+            nextIdx = i;
+            break;
+          }
+        }
+        if (nextIdx < 0) break;
+        var task = pending.splice(nextIdx, 1)[0];
+        activeBackends[task.backendId] = true;
+        (function(taskRef) {
+          var p = _runModelTest(taskRef.button, taskRef.backendId, taskRef.modelId, taskRef.testId)
+            .finally(function() { _release(p, taskRef.backendId); });
+          running.push(p);
+        })(task);
+      }
+      if (!running.length && pending.length) {
+        var fallback = pending.shift();
+        activeBackends[fallback.backendId] = true;
+        (function(taskRef) {
+          var p = _runModelTest(taskRef.button, taskRef.backendId, taskRef.modelId, taskRef.testId)
+            .finally(function() { _release(p, taskRef.backendId); });
+          running.push(p);
+        })(fallback);
+      }
+      if (running.length) {
+        await Promise.race(running);
+      }
     }
     toast('Model tests complete' + (label ? ': ' + label : ''), 'ok');
   } finally {
@@ -18615,7 +18652,7 @@ async function _runQueuedModelTests(tasks, triggerBtn, label) {
 async function _testCardModels(triggerBtn, backendId) {
   var card = document.querySelector('.model-card[data-model-id="' + backendId + '"]');
   if (!card) return;
-  await _runQueuedModelTests(_collectCardModelTests(card), triggerBtn, backendId);
+  await _runQueuedModelTests(_collectCardModelTests(card), triggerBtn, backendId, { maxConcurrent: 1, uniqueBackend: true });
 }
 
 async function _testAllBackends(triggerBtn) {
@@ -18624,76 +18661,75 @@ async function _testAllBackends(triggerBtn) {
   cards.forEach(function(card) {
     tasks = tasks.concat(_collectCardModelTests(card));
   });
-  await _runQueuedModelTests(tasks, triggerBtn, 'all backends');
+  await _runQueuedModelTests(tasks, triggerBtn, 'all backends', { maxConcurrent: 3, uniqueBackend: true });
+}
+
+function _applyModelVersions(versionMap) {
+  window._modelVersions = versionMap || {};
+  Object.keys(window._modelVersions).forEach(function(bk) {
+    var vd = window._modelVersions[bk];
+    var el = document.getElementById('ver-badge-' + bk);
+    var updEl = document.getElementById('backend-update-foot-' + bk);
+    if (!el || !vd) return;
+    var html = '';
+    var showUpdate = false;
+    if (vd.version) {
+      var _vstr = vd.version.match(/^[0-9]/) ? 'v' + vd.version : vd.version;
+      html += '<span style="font-size:10px;color:var(--text2)">Installed ' + escHtml(_vstr) + '</span>';
+    }
+    if (vd.latest) {
+      var _lstr = vd.latest.match(/^[0-9]/) ? 'v' + vd.latest : vd.latest;
+      var cmp = vd.version ? _compareVersionish(vd.latest, vd.version) : 0;
+      if (vd.version && cmp === 0) {
+        html += ' <span style="font-size:10px;color:#22c55e;font-weight:600">Latest</span>';
+      } else if (vd.version && cmp < 0) {
+        html += ' <span style="font-size:10px;color:var(--text3)">Latest check stale</span>';
+      } else {
+        showUpdate = !!vd.update_cmd;
+        if (html) html += ' ';
+        html += '<span style="font-size:10px;color:#f59e0b;font-weight:600">Latest ' + escHtml(_lstr) + '</span>';
+      }
+    }
+    el.innerHTML = html || '<span style="font-size:10px;color:var(--text3)">Checking version…</span>';
+    if (updEl) {
+      if (showUpdate) {
+        updEl.innerHTML = '<div class="model-card-action update">'
+          + '<strong>\u21bb</strong>'
+          + '<span>Update available</span>'
+          + '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="_showUpdateCommand(\'' + escHtml(bk) + '\')">Update</button>'
+          + '</div>';
+      } else {
+        updEl.innerHTML = '';
+      }
+    }
+  });
+}
+
+function _refreshModelVersions(force) {
+  var suffix = force ? '?refresh=1' : '';
+  fetch('/api/models/versions' + suffix, {credentials:'same-origin'})
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(vers) {
+      _applyModelVersions((vers && vers.versions) ? vers.versions : {});
+    }).catch(function(e) {
+      _reportModelsClientError('models-versions', e || new Error('Version probe failed'));
+    });
 }
 
 async function loadModels() {
   try {
-    var results = await Promise.allSettled([
-      api('/api/providers'),
-      api('/api/models/activity'),
-      api('/api/models/available'),
-    ]);
-    var data = results[0].status === 'fulfilled' ? results[0].value : null;
-    var act = results[1].status === 'fulfilled' ? results[1].value : null;
-    var avail = results[2].status === 'fulfilled' ? results[2].value : null;
-    if (!data || !data.providers) {
-      throw new Error('Providers unavailable');
+    var snap = await api('/api/models/snapshot');
+    if (!snap || !snap.providers) {
+      throw new Error('Models snapshot unavailable');
     }
-    _modelActivityData = (act && act.activity) ? act.activity : {};
-    _modelAvailableData = (avail && avail.backends) ? avail.backends : {};
-    // Versions loaded separately — slower probe, shouldn't block card render
-    fetch('/api/models/versions?refresh=1', {credentials:'same-origin'})
-      .then(function(r) { return r.ok ? r.json() : null; })
-      .then(function(vers) {
-        window._modelVersions = (vers && vers.versions) ? vers.versions : {};
-
-        // Populate version badge placeholders
-        Object.keys(window._modelVersions).forEach(function(bk) {
-          var vd = window._modelVersions[bk];
-          var el = document.getElementById('ver-badge-' + bk);
-          var updEl = document.getElementById('backend-update-foot-' + bk);
-          if (!el || !vd) return;
-          var html = '';
-          var showUpdate = false;
-          if (vd.version) {
-            var _vstr = vd.version.match(/^[0-9]/) ? 'v' + vd.version : vd.version;
-            html += '<span style="font-size:10px;color:var(--text2)">Installed ' + escHtml(_vstr) + '</span>';
-          }
-          if (vd.latest) {
-            var _lstr = vd.latest.match(/^[0-9]/) ? 'v' + vd.latest : vd.latest;
-            var cmp = vd.version ? _compareVersionish(vd.latest, vd.version) : 0;
-            if (vd.version && cmp === 0) {
-              html += ' <span style="font-size:10px;color:#22c55e;font-weight:600">Latest</span>';
-            } else if (vd.version && cmp < 0) {
-              html += ' <span style="font-size:10px;color:var(--text3)">Latest check stale</span>';
-            } else {
-              showUpdate = !!vd.update_cmd;
-              if (html) html += ' ';
-              html += '<span style="font-size:10px;color:#f59e0b;font-weight:600">Latest ' + escHtml(_lstr) + '</span>';
-            }
-          }
-          el.innerHTML = html || '<span style="font-size:10px;color:var(--text3)">Checking version…</span>';
-          if (updEl) {
-            if (showUpdate) {
-              updEl.innerHTML = '<div class="model-card-action update">'
-                + '<strong>\u21bb</strong>'
-                + '<span>Update available</span>'
-                + '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="_showUpdateCommand(\'' + escHtml(bk) + '\')">Update</button>'
-                + '</div>';
-            } else {
-              updEl.innerHTML = '';
-            }
-          }
-        });
-      }).catch(function(e) {
-        _reportModelsClientError('models-versions', e || new Error('Version probe failed'));
-      });
-    window._modelProviders = data.providers || [];
-
-    _renderModelCards(data, _modelActivityData);
-    _checkBackendStatuses(data.providers);
+    _modelActivityData = snap.activity || {};
+    _modelAvailableData = snap.backends || {};
+    window._modelProviders = snap.providers || [];
+    _renderModelCards({ providers: window._modelProviders }, _modelActivityData);
+    _applyModelVersions(snap.versions || {});
+    _checkBackendStatuses(window._modelProviders);
     _connectModelSSE();
+    setTimeout(function() { _refreshModelVersions(true); }, 250);
   } catch(e) {
     _reportModelsClientError('load-models', e);
   }
@@ -26552,7 +26588,9 @@ def _model_repair_hint(backend: str, detail: str = "") -> dict:
         elif "timed out" in text or "timeout" in text:
             hint["repair_hint"] = "OpenClaw did not answer in time. Check whether the gateway is crash-looping or blocked on startup."
         else:
-            hint["repair_hint"] = "Check OpenClaw bridge health, agent execution, and auth before changing the install."
+            if text.strip():
+                hint["repair_hint"] = "Check OpenClaw bridge health, agent execution, and auth before changing the install."
+
     elif backend == "claude":
         hint["reinstall_cmd"] = "npm i -g @anthropic-ai/claude-code"
     elif backend == "gemini":
@@ -26653,8 +26691,6 @@ def _openclaw_runtime_diagnosis() -> dict:
                 diag["pending_devices"] = len([k for k in pending_data.keys() if str(k).strip()])
         if devices_dir.exists():
             diag["pairing_temp_files"] = len(list(devices_dir.glob("*.tmp")))
-        if diag["paired_devices"] > 0:
-            diag["issues"].append("paired_devices_present")
         if diag["pending_devices"] > 0:
             diag["issues"].append("pairing_pending")
         if diag["paired_devices"] > 0 and not diag["gateway_running"]:
@@ -26810,7 +26846,7 @@ def _check_gateway_status() -> dict:
             repair_detail = "agent_path_flaky"
         else:
             repair_detail = "agent execution failed timeout"
-    repair = _model_repair_hint("openclaw", repair_detail)
+    repair = _model_repair_hint("openclaw", repair_detail) if repair_detail.strip() else {}
     return {
         "ok": True,
         "running": pid is not None,
@@ -26840,6 +26876,95 @@ def _check_gateway_status() -> dict:
         "repair_cmd": repair.get("repair_cmd", ""),
         "followup_hint": repair.get("followup_hint", ""),
         "reinstall_cmd": repair.get("reinstall_cmd", ""),
+    }
+
+
+def _providers_payload() -> list:
+    providers = []
+    for name, info in PROVIDER_REGISTRY.items():
+        _meta = _backend_meta(name)
+        providers.append({
+            "id": name,
+            "available": _probe_provider(name),
+            "type": info["type"],
+            "label": info["label"],
+            "description": _meta.get("description", ""),
+            "install_hint": INSTALL_HINTS.get(name, ""),
+        })
+    return providers
+
+
+def _models_activity_payload() -> dict:
+    import time as _act_t
+    _act_now = _act_t.time()
+    _act_since = _act_now - 86400
+    activity = {}
+    try:
+        _act_conn = _db_conn()
+        _stale_cutoff = _act_now - 600
+        _act_conn.execute(
+            "UPDATE agent_messages SET status='failed' "
+            "WHERE status='in_progress' AND created_at<?",
+            (_stale_cutoff,)
+        )
+        _act_conn.commit()
+        for _bk in PROVIDER_REGISTRY:
+            _act_active = _act_conn.execute(
+                "SELECT run_id, message, created_at FROM agent_messages "
+                "WHERE to_agent=? AND status='in_progress' ORDER BY created_at DESC LIMIT 3",
+                (_bk,)
+            ).fetchall()
+            _act_stats = _act_conn.execute(
+                "SELECT COUNT(*) as total, "
+                "SUM(CASE WHEN status='complete' THEN 1 ELSE 0 END) as complete, "
+                "SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as failed, "
+                "AVG(CASE WHEN status='complete' THEN duration_ms END) as avg_ms "
+                "FROM agent_messages WHERE to_agent=? AND created_at>?",
+                (_bk, _act_since)
+            ).fetchone()
+            _act_recent = _act_conn.execute(
+                "SELECT run_id, status, substr(message,1,80) as preview, "
+                "duration_ms, created_at FROM agent_messages "
+                "WHERE to_agent=? ORDER BY created_at DESC LIMIT 5",
+                (_bk,)
+            ).fetchall()
+            activity[_bk] = {
+                "active": [{"run_id": r[0], "prompt": r[1][:80] if r[1] else "", "started_at": r[2]} for r in _act_active],
+                "stats": {
+                    "total": _act_stats[0] or 0,
+                    "complete": _act_stats[1] or 0,
+                    "failed": _act_stats[2] or 0,
+                    "avg_ms": int(_act_stats[3] or 0),
+                },
+                "recent": [{"run_id": r[0], "status": r[1], "preview": r[2] or "",
+                           "duration_ms": r[3] or 0, "created_at": r[4]} for r in _act_recent],
+            }
+        _act_conn.close()
+    except Exception:
+        pass
+    return activity
+
+
+def _models_available_payload() -> dict:
+    prefs = _config.get("preferences", {})
+    active_models = prefs.get("active_models", {})
+    backends_out = {}
+    for bk in ["openclaw", "claude", "gemini", "codex", "ollama"]:
+        models = _get_available_models(bk)
+        choice = active_models.get(bk, "auto")
+        resolved = _get_active_model(bk)
+        catalog = ([{"id": "auto", "name": "Auto"}] + models) if len(models) > 1 else models
+        backends_out[bk] = {"active": choice, "resolved": resolved, "models": catalog}
+    return backends_out
+
+
+def _models_snapshot(force_versions: bool = False) -> dict:
+    return {
+        "ok": True,
+        "providers": _providers_payload(),
+        "activity": _models_activity_payload(),
+        "backends": _models_available_payload(),
+        "versions": _probe_backend_versions(force=force_versions),
     }
 
 
@@ -26893,19 +27018,28 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                 out = (r.stdout or "").strip()
                 text = ""
                 latest_obj = None
-                for line in out.split("\n"):
-                    if not line.strip():
-                        continue
-                    try:
-                        evt = json.loads(line)
-                        if isinstance(evt, dict):
-                            latest_obj = evt
-                        if evt.get("type") == "item.completed":
-                            item = evt.get("item", {})
-                            if item.get("type") == "agent_message":
-                                text = item.get("text", "") or ""
-                    except Exception:
-                        continue
+                # Try parsing entire stdout as single JSON first (pretty-printed output)
+                try:
+                    _whole = json.loads(out)
+                    if isinstance(_whole, dict):
+                        latest_obj = _whole
+                except Exception:
+                    pass
+                # Fall back to line-by-line JSONL parsing
+                if latest_obj is None:
+                    for line in out.split("\n"):
+                        if not line.strip():
+                            continue
+                        try:
+                            evt = json.loads(line)
+                            if isinstance(evt, dict):
+                                latest_obj = evt
+                            if evt.get("type") == "item.completed":
+                                item = evt.get("item", {})
+                                if item.get("type") == "agent_message":
+                                    text = item.get("text", "") or ""
+                        except Exception:
+                            continue
                 if not text and isinstance(latest_obj, dict):
                     result_obj = latest_obj.get("result", {}) if isinstance(latest_obj.get("result"), dict) else {}
                     payloads = result_obj.get("payloads", []) if isinstance(result_obj, dict) else []
@@ -29025,7 +29159,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.86"})
+            self.reply_json({"v": "0.29.87"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -29187,7 +29321,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.86"
+                health["porter_version"] = "0.29.87"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29359,73 +29493,11 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/providers":
             if not self.auth_check(redirect=False): return
-            providers = []
-            for name, info in PROVIDER_REGISTRY.items():
-                _meta = _backend_meta(name)
-                providers.append({
-                    "id": name,
-                    "available": _probe_provider(name),
-                    "type": info["type"],
-                    "label": info["label"],
-                    "description": _meta.get("description", ""),
-                    "install_hint": INSTALL_HINTS.get(name, ""),
-                })
-            self.reply_json({"ok": True, "providers": providers})
+            self.reply_json({"ok": True, "providers": _providers_payload()})
 
         elif parsed.path == "/api/models/activity":
             if not self.auth_check(redirect=False): return
-            import time as _act_t
-            _act_now = _act_t.time()
-            _act_since = _act_now - 86400
-            activity = {}
-            try:
-                _act_conn = _db_conn()
-                # Stale run cleanup: mark in_progress runs older than 10 min as failed
-                _stale_cutoff = _act_now - 600
-                _act_conn.execute(
-                    "UPDATE agent_messages SET status='failed' "
-                    "WHERE status='in_progress' AND created_at<?",
-                    (_stale_cutoff,)
-                )
-                _act_conn.commit()
-                for _bk in PROVIDER_REGISTRY:
-                    # Active runs (in_progress)
-                    _act_active = _act_conn.execute(
-                        "SELECT run_id, message, created_at FROM agent_messages "
-                        "WHERE to_agent=? AND status='in_progress' ORDER BY created_at DESC LIMIT 3",
-                        (_bk,)
-                    ).fetchall()
-                    # 24h stats
-                    _act_stats = _act_conn.execute(
-                        "SELECT COUNT(*) as total, "
-                        "SUM(CASE WHEN status='complete' THEN 1 ELSE 0 END) as complete, "
-                        "SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as failed, "
-                        "AVG(CASE WHEN status='complete' THEN duration_ms END) as avg_ms "
-                        "FROM agent_messages WHERE to_agent=? AND created_at>?",
-                        (_bk, _act_since)
-                    ).fetchone()
-                    # Recent runs (last 5)
-                    _act_recent = _act_conn.execute(
-                        "SELECT run_id, status, substr(message,1,80) as preview, "
-                        "duration_ms, created_at FROM agent_messages "
-                        "WHERE to_agent=? ORDER BY created_at DESC LIMIT 5",
-                        (_bk,)
-                    ).fetchall()
-                    activity[_bk] = {
-                        "active": [{"run_id": r[0], "prompt": r[1][:80] if r[1] else "", "started_at": r[2]} for r in _act_active],
-                        "stats": {
-                            "total": _act_stats[0] or 0,
-                            "complete": _act_stats[1] or 0,
-                            "failed": _act_stats[2] or 0,
-                            "avg_ms": int(_act_stats[3] or 0),
-                        },
-                        "recent": [{"run_id": r[0], "status": r[1], "preview": r[2] or "",
-                                   "duration_ms": r[3] or 0, "created_at": r[4]} for r in _act_recent],
-                    }
-                _act_conn.close()
-            except Exception:
-                pass
-            self.reply_json({"ok": True, "activity": activity})
+            self.reply_json({"ok": True, "activity": _models_activity_payload()})
 
         elif parsed.path == "/api/gateway/status":
             if not self.auth_check(redirect=False): return
@@ -29458,16 +29530,11 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/models/available":
             if not self.auth_check(redirect=False): return
-            prefs = _config.get("preferences", {})
-            active_models = prefs.get("active_models", {})
-            backends_out = {}
-            for bk in ["openclaw", "claude", "gemini", "codex", "ollama"]:
-                models = _get_available_models(bk)
-                choice = active_models.get(bk, "auto")
-                resolved = _get_active_model(bk)
-                catalog = ([{"id": "auto", "name": "Auto"}] + models) if len(models) > 1 else models
-                backends_out[bk] = {"active": choice, "resolved": resolved, "models": catalog}
-            self.reply_json({"ok": True, "backends": backends_out})
+            self.reply_json({"ok": True, "backends": _models_available_payload()})
+
+        elif parsed.path == "/api/models/snapshot":
+            if not self.auth_check(redirect=False): return
+            self.reply_json(_models_snapshot(force_versions=False))
 
         elif parsed.path == "/api/bridge/chains":
             if not self.auth_check(redirect=False): return
@@ -31026,7 +31093,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.86'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.87'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -35703,7 +35770,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.86 ready (localhost only)")
+    print(f"\n  Porter v0.29.87 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
