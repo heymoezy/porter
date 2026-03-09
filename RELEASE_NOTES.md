@@ -1,5 +1,25 @@
 # Porter Release Notes
 
+## v0.30.18 (2026-03-09)
+
+**Capability-Scored Orchestration Engine**
+
+- Porter now plans orchestration goals into executable DAG steps, scores each backend by capability fit, and dispatches steps to the best available model instead of relying on loose keyword routing
+- Added persistent orchestration state with `orchestration_runs`, `orchestration_steps`, and `orchestration_events`, plus Runtime controls for creating runs, viewing progress, drilling into details, and cancelling active work
+- Independent orchestration steps can execute in parallel, failed steps can be reassigned to a better backend, and the Runtime lane now shows both orchestration progress and coordination ledger state together
+
+---
+
+## v0.30.17 (2026-03-09)
+
+**Live Coordination And Orchestration Panels**
+
+- Runtime now includes live Coordination Bridge and Orchestration Engine panels showing active claims, conflict alerts, recent coordination results, and recent orchestration runs
+- Filled in the missing orchestration UI functions and fixed the orchestration runs API query parsing so the new runtime lane is real instead of a dead shell
+- This makes Porter Bridge orchestration inspectable from the operator view instead of relying on invisible background state
+
+---
+
 ## v0.30.16 (2026-03-09)
 
 **Live Coordination Visibility**
