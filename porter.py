@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.85 — Models card cleanup and version-state fixes"""
+"""Porter v0.29.86 — Models probe truthfulness and OpenClaw restart-loop diagnosis"""
 
 
 import email
@@ -8558,6 +8558,9 @@ body.density-compact .file-name { padding: 6px 0; }
 .model-card-action { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; border:1px solid color-mix(in srgb,#f59e0b 35%,var(--border)); background:color-mix(in srgb,#f59e0b 8%,var(--bg)); font-size:11px; color:var(--text2); }
 .model-card-action strong { color:#f59e0b; font-size:12px; }
 .model-card-action button { margin-left:auto; }
+.model-card-action.update { border-color:color-mix(in srgb,var(--accent) 35%,var(--border)); background:color-mix(in srgb,var(--accent) 8%,var(--bg)); }
+.model-card-action.update strong { color:var(--accent); }
+.model-card-alert { margin-top:auto; }
 .model-card-footer { margin-top:auto; display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding-top:8px; border-top:1px solid var(--border); }
 .model-card-activity { display:flex;align-items:center;gap:8px;font-size:12px; }
 .model-card-activity.working { color:var(--accent);font-weight:500; }
@@ -9129,7 +9132,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.85</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.86</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9831,7 +9834,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
       <div style="flex:1"></div>
       <span id="test-all-result" style="font-size:11px;margin-right:8px"></span>
-      <button class="btn btn-ghost" onclick="_testAllBackends()">Test All</button>
+      <button class="btn btn-ghost" onclick="_testAllBackends(this)">Test All</button>
     </div>
     <!-- Backends sub-tab -->
     <div id="models-backends-tab">
@@ -10383,9 +10386,35 @@ var _fhomeInitDone = false;
 function enc(s) { return encodeURIComponent(s); }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function esc(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+function _emitClientLog(payload) {
+  try {
+    var body = JSON.stringify(payload || {});
+    if (navigator.sendBeacon) {
+      var blob = new Blob([body], { type: 'application/json' });
+      if (navigator.sendBeacon('/api/logs/client-error', blob)) return;
+    }
+    fetch('/api/logs/client-error', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'},
+      body: body,
+    }).catch(function() {});
+  } catch (_) {}
+}
 async function api(url, body, timeout_ms = 15000) {
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), timeout_ms);
+  const reqMeta = {
+    source: 'client-api',
+    url: url,
+    method: body ? 'POST' : 'GET',
+    timeout_ms: timeout_ms,
+  };
+  if (body && typeof body === 'object') {
+    if (body.backend) reqMeta.backend = body.backend;
+    if (body.model) reqMeta.model = body.model;
+    if (body.action) reqMeta.action = body.action;
+  }
   const opt = body
     ? { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), signal:ctrl.signal }
     : { signal: ctrl.signal };
@@ -10397,6 +10426,10 @@ async function api(url, body, timeout_ms = 15000) {
     try { d = await r.json(); } catch(_) { d = { ok: false, error: 'Invalid response from server' }; }
     if (!r.ok) {
       const errMsg = d.error && typeof d.error === 'object' ? (d.error.message || 'API error') : (d.error || 'Server error (' + r.status + ')');
+      _emitClientLog(Object.assign({
+        message: '[api] ' + url + ' failed with HTTP ' + r.status + ': ' + errMsg,
+        status: r.status,
+      }, reqMeta));
       toast(errMsg, 'err');
       return null;
     }
@@ -10404,10 +10437,17 @@ async function api(url, body, timeout_ms = 15000) {
   } catch(e) {
     clearTimeout(tid);
     if (e.name === 'AbortError') {
+      _emitClientLog(Object.assign({
+        message: '[api] ' + url + ' timed out after ' + timeout_ms + 'ms',
+      }, reqMeta));
       toast('Request timed out', 'err');
       return null;
     }
     // v0.29.26 — Detect offline vs network error
+    _emitClientLog(Object.assign({
+      message: '[api] ' + url + ' transport failure: ' + ((e && e.message) || 'network error'),
+      error_name: (e && e.name) || '',
+    }, reqMeta));
     if (!navigator.onLine) { toast('You appear to be offline', 'err'); }
     else { toast('Connection failed — server may be restarting', 'err'); }
     return null;
@@ -10440,6 +10480,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.86', date:'2026-03-09', notes:['Installed-version probes now prefer the real user-local CLI path and can be force-refreshed on Models load','Cards stop rendering Version unknown / Latest unknown noise when a probe has not completed','OpenClaw diagnosis now reads its runtime log and surfaces service-restart loops and token mismatches explicitly','Ollama and Codex latest-version checks are more robust so update labels do not disappear as easily','OpenClaw warning actions now sit on the bottom rail and gateway-only clutter was removed from the middle of the card','OpenClaw config uses a visible Gateway Token field instead of masking typed input','Shared client-side request failures now log through the common api() path','Test All now runs as a queued sequence instead of firing every backend at once','OpenClaw model tests now parse the current CLI JSON result format instead of failing successful runs','OpenClaw supervisor-conflict diagnosis now requires active restart evidence instead of only seeing two service files','Models page loading now tolerates partial API failures instead of blanking the whole tab'] },
   { ver:'v0.29.85', date:'2026-03-09', notes:['Models cards no longer show stale latest-version data as an update when installed is newer','OpenClaw duplicate model rows are deduped on canonical model keys','Gateway state and request activity are no longer presented as contradictory status labels','Repair commands stay in config/repair flows instead of cluttering the card body'] },
   { ver:'v0.29.84', date:'2026-03-09', notes:['OpenClaw diagnosis now detects paired devices with a down gateway and surfaces reconnect-loop repair guidance','More OpenClaw reads now normalize through shared config/state helpers instead of legacy top-level fields','OpenClaw cards show paired/pending counts and clearer repair follow-up when gateway pairing state is stale'] },
   { ver:'v0.29.83', date:'2026-03-09', notes:['Gateway version badges now show Installed plus Latest/Latest unknown state per backend','OpenClaw repair/install commands corrected to npm i -g openclaw (removed stale package name)','Gateway repair actions separated from passive status chips for clearer operator flow','Gemini stable-vs-preview selection logic is being biased toward safer auto defaults when available'] },
@@ -17271,11 +17312,7 @@ function _reportClientError(payload) {
   if (_ceCount >= 3) return;
   _ceCount++;
   try {
-    fetch('/api/logs/client-error', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload)
-    }).catch(function(){});
+    _emitClientLog(payload);
   } catch(e) {}
 }
 window.onerror = function(msg, source, lineno, colno, error) {
@@ -18117,6 +18154,7 @@ var _modelSseId = null;
 var _modelActivityData = {};
 var _modelAvailableData = {};
 var _modelTestResults = {};
+var _modelTestBatchRunning = false;
 
 function _relativeTime(ts) {
   if (!ts) return '';
@@ -18151,7 +18189,7 @@ function _formatDuration(ms) {
   return Math.floor(s / 60) + 'm ' + Math.round(s % 60) + 's';
 }
 
-function _reportClientError(context, err, extra) {
+function _reportModelsClientError(context, err, extra) {
   try {
     var payload = Object.assign({
       message: '[' + context + '] ' + ((err && err.message) || String(err) || 'Unknown error'),
@@ -18206,6 +18244,8 @@ function _checkBackendStatuses(providers) {
   if (!providers) return;
   providers.forEach(function(p) {
     var el = document.getElementById('backend-status-' + p.id);
+    var updEl = document.getElementById('backend-update-foot-' + p.id);
+    var footEl = document.getElementById('backend-status-foot-' + p.id);
     if (!el) return;
     if (p.type === 'gateway') {
       _checkGatewayCardStatus(p.id, el);
@@ -18216,12 +18256,16 @@ function _checkBackendStatuses(providers) {
     el.innerHTML = '<div class="model-card-state">'
       + '<span class="model-card-chip ' + (p.available ? 'ok' : 'err') + '">' + (p.available ? 'Ready' : 'Unavailable') + '</span>'
       + '</div>';
+    if (updEl) updEl.innerHTML = '';
+    if (footEl) footEl.innerHTML = '';
   });
 }
 
 async function _checkGatewayCardStatus(backendId, el) {
+  var footEl = document.getElementById('backend-status-foot-' + backendId);
   _setModelCardState(backendId, 'unknown');
   el.innerHTML = '<div class="model-card-state"><span class="model-card-chip dim">Checking gateway…</span></div>';
+  if (footEl) footEl.innerHTML = '';
   try {
     var r = await api('/api/gateway/status');
     if (!r || !r.ok) {
@@ -18230,43 +18274,46 @@ async function _checkGatewayCardStatus(backendId, el) {
       return;
     }
     var state = 'err';
-    if (r.running) state = (r.diagnosis_summary && r.diagnosis_summary.length) ? 'warn' : 'ok';
-    else if (r.crash_looping || (r.diagnosis_summary && r.diagnosis_summary.length)) state = 'warn';
+    if (r.service_restart_loop || r.crash_looping) state = 'warn';
+    else if (r.running || r.listening) state = (r.diagnosis_summary && r.diagnosis_summary.length) ? 'warn' : 'ok';
+    else if (r.diagnosis_summary && r.diagnosis_summary.length) state = 'warn';
     _setModelCardState(backendId, state);
     var chips = [];
-    if (r.running) {
-      chips.push('<span class="model-card-chip ' + (state === 'warn' ? 'warn' : 'ok') + '">Running</span>');
-      if (typeof r.uptime_s === 'number') {
-        var up = Number(r.uptime_s || 0);
-        chips.push('<span class="model-card-chip dim">Up ' + (up >= 60 ? Math.floor(up / 60) + 'm' : Math.max(0, Math.floor(up)) + 's') + '</span>');
-      }
+    if (r.service_restart_loop) {
+      chips.push('<span class="model-card-chip warn">Restart loop</span>');
+    } else if (r.running || r.listening) {
+      chips.push('<span class="model-card-chip ' + (state === 'warn' ? 'warn' : 'ok') + '">' + (backendId === 'openclaw' ? 'Bridge ready' : 'Ready') + '</span>');
     } else if (r.crash_looping) {
       chips.push('<span class="model-card-chip warn">Crash loop</span>');
     } else {
       chips.push('<span class="model-card-chip err">Gateway down</span>');
     }
-    if (r.version_short) chips.push('<span class="model-card-chip dim">v' + escHtml(r.version_short) + '</span>');
+    if (r.version_short && !r.version) chips.push('<span class="model-card-chip dim">v' + escHtml(r.version_short) + '</span>');
     if (r.auth_configured === false) chips.push('<span class="model-card-chip warn">No auth token</span>');
-    if ((r.paired_devices || 0) > 0) chips.push('<span class="model-card-chip dim">' + escHtml(String(r.paired_devices)) + ' paired</span>');
-    if ((r.pending_devices || 0) > 0) chips.push('<span class="model-card-chip warn">' + escHtml(String(r.pending_devices)) + ' pending</span>');
+    if (r.token_mismatch) chips.push('<span class="model-card-chip warn">Auth mismatch</span>');
+    if (r.duplicate_service_units && (r.service_restart_loop || r.crash_looping)) chips.push('<span class="model-card-chip warn">Supervisor conflict</span>');
     if (r.node_issue) chips.push('<span class="model-card-chip warn">Node runtime</span>');
-    chips.push('<span class="model-card-chip dim"><button onclick="_restartBackend(\'' + backendId + '\')">Restart</button></span>');
-    chips.push('<span class="model-card-chip dim"><button onclick="_recheckGw(\'' + backendId + '\')">Check</button></span>');
+    if (r.recent_agent_success && r.recent_agent_failure) chips.push('<span class="model-card-chip warn">Agent flaky</span>');
+    else if (backendId === 'openclaw' && r.recent_agent_success) chips.push('<span class="model-card-chip ok">Agent healthy</span>');
     var actionHtml = '';
     if (r.repair_hint || r.reinstall_cmd || (r.diagnosis_summary && r.diagnosis_summary.length)) {
+      window._gatewayStatus = window._gatewayStatus || {};
+      window._gatewayStatus[backendId] = r;
       var detail = r.repair_hint || ((r.diagnosis_summary || []).join(' · ')) || 'Repair action required.';
-      var actionLabel = (r.repair_cmd || r.reinstall_cmd) ? 'Repair' : 'Review';
+      var actionLabel = (r.repair_cmd || r.reinstall_cmd || r.followup_hint || (r.service_unit_paths && r.service_unit_paths.length)) ? 'Show Fix' : 'Review';
       actionHtml = '<div class="model-card-action" title="' + escHtml(detail) + '">'
         + '<strong>▲</strong>'
         + '<span>' + escHtml(detail) + '</span>'
-        + '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="_openBackendConfig(\'' + backendId + '\')">' + actionLabel + '</button>'
+        + '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="_showRepairAction(\'' + backendId + '\')">' + actionLabel + '</button>'
         + '</div>';
     }
-    el.innerHTML = '<div class="model-card-state">' + chips.join('') + '</div>' + actionHtml;
+    el.innerHTML = '<div class="model-card-state">' + chips.join('') + '</div>';
+    if (footEl) footEl.innerHTML = actionHtml;
   } catch(e) {
-    _reportClientError('gateway-status', e, { backend: backendId });
+    _reportModelsClientError('gateway-status', e, { backend: backendId });
     _setModelCardState(backendId, 'err');
     el.innerHTML = '<div class="model-card-state"><span class="model-card-chip err">Error checking status</span></div>';
+    if (footEl) footEl.innerHTML = '';
   }
 }
 
@@ -18282,8 +18329,7 @@ async function _restartBackend(backendId) {
   setTimeout(function() { _recheckGw(backendId); }, 2000);
 }
 
-async function _testModel(event, backendId, modelId, testId) {
-  var btn = event.target;
+async function _runModelTest(btn, backendId, modelId, testId) {
   var resultEl = document.getElementById('test-r-' + testId);
   btn.disabled = true;
   btn.textContent = '...';
@@ -18294,14 +18340,25 @@ async function _testModel(event, backendId, modelId, testId) {
     var r = await api('/api/models/test', {backend: backendId, model: modelId}, 60000);
     var elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     if (r && r.ok) {
-      _setModelCardState(backendId, 'ok');
-      _modelTestResults[testId] = { state: 'ok', backend: backendId, model: modelId, label: elapsed + 's', title: 'Passed in ' + elapsed + 's' };
-      if (resultEl) resultEl.innerHTML = '<span style="color:#22c55e">\u2713 ' + elapsed + 's</span>';
+      var flakyPass = (r.execution_state === 'flaky');
+      _setModelCardState(backendId, flakyPass ? 'warn' : 'ok');
+      window._gatewayStatus = window._gatewayStatus || {};
+      if (!window._gatewayStatus[backendId]) window._gatewayStatus[backendId] = {};
+      if (backendId === 'openclaw') {
+        window._gatewayStatus[backendId].recent_agent_success = true;
+        if (flakyPass) window._gatewayStatus[backendId].recent_agent_failure = true;
+      }
+      _modelTestResults[testId] = { state: flakyPass ? 'warn' : 'ok', backend: backendId, model: modelId, label: elapsed + 's', title: flakyPass ? ('Passed after retry in ' + elapsed + 's') : ('Passed in ' + elapsed + 's') };
+      if (resultEl) resultEl.innerHTML = '<span style="color:' + (flakyPass ? '#f59e0b' : '#22c55e') + '">\u2713 ' + elapsed + (flakyPass ? ' retry' : '') + '</span>';
     } else {
       var _errText = ((r && r.error) || 'Failed').toLowerCase();
-      _setModelCardState(backendId, (_errText.indexOf('time') >= 0 || _errText.indexOf('auth') >= 0) ? 'warn' : 'err');
+      var warnFail = (_errText.indexOf('time') >= 0 || _errText.indexOf('auth') >= 0 || (r && r.execution_state === 'flaky'));
+      _setModelCardState(backendId, warnFail ? 'warn' : 'err');
+      window._gatewayStatus = window._gatewayStatus || {};
+      if (!window._gatewayStatus[backendId]) window._gatewayStatus[backendId] = {};
+      if (backendId === 'openclaw') window._gatewayStatus[backendId].recent_agent_failure = true;
       _modelTestResults[testId] = {
-        state: 'fail',
+        state: warnFail ? 'warn' : 'fail',
         backend: backendId,
         model: modelId,
         label: (r && r.error || 'Failed').substring(0, 40),
@@ -18319,11 +18376,18 @@ async function _testModel(event, backendId, modelId, testId) {
       label: (e.message || 'Error').substring(0, 40),
       title: e.message || 'Error',
     };
-    _reportClientError('model-test', e, { backend: backendId, model: modelId });
+    _reportModelsClientError('model-test', e, { backend: backendId, model: modelId });
     if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">\u2717 ' + escHtml((e.message || 'Error').substring(0, 40)) + '</span>';
+  }
+  if (backendId === 'openclaw') {
+    setTimeout(function() { _recheckGw(backendId); }, 100);
   }
   btn.disabled = false;
   btn.textContent = 'Test';
+}
+
+async function _testModel(event, backendId, modelId, testId) {
+  await _runModelTest(event.target, backendId, modelId, testId);
 }
 
 async function _openBackendConfig(backendId) {
@@ -18340,14 +18404,16 @@ async function _openBackendConfig(backendId) {
   if (prov) label = prov.label || backendId;
   var modal = document.createElement('div');
   modal.className = 'modal';
+  var tokenLabel = backendId === 'openclaw' ? 'Gateway Token' : 'Auth Token';
+  var tokenType = backendId === 'openclaw' ? 'text' : 'password';
   modal.innerHTML = '<h3>' + escHtml(label) + ' Config</h3>'
     + '<p style="margin-bottom:14px">Configure connection settings for this backend.</p>'
     + '<div id="bcfg-runtime" style="margin-bottom:14px;font-size:12px;color:var(--text3)">Loading runtime diagnosis…</div>'
     + '<div style="display:grid;gap:12px">'
     + '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Description</label>'
     + '<input id="bcfg-desc" class="form-input" style="margin-bottom:0" /></div>'
-    + '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Auth Token</label>'
-    + '<input id="bcfg-token" type="password" class="form-input" style="margin-bottom:0" placeholder="Leave blank to keep current" /></div>'
+    + '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">' + escHtml(tokenLabel) + '</label>'
+    + '<input id="bcfg-token" type="' + escHtml(tokenType) + '" class="form-input" style="margin-bottom:0" placeholder="Leave blank to keep current" /></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
     + '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Host</label>'
     + '<input id="bcfg-host" class="form-input" style="margin-bottom:0" placeholder="127.0.0.1" /></div>'
@@ -18386,6 +18452,10 @@ async function _openBackendConfig(backendId) {
       if (c.runtime_issues && c.runtime_issues.length) {
         diagHtml += '<div style="color:#f59e0b;margin-bottom:6px">' + escHtml(c.runtime_issues.join(' · ')) + '</div>';
       }
+      if (c.service_unit_paths && c.service_unit_paths.length > 1) {
+        diagHtml += '<div style="margin-bottom:6px;color:#f59e0b">Competing service units:</div>';
+        diagHtml += '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">' + escHtml(c.service_unit_paths.join(' · ')) + '</div>';
+      }
       if (c.repair_hint) {
         diagHtml += '<div style="margin-bottom:6px">' + escHtml(c.repair_hint) + '</div>';
       }
@@ -18396,7 +18466,7 @@ async function _openBackendConfig(backendId) {
     }
   }
   else {
-    _reportClientError('backend-config-load', new Error('Missing backend config response'), { backend: backendId });
+    _reportModelsClientError('backend-config-load', new Error('Missing backend config response'), { backend: backendId });
   }
 }
 
@@ -18417,7 +18487,7 @@ async function _saveBackendConfig(backendId) {
     if (overlay) overlay.remove();
     loadModels();
   } else {
-    _reportClientError('backend-config-save', new Error((r && r.error) || 'Failed to save backend config'), { backend: backendId });
+    _reportModelsClientError('backend-config-save', new Error((r && r.error) || 'Failed to save backend config'), { backend: backendId });
     toast((r && r.error) || 'Failed to save', 'err');
   }
 }
@@ -18434,45 +18504,130 @@ async function _resetBackendConfigToDiscovered(backendId) {
   }
 }
 
-async function _testCardModels(backendId) {
-  // Find all test buttons within this backend's card and click them
-  var card = document.querySelector('.model-card[data-model-id="' + backendId + '"]');
-  if (!card) return;
-  var btns = card.querySelectorAll('.model-list-row button.btn-ghost');
-  btns.forEach(function(btn) { if (btn.textContent.trim() === 'Test') btn.click(); });
+async function _showUpdateCommand(backendId) {
+  var vd = (window._modelVersions || {})[backendId] || {};
+  var cmd = vd.update_cmd || '';
+  if (!cmd) {
+    toast('No update command available', 'warn');
+    return;
+  }
+  var ok = await porterPrompt('Update Command', 'Run this manually in your terminal:', cmd);
+  if (ok !== null && navigator.clipboard) {
+    navigator.clipboard.writeText(cmd).then(function() {
+      toast('Update command copied', 'ok');
+    }).catch(function() {});
+  }
 }
 
-async function _testAllBackends() {
-  // Trigger every backend test path. Prefer per-card Test All, otherwise click individual Test buttons.
-  var cards = document.querySelectorAll('.model-card');
-  cards.forEach(function(card) {
-    var btns = card.querySelectorAll('.model-list-row button.btn-ghost');
-    var clicked = false;
-    btns.forEach(function(b) {
-      if (!clicked && b.textContent.trim() === 'Test All') {
-        clicked = true;
-        b.click();
+async function _showRepairAction(backendId) {
+  var status = ((window._gatewayStatus || {})[backendId]) || null;
+  if (!status) {
+    try {
+      status = await api('/api/gateway/status');
+      if (status && status.ok) {
+        window._gatewayStatus = window._gatewayStatus || {};
+        window._gatewayStatus[backendId] = status;
       }
-    });
-    if (!clicked) {
-      btns.forEach(function(b) {
-        if (b.textContent.trim() === 'Test') b.click();
-      });
+    } catch(e) {
+      _reportModelsClientError('gateway-repair-load', e, { backend: backendId });
     }
+  }
+  if (!status) {
+    toast('Repair details unavailable', 'warn');
+    return;
+  }
+  var detail = status.repair_hint || ((status.diagnosis_summary || []).join(' · ')) || 'Review runtime diagnosis.';
+  var lines = [];
+  if (status.repair_cmd) lines.push(status.repair_cmd);
+  else if (status.reinstall_cmd) lines.push(status.reinstall_cmd);
+  if (status.followup_hint) lines.push(status.followup_hint);
+  if (status.service_unit_paths && status.service_unit_paths.length) lines.push('Units: ' + status.service_unit_paths.join(' · '));
+  if (status.log_path) lines.push('Logs: ' + status.log_path);
+  var promptText = lines.join('\n\n');
+  if (promptText) {
+    var ok = await porterPrompt('Repair ' + backendId, detail, promptText);
+    if (ok !== null && navigator.clipboard) {
+      navigator.clipboard.writeText(promptText).then(function() {
+        toast('Repair details copied', 'ok');
+      }).catch(function() {});
+    }
+    return;
+  }
+  _openBackendConfig(backendId);
+}
+
+function _collectCardModelTests(card) {
+  return Array.from(card.querySelectorAll('button[data-test-model="1"]')).map(function(btn) {
+    return {
+      button: btn,
+      backendId: btn.getAttribute('data-backend') || '',
+      modelId: btn.getAttribute('data-model') || '',
+      testId: btn.getAttribute('data-testid') || '',
+    };
+  }).filter(function(task) {
+    return task.backendId && task.modelId && task.testId;
   });
+}
+
+async function _runQueuedModelTests(tasks, triggerBtn, label) {
+  if (_modelTestBatchRunning) {
+    toast('Model tests already running', 'warn');
+    return;
+  }
+  if (!tasks || !tasks.length) return;
+  _modelTestBatchRunning = true;
+  var prevText = triggerBtn ? triggerBtn.textContent : '';
+  if (triggerBtn) {
+    triggerBtn.disabled = true;
+    triggerBtn.textContent = 'Running…';
+  }
+  try {
+    for (var i = 0; i < tasks.length; i++) {
+      var task = tasks[i];
+      await _runModelTest(task.button, task.backendId, task.modelId, task.testId);
+    }
+    toast('Model tests complete' + (label ? ': ' + label : ''), 'ok');
+  } finally {
+    _modelTestBatchRunning = false;
+    if (triggerBtn) {
+      triggerBtn.disabled = false;
+      triggerBtn.textContent = prevText || 'Test All';
+    }
+  }
+}
+
+async function _testCardModels(triggerBtn, backendId) {
+  var card = document.querySelector('.model-card[data-model-id="' + backendId + '"]');
+  if (!card) return;
+  await _runQueuedModelTests(_collectCardModelTests(card), triggerBtn, backendId);
+}
+
+async function _testAllBackends(triggerBtn) {
+  var cards = document.querySelectorAll('.model-card');
+  var tasks = [];
+  cards.forEach(function(card) {
+    tasks = tasks.concat(_collectCardModelTests(card));
+  });
+  await _runQueuedModelTests(tasks, triggerBtn, 'all backends');
 }
 
 async function loadModels() {
   try {
-    var [data, act, avail] = await Promise.all([
+    var results = await Promise.allSettled([
       api('/api/providers'),
       api('/api/models/activity'),
       api('/api/models/available'),
     ]);
+    var data = results[0].status === 'fulfilled' ? results[0].value : null;
+    var act = results[1].status === 'fulfilled' ? results[1].value : null;
+    var avail = results[2].status === 'fulfilled' ? results[2].value : null;
+    if (!data || !data.providers) {
+      throw new Error('Providers unavailable');
+    }
     _modelActivityData = (act && act.activity) ? act.activity : {};
     _modelAvailableData = (avail && avail.backends) ? avail.backends : {};
     // Versions loaded separately — slower probe, shouldn't block card render
-    fetch('/api/models/versions', {credentials:'same-origin'})
+    fetch('/api/models/versions?refresh=1', {credentials:'same-origin'})
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(vers) {
         window._modelVersions = (vers && vers.versions) ? vers.versions : {};
@@ -18481,13 +18636,13 @@ async function loadModels() {
         Object.keys(window._modelVersions).forEach(function(bk) {
           var vd = window._modelVersions[bk];
           var el = document.getElementById('ver-badge-' + bk);
+          var updEl = document.getElementById('backend-update-foot-' + bk);
           if (!el || !vd) return;
           var html = '';
+          var showUpdate = false;
           if (vd.version) {
             var _vstr = vd.version.match(/^[0-9]/) ? 'v' + vd.version : vd.version;
             html += '<span style="font-size:10px;color:var(--text2)">Installed ' + escHtml(_vstr) + '</span>';
-          } else {
-            html += '<span style="font-size:10px;color:var(--text3)">Version unknown</span>';
           }
           if (vd.latest) {
             var _lstr = vd.latest.match(/^[0-9]/) ? 'v' + vd.latest : vd.latest;
@@ -18497,21 +18652,34 @@ async function loadModels() {
             } else if (vd.version && cmp < 0) {
               html += ' <span style="font-size:10px;color:var(--text3)">Latest check stale</span>';
             } else {
-              html += ' <span style="font-size:10px;color:#f59e0b;font-weight:600">Latest ' + escHtml(_lstr) + '</span>';
+              showUpdate = !!vd.update_cmd;
+              if (html) html += ' ';
+              html += '<span style="font-size:10px;color:#f59e0b;font-weight:600">Latest ' + escHtml(_lstr) + '</span>';
             }
-          } else {
-            html += ' <span style="font-size:10px;color:var(--text3)">Latest unknown</span>';
           }
-          el.innerHTML = html;
+          el.innerHTML = html || '<span style="font-size:10px;color:var(--text3)">Checking version…</span>';
+          if (updEl) {
+            if (showUpdate) {
+              updEl.innerHTML = '<div class="model-card-action update">'
+                + '<strong>\u21bb</strong>'
+                + '<span>Update available</span>'
+                + '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="_showUpdateCommand(\'' + escHtml(bk) + '\')">Update</button>'
+                + '</div>';
+            } else {
+              updEl.innerHTML = '';
+            }
+          }
         });
-      }).catch(function() {});
+      }).catch(function(e) {
+        _reportModelsClientError('models-versions', e || new Error('Version probe failed'));
+      });
     window._modelProviders = data.providers || [];
 
     _renderModelCards(data, _modelActivityData);
     _checkBackendStatuses(data.providers);
     _connectModelSSE();
   } catch(e) {
-    _reportClientError('load-models', e);
+    _reportModelsClientError('load-models', e);
   }
 }
 
@@ -19491,11 +19659,11 @@ function _renderModelCards(data, act) {
         _selHtml += '<span class="model-list-dot" style="background:' + (isResolved ? 'var(--accent)' : 'transparent') + '"></span>';
         _selHtml += '<span class="model-list-name">' + escHtml(m.name) + (m.default ? ' <span style=\"font-size:10px;color:var(--text3)\">(default)</span>' : '') + '</span>';
         if (m.id === 'auto') {
-          _selHtml += '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px;margin-left:auto" onclick="event.stopPropagation();_testCardModels(\'' + escHtml(p.id) + '\')">Test All</button>';
+          _selHtml += '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px;margin-left:auto" onclick="event.stopPropagation();_testCardModels(this,\'' + escHtml(p.id) + '\')">Test All</button>';
         } else {
           var _mTid = (p.id + '_' + m.id).replace(/[^a-zA-Z0-9_-]/g, '_');
           _selHtml += '<span id="test-r-' + _mTid + '" style="font-size:10px;margin-left:auto;white-space:nowrap">' + _renderStoredTestResult(_mTid) + '</span>';
-          _selHtml += '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_testModel(event,\'' + escHtml(p.id) + '\',\'' + escHtml(m.id) + '\',\'' + _mTid + '\')">Test</button>';
+          _selHtml += '<button class="btn btn-ghost" data-test-model="1" data-backend="' + escHtml(p.id) + '" data-model="' + escHtml(m.id) + '" data-testid="' + escHtml(_mTid) + '" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_testModel(event,\'' + escHtml(p.id) + '\',\'' + escHtml(m.id) + '\',\'' + _mTid + '\')">Test</button>';
         }
         _selHtml += '</div>';
       });
@@ -19507,6 +19675,8 @@ function _renderModelCards(data, act) {
       ? '<span style="font-size:10px;font-weight:600;color:var(--accent);display:flex;align-items:center;gap:3px"><span class="pulse-dot"></span>' + activeRuns.length + ' active</span>'
       : '';
 
+    var updateFootHtml = '<div id="backend-update-foot-' + escHtml(p.id) + '" class="model-card-alert"></div>';
+    var statusFootHtml = '<div id="backend-status-foot-' + escHtml(p.id) + '" class="model-card-alert"></div>';
     var footerHtml = (statsHtml || liveTraceBtn || lastPromptBtn) ? '<div class="model-card-footer">' + statsHtml + liveTraceBtn + lastPromptBtn + '</div>' : '';
 
     return '<div class="model-card' + offClass + '" data-model-id="' + escHtml(p.id) + '">'
@@ -19522,6 +19692,8 @@ function _renderModelCards(data, act) {
       + '</div>'
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
       + (p.available ? _selHtml : _installHtml)
+      + updateFootHtml
+      + statusFootHtml
       + footerHtml
       + '</div>';
   }).join('');
@@ -25873,14 +26045,22 @@ def _backend_meta(name):
 
 # ── Backend Version Probing ─────────────────────────────────────────────
 _backend_version_cache = {"data": None, "ts": 0}
+_backend_latest_cache = {"data": {}, "ts": 0}
 _backend_model_cache = {"data": {}, "ts": {}}
 
 
-def _probe_backend_versions():
-    """Detect version strings for each backend. Cached 5 minutes."""
+def _invalidate_backend_version_cache():
+    _backend_version_cache["data"] = None
+    _backend_version_cache["ts"] = 0
+
+
+def _probe_backend_versions(force: bool = False):
+    """Detect installed/current versions quickly and refresh latest checks on a slower cadence."""
     import time as _t
     now = _t.time()
-    if _backend_version_cache["data"] and (now - _backend_version_cache["ts"]) < 300:
+    if force:
+        _invalidate_backend_version_cache()
+    if _backend_version_cache["data"] and (now - _backend_version_cache["ts"]) < 30:
         return _backend_version_cache["data"]
 
     versions = {}
@@ -25901,21 +26081,22 @@ def _probe_backend_versions():
         return ""
 
     def _resolve_bin(name):
-        """Find binary via shutil.which + common user-local paths."""
-        p = shutil.which(name)
-        if p: return p
-        for d in (str(Path.home() / ".npm-global" / "bin"), str(Path.home() / ".local" / "bin"), "/usr/local/bin"):
+        """Prefer user-local installs over system PATH to avoid stale distro shims."""
+        for d in (str(Path.home() / ".npm-global" / "bin"), str(Path.home() / ".local" / "bin"), "/usr/local/bin", "/usr/bin", "/bin"):
             c = Path(d) / name
-            if c.exists(): return str(c)
+            if c.exists():
+                return str(c)
+        p = shutil.which(name)
+        if p:
+            return p
         return None
 
     def _cli_version(name, parse_fn=None):
         """Run binary --version, return version string or empty."""
         path = _resolve_bin(name)
         if not path:
-            return {"version": "", "detected": False}
+            return {"version": "", "detected": False, "path": ""}
         try:
-            # v0.28.50 — Ensure PATH includes user-local dirs (systemd service PATH is minimal)
             _env = dict(os.environ)
             _home = str(Path.home())
             _extra = f"{_home}/.npm-global/bin:{_home}/.local/bin:/usr/local/bin"
@@ -25924,61 +26105,63 @@ def _probe_backend_versions():
             result = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5, env=_env)
             out = (result.stdout or result.stderr or "").strip()
             ver = parse_fn(out) if parse_fn else out.split()[-1] if out else ""
-            return {"version": ver, "detected": True} if ver else {"version": "", "detected": False}
+            return {"version": ver, "detected": True, "path": path} if ver else {"version": "", "detected": False, "path": path}
         except Exception:
-            return {"version": "", "detected": False}
+            return {"version": "", "detected": False, "path": path}
 
     def _npm_latest(pkg_name):
         try:
-            result = subprocess.run(["npm", "view", pkg_name, "version"], capture_output=True, text=True, timeout=2, env=_agent_env())
+            result = subprocess.run(["npm", "view", pkg_name, "version"], capture_output=True, text=True, timeout=3, env=_agent_env())
             latest = (result.stdout or "").strip().splitlines()
             latest = latest[-1].strip() if latest else ""
             return _extract_semverish(latest)
         except Exception:
             return ""
 
+    def _http_json(url, timeout=3):
+        try:
+            import urllib.request
+            with urllib.request.urlopen(url, timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            return None
+
+    def _github_latest_release(repo):
+        data = _http_json(f"https://api.github.com/repos/{repo}/releases/latest", timeout=4)
+        if not isinstance(data, dict):
+            return ""
+        return _extract_semverish(data.get("tag_name", ""))
+
     # OpenClaw
     versions["openclaw"] = _cli_version("openclaw", _extract_semverish)
-    try:
-        oc_update = json.loads((OPENCLAW_STATE_DIR / "update-check.json").read_text(encoding="utf-8"))
-        oc_latest = _extract_semverish(oc_update.get("lastNotifiedVersion", ""))
-        if oc_latest:
-            versions["openclaw"]["latest"] = oc_latest
-            versions["openclaw"]["update_cmd"] = "npm uninstall -g openclaw && npm i -g openclaw"
-    except Exception:
-        pass
 
     # Ollama
+    versions["ollama"] = _cli_version("ollama", _extract_semverish)
     try:
         import urllib.request, json as _j2
         req = urllib.request.Request("http://127.0.0.1:11434/api/version", method="GET")
         with urllib.request.urlopen(req, timeout=3) as resp:
             data = _j2.loads(resp.read())
-            versions["ollama"] = {"version": data.get("version", ""), "detected": True}
+            api_ver = _extract_semverish(data.get("version", ""))
+            if api_ver:
+                versions["ollama"]["version"] = api_ver
+                versions["ollama"]["detected"] = True
     except Exception:
-        versions["ollama"] = {"version": "", "detected": False}
+        pass
 
     # Claude CLI — "2.1.70 (Claude Code)" → extract version number
     versions["claude"] = _cli_version("claude", _extract_semverish)
-    _cl_latest = _npm_latest("@anthropic-ai/claude-code")
-    if _cl_latest:
-        versions["claude"]["latest"] = _cl_latest
-        versions["claude"]["update_cmd"] = "npm i -g @anthropic-ai/claude-code"
 
     # Gemini
     versions["gemini"] = _cli_version("gemini", _extract_semverish)
-    _gm_latest = _npm_latest("@google/gemini-cli")
-    if _gm_latest:
-        versions["gemini"]["latest"] = _gm_latest
-        versions["gemini"]["update_cmd"] = "npm i -g @google/gemini-cli"
 
     # Codex — also check ~/.codex/version.json for latest available
     _cdx_ver = _cli_version("codex", _extract_semverish)
     try:
         _cdx_vjson = json.loads((Path.home() / ".codex" / "version.json").read_text())
         _cdx_latest = _cdx_vjson.get("latest_version", "")
-        if _cdx_latest and _cdx_latest != _cdx_ver.get("version", ""):
-            _cdx_ver["latest"] = _cdx_latest
+        if _cdx_latest:
+            _cdx_ver["latest"] = _extract_semverish(_cdx_latest) or str(_cdx_latest)
             _cdx_ver["update_cmd"] = "npm i -g @openai/codex"
     except Exception:
         pass
@@ -25987,21 +26170,40 @@ def _probe_backend_versions():
     # Google Workspace CLI
     versions["gws"] = _cli_version("gws")
 
+    latest_cache = dict(_backend_latest_cache.get("data") or {})
+    latest_stale = force or ((now - float(_backend_latest_cache.get("ts") or 0)) >= 21600)
+    if latest_stale:
+        refreshed = {}
+        try:
+            oc_update = json.loads((OPENCLAW_STATE_DIR / "update-check.json").read_text(encoding="utf-8"))
+            oc_latest = _extract_semverish(oc_update.get("lastNotifiedVersion", ""))
+            if oc_latest:
+                refreshed["openclaw"] = {"latest": oc_latest, "update_cmd": "npm uninstall -g openclaw && npm i -g openclaw"}
+        except Exception:
+            pass
+        if not refreshed.get("openclaw"):
+            _oc_latest = _npm_latest("openclaw")
+            if _oc_latest:
+                refreshed["openclaw"] = {"latest": _oc_latest, "update_cmd": "npm uninstall -g openclaw && npm i -g openclaw"}
+        _cl_latest = _npm_latest("@anthropic-ai/claude-code")
+        if _cl_latest:
+            refreshed["claude"] = {"latest": _cl_latest, "update_cmd": "npm i -g @anthropic-ai/claude-code"}
+        _gm_latest = _npm_latest("@google/gemini-cli")
+        if _gm_latest:
+            refreshed["gemini"] = {"latest": _gm_latest, "update_cmd": "npm i -g @google/gemini-cli"}
+        _cdx_latest = _npm_latest("@openai/codex")
+        if _cdx_latest:
+            refreshed["codex"] = {"latest": _cdx_latest, "update_cmd": "npm i -g @openai/codex"}
+        _ollama_latest = _github_latest_release("ollama/ollama")
+        if _ollama_latest:
+            refreshed["ollama"] = {"latest": _ollama_latest, "update_cmd": "curl -fsSL https://ollama.com/install.sh | sh"}
+        latest_cache = refreshed
+        _backend_latest_cache["data"] = latest_cache
+        _backend_latest_cache["ts"] = now
 
-
-    # Check npm outdated for update detection (non-blocking, best-effort)
-    _npm_pkgs = {"claude": "@anthropic-ai/claude-code", "gemini": "@google/gemini-cli", "openclaw": "openclaw"}
-    for _nbk, _npkg in _npm_pkgs.items():
-        if _nbk in versions and versions[_nbk].get("detected"):
-            try:
-                _npm_r = subprocess.run(["npm", "ls", "-g", _npkg, "--depth=0", "--json"],
-                                       capture_output=True, text=True, timeout=5, env=_agent_env())
-                _npm_d = json.loads(_npm_r.stdout or "{}")
-                _deps = _npm_d.get("dependencies", {})
-                _pkg_info = _deps.get(_npkg.split("/")[-1], _deps.get(_npkg, {}))
-                # npm ls doesn't show latest — skip for now, version.json approach is better
-            except Exception:
-                pass
+    for _bk, _latest in latest_cache.items():
+        if _bk in versions and isinstance(_latest, dict):
+            versions[_bk].update({k: v for k, v in _latest.items() if v})
 
     _backend_version_cache["data"] = versions
     _backend_version_cache["ts"] = now
@@ -26310,10 +26512,22 @@ def _model_repair_hint(backend: str, detail: str = "") -> dict:
         hint["reinstall_cmd"] = "npm uninstall -g openclaw && npm i -g openclaw"
         if any(tok in text for tok in ("cannot find module", "module not found", "err_module_not_found", "syntaxerror", "typeerror", "node:internal")):
             hint["repair_hint"] = "OpenClaw CLI install appears broken. Reinstall the CLI, then re-open/auth the gateway."
+        elif "duplicate_service_units" in text or "competing service units" in text or "supervisor conflict" in text:
+            hint["repair_hint"] = "OpenClaw has competing service units or supervisors. Reinstall will not fix that; disable the duplicate unit so only one gateway service owns the port."
+            hint["repair_cmd"] = "systemctl status openclaw-gateway"
+            hint["followup_hint"] = "Check both /etc/systemd/system/openclaw-gateway.service and ~/.config/systemd/user/openclaw-gateway.service."
+        elif "service_restart_loop" in text or "service restart" in text or "restarting itself every few seconds" in text:
+            hint["repair_hint"] = "OpenClaw gateway is entering a service restart loop. This is runtime breakage in OpenClaw, not just a bad model test."
+            hint["repair_cmd"] = "openclaw status"
+            hint["followup_hint"] = "Review the OpenClaw gateway service/logs before changing Porter config."
         elif "paired devices exist" in text or "connected and reconnected" in text or "reconnect loop" in text:
             hint["repair_hint"] = "OpenClaw looks paired but unstable. If it loops between connected and reconnected, stop the gateway and reset devices/paired.json plus devices/pending.json, then pair again."
             hint["repair_cmd"] = "openclaw gateway stop"
             hint["followup_hint"] = "Then back up or clear ~/.openclaw/devices/paired.json and ~/.openclaw/devices/pending.json before re-pairing."
+        elif "agent_path_flaky" in text or "agent runs are intermittent" in text:
+            hint["repair_hint"] = "OpenClaw gateway is up, but real agent runs are intermittent. Recheck the active gateway service, then test one direct agent run before blaming Porter."
+            hint["repair_cmd"] = "openclaw agent --agent main --message \"Reply with just the word OK\" --json --timeout 45"
+            hint["followup_hint"] = "If this flaps between success and 1006/timeout, inspect the active openclaw-gateway service and its journal."
         elif "gateway not running" in text:
             hint["repair_hint"] = "OpenClaw gateway is down. Run doctor --fix or stop/reset pairing state if the UI keeps reconnecting."
             hint["repair_cmd"] = "openclaw doctor --fix"
@@ -26344,12 +26558,20 @@ def _openclaw_runtime_diagnosis() -> dict:
 
     diag = {
         "gateway_running": False,
+        "gateway_listening": False,
         "node_version": "",
         "issues": [],
         "doctor_summary": [],
         "paired_devices": 0,
         "pending_devices": 0,
         "pairing_temp_files": 0,
+        "service_restart_loop": False,
+        "token_mismatch": False,
+        "log_path": "",
+        "duplicate_service_units": False,
+        "service_unit_paths": [],
+        "recent_agent_success": False,
+        "recent_agent_failure": False,
     }
 
     try:
@@ -26359,6 +26581,13 @@ def _openclaw_runtime_diagnosis() -> dict:
             diag["issues"].append("gateway_not_running")
     except Exception:
         diag["issues"].append("gateway_status_unknown")
+
+    try:
+        settings = _openclaw_gateway_settings()
+        with socket.create_connection((str(settings.get("host") or "127.0.0.1"), int(settings.get("port") or 18789)), timeout=1.0):
+            diag["gateway_listening"] = True
+    except Exception:
+        diag["gateway_listening"] = False
 
     try:
         node_r = subprocess.run(["node", "-v"], capture_output=True, text=True, timeout=3, env=_agent_env())
@@ -26419,6 +26648,87 @@ def _openclaw_runtime_diagnosis() -> dict:
             diag["issues"].append("pairing_temp_files")
     except Exception as e:
         log.debug("OpenClaw pairing diagnosis failed: %s", e)
+
+    unit_paths = [
+        Path("/etc/systemd/system/openclaw-gateway.service"),
+        Path.home() / ".config" / "systemd" / "user" / "openclaw-gateway.service",
+    ]
+    try:
+        existing_units = [str(p) for p in unit_paths if p.exists()]
+        diag["service_unit_paths"] = existing_units
+    except Exception as e:
+        log.debug("OpenClaw unit diagnosis failed: %s", e)
+
+    try:
+        log_dir = Path("/tmp/openclaw")
+        log_path = log_dir / f"openclaw-{datetime.utcnow().strftime('%Y-%m-%d')}.log"
+        if log_path.exists():
+            diag["log_path"] = str(log_path)
+            lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-160:]
+            restart_times = []
+            token_mismatch_times = []
+            success_times = []
+            failure_times = []
+            now_dt = datetime.now(timezone.utc)
+            for line in lines:
+                low = line.lower()
+                evt_time = None
+                rec = None
+                try:
+                    rec = json.loads(line)
+                    raw_time = ""
+                    if isinstance(rec, dict):
+                        raw_time = str(rec.get("time") or (rec.get("_meta") or {}).get("date") or "").strip()
+                    if raw_time:
+                        evt_time = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+                        if evt_time.tzinfo is None:
+                            evt_time = evt_time.replace(tzinfo=timezone.utc)
+                except Exception:
+                    evt_time = None
+                if evt_time and isinstance(rec, dict):
+                    line0 = str(rec.get("0") or "")
+                    if "\"status\": \"ok\"" in line0 and "\"summary\": \"completed\"" in line0:
+                        success_times.append(evt_time)
+                    if "\"stopReason\": \"error\"" in line0 or "embedded run agent end" in low and "iserror=true" in low:
+                        failure_times.append(evt_time)
+                if "token_mismatch" in low or "unauthorized" in low:
+                    if evt_time:
+                        token_mismatch_times.append(evt_time)
+                if "reason=service restart" in low or "killing 1 stale gateway process(es) before restart" in low or "signal sigterm received" in low:
+                    if evt_time:
+                        restart_times.append(evt_time)
+            recent_restarts = [ts for ts in restart_times if abs((now_dt - ts).total_seconds()) <= 90]
+            recent_token_mismatch = [ts for ts in token_mismatch_times if abs((now_dt - ts).total_seconds()) <= 300]
+            recent_success = [ts for ts in success_times if abs((now_dt - ts).total_seconds()) <= 300]
+            recent_failure = [ts for ts in failure_times if abs((now_dt - ts).total_seconds()) <= 300]
+            if recent_success:
+                diag["recent_agent_success"] = True
+            if recent_failure:
+                diag["recent_agent_failure"] = True
+            if len(recent_restarts) >= 2:
+                diag["service_restart_loop"] = True
+                diag["issues"].append("service_restart_loop")
+                diag["doctor_summary"].append("Gateway is restarting itself every few seconds.")
+            if len(diag.get("service_unit_paths") or []) >= 2 and recent_restarts:
+                diag["duplicate_service_units"] = True
+                diag["issues"].append("duplicate_service_units")
+                diag["doctor_summary"].append("Competing OpenClaw service units likely caused the restart loop.")
+            if recent_token_mismatch:
+                diag["token_mismatch"] = True
+                diag["issues"].append("token_mismatch")
+                diag["doctor_summary"].append("Gateway auth token mismatch was seen in recent logs.")
+            if recent_success and recent_failure:
+                diag["issues"].append("agent_path_flaky")
+                diag["doctor_summary"].append("Gateway is up, but agent runs are intermittent.")
+    except Exception as e:
+        log.debug("OpenClaw log diagnosis failed: %s", e)
+
+    if diag["gateway_running"] or diag["gateway_listening"]:
+        diag["issues"] = [issue for issue in diag["issues"] if issue != "doctor_gateway_not_running"]
+        diag["doctor_summary"] = [msg for msg in diag["doctor_summary"] if "gateway not running" not in msg.lower()]
+    if re.search(r"v?(22|23|24|25)\b", diag.get("node_version") or ""):
+        diag["issues"] = [issue for issue in diag["issues"] if issue != "doctor_node_requirement"]
+        diag["doctor_summary"] = [msg for msg in diag["doctor_summary"] if "node below required 22+" not in msg.lower()]
 
     # Normalize + dedupe
     diag["issues"] = sorted(set(diag["issues"]))
@@ -26484,6 +26794,7 @@ def _check_gateway_status() -> dict:
         "running": pid is not None,
         "pid": pid,
         "uptime_s": uptime_s,
+        "listening": bool(diagnosis.get("gateway_listening")),
         "crash_looping": crash_looping,
         "restart_count_60s": restart_count_60s,
         "version": version,
@@ -26494,8 +26805,15 @@ def _check_gateway_status() -> dict:
         "auth_configured": bool(settings.get("token")),
         "diagnosis_summary": diag_summary[:3],
         "node_issue": node_issue,
+        "service_restart_loop": bool(diagnosis.get("service_restart_loop")),
+        "token_mismatch": bool(diagnosis.get("token_mismatch")),
+        "log_path": diagnosis.get("log_path", ""),
+        "duplicate_service_units": bool(diagnosis.get("duplicate_service_units")),
+        "service_unit_paths": list(diagnosis.get("service_unit_paths") or []),
         "paired_devices": int(diagnosis.get("paired_devices") or 0),
         "pending_devices": int(diagnosis.get("pending_devices") or 0),
+        "recent_agent_success": bool(diagnosis.get("recent_agent_success")),
+        "recent_agent_failure": bool(diagnosis.get("recent_agent_failure")),
         "repair_hint": repair.get("repair_hint", ""),
         "repair_cmd": repair.get("repair_cmd", ""),
         "followup_hint": repair.get("followup_hint", ""),
@@ -26546,44 +26864,82 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                 result = {"ok": False, "backend": backend, "model": model, "error": "openclaw CLI not found"}
                 result.update(_model_repair_hint(backend, result["error"]))
                 return result
-            cmd = [oc_bin, "agent", "--agent", "main", "--message", "Reply with just the word OK", "--json"]
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=15, env=_agent_env(), cwd=str(Path.home()))
-            latency_ms = int((time.time() - t0) * 1000)
-            out = (r.stdout or "").strip()
-            # Parse JSONL for response text
-            text = ""
-            for line in out.split("\n"):
-                if not line.strip():
-                    continue
-                try:
-                    evt = json.loads(line)
-                    if evt.get("type") == "item.completed":
-                        item = evt.get("item", {})
-                        if item.get("type") == "agent_message":
-                            text = item.get("text", "") or ""
-                except Exception:
-                    continue
-            if text:
-                return {"ok": True, "model": model, "response": text.strip()[:200], "latency_ms": latency_ms}
-            # Check for errors
-            err = ""
-            for line in out.split("\n"):
-                try:
-                    evt = json.loads(line)
-                    if evt.get("type") in ("error", "turn.failed"):
-                        err = evt.get("message", "") or str(evt.get("error", {}).get("message", ""))
-                except Exception:
-                    continue
-            if not err:
-                err = (r.stderr or "").strip()[:200] or "No response from gateway"
-            log.warning("Model test fail [openclaw]: model=%s err=%s stderr=%s", model, err, (r.stderr or "").strip()[:500])
-            result = {"ok": False, "backend": backend, "model": model, "error": err[:200]}
-            result.update(_model_repair_hint(backend, (r.stderr or "") + "\n" + err))
+            cmd = [oc_bin, "agent", "--agent", "main", "--message", "Reply with just the word OK", "--json", "--timeout", "45"]
+            attempts = []
+            for attempt in range(2):
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=55, env=_agent_env(), cwd=str(Path.home()))
+                out = (r.stdout or "").strip()
+                text = ""
+                latest_obj = None
+                for line in out.split("\n"):
+                    if not line.strip():
+                        continue
+                    try:
+                        evt = json.loads(line)
+                        if isinstance(evt, dict):
+                            latest_obj = evt
+                        if evt.get("type") == "item.completed":
+                            item = evt.get("item", {})
+                            if item.get("type") == "agent_message":
+                                text = item.get("text", "") or ""
+                    except Exception:
+                        continue
+                if not text and isinstance(latest_obj, dict):
+                    result_obj = latest_obj.get("result", {}) if isinstance(latest_obj.get("result"), dict) else {}
+                    payloads = result_obj.get("payloads", []) if isinstance(result_obj, dict) else []
+                    if isinstance(payloads, list):
+                        for payload in payloads:
+                            if isinstance(payload, dict) and str(payload.get("text", "")).strip():
+                                text = str(payload.get("text", "")).strip()
+                                break
+                    if not text and str(result_obj.get("text", "")).strip():
+                        text = str(result_obj.get("text", "")).strip()
+                    if not text and str(latest_obj.get("summary", "")).strip().lower() == "completed" and str(latest_obj.get("status", "")).strip().lower() == "ok":
+                        text = "OK"
+                if text:
+                    latency_ms = int((time.time() - t0) * 1000)
+                    result = {"ok": True, "model": model, "response": text.strip()[:200], "latency_ms": latency_ms}
+                    if attempt:
+                        result["execution_state"] = "flaky"
+                        result["attempts"] = attempt + 1
+                    else:
+                        result["execution_state"] = "healthy"
+                    return result
+                err = ""
+                for line in out.split("\n"):
+                    try:
+                        evt = json.loads(line)
+                        if evt.get("type") in ("error", "turn.failed"):
+                            err = evt.get("message", "") or str(evt.get("error", {}).get("message", ""))
+                    except Exception:
+                        continue
+                if not err and isinstance(latest_obj, dict):
+                    if str(latest_obj.get("status", "")).strip().lower() not in ("", "ok"):
+                        err = str(latest_obj.get("summary", "") or latest_obj.get("status", "") or "")
+                if not err:
+                    err = (r.stderr or "").strip()[:200] or "No response from gateway"
+                attempts.append({
+                    "error": err[:200],
+                    "stderr": (r.stderr or "").strip()[:500],
+                    "transient": ("1006" in err.lower() or "timed out" in err.lower() or "timeout" in err.lower() or "1006" in (r.stderr or "").lower()),
+                })
+                if not attempts[-1]["transient"] or attempt == 1:
+                    break
+                time.sleep(1.0)
+            last = attempts[-1] if attempts else {"error": "No response from gateway", "stderr": ""}
+            log.warning("Model test fail [openclaw]: model=%s err=%s stderr=%s", model, last.get("error", ""), last.get("stderr", ""))
+            result = {"ok": False, "backend": backend, "model": model, "error": last.get("error", "")[:200], "execution_state": "broken", "attempts": len(attempts)}
+            if any(a.get("transient") for a in attempts):
+                result["execution_state"] = "flaky"
+            result.update(_model_repair_hint(backend, (last.get("stderr", "") or "") + "\n" + last.get("error", "")))
             diagnosis = _openclaw_runtime_diagnosis()
             if diagnosis.get("doctor_summary"):
                 result["diagnosis"] = diagnosis
-            if "doctor_gateway_not_running" in diagnosis.get("issues", []):
-                result["repair_hint"] = "OpenClaw doctor reports the gateway is not running. Start or reinstall OpenClaw before retrying."
+            if diagnosis.get("gateway_running") or diagnosis.get("gateway_listening"):
+                if result.get("execution_state") == "flaky":
+                    result["repair_hint"] = "Gateway looks healthy, but real OpenClaw agent runs are intermittent. Retry once and inspect gateway logs if 1006/timeouts continue."
+                else:
+                    result["repair_hint"] = "Gateway is up, but real OpenClaw agent execution failed. Inspect the active gateway service and last stderr."
             elif "embedded_timeout" in diagnosis.get("issues", []):
                 result["repair_hint"] = "OpenClaw gateway failed and embedded fallback also timed out. This is runtime breakage, not just a slow model."
             return result
@@ -28647,7 +29003,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.85"})
+            self.reply_json({"v": "0.29.86"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -28809,7 +29165,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.85"
+                health["porter_version"] = "0.29.86"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28975,6 +29331,7 @@ class Handler(BaseHTTPRequestHandler):
                     "source": settings.get("source", "~/.openclaw"),
                 }
                 _cfg_payload["runtime_issues"] = diagnosis.get("doctor_summary") or []
+                _cfg_payload["service_unit_paths"] = diagnosis.get("service_unit_paths") or []
                 _cfg_payload.update(_model_repair_hint("openclaw", " ".join(diagnosis.get("doctor_summary") or diagnosis.get("issues") or [])))
             self.reply_json({"ok": True, "backend": _cfg_bk, "config": _cfg_payload})
 
@@ -29069,7 +29426,8 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/models/versions":
             if not self.auth_check(redirect=False): return
-            versions = _probe_backend_versions()
+            force = parse_qs(parsed.query).get("refresh", ["0"])[0] in ("1", "true", "yes")
+            versions = _probe_backend_versions(force=force)
             _detected = sorted([bk for bk, info in versions.items() if isinstance(info, dict) and info.get("detected") and bk in PROVIDER_REGISTRY])
             mlog.emit("info", "models", "models.versions.probed",
                       f"Version probe complete for {len(_detected)} backends",
@@ -30646,7 +31004,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.85'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.86'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -35323,7 +35681,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.85 ready (localhost only)")
+    print(f"\n  Porter v0.29.86 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

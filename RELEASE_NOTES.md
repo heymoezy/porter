@@ -1,5 +1,26 @@
 # Porter Release Notes
 
+## v0.29.86 (2026-03-09)
+
+**Models Probe Truthfulness + OpenClaw Restart-Loop Diagnosis**
+
+- Installed-version checks now prefer the real user-local CLI path instead of stale system shims
+- Models cards no longer render `Version unknown` / `Latest unknown` when Porter still lacks a verified answer
+- Version probes can be force-refreshed on Models load so recent CLI upgrades show up immediately
+- OpenClaw diagnosis now inspects the runtime logfile and surfaces service-restart loops and recent auth-token mismatches explicitly
+- Ollama and Codex latest-version checks are more robust, reducing disappearing update labels
+- OpenClaw card repair warnings moved to the bottom rail and gateway-only clutter was removed from the middle of the card
+- OpenClaw config now uses `Gateway Token` with a visible input instead of masking typed characters
+- Shared client-side request errors and timeouts now emit Mission Control log entries from the common `api()` path
+- `Test All` now runs as a queued sequence instead of blasting every backend concurrently
+- OpenClaw model tests now parse the current CLI JSON result format instead of failing on successful runs
+- OpenClaw supervisor-conflict diagnosis is now tied to active restart evidence, not just the existence of two service files
+- Models page loading is resilient to partial API failures instead of blanking the entire tab when one request stalls
+- OpenClaw status now separates bridge health from agent execution health, and transient `1006`/timeout agent runs are classified as flaky instead of gateway-down
+- OpenClaw repair actions now show concrete fix steps instead of always routing to generic config
+
+---
+
 ## v0.29.85 (2026-03-09)
 
 **Models Card Cleanup**
