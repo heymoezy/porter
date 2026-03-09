@@ -1,5 +1,16 @@
 # Porter Release Notes
 
+## v0.29.85 (2026-03-09)
+
+**Models Card Cleanup**
+
+- Models cards no longer show stale `latest` metadata as if it were a valid downgrade/update target
+- OpenClaw duplicate model rows are deduped on canonical model keys
+- Gateway state is separated from request-activity state so cards stop showing contradictory labels like `Idle` and `Running`
+- Repair commands stay in the repair/config flow instead of cluttering the card body
+
+---
+
 ## v0.29.84 (2026-03-09)
 
 **OpenClaw Pairing-State Diagnosis**

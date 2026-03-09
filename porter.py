@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.84 — OpenClaw pairing-state diagnosis and config normalization"""
+"""Porter v0.29.85 — Models card cleanup and version-state fixes"""
 
 
 import email
@@ -9129,7 +9129,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.84</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.85</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10440,6 +10440,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.85', date:'2026-03-09', notes:['Models cards no longer show stale latest-version data as an update when installed is newer','OpenClaw duplicate model rows are deduped on canonical model keys','Gateway state and request activity are no longer presented as contradictory status labels','Repair commands stay in config/repair flows instead of cluttering the card body'] },
   { ver:'v0.29.84', date:'2026-03-09', notes:['OpenClaw diagnosis now detects paired devices with a down gateway and surfaces reconnect-loop repair guidance','More OpenClaw reads now normalize through shared config/state helpers instead of legacy top-level fields','OpenClaw cards show paired/pending counts and clearer repair follow-up when gateway pairing state is stale'] },
   { ver:'v0.29.83', date:'2026-03-09', notes:['Gateway version badges now show Installed plus Latest/Latest unknown state per backend','OpenClaw repair/install commands corrected to npm i -g openclaw (removed stale package name)','Gateway repair actions separated from passive status chips for clearer operator flow','Gemini stable-vs-preview selection logic is being biased toward safer auto defaults when available'] },
   { ver:'v0.29.82', date:'2026-03-09', notes:['Models cards redesigned with compact runtime chips and reduced dead space','Gateway dots now reflect backend state instead of staying neutral gray','OpenClaw config modal shows effective runtime settings, diagnosis, and a reset-to-discovered recovery path','Filtered synthetic model IDs from dynamic discovery and gave Gemini preview tests a longer timeout budget'] },
@@ -18172,6 +18173,20 @@ function _elapsedStr(startTs) {
   return Math.floor(diff / 60) + 'm ' + Math.round(diff % 60) + 's';
 }
 
+function _compareVersionish(a, b) {
+  function parts(v) {
+    return String(v || '').replace(/^v/i, '').split(/[^0-9]+/).filter(Boolean).map(function(n) { return parseInt(n, 10) || 0; });
+  }
+  var aa = parts(a), bb = parts(b);
+  var len = Math.max(aa.length, bb.length);
+  for (var i = 0; i < len; i++) {
+    var av = aa[i] || 0, bv = bb[i] || 0;
+    if (av > bv) return 1;
+    if (av < bv) return -1;
+  }
+  return 0;
+}
+
 function _modelCardStateColor(state) {
   if (state === 'ok') return '#22c55e';
   if (state === 'warn') return '#f59e0b';
@@ -18246,13 +18261,6 @@ async function _checkGatewayCardStatus(backendId, el) {
         + '<span>' + escHtml(detail) + '</span>'
         + '<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="_openBackendConfig(\'' + backendId + '\')">' + actionLabel + '</button>'
         + '</div>';
-      if (r.repair_cmd || r.followup_hint || r.reinstall_cmd) {
-        actionHtml += '<div style="margin-top:6px;font-size:10px;color:var(--text3);line-height:1.4">'
-          + (r.repair_cmd ? '<code style="font-size:10px;background:var(--bg);padding:3px 6px;border-radius:6px;display:inline-block;margin-right:6px">' + escHtml(r.repair_cmd) + '</code>' : '')
-          + (r.reinstall_cmd ? '<code style="font-size:10px;background:var(--bg);padding:3px 6px;border-radius:6px;display:inline-block;margin-right:6px">' + escHtml(r.reinstall_cmd) + '</code>' : '')
-          + (r.followup_hint ? escHtml(r.followup_hint) : '')
-          + '</div>';
-      }
     }
     el.innerHTML = '<div class="model-card-state">' + chips.join('') + '</div>' + actionHtml;
   } catch(e) {
@@ -18483,13 +18491,13 @@ async function loadModels() {
           }
           if (vd.latest) {
             var _lstr = vd.latest.match(/^[0-9]/) ? 'v' + vd.latest : vd.latest;
-            if (vd.version && vd.latest === vd.version) {
+            var cmp = vd.version ? _compareVersionish(vd.latest, vd.version) : 0;
+            if (vd.version && cmp === 0) {
               html += ' <span style="font-size:10px;color:#22c55e;font-weight:600">Latest</span>';
+            } else if (vd.version && cmp < 0) {
+              html += ' <span style="font-size:10px;color:var(--text3)">Latest check stale</span>';
             } else {
               html += ' <span style="font-size:10px;color:#f59e0b;font-weight:600">Latest ' + escHtml(_lstr) + '</span>';
-              if (vd.update_cmd) {
-                html += '<br><code style="font-size:10px;color:var(--accent);cursor:pointer" onclick="navigator.clipboard.writeText(\'' + escHtml(vd.update_cmd) + '\');toast(\'' + escHtml(vd.update_cmd) + ' copied\',\'ok\')" title="Click to copy">' + escHtml(vd.update_cmd) + '</code>';
-              }
             }
           } else {
             html += ' <span style="font-size:10px;color:var(--text3)">Latest unknown</span>';
@@ -19495,12 +19503,9 @@ function _renderModelCards(data, act) {
     }
 
     // Compact status badge for upper-right
-    var _statusBadge = '';
-    if (activeRuns.length > 0) {
-      _statusBadge = '<span style="font-size:10px;font-weight:600;color:var(--accent);display:flex;align-items:center;gap:3px"><span class="pulse-dot"></span>WORKING</span>';
-    } else {
-      _statusBadge = '<span style="font-size:10px;color:var(--text3);font-style:italic">Idle</span>';
-    }
+    var _statusBadge = activeRuns.length > 0
+      ? '<span style="font-size:10px;font-weight:600;color:var(--accent);display:flex;align-items:center;gap:3px"><span class="pulse-dot"></span>' + activeRuns.length + ' active</span>'
+      : '';
 
     var footerHtml = (statsHtml || liveTraceBtn || lastPromptBtn) ? '<div class="model-card-footer">' + statsHtml + liveTraceBtn + lastPromptBtn + '</div>' : '';
 
@@ -26031,6 +26036,13 @@ def _clean_runtime_model_id(model_id: str) -> str:
     return model_id
 
 
+def _canonical_model_key(model_id: str) -> str:
+    model_id = _clean_runtime_model_id(model_id)
+    if not model_id:
+        return ""
+    return model_id.split("/")[-1].strip().lower()
+
+
 def _unique_model_catalog(entries, preferred_id=""):
     """Dedupe model entries while preserving order and honoring a preferred active ID."""
     preferred_id = str(preferred_id or "").strip()
@@ -26041,9 +26053,10 @@ def _unique_model_catalog(entries, preferred_id=""):
         if not isinstance(entry, dict):
             continue
         model_id = _clean_runtime_model_id(entry.get("id", ""))
-        if not model_id or model_id in seen:
+        canonical = _canonical_model_key(model_id)
+        if not model_id or canonical in seen:
             continue
-        seen.add(model_id)
+        seen.add(canonical)
         item = {
             "id": model_id,
             "name": str(entry.get("name") or _model_display_name(model_id) or model_id),
@@ -28634,7 +28647,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.84"})
+            self.reply_json({"v": "0.29.85"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -28796,7 +28809,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.84"
+                health["porter_version"] = "0.29.85"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -30633,7 +30646,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.84'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.85'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -35310,7 +35323,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.84 ready (localhost only)")
+    print(f"\n  Porter v0.29.85 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
