@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.72 — Config-backed backends, fix all model tests, remove hardcoded data"""
+"""Porter v0.29.73 — Models tab: dynamic model detection, Test All, gateway health, UX cleanup"""
 
 
 import email
@@ -9112,7 +9112,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.72</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.73</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9804,7 +9804,8 @@ input[type="number"].settings-input { min-width: 60px; }
       <span class="module-title">Models</span>
 
       <div style="flex:1"></div>
-      <button class="btn btn-ghost" onclick="loadModels()">&#8635; Refresh</button>
+      <span id="test-all-result" style="font-size:11px;margin-right:8px"></span>
+      <button class="btn btn-ghost" onclick="_testAllBackends()">Test All</button>
     </div>
     <!-- Backends sub-tab -->
     <div id="models-backends-tab">
@@ -10415,6 +10416,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.73', date:'2026-03-09', notes:['Dynamic model detection (Codex reads models_cache.json, real Claude/Gemini models)','Test All button, removed useless Refresh','Removed redundant model sub-header from cards','Auto only shown when 2+ models','CLI health status for all backends','Gateway vs model testing separated'] },
   { ver:'v0.29.72', date:'2026-03-09', notes:['Purge hardcoded model data — models/descriptions/tags now config-backed','Fix all model tests: OpenClaw uses CLI not HTTP, Claude removes --no-input, Gemini adds -y flag, auto resolves before test','Remove best_for tags from cards (were hardcoded)','Remove stale KNOWN_LATEST version comparisons'] },
   { ver:'v0.29.71', date:'2026-03-09', notes:['Model cards: OpenAI Codex/Google Gemini labels, install hints for missing backends, per-model test buttons'] },
   { ver:'v0.29.70', date:'2026-03-09', notes:['Models tab redesign — cards show gateway/provider name, per-card inline status with restart, codex test separated from openclaw'] },
@@ -18096,6 +18098,13 @@ function _checkBackendStatuses(providers) {
     if (!el) return;
     if (p.type === 'gateway') {
       _checkGatewayCardStatus(p.id, el);
+    } else if (p.type === 'cli') {
+      if (p.available) {
+        var vStr = (window._modelVersions && window._modelVersions[p.id] && window._modelVersions[p.id].version) ? ' \u00b7 ' + window._modelVersions[p.id].version : '';
+        el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#22c55e;flex-shrink:0"></span><span style="color:var(--text2)">CLI ready' + escHtml(vStr) + '</span></div>';
+      } else {
+        el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0"></span><span style="color:var(--text3)">CLI not found</span></div>';
+      }
     } else if (p.type === 'local') {
       if (p.available) {
         el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#22c55e;flex-shrink:0"></span><span style="color:var(--text2)">Server running</span></div>';
@@ -18176,6 +18185,35 @@ async function _testModel(event, backendId, modelId, testId) {
   btn.textContent = 'Test';
 }
 
+async function _testAllBackends() {
+  var resEl = document.getElementById('test-all-result');
+  if (resEl) resEl.innerHTML = '<span class="learn-spinner" style="width:12px;height:12px"></span> Testing...';
+  var t0 = Date.now();
+  try {
+    var r = await api('/api/models/test-all');
+    var elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    if (!r || !r.results) { if (resEl) resEl.innerHTML = '<span style="color:#ef4444">Failed</span>'; return; }
+    var ok = 0, fail = 0;
+    Object.keys(r.results).forEach(function(bk) {
+      var tr = r.results[bk];
+      // Update per-model test result spans if they exist
+      var tid = (bk + '_' + (tr.model || '')).replace(/[^a-zA-Z0-9_-]/g, '_');
+      var mEl = document.getElementById('test-r-' + tid);
+      if (mEl) {
+        if (tr.ok) mEl.innerHTML = '<span style="color:#22c55e">\u2713 ' + ((tr.latency_ms || 0) / 1000).toFixed(1) + 's</span>';
+        else mEl.innerHTML = '<span style="color:#ef4444">\u2717 ' + escHtml(tr.error || 'Failed') + '</span>';
+      }
+      if (tr.ok) ok++; else fail++;
+    });
+    if (resEl) {
+      if (fail === 0) resEl.innerHTML = '<span style="color:#22c55e">\u2713 All ' + ok + ' passed (' + elapsed + 's)</span>';
+      else resEl.innerHTML = '<span style="color:#f59e0b">' + ok + ' ok, ' + fail + ' failed (' + elapsed + 's)</span>';
+    }
+  } catch(e) {
+    if (resEl) resEl.innerHTML = '<span style="color:#ef4444">' + escHtml(e.message || 'Error') + '</span>';
+  }
+}
+
 async function loadModels() {
   _preloadSessionCounts();
   _updateExtractionProgress();
@@ -18192,6 +18230,8 @@ async function loadModels() {
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(vers) {
         window._modelVersions = (vers && vers.versions) ? vers.versions : {};
+        // Re-check CLI statuses now that versions are available
+        if (data && data.providers) _checkBackendStatuses(data.providers);
         // Populate version badge placeholders
         Object.keys(window._modelVersions).forEach(function(bk) {
           var vd = window._modelVersions[bk];
@@ -19240,7 +19280,7 @@ function _renderModelCards(data, act) {
       + '<span class="model-card-name">' + escHtml(p.label || p.id) + '</span></div>'
       + _statusBadge
       + '</div>'
-      + '<div class="model-card-type">' + escHtml(_resolvedName || 'No model') + ' · ' + escHtml(p.type || 'unknown') + '</div>'
+
       + '<div class="model-ver-badge" id="ver-badge-' + escHtml(p.id) + '"></div>'
       + '<div id="backend-status-' + escHtml(p.id) + '"></div>'
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
@@ -25580,16 +25620,34 @@ def _ensure_backend_config():
     changed = False
     # Only seed if backend key is completely missing (never overwrite user edits)
     _defaults = {
-        "openclaw": {"description": "Multi-model gateway", "models": [{"id": "gpt-5.4", "name": "GPT-5.4", "default": True}]},
-        "codex": {"description": "OpenAI agentic coding CLI", "models": [{"id": "gpt-5.4", "name": "GPT-5.4", "default": True}]},
-        "claude": {"description": "Anthropic reasoning CLI", "models": [{"id": "claude-opus-4-6", "name": "Claude Opus 4.6", "default": True}]},
-        "gemini": {"description": "Google multimodal CLI", "models": [{"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "default": True}]},
+        "openclaw": {"description": "Multi-model gateway", "models": [
+            {"id": "gpt-5.4", "name": "GPT-5.4", "default": True},
+            {"id": "gpt-5.3-codex", "name": "GPT-5.3 Codex", "default": False},
+        ]},
+        "codex": {"description": "OpenAI agentic coding CLI", "models": []},
+        "claude": {"description": "Anthropic reasoning CLI", "models": [
+            {"id": "opus", "name": "Claude Opus", "default": True},
+            {"id": "sonnet", "name": "Claude Sonnet", "default": False},
+            {"id": "haiku", "name": "Claude Haiku", "default": False},
+        ]},
+        "gemini": {"description": "Google multimodal CLI", "models": [
+            {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "default": True},
+            {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "default": False},
+            {"id": "gemini-3-pro-preview", "name": "Gemini 3 Pro", "default": False},
+            {"id": "gemini-3-flash-preview", "name": "Gemini 3 Flash", "default": False},
+        ]},
         "ollama": {"description": "Local model inference", "models": []},
     }
     for bk, default in _defaults.items():
         if bk not in bc:
             bc[bk] = default
             changed = True
+        elif bk != "ollama" and bk != "codex":
+            # Refresh model list if it was a single hardcoded entry from previous version
+            existing = bc[bk].get("models", [])
+            if len(existing) <= 1 and len(default.get("models", [])) > 1:
+                bc[bk]["models"] = default["models"]
+                changed = True
     if changed:
         save_config(_config)
         log.info("Backend config seeded for first run")
@@ -25673,7 +25731,27 @@ def _probe_backend_versions():
 
 
 def _get_available_models(backend):
-    """Return models for a backend. Ollama: runtime discovery. Others: from config."""
+    """Return models for a backend. Codex + Ollama: runtime discovery. Others: from config."""
+    if backend == "codex":
+        # Read from Codex CLI models cache (auto-updated by codex)
+        try:
+            cache_path = Path.home() / ".codex" / "models_cache.json"
+            if cache_path.exists():
+                data = json.loads(cache_path.read_text(encoding="utf-8"))
+                models = []
+                for m in sorted(data.get("models", []), key=lambda x: x.get("priority", 99)):
+                    if m.get("visibility") == "hide":
+                        continue
+                    slug = m.get("slug", "")
+                    if slug:
+                        models.append({"id": slug, "name": m.get("display_name", slug), "default": len(models) == 0})
+                if models:
+                    return models
+        except Exception:
+            pass
+        # Fallback to config
+        bc = _config.get("backend_config", {}).get("codex", {})
+        return bc.get("models", [])
     if backend == "ollama":
         try:
             import urllib.request, json as _j
@@ -27881,7 +27959,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.72"})
+            self.reply_json({"v": "0.29.73"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -28043,7 +28121,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.72"
+                health["porter_version"] = "0.29.73"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -28286,7 +28364,7 @@ class Handler(BaseHTTPRequestHandler):
                 models = _get_available_models(bk)
                 choice = active_models.get(bk, "auto")
                 resolved = _get_active_model(bk)
-                catalog = [{"id": "auto", "name": "Auto"}] + models
+                catalog = ([{"id": "auto", "name": "Auto"}] + models) if len(models) > 1 else models
                 backends_out[bk] = {"active": choice, "resolved": resolved, "models": catalog}
             self.reply_json({"ok": True, "backends": backends_out})
 
@@ -29847,7 +29925,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.72'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.73'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -30666,6 +30744,23 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json(result)
             else:
                 self.reply_json({"ok": False, "error": "Unknown action"}, 400)
+
+        elif parsed.path == "/api/models/test-all":
+            if not self.auth_check(redirect=False): return
+            import concurrent.futures
+            results = {}
+            def _run_test(bk):
+                model = _get_active_model(bk)
+                return bk, _test_model_connectivity(bk, model)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+                futures = [pool.submit(_run_test, bk) for bk in PROVIDER_REGISTRY]
+                for f in concurrent.futures.as_completed(futures, timeout=60):
+                    try:
+                        bk, result = f.result()
+                        results[bk] = result
+                    except Exception as e:
+                        pass
+            self.reply_json({"ok": True, "results": results})
 
         elif parsed.path == "/api/models/test":
             if not self.auth_check(redirect=False): return
@@ -34474,7 +34569,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.72 ready (localhost only)")
+    print(f"\n  Porter v0.29.73 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
