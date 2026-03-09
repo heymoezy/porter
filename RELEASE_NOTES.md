@@ -1,5 +1,16 @@
 # Porter Release Notes
 
+## v0.29.80 (2026-03-09)
+
+**Models Test Reliability + OpenClaw Diagnosis**
+
+- `Test All` now covers model cards that do not expose an `Auto` row, so single-model backends like Ollama are no longer skipped
+- Per-model test badges persist across model-card refreshes instead of disappearing after other backend responses land
+- OpenClaw failures now attach runtime diagnosis from gateway/doctor checks, making gateway-down and embedded-timeout scenarios explicit
+- Repair hints are sharper for broken OpenClaw runtime states instead of showing only generic timeout failures
+
+---
+
 ## v0.29.79 (2026-03-09)
 
 **Models Control Plane Hardening**

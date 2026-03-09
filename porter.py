@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.79 — Models logging, diagnostics, and version hardening"""
+"""Porter v0.29.80 — Models test persistence and OpenClaw diagnosis"""
 
 
 import email
@@ -9119,7 +9119,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.79</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.80</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10423,6 +10423,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.80', date:'2026-03-09', notes:['Test All now covers backends without an Auto row (including single-model cards)','Per-model test results persist across card refreshes instead of disappearing','OpenClaw failures attach runtime diagnosis from doctor/gateway checks','Sharper repair hints for gateway-down vs embedded-timeout scenarios'] },
   { ver:'v0.29.79', date:'2026-03-09', notes:['Models tab frontend errors report to Mission Control with context','Model tests + gateway actions emit structured logs with diagnostics','Mission Log preserves frontend error metadata (source, stack, backend)','Version parsing hardened for OpenClaw, Claude, Gemini, Codex','OpenClaw failures now return repair/reinstall guidance'] },
   { ver:'v0.29.78', date:'2026-03-09', notes:['All model test results logged (WARNING level)','Removed backends detected summary','Neutral dots (gray) until tests verify','Version display: always prefixed with v','Fix OpenClaw/Claude/Gemini version parsing'] },
   { ver:'v0.29.77', date:'2026-03-09', notes:['Backend config as modal popup (not inline)','Current values pre-populated in modal','Masked auth token shown as placeholder'] },
@@ -18079,6 +18080,7 @@ var _modelActivityPoller = null;
 var _modelSseId = null;
 var _modelActivityData = {};
 var _modelAvailableData = {};
+var _modelTestResults = {};
 
 function _relativeTime(ts) {
   if (!ts) return '';
@@ -18088,6 +18090,21 @@ function _relativeTime(ts) {
   if (diff < 3600) return Math.round(diff / 60) + 'm ago';
   if (diff < 86400) return Math.round(diff / 3600) + 'h ago';
   return Math.round(diff / 86400) + 'd ago';
+}
+
+function _renderStoredTestResult(testId) {
+  var rec = _modelTestResults[testId];
+  if (!rec) return '';
+  if (rec.state === 'running') {
+    return '<span class="learn-spinner" style="width:10px;height:10px"></span>';
+  }
+  if (rec.state === 'ok') {
+    return '<span style="color:#22c55e">\u2713 ' + escHtml(rec.label || '') + '</span>';
+  }
+  if (rec.state === 'fail') {
+    return '<span style="color:#ef4444" title="' + escHtml(rec.title || rec.label || 'Failed') + '">\u2717 ' + escHtml(rec.label || 'Failed') + '</span>';
+  }
+  return '';
 }
 
 function _formatDuration(ms) {
@@ -18186,18 +18203,34 @@ async function _testModel(event, backendId, modelId, testId) {
   var resultEl = document.getElementById('test-r-' + testId);
   btn.disabled = true;
   btn.textContent = '...';
+  _modelTestResults[testId] = { state: 'running', backend: backendId, model: modelId, title: 'Running' };
   if (resultEl) resultEl.innerHTML = '<span class="learn-spinner" style="width:10px;height:10px"></span>';
   var t0 = Date.now();
   try {
     var r = await api('/api/models/test', {backend: backendId, model: modelId}, 60000);
     var elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     if (r && r.ok) {
+      _modelTestResults[testId] = { state: 'ok', backend: backendId, model: modelId, label: elapsed + 's', title: 'Passed in ' + elapsed + 's' };
       if (resultEl) resultEl.innerHTML = '<span style="color:#22c55e">\u2713 ' + elapsed + 's</span>';
     } else {
+      _modelTestResults[testId] = {
+        state: 'fail',
+        backend: backendId,
+        model: modelId,
+        label: (r && r.error || 'Failed').substring(0, 40),
+        title: (r && (r.repair_hint || r.error) || 'Failed'),
+      };
       if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444" title="' + escHtml((r && (r.repair_hint || r.error) || 'Failed')) + '">\u2717 ' + escHtml((r && r.error || 'Failed').substring(0, 40)) + '</span>';
       if (r && r.repair_hint) toast(r.repair_hint, 'warn');
     }
   } catch(e) {
+    _modelTestResults[testId] = {
+      state: 'fail',
+      backend: backendId,
+      model: modelId,
+      label: (e.message || 'Error').substring(0, 40),
+      title: e.message || 'Error',
+    };
     _reportClientError('model-test', e, { backend: backendId, model: modelId });
     if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">\u2717 ' + escHtml((e.message || 'Error').substring(0, 40)) + '</span>';
   }
@@ -18289,15 +18322,22 @@ async function _testCardModels(backendId) {
 }
 
 async function _testAllBackends() {
-  // Trigger each card's Test All button visually
+  // Trigger every backend test path. Prefer per-card Test All, otherwise click individual Test buttons.
   var cards = document.querySelectorAll('.model-card');
   cards.forEach(function(card) {
-    var testAllBtn = card.querySelector('.model-list-row button');
-    // Find the Test All button (on Auto row) or first test button
     var btns = card.querySelectorAll('.model-list-row button.btn-ghost');
+    var clicked = false;
     btns.forEach(function(b) {
-      if (b.textContent.trim() === 'Test All') b.click();
+      if (!clicked && b.textContent.trim() === 'Test All') {
+        clicked = true;
+        b.click();
+      }
     });
+    if (!clicked) {
+      btns.forEach(function(b) {
+        if (b.textContent.trim() === 'Test') b.click();
+      });
+    }
   });
 }
 
@@ -19347,7 +19387,7 @@ function _renderModelCards(data, act) {
           _selHtml += '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px;margin-left:auto" onclick="event.stopPropagation();_testCardModels(\'' + escHtml(p.id) + '\')">Test All</button>';
         } else {
           var _mTid = (p.id + '_' + m.id).replace(/[^a-zA-Z0-9_-]/g, '_');
-          _selHtml += '<span id="test-r-' + _mTid + '" style="font-size:10px;margin-left:auto;white-space:nowrap"></span>';
+          _selHtml += '<span id="test-r-' + _mTid + '" style="font-size:10px;margin-left:auto;white-space:nowrap">' + _renderStoredTestResult(_mTid) + '</span>';
           _selHtml += '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_testModel(event,\'' + escHtml(p.id) + '\',\'' + escHtml(m.id) + '\',\'' + _mTid + '\')">Test</button>';
         }
         _selHtml += '</div>';
@@ -25959,6 +25999,73 @@ def _model_repair_hint(backend: str, detail: str = "") -> dict:
     return hint
 
 
+_openclaw_diag_cache = {"ts": 0.0, "data": None}
+
+
+def _openclaw_runtime_diagnosis() -> dict:
+    """Best-effort OpenClaw diagnosis for operator-facing failures."""
+    now = time.time()
+    cached = _openclaw_diag_cache.get("data")
+    if cached and (now - float(_openclaw_diag_cache.get("ts") or 0)) < 30:
+        return cached
+
+    diag = {
+        "gateway_running": False,
+        "node_version": "",
+        "issues": [],
+        "doctor_summary": [],
+    }
+
+    try:
+        r = subprocess.run(["pgrep", "-f", "openclaw-gateway"], capture_output=True, text=True, timeout=3)
+        diag["gateway_running"] = (r.returncode == 0 and bool((r.stdout or "").strip()))
+        if not diag["gateway_running"]:
+            diag["issues"].append("gateway_not_running")
+    except Exception:
+        diag["issues"].append("gateway_status_unknown")
+
+    try:
+        node_r = subprocess.run(["node", "-v"], capture_output=True, text=True, timeout=3, env=_agent_env())
+        node_ver = (node_r.stdout or node_r.stderr or "").strip()
+        diag["node_version"] = node_ver
+        m = re.search(r"v?(\d+)", node_ver)
+        if m and int(m.group(1)) < 22:
+            diag["issues"].append("node_below_22")
+    except Exception:
+        diag["issues"].append("node_version_unknown")
+
+    oc_bin = _resolve_cli("openclaw")
+    if oc_bin:
+        try:
+            dr = subprocess.run([oc_bin, "doctor"], capture_output=True, text=True, timeout=20, env=_agent_env(), cwd=str(Path.home()))
+            out = (dr.stdout or "") + "\n" + (dr.stderr or "")
+            for raw in out.splitlines():
+                line = raw.strip()
+                if not line:
+                    continue
+                if "Gateway not running" in line:
+                    diag["issues"].append("doctor_gateway_not_running")
+                    diag["doctor_summary"].append("Doctor reports gateway not running.")
+                elif "below the required Node 22+" in line:
+                    diag["issues"].append("doctor_node_requirement")
+                    diag["doctor_summary"].append("Doctor reports Node below required 22+ runtime.")
+                elif "embedded run agent end" in line and "timed out" in line.lower():
+                    diag["issues"].append("embedded_timeout")
+                    diag["doctor_summary"].append("Embedded fallback timed out.")
+        except subprocess.TimeoutExpired:
+            diag["issues"].append("doctor_timeout")
+            diag["doctor_summary"].append("OpenClaw doctor timed out.")
+        except Exception:
+            diag["issues"].append("doctor_failed")
+
+    # Normalize + dedupe
+    diag["issues"] = sorted(set(diag["issues"]))
+    diag["doctor_summary"] = list(dict.fromkeys(diag["doctor_summary"]))[:3]
+    _openclaw_diag_cache["ts"] = now
+    _openclaw_diag_cache["data"] = diag
+    return diag
+
+
 def _check_gateway_status() -> dict:
     """Check openclaw-gateway process state and detect rapid PID churn."""
     global _gw_pid_history
@@ -26087,6 +26194,13 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
             log.warning("Model test fail [openclaw]: model=%s err=%s stderr=%s", model, err, (r.stderr or "").strip()[:500])
             result = {"ok": False, "backend": backend, "model": model, "error": err[:200]}
             result.update(_model_repair_hint(backend, (r.stderr or "") + "\n" + err))
+            diagnosis = _openclaw_runtime_diagnosis()
+            if diagnosis.get("doctor_summary"):
+                result["diagnosis"] = diagnosis
+            if "doctor_gateway_not_running" in diagnosis.get("issues", []):
+                result["repair_hint"] = "OpenClaw doctor reports the gateway is not running. Start or reinstall OpenClaw before retrying."
+            elif "embedded_timeout" in diagnosis.get("issues", []):
+                result["repair_hint"] = "OpenClaw gateway failed and embedded fallback also timed out. This is runtime breakage, not just a slow model."
             return result
 
         if backend == "codex":
@@ -28147,7 +28261,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.79"})
+            self.reply_json({"v": "0.29.80"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -28309,7 +28423,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.79"
+                health["porter_version"] = "0.29.80"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -30138,7 +30252,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.79'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.80'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34807,7 +34921,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.79 ready (localhost only)")
+    print(f"\n  Porter v0.29.80 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
