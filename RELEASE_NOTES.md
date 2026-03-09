@@ -1,5 +1,25 @@
 # Porter Release Notes
 
+## v0.30.14 (2026-03-09)
+
+**Coordination SSE Compatibility Fix**
+
+- Restored an SSE compatibility wrapper for the new coordination ledger so claim, progress, handoff, and release events emit correctly through Porter’s shared event bus
+- Fixes the live runtime `NameError` that was breaking coordination claims immediately after the ledger feature landed
+- Keeps the newer coordination layer compatible with the existing event hub instead of introducing a second broadcast path
+
+---
+
+## v0.30.13 (2026-03-09)
+
+**Event-Driven Overview Refresh**
+
+- Overview persona and quest-log refresh now follow live cortex and bridge SSE events instead of depending on a blind 30-second loop
+- Kept a lighter 60-second fallback refresh while Overview is active, with timer teardown when leaving the tab
+- This reduces idle homepage churn while keeping agent and squad state visibly current during autonomous work
+
+---
+
 ## v0.30.12 (2026-03-09)
 
 **SSE Orchestration Hub Refresh**
