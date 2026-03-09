@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.91 — Models fast-path repaint fix"""
+"""Porter v0.29.92 — Models structural hydrate stability"""
 
 
 import email
@@ -9179,7 +9179,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.91</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.92</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10507,6 +10507,7 @@ var _modelsClientCacheKeys = {
   snapshot: 'porter.models.snapshot.v2'
 };
 var _modelsActivityHydrate = {};
+var _modelStructureSignature = '';
 function _readModelsClientCache(key, maxAgeMs) {
   try {
     var raw = sessionStorage.getItem(key);
@@ -10524,6 +10525,44 @@ function _writeModelsClientCache(key, data) {
     if (!data || !data.providers) return;
     sessionStorage.setItem(key, JSON.stringify({ ts: Date.now(), data: data }));
   } catch (_) {}
+}
+function _modelsStructureSignature(snap) {
+  try {
+    var providers = (snap && snap.providers ? snap.providers : []).map(function(p) {
+      return {
+        id: p.id,
+        available: !!p.available,
+        label: p.label || '',
+      };
+    });
+    var backends = {};
+    var runtimes = {};
+    Object.keys((snap && snap.backends) || {}).sort().forEach(function(bk) {
+      var info = (snap.backends || {})[bk] || {};
+      backends[bk] = {
+        active: info.active || '',
+        resolved: info.resolved || '',
+        models: (info.models || []).map(function(m) {
+          return {
+            id: m.id || '',
+            name: m.name || '',
+            default: !!m.default,
+          };
+        }),
+      };
+    });
+    Object.keys((snap && snap.runtimes) || {}).sort().forEach(function(bk) {
+      var info = (snap.runtimes || {})[bk] || {};
+      runtimes[bk] = {
+        auth_mode: info.auth_mode || '',
+        supports_json_output: !!info.supports_json_output,
+        supports_model_flag: !!info.supports_model_flag,
+      };
+    });
+    return JSON.stringify({ providers: providers, backends: backends, runtimes: runtimes });
+  } catch (_) {
+    return '';
+  }
 }
 
 // v0.29.26 — Centralized UI failure display with retry
@@ -10552,6 +10591,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.92', date:'2026-03-09', notes:['Models live hydration now compares a structural signature before redrawing cards, so stable snapshots stop causing visible reloads','Cached bootstrap/snapshot renders now preserve the existing grid when only versions or backend status changed','Models load path keeps the fast seeded render and only rebuilds card DOM when provider/model/runtime structure actually changes'] },
   { ver:'v0.29.91', date:'2026-03-09', notes:['Fixed Models fast-path repaint churn so cached snapshot loads no longer redraw through bootstrap before live hydration','Live Models refresh now keeps the seeded cache render on screen and only applies one network snapshot update','Bootstrap fetch is skipped when a cached snapshot is already good enough to seed the tab'] },
   { ver:'v0.29.90', date:'2026-03-09', notes:['Models tab now reuses the last good bootstrap/snapshot from session storage so repeat visits render instantly before the network round-trip','Bootstrap and snapshot activity payloads stop querying recent-run history that the card grid does not use, reducing first-load database work','Model activity slide-outs lazily hydrate recent runs only when opened, preserving detail without penalizing initial card render'] },
   { ver:'v0.29.89', date:'2026-03-09', notes:['Models tab now shows an animated staged loading rail instead of appearing stalled during bootstrap and snapshot hydration','Bootstrap load paints skeleton cards immediately, then preserves the first card render while live catalogs hydrate in the background','Models load states now distinguish fast cached runtime bootstrap from slower live catalog hydration so the page feels responsive even when backends are slow'] },
@@ -18778,15 +18818,25 @@ function _refreshModelVersions(force) {
     });
 }
 
-function _applyModelsSnapshot(snap) {
+function _applyModelsSnapshot(snap, opts) {
   if (!snap || !snap.providers) {
     throw new Error('Models snapshot unavailable');
+  }
+  opts = opts || {};
+  var nextSig = _modelsStructureSignature(snap);
+  var grid = document.getElementById('models-grid');
+  var shouldRenderCards = true;
+  if (opts.preferStable && grid && grid.children.length && _modelStructureSignature && nextSig && _modelStructureSignature === nextSig) {
+    shouldRenderCards = false;
   }
   _modelActivityData = snap.activity || {};
   _modelAvailableData = snap.backends || {};
   window._modelProviders = snap.providers || [];
   window._modelRuntimes = snap.runtimes || {};
-  _renderModelCards({ providers: window._modelProviders }, _modelActivityData);
+  if (shouldRenderCards) {
+    _renderModelCards({ providers: window._modelProviders }, _modelActivityData);
+    _modelStructureSignature = nextSig;
+  }
   _applyModelVersions(snap.versions || {});
   _checkBackendStatuses(window._modelProviders);
 }
@@ -18840,12 +18890,12 @@ async function loadModels() {
     var seededSnapshot = false;
     var seededBootstrap = false;
     if (cachedSnapshot && cachedSnapshot.providers) {
-      _applyModelsSnapshot(cachedSnapshot);
+      _applyModelsSnapshot(cachedSnapshot, { preferStable: true });
       _connectModelSSE();
       seededSnapshot = true;
       _renderModelsLoading('Refreshing live model state...', { detail: 'Using the last good snapshot while Porter refreshes health, catalogs, and versions.', keepCards: true });
     } else if (cachedBootstrap && cachedBootstrap.providers) {
-      _applyModelsSnapshot(cachedBootstrap);
+      _applyModelsSnapshot(cachedBootstrap, { preferStable: true });
       _connectModelSSE();
       seededBootstrap = true;
       _renderModelsLoading('Hydrating live model catalogs...', { detail: 'Using cached bootstrap state while Porter refreshes the live catalog.', keepCards: true });
@@ -18856,7 +18906,7 @@ async function loadModels() {
       var boot = await api('/api/models/bootstrap');
       if (boot && boot.providers) {
         _writeModelsClientCache(_modelsClientCacheKeys.bootstrap, boot);
-        if (!seededBootstrap) _applyModelsSnapshot(boot);
+        if (!seededBootstrap) _applyModelsSnapshot(boot, { preferStable: true });
       }
     }
     if (!_modelSseId) _connectModelSSE();
@@ -18865,7 +18915,7 @@ async function loadModels() {
       api('/api/models/snapshot').then(function(snap) {
         if (snap && snap.providers) {
           _writeModelsClientCache(_modelsClientCacheKeys.snapshot, snap);
-          _applyModelsSnapshot(snap);
+          _applyModelsSnapshot(snap, { preferStable: true });
         }
         _renderModelsLoading('');
       }).catch(function(e) {
@@ -29596,7 +29646,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.91"})
+            self.reply_json({"v": "0.29.92"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -31534,7 +31584,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.91'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.92'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36211,7 +36261,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.91 ready (localhost only)")
+    print(f"\n  Porter v0.29.92 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

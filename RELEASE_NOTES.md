@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.29.92 (2026-03-09)
+
+**Models Structural Hydrate Stability**
+
+- Models live hydration now compares a structural signature before redrawing cards, so stable snapshots stop causing visible reloads
+- Cached bootstrap and snapshot renders now preserve the existing grid when only versions or backend status changed
+- Models load path keeps the fast seeded render and only rebuilds card DOM when provider, model, or runtime structure actually changes
+
+---
+
 ## v0.29.91 (2026-03-09)
 
 **Models Repaint Fix**
