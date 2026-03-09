@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.87 — Models snapshot loading and faster controlled test-all"""
+"""Porter v0.29.88 — Backend runtime profiles and Gemini auth-aware testing"""
 
 
 import email
@@ -9162,7 +9162,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.87</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.88</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10510,6 +10510,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.88', date:'2026-03-09', notes:['Backend runtime profiles now capture documented CLI capabilities instead of scattering per-backend assumptions','Gemini runtime detects OAuth vs API-key control mode and normalizes model testing accordingly','Gemini and Claude tests now prefer documented headless/structured-output flags when supported by the installed CLI','Gemini tests now detect OAuth re-authorization prompts explicitly instead of misclassifying them as generic model failures','Models snapshot/bootstrap now carry runtime metadata so UI and tests share the same backend truth','Gemini startup no longer spawns gemini --version during capability checks, and Models bootstrap reuses cached Gemini capability state correctly'] },
   { ver:'v0.29.87', date:'2026-03-09', notes:['Models tab now paints from a lightweight bootstrap payload, then hydrates the full snapshot in the background','Cached version state renders immediately from the snapshot, then refreshes in the background','Test All now runs with controlled concurrency across different backends instead of full serialization','Test scheduling prevents multiple tests from hammering the same backend at once','Providers, activity, and available-model payloads now share backend helpers instead of duplicating route logic','Gemini startup no longer spawns gemini --version during capability checks, and Models bootstrap now reuses cached Gemini capability state correctly'] },
   { ver:'v0.29.86', date:'2026-03-09', notes:['Installed-version probes now prefer the real user-local CLI path and can be force-refreshed on Models load','Cards stop rendering Version unknown / Latest unknown noise when a probe has not completed','OpenClaw diagnosis now reads its runtime log and surfaces service-restart loops and token mismatches explicitly','Ollama and Codex latest-version checks are more robust so update labels do not disappear as easily','OpenClaw warning actions now sit on the bottom rail and gateway-only clutter was removed from the middle of the card','OpenClaw config uses a visible Gateway Token field instead of masking typed input','Shared client-side request failures now log through the common api() path','Test All now runs as a queued sequence instead of firing every backend at once','OpenClaw model tests now parse the current CLI JSON result format instead of failing successful runs','OpenClaw supervisor-conflict diagnosis now requires active restart evidence instead of only seeing two service files','Models page loading now tolerates partial API failures instead of blanking the whole tab'] },
   { ver:'v0.29.85', date:'2026-03-09', notes:['Models cards no longer show stale latest-version data as an update when installed is newer','OpenClaw duplicate model rows are deduped on canonical model keys','Gateway state and request activity are no longer presented as contradictory status labels','Repair commands stay in config/repair flows instead of cluttering the card body'] },
@@ -18739,6 +18740,7 @@ function _applyModelsSnapshot(snap) {
   _modelActivityData = snap.activity || {};
   _modelAvailableData = snap.backends || {};
   window._modelProviders = snap.providers || [];
+  window._modelRuntimes = snap.runtimes || {};
   _renderModelCards({ providers: window._modelProviders }, _modelActivityData);
   _applyModelVersions(snap.versions || {});
   _checkBackendStatuses(window._modelProviders);
@@ -26126,6 +26128,7 @@ def _backend_meta(name):
 _backend_version_cache = {"data": None, "ts": 0}
 _backend_latest_cache = {"data": {}, "ts": 0}
 _backend_model_cache = {"data": {}, "ts": {}}
+_cli_help_cache = {}
 
 
 def _invalidate_backend_version_cache():
@@ -26169,6 +26172,126 @@ def _bootstrap_backend_versions() -> dict:
             base.update({k: v for k, v in latest_cache[bk].items() if v})
         versions[bk] = base
     return versions
+
+
+BACKEND_RUNTIME_SPECS = {
+    "openclaw": {
+        "kind": "gateway-cli",
+        "doc_basis": "OpenClaw docs: gateway/agent split, JSON output, models subcommands",
+        "catalog_source": "openclaw models list --json",
+        "test_mode": "agent-json",
+    },
+    "claude": {
+        "kind": "cli",
+        "doc_basis": "Claude Code docs: --print, --model, --output-format json/stream-json",
+        "catalog_source": "history + active selection",
+        "test_mode": "print-json",
+    },
+    "gemini": {
+        "kind": "cli",
+        "doc_basis": "Gemini CLI docs: --prompt, --model, --output-format json/stream-json; OAuth updates latest models, API key is best for specific model control",
+        "catalog_source": "history + active selection",
+        "test_mode": "prompt-json",
+    },
+    "codex": {
+        "kind": "cli",
+        "doc_basis": "Codex CLI docs: exec --json, --model, --ephemeral",
+        "catalog_source": "~/.codex/models_cache.json",
+        "test_mode": "exec-json",
+    },
+    "ollama": {
+        "kind": "local-http",
+        "doc_basis": "Ollama docs: local HTTP API, list/run/show/ps",
+        "catalog_source": "ollama list / local API",
+        "test_mode": "http-generate",
+    },
+}
+
+
+def _cli_help_text(binary: str, args=None) -> str:
+    args = tuple(args or [])
+    key = (binary,) + args
+    cached = _cli_help_cache.get(key)
+    if cached and (time.time() - cached[0]) < 3600:
+        return cached[1]
+    path = _resolve_cli(binary)
+    if not path:
+        return ""
+    try:
+        result = subprocess.run([path, *args, "--help"], capture_output=True, text=True, timeout=8, env=_agent_env(), cwd=str(Path.home()))
+        text = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
+    except Exception:
+        text = ""
+    _cli_help_cache[key] = (time.time(), text)
+    return text
+
+
+def _gemini_auth_mode() -> str:
+    if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+        return "api_key"
+    gdir = Path.home() / ".gemini"
+    if (gdir / "oauth_creds.json").exists():
+        return "oauth"
+    return "unknown"
+
+
+def _normalize_gemini_model_id(model_id: str, auth_mode: str = "") -> str:
+    text = _clean_runtime_model_id(model_id)
+    if not text:
+        return ""
+    low = text.lower()
+    if auth_mode == "oauth":
+        if "flash-lite" in low:
+            return "gemini-2.5-flash-lite"
+        if "flash" in low:
+            return "gemini-2.5-flash"
+        if "pro" in low:
+            return "gemini-2.5-pro"
+    return text
+
+
+def _backend_runtime_info(backend: str) -> dict:
+    backend = str(backend or "").strip().lower()
+    spec = dict(BACKEND_RUNTIME_SPECS.get(backend) or {})
+    info = {"backend": backend, "spec": spec}
+    if backend == "gemini":
+        help_text = _cli_help_text("gemini")
+        auth_mode = _gemini_auth_mode()
+        info.update({
+            "auth_mode": auth_mode,
+            "supports_json_output": "--output-format" in help_text and "json" in help_text.lower(),
+            "supports_model_flag": "-m, --model" in help_text or "--model" in help_text,
+            "supports_headless": "-p, --prompt" in help_text or "--prompt" in help_text,
+            "recommended_smoke_model": "gemini-2.5-flash" if auth_mode in ("oauth", "unknown") else "",
+        })
+    elif backend == "claude":
+        help_text = _cli_help_text("claude")
+        info.update({
+            "supports_json_output": "--output-format" in help_text and "json" in help_text.lower(),
+            "supports_model_flag": "--model" in help_text,
+            "supports_headless": "-p, --print" in help_text or "--print" in help_text,
+        })
+    elif backend == "codex":
+        help_text = _cli_help_text("codex", ("exec",))
+        info.update({
+            "supports_json_output": "--json" in help_text,
+            "supports_model_flag": "--model" in help_text,
+            "supports_headless": True,
+        })
+    elif backend == "openclaw":
+        help_text = _cli_help_text("openclaw", ("agent",))
+        info.update({
+            "supports_json_output": "--json" in help_text,
+            "supports_model_flag": "--agent" in help_text,
+            "supports_headless": True,
+        })
+    elif backend == "ollama":
+        info.update({
+            "supports_json_output": True,
+            "supports_model_flag": True,
+            "supports_headless": True,
+        })
+    return info
 
 
 def _probe_backend_versions(force: bool = False):
@@ -26478,6 +26601,8 @@ def _discover_models_from_gemini_history(active_choice=""):
     gemini_root = Path.home() / ".gemini" / "tmp"
     if not gemini_root.exists():
         return []
+    runtime = _backend_runtime_info("gemini")
+    auth_mode = runtime.get("auth_mode", "")
     observed = {}
     for json_file in sorted(gemini_root.rglob("chats/*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:80]:
         try:
@@ -26490,12 +26615,15 @@ def _discover_models_from_gemini_history(active_choice=""):
             if isinstance(cur, dict):
                 for k, v in cur.items():
                     if k == "model" and isinstance(v, str) and v.strip():
-                        model_id = _clean_runtime_model_id(v)
+                        model_id = _normalize_gemini_model_id(v, auth_mode)
                         observed.setdefault(model_id, {"id": model_id, "name": _model_display_name(model_id) or model_id})
                     elif isinstance(v, (dict, list)):
                         stack.append(v)
             elif isinstance(cur, list):
                 stack.extend(cur)
+    if auth_mode == "oauth":
+        for stable in ("gemini-2.5-flash", "gemini-2.5-pro"):
+            observed.setdefault(stable, {"id": stable, "name": _model_display_name(stable) or stable})
     return _unique_model_catalog(list(observed.values()), active_choice)
 
 
@@ -26666,10 +26794,16 @@ def _model_repair_hint(backend: str, detail: str = "") -> dict:
 
     elif backend == "claude":
         hint["reinstall_cmd"] = "npm i -g @anthropic-ai/claude-code"
+        if "auth" in text or "login" in text or "token" in text:
+            hint["repair_hint"] = "Claude Code needs authentication or token refresh before model tests can succeed."
     elif backend == "gemini":
         hint["reinstall_cmd"] = "npm i -g @google/gemini-cli"
+        if "auth" in text or "oauth" in text or "authorize" in text or "login" in text:
+            hint["repair_hint"] = "Gemini CLI needs authentication before model tests can succeed."
     elif backend == "codex":
         hint["reinstall_cmd"] = "npm i -g @openai/codex"
+        if "auth" in text or "login" in text or "token" in text:
+            hint["repair_hint"] = "Codex CLI needs authentication before model tests can succeed."
     return hint
 
 
@@ -27055,6 +27189,7 @@ def _models_snapshot(force_versions: bool = False) -> dict:
         "activity": _models_activity_payload(),
         "backends": _models_available_payload(),
         "versions": _probe_backend_versions(force=force_versions),
+        "runtimes": {bk: _backend_runtime_info(bk) for bk in PROVIDER_REGISTRY},
     }
 
 
@@ -27065,6 +27200,7 @@ def _models_bootstrap() -> dict:
         "activity": _models_activity_payload(),
         "backends": _models_available_payload(lightweight=True),
         "versions": _bootstrap_backend_versions(),
+        "runtimes": {bk: _backend_runtime_info(bk) for bk in PROVIDER_REGISTRY},
     }
 
 
@@ -27260,24 +27396,51 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                 result = {"ok": False, "backend": backend, "model": model, "error": "gemini CLI not found"}
                 result.update(_model_repair_hint(backend, result["error"]))
                 return result
-            cmd = [gem, "-p", "Reply with just OK", "-y"]
-            if model and model != "auto" and model != "gemini":
-                cmd.extend(["-m", model])
+            runtime = _backend_runtime_info("gemini")
+            _gem_model = str(model or "").strip()
+            if not _gem_model or _gem_model in ("auto", "gemini"):
+                _gem_model = runtime.get("recommended_smoke_model") or _get_active_model("gemini") or "gemini-2.5-flash"
+            _gem_model = _normalize_gemini_model_id(_gem_model, runtime.get("auth_mode", ""))
+            cmd = [gem]
+            if runtime.get("supports_headless"):
+                cmd.extend(["-p", "Reply with just OK", "-y"])
+            else:
+                cmd.append("Reply with just OK")
+            if runtime.get("supports_model_flag") and _gem_model:
+                cmd.extend(["-m", _gem_model])
+            if runtime.get("supports_json_output"):
+                cmd.extend(["--output-format", "json"])
             _gem_env = _agent_env()
             _gem_env["GEMINI_CLI_YOLO"] = "1"  # suppress YOLO prompts
-            _gem_timeout = 75 if "preview" in str(model or "").lower() else 45
+            _gem_timeout = 75 if "preview" in str(_gem_model or "").lower() else 45
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=_gem_timeout, env=_gem_env, cwd=str(Path.home()))
+            _gem_stdout = (r.stdout or "").strip()
+            if "Please visit the following URL to authorize" in _gem_stdout or "accounts.google.com/o/oauth2" in _gem_stdout:
+                _gem_fail_msg = "Gemini CLI requires OAuth re-authorization"
+                result = {"ok": False, "backend": backend, "model": model, "error": _gem_fail_msg, "runtime": {"auth_mode": runtime.get("auth_mode", ""), "resolved_model": _gem_model}}
+                result.update(_model_repair_hint(backend, "auth oauth reauthorize"))
+                result["repair_hint"] = "Gemini CLI is asking for OAuth login again. Re-authenticate Gemini before relying on model tests."
+                return result
             if r.returncode != 0:
                 _gem_err = (r.stderr or "").strip()
                 # Filter out YOLO mode info lines
                 _gem_err = "\n".join(l for l in _gem_err.split("\n") if "YOLO" not in l and "cached credentials" not in l.lower()).strip()
-                _gem_fail_msg = (_gem_err or r.stdout or "Gemini failed").strip()[:200]
+                _gem_fail_msg = (_gem_err or _gem_stdout or "Gemini failed").strip()[:200]
                 log.warning("Model test fail [gemini]: model=%s rc=%s err=%s stdout=%s", model, r.returncode, _gem_fail_msg, (r.stdout or "").strip()[:500])
                 result = {"ok": False, "backend": backend, "model": model, "error": _gem_fail_msg}
                 result.update(_model_repair_hint(backend, _gem_fail_msg))
+                result["runtime"] = {"auth_mode": runtime.get("auth_mode", ""), "resolved_model": _gem_model}
                 return result
             latency_ms = int((time.time() - t0) * 1000)
-            return {"ok": True, "backend": backend, "model": model, "response": (r.stdout or "OK").strip()[:200], "latency_ms": latency_ms}
+            _gem_text = _gem_stdout
+            if runtime.get("supports_json_output"):
+                try:
+                    payload = json.loads(_gem_text)
+                    if isinstance(payload, dict):
+                        _gem_text = str(payload.get("text") or payload.get("response") or payload.get("output") or payload.get("result") or "OK")
+                except Exception:
+                    pass
+            return {"ok": True, "backend": backend, "model": model, "response": _gem_text.strip()[:200] or "OK", "latency_ms": latency_ms, "runtime": {"auth_mode": runtime.get("auth_mode", ""), "resolved_model": _gem_model}}
 
         if backend == "claude":
             claude_bin = _resolve_cli("claude")
@@ -27285,9 +27448,16 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                 result = {"ok": False, "backend": backend, "model": model, "error": "claude CLI not found"}
                 result.update(_model_repair_hint(backend, result["error"]))
                 return result
-            cmd = [claude_bin, "-p", "Reply with just OK"]
-            if model and model != "auto" and model != "claude":
+            runtime = _backend_runtime_info("claude")
+            cmd = [claude_bin]
+            if runtime.get("supports_headless"):
+                cmd.extend(["-p", "Reply with just OK"])
+            else:
+                cmd.append("Reply with just OK")
+            if runtime.get("supports_model_flag") and model and model != "auto" and model != "claude":
                 cmd.extend(["--model", model])
+            if runtime.get("supports_json_output"):
+                cmd.extend(["--output-format", "json"])
             # Unset CLAUDECODE to allow nested invocation from within Claude Code
             _env = _agent_env()
             _env.pop("CLAUDECODE", None)
@@ -27299,7 +27469,15 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                 result.update(_model_repair_hint(backend, _cl_fail_msg))
                 return result
             latency_ms = int((time.time() - t0) * 1000)
-            return {"ok": True, "backend": backend, "model": model, "response": (r.stdout or "OK").strip()[:200], "latency_ms": latency_ms}
+            _cl_text = (r.stdout or "OK").strip()
+            if runtime.get("supports_json_output"):
+                try:
+                    payload = json.loads(_cl_text)
+                    if isinstance(payload, dict):
+                        _cl_text = str(payload.get("result") or payload.get("text") or payload.get("output") or "OK")
+                except Exception:
+                    pass
+            return {"ok": True, "backend": backend, "model": model, "response": _cl_text[:200], "latency_ms": latency_ms}
 
         result = {"ok": False, "backend": backend, "model": model, "error": f"Unknown backend: {backend}"}
         result.update(_model_repair_hint(backend, result["error"]))
@@ -29259,7 +29437,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.87"})
+            self.reply_json({"v": "0.29.88"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -29421,7 +29599,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.87"
+                health["porter_version"] = "0.29.88"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -31197,7 +31375,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.87'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.88'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -35874,7 +36052,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.87 ready (localhost only)")
+    print(f"\n  Porter v0.29.88 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

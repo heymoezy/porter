@@ -1,5 +1,18 @@
 # Porter Release Notes
 
+## v0.29.88 (2026-03-09)
+
+**Backend Runtime Profiles + Gemini Auth-Aware Testing**
+
+- Backend runtime profiles now capture documented CLI capabilities instead of scattering per-backend assumptions
+- Gemini runtime detects OAuth vs API-key control mode and normalizes model testing accordingly
+- Gemini and Claude tests now prefer documented headless and structured-output flags when supported by the installed CLI
+- Gemini tests now detect CLI OAuth re-authorization prompts explicitly instead of misclassifying them as generic model failures
+- Models snapshot/bootstrap now carry runtime metadata so UI and tests can share the same backend truth
+- Gemini capability checks no longer spawn `gemini --version` at startup, and Gemini version bootstrap now reuses cached capability state correctly
+
+---
+
 ## v0.29.87 (2026-03-09)
 
 **Models Snapshot Loading + Faster Controlled Test-All**
