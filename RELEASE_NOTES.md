@@ -5,6 +5,7 @@
 **Models Snapshot Loading + Faster Controlled Test-All**
 
 - Models tab now loads from a unified snapshot payload instead of composing multiple API calls on first render
+- Models tab now paints from a lightweight bootstrap payload first, then hydrates the full snapshot in the background
 - Cached version state is rendered immediately from the snapshot, then refreshed in the background
 - `Test All` now runs with controlled concurrency across different backends instead of full serialization
 - Test scheduling prevents multiple tests from hammering the same backend at once

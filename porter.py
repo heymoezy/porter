@@ -10494,7 +10494,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.29.87', date:'2026-03-09', notes:['Models tab now loads from a unified snapshot payload instead of composing multiple API calls on first render','Cached version state renders immediately from the snapshot, then refreshes in the background','Test All now runs with controlled concurrency across different backends instead of full serialization','Test scheduling prevents multiple tests from hammering the same backend at once','Providers, activity, and available-model payloads now share backend helpers instead of duplicating route logic'] },
+  { ver:'v0.29.87', date:'2026-03-09', notes:['Models tab now paints from a lightweight bootstrap payload, then hydrates the full snapshot in the background','Cached version state renders immediately from the snapshot, then refreshes in the background','Test All now runs with controlled concurrency across different backends instead of full serialization','Test scheduling prevents multiple tests from hammering the same backend at once','Providers, activity, and available-model payloads now share backend helpers instead of duplicating route logic'] },
   { ver:'v0.29.86', date:'2026-03-09', notes:['Installed-version probes now prefer the real user-local CLI path and can be force-refreshed on Models load','Cards stop rendering Version unknown / Latest unknown noise when a probe has not completed','OpenClaw diagnosis now reads its runtime log and surfaces service-restart loops and token mismatches explicitly','Ollama and Codex latest-version checks are more robust so update labels do not disappear as easily','OpenClaw warning actions now sit on the bottom rail and gateway-only clutter was removed from the middle of the card','OpenClaw config uses a visible Gateway Token field instead of masking typed input','Shared client-side request failures now log through the common api() path','Test All now runs as a queued sequence instead of firing every backend at once','OpenClaw model tests now parse the current CLI JSON result format instead of failing successful runs','OpenClaw supervisor-conflict diagnosis now requires active restart evidence instead of only seeing two service files','Models page loading now tolerates partial API failures instead of blanking the whole tab'] },
   { ver:'v0.29.85', date:'2026-03-09', notes:['Models cards no longer show stale latest-version data as an update when installed is newer','OpenClaw duplicate model rows are deduped on canonical model keys','Gateway state and request activity are no longer presented as contradictory status labels','Repair commands stay in config/repair flows instead of cluttering the card body'] },
   { ver:'v0.29.84', date:'2026-03-09', notes:['OpenClaw diagnosis now detects paired devices with a down gateway and surfaces reconnect-loop repair guidance','More OpenClaw reads now normalize through shared config/state helpers instead of legacy top-level fields','OpenClaw cards show paired/pending counts and clearer repair follow-up when gateway pairing state is stale'] },
@@ -18716,20 +18716,31 @@ function _refreshModelVersions(force) {
     });
 }
 
+function _applyModelsSnapshot(snap) {
+  if (!snap || !snap.providers) {
+    throw new Error('Models snapshot unavailable');
+  }
+  _modelActivityData = snap.activity || {};
+  _modelAvailableData = snap.backends || {};
+  window._modelProviders = snap.providers || [];
+  _renderModelCards({ providers: window._modelProviders }, _modelActivityData);
+  _applyModelVersions(snap.versions || {});
+  _checkBackendStatuses(window._modelProviders);
+}
+
 async function loadModels() {
   try {
-    var snap = await api('/api/models/snapshot');
-    if (!snap || !snap.providers) {
-      throw new Error('Models snapshot unavailable');
-    }
-    _modelActivityData = snap.activity || {};
-    _modelAvailableData = snap.backends || {};
-    window._modelProviders = snap.providers || [];
-    _renderModelCards({ providers: window._modelProviders }, _modelActivityData);
-    _applyModelVersions(snap.versions || {});
-    _checkBackendStatuses(window._modelProviders);
+    var boot = await api('/api/models/bootstrap');
+    _applyModelsSnapshot(boot);
     _connectModelSSE();
-    setTimeout(function() { _refreshModelVersions(true); }, 250);
+    setTimeout(function() {
+      api('/api/models/snapshot').then(function(snap) {
+        if (snap && snap.providers) _applyModelsSnapshot(snap);
+      }).catch(function(e) {
+        _reportModelsClientError('models-snapshot-hydrate', e || new Error('Snapshot hydrate failed'));
+      });
+      _refreshModelVersions(true);
+    }, 150);
   } catch(e) {
     _reportModelsClientError('load-models', e);
   }
@@ -26879,13 +26890,20 @@ def _check_gateway_status() -> dict:
     }
 
 
-def _providers_payload() -> list:
+def _providers_payload(lightweight: bool = False) -> list:
     providers = []
     for name, info in PROVIDER_REGISTRY.items():
         _meta = _backend_meta(name)
+        available = None
+        if lightweight:
+            cap = _capabilities_cache.get(name) or {}
+            if isinstance(cap, dict) and "ok" in cap:
+                available = bool(cap.get("ok"))
+        if available is None:
+            available = _probe_provider(name)
         providers.append({
             "id": name,
-            "available": _probe_provider(name),
+            "available": available,
             "type": info["type"],
             "label": info["label"],
             "description": _meta.get("description", ""),
@@ -26945,15 +26963,25 @@ def _models_activity_payload() -> dict:
     return activity
 
 
-def _models_available_payload() -> dict:
+def _models_available_payload(lightweight: bool = False) -> dict:
     prefs = _config.get("preferences", {})
     active_models = prefs.get("active_models", {})
     backends_out = {}
     for bk in ["openclaw", "claude", "gemini", "codex", "ollama"]:
-        models = _get_available_models(bk)
         choice = active_models.get(bk, "auto")
-        resolved = _get_active_model(bk)
-        catalog = ([{"id": "auto", "name": "Auto"}] + models) if len(models) > 1 else models
+        cached_models = _backend_model_cache["data"].get(bk) or []
+        if lightweight and cached_models:
+            models = cached_models
+        elif lightweight:
+            resolved_guess = choice if choice != "auto" else ""
+            catalog_seed = []
+            if resolved_guess:
+                catalog_seed.append({"id": resolved_guess, "name": _model_display_name(resolved_guess) or resolved_guess})
+            models = _unique_model_catalog(catalog_seed, resolved_guess)
+        else:
+            models = _get_available_models(bk)
+        resolved = _get_active_model(bk) if not lightweight else (choice if choice != "auto" else (models[0]["id"] if models else ""))
+        catalog = ([{"id": "auto", "name": "Auto"}] + models) if len(models) > 0 else [{"id": "auto", "name": "Auto"}]
         backends_out[bk] = {"active": choice, "resolved": resolved, "models": catalog}
     return backends_out
 
@@ -26965,6 +26993,16 @@ def _models_snapshot(force_versions: bool = False) -> dict:
         "activity": _models_activity_payload(),
         "backends": _models_available_payload(),
         "versions": _probe_backend_versions(force=force_versions),
+    }
+
+
+def _models_bootstrap() -> dict:
+    return {
+        "ok": True,
+        "providers": _providers_payload(lightweight=True),
+        "activity": _models_activity_payload(),
+        "backends": _models_available_payload(lightweight=True),
+        "versions": _probe_backend_versions(force=False),
     }
 
 
@@ -29535,6 +29573,10 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/models/snapshot":
             if not self.auth_check(redirect=False): return
             self.reply_json(_models_snapshot(force_versions=False))
+
+        elif parsed.path == "/api/models/bootstrap":
+            if not self.auth_check(redirect=False): return
+            self.reply_json(_models_bootstrap())
 
         elif parsed.path == "/api/bridge/chains":
             if not self.auth_check(redirect=False): return
