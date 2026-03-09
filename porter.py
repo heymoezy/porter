@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.69 — Gateway health + model test from Models tab"""
+"""Porter v0.29.70 — Models tab redesign: gateway cards, per-card status, codex test fix"""
 
 
 import email
@@ -9112,7 +9112,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.69</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.70</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9809,15 +9809,6 @@ input[type="number"].settings-input { min-width: 60px; }
     <!-- Backends sub-tab -->
     <div id="models-backends-tab">
       <div class="module-intro">AI backends available to Porter. Each persona routes through one of these.</div>
-      <div id="gateway-health-bar" style="margin-bottom:12px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);display:flex;align-items:center;gap:12px;font-size:12px">
-        <span id="gw-status-dot" class="status-dot" style="background:var(--text3)"></span>
-        <span id="gw-status-label" style="font-weight:600;color:var(--text)">Gateway</span>
-        <span id="gw-status-detail" style="color:var(--text3)">Checking...</span>
-        <div style="margin-left:auto;display:flex;gap:6px">
-          <button class="btn btn-ghost" style="font-size:11px;padding:2px 10px" onclick="_gwRestart()">Restart</button>
-          <button class="btn btn-ghost" style="font-size:11px;padding:2px 10px" onclick="_gwCheck()">Check</button>
-        </div>
-      </div>
       <div id="models-summary" style="margin:12px 0 16px;font-size:13px;color:var(--text2)"></div>
       <div id="extraction-progress-bar" style="margin:0 0 12px;padding:0"><div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px"><div style="display:flex;align-items:center;gap:8px"><span class="learn-spinner"></span><span style="font-size:12px;color:var(--text3)">Loading extraction status...</span></div></div></div>
       <div id="models-grid" class="models-grid">
@@ -10424,6 +10415,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.70', date:'2026-03-09', notes:['Models tab redesign — cards show gateway/provider name, per-card inline status with restart, codex test separated from openclaw'] },
   { ver:'v0.29.69', date:'2026-03-09', notes:['Gateway health banner on Models tab (status, crash-loop detection, restart button)','Model test button — sends real prompt, shows latency','New APIs: /api/gateway/status, /api/gateway/action, /api/models/test'] },
   { ver:'v0.29.68', date:'2026-03-09', notes:['FIX: login page was rendering keyboard shortcuts overlay and task modal (belonged in main page only)'] },
   { ver:'v0.29.67', date:'2026-03-08', notes:['Squad creation wizard (3-step)','Per-squad config buttons replace global modal','Agents tab UX cleanup'] },
@@ -18095,28 +18087,37 @@ function _elapsedStr(startTs) {
   return Math.floor(diff / 60) + 'm ' + Math.round(diff % 60) + 's';
 }
 
-async function _gwCheck() {
-  var dot = document.getElementById('gw-status-dot');
-  var label = document.getElementById('gw-status-label');
-  var detail = document.getElementById('gw-status-detail');
-  if (!dot || !label || !detail) return;
-  detail.textContent = 'Checking...';
-  dot.style.background = 'var(--text3)';
+function _checkBackendStatuses(providers) {
+  if (!providers) return;
+  providers.forEach(function(p) {
+    var el = document.getElementById('backend-status-' + p.id);
+    if (!el) return;
+    if (p.type === 'gateway') {
+      _checkGatewayCardStatus(p.id, el);
+    } else if (p.type === 'local') {
+      if (p.available) {
+        el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#22c55e;flex-shrink:0"></span><span style="color:var(--text2)">Server running</span></div>';
+      } else {
+        el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0"></span><span style="color:var(--text3)">Server down</span></div>';
+      }
+    }
+  });
+}
+
+async function _checkGatewayCardStatus(backendId, el) {
+  el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--text3)">Checking gateway...</div>';
   try {
     var r = await api('/api/gateway/status');
     if (!r || !r.ok) {
-      label.textContent = 'Gateway';
-      detail.textContent = 'Status unavailable';
-      dot.style.background = '#ef4444';
+      el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0"></span><span style="color:var(--text3)">Status unavailable</span></div>';
       return;
     }
+    var dotC = '#ef4444', statusText = 'Down';
     if (r.crash_looping) {
-      label.textContent = 'Gateway';
-      detail.textContent = 'Crash-looping (' + (r.restart_count_60s || 0) + ' restarts in last 60s)';
-      dot.style.background = '#f59e0b';
-      return;
-    }
-    if (r.running) {
+      dotC = '#f59e0b';
+      statusText = 'Crash-looping (' + (r.restart_count_60s || 0) + ' restarts in 60s)';
+    } else if (r.running) {
+      dotC = '#22c55e';
       var parts = ['Running'];
       if (r.pid) parts.push('PID ' + r.pid);
       if (typeof r.uptime_s === 'number') {
@@ -18125,26 +18126,30 @@ async function _gwCheck() {
         else parts.push('up ' + Math.max(0, Math.floor(up)) + 's');
       }
       if (r.version) parts.push(String(r.version));
-      label.textContent = 'Gateway';
-      detail.textContent = parts.join(' · ');
-      dot.style.background = '#22c55e';
-    } else {
-      label.textContent = 'Gateway';
-      detail.textContent = 'Down';
-      dot.style.background = '#ef4444';
+      statusText = parts.join(' \u00b7 ');
     }
-  } catch (e) {
-    label.textContent = 'Gateway';
-    detail.textContent = 'Status unavailable';
-    dot.style.background = '#ef4444';
+    el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+      + '<span style="width:6px;height:6px;border-radius:50%;background:' + dotC + ';flex-shrink:0"></span>'
+      + '<span style="color:var(--text2)">' + statusText + '</span>'
+      + '<div style="margin-left:auto;display:flex;gap:4px">'
+      + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 8px" onclick="_restartBackend(\'' + backendId + '\')">Restart</button>'
+      + '<button class="btn btn-ghost" style="font-size:10px;padding:1px 8px" onclick="_recheckGw(\'' + backendId + '\')">Check</button>'
+      + '</div></div>';
+  } catch(e) {
+    el.innerHTML = '<div style="padding:6px 10px;margin:6px 0;border:1px solid var(--border);border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0"></span><span style="color:var(--text3)">Error checking status</span></div>';
   }
 }
 
-async function _gwRestart() {
+function _recheckGw(backendId) {
+  var el = document.getElementById('backend-status-' + backendId);
+  if (el) _checkGatewayCardStatus(backendId, el);
+}
+
+async function _restartBackend(backendId) {
   var r = await api('/api/gateway/action', {action: 'restart'});
-  if (r && r.ok) toast(r.message || 'Gateway restart signal sent', 'ok');
-  else toast((r && r.error) || 'Failed to restart gateway', 'err');
-  setTimeout(function() { _gwCheck(); }, 2000);
+  if (r && r.ok) toast(r.message || 'Restart signal sent', 'ok');
+  else toast((r && r.error) || 'Failed to restart', 'err');
+  setTimeout(function() { _recheckGw(backendId); }, 2000);
 }
 
 async function _testModel(event, modelId) {
@@ -18172,7 +18177,6 @@ async function _testModel(event, modelId) {
 async function loadModels() {
   _preloadSessionCounts();
   _updateExtractionProgress();
-  _gwCheck();
   try {
     var [data, act, avail] = await Promise.all([
       api('/api/providers'),
@@ -18202,6 +18206,7 @@ async function loadModels() {
       }).catch(function() {});
     _renderModelsSummary(data);
     _renderModelCards(data, _modelActivityData);
+    _checkBackendStatuses(data.providers);
     _connectModelSSE();
   } catch(e) { /* loadModels error silenced */ }
 }
@@ -19186,7 +19191,7 @@ function _renderModelCards(data, act) {
     }
     var lastPromptBtn = '';
 
-    // Model selector: show active model name as card title
+    // Model selector: active model shown in card subtitle
     var _avBk = (_modelAvailableData || {})[p.id] || {};
     var _avResolved = _avBk.resolved || '';
     var _avModels = _avBk.models || [];
@@ -19220,11 +19225,12 @@ function _renderModelCards(data, act) {
     return '<div class="model-card' + offClass + '" data-model-id="' + escHtml(p.id) + '">'
       + '<div class="model-card-head" style="justify-content:space-between">'
       + '<div style="display:flex;align-items:center;gap:10px"><span class="model-card-dot" style="background:' + dotColor + '"></span>'
-      + '<span class="model-card-name">' + escHtml(_resolvedName) + '</span></div>'
+      + '<span class="model-card-name">' + escHtml(p.label || p.id) + '</span></div>'
       + _statusBadge
       + '</div>'
-      + '<div class="model-card-type">' + escHtml(p.label || p.id) + ' · ' + escHtml(p.type || 'unknown') + '</div>'
+      + '<div class="model-card-type">' + escHtml(_resolvedName || 'No model') + ' · ' + escHtml(p.type || 'unknown') + '</div>'
       + '<div class="model-ver-badge" id="ver-badge-' + escHtml(p.id) + '"></div>'
+      + '<div id="backend-status-' + escHtml(p.id) + '"></div>'
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
       + (tags ? '<div class="model-card-tags">' + tags + '</div>' : '')
       + _selHtml
@@ -25811,9 +25817,9 @@ def _test_model_connectivity(model_id: str) -> dict:
 
     t0 = time.time()
     try:
-        if backend in ("openclaw", "codex"):
+        if backend == "openclaw":
             gw = _openclaw_gateway_settings()
-            model_name = _get_active_model("openclaw" if backend == "openclaw" else "codex") or "gpt-5.4"
+            model_name = _get_active_model("openclaw") or "gpt-5.4"
             payload = {
                 "model": model_name,
                 "messages": [{"role": "user", "content": "Reply with just the word OK"}],
@@ -25839,6 +25845,38 @@ def _test_model_connectivity(model_id: str) -> dict:
                 response_text = "".join([(p.get("text", "") if isinstance(p, dict) else str(p)) for p in response_text])
             latency_ms = int((time.time() - t0) * 1000)
             return {"ok": True, "model": model_id, "response": (response_text or "OK").strip()[:200], "latency_ms": latency_ms}
+
+        if backend == "codex":
+            cdx = _resolve_cli("codex")
+            if not cdx:
+                return {"ok": False, "model": model_id, "error": "codex CLI not found"}
+            _cdx_model = _get_active_model("codex") or "gpt-5.4"
+            _cdx_cmd = [cdx, "exec", "--ephemeral", "--json", "--skip-git-repo-check",
+                        "-m", _cdx_model, "Reply with just the word OK"]
+            _cdx_r = subprocess.run(_cdx_cmd, capture_output=True, text=True,
+                                    timeout=15, env=_agent_env(), cwd=str(Path.home()))
+            _cdx_text = ""
+            for _cdx_ln in (_cdx_r.stdout or "").strip().split("\n"):
+                if not _cdx_ln.strip():
+                    continue
+                try:
+                    _cdx_evt = json.loads(_cdx_ln)
+                    if _cdx_evt.get("type") == "item.completed":
+                        _cdx_item = _cdx_evt.get("item", {})
+                        if _cdx_item.get("type") == "agent_message":
+                            _cdx_msg = _cdx_item.get("text", "") or ""
+                            if not _cdx_msg:
+                                _cdx_parts = [_cp.get("text", "") for _cp in (_cdx_item.get("content", []) or []) if isinstance(_cp, dict) and _cp.get("text")]
+                                if _cdx_parts:
+                                    _cdx_msg = "".join(_cdx_parts).strip()
+                            if _cdx_msg:
+                                _cdx_text = _cdx_msg
+                except Exception:
+                    continue
+            latency_ms = int((time.time() - t0) * 1000)
+            if _cdx_text:
+                return {"ok": True, "model": model_id, "response": _cdx_text.strip()[:200], "latency_ms": latency_ms}
+            return {"ok": False, "model": model_id, "error": (_cdx_r.stderr or "").strip()[:200] or "Codex returned no text"}
 
         if backend == "ollama":
             model_name = _get_active_model("ollama") or "qwen2.5-coder:1.5b"
@@ -27824,7 +27862,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.69"})
+            self.reply_json({"v": "0.29.70"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -27986,7 +28024,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.69"
+                health["porter_version"] = "0.29.70"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -29790,7 +29828,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.69'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.70'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34397,7 +34435,7 @@ if __name__ == "__main__":
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
-    print(f"\n  Porter v0.29.69 ready (localhost only)")
+    print(f"\n  Porter v0.29.70 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
