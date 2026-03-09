@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.99 — Models no-cache control plane"""
+"""Porter v0.30.0 — Faster live Models bootstrap"""
 
 
 import email
@@ -9179,7 +9179,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.99</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.0</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10575,6 +10575,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.0', date:'2026-03-09', notes:['Models bootstrap is fast again without falling back to stale browser truth: first paint uses fresh lightweight provider/model data, then full live snapshot hydrates afterward','Non-lightweight provider probing now runs in parallel instead of sequentially, reducing server-side wait on the Models endpoints','Control-plane truth remains live, but preliminary loading no longer pays the full dynamic catalog cost up front'] },
   { ver:'v0.29.99', date:'2026-03-09', notes:['Models no longer uses browser sessionStorage at all for backend truth','Models bootstrap and snapshot now force fresh capability checks and invalidate CLI-derived caches when binary fingerprints change','Porter control-plane surfaces now prefer live runtime truth over cached bootstrap state after CLI upgrades like Gemini'] },
   { ver:'v0.29.97', date:'2026-03-09', notes:['Models loading no longer writes skeleton cards into the grid at all; only the top loading rail changes during refresh','This guarantees background loads cannot blank or replace the visible grid once real cards have rendered','Grid DOM is now reserved for real card renders and the explicit empty-state only'] },
   { ver:'v0.29.96', date:'2026-03-09', notes:['Models loading is now single-flight: duplicate loadModels calls cannot replace an already-rendered grid with skeletons or bootstrap state','Once the grid has rendered in a visit, later loads refresh in the background without clearing cards','Stale async bootstrap/snapshot responses are dropped if a newer Models load started afterward'] },
@@ -27285,13 +27286,24 @@ def _check_gateway_status() -> dict:
 
 def _providers_payload(lightweight: bool = False) -> list:
     providers = []
-    for name, info in PROVIDER_REGISTRY.items():
-        _meta = _backend_meta(name)
-        available = None
-        if lightweight:
+    availability = {}
+    if lightweight:
+        for name in PROVIDER_REGISTRY:
             cap = _capabilities_cache.get(name) or {}
             if isinstance(cap, dict) and "ok" in cap:
-                available = bool(cap.get("ok"))
+                availability[name] = bool(cap.get("ok"))
+    else:
+        import concurrent.futures as _cf
+        with _cf.ThreadPoolExecutor(max_workers=min(5, len(PROVIDER_REGISTRY))) as ex:
+            future_map = {ex.submit(_probe_provider, name): name for name in PROVIDER_REGISTRY}
+            for fut, name in ((f, future_map[f]) for f in future_map):
+                try:
+                    availability[name] = bool(fut.result(timeout=4))
+                except Exception:
+                    availability[name] = False
+    for name, info in PROVIDER_REGISTRY.items():
+        _meta = _backend_meta(name)
+        available = availability.get(name)
         if available is None:
             available = _probe_provider(name)
         providers.append({
@@ -27400,9 +27412,9 @@ def _models_bootstrap() -> dict:
     _run_cap_checks(force=True)
     return {
         "ok": True,
-        "providers": _providers_payload(lightweight=False),
+        "providers": _providers_payload(lightweight=True),
         "activity": _models_activity_payload(include_recent=False),
-        "backends": _models_available_payload(lightweight=False),
+        "backends": _models_available_payload(lightweight=True),
         "versions": _bootstrap_backend_versions(),
         "runtimes": {bk: _backend_runtime_info(bk) for bk in PROVIDER_REGISTRY},
     }
@@ -29641,7 +29653,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.99"})
+            self.reply_json({"v": "0.30.0"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -31580,7 +31592,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.99'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.0'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36257,7 +36269,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.99 ready (localhost only)")
+    print(f"\n  Porter v0.30.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

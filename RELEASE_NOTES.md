@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.0 (2026-03-09)
+
+**Faster Live Models Bootstrap**
+
+- Models bootstrap is fast again without falling back to stale browser truth: first paint uses fresh lightweight provider and model data, then the full live snapshot hydrates afterward
+- Non-lightweight provider probing now runs in parallel instead of sequentially, reducing server-side wait on Models endpoints
+- Control-plane truth remains live, but preliminary loading no longer pays the full dynamic catalog cost up front
+
+---
+
 ## v0.29.99 (2026-03-09)
 
 **Models No-Cache Control Plane**
