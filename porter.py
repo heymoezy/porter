@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.29.90 — Models fast-path caching and partial hydration"""
+"""Porter v0.29.91 — Models fast-path repaint fix"""
 
 
 import email
@@ -9179,7 +9179,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.90</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.29.91</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10552,6 +10552,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.29.91', date:'2026-03-09', notes:['Fixed Models fast-path repaint churn so cached snapshot loads no longer redraw through bootstrap before live hydration','Live Models refresh now keeps the seeded cache render on screen and only applies one network snapshot update','Bootstrap fetch is skipped when a cached snapshot is already good enough to seed the tab'] },
   { ver:'v0.29.90', date:'2026-03-09', notes:['Models tab now reuses the last good bootstrap/snapshot from session storage so repeat visits render instantly before the network round-trip','Bootstrap and snapshot activity payloads stop querying recent-run history that the card grid does not use, reducing first-load database work','Model activity slide-outs lazily hydrate recent runs only when opened, preserving detail without penalizing initial card render'] },
   { ver:'v0.29.89', date:'2026-03-09', notes:['Models tab now shows an animated staged loading rail instead of appearing stalled during bootstrap and snapshot hydration','Bootstrap load paints skeleton cards immediately, then preserves the first card render while live catalogs hydrate in the background','Models load states now distinguish fast cached runtime bootstrap from slower live catalog hydration so the page feels responsive even when backends are slow'] },
   { ver:'v0.29.88', date:'2026-03-09', notes:['Backend runtime profiles now capture documented CLI capabilities instead of scattering per-backend assumptions','Gemini runtime detects OAuth vs API-key control mode and normalizes model testing accordingly','Gemini and Claude tests now prefer documented headless/structured-output flags when supported by the installed CLI','Gemini tests now detect OAuth re-authorization prompts explicitly instead of misclassifying them as generic model failures','Models snapshot/bootstrap now carry runtime metadata so UI and tests share the same backend truth','Gemini startup no longer spawns gemini --version during capability checks, and Models bootstrap reuses cached Gemini capability state correctly'] },
@@ -18836,21 +18837,27 @@ async function loadModels() {
   try {
     var cachedSnapshot = _readModelsClientCache(_modelsClientCacheKeys.snapshot, 120000);
     var cachedBootstrap = cachedSnapshot ? null : _readModelsClientCache(_modelsClientCacheKeys.bootstrap, 60000);
+    var seededSnapshot = false;
+    var seededBootstrap = false;
     if (cachedSnapshot && cachedSnapshot.providers) {
       _applyModelsSnapshot(cachedSnapshot);
       _connectModelSSE();
+      seededSnapshot = true;
       _renderModelsLoading('Refreshing live model state...', { detail: 'Using the last good snapshot while Porter refreshes health, catalogs, and versions.', keepCards: true });
     } else if (cachedBootstrap && cachedBootstrap.providers) {
       _applyModelsSnapshot(cachedBootstrap);
       _connectModelSSE();
+      seededBootstrap = true;
       _renderModelsLoading('Hydrating live model catalogs...', { detail: 'Using cached bootstrap state while Porter refreshes the live catalog.', keepCards: true });
     } else {
       _renderModelsLoading('Bootstrapping model runtimes...', { detail: 'Fast cached state first, then live catalog hydration.', count: 4 });
     }
-    var boot = await api('/api/models/bootstrap');
-    if (boot && boot.providers) {
-      _writeModelsClientCache(_modelsClientCacheKeys.bootstrap, boot);
-      if (!cachedSnapshot) _applyModelsSnapshot(boot);
+    if (!seededSnapshot) {
+      var boot = await api('/api/models/bootstrap');
+      if (boot && boot.providers) {
+        _writeModelsClientCache(_modelsClientCacheKeys.bootstrap, boot);
+        if (!seededBootstrap) _applyModelsSnapshot(boot);
+      }
     }
     if (!_modelSseId) _connectModelSSE();
     _renderModelsLoading('Hydrating live model catalogs...', { detail: 'Refreshing dynamic models, backend health, and version checks.', keepCards: true });
@@ -29589,7 +29596,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.29.90"})
+            self.reply_json({"v": "0.29.91"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -31527,7 +31534,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.90'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.29.91'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36204,7 +36211,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.29.90 ready (localhost only)")
+    print(f"\n  Porter v0.29.91 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

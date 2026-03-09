@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.29.91 (2026-03-09)
+
+**Models Repaint Fix**
+
+- Fixed Models cached-load repaint churn so the tab no longer redraws through bootstrap after seeding from a cached snapshot
+- Cached snapshot renders now stay on screen until the live snapshot arrives, reducing the visible double-load effect
+- Bootstrap fetch is skipped when a recent cached snapshot already seeded the tab
+
+---
+
 ## v0.29.90 (2026-03-09)
 
 **Models Fast-Path Caching + Partial Hydration**
