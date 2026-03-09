@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.19 (2026-03-09)
+
+**Project-Aware Orchestration Context**
+
+- Orchestration runs now inherit active project and task context, prefer personas assigned to the active project, and pass project/task identity through persona execution
+- Runtime orchestration cards now show project/task chips so autonomous runs stay tied to Porter’s real project lane instead of floating as generic jobs
+- This closes a core autonomy gap where the orchestration engine could execute outside project-aware dispatch and Cortex scoping
+
+---
+
 ## v0.30.18 (2026-03-09)
 
 **Capability-Scored Orchestration Engine**

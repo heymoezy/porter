@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.18 — Orchestration engine with capability-scored multi-model dispatch"""
+"""Porter v0.30.19 — Project-aware orchestration context"""
 
 
 import email
@@ -9593,7 +9593,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.18</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.19</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11031,6 +11031,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.19', date:'2026-03-09', notes:['Orchestration runs now inherit active project/task context, prefer personas assigned to the active project, and pass project/task identity through persona execution','Runtime orchestration cards now surface project/task chips so autonomous runs stay tied to the real project lane instead of floating as generic jobs','This closes a core autonomy gap where the orchestration engine could execute outside project-aware dispatch and Cortex scoping'] },
   { ver:'v0.30.18', date:'2026-03-09', notes:['Orchestration Engine: Porter now plans goals into executable DAG steps, scores each backend by capability fit, dispatches to the best available model, and auto-reassigns on failure','New DB tables: orchestration_runs, orchestration_steps, orchestration_events — full execution history with dependency tracking','Capability taxonomy: each backend scored for implementation/research/analysis/synthesis/verification/debugging — routing is data-driven not keyword-heuristic','API: POST /api/orchestration/run (plan+execute), GET /api/orchestration/runs, GET/DELETE /api/orchestration/<id>','System tab: Orchestration Engine panel with live progress bars, run status, cancel/detail controls','Steps execute in parallel when dependencies allow, with ThreadPoolExecutor — independent branches run concurrently'] },
   { ver:'v0.30.17', date:'2026-03-09', notes:['Runtime now has live Coordination Bridge and Orchestration Engine panels showing active claims, conflicts, recent coordination results, and recent orchestration runs','Filled in the missing orchestration UI functions and fixed the orchestration runs API query parsing so the new runtime lane is real instead of a dead shell','This makes Porter Bridge orchestration inspectable from the operator view instead of leaving coordination state hidden in backend tables or half-landed UI hooks'] },
   { ver:'v0.30.16', date:'2026-03-09', notes:['Overview, Projects, Runtime, and orchestration surfaces now react to live coordination:* SSE events instead of ignoring bridge-native coordination work','System tab now maintains its own runtime SSE refresh path and correctly checks system-module when refreshing workflow cards','This closes a visibility gap where coordinated work could happen through Porter Bridge without updating the operator surfaces watching it'] },
@@ -15015,10 +15016,14 @@ function _renderOrchRunCard(run) {
   var status = String(run.status || 'unknown');
   var tone = _orchRunStatusTone(status);
   var progress = Math.max(0, Math.min(100, Math.round(((run.completed_steps || 0) / Math.max(1, run.total_steps || 0)) * 100)));
+  var runCtx = {};
+  try { runCtx = JSON.parse(run.context || '{}'); } catch (_) {}
   var chips = [
     '<span class="model-card-chip ' + tone + '" style="font-size:10px">' + escHtml(status) + '</span>',
     '<span class="model-card-chip dim" style="font-size:10px">' + escHtml((run.completed_steps || 0) + '/' + (run.total_steps || 0) + ' steps') + '</span>',
     run.requested_by ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(run.requested_by) + '</span>' : '',
+    runCtx.project_id ? '<span class="model-card-chip dim" style="font-size:10px">project ' + escHtml(runCtx.project_id) + '</span>' : '',
+    runCtx.task_id ? '<span class="model-card-chip dim" style="font-size:10px">task ' + escHtml(runCtx.task_id) + '</span>' : '',
     run.created_at ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(_relativeTime(run.created_at)) + '</span>' : ''
   ].filter(Boolean).join('');
   return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">'
@@ -15126,7 +15131,13 @@ function _newOrchRun() {
     {name: 'context', label: 'Context', type: 'textarea', placeholder: 'Optional context, constraints, or project scope'}
   ], async function(vals) {
     if (!vals.goal) { toast('Goal required', 'err'); return; }
-    var res = await api('/api/orchestration/run', {goal: vals.goal, context: vals.context || '', requested_by: 'operator', execute: true}, 120000);
+    var res = await api('/api/orchestration/run', {
+      goal: vals.goal,
+      context: vals.context || '',
+      requested_by: 'operator',
+      project_id: (window._projCurrent && window._projCurrent.id) || '',
+      execute: true
+    }, 120000);
     if (res && res.ok) {
       toast('Orchestration run started', 'ok');
       _loadOrchRuns(true);
@@ -30438,10 +30449,11 @@ def _orch_score_backend(backend: str, step_kind: str, required_caps: list) -> fl
     return min(1.0, max(0.0, base_score + speed_bonus))
 
 
-def _orch_select_executor(step: dict) -> tuple:
+def _orch_select_executor(step: dict, project_id: str = "", task_id: str = "") -> tuple:
     """Pick the best (backend, persona_id) for an orchestration step."""
     kind = step.get("kind", "general")
-    required_caps = json.loads(step.get("required_capabilities", "[]") or "[]")
+    _raw_caps = step.get("required_capabilities", [])
+    required_caps = json.loads(_raw_caps) if isinstance(_raw_caps, str) else (_raw_caps if isinstance(_raw_caps, list) else [])
     preferred_backend = step.get("preferred_backend", "")
     preferred_persona = step.get("preferred_persona_id", "")
     if preferred_backend and preferred_backend in PROVIDER_REGISTRY:
@@ -30458,18 +30470,32 @@ def _orch_select_executor(step: dict) -> tuple:
         return (None, None)
     best_backend = scored[0][1]
     persona_id = preferred_persona
+    resolved_project_id = _resolve_persona_project(preferred_persona or "", explicit_project_id=project_id, task_id=task_id) if preferred_persona else (str(project_id or "").strip() or "")
+    project_assigned = []
+    if resolved_project_id:
+        proj = _project_by_id(resolved_project_id) or {}
+        project_assigned = [str(x).strip() for x in (proj.get("assigned_personas") or []) if str(x).strip()]
     if not persona_id:
         try:
             conn = _db_conn()
-            rows = conn.execute(
-                "SELECT id FROM personas WHERE preferred_backend=? AND status != 'disabled' ORDER BY last_active DESC LIMIT 1",
-                (best_backend,)
-            ).fetchall()
+            if project_assigned:
+                placeholders = ",".join("?" for _ in project_assigned)
+                rows = conn.execute(
+                    f"SELECT id FROM personas WHERE preferred_backend=? AND id IN ({placeholders}) AND status != 'disabled' ORDER BY last_active DESC LIMIT 1",
+                    [best_backend] + project_assigned
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id FROM personas WHERE preferred_backend=? AND status != 'disabled' ORDER BY last_active DESC LIMIT 1",
+                    (best_backend,)
+                ).fetchall()
             conn.close()
             if rows:
                 persona_id = rows[0]["id"]
         except Exception:
             pass
+    if not persona_id and project_assigned:
+        persona_id = project_assigned[0]
     return (best_backend, persona_id)
 
 
@@ -30507,9 +30533,22 @@ def _orch_plan_goal(goal: str, context: str = "") -> list:
     return steps
 
 
-def _orch_create_run(goal: str, context: str = "", requested_by: str = "user") -> dict:
+def _orch_create_run(goal: str, context: str = "", requested_by: str = "user", project_id: str = "", task_id: str = "") -> dict:
     """Create and plan an orchestration run."""
     run_id = f"orch-{int(time.time())}-{uuid.uuid4().hex[:8]}"
+    task = _task_by_id(task_id)
+    resolved_project_id = str(project_id or "").strip()
+    if task and str(task.get("project_id") or "").strip():
+        resolved_project_id = str(task.get("project_id") or "").strip()
+    if not resolved_project_id:
+        resolved_project_id = str(_config.get("active_project_id") or "").strip()
+    context_payload = {
+        "operator_context": context[:2000],
+        "project_id": resolved_project_id,
+        "task_id": str(task_id or "").strip(),
+    }
+    if task:
+        context_payload["task_title"] = str(task.get("title") or "")[:200]
     planned_steps = _orch_plan_goal(goal, context)
     if not planned_steps:
         return {"ok": False, "error": "Could not plan goal into steps"}
@@ -30517,34 +30556,35 @@ def _orch_create_run(goal: str, context: str = "", requested_by: str = "user") -
         conn = _db_conn()
         conn.execute(
             "INSERT INTO orchestration_runs (id, goal, context, status, requested_by, total_steps) VALUES (?, ?, ?, 'planned', ?, ?)",
-            (run_id, goal[:2000], context[:2000], requested_by, len(planned_steps))
+            (run_id, goal[:2000], json.dumps(context_payload), requested_by, len(planned_steps))
         )
         for i, step in enumerate(planned_steps):
             step_id = f"{run_id}-s{i}"
             deps = [f"{run_id}-s{d}" for d in step.get("depends_on", [])]
-            backend, persona_id = _orch_select_executor(step)
+            backend, persona_id = _orch_select_executor(step, project_id=resolved_project_id, task_id=task_id)
             conn.execute(
                 """INSERT INTO orchestration_steps
                 (id, run_id, step_num, kind, title, description, required_capabilities,
-                 preferred_backend, preferred_persona_id, depends_on, assigned_backend, assigned_persona_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 preferred_backend, preferred_persona_id, depends_on, assigned_backend, assigned_persona_id, input_data)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (step_id, run_id, i, step.get("kind", "general"),
                  step.get("title", "")[:200], step.get("description", "")[:1000],
                  json.dumps(step.get("required_capabilities", [])),
-                 backend or "", persona_id or "", json.dumps(deps), backend or "", persona_id or "")
+                 backend or "", persona_id or "", json.dumps(deps), backend or "", persona_id or "", json.dumps(context_payload))
             )
         conn.execute(
             "INSERT INTO orchestration_events (run_id, event_type, message, data) VALUES (?, 'planned', ?, ?)",
-            (run_id, f"Goal planned into {len(planned_steps)} steps", json.dumps({"steps": len(planned_steps)}))
+            (run_id, f"Goal planned into {len(planned_steps)} steps", json.dumps({"steps": len(planned_steps), "project_id": resolved_project_id, "task_id": str(task_id or '').strip()}))
         )
         conn.commit()
         conn.close()
     except Exception as e:
         log.error("Orchestration create run failed: %s", e)
         return {"ok": False, "error": str(e)}
-    _emit_event("orch:planned", {"run_id": run_id, "goal": goal[:200], "steps": len(planned_steps)})
-    mlog.emit("info", "orchestration", "orch.planned", f"Run {run_id}: {goal[:100]} ({len(planned_steps)} steps)", run_id=run_id)
-    return {"ok": True, "run_id": run_id, "steps": len(planned_steps), "status": "planned"}
+    _emit_event("orch:planned", {"run_id": run_id, "goal": goal[:200], "steps": len(planned_steps), "project_id": resolved_project_id, "task_id": str(task_id or "").strip()})
+    mlog.emit("info", "orchestration", "orch.planned", f"Run {run_id}: {goal[:100]} ({len(planned_steps)} steps)", run_id=run_id,
+              extra={"project_id": resolved_project_id, "task_id": str(task_id or "").strip()})
+    return {"ok": True, "run_id": run_id, "steps": len(planned_steps), "status": "planned", "project_id": resolved_project_id, "task_id": str(task_id or "").strip()}
 
 
 def _orch_get_run(run_id: str) -> dict:
@@ -30584,7 +30624,8 @@ def _orch_step_runnable(step: dict, all_steps: list) -> bool:
     """Check if a step's dependencies are all completed."""
     if step.get("status") != "pending":
         return False
-    deps = json.loads(step.get("depends_on", "[]") or "[]")
+    _raw_deps = step.get("depends_on", [])
+    deps = json.loads(_raw_deps) if isinstance(_raw_deps, str) else (_raw_deps if isinstance(_raw_deps, list) else [])
     if not deps:
         return True
     completed_ids = {s["id"] for s in all_steps if s.get("status") in ("completed", "complete")}
@@ -30598,9 +30639,27 @@ def _orch_execute_step(run_id: str, step: dict) -> dict:
     persona_id = step.get("assigned_persona_id", "")
     attempt = step.get("attempt", 0) + 1
     prompt = step.get("description", step.get("title", ""))
+    project_id = ""
+    task_id = ""
+    try:
+        step_ctx = json.loads(step.get("input_data", "") or "{}")
+        project_id = str(step_ctx.get("project_id") or "").strip()
+        task_id = str(step_ctx.get("task_id") or "").strip()
+    except Exception:
+        step_ctx = {}
     try:
         conn = _db_conn()
-        deps = json.loads(step.get("depends_on", "[]") or "[]")
+        if not project_id:
+            run_row = conn.execute("SELECT context FROM orchestration_runs WHERE id=?", (run_id,)).fetchone()
+            if run_row and run_row["context"]:
+                try:
+                    run_ctx = json.loads(run_row["context"] or "{}")
+                    project_id = str(run_ctx.get("project_id") or "").strip()
+                    task_id = task_id or str(run_ctx.get("task_id") or "").strip()
+                except Exception:
+                    pass
+        _raw_deps = step.get("depends_on", [])
+        deps = json.loads(_raw_deps) if isinstance(_raw_deps, str) else (_raw_deps if isinstance(_raw_deps, list) else [])
         for dep_id in deps:
             dep = conn.execute("SELECT title, output_data FROM orchestration_steps WHERE id=?", (dep_id,)).fetchone()
             if dep and dep["output_data"]:
@@ -30623,7 +30682,7 @@ def _orch_execute_step(run_id: str, step: dict) -> dict:
     t0 = time.time()
     try:
         if persona_id:
-            result = dispatch_to_persona(prompt, persona_id, timeout=120, backend_override=backend)
+            result = dispatch_to_persona(prompt, persona_id, timeout=120, backend_override=backend, project_id=project_id, task_id=task_id)
         elif backend:
             result = dispatch_agent(prompt, backend, timeout=120)
         else:
@@ -30659,7 +30718,8 @@ def _orch_execute_step(run_id: str, step: dict) -> dict:
             if new_status == "pending":
                 scored = []
                 kind = step.get("kind", "general")
-                req_caps = json.loads(step.get("required_capabilities", "[]") or "[]")
+                _raw_rc = step.get("required_capabilities", [])
+                req_caps = json.loads(_raw_rc) if isinstance(_raw_rc, str) else (_raw_rc if isinstance(_raw_rc, list) else [])
                 for bk in PROVIDER_REGISTRY:
                     if bk == backend:
                         continue
@@ -31601,7 +31661,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.18"})
+            self.reply_json({"v": "0.30.19"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -31763,7 +31823,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.18"
+                health["porter_version"] = "0.30.19"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -33452,22 +33512,6 @@ class Handler(BaseHTTPRequestHandler):
             conflicts = _ledger_conflicts()
             self.reply_json({"ok": True, "active_claims": active, "recent": recent, "conflicts": conflicts})
 
-        elif parsed.path == "/api/orchestration/run" and self.command == "POST":
-            if not self.auth_check(redirect=False): return
-            body = self.read_json_body()
-            if not body: return
-            goal = (body.get("goal") or "").strip()
-            if not goal:
-                self.reply_json({"ok": False, "error": "goal required"}, 400); return
-            context = (body.get("context") or "").strip()
-            requested_by = (body.get("requested_by") or "user").strip()
-            result = _orch_create_run(goal, context, requested_by)
-            if result.get("ok") and body.get("execute", True):
-                run_id = result["run_id"]
-                threading.Thread(target=_orch_execute_run, args=(run_id,), daemon=True, name=f"orch-{run_id}").start()
-                result["executing"] = True
-            self.reply_json(result)
-
         elif parsed.path == "/api/orchestration/runs":
             if not self.auth_check(redirect=False): return
             qs = parse_qs(parsed.query)
@@ -33601,7 +33645,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.18'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.19'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34374,6 +34418,24 @@ class Handler(BaseHTTPRequestHandler):
                 context=str(data.get("context", "")).strip()
             )
             self.reply_json(result, 200 if result.get("ok") else 400)
+
+        elif parsed.path == "/api/orchestration/run":
+            if not self.auth_check(redirect=False): return
+            body = self.read_json_body()
+            if not body: return
+            goal = (body.get("goal") or "").strip()
+            if not goal:
+                self.reply_json({"ok": False, "error": "goal required"}, 400); return
+            context = (body.get("context") or "").strip()
+            requested_by = (body.get("requested_by") or "user").strip()
+            project_id = str(body.get("project_id") or _config.get("active_project_id") or "").strip()
+            task_id = str(body.get("task_id") or "").strip()
+            result = _orch_create_run(goal, context, requested_by, project_id=project_id, task_id=task_id)
+            if result.get("ok") and body.get("execute", True):
+                run_id = result["run_id"]
+                threading.Thread(target=_orch_execute_run, args=(run_id,), daemon=True, name=f"orch-{run_id}").start()
+                result["executing"] = True
+            self.reply_json(result)
 
         elif parsed.path == "/api/coordination/run":
             if not self.auth_check(redirect=False): return
@@ -38319,7 +38381,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.18 ready (localhost only)")
+    print(f"\n  Porter v0.30.19 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
