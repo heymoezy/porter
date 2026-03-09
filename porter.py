@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.11 — Live project activity refresh"""
+"""Porter v0.30.12 — Coordination ledger for model deconfliction"""
 
 
 import email
@@ -6579,6 +6579,22 @@ def _init_trace_tables():
     CREATE INDEX IF NOT EXISTS idx_at_agent ON agent_telemetry(agent_id);
     CREATE INDEX IF NOT EXISTS idx_at_ts ON agent_telemetry(ts);
     CREATE INDEX IF NOT EXISTS idx_at_backend ON agent_telemetry(backend);
+    CREATE TABLE IF NOT EXISTS coordination_ledger (
+        id TEXT PRIMARY KEY,
+        ts REAL NOT NULL,
+        model TEXT NOT NULL,
+        entry_type TEXT NOT NULL,
+        scope TEXT NOT NULL DEFAULT '',
+        message TEXT NOT NULL DEFAULT '',
+        version_at TEXT DEFAULT '',
+        ttl_minutes INTEGER DEFAULT 30,
+        expires_at REAL DEFAULT 0,
+        context TEXT DEFAULT '',
+        resolved INTEGER DEFAULT 0,
+        created_at REAL DEFAULT (strftime('%s','now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_cl_active ON coordination_ledger(resolved, expires_at);
+    CREATE INDEX IF NOT EXISTS idx_cl_scope ON coordination_ledger(scope, entry_type);
 
     CREATE TABLE IF NOT EXISTS telemetry_hourly (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -9417,7 +9433,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.11</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.12</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10832,6 +10848,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 const CHANGELOG = [
   { ver:'v0.30.9', date:'2026-03-09', notes:['Runtime gateway activity now refreshes from live bridge SSE events instead of a tight 5-second poll loop, reducing background load while making backend activity feel more immediate','Kept a light 30-second fallback poll so the Runtime activity feed still self-heals if SSE events are missed','This cuts unnecessary repeat queries on the same dispatch log path while preserving the rule that gateway activity must stay visible'] },
   { ver:'v0.30.11', date:'2026-03-09', notes:['Projects overview activity now refreshes from live bridge SSE events instead of staying static until manual reload','Added a light 30-second fallback refresh for project activity while the overview is open, with teardown when leaving Projects','This keeps autonomous project work visible in real time without adding another tight polling loop'] },
+  { ver:'v0.30.11', date:'2026-03-09', notes:['Coordination ledger: shared work board so models (Claude, GPT-5.4, Gemini, OpenClaw) claim scopes before working, report progress, hand off tasks, and detect version/scope collisions','New API: /api/coordination/ledger (read), /api/coordination/claim (claim scope), /api/coordination/update (progress/complete/handoff/block/release), /api/coordination/conflicts','System tab shows live ledger panel with active claims, conflict alerts, and recent coordination activity color-coded by model'] },
   { ver:'v0.30.10', date:'2026-03-09', notes:['Projects Memory sub-tab upgraded to full knowledge browser with confidence bars, importance indicators, timestamps, agent attribution, search, archive/restore/delete','Cortex tab now has Agent/Project/Global scope filter buttons for viewing knowledge by scope','Project memories show reinforcement count, injection frequency, and relative age for each fact'] },
   { ver:'v0.30.8', date:'2026-03-09', notes:['Models bootstrap and snapshot now use short server-side caches keyed by config and CLI fingerprints instead of forcing heavy runtime introspection on every open','Removed the dead browser-side Models snapshot/bootstrap reuse path so the tab stays live-truth only while still rendering from a much cheaper first payload','Models runtime metadata is now cached server-side for one minute and invalidated on config or binary changes, cutting repeated CLI help/version work without reintroducing stale browser truth'] },
   { ver:'v0.30.7', date:'2026-03-09', notes:['Projects overview now shows a real recent activity stream merged from trace_steps and agent_messages, so project work is visible without tab-hopping','Added a lightweight /api/projects/<id>/activity endpoint backed by live trace and dispatch data instead of synthetic summaries','This makes autonomous project work legible while reusing the indexed data paths already added for speed'] },
@@ -12797,6 +12814,11 @@ function switchModule(name) {
   if (_currentModule === 'admin' && name !== 'admin') {
     if (_mcMetricsTimer) { clearInterval(_mcMetricsTimer); _mcMetricsTimer = null; }
     if (_mcSseId) { _sseUnsubscribe(_mcSseId); _mcSseId = null; }
+  }
+  if (_currentModule === 'agents' && name !== 'agents') {
+    if (_orchHubPollTimer) { clearInterval(_orchHubPollTimer); _orchHubPollTimer = null; }
+    if (_orchHubRefreshTimer) { clearTimeout(_orchHubRefreshTimer); _orchHubRefreshTimer = null; }
+    if (_orchHubSseId) { _sseUnsubscribe(_orchHubSseId); _orchHubSseId = null; }
   }
 
   if (_currentModule === 'models' && name !== 'models') {
@@ -18703,6 +18725,8 @@ function _buildFlowSVG(count, direction, label) {
 }
 
 let _orchHubPollTimer = null;
+let _orchHubSseId = null;
+let _orchHubRefreshTimer = null;
 let _orchHubAgentCount = 0;
 let _orchHubModelCount = 0;
 async function _refreshOrchHubActivity(agentCount, modelCount) {
@@ -18747,10 +18771,26 @@ function _ensureOrchHubPolling(agentCount, modelCount) {
   _orchHubAgentCount = agentCount;
   _orchHubModelCount = modelCount;
   _refreshOrchHubActivity(_orchHubAgentCount, _orchHubModelCount);
+  if (!_orchHubSseId) {
+    _orchHubSseId = _sseSubscribe(function(d) {
+      if (!d || !d.type) return;
+      if (d.type === 'bridge:dispatch') _scheduleOrchHubRefresh(120);
+      else if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleOrchHubRefresh(220);
+    });
+  }
   if (_orchHubPollTimer) return;
   _orchHubPollTimer = setInterval(function() {
-    _refreshOrchHubActivity(_orchHubAgentCount, _orchHubModelCount);
-  }, 15000);
+    if (_currentModule === 'agents') _refreshOrchHubActivity(_orchHubAgentCount, _orchHubModelCount);
+  }, 60000);
+}
+
+function _scheduleOrchHubRefresh(delayMs) {
+  if (_currentModule !== 'agents') return;
+  if (_orchHubRefreshTimer) return;
+  _orchHubRefreshTimer = setTimeout(function() {
+    _orchHubRefreshTimer = null;
+    if (_currentModule === 'agents') _refreshOrchHubActivity(_orchHubAgentCount, _orchHubModelCount);
+  }, Math.max(80, delayMs || 250));
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -26530,9 +26570,11 @@ def _dispatch_openclaw(message, model=None, timeout=120):
     oc_bin = _resolve_cli("openclaw")
     if not oc_bin:
         return {"ok": False, "error": "openclaw CLI not found. Install: npm i -g openclaw"}
-    agent_id = model or "main"
+    # Porter routes on provider/model names, but OpenClaw CLI expects a configured agent id here.
+    # For now, keep bridge dispatch pinned to the default main agent instead of misusing model strings.
+    agent_id = "main"
     cmd = [oc_bin, "agent", "--agent", agent_id, "--message", message, "--json", "--timeout", str(timeout)]
-    log.info("Agent bridge [openclaw]: agent=%s msg=%s", agent_id, message[:80])
+    log.info("Agent bridge [openclaw]: agent=%s requested_model=%s msg=%s", agent_id, model or "", message[:80])
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env(), cwd=str(Path.home()))
     if result.returncode != 0:
         return {"ok": False, "error": result.stderr[:500] or "OpenClaw returned non-zero"}
@@ -29615,6 +29657,123 @@ def _append_coordination_event(event: dict) -> None:
         log.debug("Coordination log append failed: %s", e)
 
 
+
+# ── Coordination Ledger — shared work board for model deconfliction ──
+
+def _ledger_claim(model: str, scope: str, message: str = "", ttl_minutes: int = 30, version_at: str = "") -> dict:
+    model = str(model or "").strip().lower()
+    scope = str(scope or "").strip()
+    if not model or not scope:
+        return {"ok": False, "error": "model and scope required"}
+    now = time.time()
+    conn = _db_conn()
+    existing = conn.execute(
+        "SELECT id, model, message, expires_at FROM coordination_ledger "
+        "WHERE scope=? AND entry_type='claim' AND resolved=0 AND expires_at>? LIMIT 1",
+        (scope, now)
+    ).fetchone()
+    if existing and existing["model"] != model:
+        conn.close()
+        return {"ok": False, "conflict": True, "claimed_by": existing["model"],
+                "message": existing["message"], "expires_at": existing["expires_at"]}
+    conn.execute(
+        "UPDATE coordination_ledger SET resolved=1 WHERE scope=? AND model=? AND entry_type='claim' AND resolved=0",
+        (scope, model)
+    )
+    entry_id = f"cl-{int(now)}-{uuid.uuid4().hex[:8]}"
+    expires_at = now + (ttl_minutes * 60)
+    conn.execute(
+        "INSERT INTO coordination_ledger (id, ts, model, entry_type, scope, message, version_at, ttl_minutes, expires_at) "
+        "VALUES (?, ?, ?, 'claim', ?, ?, ?, ?, ?)",
+        (entry_id, now, model, scope, str(message or ""), str(version_at or ""), ttl_minutes, expires_at)
+    )
+    conn.commit()
+    conn.close()
+    _sse_broadcast(json.dumps({"type": "coordination:claim", "model": model, "scope": scope, "message": message}))
+    return {"ok": True, "id": entry_id, "scope": scope, "expires_at": expires_at}
+
+
+def _ledger_update(model: str, scope: str, entry_type: str, message: str = "", version_at: str = "", context: str = "") -> dict:
+    model = str(model or "").strip().lower()
+    scope = str(scope or "").strip()
+    entry_type = str(entry_type or "").strip().lower()
+    if entry_type not in ("progress", "complete", "handoff", "block", "release"):
+        return {"ok": False, "error": "entry_type must be progress|complete|handoff|block|release"}
+    now = time.time()
+    conn = _db_conn()
+    entry_id = f"cl-{int(now)}-{uuid.uuid4().hex[:8]}"
+    conn.execute(
+        "INSERT INTO coordination_ledger (id, ts, model, entry_type, scope, message, version_at, context) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (entry_id, now, model, entry_type, scope, str(message or "")[:500], str(version_at or ""), str(context or "")[:2000])
+    )
+    if entry_type in ("complete", "release"):
+        conn.execute(
+            "UPDATE coordination_ledger SET resolved=1 WHERE scope=? AND model=? AND entry_type='claim' AND resolved=0",
+            (scope, model)
+        )
+    conn.commit()
+    conn.close()
+    _sse_broadcast(json.dumps({"type": "coordination:" + entry_type, "model": model, "scope": scope, "message": message}))
+    return {"ok": True, "id": entry_id}
+
+
+def _ledger_active() -> list:
+    now = time.time()
+    try:
+        conn = _db_conn()
+        conn.execute("UPDATE coordination_ledger SET resolved=1 WHERE entry_type='claim' AND resolved=0 AND expires_at<? AND expires_at>0", (now,))
+        conn.commit()
+        rows = conn.execute(
+            "SELECT id, ts, model, entry_type, scope, message, version_at, ttl_minutes, expires_at "
+            "FROM coordination_ledger WHERE entry_type='claim' AND resolved=0 AND expires_at>? "
+            "ORDER BY ts DESC", (now,)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def _ledger_recent(limit: int = 50) -> list:
+    try:
+        conn = _db_conn()
+        rows = conn.execute(
+            "SELECT id, ts, model, entry_type, scope, message, version_at, context, resolved "
+            "FROM coordination_ledger ORDER BY ts DESC LIMIT ?",
+            (max(1, min(200, limit)),)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def _ledger_conflicts() -> list:
+    conflicts = []
+    try:
+        conn = _db_conn()
+        now = time.time()
+        vc = conn.execute(
+            "SELECT version_at, GROUP_CONCAT(DISTINCT model) as models, COUNT(DISTINCT model) as cnt "
+            "FROM coordination_ledger WHERE entry_type='complete' AND version_at != '' "
+            "GROUP BY version_at HAVING cnt > 1"
+        ).fetchall()
+        for row in vc:
+            conflicts.append({"type": "version_collision", "version": row["version_at"], "models": row["models"]})
+        sc = conn.execute(
+            "SELECT scope, GROUP_CONCAT(DISTINCT model) as models, COUNT(DISTINCT model) as cnt "
+            "FROM coordination_ledger WHERE entry_type='claim' AND resolved=0 AND expires_at>? "
+            "GROUP BY scope HAVING cnt > 1", (now,)
+        ).fetchall()
+        for row in sc:
+            conflicts.append({"type": "scope_collision", "scope": row["scope"], "models": row["models"]})
+        conn.close()
+    except Exception:
+        pass
+    return conflicts
+
+
 def _run_coordination(prompt: str, backends: list[str] | None = None, timeout: int = 45) -> dict:
     """Run the same prompt across selected backends through Porter's agent bridge."""
     prompt = (prompt or "").strip()
@@ -30378,7 +30537,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.11"})
+            self.reply_json({"v": "0.30.12"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -30540,7 +30699,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.11"
+                health["porter_version"] = "0.30.12"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -32214,6 +32373,17 @@ class Handler(BaseHTTPRequestHandler):
             events = _coordination_recent(limit=limit)
             self.reply_json({"ok": True, "events": events, "count": len(events)})
 
+        elif parsed.path == "/api/coordination/ledger":
+            if not self.auth_check(redirect=False): return
+            active = _ledger_active()
+            recent = _ledger_recent(limit=50)
+            conflicts = _ledger_conflicts()
+            self.reply_json({"ok": True, "active_claims": active, "recent": recent, "conflicts": conflicts})
+
+        elif parsed.path == "/api/coordination/conflicts":
+            if not self.auth_check(redirect=False): return
+            self.reply_json({"ok": True, "conflicts": _ledger_conflicts()})
+
         elif parsed.path == "/api/agent-messages":
             if not self.auth_check(redirect=False): return
             qs = parse_qs(parsed.query)
@@ -32326,7 +32496,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.11'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.12'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -33066,6 +33236,33 @@ class Handler(BaseHTTPRequestHandler):
                     "message": str(e)[:300],
                     "retryable": False,
                 }})
+
+        elif parsed.path == "/api/coordination/claim":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            if not data: return
+            result = _ledger_claim(
+                model=str(data.get("model", "")).strip(),
+                scope=str(data.get("scope", "")).strip(),
+                message=str(data.get("message", "")).strip(),
+                ttl_minutes=int(data.get("ttl_minutes", 30) or 30),
+                version_at=str(data.get("version_at", "")).strip()
+            )
+            self.reply_json(result, 200 if result.get("ok") else 409 if result.get("conflict") else 400)
+
+        elif parsed.path == "/api/coordination/update":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            if not data: return
+            result = _ledger_update(
+                model=str(data.get("model", "")).strip(),
+                scope=str(data.get("scope", "")).strip(),
+                entry_type=str(data.get("type", "")).strip(),
+                message=str(data.get("message", "")).strip(),
+                version_at=str(data.get("version_at", "")).strip(),
+                context=str(data.get("context", "")).strip()
+            )
+            self.reply_json(result, 200 if result.get("ok") else 400)
 
         elif parsed.path == "/api/coordination/run":
             if not self.auth_check(redirect=False): return
@@ -37010,7 +37207,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.11 ready (localhost only)")
+    print(f"\n  Porter v0.30.12 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
