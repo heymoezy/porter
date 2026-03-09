@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.23 (2026-03-09)
+
+**Project-Aware Coordination Bridge**
+
+- Coordination Bridge runs now inherit active project and task context automatically instead of behaving like generic prompt fanout
+- Coordination prompts now get the same project brief, decision log, task state, recent activity, and Cortex memory injection used by project-aware persona dispatch
+- `coordination:start`, `coordination:result`, and `coordination:complete` events plus API responses now carry `project_id` and `task_id`, keeping live bridge activity tied to the project lane
+
+---
+
 ## v0.30.22 (2026-03-09)
 
 **Project-Lane Orchestration**

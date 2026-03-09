@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.22 — Project-aware orchestration engine"""
+"""Porter v0.30.23 — Project-aware bridge coordination"""
 
 
 import email
@@ -9596,7 +9596,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.22</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.23</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11034,6 +11034,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.23', date:'2026-03-09', notes:['Coordination Bridge runs now inherit active project/task context automatically instead of behaving like generic prompt fanout','Bridge coordination prompts now get the same project brief, decision log, task state, recent activity, and Cortex memory injection used by project-aware persona dispatch','coordination:start/result/complete events and API responses now carry project_id and task_id so live bridge activity stays tied to the project lane'] },
   { ver:'v0.30.22', date:'2026-03-09', notes:['Orchestration executor selection now prefers personas assigned to the active project or task instead of choosing a raw backend first and hoping context survives','Project-backed orchestration steps now always carry project brief, decision log, task state, recent project activity, and Cortex context even when a step falls back to direct backend dispatch','Failed orchestration steps now reassign through the same project-aware selector, so retries stay inside the project lane instead of degrading into generic backend swaps'] },
   { ver:'v0.30.21', date:'2026-03-09', notes:['Process Manager: Porter now tracks all model gateway processes (OpenClaw, Gemini, Codex, Ollama) with CPU, memory, runtime, and stall detection','Auto-kill: watchdog automatically kills processes stalled for 2+ hours with 0% CPU or zombies','API: GET /api/processes lists running gateways, POST /api/processes/kill and /restart for manual control','Watchdog integration: stalled processes auto-detected and terminated every 30 seconds'] },
   { ver:'v0.30.20', date:'2026-03-09', notes:['Agent Watchdog: background thread monitors running dispatches and orchestration steps, detects stalls, auto-reboots by reassigning to next-best backend','Response validation catches empty, repetitive, or refusal responses especially from OpenClaw','OpenClaw gateway health check: watchdog pings gateway every 30s, attempts auto-restart if unresponsive','New API: GET /api/watchdog returns live stats (checks, reboots, validation failures)'] },
@@ -30743,6 +30744,27 @@ def _agent_watchdog_loop():
                         f"OpenClaw response invalid: {validation['reason']}",
                         run_id=resp["run_id"], backend="openclaw")
 
+            # 4a. Resume stalled orchestration runs (pending steps with no running executor)
+            stalled_runs = conn.execute(
+                "SELECT DISTINCT run_id FROM orchestration_steps WHERE status='pending' "
+                "AND run_id IN (SELECT id FROM orchestration_runs WHERE status='running')"
+            ).fetchall()
+            for sr in stalled_runs:
+                rid = sr["run_id"]
+                running_count = conn.execute(
+                    "SELECT COUNT(*) as c FROM orchestration_steps WHERE run_id=? AND status='running'",
+                    (rid,)
+                ).fetchone()
+                if running_count and running_count["c"] == 0:
+                    log.info("Watchdog: resuming stalled run %s", rid)
+                    conn.execute(
+                        "INSERT INTO orchestration_events (run_id, event_type, message) VALUES (?, 'watchdog_resume', 'Watchdog resumed stalled run')",
+                        (rid,)
+                    )
+                    threading.Thread(target=_orch_execute_run, args=(rid,), daemon=True, name=f"orch-resume-{rid}").start()
+                    _emit_event("watchdog:run_resumed", {"run_id": rid})
+                    mlog.emit("info", "watchdog", "watchdog.run_resumed", f"Resumed stalled run {rid}", run_id=rid)
+
             conn.commit()
             conn.close()
 
@@ -31310,11 +31332,13 @@ def _orch_cancel_run(run_id: str) -> dict:
         return {"ok": False, "error": str(e)}
 
 
-def _run_coordination(prompt: str, backends: list[str] | None = None, timeout: int = 45) -> dict:
+def _run_coordination(prompt: str, backends: list[str] | None = None, timeout: int = 45, project_id: str = "", task_id: str = "") -> dict:
     """Run the same prompt across selected backends through Porter's agent bridge."""
     prompt = (prompt or "").strip()
     if not prompt:
         return {"ok": False, "error": "prompt required"}
+    project_id = str(project_id or "").strip() or str(_config.get("active_project_id") or "").strip()
+    task_id = str(task_id or "").strip()
     available = list(AGENT_DISPATCHERS.keys())
     selected = backends or ["openclaw", "claude", "gemini", "codex"]
     selected = [b for b in selected if b in available]
@@ -31325,14 +31349,19 @@ def _run_coordination(prompt: str, backends: list[str] | None = None, timeout: i
     ts = datetime.now(timezone.utc).isoformat()
     results = {}
     started = time.time()
-    _emit_event("coordination:start", {"run_id": run_id, "backends": selected, "prompt": prompt[:200]})
+    effective_prompt = prompt
+    if project_id:
+        project_ctx = _build_project_dispatch_context(project_id, task_id=task_id, message=prompt)
+        if project_ctx:
+            effective_prompt = f"{prompt}\n\n--- Project Context ---\n{project_ctx}"
+    _emit_event("coordination:start", {"run_id": run_id, "backends": selected, "prompt": prompt[:200], "project_id": project_id, "task_id": task_id})
     mlog.emit("info", "coordination", "coordination.start",
               f"Coordination run started across {len(selected)} backends",
               run_id=run_id, status="running",
-              extra={"backends": selected, "prompt": prompt[:200]})
+              extra={"backends": selected, "prompt": prompt[:200], "project_id": project_id, "task_id": task_id})
 
     def _run_backend(b):
-        r = dispatch_agent(prompt, b, timeout=timeout)
+        r = dispatch_agent(effective_prompt, b, timeout=timeout)
         out = {
             "ok": bool(r.get("ok", False)),
             "model": r.get("model", ""),
@@ -31358,6 +31387,8 @@ def _run_coordination(prompt: str, backends: list[str] | None = None, timeout: i
                 "run_id": run_id,
                 "backend": b,
                 "prompt": prompt[:500],
+                "project_id": project_id,
+                "task_id": task_id,
                 **out,
             })
             _emit_event("coordination:result", {
@@ -31366,6 +31397,8 @@ def _run_coordination(prompt: str, backends: list[str] | None = None, timeout: i
                 "ok": bool(out.get("ok")),
                 "error": out.get("error", "")[:200],
                 "model": out.get("model", ""),
+                "project_id": project_id,
+                "task_id": task_id,
             })
     ok_count = sum(1 for v in results.values() if v.get("ok"))
     duration_ms = int((time.time() - started) * 1000)
@@ -31374,13 +31407,15 @@ def _run_coordination(prompt: str, backends: list[str] | None = None, timeout: i
         "ok_count": ok_count,
         "backend_count": len(selected),
         "duration_ms": duration_ms,
+        "project_id": project_id,
+        "task_id": task_id,
     })
     mlog.emit("info", "coordination", "coordination.complete",
               f"Coordination run complete: {ok_count}/{len(selected)} ok",
               run_id=run_id, duration_ms=duration_ms,
               status="ok" if ok_count == len(selected) else "partial",
-              extra={"results": results})
-    return {"ok": True, "run_id": run_id, "prompt": prompt, "ok_count": ok_count, "results": results, "duration_ms": duration_ms}
+              extra={"results": results, "project_id": project_id, "task_id": task_id})
+    return {"ok": True, "run_id": run_id, "prompt": prompt, "project_id": project_id, "task_id": task_id, "ok_count": ok_count, "results": results, "duration_ms": duration_ms}
 
 
 def _coordination_recent(limit: int = 20) -> list[dict]:
@@ -32127,7 +32162,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.22"})
+            self.reply_json({"v": "0.30.23"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32289,7 +32324,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.22"
+                health["porter_version"] = "0.30.23"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34119,7 +34154,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.22'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.23'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34934,6 +34969,8 @@ class Handler(BaseHTTPRequestHandler):
             data = self.read_json_body()
             if not data: return
             prompt = str(data.get("prompt", "")).strip()
+            project_id = str(data.get("project_id") or _config.get("active_project_id") or "").strip()
+            task_id = str(data.get("task_id") or "").strip()
             raw_backends = data.get("backends", [])
             if isinstance(raw_backends, list):
                 backends = [str(b).strip().lower() for b in raw_backends if str(b).strip()]
@@ -34945,7 +34982,7 @@ class Handler(BaseHTTPRequestHandler):
                 log.debug("Timeout parse fallback: %s", e)
                 timeout = 45
             timeout = max(10, min(300, timeout))
-            res = _run_coordination(prompt, backends=backends or None, timeout=timeout)
+            res = _run_coordination(prompt, backends=backends or None, timeout=timeout, project_id=project_id, task_id=task_id)
             self.reply_json(res, 200 if res.get("ok") else 400)
 
         # ── Session rename (POST /api/sessions/<id>/rename) ──────────
@@ -38874,7 +38911,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.22 ready (localhost only)")
+    print(f"\n  Porter v0.30.23 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
