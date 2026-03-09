@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.1 (2026-03-09)
+
+**Faster Staged Models Hydration**
+
+- Models bootstrap is now structure-only and no longer runs activity aggregation on the critical first-paint path
+- Bootstrap and full snapshot start in parallel, so Porter can render whichever live payload lands first instead of blocking on sequential hydration
+- Backend status checks are deferred until after first paint, keeping gateway probes off the initial render path
+
+---
+
 ## v0.30.0 (2026-03-09)
 
 **Faster Live Models Bootstrap**

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.0 — Faster live Models bootstrap"""
+"""Porter v0.30.1 — Faster staged Models hydration"""
 
 
 import email
@@ -9179,7 +9179,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.0</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.1</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10510,6 +10510,9 @@ var _modelsActivityHydrate = {};
 var _modelStructureSignature = '';
 var _modelsLoadSeq = 0;
 var _modelsRenderedOnce = false;
+var _modelsStatusCheckSeq = 0;
+var _modelsStatusCheckTimer = null;
+var _modelsStatusIdleHandle = null;
 function _readModelsClientCache(key, maxAgeMs) {
   return null;
 }
@@ -10575,6 +10578,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.1', date:'2026-03-09', notes:['Models bootstrap is now structure-only and no longer runs activity aggregation on the critical first-paint path','Bootstrap and full snapshot now start in parallel, so Porter renders whichever live payload lands first instead of waiting on sequential hydration','Backend status checks are deferred until after first paint, keeping gateway probes off the initial render path'] },
   { ver:'v0.30.0', date:'2026-03-09', notes:['Models bootstrap is fast again without falling back to stale browser truth: first paint uses fresh lightweight provider/model data, then full live snapshot hydrates afterward','Non-lightweight provider probing now runs in parallel instead of sequentially, reducing server-side wait on the Models endpoints','Control-plane truth remains live, but preliminary loading no longer pays the full dynamic catalog cost up front'] },
   { ver:'v0.29.99', date:'2026-03-09', notes:['Models no longer uses browser sessionStorage at all for backend truth','Models bootstrap and snapshot now force fresh capability checks and invalidate CLI-derived caches when binary fingerprints change','Porter control-plane surfaces now prefer live runtime truth over cached bootstrap state after CLI upgrades like Gemini'] },
   { ver:'v0.29.97', date:'2026-03-09', notes:['Models loading no longer writes skeleton cards into the grid at all; only the top loading rail changes during refresh','This guarantees background loads cannot blank or replace the visible grid once real cards have rendered','Grid DOM is now reserved for real card renders and the explicit empty-state only'] },
@@ -18348,25 +18352,63 @@ function _setModelCardState(backendId, state) {
   card.setAttribute('data-health-state', state || 'unknown');
 }
 
+function _applyBackendStatus(provider) {
+  if (!provider) return;
+  var p = provider;
+  var el = document.getElementById('backend-status-' + p.id);
+  var updEl = document.getElementById('backend-update-foot-' + p.id);
+  var footEl = document.getElementById('backend-status-foot-' + p.id);
+  if (!el) return;
+  if (p.type === 'gateway') {
+    _checkGatewayCardStatus(p.id, el);
+    return;
+  }
+  var state = p.available ? 'ok' : 'err';
+  _setModelCardState(p.id, state);
+  el.innerHTML = '<div class="model-card-state">'
+    + '<span class="model-card-chip ' + (p.available ? 'ok' : 'err') + '">' + (p.available ? 'Ready' : 'Unavailable') + '</span>'
+    + '</div>';
+  if (updEl) updEl.innerHTML = '';
+  if (footEl) footEl.innerHTML = '';
+}
+
 function _checkBackendStatuses(providers) {
   if (!providers) return;
-  providers.forEach(function(p) {
-    var el = document.getElementById('backend-status-' + p.id);
-    var updEl = document.getElementById('backend-update-foot-' + p.id);
-    var footEl = document.getElementById('backend-status-foot-' + p.id);
-    if (!el) return;
-    if (p.type === 'gateway') {
-      _checkGatewayCardStatus(p.id, el);
-      return;
-    }
-    var state = p.available ? 'ok' : 'err';
-    _setModelCardState(p.id, state);
-    el.innerHTML = '<div class="model-card-state">'
-      + '<span class="model-card-chip ' + (p.available ? 'ok' : 'err') + '">' + (p.available ? 'Ready' : 'Unavailable') + '</span>'
-      + '</div>';
-    if (updEl) updEl.innerHTML = '';
-    if (footEl) footEl.innerHTML = '';
-  });
+  providers.forEach(_applyBackendStatus);
+}
+
+function _scheduleBackendStatusChecks(providers) {
+  providers = Array.isArray(providers) ? providers.slice() : [];
+  _modelsStatusCheckSeq += 1;
+  var seq = _modelsStatusCheckSeq;
+  if (_modelsStatusCheckTimer) {
+    clearTimeout(_modelsStatusCheckTimer);
+    _modelsStatusCheckTimer = null;
+  }
+  if (_modelsStatusIdleHandle && window.cancelIdleCallback) {
+    cancelIdleCallback(_modelsStatusIdleHandle);
+    _modelsStatusIdleHandle = null;
+  }
+  function _runChecks() {
+    if (seq !== _modelsStatusCheckSeq) return;
+    providers.forEach(function(p, idx) {
+      window.setTimeout(function() {
+        if (seq !== _modelsStatusCheckSeq) return;
+        _applyBackendStatus(p);
+      }, p && p.type === 'gateway' ? (120 + (idx * 180)) : (idx * 24));
+    });
+  }
+  if (window.requestIdleCallback) {
+    _modelsStatusIdleHandle = requestIdleCallback(function() {
+      _modelsStatusIdleHandle = null;
+      _runChecks();
+    }, { timeout: 700 });
+    return;
+  }
+  _modelsStatusCheckTimer = window.setTimeout(function() {
+    _modelsStatusCheckTimer = null;
+    _runChecks();
+  }, 80);
 }
 
 async function _checkGatewayCardStatus(backendId, el) {
@@ -18833,7 +18875,7 @@ function _applyModelsSnapshot(snap, opts) {
     _modelsRenderedOnce = true;
   }
   _applyModelVersions(snap.versions || {});
-  _checkBackendStatuses(window._modelProviders);
+  _scheduleBackendStatusChecks(window._modelProviders);
 }
 
 function _renderModelsLoading(stage, opts) {
@@ -18874,31 +18916,35 @@ async function loadModels() {
         _renderModelsLoading('Refreshing live model state...', { detail: 'Models is already rendered; refreshing in the background without replacing the grid.', keepCards: true });
       }
     }
-    if (!seededSnapshot) {
-      var boot = await api('/api/models/bootstrap');
-      if (loadSeq !== _modelsLoadSeq) return;
+    if (!_modelSseId) _connectModelSSE();
+    _renderModelsLoading('Hydrating live model catalogs...', { detail: 'Refreshing dynamic models, backend health, and version checks.', keepCards: true });
+    var snapshotApplied = false;
+    var bootPromise = seededSnapshot ? Promise.resolve(null) : api('/api/models/bootstrap');
+    var snapPromise = api('/api/models/snapshot');
+    bootPromise.then(function(boot) {
+      if (loadSeq !== _modelsLoadSeq || snapshotApplied) return;
       if (boot && boot.providers) {
         _writeModelsClientCache(_modelsClientCacheKeys.bootstrap, boot);
         if (!seededBootstrap) _applyModelsSnapshot(boot, { preferStable: true });
       }
-    }
-    if (!_modelSseId) _connectModelSSE();
-    _renderModelsLoading('Hydrating live model catalogs...', { detail: 'Refreshing dynamic models, backend health, and version checks.', keepCards: true });
-    setTimeout(function() {
-      api('/api/models/snapshot').then(function(snap) {
-        if (loadSeq !== _modelsLoadSeq) return;
-        if (snap && snap.providers) {
-          _writeModelsClientCache(_modelsClientCacheKeys.snapshot, snap);
-          if (!seededSnapshot) _applyModelsSnapshot(snap, { preferStable: true });
-        }
-        _renderModelsLoading('');
-      }).catch(function(e) {
-        if (loadSeq !== _modelsLoadSeq) return;
-        _reportModelsClientError('models-snapshot-hydrate', e || new Error('Snapshot hydrate failed'));
-        _renderModelsLoading('');
-      });
-      _refreshModelVersions(true);
-    }, 150);
+    }).catch(function(e) {
+      if (loadSeq !== _modelsLoadSeq) return;
+      _reportModelsClientError('models-bootstrap-hydrate', e || new Error('Bootstrap hydrate failed'));
+    });
+    snapPromise.then(function(snap) {
+      if (loadSeq !== _modelsLoadSeq) return;
+      if (snap && snap.providers) {
+        snapshotApplied = true;
+        _writeModelsClientCache(_modelsClientCacheKeys.snapshot, snap);
+        _applyModelsSnapshot(snap, { preferStable: true });
+      }
+      _renderModelsLoading('');
+    }).catch(function(e) {
+      if (loadSeq !== _modelsLoadSeq) return;
+      _reportModelsClientError('models-snapshot-hydrate', e || new Error('Snapshot hydrate failed'));
+      _renderModelsLoading('');
+    });
+    _refreshModelVersions(true);
   } catch(e) {
     _renderModelsLoading('');
     _reportModelsClientError('load-models', e);
@@ -27400,7 +27446,7 @@ def _models_snapshot(force_versions: bool = False) -> dict:
     return {
         "ok": True,
         "providers": _providers_payload(),
-        "activity": _models_activity_payload(include_recent=False),
+        "activity": {},
         "backends": _models_available_payload(),
         "versions": _probe_backend_versions(force=force_versions),
         "runtimes": {bk: _backend_runtime_info(bk) for bk in PROVIDER_REGISTRY},
@@ -27413,7 +27459,7 @@ def _models_bootstrap() -> dict:
     return {
         "ok": True,
         "providers": _providers_payload(lightweight=True),
-        "activity": _models_activity_payload(include_recent=False),
+        "activity": {},
         "backends": _models_available_payload(lightweight=True),
         "versions": _bootstrap_backend_versions(),
         "runtimes": {bk: _backend_runtime_info(bk) for bk in PROVIDER_REGISTRY},
@@ -29653,7 +29699,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.0"})
+            self.reply_json({"v": "0.30.1"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -29815,7 +29861,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.29.88"
+                health["porter_version"] = "0.30.1"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -31592,7 +31638,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.0'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.1'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -36269,7 +36315,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.0 ready (localhost only)")
+    print(f"\n  Porter v0.30.1 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
