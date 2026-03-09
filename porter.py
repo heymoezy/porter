@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.28 — Auto-fallback dispatch + rate-limit retry + leader/contributor modes"""
+"""Porter v0.30.29 — Auto-fallback dispatch + rate-limit retry + leader/contributor modes"""
 
 
 import email
@@ -9645,7 +9645,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.28</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.29</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11012,6 +11012,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.29', date:'2026-03-09', notes:['Models tab fix: client timeout raised from 15s to 45s so model endpoints no longer abort mid-load','Snapshot and bootstrap cache TTL extended from 10s to 120s — stops cold-cache rebuilds every 10 seconds','Removed blocking capability checks from snapshot and bootstrap HTTP handlers (saved 8s per request)','Model catalog fetching now parallelized across all 5 backends instead of sequential (saved 4s)'] },
   { ver:'v0.30.28', date:'2026-03-09', notes:['Cortex extraction now prefers local Ollama (no rate limits) before trying cloud backends','Batch extraction: Extract Now button processes recent unextracted dispatches on demand','Cortex squad filter wired up — filter memories by squad membership','Backend health-aware extraction skips rate-limited backends automatically'] },
   { ver:'v0.30.27', date:'2026-03-09', notes:['Backend health tracking: rate-limited backends enter cooldown and auto-recover when watchdog confirms they are back','Dispatch skips rate-limited backends immediately instead of wasting a timeout discovering the limit again','Rate limits hidden in successful response text are now caught and trigger auto-fallback','Watchdog probes recovering backends every 30s and marks them available when they respond','New API: GET /api/backend-health shows cooldown status and failure counts per backend'] },
   { ver:'v0.30.26', date:'2026-03-09', notes:['Auto-fallback: when a backend fails or hits rate limits, Porter tries fallback backends automatically — agents never give up','Rate-limit retry: dispatch_agent retries with 30/60/120s exponential backoff before failing','All agents now have fallback backend chains (primary fails → try next in chain)','Leader/Contributor dispatch mode: Lobster and Vision are leaders, others are contributors','Cortex squad filter: click a squad to see only memories from its agents'] },
@@ -20065,8 +20066,8 @@ async function loadModels() {
     _renderModelsLoading('Hydrating live model catalogs...', { detail: 'Refreshing dynamic models, backend health, and version checks.', keepCards: true });
     var snapshotApplied = false;
     var bootstrapApplied = false;
-    var bootPromise = api('/api/models/bootstrap');
-    var snapPromise = api('/api/models/snapshot');
+    var bootPromise = api('/api/models/bootstrap', null, 45000);
+    var snapPromise = api('/api/models/snapshot', null, 45000);
     bootPromise.then(function(boot) {
       if (loadSeq !== _modelsLoadSeq || snapshotApplied) return;
       if (boot && boot.providers) {
@@ -28734,7 +28735,9 @@ def _models_available_payload(lightweight: bool = False) -> dict:
     prefs = _config.get("preferences", {})
     active_models = prefs.get("active_models", {})
     backends_out = {}
-    for bk in ["openclaw", "claude", "gemini", "codex", "ollama"]:
+    import concurrent.futures as _avail_cf
+    _bk_list = ["openclaw", "claude", "gemini", "codex", "ollama"]
+    def _fetch_bk_models(bk):
         choice = active_models.get(bk, "auto")
         cached_models = _backend_model_cache["data"].get(bk) or []
         if lightweight and cached_models:
@@ -28749,18 +28752,26 @@ def _models_available_payload(lightweight: bool = False) -> dict:
             models = _get_available_models(bk)
         resolved = _get_active_model(bk) if not lightweight else (choice if choice != "auto" else (models[0]["id"] if models else ""))
         catalog = ([{"id": "auto", "name": "Auto"}] + models) if len(models) > 0 else [{"id": "auto", "name": "Auto"}]
-        backends_out[bk] = {"active": choice, "resolved": resolved, "models": catalog}
+        return bk, {"active": choice, "resolved": resolved, "models": catalog}
+    if lightweight:
+        for bk in _bk_list:
+            _, data = _fetch_bk_models(bk)
+            backends_out[bk] = data
+    else:
+        with _avail_cf.ThreadPoolExecutor(max_workers=5) as _avail_ex:
+            for bk, data in _avail_ex.map(_fetch_bk_models, _bk_list):
+                backends_out[bk] = data
     return backends_out
 
 
 def _models_snapshot(force_versions: bool = False) -> dict:
     _refresh_cli_cache_fingerprints()
-    _run_cap_checks(force=False)
+    # Cap checks moved to background — too slow for HTTP handler (8s+)
     now = time.time()
     fp = _models_cache_fingerprint()
     if (not force_versions and _models_snapshot_cache.get("data")
             and _models_snapshot_cache.get("fp") == fp
-            and (now - float(_models_snapshot_cache.get("ts") or 0.0)) < 10.0):
+            and (now - float(_models_snapshot_cache.get("ts") or 0.0)) < 120.0):
         return dict(_models_snapshot_cache["data"])
     payload = {
         "ok": True,
@@ -28778,12 +28789,12 @@ def _models_snapshot(force_versions: bool = False) -> dict:
 
 def _models_bootstrap() -> dict:
     _refresh_cli_cache_fingerprints()
-    _run_cap_checks(force=False)
+    # Cap checks moved to background — too slow for HTTP handler
     now = time.time()
     fp = _models_cache_fingerprint()
     if (_models_bootstrap_cache.get("data")
             and _models_bootstrap_cache.get("fp") == fp
-            and (now - float(_models_bootstrap_cache.get("ts") or 0.0)) < 10.0):
+            and (now - float(_models_bootstrap_cache.get("ts") or 0.0)) < 120.0):
         return dict(_models_bootstrap_cache["data"])
     payload = {
         "ok": True,
@@ -32405,7 +32416,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.28"})
+            self.reply_json({"v": "0.30.29"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32567,7 +32578,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.28"
+                health["porter_version"] = "0.30.29"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34411,7 +34422,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.28'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.29'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39174,7 +39185,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.28 ready (localhost only)")
+    print(f"\n  Porter v0.30.29 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
