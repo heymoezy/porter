@@ -8578,6 +8578,8 @@ body.density-compact .file-name { padding: 6px 0; }
 .model-card-tags { display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px; }
 .model-card-tag { font-size:11px;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,var(--accent) 12%,var(--bg));color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border)); }
 .model-card-meta { display:flex;flex-wrap:wrap;gap:6px;align-items:center; }
+.model-card-runtime { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+.model-card-runtime .model-card-chip { font-size:10px; }
 .model-card-state { display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:24px; }
 .model-card-chip { display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid var(--border);font-size:10px;color:var(--text2);background:var(--bg);white-space:nowrap; }
 .model-card-chip.ok { border-color:color-mix(in srgb,#22c55e 35%,var(--border)); color:#22c55e; }
@@ -19726,9 +19728,37 @@ function _renderModelCards(data, act) {
     var _avResolved = _avBk.resolved || '';
     var _avModels = _avBk.models || [];
     var _avActive = _avBk.active || 'auto';
+    var _rt = (window._modelRuntimes || {})[p.id] || {};
     var _resolvedName = '';
     _avModels.forEach(function(m) { if (m.id === _avResolved) _resolvedName = m.name; });
     if (!_resolvedName) _resolvedName = _avResolved || (p.label || p.id);
+    var _runtimeHtml = '';
+    if (p.id === 'gemini') {
+      var _authMode = _rt.auth_mode || 'unknown';
+      var _controlMode = _authMode === 'api_key' ? 'Strict model control' : 'Alias model control';
+      var _authLabel = _authMode === 'api_key' ? 'API key mode' : (_authMode === 'oauth' ? 'OAuth mode' : 'Auth unknown');
+      _runtimeHtml = '<div class="model-card-runtime">'
+        + '<span class="model-card-chip dim">' + escHtml(_authLabel) + '</span>'
+        + '<span class="model-card-chip dim">' + escHtml(_controlMode) + '</span>'
+        + '</div>';
+    } else if (p.id === 'openclaw') {
+      _runtimeHtml = '<div class="model-card-runtime">'
+        + '<span class="model-card-chip dim">Gateway runtime</span>'
+        + '<span class="model-card-chip dim">Bridge + agent split</span>'
+        + '</div>';
+    } else if (p.id === 'claude' && _rt.supports_json_output) {
+      _runtimeHtml = '<div class="model-card-runtime">'
+        + '<span class="model-card-chip dim">Structured test path</span>'
+        + '</div>';
+    } else if (p.id === 'codex') {
+      _runtimeHtml = '<div class="model-card-runtime">'
+        + '<span class="model-card-chip dim">Exec JSON runtime</span>'
+        + '</div>';
+    } else if (p.id === 'ollama') {
+      _runtimeHtml = '<div class="model-card-runtime">'
+        + '<span class="model-card-chip dim">Local HTTP runtime</span>'
+        + '</div>';
+    }
     // Build model list (replaces dropdown)
     var _selHtml = '';
     if (_avModels.length > 0) {
@@ -19772,6 +19802,7 @@ function _renderModelCards(data, act) {
       + '<div id="backend-status-' + escHtml(p.id) + '" style="flex:1"></div>'
       + '</div>'
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
+      + _runtimeHtml
       + (p.available ? _selHtml : _installHtml)
       + updateFootHtml
       + statusFootHtml
