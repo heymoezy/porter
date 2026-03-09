@@ -1,5 +1,15 @@
 # Porter Release Notes
 
+## v0.30.25 (2026-03-09)
+
+**Squad-Aware Orchestration Routing**
+
+- Orchestration executor selection now applies squad `dispatch_policy` instead of treating squads as display-only metadata
+- `leader_first`, `backend_specialist`, and `balanced` squad policies now influence which assigned persona gets the work inside a project lane
+- This makes squad structure affect real autonomous routing instead of only enriching prompts after the route was already chosen
+
+---
+
 ## v0.30.24 (2026-03-09)
 
 **Project-Aware Watchdog Recovery**

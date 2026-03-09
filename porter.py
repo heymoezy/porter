@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.24 — Project-aware watchdog recovery"""
+"""Porter v0.30.26 — Auto-fallback dispatch + rate-limit retry + leader/contributor modes"""
 
 
 import email
@@ -6678,6 +6678,8 @@ def _init_trace_tables():
         entry_type TEXT NOT NULL,
         scope TEXT NOT NULL DEFAULT '',
         message TEXT NOT NULL DEFAULT '',
+        project_id TEXT DEFAULT '',
+        task_id TEXT DEFAULT '',
         version_at TEXT DEFAULT '',
         ttl_minutes INTEGER DEFAULT 30,
         expires_at REAL DEFAULT 0,
@@ -6834,8 +6836,14 @@ def _init_trace_tables():
         PRIMARY KEY (squad_id, persona_id)
     )""")
     # v0.29.25 — Hook Profiles: dispatch strictness per agent
-    try: conn.execute("ALTER TABLE personas ADD COLUMN hook_profile TEXT DEFAULT 'balanced'")
-    except: pass  # Column already exists
+    try:
+        conn.execute("ALTER TABLE personas ADD COLUMN hook_profile TEXT DEFAULT 'balanced'")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE personas ADD COLUMN dispatch_mode TEXT DEFAULT 'contributor'")
+    except Exception:
+        pass
 
     # v0.29.27 — Session Lifecycle: chat session state machine
     try: conn.execute("ALTER TABLE chats ADD COLUMN session_state TEXT DEFAULT 'active'")
@@ -9533,11 +9541,6 @@ input[type="number"].settings-input { min-width: 60px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
       <span class="mnav-label">Workflows</span>
     </button>
-    <div class="mnav-group-label">Storage</div>
-    <button class="mnav-item" id="mnav-locations" onclick="switchModule('locations')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-      <span class="mnav-label">Locations</span>
-    </button>
     <button class="mnav-item" id="mnav-files" onclick="closeSettings(); switchModule('files')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
       <span class="mnav-label">Files</span>
@@ -9596,7 +9599,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.24</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.26</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -9970,79 +9973,6 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
   </div>
 
-  <div id="locations-module" class="module-panel">
-    <div class="module-hdr">
-      <span class="module-title">Locations</span>
-      <button class="btn btn-ghost"  onclick="loadTailscaleStatus(true);loadLocations();">&#8635; Refresh</button>
-    </div>
-    <div class="module-intro">Devices and network locations connected to this Porter instance.</div>
-    <div id="loc-list"></div>
-
-    <!-- mount add/edit form (moved from spage-locations) -->
-    <div id="mount-form" style="display:none;margin-top:16px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
-      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">Mount path</div>
-      <input type="hidden" id="nm-node-id">
-      <input type="hidden" id="nm-mount-id">
-      <div class="settings-field">
-        <label>Label</label>
-        <input type="text" class="settings-input" id="nm-label" placeholder="Documents">
-      </div>
-      <div class="settings-field">
-        <label>Absolute path</label>
-        <input type="text" class="settings-input" id="nm-path" placeholder="/home/user/files">
-      </div>
-      <div class="settings-save-row" style="gap:8px">
-        <button class="btn btn-ghost" onclick="testMountPath()">Test path</button>
-        <div style="flex:1"></div>
-        <button class="btn btn-ghost" onclick="cancelMountForm()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveMountForm()">Save</button>
-      </div>
-      <div id="nm-status" style="font-size:12px;margin-top:6px;color:var(--text3)"></div>
-    </div>
-
-    <!-- add location form -->
-    <div id="loc-form" style="display:none;margin-top:16px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
-      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">Add Location</div>
-      <input type="hidden" id="lf-edit-id">
-      <input type="hidden" id="lf-type">
-      <div class="loc-type-grid">
-        <button class="loc-type-card" onclick="addLocalNode()">
-          <span class="loc-card-title">🖥 Local machine</span>
-          <span class="loc-card-desc">Add another local node instance</span>
-        </button>
-        <button class="loc-type-card" onclick="addVpsNode()">
-          <span class="loc-card-title">☁ VPS / Remote server</span>
-          <span class="loc-card-desc">A cloud or hosted server accessed via SSH or direct mount</span>
-        </button>
-        <button class="loc-type-card" onclick="addTailscaleNode()">
-          <span class="loc-card-title">🔗 Tailscale peer</span>
-          <span class="loc-card-desc">Discover and add a peer from your tailnet</span>
-        </button>
-        <button class="loc-type-card" disabled>
-          <span class="loc-card-title">🐙 GitHub repository</span>
-          <span class="loc-card-desc">Coming soon</span>
-        </button>
-      </div>
-      <!-- tailscale peer selector -->
-      <div id="lf-ts-picker" style="display:none;margin-top:12px">
-        <div class="settings-field">
-          <label>Select peer</label>
-          <select class="settings-input" id="lf-ts-peer" onchange="onTsPeerSelect()" style="cursor:pointer">
-            <option value="">Loading peers…</option>
-          </select>
-        </div>
-        <div id="lf-ts-status" style="font-size:11px;color:var(--text3);margin-bottom:10px"></div>
-        <div class="settings-save-row" style="gap:8px">
-          <button class="btn btn-ghost" onclick="cancelLocationForm()">Cancel</button>
-          <button class="btn btn-primary" id="lf-ts-add-btn" disabled onclick="addTailscaleNodeFromPeer()">Add Location</button>
-        </div>
-      </div>
-      <div id="lf-status" style="font-size:12px;margin-top:8px;color:var(--text3)"></div>
-    </div>
-    <div style="margin-top:16px;display:flex;gap:8px">
-      <button class="btn btn-primary" onclick="openAddLocation()">+ Add Location</button>
-    </div>
-  </div>
 
 
   <div id="policies-module" class="module-panel">
@@ -10412,6 +10342,7 @@ input[type="number"].settings-input { min-width: 60px; }
           <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('global',this)" style="font-size:10px;padding:2px 7px;color:#22c55e">Global</button>
           <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('unassigned',this)" style="font-size:10px;padding:2px 7px;color:#f87171">Unassigned</button>
         </div>
+        <div id="cx-squad-filter-row" style="display:flex;gap:4px;align-items:center;padding:4px 28px 0;flex-wrap:wrap"></div>
         <div style="padding:4px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
           <input type="text" id="cx-search" placeholder="Search..." oninput="_searchCortexMemories(this.value)" style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none;box-sizing:border-box" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
         </div>
@@ -11034,6 +10965,8 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.26', date:'2026-03-09', notes:['Auto-fallback: when a backend fails or hits rate limits, Porter tries fallback backends automatically — agents never give up','Rate-limit retry: dispatch_agent retries with 30/60/120s exponential backoff before failing','All agents now have fallback backend chains (primary fails → try next in chain)','Leader/Contributor dispatch mode: Lobster and Vision are leaders, others are contributors','Cortex squad filter: click a squad to see only memories from its agents'] },
+  { ver:'v0.30.25', date:'2026-03-09', notes:['Orchestration executor selection now applies squad dispatch_policy instead of treating squads as display-only metadata','Leader-first, backend-specialist, and balanced squad policies now influence which assigned persona gets the work inside a project lane','This makes squad structure affect real autonomous routing instead of only enriching prompts after the route was already chosen'] },
   { ver:'v0.30.24', date:'2026-03-09', notes:['Watchdog reboot of stalled orchestration steps now reselects executors through the same project-aware selector instead of doing a blind backend swap','Recovered steps now keep project_id, task_id, and any reassigned persona identity attached to the reboot event and recovery logs','This keeps failure recovery inside the project lane so autonomous work does not lose squad/project context during a stall'] },
   { ver:'v0.30.23', date:'2026-03-09', notes:['Coordination Bridge runs now inherit active project/task context automatically instead of behaving like generic prompt fanout','Bridge coordination prompts now get the same project brief, decision log, task state, recent activity, and Cortex memory injection used by project-aware persona dispatch','coordination:start/result/complete events and API responses now carry project_id and task_id so live bridge activity stays tied to the project lane'] },
   { ver:'v0.30.22', date:'2026-03-09', notes:['Orchestration executor selection now prefers personas assigned to the active project or task instead of choosing a raw backend first and hoping context survives','Project-backed orchestration steps now always carry project brief, decision log, task state, recent project activity, and Cortex context even when a step falls back to direct backend dispatch','Failed orchestration steps now reassign through the same project-aware selector, so retries stay inside the project lane instead of degrading into generic backend swaps'] },
@@ -13053,9 +12986,7 @@ function switchModule(name) {
     if (window._systemRuntimeRefreshTimer) { clearTimeout(window._systemRuntimeRefreshTimer); window._systemRuntimeRefreshTimer = null; }
     if (window._wfRefreshTimer) { clearTimeout(window._wfRefreshTimer); window._wfRefreshTimer = null; }
   }
-  if (_currentModule === 'locations' && name !== 'locations') {
-    if (typeof stopTsPolling === 'function') stopTsPolling();
-  }
+
   if (name !== 'settings') closeSettings();
   const leavingFiles = _currentModule === 'files' && name !== 'files';
   if (leavingFiles && typeof closePreview === 'function') {
@@ -13154,7 +13085,7 @@ function switchModule(name) {
         else clearInterval(window._personaRefreshTimer);
       }, 60000);
     }, tasks: function() { /* tasks merged into projects */ }, agents: function() { loadAgents(); }, projects: function() { loadProjects(); }, admin: loadAdmin,
-    files: loadLocations, locations: loadLocations, policies: loadPolicy,
+    files: loadLocations, policies: loadPolicy,
     models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, cortex: function(){ withLoadTimeout('cx-memory-list','_loadCortexTab()'); _loadCortexTab(); }, system: function(){ withLoadTimeout('wf-system-grid','loadWorkflowRegistry()'); loadWorkflowRegistry(); }, workflows: function(){}, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
@@ -16104,7 +16035,7 @@ async function _memCfgQuickAdd(agentId) {
 
 // Backward compat wrappers
 function openSettings(tab = 'profile') {
-  const moduleMap = { tasks:'tasks', agents:'agents', locations:'locations', policy:'policies', usage:'agents' };
+  const moduleMap = { tasks:'tasks', agents:'agents', policy:'policies', usage:'agents' };
   if (moduleMap[tab]) { switchModule(moduleMap[tab]); return; }
   switchSettingsTab(tab);
   syncSettingsUI();
@@ -16122,7 +16053,7 @@ function closeSettings() {
 }
 function switchSettingsTab(tab) {
   if (tab === 'usage') tab = 'agents';
-  const modules = ['tasks','agents','locations','policy','policies'];
+  const modules = ['tasks','agents','policy','policies'];
   if (modules.includes(tab)) { switchModule(tab === 'policy' ? 'policies' : tab); return; }
   stopTsPolling();
   document.querySelectorAll('.settings-nav-item').forEach(el =>
@@ -20292,6 +20223,39 @@ function _showCortexFilterBar(label) {
   var lbl = document.getElementById('cx-filter-label');
   if (bar) { bar.style.display = ''; }
   if (lbl) { lbl.textContent = label; }
+}
+var _cortexSquads = [];
+async function _loadCortexSquads() {
+  try {
+    var data = await api('/api/squads');
+    _cortexSquads = data && data.squads ? data.squads : (Array.isArray(data) ? data : []);
+    var row = document.getElementById('cx-squad-filter-row');
+    if (!row || !_cortexSquads.length) return;
+    var html = '<span style="font-size:10px;color:var(--text3);margin-right:2px">Squad:</span>';
+    html += '<button class="btn btn-ghost cx-squad-btn" onclick="_filterCortexSquad(null,this)" style="font-size:10px;padding:2px 7px">All</button>';
+    _cortexSquads.forEach(function(sq) {
+      var c = sq.color || '#6366f1';
+      var memberIds = (sq.members || []).map(function(m) { return m.id || m.persona_id; }).join(',');
+      html += '<button class="btn btn-ghost cx-squad-btn" data-squad-ids="' + memberIds + '" onclick="_filterCortexSquad(\x27' + (sq.id||'') + '\x27,this)" style="font-size:10px;padding:2px 7px;color:' + c + '">' + escHtml(sq.name) + '</button>';
+    });
+    row.innerHTML = html;
+  } catch(e) { console.debug('squad load:', e); }
+}
+function _filterCortexSquad(squadId, btn) {
+  document.querySelectorAll('.cx-squad-btn').forEach(function(b) { b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  if (!squadId) { _clearCortexFilter(); return; }
+  // Find squad members
+  var squad = _cortexSquads.find(function(s) { return s.id === squadId; });
+  if (!squad) return;
+  var memberIds = (squad.members || []).map(function(m) { return m.id || m.persona_id; });
+  // Filter memories: agent-scoped where scope_id is in this squad
+  var filtered = (_cortexMemories || []).filter(function(m) {
+    return m.scope === 'agent' && memberIds.indexOf(m.scope_id) !== -1;
+  });
+  _renderCortexMemories(filtered, true);
+  var label = (squad.name || 'Squad') + ' — ' + filtered.length + ' memories';
+  _showCortexFilterBar(label);
 }
 function _clearCortexFilter() {
   var bar = document.getElementById('cx-filter-bar');
@@ -25882,7 +25846,7 @@ function showFilesHome() {
   let html = "";
 
   if (!nodes.length) {
-    html = `<div style="padding:48px 24px;color:var(--text3);font-size:13px;text-align:center">No locations configured. Go to <button class="btn btn-ghost"  onclick="switchModule('locations')">Locations</button> to add one.</div>`;
+    html = `<div style="padding:48px 24px;color:var(--text3);font-size:13px;text-align:center">No locations configured yet.</div>`;
   } else {
     nodes.forEach(node => {
       const mounts  = (node.mounts || []).filter(m => m.visible !== false);
@@ -25918,7 +25882,7 @@ function showFilesHome() {
 
       if (devOpen) {
         if (!mounts.length) {
-          html += `<div style="padding:8px 24px 8px 48px;font-size:12px;color:var(--text3)">No paths — add one in <button class="btn btn-ghost"  onclick="switchModule('locations')">Locations</button></div>`;
+          html += `<div style="padding:8px 24px 8px 48px;font-size:12px;color:var(--text3)">No paths configured</div>`;
         }
         mounts.forEach(m => {
           const lbl = String(m.label || m.id || "");
@@ -26997,8 +26961,8 @@ document.addEventListener('keydown', function(e) {
   // Number keys 1-9: switch tabs
   var tabMap = {
     '1': 'overview', '2': 'agents', '3': 'skills',
-    '4': 'projects', '5': 'workflows', '6': 'locations',
-    '7': 'files', '8': 'models', '9': 'cortex'
+    '4': 'projects', '5': 'workflows', '6': 'files',
+    '7': 'models', '8': 'cortex', '9': 'system'
   };
   if (tabMap[e.key]) {
     e.preventDefault();
@@ -29732,6 +29696,31 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
 
     result = dispatch_agent(augmented_message, backend, model=model_override, timeout=timeout, run_id=run_id, chain_id=chain_id, step_num=step_num)
 
+    # v0.30.26 — Auto-fallback: if primary failed (rate limit, timeout, error), try fallback backends
+    if not result.get("ok"):
+        _fail_reason = result.get("error", "")
+        _rate_limit_phrases = ["rate limit", "quota exceeded", "too many requests", "429", "timed out",
+                               "timeout", "connection refused", "503", "overloaded", "capacity"]
+        _should_fallback = any(p in _fail_reason.lower() for p in _rate_limit_phrases) or not _fail_reason
+        if _should_fallback:
+            try:
+                _fb_list = json.loads(persona.get("fallback_backends", "[]"))
+            except Exception:
+                _fb_list = []
+            for _fb_backend in _fb_list:
+                if _fb_backend == backend or _fb_backend not in PROVIDER_REGISTRY:
+                    continue
+                log.warning("Auto-fallback: %s failed (%s), trying %s", backend, _fail_reason[:80], _fb_backend)
+                mlog.emit("warn", "bridge", "persona.fallback",
+                    f"{persona.get('name','?')}: {backend} failed, falling back to {_fb_backend}",
+                    persona_id=persona_id, backend=_fb_backend, run_id=run_id)
+                _emit_event("persona:fallback", {"persona_id": persona_id, "from": backend, "to": _fb_backend, "reason": _fail_reason[:100]})
+                result = dispatch_agent(augmented_message, _fb_backend, timeout=timeout, run_id=run_id, chain_id=chain_id, step_num=step_num)
+                if result.get("ok"):
+                    backend = _fb_backend  # Update for logging
+                    break
+                log.warning("Auto-fallback: %s also failed: %s", _fb_backend, result.get("error", "?")[:80])
+
     # Tag the agent_message with persona_id
     try:
         conn = _db_conn()
@@ -30054,8 +30043,27 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None, chain
     _record_agent_message(run_id, "porter", backend, message, status="in_progress", chain_id=chain_id, step_num=step_num)
     _emit_event("bridge:dispatch", {"run_id": run_id, "backend": backend, "prompt": message[:200]})
     mlog.emit("info", "bridge", "bridge.dispatch", f"Dispatch to {backend}", run_id=run_id, backend=backend, trace_id=_get_trace_id())
+    # v0.30.26 — Rate-limit auto-retry with exponential backoff
+    _rl_max_retries = 3
+    _rl_base_delay = 30  # seconds: 30, 60, 120
+    _result = None
     try:
-        _result = fn(message, model=model, timeout=timeout)
+        for _rl_attempt in range(_rl_max_retries + 1):
+            _dt_start = _dt.time()  # Reset timer per attempt
+            _result = fn(message, model=model, timeout=timeout)
+            _ok_check = bool(_result.get("ok", True))
+            _err_check = str(_result.get("error", "") or "").lower()
+            _rl_phrases = ["rate limit", "429", "quota exceeded", "too many requests", "overloaded", "capacity"]
+            _is_rate_limit = any(p in _err_check for p in _rl_phrases)
+            if _ok_check or not _is_rate_limit or _rl_attempt >= _rl_max_retries:
+                break
+            _rl_delay = _rl_base_delay * (2 ** _rl_attempt)
+            log.warning("Rate limit on %s (attempt %d/%d), retrying in %ds", backend, _rl_attempt + 1, _rl_max_retries, _rl_delay)
+            mlog.emit("warn", "bridge", "dispatch.rate_limited",
+                f"{backend} rate limited, retry {_rl_attempt+1}/{_rl_max_retries} in {_rl_delay}s",
+                backend=backend, run_id=run_id or "")
+            _emit_event("dispatch:rate_limited", {"backend": backend, "attempt": _rl_attempt + 1, "delay": _rl_delay, "run_id": run_id or ""})
+            _dt.sleep(_rl_delay)
         dur_ms = int((_dt.time() - _dt_start) * 1000)
         _ok = bool(_result.get("ok", True))
         _err = str(_result.get("error", "") or "")
@@ -30282,7 +30290,7 @@ def _append_coordination_event(event: dict) -> None:
 
 # ── Coordination Ledger — shared work board for model deconfliction ──
 
-def _ledger_claim(model: str, scope: str, message: str = "", ttl_minutes: int = 30, version_at: str = "") -> dict:
+def _ledger_claim(model: str, scope: str, message: str = "", ttl_minutes: int = 30, version_at: str = "", project_id: str = "", task_id: str = "") -> dict:
     model = str(model or "").strip().lower()
     scope = str(scope or "").strip()
     if not model or not scope:
@@ -30305,17 +30313,18 @@ def _ledger_claim(model: str, scope: str, message: str = "", ttl_minutes: int = 
     entry_id = f"cl-{int(now)}-{uuid.uuid4().hex[:8]}"
     expires_at = now + (ttl_minutes * 60)
     conn.execute(
-        "INSERT INTO coordination_ledger (id, ts, model, entry_type, scope, message, version_at, ttl_minutes, expires_at) "
-        "VALUES (?, ?, ?, 'claim', ?, ?, ?, ?, ?)",
-        (entry_id, now, model, scope, str(message or ""), str(version_at or ""), ttl_minutes, expires_at)
+        "INSERT INTO coordination_ledger (id, ts, model, entry_type, scope, message, project_id, task_id, version_at, ttl_minutes, expires_at) "
+        "VALUES (?, ?, ?, 'claim', ?, ?, ?, ?, ?, ?, ?)",
+        (entry_id, now, model, scope, str(message or ""), str(project_id or ""), str(task_id or ""), str(version_at or ""), ttl_minutes, expires_at)
     )
     conn.commit()
     conn.close()
-    _emit_event("coordination:claim", {"model": model, "scope": scope, "message": message})
+    _emit_event("coordination:claim", {"model": model, "scope": scope, "message": message,
+                                       "project_id": project_id, "task_id": task_id})
     return {"ok": True, "id": entry_id, "scope": scope, "expires_at": expires_at}
 
 
-def _ledger_update(model: str, scope: str, entry_type: str, message: str = "", version_at: str = "", context: str = "") -> dict:
+def _ledger_update(model: str, scope: str, entry_type: str, message: str = "", version_at: str = "", context: str = "", project_id: str = "", task_id: str = "") -> dict:
     model = str(model or "").strip().lower()
     scope = str(scope or "").strip()
     entry_type = str(entry_type or "").strip().lower()
@@ -30325,9 +30334,10 @@ def _ledger_update(model: str, scope: str, entry_type: str, message: str = "", v
     conn = _db_conn()
     entry_id = f"cl-{int(now)}-{uuid.uuid4().hex[:8]}"
     conn.execute(
-        "INSERT INTO coordination_ledger (id, ts, model, entry_type, scope, message, version_at, context) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (entry_id, now, model, entry_type, scope, str(message or "")[:500], str(version_at or ""), str(context or "")[:2000])
+        "INSERT INTO coordination_ledger (id, ts, model, entry_type, scope, message, project_id, task_id, version_at, context) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (entry_id, now, model, entry_type, scope, str(message or "")[:500],
+         str(project_id or ""), str(task_id or ""), str(version_at or ""), str(context or "")[:2000])
     )
     if entry_type in ("complete", "release"):
         conn.execute(
@@ -30336,7 +30346,8 @@ def _ledger_update(model: str, scope: str, entry_type: str, message: str = "", v
         )
     conn.commit()
     conn.close()
-    _emit_event("coordination:" + entry_type, {"model": model, "scope": scope, "message": message})
+    _emit_event("coordination:" + entry_type, {"model": model, "scope": scope, "message": message,
+                                               "project_id": project_id, "task_id": task_id})
     return {"ok": True, "id": entry_id}
 
 
@@ -30892,6 +30903,17 @@ def _orch_score_backend(backend: str, step_kind: str, required_caps: list) -> fl
     return min(1.0, max(0.0, base_score + speed_bonus))
 
 
+def _orch_step_budget(backend: str, step_kind: str = "") -> dict:
+    caps = BACKEND_CAPABILITIES.get(str(backend or "").strip().lower(), {})
+    speed = str(caps.get("speed") or "medium").strip().lower()
+    timeout_s = {"fast": 90, "medium": 150, "slow": 240}.get(speed, 120)
+    lease_s = {"fast": 180, "medium": 300, "slow": 420}.get(speed, 180)
+    if str(step_kind or "").strip().lower() in {"implementation", "verification", "debugging", "refactoring"}:
+        timeout_s += 30
+        lease_s += 60
+    return {"timeout_s": timeout_s, "lease_s": lease_s}
+
+
 def _project_assigned_persona_ids(project_id: str = "", task_id: str = "") -> list[str]:
     task = _task_by_id(task_id)
     if task:
@@ -30903,6 +30925,32 @@ def _project_assigned_persona_ids(project_id: str = "", task_id: str = "") -> li
     return [str(x).strip() for x in (proj or {}).get("assigned_personas", []) if str(x).strip()]
 
 
+def _project_squad_policy_context(project_assigned: list[str]) -> dict:
+    project_assigned = [str(x).strip() for x in (project_assigned or []) if str(x).strip()]
+    leader_ids = set()
+    persona_policies = {}
+    if not project_assigned:
+        return {"leader_ids": leader_ids, "persona_policies": persona_policies}
+    try:
+        assigned_set = set(project_assigned)
+        for squad in _squad_list():
+            members = squad.get("members") or []
+            member_ids = {str(m.get("id") or "").strip() for m in members if str(m.get("id") or "").strip()}
+            if not (member_ids & assigned_set):
+                continue
+            policy = str(squad.get("dispatch_policy") or "best_fit").strip().lower()
+            for member in members:
+                mid = str(member.get("id") or "").strip()
+                if not mid or mid not in assigned_set:
+                    continue
+                persona_policies.setdefault(mid, []).append(policy)
+                if str(member.get("squad_role") or "").strip().lower() == "leader":
+                    leader_ids.add(mid)
+    except Exception:
+        pass
+    return {"leader_ids": leader_ids, "persona_policies": persona_policies}
+
+
 def _orch_select_executor(step: dict, project_id: str = "", task_id: str = "", exclude_backends: list | None = None) -> tuple:
     """Pick the best (backend, persona_id) for an orchestration step."""
     kind = step.get("kind", "general")
@@ -30912,20 +30960,9 @@ def _orch_select_executor(step: dict, project_id: str = "", task_id: str = "", e
     preferred_persona = step.get("preferred_persona_id", "")
     exclude = {str(x).strip().lower() for x in (exclude_backends or []) if str(x).strip()}
     project_assigned = _project_assigned_persona_ids(project_id=project_id, task_id=task_id)
-    leader_ids = set()
-    try:
-        for squad in _squad_list():
-            members = squad.get("members") or []
-            member_ids = {str(m.get("id") or "").strip() for m in members if str(m.get("id") or "").strip()}
-            if project_assigned and not (member_ids & set(project_assigned)):
-                continue
-            for member in members:
-                if str(member.get("squad_role") or "").strip().lower() == "leader":
-                    mid = str(member.get("id") or "").strip()
-                    if mid:
-                        leader_ids.add(mid)
-    except Exception:
-        pass
+    squad_ctx = _project_squad_policy_context(project_assigned)
+    leader_ids = set(squad_ctx.get("leader_ids") or set())
+    persona_policies = squad_ctx.get("persona_policies") or {}
     if preferred_backend and preferred_backend in PROVIDER_REGISTRY and preferred_backend not in exclude:
         score = _orch_score_backend(preferred_backend, kind, required_caps)
         if score > 0.3:
@@ -30969,8 +31006,26 @@ def _orch_select_executor(step: dict, project_id: str = "", task_id: str = "", e
             bonus = 0.0
             if pid in project_assigned:
                 bonus += 0.22
+            policies = {str(x).strip().lower() for x in persona_policies.get(pid, []) if str(x).strip()}
             if pid in leader_ids and kind in ("research", "analysis", "synthesis", "general"):
                 bonus += 0.08
+            if "leader_first" in policies or "leader-first" in policies or "leader" in policies:
+                if pid in leader_ids:
+                    bonus += 0.16
+                else:
+                    bonus -= 0.05
+            if "backend_specialist" in policies or "specialist" in policies:
+                persona_backend = str(persona.get("preferred_backend") or "").strip().lower()
+                if bk == persona_backend:
+                    bonus += 0.12
+            if "balanced" in policies:
+                try:
+                    last_active = float(persona.get("last_active") or 0.0)
+                except Exception:
+                    last_active = 0.0
+                if last_active:
+                    age_s = max(0.0, time.time() - last_active)
+                    bonus += min(0.08, age_s / 86400.0)
             if kind in ("implementation", "verification") and bk in ("codex", "openclaw", "ollama"):
                 bonus += 0.05
             total = score + bonus
@@ -31136,6 +31191,7 @@ def _orch_execute_step(run_id: str, step: dict) -> dict:
     backend = step.get("assigned_backend", "")
     persona_id = step.get("assigned_persona_id", "")
     attempt = step.get("attempt", 0) + 1
+    kind = step.get("kind", "general")
     prompt = step.get("description", step.get("title", ""))
     project_id = ""
     task_id = ""
@@ -31168,7 +31224,8 @@ def _orch_execute_step(run_id: str, step: dict) -> dict:
             project_ctx = _build_project_dispatch_context(project_id, persona_id=persona_id or "", task_id=task_id, message=prompt)
             if project_ctx:
                 prompt = f"{prompt}\n\n--- Project Context ---\n{project_ctx}"
-        lease_expires = time.time() + 180
+        budget = _orch_step_budget(backend, kind)
+        lease_expires = time.time() + float(budget.get("lease_s") or 180)
         conn.execute(
             "UPDATE orchestration_steps SET status='running', attempt=?, started_at=?, lease_expires_at=?, assigned_backend=?, assigned_persona_id=? WHERE id=?",
             (attempt, time.time(), lease_expires, backend, persona_id or "", step_id)
@@ -31184,11 +31241,13 @@ def _orch_execute_step(run_id: str, step: dict) -> dict:
     _emit_event("orch:step_started", {"run_id": run_id, "step_id": step_id, "backend": backend, "attempt": attempt})
     result = None
     t0 = time.time()
+    budget = _orch_step_budget(backend, kind)
+    timeout_s = int(budget.get("timeout_s") or 120)
     try:
         if persona_id:
-            result = dispatch_to_persona(prompt, persona_id, timeout=120, backend_override=backend, project_id=project_id, task_id=task_id)
+            result = dispatch_to_persona(prompt, persona_id, timeout=timeout_s, backend_override=backend, project_id=project_id, task_id=task_id)
         elif backend:
-            result = dispatch_agent(prompt, backend, timeout=120)
+            result = dispatch_agent(prompt, backend, timeout=timeout_s)
         else:
             result = {"ok": False, "error": "No backend assigned"}
     except Exception as e:
@@ -32167,7 +32226,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.24"})
+            self.reply_json({"v": "0.30.26"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32329,7 +32388,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.24"
+                health["porter_version"] = "0.30.26"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34159,7 +34218,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.24'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.26'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -34910,12 +34969,15 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
             if not data: return
+            project_id = str(data.get("project_id") or _config.get("active_project_id") or "").strip()
+            task_id = str(data.get("task_id") or "").strip()
             result = _ledger_claim(
                 model=str(data.get("model", "")).strip(),
                 scope=str(data.get("scope", "")).strip(),
                 message=str(data.get("message", "")).strip(),
                 ttl_minutes=int(data.get("ttl_minutes", 30) or 30),
                 version_at=str(data.get("version_at", "")).strip()
+                , project_id=project_id, task_id=task_id
             )
             self.reply_json(result, 200 if result.get("ok") else 409 if result.get("conflict") else 400)
 
@@ -34923,6 +34985,8 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
             if not data: return
+            project_id = str(data.get("project_id") or _config.get("active_project_id") or "").strip()
+            task_id = str(data.get("task_id") or "").strip()
             result = _ledger_update(
                 model=str(data.get("model", "")).strip(),
                 scope=str(data.get("scope", "")).strip(),
@@ -34930,6 +34994,7 @@ class Handler(BaseHTTPRequestHandler):
                 message=str(data.get("message", "")).strip(),
                 version_at=str(data.get("version_at", "")).strip(),
                 context=str(data.get("context", "")).strip()
+                , project_id=project_id, task_id=task_id
             )
             self.reply_json(result, 200 if result.get("ok") else 400)
 
@@ -38916,7 +38981,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.24 ready (localhost only)")
+    print(f"\n  Porter v0.30.26 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
