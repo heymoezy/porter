@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.26 — Auto-fallback dispatch + rate-limit retry + leader/contributor modes"""
+"""Porter v0.30.27 — Auto-fallback dispatch + rate-limit retry + leader/contributor modes"""
 
 
 import email
@@ -9599,7 +9599,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.26</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.27</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10965,6 +10965,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.27', date:'2026-03-09', notes:['Backend health tracking: rate-limited backends enter cooldown and auto-recover when watchdog confirms they are back','Dispatch skips rate-limited backends immediately instead of wasting a timeout discovering the limit again','Rate limits hidden in successful response text are now caught and trigger auto-fallback','Watchdog probes recovering backends every 30s and marks them available when they respond','New API: GET /api/backend-health shows cooldown status and failure counts per backend'] },
   { ver:'v0.30.26', date:'2026-03-09', notes:['Auto-fallback: when a backend fails or hits rate limits, Porter tries fallback backends automatically — agents never give up','Rate-limit retry: dispatch_agent retries with 30/60/120s exponential backoff before failing','All agents now have fallback backend chains (primary fails → try next in chain)','Leader/Contributor dispatch mode: Lobster and Vision are leaders, others are contributors','Cortex squad filter: click a squad to see only memories from its agents'] },
   { ver:'v0.30.25', date:'2026-03-09', notes:['Orchestration executor selection now applies squad dispatch_policy instead of treating squads as display-only metadata','Leader-first, backend-specialist, and balanced squad policies now influence which assigned persona gets the work inside a project lane','This makes squad structure affect real autonomous routing instead of only enriching prompts after the route was already chosen'] },
   { ver:'v0.30.24', date:'2026-03-09', notes:['Watchdog reboot of stalled orchestration steps now reselects executors through the same project-aware selector instead of doing a blind backend swap','Recovered steps now keep project_id, task_id, and any reassigned persona identity attached to the reboot event and recovery logs','This keeps failure recovery inside the project lane so autonomous work does not lose squad/project context during a stall'] },
@@ -27411,6 +27412,55 @@ GWS_TOOLS_PROMPT = """You have access to Google Workspace via the `gws` CLI tool
 When you need to perform a Workspace action, output a ```gws code block and Porter will execute it."""
 
 
+# Backend health state — tracks rate limits, cooldowns, and recovery
+_backend_health = {}  # {backend: {"status": "ok"|"rate_limited"|"down", "cooldown_until": float, "failures": int, "last_success": float}}
+
+def _backend_set_rate_limited(backend: str, cooldown_seconds: int = 120):
+    """Mark a backend as rate-limited with cooldown period."""
+    import time as _bh_t
+    _backend_health[backend] = {
+        "status": "rate_limited",
+        "cooldown_until": _bh_t.time() + cooldown_seconds,
+        "failures": _backend_health.get(backend, {}).get("failures", 0) + 1,
+        "last_success": _backend_health.get(backend, {}).get("last_success", 0),
+    }
+    log.warning("Backend %s rate-limited, cooldown %ds (failures: %d)", backend, cooldown_seconds, _backend_health[backend]["failures"])
+    _emit_event("backend:rate_limited", {"backend": backend, "cooldown": cooldown_seconds})
+
+def _backend_set_ok(backend: str):
+    """Mark a backend as healthy after successful dispatch."""
+    import time as _bh_t
+    _backend_health[backend] = {
+        "status": "ok",
+        "cooldown_until": 0,
+        "failures": 0,
+        "last_success": _bh_t.time(),
+    }
+
+def _backend_is_available(backend: str) -> bool:
+    """Check if a backend is available (not in cooldown)."""
+    import time as _bh_t
+    h = _backend_health.get(backend)
+    if not h:
+        return True
+    if h["status"] == "rate_limited" and _bh_t.time() < h.get("cooldown_until", 0):
+        return False
+    if h["status"] == "rate_limited" and _bh_t.time() >= h.get("cooldown_until", 0):
+        h["status"] = "recovering"  # Try again
+    return True
+
+def _backend_health_status() -> dict:
+    """Return health status of all backends."""
+    import time as _bh_t
+    now = _bh_t.time()
+    out = {}
+    for bk in list(PROVIDER_REGISTRY.keys()):
+        h = _backend_health.get(bk, {"status": "ok", "cooldown_until": 0, "failures": 0})
+        remaining = max(0, int(h.get("cooldown_until", 0) - now))
+        out[bk] = {"status": h.get("status", "ok"), "cooldown_remaining": remaining, "failures": h.get("failures", 0)}
+    return out
+
+
 PROVIDER_REGISTRY = {
     "codex":    {"dispatch": _dispatch_codex,    "probe": _probe_codex,    "type": "cli",     "label": "OpenAI Codex"},
     "claude":   {"dispatch": _dispatch_claude,   "probe": _probe_claude,   "type": "cli",     "label": "Claude Code"},
@@ -29696,7 +29746,13 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
 
     result = dispatch_agent(augmented_message, backend, model=model_override, timeout=timeout, run_id=run_id, chain_id=chain_id, step_num=step_num)
 
-    # v0.30.26 — Auto-fallback: if primary failed (rate limit, timeout, error), try fallback backends
+    # v0.30.26 — Auto-fallback: if primary failed OR response contains rate-limit text, try fallbacks
+    _resp_text = (result.get("text", "") or "").lower()
+    _rl_in_text = any(p in _resp_text for p in ["rate limit", "quota exceeded", "too many requests", "try again later", "api rate limit"])
+    if _rl_in_text and result.get("ok"):
+        result["ok"] = False
+        result["error"] = f"Rate limit detected in response text: {result.get('text', '')[:100]}"
+        log.warning("Rate limit detected in response text from %s", backend)
     if not result.get("ok"):
         _fail_reason = result.get("error", "")
         _rate_limit_phrases = ["rate limit", "quota exceeded", "too many requests", "429", "timed out",
@@ -30037,6 +30093,11 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None, chain
     fn = PROVIDER_REGISTRY.get(backend, {}).get('dispatch')
     if not fn:
         return {"ok": False, "error": f"Unknown backend: {backend}. Available: {', '.join(PROVIDER_REGISTRY.keys())}", "run_id": run_id}
+    # Check if backend is in cooldown
+    if not _backend_is_available(backend):
+        _cd = _backend_health.get(backend, {})
+        _cd_remaining = max(0, int(_cd.get("cooldown_until", 0) - _dt.time()))
+        return {"ok": False, "error": f"{backend} rate-limited, cooldown {_cd_remaining}s remaining", "run_id": run_id}
     # Bridge context logged, not injected into prompt (avoids contaminating model output)
     log.info("Bridge dispatch: %s → %s (%s)", "porter", backend, message[:60])
     # Record outgoing message
@@ -30055,7 +30116,12 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None, chain
             _err_check = str(_result.get("error", "") or "").lower()
             _rl_phrases = ["rate limit", "429", "quota exceeded", "too many requests", "overloaded", "capacity"]
             _is_rate_limit = any(p in _err_check for p in _rl_phrases)
-            if _ok_check or not _is_rate_limit or _rl_attempt >= _rl_max_retries:
+            if _ok_check:
+                _backend_set_ok(backend)
+                break
+            if not _is_rate_limit or _rl_attempt >= _rl_max_retries:
+                if _is_rate_limit:
+                    _backend_set_rate_limited(backend, 120 * (2 ** min(_rl_attempt, 3)))
                 break
             _rl_delay = _rl_base_delay * (2 ** _rl_attempt)
             log.warning("Rate limit on %s (attempt %d/%d), retrying in %ds", backend, _rl_attempt + 1, _rl_max_retries, _rl_delay)
@@ -30798,6 +30864,24 @@ def _agent_watchdog_loop():
                     _watchdog_stats["reboots"] += 1
             except Exception as e:
                 log.debug("Watchdog process check error: %s", e)
+
+
+            # 6. Probe rate-limited backends for recovery
+            for _wbk, _wbh in list(_backend_health.items()):
+                if _wbh.get("status") in ("rate_limited", "recovering") and time.time() >= _wbh.get("cooldown_until", 0):
+                    try:
+                        _probe_fn = PROVIDER_REGISTRY.get(_wbk, {}).get("probe")
+                        if _probe_fn and _probe_fn():
+                            _backend_set_ok(_wbk)
+                            log.info("Watchdog: backend %s recovered from rate limit", _wbk)
+                            mlog.emit("info", "watchdog", "watchdog.backend_recovered",
+                                f"Backend {_wbk} recovered from rate limit")
+                            _emit_event("watchdog:backend_recovered", {"backend": _wbk})
+                        else:
+                            # Extend cooldown
+                            _wbh["cooldown_until"] = time.time() + 60
+                    except Exception:
+                        _wbh["cooldown_until"] = time.time() + 60
 
             # 5. OpenClaw gateway health check
             oc_health = _openclaw_health_check()
@@ -32226,7 +32310,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.26"})
+            self.reply_json({"v": "0.30.27"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32388,7 +32472,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.26"
+                health["porter_version"] = "0.30.27"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34081,6 +34165,10 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             self.reply_json({"ok": True, "processes": _process_list()})
 
+        elif parsed.path == "/api/backend-health":
+            if not self.auth_check(redirect=False): return
+            self.reply_json({"ok": True, "backends": _backend_health_status()})
+
         elif parsed.path == "/api/watchdog":
             if not self.auth_check(redirect=False): return
             self.reply_json({"ok": True, **_watchdog_status()})
@@ -34218,7 +34306,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.26'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.27'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38981,7 +39069,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.26 ready (localhost only)")
+    print(f"\n  Porter v0.30.27 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
