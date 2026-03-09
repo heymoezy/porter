@@ -19434,6 +19434,29 @@ function _setModelCardState(backendId, state) {
   card.setAttribute('data-health-state', state || 'unknown');
 }
 
+function _applyBackendHealthChips(healthData) {
+  if (!healthData) return;
+  Object.keys(healthData).forEach(function(bk) {
+    var h = healthData[bk];
+    var chip = document.getElementById('backend-health-chip-' + bk);
+    if (!chip) return;
+    if (h.status === 'rate_limited' && h.cooldown_remaining > 0) {
+      chip.innerHTML = '<span class="model-card-chip warn" style="animation:pulse 1.5s infinite">Rate Limited (' + h.cooldown_remaining + 's)</span>';
+      chip.style.display = '';
+      _setModelCardState(bk, 'warn');
+    } else if (h.status === 'recovering') {
+      chip.innerHTML = '<span class="model-card-chip dim">Recovering...</span>';
+      chip.style.display = '';
+    } else if (h.failures > 0) {
+      chip.innerHTML = '<span class="model-card-chip dim">' + h.failures + ' recent failures</span>';
+      chip.style.display = '';
+    } else {
+      chip.innerHTML = '';
+      chip.style.display = 'none';
+    }
+  });
+}
+
 function _applyBackendStatus(provider) {
   if (!provider) return;
   var p = provider;
@@ -20023,6 +20046,13 @@ async function loadModels() {
       }
     });
     _refreshModelVersions(true);
+    // Load backend health state
+    api('/api/backend-health').then(function(h) {
+      if (h && h.backends) {
+        window._backendHealthData = h.backends;
+        _applyBackendHealthChips(h.backends);
+      }
+    }).catch(function() {});
   } catch(e) {
     _showModelsLoadFailure((e && e.message) || 'Models failed to load');
     _reportModelsClientError('load-models', e);
@@ -21012,6 +21042,7 @@ function _renderModelCards(data, act) {
     var lastPromptBtn = '';
 
     // Install hint for unavailable backends
+    var _healthChipHtml = '<div id="backend-health-chip-' + p.id + '" style="display:none;margin:4px 0"></div>';
     var _installHtml = '';
     if (!p.available && p.install_hint) {
       _installHtml = '<div style="padding:12px;margin:8px 0;border:1px dashed var(--border);border-radius:6px;text-align:center">'
@@ -21100,6 +21131,7 @@ function _renderModelCards(data, act) {
       + '</div>'
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
       + _runtimeHtml
+      + _healthChipHtml
       + (p.available ? _selHtml : _installHtml)
       + updateFootHtml
       + statusFootHtml
