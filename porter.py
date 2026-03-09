@@ -20111,7 +20111,7 @@ var _cortexAgents = [];
 async function _cortexBatchExtract(btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Extracting...'; }
   try {
-    await api('/api/cortex/batch-extract', {});
+    await api('/api/cortex/batch-extract');
     if (btn) { btn.textContent = 'Started!'; setTimeout(function() { btn.textContent = 'Extract Now'; btn.disabled = false; }, 3000); }
     // Refresh after a delay
     setTimeout(function() { _loadCortexTab(); }, 10000);
