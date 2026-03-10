@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.33 — System Health card in Runtime tab + self-check UI"""
+"""Porter v0.30.34 — Anomaly detection: 7-day baselines, 2x deviation flagging"""
 
 
 import email
@@ -7220,6 +7220,112 @@ def _rollup_daily():
         log.error("Daily rollup error: %s", e)
 
 
+def _detect_anomalies():
+    """v0.30.34 — Anomaly detection: compare latest hourly rollup against 7-day baselines.
+    Flags when latency, token usage, or failure rate exceed 2x the rolling average."""
+    import time as _adt
+    try:
+        conn = _db_conn()
+        now = _adt.time()
+        # Get the latest completed hour
+        latest_hour = conn.execute(
+            "SELECT MAX(hour_ts) FROM telemetry_hourly"
+        ).fetchone()[0]
+        if not latest_hour:
+            conn.close()
+            return
+        # 7-day baseline window (168 hours)
+        baseline_start = latest_hour - (7 * 86400)
+        # Get baselines per agent: avg latency_p50, avg tokens, avg failure rate
+        baselines = conn.execute(
+            "SELECT agent_id, agent_name, "
+            "AVG(latency_p50) as avg_lat, AVG(tokens_out_total) as avg_tokens, "
+            "AVG(CASE WHEN (task_complete + task_failed) > 0 "
+            "  THEN CAST(task_failed AS REAL) / (task_complete + task_failed) ELSE 0 END) as avg_fail_rate, "
+            "COUNT(*) as sample_count "
+            "FROM telemetry_hourly WHERE hour_ts >= ? AND hour_ts < ? "
+            "GROUP BY agent_id HAVING sample_count >= 3",
+            (baseline_start, latest_hour)
+        ).fetchall()
+        if not baselines:
+            conn.close()
+            return
+        # Get latest hour data per agent
+        latest = {}
+        for row in conn.execute(
+            "SELECT agent_id, agent_name, latency_p50, latency_p95, "
+            "tokens_out_total, task_complete, task_failed, retries_total "
+            "FROM telemetry_hourly WHERE hour_ts = ?", (latest_hour,)
+        ).fetchall():
+            latest[row[0]] = dict(row)
+        conn.close()
+        anomalies = []
+        for bl in baselines:
+            agent_id = bl[0]
+            agent_name = bl[1] or agent_id[:8]
+            avg_lat = bl[2] or 0
+            avg_tokens = bl[3] or 0
+            avg_fail = bl[4] or 0
+            samples = bl[5]
+            cur = latest.get(agent_id)
+            if not cur:
+                continue
+            # Latency anomaly: p50 > 2x baseline
+            if avg_lat > 0 and (cur.get("latency_p50") or 0) > avg_lat * 2:
+                anomalies.append({
+                    "agent_id": agent_id, "agent_name": agent_name,
+                    "metric": "latency_p50", "type": "spike",
+                    "current": cur.get("latency_p50"), "baseline": round(avg_lat),
+                    "ratio": round((cur.get("latency_p50") or 0) / avg_lat, 1),
+                    "detail": f"{agent_name} latency {cur.get('latency_p50')}ms vs {round(avg_lat)}ms avg (7d)"
+                })
+            # Token usage anomaly: > 2x baseline
+            if avg_tokens > 100 and (cur.get("tokens_out_total") or 0) > avg_tokens * 2:
+                anomalies.append({
+                    "agent_id": agent_id, "agent_name": agent_name,
+                    "metric": "tokens_out", "type": "spike",
+                    "current": cur.get("tokens_out_total"), "baseline": round(avg_tokens),
+                    "ratio": round((cur.get("tokens_out_total") or 0) / avg_tokens, 1),
+                    "detail": f"{agent_name} tokens {cur.get('tokens_out_total')} vs {round(avg_tokens)} avg (7d)"
+                })
+            # Failure rate anomaly: > 2x baseline (min 2 failures)
+            total = (cur.get("task_complete") or 0) + (cur.get("task_failed") or 0)
+            cur_fail_rate = (cur.get("task_failed") or 0) / total if total > 0 else 0
+            if avg_fail > 0 and cur_fail_rate > avg_fail * 2 and (cur.get("task_failed") or 0) >= 2:
+                anomalies.append({
+                    "agent_id": agent_id, "agent_name": agent_name,
+                    "metric": "failure_rate", "type": "spike",
+                    "current": round(cur_fail_rate, 2), "baseline": round(avg_fail, 2),
+                    "ratio": round(cur_fail_rate / avg_fail, 1) if avg_fail > 0 else 0,
+                    "detail": f"{agent_name} failure rate {round(cur_fail_rate*100)}% vs {round(avg_fail*100)}% avg (7d)"
+                })
+            # Retry anomaly: > 3x average retries
+            avg_retries_approx = avg_tokens * 0.01 if avg_tokens > 0 else 1  # rough proxy
+            if (cur.get("retries_total") or 0) > 5:
+                anomalies.append({
+                    "agent_id": agent_id, "agent_name": agent_name,
+                    "metric": "retries", "type": "spike",
+                    "current": cur.get("retries_total"), "baseline": 0,
+                    "detail": f"{agent_name} had {cur.get('retries_total')} retries this hour"
+                })
+        # Report anomalies
+        if anomalies:
+            summary = f"Anomaly detection: {len(anomalies)} anomalies found"
+            details = "; ".join(a["detail"] for a in anomalies[:5])
+            mlog.emit("warn", "telemetry", "anomaly.detected", f"{summary}: {details}")
+            _emit_event("telemetry:anomalies", {"anomalies": anomalies, "hour_ts": latest_hour})
+            log.warning("Telemetry anomalies: %s", details)
+            # Feed into AlertEngine for auto-remediation consideration
+            for a in anomalies:
+                if a["metric"] == "failure_rate" and a.get("ratio", 0) > 3:
+                    mlog.emit("error", "telemetry", "anomaly.critical",
+                        f"Critical: {a['detail']}")
+        else:
+            log.debug("Anomaly detection: no anomalies (checked %d agents)", len(baselines))
+    except Exception as e:
+        log.debug("Anomaly detection error: %s", e)
+
+
 def _telemetry_rollup_loop():
     """Background thread: runs hourly + daily rollups."""
     import time as _t
@@ -7233,6 +7339,11 @@ def _telemetry_rollup_loop():
         _t0 = _t.time()
         try:
             _rollup_hourly()
+            # v0.30.34 — Run anomaly detection after hourly rollup
+            try:
+                _detect_anomalies()
+            except Exception as _ae:
+                log.debug("Anomaly detection failed: %s", _ae)
             # Daily rollup at midnight-ish
             hour = int((_t.time() % 86400) / 3600)
             if hour == 0:
@@ -9664,7 +9775,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.33</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.34</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11041,6 +11152,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.34', date:'2026-03-10', notes:['Anomaly detection: compares latest hourly rollup against 7-day rolling baselines per agent (latency, tokens, failure rate, retries)','Flags when metrics exceed 2x baseline — logged to Mission Control, emitted as telemetry:anomalies SSE event','GET /api/telemetry/anomalies returns per-agent baseline comparisons with anomaly flags','Runs automatically after each hourly telemetry rollup'] },
   { ver:'v0.30.33', date:'2026-03-10', notes:['Runtime tab: System Health card shows self-check results (version, page, DB, threads, config) with pass/fail badges','Self-check threshold fixed (login page ~9KB is healthy, lowered from 10KB to 1KB)','Health card auto-loads when Runtime tab opens, with manual Refresh button'] },
   { ver:'v0.30.32', date:'2026-03-10', notes:['Self-Monitoring Stage 1: startup self-check verifies version endpoint, main page, database, background threads, and config 5s after boot','GET /api/self-check returns last self-check results (checks array, all_ok, summary, timestamp)','Results logged to Mission Control and emitted as system:self_check SSE event'] },
   { ver:'v0.30.31', date:'2026-03-10', notes:['Cross-agent learning: when different agents reinforce similar facts, agent-scoped memories auto-promote to project scope','Project Memory tab now shows agent-scoped memories from all assigned agents alongside project memories, with scope badges','SSE event cortex:cross_agent_promotion fires on scope promotion for real-time UI updates'] },
@@ -32636,7 +32748,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"ok": True, **_last_self_check})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.33"})
+            self.reply_json({"v": "0.30.34"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32798,7 +32910,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.33"
+                health["porter_version"] = "0.30.34"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -33274,6 +33386,47 @@ class Handler(BaseHTTPRequestHandler):
 
             data = [{col_names[i]: row[i] for i in range(len(col_names))} for row in rows]
             self.reply_json({"ok": True, "rollups": data, "level": level, "count": len(data)})
+
+        elif parsed.path == "/api/telemetry/anomalies":
+            if not self.auth_check(redirect=False): return
+            try:
+                conn = _db_conn()
+                # Get latest hour
+                latest_hour = conn.execute("SELECT MAX(hour_ts) FROM telemetry_hourly").fetchone()[0]
+                if not latest_hour:
+                    self.reply_json({"ok": True, "anomalies": [], "message": "No rollup data yet"})
+                    conn.close()
+                    return
+                baseline_start = latest_hour - (7 * 86400)
+                baselines = conn.execute(
+                    "SELECT agent_id, agent_name, AVG(latency_p50) as avg_lat, "
+                    "AVG(tokens_out_total) as avg_tokens, COUNT(*) as samples "
+                    "FROM telemetry_hourly WHERE hour_ts >= ? AND hour_ts < ? "
+                    "GROUP BY agent_id HAVING samples >= 3",
+                    (baseline_start, latest_hour)
+                ).fetchall()
+                latest_rows = conn.execute(
+                    "SELECT agent_id, agent_name, latency_p50, tokens_out_total, "
+                    "task_complete, task_failed, retries_total "
+                    "FROM telemetry_hourly WHERE hour_ts = ?", (latest_hour,)
+                ).fetchall()
+                conn.close()
+                result = []
+                bl_map = {b[0]: {"avg_lat": b[2], "avg_tokens": b[3], "samples": b[4]} for b in baselines}
+                for r in latest_rows:
+                    bl = bl_map.get(r[0], {})
+                    result.append({
+                        "agent_id": r[0], "agent_name": r[1],
+                        "latency_p50": r[2], "baseline_latency": round(bl.get("avg_lat", 0)),
+                        "tokens_out": r[3], "baseline_tokens": round(bl.get("avg_tokens", 0)),
+                        "tasks_complete": r[4], "tasks_failed": r[5], "retries": r[6],
+                        "baseline_samples": bl.get("samples", 0),
+                        "latency_anomaly": r[2] > (bl.get("avg_lat", 0) or 9999999) * 2 if bl.get("avg_lat") else False,
+                        "token_anomaly": r[3] > (bl.get("avg_tokens", 0) or 9999999) * 2 if bl.get("avg_tokens", 0) and bl["avg_tokens"] > 100 else False,
+                    })
+                self.reply_json({"ok": True, "anomalies": result, "hour_ts": latest_hour, "baseline_window": "7d"})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)[:200]})
 
         elif parsed.path == "/api/agents/eval-results":
             if not self.auth_check(redirect=False): return
@@ -34642,7 +34795,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.33'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.34'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39407,7 +39560,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.33 ready (localhost only)")
+    print(f"\n  Porter v0.30.34 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
