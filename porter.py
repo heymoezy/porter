@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.30 — Agent detail shows assigned tasks + project context"""
+"""Porter v0.30.31 — Cross-agent learning + project Memory shows all agent knowledge"""
 
 
 import email
@@ -1532,11 +1532,30 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
                     # Reinforce: bump confidence and evidence count
                     _new_conf = min(0.95, (_ex[2] or 0.5) + 0.15)
                     _new_ev = (_ex[3] or 1) + 1
-                    _rc.execute(
-                        "UPDATE cortex_memories SET confidence=?, evidence_count=?, "
-                        "updated_at=strftime('%s','now') WHERE id=?",
-                        (_new_conf, _new_ev, _ex[0])
-                    )
+                    _update_sql = ("UPDATE cortex_memories SET confidence=?, evidence_count=?, "
+                        "updated_at=strftime('%s','now')")
+                    _update_params = [_new_conf, _new_ev]
+                    # v0.30.31 — Cross-agent promotion: if different agent reinforces
+                    # an agent-scoped fact, and both agents share a project, promote to project scope
+                    _orig_source = _rc.execute("SELECT source_id, scope, scope_id FROM cortex_memories WHERE id=?", (_ex[0],)).fetchone()
+                    if _orig_source and _orig_source[1] == "agent" and persona_id and str(_orig_source[0] or "") != str(persona_id):
+                        # Different agent reinforcing — check if they share a project
+                        _shared_projects = set(_persona_project_ids(str(_orig_source[0] or ""))) & set(_persona_project_ids(str(persona_id)))
+                        if not _shared_projects and str(project_id or "").strip():
+                            _shared_projects = {str(project_id)}
+                        if _shared_projects:
+                            _promo_pid = _shared_projects.pop()
+                            _update_sql += ", scope='project', scope_id=?"
+                            _update_params.append(_promo_pid)
+                            log.info("Cortex: cross-agent promotion — fact #%s promoted to project %s (agents: %s + %s)",
+                                _ex[0], _promo_pid[:8], str(_orig_source[0] or "")[:8], str(persona_id)[:8])
+                            _emit_event("cortex:cross_agent_promotion", {
+                                "fact_id": _ex[0], "project_id": _promo_pid,
+                                "agents": [str(_orig_source[0] or ""), str(persona_id)]
+                            })
+                    _update_sql += " WHERE id=?"
+                    _update_params.append(_ex[0])
+                    _rc.execute(_update_sql, _update_params)
                     _rc.commit()
                     _reinforced = True
                     break
@@ -9645,7 +9664,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.30</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.31</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11012,6 +11031,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.31', date:'2026-03-10', notes:['Cross-agent learning: when different agents reinforce similar facts, agent-scoped memories auto-promote to project scope','Project Memory tab now shows agent-scoped memories from all assigned agents alongside project memories, with scope badges','SSE event cortex:cross_agent_promotion fires on scope promotion for real-time UI updates'] },
   { ver:'v0.30.30', date:'2026-03-10', notes:['Agent detail Overview: new Assigned Tasks section shows task-registry tasks assigned to this agent with status, priority, and project badges','Agent detail Overview: new Project Context section shows resolved project name and cross-agent activity feed from /api/projects/<id>/activity','GET /api/personas/<id> now includes resolved project_id for UI project binding'] },
   { ver:'v0.30.29', date:'2026-03-09', notes:['Models tab fix: client timeout raised from 15s to 45s so model endpoints no longer abort mid-load','Snapshot and bootstrap cache TTL extended from 10s to 120s — stops cold-cache rebuilds every 10 seconds','Removed blocking capability checks from snapshot and bootstrap HTTP handlers (saved 8s per request)','Model catalog fetching now parallelized across all 5 backends instead of sequential (saved 4s)'] },
   { ver:'v0.30.28', date:'2026-03-09', notes:['Cortex extraction now prefers local Ollama (no rate limits) before trying cloud backends','Batch extraction: Extract Now button processes recent unextracted dispatches on demand','Cortex squad filter wired up — filter memories by squad membership','Backend health-aware extraction skips rate-limited backends automatically'] },
@@ -14330,6 +14350,7 @@ function _renderProjMemories(memories) {
     if (m.evidence_count > 1) html += '<span style="font-size:10px;color:var(--text3)" title="Reinforced ' + m.evidence_count + ' times">' + m.evidence_count + 'x</span>';
     if (m.use_count) html += '<span style="font-size:10px;color:var(--text3)" title="Injected ' + m.use_count + ' times">used ' + m.use_count + 'x</span>';
     if (age) html += '<span style="font-size:10px;color:var(--text3)">' + age + '</span>';
+    if (m._agentScoped) html += '<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:color-mix(in srgb,#06b6d4 15%,transparent);color:#06b6d4">agent</span>';
     if (m.source_id) {
       var persona = (_personas || []).find(function(p) { return p.id === m.source_id; });
       if (persona) html += '<span style="font-size:10px;color:var(--text3)">' + escHtml((persona.avatar || '') + ' ' + persona.name) + '</span>';
@@ -14367,7 +14388,27 @@ async function _projLoadMemory(pid) {
   var el = document.getElementById('proj-memory-list');
   if (!el) return;
   try {
+    // v0.30.31 — Fetch project-scoped + agent-scoped memories from assigned agents
     var data = await api('/api/cortex/memories?scope=project&scope_id=' + pid);
+    var projMems = (data && data.memories) || [];
+    // Also fetch agent-scoped memories from assigned agents
+    var proj = window._projCurrent || {};
+    var assigned = proj.assigned_personas || [];
+    var agentMems = [];
+    for (var ai = 0; ai < assigned.length; ai++) {
+      try {
+        var ad = await api('/api/cortex/memories?scope=agent&scope_id=' + assigned[ai] + '&limit=20');
+        if (ad && ad.memories) agentMems = agentMems.concat(ad.memories.map(function(m) { m._agentScoped = true; return m; }));
+      } catch(e) {}
+    }
+    // Merge: project first (sorted by confidence), then agent memories
+    data = data || {};
+    data.memories = projMems.concat(agentMems).sort(function(a, b) {
+      // Project scope first, then by confidence
+      if (a.scope === 'project' && b.scope !== 'project') return -1;
+      if (b.scope === 'project' && a.scope !== 'project') return 1;
+      return (b.confidence || 0.5) - (a.confidence || 0.5);
+    });
     _projMemories = (data && data.memories) || [];
     if (!_projMemories.length) {
       el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text3)">No project-scoped memories yet.<br><span style="font-size:10px">Memories are created when agents work on this project.</span></div>';
@@ -32490,7 +32531,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.30"})
+            self.reply_json({"v": "0.30.31"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32652,7 +32693,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.30"
+                health["porter_version"] = "0.30.31"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34496,7 +34537,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.30'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.31'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39259,7 +39300,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.30 ready (localhost only)")
+    print(f"\n  Porter v0.30.31 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
