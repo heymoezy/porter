@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.50 (2026-03-10)
+
+- The Agents tab no longer uses compact status cards; workers now render as full-figure pixel characters on a stage with just name and title.
+- Porter and worker detail views now use a hero-style profile layout with a large figure render and cleaner command-profile copy instead of a CRUD-heavy header.
+- Idle/status noise was removed from the main gallery so the screen reads as identities and teams first, not backend records.
+- Minecraft-style figure rendering now uses a full-body silhouette with simple walk/hero motion so Porter feels like a real platform character.
+
 ## v0.30.49 (2026-03-10)
 
 - Workers now have visible lifecycle state, with temporary vs persistent creation in the wizard and promote/make-temporary controls in the detail view.

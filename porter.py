@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.49 — Worker lifecycle and Minecraft-style portraits"""
+"""Porter v0.30.50 — Agents stage redesign and Porter hero profile"""
 
 
 import email
@@ -9666,28 +9666,89 @@ body.density-compact .file-name { padding: 6px 0; }
 .proj-agent-remove:hover { color:var(--danger); }
 .proj-agent-add { font-size:11px;padding:3px 6px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text2);cursor:pointer; }
 .proj-agent-add:hover { border-color:var(--accent); }
-/* Agent grid (compact layout) */
-.persona-cards-row { display:flex; gap:10px; flex-wrap:wrap; padding:4px 0; }
-.persona-card { display:flex; flex-direction:column; align-items:center; padding:12px 14px;
-  background:var(--raised); border:1px solid var(--border); border-radius:10px;
-  width:130px; cursor:pointer; transition:border-color .15s, box-shadow .15s; }
-.persona-card:hover { border-color:var(--accent); box-shadow:0 2px 8px rgba(0,0,0,.08); }
-.persona-card.selected { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 6%, var(--bg)); }
-.persona-card.orchestrator { border-color:var(--accent); border-width:2px; }
-.persona-card-avatar { font-size:24px; margin-bottom:4px; }
-.persona-card-name { font-size:12px; font-weight:600; color:var(--text); text-align:center;
-  word-wrap:break-word; overflow-wrap:break-word; }
-.persona-card-role { font-size:10px; color:var(--text3); text-align:center;
-  word-wrap:break-word; overflow-wrap:break-word; line-height:1.3; }
-.persona-card-status { display:flex; align-items:center; gap:4px; margin-top:4px; font-size:10px; }
-.persona-card-dot { width:5px; height:5px; border-radius:50%; }
-
-/* v0.28.54 — Spatial agent status animations */
-@keyframes agent-pulse { 0%,100% { box-shadow:0 0 0 0 rgba(34,197,94,.4); } 50% { box-shadow:0 0 0 8px rgba(34,197,94,0); } }
-@keyframes agent-shake { 0%,100% { transform:translateX(0); } 20%,60% { transform:translateX(-3px); } 40%,80% { transform:translateX(3px); } }
-.persona-card.status-active { animation:agent-pulse 2s ease-in-out infinite; border-color:#22c55e; }
-.persona-card.status-error { animation:agent-shake .4s ease-in-out; border-color:#ef4444; }
-.persona-card.status-sleeping { opacity:.7; }
+/* Agent stage redesign */
+.persona-cards-row { display:flex; gap:18px; flex-wrap:wrap; padding:12px 0 6px; align-items:flex-end; }
+.persona-card {
+  width:168px;
+  min-height:252px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+  padding:0 8px 8px;
+  background:transparent;
+  border:none;
+  border-radius:0;
+  cursor:pointer;
+  position:relative;
+  transition:transform .18s ease, filter .18s ease;
+}
+.persona-card:hover { transform:translateY(-5px); filter:brightness(1.05); }
+.persona-card.selected { transform:translateY(-8px) scale(1.02); }
+.persona-card::before {
+  content:"";
+  position:absolute;
+  left:20px;
+  right:20px;
+  bottom:46px;
+  height:24px;
+  border-radius:999px;
+  background:radial-gradient(circle, color-mix(in srgb,var(--accent) 28%, transparent) 0%, transparent 72%);
+  opacity:.18;
+  transition:opacity .18s ease, transform .18s ease;
+}
+.persona-card:hover::before, .persona-card.selected::before { opacity:.4; transform:scale(1.08); }
+.persona-card.orchestrator::before {
+  background:radial-gradient(circle, color-mix(in srgb,#f59e0b 40%, transparent) 0%, transparent 74%);
+  opacity:.55;
+}
+.persona-card-avatar {
+  width:138px;
+  height:182px;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  overflow:visible;
+}
+.persona-card.orchestrator .persona-card-avatar { width:154px; height:200px; }
+.persona-card-name {
+  font-size:15px;
+  font-weight:800;
+  color:var(--text);
+  text-align:center;
+  line-height:1.05;
+  word-wrap:break-word;
+  overflow-wrap:break-word;
+}
+.persona-card-role {
+  font-size:11px;
+  color:var(--text3);
+  text-align:center;
+  line-height:1.25;
+  max-width:150px;
+}
+.persona-card-status, .persona-card-dot { display:none; }
+@keyframes pixel-walk {
+  0%,100% { transform:translateY(0) rotate(0deg); }
+  25% { transform:translateY(-2px) rotate(-1deg); }
+  50% { transform:translateY(0) rotate(0deg); }
+  75% { transform:translateY(-2px) rotate(1deg); }
+}
+@keyframes pixel-hero {
+  0%,100% { transform:translateY(0) scale(1); }
+  50% { transform:translateY(-3px) scale(1.01); }
+}
+.persona-figure {
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  transform-origin:50% 100%;
+  animation:pixel-walk 1.2s steps(2) infinite;
+  filter:drop-shadow(0 14px 22px rgba(0,0,0,.18));
+}
+.persona-card.orchestrator .persona-figure { animation:pixel-hero 1.8s ease-in-out infinite; }
+.persona-card.selected .persona-figure { filter:drop-shadow(0 20px 30px rgba(0,0,0,.24)); }
 .persona-card-xp { width:100%; height:3px; border-radius:2px; background:var(--border); margin-top:6px; overflow:hidden; }
 .persona-card-xp-fill { height:100%; border-radius:2px; background:linear-gradient(90deg,#3b82f6,#8b5cf6); transition:width .3s; }
 .persona-card-xp-label { font-size:9px; color:var(--text3); margin-top:2px; }
@@ -9695,12 +9756,28 @@ body.density-compact .file-name { padding: 6px 0; }
 /* v0.29.1 — Full-page Agent Detail View */
 .agent-detail-view { display:flex; flex-direction:column; gap:12px; }
 .agent-detail-topbar { display:flex; align-items:center; gap:8px; }
-.agent-identity-shell { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; }
-.agent-identity-card { display:flex; align-items:center; gap:14px; }
-.agent-identity-avatar { width:56px; height:56px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:28px; background:var(--bg); border:1px solid var(--border); }
-.agent-identity-name { font-size:16px; font-weight:600; color:var(--text); }
-.agent-identity-role { font-size:12px; color:var(--text3); margin-top:2px; }
-.agent-identity-badges { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+.agent-identity-shell {
+  background:
+    radial-gradient(circle at top, color-mix(in srgb,var(--accent) 12%, transparent), transparent 46%),
+    linear-gradient(180deg,color-mix(in srgb,var(--surface) 94%, transparent),color-mix(in srgb,var(--bg) 96%, transparent));
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:24px;
+}
+.agent-identity-card { display:flex; align-items:flex-end; gap:24px; }
+.agent-identity-avatar {
+  width:188px;
+  height:232px;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  background:transparent;
+  border:none;
+  overflow:visible;
+}
+.agent-identity-name { font-size:30px; font-weight:800; color:var(--text); line-height:1; }
+.agent-identity-role { font-size:14px; color:var(--text3); margin-top:6px; }
+.agent-identity-badges { display:flex; gap:6px; flex-wrap:wrap; margin-top:12px; }
 .agent-badge { font-size:10px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:var(--bg); color:var(--text2); }
 .agent-detail-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); }
 .agent-detail-tabs .pd-tab { padding:8px 16px; }
@@ -10155,7 +10232,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.49</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.50</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11552,6 +11629,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.50', date:'2026-03-10', notes:['Agents tab no longer uses compact status cards; workers now render as full-figure pixel characters on a stage with just name and title','Porter and worker detail views now use a hero-style profile layout with a large figure render and cleaner command-profile copy instead of a CRUD-heavy header','Idle/status noise was removed from the main gallery so the screen reads as identities and teams first, not backend records','Minecraft-style figure rendering now uses a full-body silhouette with simple walk/hero motion so Porter feels like a real platform character'] },
   { ver:'v0.30.49', date:'2026-03-10', notes:['Workers now have visible lifecycle state, with temporary vs persistent creation in the wizard and promote/make-temporary controls in the detail view','New workers can be assigned directly into a squad at creation time so the tab no longer forces a detached create-then-organize flow','Agents cards and detail headers now render deterministic Minecraft-style portraits from appearance specs instead of relying only on emoji placeholders','Squad skill assignment paths now use the real persona skill API again, removing the dead action that left the squad editor half-working'] },
   { ver:'v0.30.48', date:'2026-03-10', notes:['New workers now receive Porter-managed starter skills automatically based on their role instead of starting as blank manual shells','Agent Skills now shows whether a worker is on Porter-managed defaults or manual overrides, with a one-click Re-curate action when the role changes','Manual skill edits now explicitly switch a worker off Porter-managed defaults so the UI tells the truth about who is controlling capability coverage','Persona skill APIs now return recommendation metadata so the worker UI and future orchestration logic can share the same Porter skill-curation signal'] },
   { ver:'v0.30.47', date:'2026-03-10', notes:['Agents now boot with a locked built-in Porter master orchestrator instead of exposing Lobster as a peer agent','Porter is orchestrator-only, cannot be selected as a worker, and his core files, skills, and config are no longer editable from the UI','Crypto Squad is removed from the public team surface, while legacy internal dev personas are hidden from normal agent and squad listings','Worker creation and squad management remain available, but public language now frames them as Porter-managed workers rather than peer agents'] },
@@ -22942,38 +23020,12 @@ function renderPersonaOrg() {
 
   // Card renderer
   function cardHtml(p) {
-    var dotColor = p.status === 'active' ? '#22c55e' : p.status === 'sleeping' ? '#f59e0b' : 'var(--text3)';
-    var statusLabel = p.status === 'active' ? 'active' : p.status === 'sleeping' ? 'sleeping' : 'idle';
     var isSelected = p.id === _selectedPersonaId;
     var isOrch = p.agent_group === 'Orchestrator' || p.orchestrator_only;
-    var grp = p.agent_group || '';
-    var grpColor = groupColors[grp] || 'var(--text3)';
-    var grpBadge = isOrch
-      ? '<div style="font-size:10px;padding:1px 6px;border-radius:3px;background:#f59e0b20;color:#f59e0b;font-weight:700;margin-top:4px;letter-spacing:.3px">MASTER ORCHESTRATOR</div>'
-      : (grp ? '<div style="font-size:10px;padding:1px 6px;border-radius:3px;background:' + grpColor + '20;color:' + grpColor + ';font-weight:600;margin-top:4px;letter-spacing:.3px">' + grp + '</div>' : '');
-    var lifecycleBadge = !isOrch
-      ? (p.is_temporary
-          ? '<div style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f59e0b20;color:#f59e0b;font-weight:700;margin-top:2px;letter-spacing:.3px">TEMPORARY</div>'
-          : '<div style="font-size:9px;padding:1px 5px;border-radius:3px;background:#22c55e20;color:#22c55e;font-weight:700;margin-top:2px;letter-spacing:.3px">PERSISTENT</div>')
-      : '';
-    var porterManagedBadge = (!isOrch && p.managed_by_porter)
-      ? '<div style="font-size:9px;padding:1px 5px;border-radius:3px;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);font-weight:700;margin-top:2px;letter-spacing:.3px">PORTER-MANAGED</div>'
-      : '';
-    var statusClass = p.status === 'active' ? ' status-active' : p.status === 'error' ? ' status-error' : p.status === 'sleeping' ? ' status-sleeping' : '';
-    var _dm = p.dispatch_mode || 'contributor';
-    var leaderBadge = (p._isLeader || _dm === 'leader') ? '<div style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f59e0b20;color:#f59e0b;font-weight:700;margin-top:2px;letter-spacing:.3px">LEADER</div>' : '';
-    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + statusClass + '" data-persona-id="' + p.id + '" onmousedown="_pMouseDown(event)" ontouchstart="_pTouchStart(event)" onclick="selectPersona(\'' + p.id + '\')">'
+    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + '" data-persona-id="' + p.id + '" onmousedown="_pMouseDown(event)" ontouchstart="_pTouchStart(event)" onclick="selectPersona(\'' + p.id + '\')">'
       + '<div class="persona-card-avatar" style="display:flex;align-items:center;justify-content:center;overflow:hidden">' + _personaAvatarMarkup(p, 54) + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
-      + '<div class="persona-card-role">' + escHtml(p.role || 'General') + '</div>'
-      + leaderBadge
-      + lifecycleBadge
-      + porterManagedBadge
-      + grpBadge
-      + '<div class="persona-card-status">'
-      + '<span class="persona-card-dot" style="background:' + dotColor + '"></span>'
-      + '<span style="color:var(--text3)">' + statusLabel + '</span>'
-      + '</div>'
+      + '<div class="persona-card-role">' + escHtml(p.role || (isOrch ? 'Master Orchestrator' : 'Worker')) + '</div>'
       + '</div>';
   }
   // Group by squad — show grouped sections
@@ -23251,9 +23303,9 @@ async function selectPersona(id) {
     }
     if (nm) nm.textContent = p.name || 'Unnamed';
     if (rl) rl.textContent = p.role || 'No role assigned';
-    if (gb) { gb.textContent = isOrchestrator ? 'Master Orchestrator' : (p.agent_group || 'Ungrouped'); var gc = {Orchestrator:'#ef4444',Strategy:'#6366f1',Creative:'#ec4899',Technical:'#06b6d4',Operations:'#f59e0b'}; gb.style.borderColor = isOrchestrator ? '#f59e0b' : (gc[p.agent_group] || 'var(--border)'); gb.style.color = isOrchestrator ? '#f59e0b' : (gc[p.agent_group] || 'var(--text2)'); }
-    if (sb) { sb.textContent = isOrchestrator ? 'supervising' : (p.status || 'idle'); sb.style.color = isOrchestrator ? '#f59e0b' : (p.status === 'active' ? '#22c55e' : p.status === 'error' ? '#ef4444' : 'var(--text3)'); }
-    if (bb) bb.textContent = isOrchestrator ? 'orchestrator-only' : (p.preferred_backend || 'auto-route');
+    if (gb) { gb.textContent = isOrchestrator ? 'Command Core' : (p.is_temporary ? 'Temporary Worker' : 'Persistent Worker'); gb.style.borderColor = isOrchestrator ? '#f59e0b' : 'var(--border)'; gb.style.color = isOrchestrator ? '#f59e0b' : 'var(--text2)'; }
+    if (sb) { sb.textContent = p.managed_by_porter ? 'Porter-managed' : 'Manual'; sb.style.color = p.managed_by_porter ? 'var(--accent)' : 'var(--text3)'; }
+    if (bb) bb.textContent = isOrchestrator ? 'Master control only' : (p.preferred_backend || 'Auto-route');
     if (delBtn) delBtn.style.display = isLocked ? 'none' : '';
     if (spBtn) spBtn.textContent = isLocked ? 'Core Prompt' : 'System Prompt';
     document.querySelectorAll('.pd-tab').forEach(function(btn) {
@@ -23322,17 +23374,36 @@ function switchPdTab(tab) {
   if (tab === 'overview') {
     // v0.29.1 — Overview: stats + recent dispatches + quick actions
     if (!p) { content.innerHTML = '<div class="loading-indicator">Select an agent</div>'; return; }
-    content.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">'
-      + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">'
-      + '<div style="font-size:20px;font-weight:600;color:var(--text)" id="ov-dispatches">—</div>'
-      + '<div style="font-size:10px;color:var(--text3)">Dispatches</div></div>'
-      + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">'
-      + '<div style="font-size:20px;font-weight:600;color:var(--text)" id="ov-tokens">—</div>'
-      + '<div style="font-size:10px;color:var(--text3)">Tokens</div></div>'
-      + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">'
-      + '<div style="font-size:20px;font-weight:600;color:var(--text)" id="ov-skills">—</div>'
-      + '<div style="font-size:10px;color:var(--text3)">Skills</div></div></div>'
-      + '<div style="margin-bottom:16px"><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Quick Actions</div>'
+    content.innerHTML = '<div style="display:grid;grid-template-columns:minmax(280px,340px) 1fr;gap:18px;align-items:start">'
+      + '<div style="padding:18px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 92%,transparent),color-mix(in srgb,var(--bg) 96%,transparent));text-align:center">'
+      + '<div style="display:flex;justify-content:center;align-items:flex-end;min-height:260px;margin-bottom:10px">' + _personaAvatarMarkup(p, 220) + '</div>'
+      + '<div style="font-size:24px;font-weight:800;color:var(--text);line-height:1">' + escHtml(p.name || 'Unnamed') + '</div>'
+      + '<div style="font-size:13px;color:var(--text3);margin-top:6px">' + escHtml(p.role || (p.orchestrator_only ? 'Master Orchestrator' : 'Worker')) + '</div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:12px">'
+      + '<span class="agent-badge">' + (p.orchestrator_only ? 'Command Core' : (p.is_temporary ? 'Temporary Worker' : 'Persistent Worker')) + '</span>'
+      + '<span class="agent-badge">' + (p.managed_by_porter ? 'Porter-managed' : 'Manual overrides') + '</span>'
+      + (p.appearance_style === 'minecraft' ? '<span class="agent-badge">Pixel figure</span>' : '')
+      + '</div></div>'
+      + '<div>'
+      + '<div style="padding:16px 18px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 7%,transparent),transparent);margin-bottom:16px">'
+      + '<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">' + (p.orchestrator_only ? 'Command Profile' : 'Worker Profile') + '</div>'
+      + '<div style="font-size:15px;line-height:1.55;color:var(--text2)">'
+      + (p.orchestrator_only
+          ? 'Porter directs work, creates or assigns workers, manages handoffs, and ensures completion. Porter does not personally execute substantive worker tasks.'
+          : ((p.is_temporary ? 'Temporary specialist created for focused execution. ' : 'Persistent specialist retained for repeated work. ')
+            + (p.managed_by_porter ? 'Porter is currently managing this worker\'s capability defaults and operating posture.' : 'This worker has manual capability overrides layered on top of Porter guidance.')))
+      + '</div></div>'
+      + '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px">'
+      + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center">'
+      + '<div style="font-size:22px;font-weight:700;color:var(--text)" id="ov-dispatches">—</div>'
+      + '<div style="font-size:10px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase">Dispatches</div></div>'
+      + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center">'
+      + '<div style="font-size:22px;font-weight:700;color:var(--text)" id="ov-tokens">—</div>'
+      + '<div style="font-size:10px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase">Tokens</div></div>'
+      + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center">'
+      + '<div style="font-size:22px;font-weight:700;color:var(--text)" id="ov-skills">—</div>'
+      + '<div style="font-size:10px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase">Skills</div></div></div>'
+      + '<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Actions</div>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
       + (p.orchestrator_only
           ? '<button class="btn btn-ghost btn-sm" onclick="switchModule(\'overview\')">Open Main Chat</button>'
@@ -23344,19 +23415,13 @@ function switchPdTab(tab) {
                 ? '<button class="btn btn-ghost btn-sm" onclick="_setWorkerLifecycle(\'' + p.id + '\',false)">Promote to Persistent</button>'
                 : '<button class="btn btn-ghost btn-sm" onclick="_setWorkerLifecycle(\'' + p.id + '\',true)">Make Temporary</button>'))
       + '</div></div>'
-      + (p.orchestrator_only
-          ? '<div style="margin:0 0 16px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,#f59e0b 8%,transparent);font-size:12px;color:var(--text2)">Porter supervises work, creates or assigns workers, and validates completion. Porter does not execute substantive worker tasks directly.</div>'
-          : '<div style="margin:0 0 16px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2)">'
-            + '<strong>Lifecycle:</strong> ' + (p.is_temporary ? 'Temporary worker' : 'Persistent worker')
-            + ' · <strong>Control:</strong> ' + (p.managed_by_porter ? 'Porter-managed defaults' : 'Manual overrides')
-            + (p.appearance_style === 'minecraft' ? ' · <strong>Identity:</strong> Minecraft-style portrait' : '')
-            + '</div>')
-      + '<div style="margin-bottom:16px"><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Assigned Tasks</div>'
+      + '<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Assigned Tasks</div>'
       + '<div id="ov-tasks" style="font-size:12px;color:var(--text3)">Loading...</div></div>'
-      + '<div style="margin-bottom:16px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:13px;font-weight:600;color:var(--text)">Project Context</span><span id="ov-project-name" style="font-size:11px;color:var(--accent)"></span></div>'
+      + '<div style="margin-bottom:16px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)">Project Context</span><span id="ov-project-name" style="font-size:11px;color:var(--accent)"></span></div>'
       + '<div id="ov-project-ctx" style="font-size:12px;color:var(--text3)"></div></div>'
-      + '<div><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Recent Activity</div>'
-      + '<div id="ov-activity" style="font-size:12px;color:var(--text3)">Loading...</div></div>';
+      + '<div><div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Recent Activity</div>'
+      + '<div id="ov-activity" style="font-size:12px;color:var(--text3)">Loading...</div></div>'
+      + '</div></div>';
     // Fetch stats
     (async function() {
       try {
@@ -24107,38 +24172,42 @@ function _minecraftPortraitSvg(p, size) {
   var pal = spec.palette || _fallbackAppearancePalette(p);
   var accessory = String(spec.accessory || '');
   var temporary = !!(p && p.is_temporary);
+  var isOrchestrator = !!(p && p.orchestrator_only);
   var s = Number(size || 72);
-  var px = 10;
-  var bodyTop = 44;
-  var accent = temporary ? '#f59e0b' : (pal.accent || '#f6ad55');
+  var accent = isOrchestrator ? '#f59e0b' : (temporary ? '#f59e0b' : (pal.accent || '#f6ad55'));
   var accessorySvg = '';
-  if (accessory === 'visor') accessorySvg = '<rect x="16" y="24" width="48" height="8" fill="' + accent + '" opacity="0.9"/>';
-  else if (accessory === 'headset') accessorySvg = '<rect x="10" y="22" width="6" height="22" rx="2" fill="' + accent + '"/><rect x="64" y="22" width="6" height="22" rx="2" fill="' + accent + '"/>';
-  else if (accessory === 'helmet') accessorySvg = '<rect x="10" y="10" width="60" height="16" rx="4" fill="' + accent + '"/>';
-  else if (accessory === 'headband') accessorySvg = '<rect x="10" y="20" width="60" height="8" fill="' + accent + '"/>';
-  else if (accessory === 'monocle') accessorySvg = '<rect x="48" y="30" width="12" height="12" rx="6" fill="none" stroke="' + accent + '" stroke-width="4"/>';
+  if (accessory === 'visor') accessorySvg = '<rect x="20" y="30" width="40" height="8" fill="' + accent + '" opacity="0.9"/>';
+  else if (accessory === 'headset') accessorySvg = '<rect x="14" y="26" width="6" height="24" rx="2" fill="' + accent + '"/><rect x="60" y="26" width="6" height="24" rx="2" fill="' + accent + '"/>';
+  else if (accessory === 'helmet') accessorySvg = '<rect x="16" y="14" width="48" height="16" rx="4" fill="' + accent + '"/>';
+  else if (accessory === 'headband') accessorySvg = '<rect x="16" y="24" width="48" height="8" fill="' + accent + '"/>';
+  else if (accessory === 'monocle') accessorySvg = '<rect x="46" y="34" width="12" height="12" rx="6" fill="none" stroke="' + accent + '" stroke-width="4"/>';
+  if (isOrchestrator) accessorySvg += '<rect x="24" y="8" width="32" height="8" fill="' + accent + '"/><rect x="30" y="4" width="20" height="6" fill="#fff3c4"/>';
   var svg = ''
-    + '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="' + s + '" height="' + s + '" shape-rendering="crispEdges">'
-    + '<rect width="80" height="80" rx="10" fill="#101828"/>'
-    + '<rect x="8" y="8" width="64" height="64" rx="8" fill="#1f2937"/>'
-    + '<rect x="18" y="14" width="44" height="14" fill="' + (pal.hair || '#2f4858') + '"/>'
-    + '<rect x="16" y="20" width="48" height="28" fill="' + (pal.skin || '#f1c27d') + '"/>'
-    + '<rect x="24" y="30" width="6" height="6" fill="' + (pal.eyes || '#111827') + '"/>'
-    + '<rect x="50" y="30" width="6" height="6" fill="' + (pal.eyes || '#111827') + '"/>'
-    + '<rect x="30" y="40" width="20" height="4" fill="#7c2d12" opacity="0.65"/>'
+    + '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120" width="' + Math.round(s * 0.72) + '" height="' + s + '" shape-rendering="crispEdges">'
+    + '<rect x="18" y="12" width="44" height="14" fill="' + (pal.hair || '#2f4858') + '"/>'
+    + '<rect x="16" y="20" width="48" height="32" fill="' + (pal.skin || '#f1c27d') + '"/>'
+    + '<rect x="24" y="34" width="6" height="6" fill="' + (pal.eyes || '#111827') + '"/>'
+    + '<rect x="50" y="34" width="6" height="6" fill="' + (pal.eyes || '#111827') + '"/>'
+    + '<rect x="30" y="44" width="20" height="4" fill="#7c2d12" opacity="0.65"/>'
     + accessorySvg
-    + '<rect x="18" y="' + bodyTop + '" width="44" height="22" fill="' + (pal.shirt || '#2b6cb0') + '"/>'
-    + '<rect x="18" y="' + bodyTop + '" width="8" height="22" fill="' + accent + '" opacity="0.85"/>'
-    + '<rect x="54" y="' + bodyTop + '" width="8" height="22" fill="' + accent + '" opacity="0.85"/>'
-    + '<rect x="34" y="' + bodyTop + '" width="12" height="22" fill="#111827" opacity="0.35"/>'
-    + (temporary ? '<rect x="24" y="58" width="32" height="8" fill="#f59e0b"/>' : '')
+    + '<rect x="8" y="56" width="12" height="34" fill="' + (pal.shirt || '#2b6cb0') + '"/>'
+    + '<rect x="60" y="56" width="12" height="34" fill="' + (pal.shirt || '#2b6cb0') + '"/>'
+    + '<rect x="20" y="56" width="40" height="34" fill="' + (pal.shirt || '#2b6cb0') + '"/>'
+    + '<rect x="20" y="56" width="8" height="34" fill="' + accent + '" opacity="0.85"/>'
+    + '<rect x="52" y="56" width="8" height="34" fill="' + accent + '" opacity="0.85"/>'
+    + '<rect x="34" y="56" width="12" height="34" fill="#111827" opacity="0.35"/>'
+    + '<rect x="24" y="90" width="12" height="22" fill="#334155"/>'
+    + '<rect x="44" y="90" width="12" height="22" fill="#334155"/>'
+    + '<rect x="22" y="112" width="16" height="6" fill="#0f172a"/>'
+    + '<rect x="42" y="112" width="16" height="6" fill="#0f172a"/>'
+    + (temporary ? '<rect x="18" y="52" width="44" height="6" fill="#f59e0b"/>' : '')
     + '</svg>';
   return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 }
 
 function _personaAvatarMarkup(p, size) {
   if (p && p.appearance_style === 'minecraft') {
-    return '<img src="' + _minecraftPortraitSvg(p, size || 72) + '" alt="' + escHtml((p && p.name) || 'worker') + '" style="width:' + (size || 72) + 'px;height:' + (size || 72) + 'px;display:block;image-rendering:pixelated;border-radius:10px">';
+    return '<div class="persona-figure"><img src="' + _minecraftPortraitSvg(p, size || 72) + '" alt="' + escHtml((p && p.name) || 'worker') + '" style="height:' + (size || 72) + 'px;display:block;image-rendering:pixelated"></div>';
   }
   return escHtml((p && p.avatar) || '🤖');
 }
@@ -34778,7 +34847,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.49"})
+            self.reply_json({"v": "0.30.50"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -34940,7 +35009,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.49"
+                health["porter_version"] = "0.30.50"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -36836,7 +36905,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.49'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.50'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -41729,7 +41798,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.49 ready (localhost only)")
+    print(f"\n  Porter v0.30.50 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
