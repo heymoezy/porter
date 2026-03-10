@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.35 — Enhanced auto-triage: 10-pattern error self-heal"""
+"""Porter v0.30.36 — Self-Healing Stage 2: auto-rollback + config drift detection"""
 
 
 import email
@@ -9774,7 +9774,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.35</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.36</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11151,6 +11151,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.36', date:'2026-03-10', notes:['Self-Healing Stage 2: auto-rollback on critical self-check failure (version endpoint or DB down)','Rollback uses git revert + systemctl restart with loop-prevention flag (/tmp/porter_rollback_attempted)','Config drift detection: hourly comparison of in-memory config vs porter_config.json on disk','GET /api/self-heal/status returns rollback state, config drift hash, and self-heal status'] },
   { ver:'v0.30.35', date:'2026-03-10', notes:['Enhanced auto-triage: 10 error patterns with actionable remediation (rate limits, gateway down, DB contention, auth spikes, frontend storms)','Rate limit errors auto-set backend cooldown (5min)','OpenClaw gateway down triggers auto-restart','Fixed _backend_set_rate_limited kwarg bug'] },
   { ver:'v0.30.34', date:'2026-03-10', notes:['Anomaly detection: compares latest hourly rollup against 7-day rolling baselines per agent (latency, tokens, failure rate, retries)','Flags when metrics exceed 2x baseline — logged to Mission Control, emitted as telemetry:anomalies SSE event','GET /api/telemetry/anomalies returns per-agent baseline comparisons with anomaly flags','Runs automatically after each hourly telemetry rollup'] },
   { ver:'v0.30.33', date:'2026-03-10', notes:['Runtime tab: System Health card shows self-check results (version, page, DB, threads, config) with pass/fail badges','Self-check threshold fixed (login page ~9KB is healthy, lowered from 10KB to 1KB)','Health card auto-loads when Runtime tab opens, with manual Refresh button'] },
@@ -30385,6 +30386,64 @@ def _error_self_heal_once():
         return {"ok": False, "error": str(e)}
 
 
+
+# ── Config Drift Detection (v0.30.36) ────────────────────────────────────
+
+_last_config_hash = ""
+
+def _config_drift_check():
+    """v0.30.36 — Compare in-memory config against disk config. Log discrepancies."""
+    global _last_config_hash
+    import hashlib
+    try:
+        if not CONFIG_PATH.exists():
+            return
+        disk_raw = CONFIG_PATH.read_text(encoding="utf-8")
+        disk_hash = hashlib.md5(disk_raw.encode()).hexdigest()
+        # On first run, just record the hash
+        if not _last_config_hash:
+            _last_config_hash = disk_hash
+            return
+        # Check if disk config changed since last check (external edit)
+        if disk_hash != _last_config_hash:
+            _last_config_hash = disk_hash
+            # Disk changed — compare keys with in-memory
+            try:
+                disk_cfg = json.loads(disk_raw)
+            except Exception:
+                mlog.emit("warning", "system", "config_drift.parse_error",
+                    "porter_config.json on disk has invalid JSON — cannot compare")
+                return
+            mem_keys = set(_config.keys())
+            disk_keys = set(disk_cfg.keys())
+            added_on_disk = disk_keys - mem_keys
+            removed_on_disk = mem_keys - disk_keys
+            changed_values = []
+            for k in mem_keys & disk_keys:
+                if _config[k] != disk_cfg.get(k):
+                    # Skip volatile keys that change at runtime
+                    if k in ("schedules",):
+                        continue
+                    changed_values.append(k)
+            if added_on_disk or removed_on_disk or changed_values:
+                drift_summary = []
+                if added_on_disk:
+                    drift_summary.append(f"new keys on disk: {sorted(added_on_disk)}")
+                if removed_on_disk:
+                    drift_summary.append(f"keys missing from disk: {sorted(removed_on_disk)}")
+                if changed_values:
+                    drift_summary.append(f"changed values: {sorted(changed_values)}")
+                detail = "; ".join(drift_summary)
+                mlog.emit("warning", "system", "config_drift.detected",
+                    f"Config drift detected — {detail}. Consider /api/reload to sync.")
+                log.warning("Config drift: %s", detail)
+                _emit_event("system:config_drift", {"drift": drift_summary})
+            else:
+                log.debug("Config file changed on disk but no meaningful drift (content equivalent)")
+    except Exception as e:
+        log.debug("Config drift check error: %s", e)
+
+
 def _error_self_heal_loop():
     """Background daemon for error self-healing."""
     import time as _shlt
@@ -30399,6 +30458,9 @@ def _error_self_heal_loop():
             cfg = _config.get("preferences", {})
             if cfg.get("self_heal_enabled", False):
                 _error_self_heal_once()
+        # v0.30.36 — Config drift detection
+        try: _config_drift_check()
+        except Exception: pass
         _shlt.sleep(3600)  # check hourly
 
 
@@ -31322,6 +31384,76 @@ def _agent_watchdog_loop():
 _last_self_check = {"checks": [], "all_ok": None, "summary": "Not run yet", "ts": 0}
 
 
+
+_ROLLBACK_FLAG = Path("/tmp/porter_rollback_attempted")
+
+def _attempt_auto_rollback(critical_failed: list, fail_detail: str):
+    """v0.30.36 — Auto-rollback: revert last commit if critical self-check fails post-deploy.
+
+    Safety: uses /tmp/porter_rollback_attempted flag to prevent infinite restart loops.
+    Only triggers on critical failures (version_endpoint, database).
+    """
+    import subprocess, time as _rbt
+    # Guard: don't rollback if we already tried recently (within 5 min)
+    if _ROLLBACK_FLAG.exists():
+        try:
+            flag_age = _rbt.time() - _ROLLBACK_FLAG.stat().st_mtime
+            if flag_age < 300:  # 5 minutes
+                mlog.emit("error", "system", "rollback.skipped",
+                    f"Rollback already attempted {int(flag_age)}s ago — manual intervention needed. Failures: {fail_detail}")
+                log.error("Auto-rollback SKIPPED (already attempted %ds ago): %s", int(flag_age), fail_detail)
+                return
+        except Exception:
+            pass
+    # Guard: check we have git history to revert to
+    try:
+        result = subprocess.run(
+            ["git", "log", "--oneline", "-2"],
+            cwd=str(_DATA_DIR), capture_output=True, text=True, timeout=10)
+        commits = result.stdout.strip().split("\n")
+        if len(commits) < 2:
+            mlog.emit("error", "system", "rollback.no_history",
+                "Cannot auto-rollback: insufficient git history")
+            log.error("Auto-rollback ABORTED: insufficient git history")
+            return
+        current_commit = commits[0]
+        previous_commit = commits[1]
+    except Exception as e:
+        log.error("Auto-rollback ABORTED: git log failed: %s", e)
+        return
+    # Write rollback flag BEFORE attempting (prevents loops)
+    try:
+        _ROLLBACK_FLAG.write_text(f"rollback at {_rbt.time()}\ncritical: {critical_failed}\nfrom: {current_commit}\nto: {previous_commit}")
+    except Exception:
+        pass
+    mlog.emit("warning", "system", "rollback.starting",
+        f"Auto-rollback triggered: {critical_failed} failed. Reverting {current_commit} → {previous_commit}")
+    log.warning("AUTO-ROLLBACK: reverting %s → %s (critical failures: %s)",
+        current_commit, previous_commit, critical_failed)
+    # Execute rollback
+    try:
+        revert = subprocess.run(
+            ["git", "revert", "HEAD", "--no-edit"],
+            cwd=str(_DATA_DIR), capture_output=True, text=True, timeout=30)
+        if revert.returncode != 0:
+            mlog.emit("error", "system", "rollback.revert_failed",
+                f"git revert failed: {revert.stderr[:200]}")
+            log.error("Auto-rollback git revert FAILED: %s", revert.stderr[:200])
+            return
+        mlog.emit("info", "system", "rollback.reverted",
+            f"Git revert successful. Restarting porter...")
+        log.info("Auto-rollback: git revert successful, restarting porter")
+        # Restart — this kills the current process
+        subprocess.Popen(
+            ["systemctl", "--user", "restart", "porter"],
+            cwd=str(_DATA_DIR))
+        # Give systemd a moment, then this process should be killed by SIGTERM
+        _rbt.sleep(10)
+    except Exception as e:
+        mlog.emit("error", "system", "rollback.failed", f"Auto-rollback exception: {e}")
+        log.error("Auto-rollback EXCEPTION: %s", e)
+
+
 def _startup_self_check():
     """v0.30.32 — Post-startup self-check: verify Porter's own health."""
     import urllib.request, time as _sct
@@ -31373,6 +31505,10 @@ def _startup_self_check():
         mlog.emit("error", "system", "startup.self_check_failed",
             f"{summary} — FAILED: {fail_detail}")
         log.error("Startup self-check FAILED: %s — %s", summary, fail_detail)
+        # v0.30.36 — Auto-rollback on critical failure
+        critical_failed = [c["check"] for c in checks if not c["ok"] and c["check"] in ("version_endpoint", "database")]
+        if critical_failed:
+            _attempt_auto_rollback(critical_failed, fail_detail)
     global _last_self_check
     _last_self_check = {"checks": checks, "all_ok": all_ok, "summary": summary, "ts": _sct.time()}
     _emit_event("system:self_check", {"checks": checks, "all_ok": all_ok, "summary": summary})
@@ -32787,9 +32923,28 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/self-check":
             if not self.auth_check(redirect=False): return
             self.reply_json({"ok": True, **_last_self_check})
+        elif parsed.path == "/api/self-heal/status":
+            if not self.auth_check(redirect=False): return
+            rollback_state = "none"
+            rollback_detail = None
+            if _ROLLBACK_FLAG.exists():
+                try:
+                    rollback_detail = _ROLLBACK_FLAG.read_text()
+                    import time as _shs_t
+                    age = _shs_t.time() - _ROLLBACK_FLAG.stat().st_mtime
+                    rollback_state = "recent" if age < 300 else "stale"
+                except Exception:
+                    rollback_state = "unknown"
+            self.reply_json({
+                "ok": True,
+                "auto_rollback": {"state": rollback_state, "detail": rollback_detail},
+                "config_drift": {"last_hash": _last_config_hash or None},
+                "self_check": _last_self_check.get("summary", "Not run"),
+                "self_heal_enabled": _config.get("preferences", {}).get("self_heal_enabled", False),
+            })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.35"})
+            self.reply_json({"v": "0.30.36"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32951,7 +33106,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.35"
+                health["porter_version"] = "0.30.36"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34836,7 +34991,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.35'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.36'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39601,7 +39756,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.35 ready (localhost only)")
+    print(f"\n  Porter v0.30.36 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
