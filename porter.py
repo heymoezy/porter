@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.37 — Dispatch result scoring: quality heuristics for routing optimization"""
+"""Porter v0.30.38 — Score-based routing: smart router learns from dispatch quality"""
 
 
 import email
@@ -9778,7 +9778,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.37</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.38</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11155,6 +11155,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.38', date:'2026-03-10', notes:['Score-based routing: smart router considers backend quality scores when choosing dispatch target','After 10+ dispatches per backend, routes override to higher-scoring alternatives (>15pt threshold)','Applied to all 4 routing paths: code, factual, short messages, and default','Logged to Mission Control when score override triggers'] },
   { ver:'v0.30.37', date:'2026-03-10', notes:['Dispatch result scoring: heuristic quality score (0-100) per response based on success, substance, speed, clean dispatch, verification','Per-backend score cache with rolling averages','quality_score + backend columns added to agent_messages table','GET /api/dispatch-scores returns per-backend and per-agent score aggregates (last 24h)'] },
   { ver:'v0.30.36', date:'2026-03-10', notes:['Self-Healing Stage 2: auto-rollback on critical self-check failure (version endpoint or DB down)','Rollback uses git revert + systemctl restart with loop-prevention flag (/tmp/porter_rollback_attempted)','Config drift detection: hourly comparison of in-memory config vs porter_config.json on disk','GET /api/self-heal/status returns rollback state, config drift hash, and self-heal status'] },
   { ver:'v0.30.35', date:'2026-03-10', notes:['Enhanced auto-triage: 10 error patterns with actionable remediation (rate limits, gateway down, DB contention, auth spikes, frontend storms)','Rate limit errors auto-set backend cooldown (5min)','OpenClaw gateway down triggers auto-restart','Fixed _backend_set_rate_limited kwarg bug'] },
@@ -29518,6 +29519,49 @@ def _project_route_hint(project_id="", task_id="", persona_id=""):
     return ""
 
 
+
+def _score_adjusted_route(preferred: str, message: str = "") -> tuple:
+    """v0.30.38 — Adjust routing based on dispatch quality scores.
+
+    If the preferred backend's recent avg score is significantly lower than
+    an alternative (>15 points), route to the higher-scoring backend instead.
+    Only activates after 10+ scored dispatches per backend (needs data).
+    """
+    MIN_DISPATCHES = 10  # Need enough data before overriding
+    SCORE_THRESHOLD = 15  # Must beat preferred by this much
+
+    pref_stats = _dispatch_scores_cache.get(preferred)
+    if not pref_stats or pref_stats["count"] < MIN_DISPATCHES:
+        return _resolve_with_fallback(preferred, message)
+
+    pref_avg = pref_stats["avg"]
+    best_alt = None
+    best_alt_avg = pref_avg
+
+    prefs = _config.get("preferences", {})
+    chain = prefs.get("fallback_chain", _DEFAULT_FALLBACK_CHAIN)
+    for alt_backend in chain:
+        if alt_backend == preferred:
+            continue
+        alt_stats = _dispatch_scores_cache.get(alt_backend)
+        if not alt_stats or alt_stats["count"] < MIN_DISPATCHES:
+            continue
+        if alt_stats["avg"] > best_alt_avg + SCORE_THRESHOLD:
+            if _probe_provider(alt_backend) and not _backend_is_circuit_open(alt_backend):
+                best_alt = alt_backend
+                best_alt_avg = alt_stats["avg"]
+
+    if best_alt:
+        mlog.emit("info", "routing", "route.score_override",
+            f"Score override: {preferred} (avg {pref_avg}) → {best_alt} (avg {best_alt_avg})",
+            preferred=preferred, override=best_alt)
+        log.info("Score-based route override: %s (%.1f) → %s (%.1f)",
+            preferred, pref_avg, best_alt, best_alt_avg)
+        return (best_alt, None)
+
+    return _resolve_with_fallback(preferred, message)
+
+
 def _smart_route(message, project_id="", task_id="", persona_id=""):
     """Decide which backend to use based on message content.
     Returns (backend, model) tuple. Probes health + walks fallback chain.
@@ -29543,20 +29587,20 @@ def _smart_route(message, project_id="", task_id="", persona_id=""):
                      r'\.py\b', r'\.js\b', r'\.ts\b', r'\.html\b', r'\.css\b', r'\.json\b',
                      r'\bapi\b', r'\bendpoint\b', r'\bdatabase\b', r'\bquery\b', r'\bsql\b']
     if any(_re.search(p, msg) for p in code_patterns):
-        return _resolve_with_fallback("codex", message)
+        return _score_adjusted_route("codex", message)
 
     # Quick factual / research → Gemini (fast, good at factual)
     quick_signals = ['what is', 'who is', 'when did', 'how many', 'define ',
                      'explain ', 'summarize', 'translate', 'list ', 'compare']
     if any(msg.startswith(s) or (' ' + s) in msg for s in quick_signals):
-        return _resolve_with_fallback("gemini", message)
+        return _score_adjusted_route("gemini", message)
 
     # Short messages (< 20 chars) → Gemini (fast responses)
     if len(msg) < 20:
-        return _resolve_with_fallback("gemini", message)
+        return _score_adjusted_route("gemini", message)
 
-    # Default → Codex CLI (primary chat model)
-    return _resolve_with_fallback("codex", message)
+    # Default → Codex CLI (primary chat model), adjusted by dispatch scores
+    return _score_adjusted_route("codex", message)
 
 
 # ── Persona Layer ──────────────────────────────────────────────────────────
@@ -33049,7 +33093,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.37"})
+            self.reply_json({"v": "0.30.38"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -33211,7 +33255,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.37"
+                health["porter_version"] = "0.30.38"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -35096,7 +35140,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.37'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.38'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39861,7 +39905,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.37 ready (localhost only)")
+    print(f"\n  Porter v0.30.38 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
