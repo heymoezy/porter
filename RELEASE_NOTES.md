@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.46 (2026-03-10)
+
+- Models runtime tags now use clearer operator wording with hover tooltips instead of implementation-heavy labels like internal JSON/test-path jargon.
+- Backend config modals are now schema-driven per runtime, so CLI-backed providers only show settings that Porter actually uses.
+- OpenClaw model-control messaging is softer and more accurate: Porter-selected models are shown as advisory without exposing raw agent-pinning language.
+- Models/runtime copy is now environment-scoped so the UI still makes sense for future hosted Porter and connector-based user runtimes.
+
 ## v0.30.45 (2026-03-10)
 
 **Bridge V2 Scheduler And Unified Models Control Plane**

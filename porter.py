@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.45 — Bridge v2 scheduler and unified models control plane"""
+"""Porter v0.30.46 — Models runtime clarity and environment-scoped backend config"""
 
 
 import email
@@ -9864,7 +9864,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.45</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.46</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11251,6 +11251,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.46', date:'2026-03-10', notes:['Models runtime chips now use plain operator language with hover tooltips instead of implementation-heavy tags','Backend config is now schema-driven per runtime, so CLI backends stop exposing meaningless host, port, and token fields','OpenClaw model-control messaging now explains that Porter selection is advisory without showing raw agent-pinning jargon','Runtime/config copy is now environment-scoped so Models still reads correctly for future hosted and connector-based Porter deployments'] },
   { ver:'v0.30.45', date:'2026-03-10', notes:['Bridge v2: added per-backend and per-model scheduler limits with queue and wait tracking across shared dispatch paths','Models tests and live dispatches now persist benchmark history so routing can prefer faster, less-contended lanes','Models cards now surface bridge control truth, benchmark summaries, and live scheduler pressure instead of treating backend selection as equally exact everywhere','Chat streaming now uses the same bridge scheduler semantics as the rest of Porter so the control plane is aligned'] },
   { ver:'v0.30.44', date:'2026-03-10', notes:['Standup generation: auto-summarize dispatch activity per project','GET /api/standup?project_id=X&hours=24 returns dispatch stats, active agents, recent tasks, summary lines','Supports per-project or global (all projects) standup view'] },
   { ver:'v0.30.43', date:'2026-03-10', notes:['Squad-Project binding: squads can now be assigned to projects via project_id column','_resolve_persona_project checks squad binding as fallback (agent in squad → squad has project → project resolved)','Squad update API accepts project_id field','Enables per-squad project dispatch policy without individual agent assignment'] },
@@ -19799,27 +19800,12 @@ function _renderModelRuntimeBadges(provider, runtime, availableData) {
   var p = provider || {};
   var rt = runtime || {};
   var av = availableData || {};
-  var badges = [];
-  if (p.id === 'gemini') {
-    var authMode = rt.auth_mode || 'unknown';
-    badges.push(authMode === 'api_key' ? 'API key mode' : (authMode === 'oauth' ? 'OAuth mode' : 'Auth unknown'));
-    badges.push(rt.control_mode === 'exact' ? 'Exact model control' : 'Alias model control');
-  } else if (p.id === 'openclaw') {
-    badges.push('Gateway runtime');
-    badges.push(rt.control_mode === 'agent-default' ? 'Agent-pinned bridge' : 'Exact model control');
-  } else if (p.id === 'claude' && rt.supports_json_output) {
-    badges.push('Structured test path');
-  } else if (p.id === 'codex') {
-    badges.push('Exec JSON runtime');
-  } else if (p.id === 'ollama') {
-    badges.push('Local HTTP runtime');
-  }
-  if (av.resolved && rt.honors_model_selection === false) {
-    badges.push('Selected model is advisory');
-  }
-  if (!badges.length) return '';
-  return '<div class="model-card-runtime">' + badges.map(function(label) {
-    return '<span class="model-card-chip dim">' + escHtml(label) + '</span>';
+  var defs = (rt.chips || []);
+  if (!defs.length) return '';
+  return '<div class="model-card-runtime">' + defs.map(function(def) {
+    var label = def.label || '';
+    var tooltip = def.tooltip || label;
+    return '<span class="model-card-chip dim" title="' + escHtml(tooltip) + '">' + escHtml(label) + '</span>';
   }).join('') + '</div>';
 }
 
@@ -20126,7 +20112,22 @@ async function _openBackendConfig(backendId) {
   // Remove existing modal if any
   var old = document.getElementById('bcfg-overlay');
   if (old) old.remove();
-  // Create modal overlay
+  var r = await api('/api/backend/config?backend=' + backendId);
+  if (!r || !r.config) {
+    _reportModelsClientError('backend-config-load', new Error('Missing backend config response'), { backend: backendId });
+    toast('Failed to load config', 'err');
+    return;
+  }
+  var c = r.config || {};
+  var schema = c.schema || {};
+  var fields = Array.isArray(schema.fields) ? schema.fields : [];
+  var note = schema.note || 'No additional runtime settings for this backend.';
+  var tokenLabel = schema.token_label || 'Auth Token';
+  var showDesc = fields.indexOf('description') >= 0;
+  var showToken = fields.indexOf('auth_token') >= 0;
+  var showHost = fields.indexOf('host') >= 0;
+  var showPort = fields.indexOf('port') >= 0;
+
   var overlay = document.createElement('div');
   overlay.id = 'bcfg-overlay';
   overlay.className = 'overlay';
@@ -20136,22 +20137,33 @@ async function _openBackendConfig(backendId) {
   if (prov) label = prov.label || backendId;
   var modal = document.createElement('div');
   modal.className = 'modal';
-  var tokenLabel = backendId === 'openclaw' ? 'Gateway Token' : 'Auth Token';
   var tokenType = backendId === 'openclaw' ? 'text' : 'password';
+  var fieldsHtml = [];
+  if (showDesc) {
+    fieldsHtml.push('<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Description</label>'
+      + '<input id="bcfg-desc" class="form-input" style="margin-bottom:0" /></div>');
+  }
+  if (showToken) {
+    fieldsHtml.push('<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">' + escHtml(tokenLabel) + '</label>'
+      + '<input id="bcfg-token" type="' + escHtml(tokenType) + '" class="form-input" style="margin-bottom:0" placeholder="Leave blank to keep current" /></div>');
+  }
+  if (showHost || showPort) {
+    var hostHtml = showHost
+      ? '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Host</label>'
+        + '<input id="bcfg-host" class="form-input" style="margin-bottom:0" placeholder="127.0.0.1" /></div>'
+      : '';
+    var portHtml = showPort
+      ? '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Port</label>'
+        + '<input id="bcfg-port" class="form-input" style="margin-bottom:0" placeholder="e.g. 18789" /></div>'
+      : '';
+    fieldsHtml.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' + hostHtml + portHtml + '</div>');
+  }
   modal.innerHTML = '<h3>' + escHtml(label) + ' Config</h3>'
-    + '<p style="margin-bottom:14px">Configure connection settings for this backend.</p>'
+    + '<p style="margin-bottom:14px">' + escHtml(note) + '</p>'
     + '<div id="bcfg-runtime" style="margin-bottom:14px;font-size:12px;color:var(--text3)">Loading runtime diagnosis…</div>'
     + '<div style="display:grid;gap:12px">'
-    + '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Description</label>'
-    + '<input id="bcfg-desc" class="form-input" style="margin-bottom:0" /></div>'
-    + '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">' + escHtml(tokenLabel) + '</label>'
-    + '<input id="bcfg-token" type="' + escHtml(tokenType) + '" class="form-input" style="margin-bottom:0" placeholder="Leave blank to keep current" /></div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-    + '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Host</label>'
-    + '<input id="bcfg-host" class="form-input" style="margin-bottom:0" placeholder="127.0.0.1" /></div>'
-    + '<div><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Port</label>'
-    + '<input id="bcfg-port" class="form-input" style="margin-bottom:0" placeholder="e.g. 18789" /></div>'
-    + '</div></div>'
+    + fieldsHtml.join('')
+    + '</div>'
     + '<div class="modal-actions" style="margin-top:18px">'
     + '<button class="btn btn-ghost" onclick="document.getElementById(\'bcfg-overlay\').remove()">Cancel</button>'
     + (backendId === 'openclaw' ? '<button class="btn btn-ghost" onclick="_resetBackendConfigToDiscovered(\'' + escHtml(backendId) + '\')">Use Discovered</button>' : '')
@@ -20159,46 +20171,38 @@ async function _openBackendConfig(backendId) {
     + '</div>';
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
-  // Load current config
-  var r = await api('/api/backend/config?backend=' + backendId);
-  if (r && r.config) {
-    var c = r.config;
-    var descEl = document.getElementById('bcfg-desc');
-    var hostEl = document.getElementById('bcfg-host');
-    var portEl = document.getElementById('bcfg-port');
-    var tokenEl = document.getElementById('bcfg-token');
-    if (descEl) descEl.value = c.description || '';
-    if (hostEl) hostEl.value = c.host || '';
-    if (portEl) portEl.value = c.port || c.gateway_port || '';
-    if (c.has_auth_token && tokenEl) {
-      tokenEl.placeholder = 'Current: ' + (c.auth_token_masked || '****') + ' (leave blank to keep)';
-    }
-    var runtimeEl = document.getElementById('bcfg-runtime');
-    if (runtimeEl) {
-      var diagHtml = '';
-      if (c.effective) {
-        diagHtml += '<div style="margin-bottom:8px"><strong style="color:var(--text2)">Effective:</strong> '
-          + escHtml((c.effective.host || '127.0.0.1') + ':' + (c.effective.port || '18789'))
-          + ' · ' + escHtml(c.effective.source || 'config') + '</div>';
-      }
-      if (c.runtime_issues && c.runtime_issues.length) {
-        diagHtml += '<div style="color:#f59e0b;margin-bottom:6px">' + escHtml(c.runtime_issues.join(' · ')) + '</div>';
-      }
-      if (c.service_unit_paths && c.service_unit_paths.length > 1) {
-        diagHtml += '<div style="margin-bottom:6px;color:#f59e0b">Competing service units:</div>';
-        diagHtml += '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">' + escHtml(c.service_unit_paths.join(' · ')) + '</div>';
-      }
-      if (c.repair_hint) {
-        diagHtml += '<div style="margin-bottom:6px">' + escHtml(c.repair_hint) + '</div>';
-      }
-      if (c.reinstall_cmd) {
-        diagHtml += '<code style="font-size:11px;background:var(--bg);padding:4px 8px;border-radius:6px;display:inline-block">' + escHtml(c.reinstall_cmd) + '</code>';
-      }
-      runtimeEl.innerHTML = diagHtml || 'No additional runtime diagnosis.';
-    }
+  var descEl = document.getElementById('bcfg-desc');
+  var hostEl = document.getElementById('bcfg-host');
+  var portEl = document.getElementById('bcfg-port');
+  var tokenEl = document.getElementById('bcfg-token');
+  if (descEl) descEl.value = c.description || '';
+  if (hostEl) hostEl.value = c.host || '';
+  if (portEl) portEl.value = c.port || c.gateway_port || '';
+  if (c.has_auth_token && tokenEl) {
+    tokenEl.placeholder = 'Current: ' + (c.auth_token_masked || '****') + ' (leave blank to keep)';
   }
-  else {
-    _reportModelsClientError('backend-config-load', new Error('Missing backend config response'), { backend: backendId });
+  var runtimeEl = document.getElementById('bcfg-runtime');
+  if (runtimeEl) {
+    var diagHtml = '';
+    if (c.effective) {
+      diagHtml += '<div style="margin-bottom:8px"><strong style="color:var(--text2)">Effective:</strong> '
+        + escHtml((c.effective.host || '127.0.0.1') + ':' + (c.effective.port || '18789'))
+        + ' · ' + escHtml(c.effective.source || 'config') + '</div>';
+    }
+    if (c.runtime_issues && c.runtime_issues.length) {
+      diagHtml += '<div style="color:#f59e0b;margin-bottom:6px">' + escHtml(c.runtime_issues.join(' · ')) + '</div>';
+    }
+    if (c.service_unit_paths && c.service_unit_paths.length > 1) {
+      diagHtml += '<div style="margin-bottom:6px;color:#f59e0b">Competing service units:</div>';
+      diagHtml += '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">' + escHtml(c.service_unit_paths.join(' · ')) + '</div>';
+    }
+    if (c.repair_hint) {
+      diagHtml += '<div style="margin-bottom:6px">' + escHtml(c.repair_hint) + '</div>';
+    }
+    if (c.reinstall_cmd) {
+      diagHtml += '<code style="font-size:11px;background:var(--bg);padding:4px 8px;border-radius:6px;display:inline-block">' + escHtml(c.reinstall_cmd) + '</code>';
+    }
+    runtimeEl.innerHTML = diagHtml || 'No additional runtime diagnosis.';
   }
 }
 
@@ -21556,7 +21560,7 @@ function _renderModelCards(data, act) {
     var _runtimeHtml = _renderModelRuntimeBadges(p, _rt, _avBk);
     var _bridgeNoteHtml = '';
     if (_rt && _rt.honors_model_selection === false) {
-      var note = (_rt.notes && _rt.notes.length) ? _rt.notes[0] : 'Bridge dispatch does not honor exact model selection for this backend yet.';
+      var note = (_rt.notes && _rt.notes.length) ? _rt.notes[0] : 'This backend treats the selected model as a preference until exact model switching is available.';
       _bridgeNoteHtml = '<div class="model-card-alert">' + escHtml(note) + '</div>';
     }
     // Build model list (replaces dropdown)
@@ -28121,6 +28125,38 @@ def _backend_meta(name):
     bc = _config.get("backend_config", {}).get(name, {})
     return {"description": bc.get("description", ""), "best_for": []}
 
+
+def _backend_config_schema(backend: str) -> dict:
+    backend = str(backend or "").strip().lower()
+    schemas = {
+        "openclaw": {
+            "fields": ["description", "auth_token", "host", "port"],
+            "note": "Porter connects to the OpenClaw gateway for this runtime environment over host, port, and optional gateway token.",
+            "token_label": "Gateway Token",
+        },
+        "ollama": {
+            "fields": ["description", "host", "port"],
+            "note": "Porter connects to the Ollama runtime over HTTP in the current environment. Host and port control where Porter looks for it.",
+            "token_label": "",
+        },
+        "claude": {
+            "fields": ["description"],
+            "note": "Claude runs through the available CLI or connector for this environment. Auth and model access are controlled there, not by Porter host, port, or token settings.",
+            "token_label": "",
+        },
+        "gemini": {
+            "fields": ["description"],
+            "note": "Gemini runs through the available CLI or connector for this environment. Auth mode and model access are controlled there.",
+            "token_label": "",
+        },
+        "codex": {
+            "fields": ["description"],
+            "note": "Codex runs through the available CLI or connector for this environment. Porter does not use host, port, or token overrides for this backend.",
+            "token_label": "",
+        },
+    }
+    return schemas.get(backend, {"fields": ["description"], "note": "No additional runtime settings for this backend.", "token_label": ""})
+
 # ── Backend Version Probing ─────────────────────────────────────────────
 _backend_version_cache = {"data": None, "ts": 0}
 _backend_latest_cache = {"data": {}, "ts": 0}
@@ -28350,6 +28386,7 @@ def _backend_runtime_info(backend: str) -> dict:
             "supports_headless": True,
         })
     info.update(_bridge_runtime_semantics(backend))
+    info["chips"] = _runtime_chip_definitions(backend, info, {})
     _backend_runtime_cache["data"][backend] = dict(info)
     _backend_runtime_cache["ts"][backend] = now
     _backend_runtime_cache["fp"][backend] = fp
@@ -28541,9 +28578,9 @@ def _bridge_runtime_semantics(backend: str, model_id: str = "") -> dict:
     model_id = str(model_id or "").strip()
     if backend == "openclaw":
         control_mode = "agent-default"
-        notes = ["Bridge dispatch is pinned to OpenClaw agent `main`."]
+        notes = ["OpenClaw currently executes through its configured primary agent rather than an exact Porter-selected model."]
         if model_id and model_id not in ("auto", "main"):
-            notes.append("Selected Porter model is advisory until OpenClaw exposes exact model targeting.")
+            notes.append("The selected Porter model is currently a preference signal until OpenClaw exposes exact model targeting.")
         return {
             "control_mode": control_mode,
             "supports_exact_model": False,
@@ -28568,6 +28605,68 @@ def _bridge_runtime_semantics(backend: str, model_id: str = "") -> dict:
         "bridge_target": model_id,
         "notes": [],
     }
+
+
+def _runtime_chip_definitions(backend: str, runtime: dict | None = None, available: dict | None = None) -> list[dict]:
+    backend = str(backend or "").strip().lower()
+    runtime = runtime or {}
+    available = available or {}
+    chips = []
+    if backend == "openclaw":
+        chips.append({
+            "label": "Gateway Bridge",
+            "tooltip": "Porter reaches OpenClaw through its gateway runtime instead of talking directly to a model API.",
+        })
+        if runtime.get("honors_model_selection") is False:
+            chips.append({
+                "label": "Primary Agent",
+                "tooltip": "OpenClaw currently executes through its configured primary agent, so Porter model selection is advisory rather than an exact runtime switch.",
+            })
+    elif backend == "gemini":
+        auth_mode = str(runtime.get("auth_mode") or "unknown").strip().lower()
+        chips.append({
+            "label": "CLI Runtime",
+            "tooltip": "Porter uses the Gemini runtime available in this environment and its current auth/session state.",
+        })
+        chips.append({
+            "label": "Exact Selection" if runtime.get("control_mode") == "exact" else "Alias Selection",
+            "tooltip": "Exact selection means Porter can ask for a specific model ID directly. Alias selection means the Gemini CLI may remap the requested model at runtime.",
+        })
+        if auth_mode == "oauth":
+            chips.append({
+                "label": "OAuth Profile",
+                "tooltip": "This Gemini runtime is using OAuth mode, so model aliases and auth prompts are managed by that environment session.",
+            })
+    elif backend == "claude":
+        chips.append({
+            "label": "CLI Runtime",
+            "tooltip": "Porter uses the Claude runtime available in this environment and its current auth/session state.",
+        })
+        if runtime.get("supports_json_output"):
+            chips.append({
+                "label": "Structured Output",
+                "tooltip": "Porter can ask the Claude CLI for structured output during tests and bridge dispatch bookkeeping.",
+            })
+    elif backend == "codex":
+        chips.append({
+            "label": "CLI Runtime",
+            "tooltip": "Porter uses the Codex runtime available in this environment and its current auth/session state.",
+        })
+        chips.append({
+            "label": "Structured Output",
+            "tooltip": "Porter uses Codex JSON/JSONL event output so bridge telemetry and parsing stay reliable.",
+        })
+    elif backend == "ollama":
+        chips.append({
+            "label": "HTTP Runtime",
+            "tooltip": "Porter talks to the Ollama runtime over HTTP at the configured host and port for this environment.",
+        })
+    if available.get("resolved") and runtime.get("honors_model_selection") is False:
+        chips.append({
+            "label": "Model Advisory",
+            "tooltip": "The model picker still matters for operator intent and diagnostics, but this backend cannot yet honor it as an exact runtime switch.",
+        })
+    return chips
 
 
 def _clean_runtime_model_id(model_id: str) -> str:
@@ -34102,7 +34201,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.45"})
+            self.reply_json({"v": "0.30.46"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -34264,7 +34363,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.45"
+                health["porter_version"] = "0.30.46"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34422,6 +34521,7 @@ class Handler(BaseHTTPRequestHandler):
                 "host": bc.get("host", ""),
                 "port": bc.get("port", ""),
             }
+            _cfg_payload["schema"] = _backend_config_schema(_cfg_bk)
             if _cfg_bk == "openclaw":
                 settings = _openclaw_gateway_settings()
                 diagnosis = _openclaw_runtime_diagnosis()
@@ -34433,6 +34533,12 @@ class Handler(BaseHTTPRequestHandler):
                 _cfg_payload["runtime_issues"] = diagnosis.get("doctor_summary") or []
                 _cfg_payload["service_unit_paths"] = diagnosis.get("service_unit_paths") or []
                 _cfg_payload.update(_model_repair_hint("openclaw", " ".join(diagnosis.get("doctor_summary") or diagnosis.get("issues") or [])))
+            elif _cfg_bk == "ollama":
+                _cfg_payload["effective"] = {
+                    "host": bc.get("host", "127.0.0.1") or "127.0.0.1",
+                    "port": bc.get("port", 11434) or 11434,
+                    "source": "porter override" if any(str(bc.get(k, "")).strip() for k in ("host", "port")) else "default",
+                }
             self.reply_json({"ok": True, "backend": _cfg_bk, "config": _cfg_payload})
 
         elif parsed.path == "/api/providers":
@@ -36153,7 +36259,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.45'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.46'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -37212,13 +37318,22 @@ class Handler(BaseHTTPRequestHandler):
                 save_config(_config)
                 self.reply_json({"ok": True, "backend": _cfg_bk, "config": _config["backend_config"][_cfg_bk]})
                 return
-            # Merge provided fields (description, auth_token, gateway_port, host, port, models)
+            _schema = _backend_config_schema(_cfg_bk)
+            _allowed = set(_schema.get("fields") or [])
+            # Merge only settings that actually affect this backend.
             for _cfg_key in ("description", "auth_token", "gateway_port", "host", "port", "models"):
+                if _cfg_key == "gateway_port" and "port" in _allowed and _cfg_bk == "openclaw":
+                    _allowed.add("gateway_port")
+                if _cfg_key not in _allowed and not (_cfg_key == "models" and _cfg_bk == "openclaw"):
+                    continue
                 if _cfg_key in body:
                     _config["backend_config"][_cfg_bk][_cfg_key] = body[_cfg_key]
             if _cfg_bk == "openclaw":
                 if "port" in body and "gateway_port" not in body:
                     _config["backend_config"][_cfg_bk]["gateway_port"] = body.get("port", 0)
+                if not str(_config["backend_config"][_cfg_bk].get("host", "")).strip():
+                    _config["backend_config"][_cfg_bk].pop("host", None)
+            elif _cfg_bk == "ollama":
                 if not str(_config["backend_config"][_cfg_bk].get("host", "")).strip():
                     _config["backend_config"][_cfg_bk].pop("host", None)
             save_config(_config)
@@ -41011,7 +41126,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.45 ready (localhost only)")
+    print(f"\n  Porter v0.30.46 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
