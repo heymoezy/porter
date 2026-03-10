@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.57 — Porter roster size trim II"""
+"""Porter v0.30.58 — Porter detail command screen"""
 
 
 import email
@@ -7685,6 +7685,100 @@ def _persona_set_skill_names(persona_id: str, skill_names: list[str], managed_by
     return deduped
 
 
+_PORTER_PRIMARY_SKILLS = [
+    "coding-agent",
+    "github",
+    "gh-issues",
+    "gemini",
+    "healthcheck",
+    "tmux",
+    "skill-creator",
+]
+
+_PORTER_RESERVE_SKILLS = [
+    "gog",
+    "weather",
+]
+
+_PORTER_SKILL_PURPOSE = {
+    "coding-agent": "Delegated implementation lane for real code execution and edits.",
+    "github": "Repository, branch, and pull request coordination.",
+    "gh-issues": "Issue intake, triage, and queue shaping.",
+    "gemini": "Deep research and long-context investigation coverage.",
+    "healthcheck": "Runtime, service, and environment verification.",
+    "tmux": "Multi-session supervision across worker terminals.",
+    "skill-creator": "Creates or updates specialist worker skills when the roster lacks coverage.",
+    "gog": "Fast retrieval and structured lookup backup for documentation and assets.",
+    "weather": "External environment signal example skill; available but not core to orchestration.",
+}
+
+
+def _norm_skill_name(name: str | None) -> str:
+    return str(name or "").strip().lower().replace("_", "-")
+
+
+def _porter_skill_profile(available_skills: list[dict] | None = None) -> dict:
+    skills = available_skills if available_skills is not None else _load_openclaw_skills()
+    by_norm: dict[str, dict] = {}
+    for sk in skills or []:
+        for raw in (sk.get("id"), sk.get("name")):
+            norm = _norm_skill_name(raw)
+            if norm and norm not in by_norm:
+                by_norm[norm] = sk
+
+    def _entry(name: str, tier: str) -> dict | None:
+        sk = by_norm.get(_norm_skill_name(name))
+        if not sk:
+            return None
+        skill_name = str(sk.get("name") or sk.get("id") or name).strip()
+        return {
+            "id": str(sk.get("id") or skill_name),
+            "name": skill_name,
+            "description": str(sk.get("description") or "").strip(),
+            "purpose": _PORTER_SKILL_PURPOSE.get(_norm_skill_name(name), ""),
+            "tier": tier,
+            "installed": bool(sk.get("installed") or sk.get("manual")),
+            "path": str(sk.get("path") or ""),
+        }
+
+    core = [item for item in (_entry(name, "core") for name in _PORTER_PRIMARY_SKILLS) if item]
+    reserve = [item for item in (_entry(name, "reserve") for name in _PORTER_RESERVE_SKILLS) if item]
+    covered = {_norm_skill_name(item["id"]) for item in core + reserve}
+    available = []
+    for sk in skills or []:
+        sid = _norm_skill_name(sk.get("id") or sk.get("name"))
+        if not sid or sid in covered:
+            continue
+        available.append({
+            "id": str(sk.get("id") or sk.get("name") or ""),
+            "name": str(sk.get("name") or sk.get("id") or ""),
+            "description": str(sk.get("description") or "").strip(),
+            "purpose": _PORTER_SKILL_PURPOSE.get(sid, ""),
+            "tier": "available",
+            "installed": bool(sk.get("installed") or sk.get("manual")),
+            "path": str(sk.get("path") or ""),
+        })
+    return {
+        "core": core,
+        "reserve": reserve,
+        "available": available,
+        "available_count": len(skills or []),
+    }
+
+
+def _ensure_porter_skill_profile() -> None:
+    try:
+        profile = _porter_skill_profile()
+        target = [str(item.get("name") or "").strip() for item in profile.get("core", []) if str(item.get("name") or "").strip()]
+        if not target:
+            return
+        current = _persona_get_skill_names(PORTER_PERSONA_ID)
+        if current != target:
+            _persona_set_skill_names(PORTER_PERSONA_ID, target, managed_by_porter=True)
+    except Exception as e:
+        log.warning("Porter skill profile sync failed: %s", e)
+
+
 def _appearance_palette_for_persona(name: str = "", role: str = "", temporary: bool = False) -> dict:
     seeds = [
         {"skin": "#f1c27d", "hair": "#2f4858", "shirt": "#2b6cb0", "accent": "#f6ad55", "eyes": "#1a202c"},
@@ -7856,6 +7950,7 @@ def _ensure_porter_persona() -> None:
         "heartbeat.md": "",
     }.items():
         (_pdir / _fname).write_text(_content)
+    _ensure_porter_skill_profile()
 
 # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -10227,7 +10322,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.57</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.58</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11623,6 +11718,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.58', date:'2026-03-10', notes:['Who Is Porter and worker brief overlays now trap Escape correctly inside the popup, and the close button is pinned to the popup upper-right corner inside the detail pane'] },
   { ver:'v0.30.57', date:'2026-03-10', notes:['Porter was reduced again on the main Agents roster with another smaller orchestrator stage and portrait render size, leaving the detail view unchanged'] },
   { ver:'v0.30.56', date:'2026-03-10', notes:['Porter was trimmed down one more step on the main Agents roster by shrinking both the orchestrator stage box and the requested portrait render size together'] },
   { ver:'v0.30.55', date:'2026-03-10', notes:['Porter was scaled down again on the main Agents roster and the requested portrait render size now matches the stage box, fixing the oversized look and clipped head on the main screen'] },
@@ -16088,15 +16184,25 @@ async function _showSystemPrompt(personaId) {
 
 function _showPersonaBrief(persona) {
   if (!persona) return;
-  var host = document.getElementById('agent-detail-view');
+  var host = document.getElementById('pd-content') || document.getElementById('agent-detail-view');
   var usePaneHost = !!(host && host.style.display !== 'none');
   var overlay = document.createElement('div');
   overlay.style.cssText = (usePaneHost
     ? 'position:absolute;inset:0;background:rgba(0,0,0,0.46);z-index:30;display:flex;align-items:center;justify-content:center;padding:20px'
     : 'position:fixed;inset:0;background:rgba(0,0,0,0.56);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px');
   overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
-  function _briefEsc(e) { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', _briefEsc); } }
-  document.addEventListener('keydown', _briefEsc);
+  function _closeBrief() {
+    document.removeEventListener('keydown', _briefEsc, true);
+    overlay.remove();
+  }
+  function _briefEsc(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      _closeBrief();
+    }
+  }
+  document.addEventListener('keydown', _briefEsc, true);
   var title = persona.orchestrator_only ? 'Who Is Porter' : 'Worker Brief';
   var body = persona.orchestrator_only
     ? '<div style="font-size:14px;line-height:1.7;color:var(--text2)">Porter is the platform\'s master orchestrator. He interprets objectives, designs the plan, creates or assigns workers, manages handoffs, and verifies completion. Porter does not take on substantive implementation work himself. He remains accountable for coordination quality, worker composition, and the final outcome presented back to the user.</div>'
@@ -16107,16 +16213,17 @@ function _showPersonaBrief(persona) {
       + '</div>'
     : '<div style="font-size:14px;line-height:1.7;color:var(--text2)">' + escHtml((persona.name || 'This worker') + ' is a ' + (persona.is_temporary ? 'temporary' : 'persistent') + ' worker managed by Porter for focused execution. Role: ' + (persona.role || 'Worker') + '.') + '</div>';
   var modal = document.createElement('div');
-  modal.style.cssText = 'background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%, transparent),color-mix(in srgb,var(--bg) 97%, transparent));border:1px solid var(--border);border-radius:20px;padding:22px;max-width:760px;width:min(760px,100%);box-shadow:0 18px 60px rgba(0,0,0,.34)';
-  modal.innerHTML = '<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">'
+  modal.style.cssText = 'position:relative;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%, transparent),color-mix(in srgb,var(--bg) 97%, transparent));border:1px solid var(--border);border-radius:20px;padding:22px;max-width:760px;width:min(760px,100%);box-shadow:0 18px 60px rgba(0,0,0,.34)';
+  modal.innerHTML = '<button class="btn btn-ghost" onclick="this.closest(\'.persona-brief-overlay\')._closeBrief()" style="position:absolute;top:12px;right:12px;font-size:16px;padding:4px 10px;line-height:1">×</button>'
+    + '<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;padding-right:44px">'
     + '<div style="display:flex;align-items:flex-end;justify-content:center;min-width:110px;min-height:130px">' + _personaAvatarMarkup(persona, 112) + '</div>'
     + '<div style="min-width:0"><div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">' + title + '</div>'
     + '<div style="font-size:28px;font-weight:800;color:var(--text);line-height:1">' + escHtml(persona.name || 'Unnamed') + '</div>'
     + '<div style="font-size:13px;color:var(--text3);margin-top:6px">' + escHtml(persona.role || (persona.orchestrator_only ? 'Master Orchestrator' : 'Worker')) + '</div></div>'
-    + '<div style="flex:1"></div>'
-    + '<button class="btn btn-ghost" onclick="this.closest(\'.persona-brief-overlay\').remove()" style="font-size:14px;padding:4px 10px">×</button></div>'
+    + '<div style="flex:1"></div></div>'
     + body;
   overlay.className = 'persona-brief-overlay';
+  overlay._closeBrief = _closeBrief;
   overlay.appendChild(modal);
   if (usePaneHost) {
     if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
@@ -25117,6 +25224,8 @@ document.addEventListener('keydown', function(e) {
   // Wizard modal (highest z-index)
   var wiz = document.getElementById('persona-wizard');
   if (wiz && wiz.style.display !== 'none') { closePersonaWizard(); e.stopPropagation(); return; }
+  var brief = document.querySelector('.persona-brief-overlay');
+  if (brief && typeof brief._closeBrief === 'function') { brief._closeBrief(); e.stopPropagation(); return; }
   // Persona detail slide-out
   var pd = document.getElementById('persona-detail');
   if (pd && pd.classList.contains('open')) { closePersonaDetail(); e.stopPropagation(); return; }
@@ -34781,10 +34890,12 @@ class Handler(BaseHTTPRequestHandler):
             conn.close()
             skills = [{"name": r[0], "enabled": bool(r[1])} for r in rows]
             recommended = _recommended_skill_names_for_persona(persona)
+            profile = _porter_skill_profile() if pid == PORTER_PERSONA_ID else None
             self.reply_json({
                 "ok": True,
                 "skills": skills,
                 "recommended": recommended,
+                "profile": profile,
                 "managed_by_porter": bool((persona or {}).get("managed_by_porter", 0)),
                 "auto_assign_enabled": not _persona_is_locked(persona),
             })
@@ -34919,7 +35030,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.57"})
+            self.reply_json({"v": "0.30.58"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35081,7 +35192,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.57"
+                health["porter_version"] = "0.30.58"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -36977,7 +37088,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.57'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.58'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39480,10 +39591,12 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 rows = _persona_get_skill_names(pid)
                 recommended = _recommended_skill_names_for_persona(persona)
+                profile = _porter_skill_profile() if pid == PORTER_PERSONA_ID else None
                 self.reply_json({
                     "ok": True,
                     "skills": [{"name": r, "enabled": True} for r in rows],
                     "recommended": recommended,
+                    "profile": profile,
                     "managed_by_porter": bool((persona or {}).get("managed_by_porter", 0)),
                     "auto_assign_enabled": not _persona_is_locked(persona),
                 })
@@ -41870,7 +41983,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.57 ready (localhost only)")
+    print(f"\n  Porter v0.30.58 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

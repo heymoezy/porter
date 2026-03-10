@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.58 (2026-03-10)
+
+- `Who Is Porter` and worker brief overlays now keep Escape scoped to the popup instead of collapsing the full detail view.
+- The popup close button now sits in the upper-right corner, and the brief centers inside the agent detail pane.
+
 ## v0.30.57 (2026-03-10)
 
 - Porter was reduced again on the main Agents roster, with a smaller orchestrator card and portrait render size.
