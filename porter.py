@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.36 — Self-Healing Stage 2: auto-rollback + config drift detection"""
+"""Porter v0.30.37 — Dispatch result scoring: quality heuristics for routing optimization"""
 
 
 import email
@@ -513,6 +513,10 @@ def _db_init():
         conn.execute("ALTER TABLE agent_messages ADD COLUMN project_id TEXT")
     if "task_id" not in _am_cols:
         conn.execute("ALTER TABLE agent_messages ADD COLUMN task_id TEXT")
+    if "quality_score" not in _am_cols:
+        conn.execute("ALTER TABLE agent_messages ADD COLUMN quality_score INTEGER DEFAULT 0")
+    if "backend" not in _am_cols:
+        conn.execute("ALTER TABLE agent_messages ADD COLUMN backend TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_chain ON agent_messages(chain_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_persona ON agent_messages(persona_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_project ON agent_messages(project_id)")
@@ -9774,7 +9778,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.36</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.37</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11151,6 +11155,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.37', date:'2026-03-10', notes:['Dispatch result scoring: heuristic quality score (0-100) per response based on success, substance, speed, clean dispatch, verification','Per-backend score cache with rolling averages','quality_score + backend columns added to agent_messages table','GET /api/dispatch-scores returns per-backend and per-agent score aggregates (last 24h)'] },
   { ver:'v0.30.36', date:'2026-03-10', notes:['Self-Healing Stage 2: auto-rollback on critical self-check failure (version endpoint or DB down)','Rollback uses git revert + systemctl restart with loop-prevention flag (/tmp/porter_rollback_attempted)','Config drift detection: hourly comparison of in-memory config vs porter_config.json on disk','GET /api/self-heal/status returns rollback state, config drift hash, and self-heal status'] },
   { ver:'v0.30.35', date:'2026-03-10', notes:['Enhanced auto-triage: 10 error patterns with actionable remediation (rate limits, gateway down, DB contention, auth spikes, frontend storms)','Rate limit errors auto-set backend cooldown (5min)','OpenClaw gateway down triggers auto-restart','Fixed _backend_set_rate_limited kwarg bug'] },
   { ver:'v0.30.34', date:'2026-03-10', notes:['Anomaly detection: compares latest hourly rollup against 7-day rolling baselines per agent (latency, tokens, failure rate, retries)','Flags when metrics exceed 2x baseline — logged to Mission Control, emitted as telemetry:anomalies SSE event','GET /api/telemetry/anomalies returns per-agent baseline comparisons with anomaly flags','Runs automatically after each hourly telemetry rollup'] },
@@ -29927,6 +29932,64 @@ def _verify_dispatch_response(original_message, response_text, agent_name="", ba
     return {"passed": passed, "score": score, "reason": reason, "duration_s": _v_dur}
 
 
+
+# ── Dispatch Result Scoring (v0.30.37) ───────────────────────────────────
+
+def _score_dispatch_result(result: dict, latency_ms: int, backend: str,
+                           verification: dict = None) -> int:
+    """v0.30.37 — Heuristic quality score (0-100) for a dispatch result.
+
+    Scoring breakdown:
+    - Base: 0 (failure) or 50 (success)
+    - Response substance: +0-20 based on length (100→5, 500→15, 1000+→20)
+    - Speed: +0-15 based on latency (<2s→15, <5s→10, <10s→5, >10s→0)
+    - Clean dispatch: +10 if no retries/fallback needed
+    - Verification: +5 if passed (strict agents only)
+    """
+    if not result.get("ok"):
+        return 0
+    score = 50  # Base for successful dispatch
+    # Response substance
+    text = result.get("text", "") or ""
+    text_len = len(text.strip())
+    if text_len >= 1000:
+        score += 20
+    elif text_len >= 500:
+        score += 15
+    elif text_len >= 100:
+        score += 5
+    # Speed bonus
+    if latency_ms < 2000:
+        score += 15
+    elif latency_ms < 5000:
+        score += 10
+    elif latency_ms < 10000:
+        score += 5
+    # Clean dispatch (no fallback marker in result)
+    if not result.get("fallback_used"):
+        score += 10
+    # Verification bonus
+    if verification and verification.get("passed"):
+        score += 5
+    return min(score, 100)
+
+
+# ── Backend Performance Aggregation (v0.30.37) ──────────────────────────
+
+_dispatch_scores_cache = {}  # backend → {total_score, count, avg, last_updated}
+
+def _update_dispatch_score_cache(backend: str, score: int):
+    """Track rolling average score per backend."""
+    if backend not in _dispatch_scores_cache:
+        _dispatch_scores_cache[backend] = {"total_score": 0, "count": 0, "avg": 0.0, "last_updated": 0}
+    entry = _dispatch_scores_cache[backend]
+    entry["total_score"] += score
+    entry["count"] += 1
+    entry["avg"] = round(entry["total_score"] / entry["count"], 1)
+    import time as _dsc_t
+    entry["last_updated"] = _dsc_t.time()
+
+
 def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=None, step_num=0,
                         personality_mode=False, backend_override="", project_id="", task_id=""):
     """Dispatch a message to a persona: load SOUL, resolve backend, call dispatch_agent."""
@@ -30215,6 +30278,21 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
         tokens_out=_dtp_tokens, latency_ms=_dtp_dur,
         backend=backend, action="dispatch_to_persona",
         run_id=run_id, trace_id=_get_trace_id())
+
+    # v0.30.37 — Dispatch result scoring
+    _dtp_score = _score_dispatch_result(result, _dtp_dur, backend,
+                                         verification=result.get("verification"))
+    result["quality_score"] = _dtp_score
+    _update_dispatch_score_cache(backend, _dtp_score)
+    # Persist score + backend to agent_messages
+    try:
+        _sc_conn = _db_conn()
+        _sc_conn.execute("UPDATE agent_messages SET quality_score=?, backend=? WHERE run_id=?",
+                         (_dtp_score, backend, run_id))
+        _sc_conn.commit()
+        _sc_conn.close()
+    except Exception:
+        pass
 
     # Reset status to idle
     try:
@@ -32942,9 +33020,36 @@ class Handler(BaseHTTPRequestHandler):
                 "self_check": _last_self_check.get("summary", "Not run"),
                 "self_heal_enabled": _config.get("preferences", {}).get("self_heal_enabled", False),
             })
+        elif parsed.path == "/api/dispatch-scores":
+            if not self.auth_check(redirect=False): return
+            # Return per-backend score aggregates + recent per-agent scores
+            try:
+                _ds_conn = _db_conn()
+                _ds_rows = _ds_conn.execute("""
+                    SELECT backend, persona_id, COUNT(*) as dispatches,
+                           AVG(quality_score) as avg_score,
+                           SUM(CASE WHEN status='complete' THEN 1 ELSE 0 END) as successes,
+                           SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as failures
+                    FROM agent_messages
+                    WHERE created_at > strftime('%s','now') - 86400
+                      AND backend IS NOT NULL
+                    GROUP BY backend, persona_id
+                    ORDER BY avg_score DESC
+                """).fetchall()
+                _ds_conn.close()
+                per_agent = [{"backend": r[0], "persona_id": r[1], "dispatches": r[2],
+                              "avg_score": round(r[3] or 0, 1), "successes": r[4], "failures": r[5]}
+                             for r in _ds_rows]
+            except Exception:
+                per_agent = []
+            self.reply_json({
+                "ok": True,
+                "cache": {k: dict(v) for k, v in _dispatch_scores_cache.items()},
+                "last_24h": per_agent,
+            })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.36"})
+            self.reply_json({"v": "0.30.37"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -33106,7 +33211,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.36"
+                health["porter_version"] = "0.30.37"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34991,7 +35096,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.36'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.37'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39756,7 +39861,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.36 ready (localhost only)")
+    print(f"\n  Porter v0.30.37 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
