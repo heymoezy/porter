@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.31 — Cross-agent learning + project Memory shows all agent knowledge"""
+"""Porter v0.30.32 — Startup self-check + /api/self-check endpoint"""
 
 
 import email
@@ -9664,7 +9664,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.31</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.32</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11031,6 +11031,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.32', date:'2026-03-10', notes:['Self-Monitoring Stage 1: startup self-check verifies version endpoint, main page, database, background threads, and config 5s after boot','GET /api/self-check returns last self-check results (checks array, all_ok, summary, timestamp)','Results logged to Mission Control and emitted as system:self_check SSE event'] },
   { ver:'v0.30.31', date:'2026-03-10', notes:['Cross-agent learning: when different agents reinforce similar facts, agent-scoped memories auto-promote to project scope','Project Memory tab now shows agent-scoped memories from all assigned agents alongside project memories, with scope badges','SSE event cortex:cross_agent_promotion fires on scope promotion for real-time UI updates'] },
   { ver:'v0.30.30', date:'2026-03-10', notes:['Agent detail Overview: new Assigned Tasks section shows task-registry tasks assigned to this agent with status, priority, and project badges','Agent detail Overview: new Project Context section shows resolved project name and cross-agent activity feed from /api/projects/<id>/activity','GET /api/personas/<id> now includes resolved project_id for UI project binding'] },
   { ver:'v0.30.29', date:'2026-03-09', notes:['Models tab fix: client timeout raised from 15s to 45s so model endpoints no longer abort mid-load','Snapshot and bootstrap cache TTL extended from 10s to 120s — stops cold-cache rebuilds every 10 seconds','Removed blocking capability checks from snapshot and bootstrap HTTP handlers (saved 8s per request)','Model catalog fetching now parallelized across all 5 backends instead of sequential (saved 4s)'] },
@@ -31123,6 +31124,65 @@ def _agent_watchdog_loop():
     log.info("Agent watchdog stopped")
 
 
+_last_self_check = {"checks": [], "all_ok": None, "summary": "Not run yet", "ts": 0}
+
+
+def _startup_self_check():
+    """v0.30.32 — Post-startup self-check: verify Porter's own health."""
+    import urllib.request, time as _sct
+    _sct.sleep(5)  # Wait for server to fully start
+    checks = []
+    port = PORT
+    # 1. Version endpoint responds
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/version")
+        resp = urllib.request.urlopen(req, timeout=5)
+        data = json.loads(resp.read())
+        ver = data.get("v", "?")
+        checks.append({"check": "version_endpoint", "ok": True, "detail": ver})
+    except Exception as e:
+        checks.append({"check": "version_endpoint", "ok": False, "detail": str(e)[:100]})
+    # 2. Main page loads (non-empty HTML)
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/")
+        resp = urllib.request.urlopen(req, timeout=5)
+        html = resp.read()
+        size = len(html)
+        checks.append({"check": "main_page", "ok": size > 10000, "detail": f"{size} bytes"})
+    except Exception as e:
+        checks.append({"check": "main_page", "ok": False, "detail": str(e)[:100]})
+    # 3. DB accessible (personas count)
+    try:
+        conn = _db_conn()
+        count = conn.execute("SELECT COUNT(*) FROM personas").fetchone()[0]
+        conn.close()
+        checks.append({"check": "database", "ok": True, "detail": f"{count} personas"})
+    except Exception as e:
+        checks.append({"check": "database", "ok": False, "detail": str(e)[:100]})
+    # 4. Background threads running
+    alive_threads = [t.name for t in threading.enumerate() if t.is_alive() and t.name.startswith("porter-")]
+    checks.append({"check": "background_threads", "ok": len(alive_threads) >= 5,
+                    "detail": f"{len(alive_threads)} threads: {', '.join(alive_threads[:8])}"})
+    # 5. Config loaded
+    proj_count = len(_config.get("projects", []))
+    checks.append({"check": "config", "ok": True, "detail": f"{proj_count} projects"})
+    # Report
+    all_ok = all(c["ok"] for c in checks)
+    summary = f"Self-check: {sum(1 for c in checks if c['ok'])}/{len(checks)} passed"
+    if all_ok:
+        mlog.emit("info", "system", "startup.self_check", summary)
+        log.info("Startup self-check: %s", summary)
+    else:
+        failed = [c for c in checks if not c["ok"]]
+        fail_detail = "; ".join(f"{c['check']}: {c['detail']}" for c in failed)
+        mlog.emit("error", "system", "startup.self_check_failed",
+            f"{summary} — FAILED: {fail_detail}")
+        log.error("Startup self-check FAILED: %s — %s", summary, fail_detail)
+    global _last_self_check
+    _last_self_check = {"checks": checks, "all_ok": all_ok, "summary": summary, "ts": _sct.time()}
+    _emit_event("system:self_check", {"checks": checks, "all_ok": all_ok, "summary": summary})
+
+
 def _start_watchdog():
     """Start the agent watchdog in a background thread."""
     global _watchdog_running
@@ -32529,9 +32589,12 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             with _delegation_lock:
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
+        elif parsed.path == "/api/self-check":
+            if not self.auth_check(redirect=False): return
+            self.reply_json({"ok": True, **_last_self_check})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.31"})
+            self.reply_json({"v": "0.30.32"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32693,7 +32756,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.31"
+                health["porter_version"] = "0.30.32"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34537,7 +34600,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.31'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.32'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39294,13 +39357,15 @@ if __name__ == "__main__":
         ]:
             threading.Thread(target=_tgt, name=_tn, daemon=True).start()
         _start_watchdog()  # Agent watchdog: stall detection + auto-reboot
+        # v0.30.32 — Self-check: verify Porter's own health after boot
+        threading.Thread(target=_startup_self_check, name="porter-self-check", daemon=True).start()
     threading.Thread(target=_deferred_boot, name="porter-deferred-boot", daemon=True).start()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     host_hint = _public_ip_hint()
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.31 ready (localhost only)")
+    print(f"\n  Porter v0.30.32 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
