@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.40 — Self-dispatch: Porter triggers agent work autonomously"""
+"""Porter v0.30.41 — Pattern mining: dispatch history analysis for routing insights"""
 
 
 import email
@@ -9828,7 +9828,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.40</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.41</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11205,6 +11205,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.41', date:'2026-03-10', notes:['Pattern mining: analyzes 7-day dispatch history for performance insights','Per-agent success rates + quality scores, per-backend reliability comparison','Common failure patterns (top 5), hourly performance distribution','Runs every 6h, logs insights to Mission Control, GET /api/intelligence/patterns'] },
   { ver:'v0.30.40', date:'2026-03-10', notes:['Self-dispatch: Porter creates internal tasks and dispatches to agents autonomously','Triggers: anomaly detection (routes to BugBanisher), health failures (routes to Vision/LogicLord)','Rate-limited: max 5 self-dispatches per hour, opt-in via self_dispatch_enabled preference','GET /api/self-dispatch/status shows recent auto-dispatches and rate limit state'] },
   { ver:'v0.30.39', date:'2026-03-10', notes:['Cortex-driven optimization: failed dispatch errors from last 24h injected into agent context','Agents see what went wrong in recent failures so they can avoid repeating mistakes','Deduplicated error summaries (max 3 unique errors) appended to dispatch context suffix'] },
   { ver:'v0.30.38', date:'2026-03-10', notes:['Score-based routing: smart router considers backend quality scores when choosing dispatch target','After 10+ dispatches per backend, routes override to higher-scoring alternatives (>15pt threshold)','Applied to all 4 routing paths: code, factual, short messages, and default','Logged to Mission Control when score override triggers'] },
@@ -30454,6 +30455,155 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
 
 
 
+
+# ── Pattern Mining (v0.30.41) ────────────────────────────────────────────
+# Analyzes dispatch history to find performance trends and surface insights.
+# Runs periodically (every 6h) and stores findings as Cortex project-scoped memories.
+
+_pattern_mining_results = {}  # Last mining results
+
+def _pattern_mining_run():
+    """v0.30.41 — Analyze dispatch history from last 7 days for routing insights.
+
+    Produces:
+    - Per-agent success rates + avg quality scores
+    - Per-backend reliability comparison
+    - Common failure patterns (top 5 error messages)
+    - Peak performance hours per backend
+    """
+    import time as _pmt
+    results = {"ts": _pmt.time(), "insights": []}
+    try:
+        conn = _db_conn()
+        # 1. Per-agent performance (last 7 days)
+        agent_stats = conn.execute("""
+            SELECT persona_id, backend,
+                   COUNT(*) as total,
+                   SUM(CASE WHEN status='complete' THEN 1 ELSE 0 END) as successes,
+                   AVG(quality_score) as avg_score,
+                   AVG(duration_ms) as avg_latency
+            FROM agent_messages
+            WHERE created_at > strftime('%s','now') - 604800
+              AND persona_id IS NOT NULL AND persona_id != ''
+            GROUP BY persona_id, backend
+            HAVING total >= 3
+            ORDER BY avg_score DESC
+        """).fetchall()
+        if agent_stats:
+            top = []
+            for r in agent_stats[:10]:
+                rate = round((r[3] / r[2]) * 100) if r[2] > 0 else 0
+                top.append({
+                    "persona_id": r[0], "backend": r[1],
+                    "dispatches": r[2], "success_rate": rate,
+                    "avg_score": round(r[4] or 0, 1),
+                    "avg_latency_ms": int(r[5] or 0)
+                })
+            results["agent_performance"] = top
+            # Insight: best agent+backend combo
+            if top:
+                best = top[0]
+                results["insights"].append(
+                    f"Best performer: persona {best['persona_id']} on {best['backend']} "
+                    f"({best['success_rate']}% success, avg score {best['avg_score']})")
+
+        # 2. Per-backend reliability
+        backend_stats = conn.execute("""
+            SELECT backend,
+                   COUNT(*) as total,
+                   SUM(CASE WHEN status='complete' THEN 1 ELSE 0 END) as successes,
+                   AVG(quality_score) as avg_score,
+                   AVG(duration_ms) as avg_latency
+            FROM agent_messages
+            WHERE created_at > strftime('%s','now') - 604800
+              AND backend IS NOT NULL AND backend != ''
+            GROUP BY backend
+            HAVING total >= 5
+            ORDER BY avg_score DESC
+        """).fetchall()
+        if backend_stats:
+            backends = []
+            for r in backend_stats:
+                rate = round((r[2] / r[1]) * 100) if r[1] > 0 else 0
+                backends.append({
+                    "backend": r[0], "dispatches": r[1],
+                    "success_rate": rate, "avg_score": round(r[3] or 0, 1),
+                    "avg_latency_ms": int(r[4] or 0)
+                })
+            results["backend_reliability"] = backends
+            if len(backends) >= 2:
+                best_be = backends[0]
+                worst_be = backends[-1]
+                if best_be["avg_score"] - worst_be["avg_score"] > 10:
+                    results["insights"].append(
+                        f"Backend gap: {best_be['backend']} (score {best_be['avg_score']}) "
+                        f"outperforms {worst_be['backend']} (score {worst_be['avg_score']}) by "
+                        f"{round(best_be['avg_score'] - worst_be['avg_score'], 1)} points")
+
+        # 3. Common failure patterns
+        failures = conn.execute("""
+            SELECT error, COUNT(*) as cnt
+            FROM agent_messages
+            WHERE status = 'failed'
+              AND created_at > strftime('%s','now') - 604800
+              AND error IS NOT NULL AND error != ''
+            GROUP BY error
+            ORDER BY cnt DESC
+            LIMIT 5
+        """).fetchall()
+        if failures:
+            results["top_failures"] = [
+                {"error": r[0][:120], "count": r[1]} for r in failures
+            ]
+            if failures[0][1] >= 5:
+                results["insights"].append(
+                    f"Recurring failure ({failures[0][1]}x): {failures[0][0][:80]}")
+
+        # 4. Hourly performance distribution (find peak hours)
+        hourly = conn.execute("""
+            SELECT CAST(strftime('%H', datetime(created_at, 'unixepoch', 'localtime')) AS INTEGER) as hour,
+                   AVG(quality_score) as avg_score,
+                   COUNT(*) as total
+            FROM agent_messages
+            WHERE created_at > strftime('%s','now') - 604800
+              AND quality_score > 0
+            GROUP BY hour
+            HAVING total >= 3
+            ORDER BY avg_score DESC
+        """).fetchall()
+        if hourly:
+            results["hourly_performance"] = [
+                {"hour": r[0], "avg_score": round(r[1] or 0, 1), "dispatches": r[2]}
+                for r in hourly
+            ]
+            if len(hourly) >= 2:
+                best_h = hourly[0]
+                worst_h = hourly[-1]
+                results["insights"].append(
+                    f"Best hour: {best_h[0]:02d}:00 (score {round(best_h[1],1)}), "
+                    f"worst: {worst_h[0]:02d}:00 (score {round(worst_h[1],1)})")
+
+        conn.close()
+    except Exception as e:
+        log.debug("Pattern mining error: %s", e)
+        results["error"] = str(e)[:200]
+
+    global _pattern_mining_results
+    _pattern_mining_results = results
+
+    # Log insights to Mission Control
+    if results.get("insights"):
+        summary = " | ".join(results["insights"][:3])
+        mlog.emit("info", "intelligence", "pattern_mining.complete",
+            f"Pattern mining: {len(results.get('insights',[]))} insights — {summary}")
+        _emit_event("intelligence:patterns", {
+            "insights": results["insights"],
+            "agent_count": len(results.get("agent_performance", [])),
+            "backend_count": len(results.get("backend_reliability", [])),
+        })
+    return results
+
+
 # ── Self-Dispatch (v0.30.40) ─────────────────────────────────────────────
 # Porter creates internal tasks and dispatches them to agents without human trigger.
 # Sources: anomaly alerts, health failures, scheduled analysis, pattern detection.
@@ -30759,6 +30909,12 @@ def _error_self_heal_loop():
                 _error_self_heal_once()
         # v0.30.36 — Config drift detection
         try: _config_drift_check()
+        except Exception: pass
+        # v0.30.41 — Pattern mining (every 6 hours)
+        try:
+            if not hasattr(_pattern_mining_run, '_last_run') or (_shlt.time() - _pattern_mining_run._last_run) > 21600:
+                _pattern_mining_run()
+                _pattern_mining_run._last_run = _shlt.time()
         except Exception: pass
         _shlt.sleep(3600)  # check hourly
 
@@ -33248,6 +33404,9 @@ class Handler(BaseHTTPRequestHandler):
                 "self_check": _last_self_check.get("summary", "Not run"),
                 "self_heal_enabled": _config.get("preferences", {}).get("self_heal_enabled", False),
             })
+        elif parsed.path == "/api/intelligence/patterns":
+            if not self.auth_check(redirect=False): return
+            self.reply_json({"ok": True, **_pattern_mining_results})
         elif parsed.path == "/api/self-dispatch/status":
             if not self.auth_check(redirect=False): return
             with _self_dispatch_lock:
@@ -33289,7 +33448,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.40"})
+            self.reply_json({"v": "0.30.41"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -33451,7 +33610,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.40"
+                health["porter_version"] = "0.30.41"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -35336,7 +35495,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.40'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.41'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -40101,7 +40260,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.40 ready (localhost only)")
+    print(f"\n  Porter v0.30.41 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
