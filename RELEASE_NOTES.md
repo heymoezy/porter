@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.60 (2026-03-10)
+
+- Porter detail chat was simplified so the workspace feels less boxed-in, with a cleaner composer and a stronger send action.
+- `Create Worker` and `Create Squad` now seed Porter's dedicated detail chat instead of redirecting to the main chat surface.
+
 ## v0.30.59 (2026-03-10)
 
 - Porter detail layout corrected: `Back to Agents` now lives in the upper-right action cluster instead of underneath the avatar.

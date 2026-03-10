@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.59 — Porter detail layout corrections"""
+"""Porter v0.30.60 — Porter chat workflow polish"""
 
 
 import email
@@ -10324,7 +10324,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.59</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.60</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11720,6 +11720,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.60', date:'2026-03-10', notes:["Porter detail chat is cleaner and less boxy, with a stronger send action, and Create Worker/Create Squad now seed Porter's dedicated detail chat instead of kicking the user back to the main chat"] },
   { ver:'v0.30.59', date:'2026-03-10', notes:['Porter detail layout corrected: Back to Agents moved into the upper-right action cluster, the Chat pane now stays within the browser viewport, and Skills is restored as the visible tab label'] },
   { ver:'v0.30.58', date:'2026-03-10', notes:['Who Is Porter and worker brief overlays now trap Escape correctly inside the popup, and the close button is pinned to the popup upper-right corner inside the detail pane'] },
   { ver:'v0.30.57', date:'2026-03-10', notes:['Porter was reduced again on the main Agents roster with another smaller orchestrator stage and portrait render size, leaving the detail view unchanged'] },
@@ -16237,16 +16238,33 @@ function _showPersonaBrief(persona) {
 }
 
 function _askPorterToCreate(kind) {
-  _chatAgent = null;
-  buildChatCtxSelectors();
-  switchModule('overview');
   var input = document.getElementById('chat-input-welcome') || document.getElementById('chat-input');
   if (!input) return;
   var prompts = {
     worker: 'Porter, create the right worker for this job. Define the role, decide whether it should be temporary or persistent, assign the needed skills, and keep the roster clean.',
     squad: 'Porter, create a squad only if the work truly needs one. Choose the structure, assign workers intelligently, and keep the setup lean.'
   };
-  input.value = prompts[kind] || prompts.worker;
+  var prompt = prompts[kind] || prompts.worker;
+  var detail = document.getElementById('agent-detail-view');
+  var selected = window._selectedPersona;
+  if (detail && detail.style.display !== 'none' && selected && selected.orchestrator_only) {
+    switchPdTab('overview');
+    setTimeout(function() {
+      var pdInput = document.getElementById('pd-chat-input');
+      if (!pdInput) return;
+      pdInput.value = prompt;
+      pdInput.focus();
+      var pos = pdInput.value.length;
+      try { pdInput.setSelectionRange(pos, pos); } catch(e) {}
+    }, 30);
+    return;
+  }
+  _chatAgent = null;
+  buildChatCtxSelectors();
+  switchModule('overview');
+  input = document.getElementById('chat-input-welcome') || document.getElementById('chat-input');
+  if (!input) return;
+  input.value = prompt;
   if (typeof _chatAutoGrow === 'function') _chatAutoGrow(input);
   input.focus();
   var pos = input.value.length;
@@ -16273,9 +16291,9 @@ function _pdChatRender(pid) {
   panel.innerHTML = state.messages.map(function(m) {
     var isUser = m.role === 'user';
     var isErr = m.role === 'error';
-    var bg = isUser ? 'color-mix(in srgb,var(--accent) 12%, var(--bg))' : isErr ? 'color-mix(in srgb,#ef4444 8%, var(--bg))' : 'var(--bg)';
-    var border = isUser ? 'color-mix(in srgb,var(--accent) 30%, var(--border))' : isErr ? 'color-mix(in srgb,#ef4444 28%, var(--border))' : 'var(--border)';
-    return '<div style="padding:12px 14px;border:1px solid ' + border + ';border-radius:16px;background:' + bg + '">'
+    var bg = isUser ? 'color-mix(in srgb,var(--accent) 10%, var(--surface))' : isErr ? 'color-mix(in srgb,#ef4444 6%, var(--surface))' : 'color-mix(in srgb,var(--surface) 88%, transparent)';
+    var border = isUser ? 'color-mix(in srgb,var(--accent) 18%, transparent)' : isErr ? 'color-mix(in srgb,#ef4444 18%, transparent)' : 'color-mix(in srgb,var(--border) 72%, transparent)';
+    return '<div style="padding:12px 14px;border:1px solid ' + border + ';border-radius:18px;background:' + bg + ';box-shadow:inset 0 1px 0 rgba(255,255,255,.02)">'
       + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">' + escHtml(m.label || (isUser ? 'You' : 'Agent')) + '</span>'
       + (m.meta ? '<span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(m.meta) + '</span>' : '') + '</div>'
       + '<div style="font-size:13px;line-height:1.6;color:' + (isErr ? '#ef4444' : 'var(--text2)') + ';white-space:pre-wrap">' + escHtml(m.content || '') + '</div>'
@@ -23593,7 +23611,7 @@ async function selectPersona(id) {
     }
     document.querySelectorAll('.pd-tab').forEach(function(btn) {
       var _t = btn.textContent.trim().toLowerCase();
-      if (isLocked && (_t === 'identity' || _t === 'skills' || _t === 'config')) btn.style.display = 'none';
+      if (isLocked && (_t === 'identity' || _t === 'config')) btn.style.display = 'none';
       else btn.style.display = '';
     });
     switchPdTab('overview');
@@ -23656,12 +23674,12 @@ function switchPdTab(tab) {
   if (!p) return;
   if (tab === 'overview') {
     if (!p) { content.innerHTML = '<div class="loading-indicator">Select an agent</div>'; return; }
-    content.innerHTML = '<section style="display:flex;flex-direction:column;height:min(calc(100vh - 330px), 68vh);max-height:calc(100vh - 330px);min-height:420px;padding:10px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 97%, transparent),color-mix(in srgb,var(--bg) 99%, transparent));box-sizing:border-box">'
-      + '<div id="pd-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:6px"></div>'
-      + '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">'
-      + '<div style="display:flex;gap:10px;align-items:flex-end">'
-      + '<textarea id="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate, create workers, or direct a squad...' : 'Send a directive to this worker...') + '" rows="3" onkeydown="_pdChatKey(event)" style="flex:1;min-height:72px;max-height:180px;resize:vertical;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:14px;padding:12px;font-size:13px;line-height:1.5"></textarea>'
-      + '<button class="btn btn-primary" onclick="_pdChatSend()" style="align-self:stretch;min-width:92px">Send</button>'
+    content.innerHTML = '<section style="display:flex;flex-direction:column;height:min(calc(100vh - 330px), 68vh);max-height:calc(100vh - 330px);min-height:420px;padding:4px 2px 2px;background:transparent;box-sizing:border-box">'
+      + '<div id="pd-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 14px"></div>'
+      + '<div style="margin-top:8px;padding-top:4px">'
+      + '<div style="display:flex;gap:10px;align-items:flex-end;padding:10px;border:1px solid color-mix(in srgb,var(--border) 74%, transparent);border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 98%, transparent),color-mix(in srgb,var(--bg) 99%, transparent))">'
+      + '<textarea id="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate, create workers, or direct a squad...' : 'Send a directive to this worker...') + '" rows="3" onkeydown="_pdChatKey(event)" style="flex:1;min-height:70px;max-height:180px;resize:vertical;background:transparent;color:var(--text);border:none;outline:none;border-radius:14px;padding:10px 10px 8px;font-size:13px;line-height:1.5"></textarea>'
+      + '<button onclick="_pdChatSend()" style="align-self:stretch;min-width:112px;border:none;border-radius:16px;padding:0 18px;background:linear-gradient(135deg,#f59e0b,#f97316);color:#1f1400;font-size:12px;font-weight:800;letter-spacing:.04em;cursor:pointer;box-shadow:0 10px 24px rgba(249,115,22,.28)">Send ↗</button>'
       + '</div></div></section>';
     _pdChatRender(p.id);
   } else if (tab === 'identity') {
@@ -35033,7 +35051,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.59"})
+            self.reply_json({"v": "0.30.60"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35195,7 +35213,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.59"
+                health["porter_version"] = "0.30.60"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37091,7 +37109,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.59'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.60'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -41986,7 +42004,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.59 ready (localhost only)")
+    print(f"\n  Porter v0.30.60 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
