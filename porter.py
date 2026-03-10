@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.62 — Memory telemetry hardening"""
+"""Porter v0.30.63 — Porter detail polish and previews"""
 
 
 import email
@@ -7728,17 +7728,15 @@ def _porter_skill_profile(available_skills: list[dict] | None = None) -> dict:
 
     def _entry(name: str, tier: str) -> dict | None:
         sk = by_norm.get(_norm_skill_name(name))
-        if not sk:
-            return None
-        skill_name = str(sk.get("name") or sk.get("id") or name).strip()
+        skill_name = str((sk or {}).get("name") or (sk or {}).get("id") or name).strip()
         return {
-            "id": str(sk.get("id") or skill_name),
+            "id": str((sk or {}).get("id") or skill_name),
             "name": skill_name,
-            "description": str(sk.get("description") or "").strip(),
+            "description": str((sk or {}).get("description") or "").strip(),
             "purpose": _PORTER_SKILL_PURPOSE.get(_norm_skill_name(name), ""),
             "tier": tier,
-            "installed": bool(sk.get("installed") or sk.get("manual")),
-            "path": str(sk.get("path") or ""),
+            "installed": bool((sk or {}).get("installed") or (sk or {}).get("manual")),
+            "path": str((sk or {}).get("path") or ""),
         }
 
     core = [item for item in (_entry(name, "core") for name in _PORTER_PRIMARY_SKILLS) if item]
@@ -9854,7 +9852,8 @@ body.density-compact .file-name { padding: 6px 0; }
   animation:pixel-walk 1.2s steps(2) infinite;
   filter:drop-shadow(0 14px 22px rgba(0,0,0,.18));
 }
-.persona-card.orchestrator .persona-figure { animation:pixel-hero 1.8s ease-in-out infinite; }
+.persona-card.orchestrator .persona-figure { animation:none; }
+.persona-card.orchestrator.is-busy .persona-figure { animation:pixel-hero 1.8s ease-in-out infinite; }
 .persona-card.selected .persona-figure { filter:drop-shadow(0 20px 30px rgba(0,0,0,.24)); }
 .persona-card-xp { width:100%; height:3px; border-radius:2px; background:var(--border); margin-top:6px; overflow:hidden; }
 .persona-card-xp-fill { height:100%; border-radius:2px; background:linear-gradient(90deg,#3b82f6,#8b5cf6); transition:width .3s; }
@@ -10341,7 +10340,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.62</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.63</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10537,7 +10536,7 @@ input[type="number"].settings-input { min-width: 60px; }
         <button class="pd-tab" onclick="switchPdTab('identity')">Identity</button>
         <button class="pd-tab" onclick="switchPdTab('activity')">Activity</button>
         <button class="pd-tab" onclick="switchPdTab('skills')">Skills</button>
-        <button class="pd-tab" onclick="switchPdTab('memory')">Concepts</button>
+        <button class="pd-tab" onclick="switchPdTab('memory')">Memory</button>
         <button class="pd-tab" onclick="switchPdTab('config')">Config</button>
         <div style="flex:1"></div>
         <div id="pd-tab-actions" style="display:flex;gap:8px;padding-right:8px"></div>
@@ -11737,6 +11736,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.63', date:'2026-03-10', notes:["Porter detail polish: the tab rail now feels more intentional, Memory is restored as the tab label, Porter only animates when busy, the detail send control now sits closer to the page language, and Porter Skills/Activity now render reviewable preview states when live data is still sparse"] },
   { ver:'v0.30.62', date:'2026-03-10', notes:["Concept and directive mutations now emit structured memory events for operator telemetry, and the runtime design briefs now map the next proper Memory V2 and PorterHQ logging architecture"] },
   { ver:'v0.30.61', date:'2026-03-10', notes:["Porter's detail tabs no longer drag a full divider through empty space, the creation actions now open guided Porter-led worker/squad/project sessions inside the detail chat, Concepts replaces the old Memory label with a clearer directive/concept view, and squad/project mutations now emit richer structured logs for operator visibility"] },
   { ver:'v0.30.60', date:'2026-03-10', notes:["Porter detail chat is cleaner and less boxy, with a stronger send action, and Create Worker/Create Squad now seed Porter's dedicated detail chat instead of kicking the user back to the main chat"] },
@@ -23588,7 +23588,8 @@ function renderPersonaOrg() {
   function cardHtml(p) {
     var isSelected = p.id === _selectedPersonaId;
     var isOrch = p.agent_group === 'Orchestrator' || p.orchestrator_only;
-    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + '" data-persona-id="' + p.id + '" onclick="selectPersona(\'' + p.id + '\')">'
+    var isBusy = String(p.status || '').toLowerCase() && String(p.status || '').toLowerCase() !== 'idle';
+    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + (isBusy ? ' is-busy' : '') + '" data-persona-id="' + p.id + '" onclick="selectPersona(\'' + p.id + '\')">'
       + '<div class="persona-card-avatar" style="display:flex;align-items:center;justify-content:center;overflow:hidden">' + _personaAvatarMarkup(p, isOrch ? 170 : 128) + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
       + '<div class="persona-card-role">' + escHtml(p.role || (isOrch ? 'Master Orchestrator' : 'Worker')) + '</div>'
@@ -23942,9 +23943,9 @@ function switchPdTab(tab) {
     content.innerHTML = '<section style="display:flex;flex-direction:column;height:min(calc(100vh - 330px), 68vh);max-height:calc(100vh - 330px);min-height:420px;padding:4px 2px 2px;background:transparent;box-sizing:border-box">'
       + '<div id="pd-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 14px"></div>'
       + '<div style="margin-top:8px;padding-top:4px">'
-      + '<div style="display:flex;gap:10px;align-items:flex-end;padding:10px;border:1px solid color-mix(in srgb,var(--border) 58%, transparent);border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 99%, transparent),color-mix(in srgb,var(--bg) 99%, transparent))">'
+      + '<div style="display:flex;gap:10px;align-items:flex-end;padding:10px;border:1px solid color-mix(in srgb,var(--border) 44%, transparent);border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 99%, transparent),color-mix(in srgb,var(--bg) 99%, transparent))">'
       + '<textarea id="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate, create workers, or direct a squad...' : 'Send a directive to this worker...') + '" rows="3" onkeydown="_pdChatKey(event)" style="flex:1;min-height:70px;max-height:180px;resize:vertical;background:transparent;color:var(--text);border:none;outline:none;border-radius:14px;padding:10px 10px 8px;font-size:13px;line-height:1.5"></textarea>'
-      + '<button onclick="_pdChatSend()" style="align-self:stretch;min-width:136px;border:1px solid color-mix(in srgb,#f59e0b 42%, #7c2d12);border-radius:16px;padding:0 16px;background:linear-gradient(180deg,#ffe6b0,#f59e0b);color:#301400;font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.5), 0 12px 24px rgba(245,158,11,.18)">Direct Porter ↗</button>'
+      + '<button onclick="_pdChatSend()" style="align-self:stretch;min-width:126px;border:1px solid color-mix(in srgb,#f59e0b 34%, var(--border));border-radius:14px;padding:0 14px;background:linear-gradient(180deg,color-mix(in srgb,#f59e0b 20%, var(--surface)),color-mix(in srgb,#f59e0b 10%, var(--bg)));color:#f6c66a;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)">Dispatch</button>'
       + '</div></div></section>';
     _pdChatRender(p.id);
   } else if (tab === 'identity') {
@@ -24032,24 +24033,35 @@ function switchPdTab(tab) {
   } else if (tab === 'activity') {
     content.innerHTML = '<div class="loading-indicator">Loading activity...</div>';
     api('/api/bridge/runs?persona_id=' + p.id + '&limit=20').then(r => {
-      if (!r.ok || !r.runs || !r.runs.length) {
+      var runs = (r && r.ok && r.runs) ? r.runs : [];
+      var usePreview = !!p.orchestrator_only && runs.length < 4;
+      if (!runs.length && !usePreview) {
         content.innerHTML = '<div style="color:var(--text3);font-size:12px">No dispatch activity yet.</div>';
         return;
       }
-      var runs = r.runs || [];
+      if (usePreview) {
+        runs = [
+          { status:'running', backend:'codex', duration_ms:1420, prompt_preview:'Directing QA Sentinel to verify Agents redesign regressions.', created_at:(Date.now()/1000)-120 },
+          { status:'complete', backend:'gemini', duration_ms:3180, prompt_preview:'Researching hosted telemetry patterns for PorterHQ field diagnostics.', created_at:(Date.now()/1000)-420 },
+          { status:'complete', backend:'openclaw', duration_ms:2260, prompt_preview:'Spinning up a temporary worker for UI cleanup and handoff.', created_at:(Date.now()/1000)-760 },
+          { status:'failed', backend:'claude', duration_ms:5100, prompt_preview:'Worker retry triggered after routing lane saturation.', created_at:(Date.now()/1000)-1080 },
+          { status:'complete', backend:'ollama', duration_ms:6400, prompt_preview:'Local draft pass for low-priority synthesis before final merge.', created_at:(Date.now()/1000)-1560 },
+        ];
+      }
       var successCount = runs.filter(function(run) { return run.status === 'complete'; }).length;
       var failCount = runs.filter(function(run) { return run.status === 'failed'; }).length;
       var durations = runs.map(function(run) { return run.duration_ms || 0; }).filter(Boolean);
       var avg = durations.length ? Math.round(durations.reduce(function(a, b) { return a + b; }, 0) / durations.length) : 0;
       var latest = runs.slice(0, 8);
       var html = '<div style="display:flex;flex-direction:column;gap:16px">'
+        + (usePreview ? '<div style="padding:12px 14px;border:1px dashed color-mix(in srgb,var(--accent) 32%, var(--border));border-radius:16px;background:color-mix(in srgb,var(--accent) 5%, transparent);font-size:12px;color:var(--text2)">Preview state shown because Porter does not have enough live activity yet. This is how a busy orchestrator lane will read once dispatch history fills in.</div>' : '')
         + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">'
         + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Recent Runs</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + runs.length + '</div></div>'
         + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Completed</div><div style="font-size:26px;font-weight:800;color:#22c55e;margin-top:4px">' + successCount + '</div></div>'
         + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Issues</div><div style="font-size:26px;font-weight:800;color:' + (failCount ? '#ef4444' : 'var(--text)') + ';margin-top:4px">' + failCount + '</div></div>'
         + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Avg Response</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + (avg ? (avg + 'ms') : '—') + '</div></div>'
         + '</div>'
-        + '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Live Timeline</div>'
+        + '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Activity Lane</div>'
         + latest.map(function(run) {
             var st = run.status === 'complete' ? '#22c55e' : run.status === 'failed' ? '#ef4444' : '#f59e0b';
             var ago = run.created_at ? new Date(run.created_at * 1000).toLocaleString() : '';
@@ -24076,7 +24088,7 @@ function switchPdTab(tab) {
           if (core.length) {
             html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">';
             core.forEach(function(sk) {
-              html += '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="display:flex;align-items:center;gap:8px"><div style="font-size:12px;font-weight:800;color:var(--text)">' + escHtml(sk.name || '') + '</div><span class="model-card-chip ok" style="font-size:10px">Core</span></div><div style="font-size:11px;color:var(--text2);line-height:1.55;margin-top:8px">' + escHtml(sk.purpose || sk.description || 'Command coverage') + '</div></div>';
+              html += '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="display:flex;align-items:center;gap:8px"><div style="font-size:12px;font-weight:800;color:var(--text)">' + escHtml(sk.name || '') + '</div><span class="model-card-chip ok" style="font-size:10px">' + (sk.installed ? 'Core' : 'Planned') + '</span></div><div style="font-size:11px;color:var(--text2);line-height:1.55;margin-top:8px">' + escHtml(sk.purpose || sk.description || 'Command coverage') + '</div></div>';
             });
             html += '</div>';
           }
@@ -24085,6 +24097,7 @@ function switchPdTab(tab) {
               return '<span style="font-size:11px;padding:7px 11px;border-radius:999px;border:1px solid var(--border);background:var(--bg);color:var(--text2)">' + escHtml(sk.name || '') + '</span>';
             }).join('') + '</div></div>';
           }
+          html += '<div style="padding:16px;border:1px dashed var(--border);border-radius:18px;background:color-mix(in srgb,var(--surface) 92%, transparent)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Why This Loadout</div><div style="font-size:13px;color:var(--text2);line-height:1.65">Porter keeps only coordination-critical skills for routing, research delegation, runtime checks, and worker creation. Deep implementation skills belong on workers, not the orchestrator.</div></div>';
           if (skills.length && !core.length) {
             html += '<div style="display:flex;gap:8px;flex-wrap:wrap">' + skills.map(function(sk) {
               return '<span style="font-size:11px;padding:7px 11px;border-radius:999px;border:1px solid var(--border);background:var(--bg);color:var(--text2)">' + escHtml(sk.name || '') + '</span>';
@@ -35346,7 +35359,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.62"})
+            self.reply_json({"v": "0.30.63"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35508,7 +35521,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.62"
+                health["porter_version"] = "0.30.63"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37404,7 +37417,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.62'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.63'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42329,7 +42342,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.62 ready (localhost only)")
+    print(f"\n  Porter v0.30.63 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

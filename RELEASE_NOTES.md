@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.63 (2026-03-10)
+
+- Porter detail page polish: `Memory` is back as the tab label, the send control now better matches the page language, and Porter only animates when he is actually busy.
+- Porter detail `Skills` and `Activity` now show reviewable preview states when live data is still too sparse to communicate the intended layout clearly.
+
 ## v0.30.62 (2026-03-10)
 
 - Memory mutations now emit structured telemetry events so directive/concept review activity can be audited and eventually surfaced in PorterHQ.
