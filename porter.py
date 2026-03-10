@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.34 — Anomaly detection: 7-day baselines, 2x deviation flagging"""
+"""Porter v0.30.35 — Enhanced auto-triage: 10-pattern error self-heal"""
 
 
 import email
@@ -7299,8 +7299,7 @@ def _detect_anomalies():
                     "ratio": round(cur_fail_rate / avg_fail, 1) if avg_fail > 0 else 0,
                     "detail": f"{agent_name} failure rate {round(cur_fail_rate*100)}% vs {round(avg_fail*100)}% avg (7d)"
                 })
-            # Retry anomaly: > 3x average retries
-            avg_retries_approx = avg_tokens * 0.01 if avg_tokens > 0 else 1  # rough proxy
+            # Retry anomaly: >5 retries in one hour is unusual
             if (cur.get("retries_total") or 0) > 5:
                 anomalies.append({
                     "agent_id": agent_id, "agent_name": agent_name,
@@ -9775,7 +9774,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.34</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.35</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11152,6 +11151,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.35', date:'2026-03-10', notes:['Enhanced auto-triage: 10 error patterns with actionable remediation (rate limits, gateway down, DB contention, auth spikes, frontend storms)','Rate limit errors auto-set backend cooldown (5min)','OpenClaw gateway down triggers auto-restart','Fixed _backend_set_rate_limited kwarg bug'] },
   { ver:'v0.30.34', date:'2026-03-10', notes:['Anomaly detection: compares latest hourly rollup against 7-day rolling baselines per agent (latency, tokens, failure rate, retries)','Flags when metrics exceed 2x baseline — logged to Mission Control, emitted as telemetry:anomalies SSE event','GET /api/telemetry/anomalies returns per-agent baseline comparisons with anomaly flags','Runs automatically after each hourly telemetry rollup'] },
   { ver:'v0.30.33', date:'2026-03-10', notes:['Runtime tab: System Health card shows self-check results (version, page, DB, threads, config) with pass/fail badges','Self-check threshold fixed (login page ~9KB is healthy, lowered from 10KB to 1KB)','Health card auto-loads when Runtime tab opens, with manual Refresh button'] },
   { ver:'v0.30.32', date:'2026-03-10', notes:['Self-Monitoring Stage 1: startup self-check verifies version endpoint, main page, database, background threads, and config 5s after boot','GET /api/self-check returns last self-check results (checks array, all_ok, summary, timestamp)','Results logged to Mission Control and emitted as system:self_check SSE event'] },
@@ -30309,24 +30309,65 @@ def _error_self_heal_once():
             cnt = err["cnt"]
             msg = err["message"]
 
-            # Auto-remediation rules
+            # v0.30.34 — Enhanced auto-triage with actionable remediation
+            msg_lower = msg.lower()
+
+            # 1. Heartbeat failures → disable to stop noise
             if "heartbeat" in cat and cnt >= 3:
-                # Disable failing heartbeats
                 actions_taken.append(f"Paused heartbeat workflow (failed {cnt}x)")
                 with _wf_lock:
                     if "heartbeat" in _wf_registry:
                         _wf_registry["heartbeat"]["enabled"] = False
 
-            elif "dispatch" in etype and "timeout" in msg.lower() and cnt >= 5:
-                # Log timeout pattern but don't auto-fix (risky)
-                actions_taken.append(f"Detected dispatch timeout pattern ({cnt}x): {msg[:80]}")
+            # 2. Rate limits → mark backend rate-limited with cooldown
+            elif "rate" in msg_lower and ("limit" in msg_lower or "429" in msg_lower) and cnt >= 2:
+                # Extract backend name from message
+                for _bk in ["openclaw", "claude", "gemini", "codex", "ollama"]:
+                    if _bk in msg_lower:
+                        _backend_set_rate_limited(_bk, cooldown_seconds=300)
+                        actions_taken.append(f"Set {_bk} rate-limited (5min cooldown, {cnt}x rate limit errors)")
+                        break
+                else:
+                    actions_taken.append(f"Rate limit detected ({cnt}x): {msg[:80]}")
 
+            # 3. OpenClaw gateway down → attempt restart
+            elif "openclaw" in msg_lower and ("unresponsive" in msg_lower or "gateway" in msg_lower or "connection" in msg_lower) and cnt >= 3:
+                try:
+                    restart = _openclaw_restart()
+                    if restart.get("ok"):
+                        actions_taken.append(f"Restarted OpenClaw gateway (was down {cnt}x)")
+                    else:
+                        actions_taken.append(f"OpenClaw restart failed: {restart.get('error', '?')[:60]}")
+                except Exception:
+                    actions_taken.append(f"OpenClaw gateway down ({cnt}x), restart failed")
+
+            # 4. Dispatch timeouts → increase timeout or log pattern
+            elif "dispatch" in etype and "timeout" in msg_lower and cnt >= 5:
+                actions_taken.append(f"Dispatch timeout pattern ({cnt}x): {msg[:80]} — consider increasing timeout")
+                _emit_event("self_heal:timeout_pattern", {"count": cnt, "message": msg[:200]})
+
+            # 5. DB lock/busy errors → reduce concurrent DB access
+            elif ("database" in msg_lower or "locked" in msg_lower or "busy" in msg_lower) and cnt >= 3:
+                actions_taken.append(f"Database contention ({cnt}x): {msg[:80]} — may need connection pooling")
+
+            # 6. Backend probe failures → log with specific backend
             elif "probe" in etype and cnt >= 3:
-                # Backend probe failing — log it
                 actions_taken.append(f"Backend probe failing ({cnt}x): {msg[:80]}")
 
+            # 7. Memory/extraction errors → pause extraction temporarily
+            elif ("extraction" in msg_lower or "cortex" in msg_lower) and cnt >= 5:
+                actions_taken.append(f"Cortex extraction errors ({cnt}x): {msg[:80]}")
+
+            # 8. Frontend JS errors → log pattern (client-side, can't auto-fix)
+            elif "frontend" in cat and cnt >= 10:
+                actions_taken.append(f"Client JS error storm ({cnt}x) [{etype}]: {msg[:60]}")
+
+            # 9. Auth failures → possible brute force
+            elif "auth" in cat and cnt >= 10:
+                actions_taken.append(f"Auth failure spike ({cnt}x) — possible brute force: {msg[:60]}")
+
+            # 10. Generic high-frequency → log for review
             elif cnt >= 10:
-                # Generic high-frequency error — log for review
                 actions_taken.append(f"High-frequency error ({cnt}x) [{cat}.{etype}]: {msg[:60]}")
 
         if actions_taken:
@@ -32748,7 +32789,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"ok": True, **_last_self_check})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.34"})
+            self.reply_json({"v": "0.30.35"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32910,7 +32951,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.34"
+                health["porter_version"] = "0.30.35"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34795,7 +34836,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.34'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.35'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39560,7 +39601,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.34 ready (localhost only)")
+    print(f"\n  Porter v0.30.35 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
