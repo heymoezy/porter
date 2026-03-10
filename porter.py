@@ -30453,6 +30453,131 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     return result
 
 
+
+# ── Self-Dispatch (v0.30.40) ─────────────────────────────────────────────
+# Porter creates internal tasks and dispatches them to agents without human trigger.
+# Sources: anomaly alerts, health failures, scheduled analysis, pattern detection.
+# Guards: rate limit (max 5 self-dispatches per hour), loop guard, opt-in via preferences.
+
+_self_dispatch_log = []  # Recent self-dispatches: [{ts, task_id, persona_id, reason, status}]
+_self_dispatch_lock = threading.Lock()
+_SELF_DISPATCH_MAX_PER_HOUR = 5
+
+def _self_dispatch_allowed() -> bool:
+    """Check if we can self-dispatch (rate limit + preference check)."""
+    prefs = _config.get("preferences", {})
+    if not prefs.get("self_dispatch_enabled", False):
+        return False
+    import time as _sdt
+    cutoff = _sdt.time() - 3600
+    with _self_dispatch_lock:
+        recent = [d for d in _self_dispatch_log if d["ts"] > cutoff]
+        _self_dispatch_log[:] = recent
+        return len(recent) < _SELF_DISPATCH_MAX_PER_HOUR
+
+
+def _self_dispatch(persona_id: str, message: str, reason: str,
+                   project_id: str = "", priority: str = "normal") -> dict:
+    """Create an internal task and dispatch it to an agent.
+    Returns dispatch result dict. Rate-limited and logged to Mission Control.
+    """
+    import time as _sdt2, uuid as _sdu
+    if not _self_dispatch_allowed():
+        return {"ok": False, "error": "Self-dispatch rate limit reached or disabled"}
+    task_id = f"auto-{_sdu.uuid4().hex[:8]}"
+    task = {
+        "id": task_id,
+        "title": f"[Auto] {reason[:80]}",
+        "description": message[:500],
+        "status": "pending",
+        "priority": priority,
+        "project_id": project_id,
+        "assigned_persona_id": persona_id,
+        "created_at": _sdt2.time(),
+        "updated_at": _sdt2.time(),
+        "tags": json.dumps(["auto-dispatch"]),
+        "sort_order": 0,
+    }
+    _treg_save(task)
+    mlog.emit("info", "self_dispatch", "self_dispatch.created",
+        f"Auto-task created: {reason[:80]} -> {persona_id}",
+        persona_id=persona_id, task_id=task_id)
+    log.info("Self-dispatch: %s -> %s (reason: %s)", task_id, persona_id, reason[:80])
+    result = dispatch_to_persona(message, persona_id, timeout=120,
+                                  project_id=project_id, task_id=task_id)
+    entry = {
+        "ts": _sdt2.time(),
+        "task_id": task_id,
+        "persona_id": persona_id,
+        "reason": reason[:100],
+        "status": "complete" if result.get("ok") else "failed",
+    }
+    with _self_dispatch_lock:
+        _self_dispatch_log.append(entry)
+    _emit_event("self_dispatch:complete", {
+        "task_id": task_id, "persona_id": persona_id,
+        "ok": result.get("ok", False), "reason": reason[:100]
+    })
+    return result
+
+
+def _self_dispatch_on_anomaly(anomalies: list):
+    """React to detected anomalies by dispatching investigative tasks."""
+    if not _self_dispatch_allowed():
+        return
+    bugbanisher_id = None
+    try:
+        personas = _persona_list()
+        for p in personas:
+            if "bugbanisher" in (p.get("name", "") or "").lower().replace(" ", ""):
+                bugbanisher_id = p["id"]
+                break
+    except Exception:
+        pass
+    for anomaly in anomalies[:2]:
+        agent_name = anomaly.get("agent_name", "unknown")
+        metric = anomaly.get("metric", "unknown")
+        detail = anomaly.get("detail", "")
+        target = bugbanisher_id or anomaly.get("agent_id", "")
+        if not target:
+            continue
+        message = (
+            f"Anomaly detected: {agent_name}'s {metric} is abnormal.\n"
+            f"Detail: {detail}\n\n"
+            f"Investigate this anomaly. Check recent dispatch logs for {agent_name}, "
+            f"look for patterns in failures or unusual behavior. "
+            f"Report findings and suggest remediation if needed."
+        )
+        _self_dispatch(target, message, reason=f"Anomaly: {agent_name} {metric}",
+                       priority="high")
+
+
+def _self_dispatch_on_health_failure(failed_checks: list):
+    """React to self-check failures by dispatching diagnostic tasks."""
+    if not _self_dispatch_allowed():
+        return
+    target_id = None
+    try:
+        personas = _persona_list()
+        for p in personas:
+            name = (p.get("name", "") or "").lower()
+            if name in ("vision", "logiclord", "logic lord"):
+                target_id = p["id"]
+                break
+    except Exception:
+        pass
+    if not target_id:
+        return
+    checks_str = ", ".join(c[:50] for c in failed_checks[:3])
+    message = (
+        f"Porter self-check detected failures: {checks_str}\n\n"
+        f"Diagnose the issue and suggest fixes. "
+        f"Check service status, recent logs, and any recent code changes."
+    )
+    _self_dispatch(target_id, message, reason=f"Health failure: {checks_str}",
+                   priority="high")
+
+
 # ── Error Self-Heal (v0.28.22) ─────────────────────────────────────────
 
 def _error_self_heal_once():
