@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.60 — Porter chat workflow polish"""
+"""Porter v0.30.61 — Guided creation and concepts refresh"""
 
 
 import email
@@ -7814,21 +7814,38 @@ def _default_appearance_spec(name: str = "", role: str = "", temporary: bool = F
     palette = _appearance_palette_for_persona(name, role, temporary)
     role_l = str(role or "").lower()
     accessory = "visor"
+    archetype = "operator"
+    role_marker = "command-badge"
     if re.search(r"qa|test|quality", role_l):
         accessory = "monocle"
+        archetype = "auditor"
+        role_marker = "check-grid"
     elif re.search(r"design|creative|ux", role_l):
         accessory = "headband"
+        archetype = "maker"
+        role_marker = "palette-band"
     elif re.search(r"research|analyst|strategy", role_l):
         accessory = "headset"
+        archetype = "navigator"
+        role_marker = "signal-lens"
     elif re.search(r"release|ops|infra|deploy|sre", role_l):
         accessory = "helmet"
+        archetype = "warden"
+        role_marker = "ops-crest"
     elif re.search(r"finance|market|crypto|trade", role_l):
         accessory = "visor"
+        archetype = "broker"
+        role_marker = "market-stripe"
     return {
+        "system": "porter-avatar",
+        "renderer": "porter-pixel-v1",
         "style": "minecraft",
         "palette": palette,
+        "archetype": archetype,
         "outfit": "operator-jacket" if not temporary else "task-contractor",
         "accessory": accessory,
+        "role_marker": role_marker,
+        "temperament": "steady" if not temporary else "expeditionary",
         "temporary": bool(temporary),
     }
 
@@ -9871,8 +9888,8 @@ body.density-compact .file-name { padding: 6px 0; }
 .agent-identity-role { font-size:13px; color:var(--text3); margin-top:4px; }
 .agent-identity-badges { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
 .agent-badge { font-size:10px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:var(--bg); color:var(--text2); }
-.agent-detail-tabs { display:flex; align-items:center; gap:0; border-bottom:1px solid var(--border); }
-.agent-detail-tabs .pd-tab { padding:8px 16px; }
+.agent-detail-tabs { display:flex; align-items:center; gap:6px; align-self:flex-start; border-bottom:none; flex-wrap:wrap; }
+.agent-detail-tabs .pd-tab { padding:8px 16px; border-radius:999px; border:1px solid transparent; }
 .agent-detail-content { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px; min-height:0; }
 
 /* ── Persona Detail — slide-out right panel ──────────────── */
@@ -9890,7 +9907,7 @@ body.density-compact .file-name { padding: 6px 0; }
   background:none; border:none; border-bottom:2px solid transparent; cursor:pointer;
   transition:color .15s, border-color .15s; }
 .pd-tab:hover { color:var(--text); }
-.pd-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.pd-tab.active { color:var(--accent); border-bottom-color:transparent; border-color:color-mix(in srgb,var(--accent) 24%, var(--border)); background:color-mix(in srgb,var(--accent) 8%, transparent); }
 .persona-detail-content { padding:20px; flex:1; overflow-y:auto; }
 .persona-detail-overlay { position:fixed; top:0; left:0; width:100vw; height:100vh;
   background:rgba(0,0,0,.3); z-index:899; opacity:0; transition:opacity .2s; pointer-events:none; }
@@ -10324,7 +10341,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.60</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.61</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10520,7 +10537,7 @@ input[type="number"].settings-input { min-width: 60px; }
         <button class="pd-tab" onclick="switchPdTab('identity')">Identity</button>
         <button class="pd-tab" onclick="switchPdTab('activity')">Activity</button>
         <button class="pd-tab" onclick="switchPdTab('skills')">Skills</button>
-        <button class="pd-tab" onclick="switchPdTab('memory')">Memory</button>
+        <button class="pd-tab" onclick="switchPdTab('memory')">Concepts</button>
         <button class="pd-tab" onclick="switchPdTab('config')">Config</button>
         <div style="flex:1"></div>
         <div id="pd-tab-actions" style="display:flex;gap:8px;padding-right:8px"></div>
@@ -11720,6 +11737,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.61', date:'2026-03-10', notes:["Porter's detail tabs no longer drag a full divider through empty space, the creation actions now open guided Porter-led worker/squad/project sessions inside the detail chat, Concepts replaces the old Memory label with a clearer directive/concept view, and squad/project mutations now emit richer structured logs for operator visibility"] },
   { ver:'v0.30.60', date:'2026-03-10', notes:["Porter detail chat is cleaner and less boxy, with a stronger send action, and Create Worker/Create Squad now seed Porter's dedicated detail chat instead of kicking the user back to the main chat"] },
   { ver:'v0.30.59', date:'2026-03-10', notes:['Porter detail layout corrected: Back to Agents moved into the upper-right action cluster, the Chat pane now stays within the browser viewport, and Skills is restored as the visible tab label'] },
   { ver:'v0.30.58', date:'2026-03-10', notes:['Who Is Porter and worker brief overlays now trap Escape correctly inside the popup, and the close button is pinned to the popup upper-right corner inside the detail pane'] },
@@ -16238,27 +16256,20 @@ function _showPersonaBrief(persona) {
 }
 
 function _askPorterToCreate(kind) {
+  var detail = document.getElementById('agent-detail-view');
+  var selected = window._selectedPersona;
+  if (detail && detail.style.display !== 'none' && selected && selected.orchestrator_only) {
+    _pdChatStartCreation(kind);
+    return;
+  }
   var input = document.getElementById('chat-input-welcome') || document.getElementById('chat-input');
   if (!input) return;
   var prompts = {
     worker: 'Porter, create the right worker for this job. Define the role, decide whether it should be temporary or persistent, assign the needed skills, and keep the roster clean.',
-    squad: 'Porter, create a squad only if the work truly needs one. Choose the structure, assign workers intelligently, and keep the setup lean.'
+    squad: 'Porter, create a squad only if the work truly needs one. Choose the structure, assign workers intelligently, and keep the setup lean.',
+    project: 'Porter, create a project with the right scope, description, and structure so future workers can be assigned cleanly.'
   };
   var prompt = prompts[kind] || prompts.worker;
-  var detail = document.getElementById('agent-detail-view');
-  var selected = window._selectedPersona;
-  if (detail && detail.style.display !== 'none' && selected && selected.orchestrator_only) {
-    switchPdTab('overview');
-    setTimeout(function() {
-      var pdInput = document.getElementById('pd-chat-input');
-      if (!pdInput) return;
-      pdInput.value = prompt;
-      pdInput.focus();
-      var pos = pdInput.value.length;
-      try { pdInput.setSelectionRange(pos, pos); } catch(e) {}
-    }, 30);
-    return;
-  }
   _chatAgent = null;
   buildChatCtxSelectors();
   switchModule('overview');
@@ -16278,6 +16289,254 @@ function _pdChatGetState(pid) {
     window._pdChatState[pid] = { messages: [] };
   }
   return window._pdChatState[pid];
+}
+
+function _pdCreationTypeLabel(kind) {
+  return kind === 'project' ? 'project' : (kind === 'squad' ? 'squad' : 'worker');
+}
+
+function _pdCreationCancelRequested(text) {
+  return /^(cancel|stop|never mind|nevermind|abort)$/i.test((text || '').trim());
+}
+
+function _pdCreationConfirmRequested(text) {
+  return /^(create it|ship it|do it|yes create|yes, create|confirm|looks good)$/i.test((text || '').trim());
+}
+
+function _pdRoleFromBrief(brief) {
+  var t = String(brief || '').toLowerCase();
+  if (/qa|test|bug|regression/.test(t)) return 'QA Sentinel';
+  if (/design|brand|ux|ui/.test(t)) return 'Design Builder';
+  if (/research|analysis|investigate|compare/.test(t)) return 'Research Scout';
+  if (/release|deploy|infra|ops|sre/.test(t)) return 'Release Warden';
+  if (/frontend|react|ui|css/.test(t)) return 'Frontend Smith';
+  if (/backend|api|server|database|sql/.test(t)) return 'Backend Smith';
+  if (/docs|write|content|copy/.test(t)) return 'Documentation Lead';
+  return 'Specialist Worker';
+}
+
+function _pdNameFromRole(role) {
+  var base = String(role || 'Specialist Worker').replace(/\bWorker\b/i, '').trim() || 'Specialist';
+  return base;
+}
+
+function _pdFindNamedItem(text, items) {
+  var raw = String(text || '').toLowerCase();
+  items = Array.isArray(items) ? items : [];
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    if (raw.indexOf(String(item.name || '').toLowerCase()) >= 0) return item;
+  }
+  return null;
+}
+
+async function _pdCreationLoadContext() {
+  var [squadsResp, projectsResp] = await Promise.all([
+    api('/api/squads').catch(function() { return { squads: [] }; }),
+    api('/api/projects').catch(function() { return { projects: [] }; })
+  ]);
+  return {
+    squads: (squadsResp && squadsResp.squads) || [],
+    projects: (projectsResp && projectsResp.projects) || [],
+  };
+}
+
+function _pdCreationPrompt(flow) {
+  var ctx = flow.context || { squads: [], projects: [] };
+  var squadNames = (ctx.squads || []).map(function(s) { return s.name; });
+  var projectNames = (ctx.projects || []).map(function(p) { return p.name; });
+  if (flow.kind === 'worker') {
+    if (flow.stage === 0) return 'Tell Porter what this worker should own. A short mission is enough, for example: "Handle QA for the Agents redesign."';
+    if (flow.stage === 1) return 'Should this worker be temporary or persistent?';
+    if (flow.stage === 2) return 'Should Porter place this worker into an existing squad or keep it as a direct report?'
+      + (squadNames.length ? '\nAvailable squads: ' + squadNames.join(', ') : '\nNo squads exist yet.')
+      + (projectNames.length ? '\nMention a project too if one applies: ' + projectNames.join(', ') : '');
+    return 'Reply `Create it` to proceed or tell Porter what to change.';
+  }
+  if (flow.kind === 'squad') {
+    if (flow.stage === 0) return 'What mission should this squad own?';
+    if (flow.stage === 1) return 'Will this squad start empty, or should Porter expect to create/attach workers to it right away?';
+    if (flow.stage === 2) return 'Should this squad be aligned to an existing project?'
+      + (projectNames.length ? '\nProjects: ' + projectNames.join(', ') : '\nNo projects exist yet.');
+    return 'Reply `Create it` to proceed or tell Porter what to change.';
+  }
+  if (flow.stage === 0) return 'What should the new project be called?';
+  if (flow.stage === 1) return 'Describe the project objective in one or two sentences.';
+  if (flow.stage === 2) return 'Should this be a manual project or an autonomous project?';
+  return 'Reply `Create it` to proceed or tell Porter what to change.';
+}
+
+function _pdCreationProposal(flow) {
+  var draft = flow.draft || {};
+  if (flow.kind === 'worker') {
+    return 'Proposed worker:\n'
+      + 'Name: ' + (draft.name || 'Specialist') + '\n'
+      + 'Role: ' + (draft.role || 'Specialist Worker') + '\n'
+      + 'Lifecycle: ' + (draft.is_temporary ? 'Temporary' : 'Persistent') + '\n'
+      + 'Placement: ' + (draft.squad_name || 'Direct report') + '\n'
+      + 'Project: ' + (draft.project_name || 'None') + '\n'
+      + 'Mission: ' + (draft.brief || 'Focused execution lane') + '\n\n'
+      + 'Reply `Create it` to create this worker, or tell Porter what to change.';
+  }
+  if (flow.kind === 'squad') {
+    return 'Proposed squad:\n'
+      + 'Name: ' + (draft.name || 'New Squad') + '\n'
+      + 'Mission: ' + (draft.description || 'Focused team mission') + '\n'
+      + 'Starting roster: ' + (draft.roster || 'Empty for now') + '\n'
+      + 'Project: ' + (draft.project_name || 'None') + '\n\n'
+      + 'Reply `Create it` to create this squad, or tell Porter what to change.';
+  }
+  return 'Proposed project:\n'
+    + 'Name: ' + (draft.name || 'New Project') + '\n'
+    + 'Mode: ' + (draft.type === 'autonomous' ? 'Autonomous' : 'Manual') + '\n'
+    + 'Objective: ' + (draft.description || 'No description yet') + '\n\n'
+    + 'Reply `Create it` to create this project, or tell Porter what to change.';
+}
+
+async function _pdChatStartCreation(kind) {
+  var p = window._selectedPersona;
+  if (!p) return;
+  switchPdTab('overview');
+  var state = _pdChatGetState(p.id);
+  var ctx = await _pdCreationLoadContext();
+  state.flow = { kind: kind, stage: 0, draft: {}, context: ctx };
+  state.messages.push({
+    role: 'assistant',
+    label: p.name || 'Porter',
+    content: 'Porter will guide this ' + _pdCreationTypeLabel(kind) + ' creation so the roster stays clean.\n\n' + _pdCreationPrompt(state.flow),
+    meta: 'guided creation'
+  });
+  _pdChatRender(p.id);
+  setTimeout(function() {
+    var pdInput = document.getElementById('pd-chat-input');
+    if (!pdInput) return;
+    pdInput.value = '';
+    pdInput.focus();
+  }, 30);
+}
+
+async function _pdCreationExecute(p, flow) {
+  var draft = flow.draft || {};
+  if (flow.kind === 'worker') {
+    var payload = {
+      name: draft.name || _pdNameFromRole(draft.role),
+      role: draft.role || 'Specialist Worker',
+      is_temporary: !!draft.is_temporary,
+      squad_id: draft.squad_id || '',
+      managed_by_porter: true,
+      appearance_style: 'minecraft',
+    };
+    var created = await api('/api/personas', payload);
+    if (!(created && created.ok && created.persona)) throw new Error((created && created.error) || 'Worker creation failed');
+    if (draft.project_id) {
+      await api('/api/projects', { action: 'assign_agent', project_id: draft.project_id, persona_id: created.persona.id }).catch(function() { return null; });
+    }
+    return 'Worker created: ' + (created.persona.name || payload.name) + '.';
+  }
+  if (flow.kind === 'squad') {
+    var squadRes = await api('/api/squads', { action: 'create', name: draft.name || 'New Squad', color: draft.color || '#f59e0b', description: draft.description || '' });
+    if (!(squadRes && squadRes.ok && squadRes.id)) throw new Error((squadRes && squadRes.error) || 'Squad creation failed');
+    if (draft.project_id) {
+      await api('/api/squads', { action: 'update', id: squadRes.id, project_id: draft.project_id }).catch(function() { return null; });
+    }
+    return 'Squad created: ' + (draft.name || 'New Squad') + '.';
+  }
+  var projectRes = await api('/api/projects', {
+    action: 'create',
+    name: draft.name || 'New Project',
+    type: draft.type || 'manual',
+    description: draft.description || ''
+  });
+  if (!(projectRes && projectRes.ok && projectRes.project)) throw new Error((projectRes && projectRes.error) || 'Project creation failed');
+  return 'Project created: ' + (projectRes.project.name || draft.name || 'New Project') + '.';
+}
+
+async function _pdHandleCreationReply(p, state, text) {
+  var flow = state.flow;
+  if (!flow) return false;
+  if (_pdCreationCancelRequested(text)) {
+    state.flow = null;
+    state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: 'Creation cancelled. Porter left the current roster unchanged.', meta: 'guided creation' });
+    _pdChatRender(p.id);
+    return true;
+  }
+  if (flow.stage >= 3 && _pdCreationConfirmRequested(text)) {
+    try {
+      var resultMsg = await _pdCreationExecute(p, flow);
+      state.flow = null;
+      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: resultMsg, meta: 'created' });
+      if (typeof loadSquads === 'function') await loadSquads();
+      if (typeof loadPersonas === 'function') loadPersonas();
+      _pdChatRender(p.id);
+    } catch (e) {
+      state.messages.push({ role: 'error', label: p.name || 'Porter', content: e.message || 'Creation failed' });
+      _pdChatRender(p.id);
+    }
+    return true;
+  }
+  var lower = String(text || '').toLowerCase();
+  var draft = flow.draft || (flow.draft = {});
+  if (flow.kind === 'worker') {
+    if (flow.stage === 0) {
+      draft.brief = text;
+      draft.role = _pdRoleFromBrief(text);
+      draft.name = _pdNameFromRole(draft.role);
+      flow.stage = 1;
+      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
+    } else if (flow.stage === 1) {
+      if (/temp|temporary|contract|short/i.test(lower)) draft.is_temporary = true;
+      else if (/persist|permanent|long|core/i.test(lower)) draft.is_temporary = false;
+      else {
+        state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: 'Porter still needs a lifecycle choice here: temporary or persistent?', meta: 'guided creation' });
+        _pdChatRender(p.id);
+        return true;
+      }
+      flow.stage = 2;
+      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
+    } else if (flow.stage === 2) {
+      var squad = _pdFindNamedItem(text, (flow.context || {}).squads || []);
+      var project = _pdFindNamedItem(text, (flow.context || {}).projects || []);
+      draft.squad_id = squad ? squad.id : '';
+      draft.squad_name = squad ? squad.name : '';
+      draft.project_id = project ? project.id : '';
+      draft.project_name = project ? project.name : '';
+      flow.stage = 3;
+      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationProposal(flow), meta: 'proposal' });
+    }
+  } else if (flow.kind === 'squad') {
+    if (flow.stage === 0) {
+      draft.description = text;
+      draft.name = /called|named/i.test(lower) ? text.split(/\bcalled\b|\bnamed\b/i).pop().trim() : (_pdNameFromRole(_pdRoleFromBrief(text)).replace(/\bWorker\b/i, '').trim() + ' Squad');
+      flow.stage = 1;
+      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
+    } else if (flow.stage === 1) {
+      draft.roster = text;
+      flow.stage = 2;
+      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
+    } else if (flow.stage === 2) {
+      var proj = _pdFindNamedItem(text, (flow.context || {}).projects || []);
+      draft.project_id = proj ? proj.id : '';
+      draft.project_name = proj ? proj.name : '';
+      flow.stage = 3;
+      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationProposal(flow), meta: 'proposal' });
+    }
+  } else {
+    if (flow.stage === 0) {
+      draft.name = text.trim();
+      flow.stage = 1;
+      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
+    } else if (flow.stage === 1) {
+      draft.description = text;
+      flow.stage = 2;
+      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
+    } else if (flow.stage === 2) {
+      draft.type = /auto|autonomous/i.test(lower) ? 'autonomous' : 'manual';
+      flow.stage = 3;
+      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationProposal(flow), meta: 'proposal' });
+    }
+  }
+  _pdChatRender(p.id);
+  return true;
 }
 
 function _pdChatRender(pid) {
@@ -16313,6 +16572,11 @@ async function _pdChatSend() {
   state.messages.push({ role: 'pending', label: p.name || 'Agent', content: (p.name || 'Agent') + ' is thinking...', meta: p.preferred_backend || 'auto' });
   input.value = '';
   _pdChatRender(p.id);
+  if (p.orchestrator_only && state.flow) {
+    state.messages.pop();
+    await _pdHandleCreationReply(p, state, text);
+    return;
+  }
   try {
     var payload = { prompt: text, timeout: 120 };
     if (p.project_id) payload.project_id = p.project_id;
@@ -23606,7 +23870,7 @@ async function selectPersona(id) {
     if (spBtn) spBtn.textContent = isOrchestrator ? 'Who Is Porter' : 'System Prompt';
     if (tabActions) {
       tabActions.innerHTML = isOrchestrator
-        ? '<button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'worker\')" style="font-size:11px">Create Worker</button><button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'squad\')" style="font-size:11px">Create Squad</button>'
+        ? '<button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'worker\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Worker</button><button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'squad\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Squad</button><button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'project\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Project</button>'
         : '';
     }
     document.querySelectorAll('.pd-tab').forEach(function(btn) {
@@ -23677,9 +23941,9 @@ function switchPdTab(tab) {
     content.innerHTML = '<section style="display:flex;flex-direction:column;height:min(calc(100vh - 330px), 68vh);max-height:calc(100vh - 330px);min-height:420px;padding:4px 2px 2px;background:transparent;box-sizing:border-box">'
       + '<div id="pd-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 14px"></div>'
       + '<div style="margin-top:8px;padding-top:4px">'
-      + '<div style="display:flex;gap:10px;align-items:flex-end;padding:10px;border:1px solid color-mix(in srgb,var(--border) 74%, transparent);border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 98%, transparent),color-mix(in srgb,var(--bg) 99%, transparent))">'
+      + '<div style="display:flex;gap:10px;align-items:flex-end;padding:10px;border:1px solid color-mix(in srgb,var(--border) 58%, transparent);border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 99%, transparent),color-mix(in srgb,var(--bg) 99%, transparent))">'
       + '<textarea id="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate, create workers, or direct a squad...' : 'Send a directive to this worker...') + '" rows="3" onkeydown="_pdChatKey(event)" style="flex:1;min-height:70px;max-height:180px;resize:vertical;background:transparent;color:var(--text);border:none;outline:none;border-radius:14px;padding:10px 10px 8px;font-size:13px;line-height:1.5"></textarea>'
-      + '<button onclick="_pdChatSend()" style="align-self:stretch;min-width:112px;border:none;border-radius:16px;padding:0 18px;background:linear-gradient(135deg,#f59e0b,#f97316);color:#1f1400;font-size:12px;font-weight:800;letter-spacing:.04em;cursor:pointer;box-shadow:0 10px 24px rgba(249,115,22,.28)">Send ↗</button>'
+      + '<button onclick="_pdChatSend()" style="align-self:stretch;min-width:136px;border:1px solid color-mix(in srgb,#f59e0b 42%, #7c2d12);border-radius:16px;padding:0 16px;background:linear-gradient(180deg,#ffe6b0,#f59e0b);color:#301400;font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.5), 0 12px 24px rgba(245,158,11,.18)">Direct Porter ↗</button>'
       + '</div></div></section>';
     _pdChatRender(p.id);
   } else if (tab === 'identity') {
@@ -23798,64 +24062,94 @@ function switchPdTab(tab) {
     });
   } else if (tab === 'skills') {
     if (p.is_locked) {
-      content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div style="font-size:12px;color:var(--text3)">Loading capabilities...</div></div>';
+      content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div style="font-size:12px;color:var(--text3)">Loading skills...</div></div>';
       (async function() {
         try {
           var data = await api('/api/personas/' + p.id + '/skills');
           var skills = (data && data.skills) || [];
-          var recommended = (data && data.recommended) || [];
+          var profile = (data && data.profile) || {};
+          var core = profile.core || [];
+          var reserve = profile.reserve || [];
           var html = '<div style="display:flex;flex-direction:column;gap:16px">'
-            + '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Capabilities</div><div style="font-size:13px;color:var(--text2);line-height:1.6">Porter abstracts raw skills into a managed capability layer. These capabilities are system-managed and not edited directly from the product UI.</div></div>';
-          if (skills.length) {
+            + '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Porter Skills</div><div style="font-size:13px;color:var(--text2);line-height:1.6">Porter does not need every available skill. He keeps a tight orchestrator loadout and uses workers for deep execution.</div></div>';
+          if (core.length) {
             html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">';
-            skills.forEach(function(sk) {
-              html += '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(sk.name || '') + '</div><div style="font-size:10px;color:var(--text3);margin-top:5px">Active capability</div></div>';
+            core.forEach(function(sk) {
+              html += '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="display:flex;align-items:center;gap:8px"><div style="font-size:12px;font-weight:800;color:var(--text)">' + escHtml(sk.name || '') + '</div><span class="model-card-chip ok" style="font-size:10px">Core</span></div><div style="font-size:11px;color:var(--text2);line-height:1.55;margin-top:8px">' + escHtml(sk.purpose || sk.description || 'Command coverage') + '</div></div>';
             });
             html += '</div>';
           }
-          if (recommended.length) {
-            html += '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Managed Capability Coverage</div><div style="display:flex;gap:8px;flex-wrap:wrap">' + recommended.map(function(name) {
-              return '<span style="font-size:11px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:var(--bg);color:var(--text2)">' + escHtml(name) + '</span>';
+          if (reserve.length) {
+            html += '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Reserve Skills</div><div style="display:flex;gap:8px;flex-wrap:wrap">' + reserve.map(function(sk) {
+              return '<span style="font-size:11px;padding:7px 11px;border-radius:999px;border:1px solid var(--border);background:var(--bg);color:var(--text2)">' + escHtml(sk.name || '') + '</span>';
             }).join('') + '</div></div>';
+          }
+          if (skills.length && !core.length) {
+            html += '<div style="display:flex;gap:8px;flex-wrap:wrap">' + skills.map(function(sk) {
+              return '<span style="font-size:11px;padding:7px 11px;border-radius:999px;border:1px solid var(--border);background:var(--bg);color:var(--text2)">' + escHtml(sk.name || '') + '</span>';
+            }).join('') + '</div>';
           }
           html += '</div>';
           content.innerHTML = html;
         } catch(e) {
-          content.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load capabilities.</div>';
+          content.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load skills.</div>';
         }
       })();
       return;
     }
-    content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div style="font-size:12px;color:var(--text3)">Loading capabilities...</div></div>';
+    content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div style="font-size:12px;color:var(--text3)">Loading skills...</div></div>';
     _loadPersonaSkills(p.id);
   } else if (tab === 'memory') {
-    content.innerHTML = '<div class="loading-indicator">Loading memory directives...</div>';
+    content.innerHTML = '<div class="loading-indicator">Loading concepts...</div>';
     (async function() {
       try {
-        var r = await api('/api/cortex/memories?scope=agent&scope_id=' + p.id + '&limit=50');
-        var facts = (r && r.memories) || [];
+        var facts = [];
+        if (p.orchestrator_only) {
+          var [globalMem, projectMem] = await Promise.all([
+            api('/api/cortex/memories?scope=global&limit=40').catch(function() { return { memories: [] }; }),
+            api('/api/cortex/memories?scope=project&limit=20').catch(function() { return { memories: [] }; })
+          ]);
+          facts = ((globalMem && globalMem.memories) || []).concat((projectMem && projectMem.memories) || []);
+        } else {
+          var r = await api('/api/cortex/memories?scope=agent&scope_id=' + p.id + '&limit=50');
+          facts = (r && r.memories) || [];
+        }
         if (!facts.length) {
-          content.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px">No directives for this agent yet. As Porter learns, useful operating directives will distill here.</div>';
+          content.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px">No concepts have been distilled yet. Porter will surface durable directives and strategic truths here as they stabilize.</div>';
           return;
         }
-        var html = '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">' + facts.length + ' directives</div>';
-        html += '<div style="display:flex;flex-direction:column;gap:6px">';
-        facts.forEach(function(f) {
+        var directives = facts.filter(function(f) {
+          var txt = String(f.fact || '').toLowerCase();
+          return /^keep |^prefer |^avoid |^present |^m oe|approval|required|wants|should/.test(txt) || (f.importance || 0) >= 7;
+        });
+        var concepts = facts.filter(function(f) { return directives.indexOf(f) < 0; });
+        var reviewed = facts.filter(function(f) { return Number(f.confidence || 0) >= 0.7; }).length;
+        var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'
+          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Total Concepts</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + facts.length + '</div></div>'
+          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Directives</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + directives.length + '</div></div>'
+          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">High Trust</div><div style="font-size:26px;font-weight:800;color:#22c55e;margin-top:4px">' + reviewed + '</div></div>'
+          + '</div>';
+        function _conceptCard(f, tone) {
           var conf = Math.round((f.confidence || 0) * 100);
           var confColor = conf >= 70 ? '#22c55e' : conf >= 40 ? '#f59e0b' : '#ef4444';
-          html += '<div style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:12px">'
-            + '<div style="font-size:12px;line-height:1.55;color:var(--text)">' + escHtml(f.fact || '') + '</div>'
-            + '<div style="display:flex;gap:12px;align-items:center;margin-top:8px;font-size:10px;color:var(--text3)">'
-            + '<span style="color:' + confColor + '">' + conf + '% confidence</span>'
+          return '<div style="padding:14px;background:' + (tone === 'directive' ? 'color-mix(in srgb,var(--accent) 5%, var(--bg))' : 'var(--bg)') + ';border:1px solid var(--border);border-radius:16px">'
+            + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="model-card-chip ' + (tone === 'directive' ? 'ok' : 'dim') + '" style="font-size:10px">' + (tone === 'directive' ? 'Directive' : 'Concept') + '</span><span style="font-size:10px;color:' + confColor + ';margin-left:auto">' + conf + '% confidence</span></div>'
+            + '<div style="font-size:12px;line-height:1.6;color:var(--text)">' + escHtml(f.fact || '') + '</div>'
+            + '<div style="display:flex;gap:12px;align-items:center;margin-top:10px;font-size:10px;color:var(--text3)">'
             + '<span>' + (f.evidence_count || 0) + ' evidence</span>'
-            + '<span>' + (f.memory_type || 'directive') + '</span>'
+            + '<span>' + (f.memory_type || 'semantic') + '</span>'
             + '<button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" onclick="_dismissDirective(\'' + f.id + '\')">Dismiss</button>'
             + '</div></div>';
-        });
+        }
+        html += '<div style="display:flex;flex-direction:column;gap:16px">';
+        html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Operating Directives</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">' + directives.map(function(f) { return _conceptCard(f, 'directive'); }).join('') + '</div></section>';
+        if (concepts.length) {
+          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Strategic Concepts</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">' + concepts.map(function(f) { return _conceptCard(f, 'concept'); }).join('') + '</div></section>';
+        }
         html += '</div>';
         content.innerHTML = html;
       } catch(e) {
-        content.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load memories</div>';
+        content.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load concepts</div>';
       }
     })();
   } else if (tab === 'config') {
@@ -24034,7 +24328,7 @@ function _renderPersonaSkills() {
 
   // Toolbar: toggle + search
   var html = '<div style="margin-bottom:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2)">'
-    + 'Porter manages starter capability coverage for workers and can re-curate it when the role changes.'
+    + 'Porter manages starter skill coverage for workers and can re-curate it when the role changes.'
     + (_psManagedByPorter
         ? ' <span style="color:#22c55e">This worker is currently on Porter-managed defaults.</span>'
         : ' <span style="color:var(--text3)">This worker currently has manual overrides.</span>')
@@ -35051,7 +35345,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.60"})
+            self.reply_json({"v": "0.30.61"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35213,7 +35507,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.60"
+                health["porter_version"] = "0.30.61"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37109,7 +37403,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.60'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.61'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39418,8 +39712,11 @@ class Handler(BaseHTTPRequestHandler):
                     for pid in body.get("members", []):
                         conn.execute("INSERT OR IGNORE INTO squad_members (squad_id, persona_id) VALUES (?,?)", (sid, pid))
                     conn.commit(); conn.close()
+                    _emit_event("squad:created", {"id": sid, "name": name})
+                    mlog.emit("info", "squad", "squad.create", f"Created squad: {name}", squad_id=sid)
                     self.reply_json({"ok": True, "id": sid})
                 except Exception as e:
+                    mlog.emit("error", "squad", "squad.create", str(e), squad_id=sid or "")
                     self.reply_json({"ok": False, "error": str(e)[:200]}, 500)
             elif action == "update":
                 sid = body.get("id", "")
@@ -39441,8 +39738,11 @@ class Handler(BaseHTTPRequestHandler):
                         for pid in body["members"]:
                             conn.execute("INSERT INTO squad_members (squad_id, persona_id) VALUES (?,?)", (sid, pid))
                     conn.commit(); conn.close()
+                    _emit_event("squad:updated", {"id": sid})
+                    mlog.emit("info", "squad", "squad.update", f"Updated squad: {sid}", squad_id=sid)
                     self.reply_json({"ok": True})
                 except Exception as e:
+                    mlog.emit("error", "squad", "squad.update", str(e), squad_id=sid)
                     self.reply_json({"ok": False, "error": str(e)[:200]}, 500)
             elif action == "set_leader":
                 sid = body.get("id", "")
@@ -39452,8 +39752,11 @@ class Handler(BaseHTTPRequestHandler):
                     conn.execute("UPDATE squad_members SET role='member' WHERE squad_id=?", (sid,))
                     conn.execute("UPDATE squad_members SET role='leader' WHERE squad_id=? AND persona_id=?", (sid, pid))
                     conn.commit(); conn.close()
+                    _emit_event("squad:leader", {"id": sid, "persona_id": pid})
+                    mlog.emit("info", "squad", "squad.leader", f"Set squad leader: {sid} -> {pid}", squad_id=sid, persona_id=pid)
                     self.reply_json({"ok": True})
                 except Exception as e:
+                    mlog.emit("error", "squad", "squad.leader", str(e), squad_id=sid, persona_id=pid)
                     self.reply_json({"ok": False, "error": str(e)[:200]}, 500)
             elif action == "delete":
                 sid = body.get("id", "")
@@ -39462,8 +39765,11 @@ class Handler(BaseHTTPRequestHandler):
                     conn.execute("DELETE FROM squad_members WHERE squad_id=?", (sid,))
                     conn.execute("DELETE FROM squads WHERE id=?", (sid,))
                     conn.commit(); conn.close()
+                    _emit_event("squad:deleted", {"id": sid})
+                    mlog.emit("info", "squad", "squad.delete", f"Deleted squad: {sid}", squad_id=sid)
                     self.reply_json({"ok": True})
                 except Exception as e:
+                    mlog.emit("error", "squad", "squad.delete", str(e), squad_id=sid)
                     self.reply_json({"ok": False, "error": str(e)[:200]}, 500)
             return
 
@@ -40839,6 +41145,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 _config.setdefault("projects", []).append(proj)
                 save_config(_config)
                 wp = scaffold_project_dir(pid, name)
+                _emit_event("project:created", {"id": pid, "name": name, "type": ptype})
+                mlog.emit("info", "project", "project.create", f"Created project: {name}", project_id=pid)
                 self.reply_json({"ok": True, "project": {
                     **proj, "workspace_path": str(wp), "workspace_exists": True,
                 }})
@@ -40849,6 +41157,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     self.reply_json({"ok": False, "error": "project_id not found"}); return
                 _config["active_project_id"] = pid or None
                 save_config(_config)
+                mlog.emit("info", "project", "project.set_active", f"Set active project: {pid or 'none'}", project_id=pid or "")
                 self.reply_json({"ok": True, "active_project_id": _config["active_project_id"]})
 
             elif action == "delete":
@@ -40860,6 +41169,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 if _config.get("active_project_id") == pid:
                     _config["active_project_id"] = None
                 save_config(_config)
+                _emit_event("project:deleted", {"id": pid})
+                mlog.emit("info", "project", "project.delete", f"Deleted project: {pid}", project_id=pid)
                 self.reply_json({"ok": True})
 
             elif action == "resolve":
@@ -40897,6 +41208,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                             sd["agents"] = assigned
                             sj.write_text(json.dumps(sd, indent=2))
                         except Exception: pass
+                mlog.emit("info", "project", "project.assign_agent", f"Assigned persona {persona_id} to project {pid}", project_id=pid, persona_id=persona_id)
                 self.reply_json({"ok": True, "assigned_personas": proj.get("assigned_personas", [])})
 
             elif action == "unassign_agent":
@@ -40923,6 +41235,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                             sd["agents"] = assigned
                             sj.write_text(json.dumps(sd, indent=2))
                         except Exception: pass
+                mlog.emit("info", "project", "project.unassign_agent", f"Unassigned persona {persona_id} from project {pid}", project_id=pid, persona_id=persona_id)
                 self.reply_json({"ok": True, "assigned_personas": proj.get("assigned_personas", [])})
 
             elif action == "update":
@@ -40973,6 +41286,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                         sj.write_text(json.dumps(sdata, indent=2))
                     except Exception as e:
                         log.debug("Ignored: %s", e)
+                _emit_event("project:updated", {"id": pid})
+                mlog.emit("info", "project", "project.update", f"Updated project: {pid}", project_id=pid)
                 self.reply_json({"ok": True, "project": proj})
 
 
@@ -42004,7 +42319,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.60 ready (localhost only)")
+    print(f"\n  Porter v0.30.61 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

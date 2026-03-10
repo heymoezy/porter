@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.61 (2026-03-10)
+
+- Porter detail actions now open guided creation sessions inside the agent chat for workers, squads, and projects instead of acting like dumb prompt fillers.
+- The old `Memory` tab is now `Concepts`, with a clearer split between operating directives and strategic concepts.
+- Project and squad mutations now emit richer structured events so PorterHQ-style operator logging has cleaner coverage.
+- New workers now carry a Porter-owned avatar blueprint contract even while using the current pixel renderer.
+
 ## v0.30.60 (2026-03-10)
 
 - Porter detail chat was simplified so the workspace feels less boxed-in, with a cleaner composer and a stronger send action.
