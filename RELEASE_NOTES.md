@@ -1,5 +1,9 @@
 # Porter Release Notes
 
+## v0.30.57 (2026-03-10)
+
+- Porter was reduced again on the main Agents roster, with a smaller orchestrator card and portrait render size.
+
 ## v0.30.56 (2026-03-10)
 
 - Porter was trimmed down one more step on the main Agents roster by shrinking both the orchestrator stage box and the requested portrait render size together.

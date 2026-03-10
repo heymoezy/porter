@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.56 — Porter roster size trim"""
+"""Porter v0.30.57 — Porter roster size trim II"""
 
 
 import email
@@ -9674,8 +9674,8 @@ body.density-compact .file-name { padding: 6px 0; }
   transition:transform .18s ease, filter .18s ease;
 }
 .persona-card.orchestrator {
-  width:190px;
-  min-height:296px;
+  width:176px;
+  min-height:278px;
 }
 .persona-card:hover { transform:translateY(-5px); filter:brightness(1.05); }
 .persona-card.selected { transform:translateY(-8px) scale(1.02); }
@@ -9704,7 +9704,7 @@ body.density-compact .file-name { padding: 6px 0; }
   justify-content:center;
   overflow:visible;
 }
-.persona-card.orchestrator .persona-card-avatar { width:156px; height:204px; }
+.persona-card.orchestrator .persona-card-avatar { width:142px; height:186px; }
 .persona-card-name {
   font-size:16px;
   font-weight:800;
@@ -9714,7 +9714,7 @@ body.density-compact .file-name { padding: 6px 0; }
   word-wrap:break-word;
   overflow-wrap:break-word;
 }
-.persona-card.orchestrator .persona-card-name { font-size:17px; margin-top:0; }
+.persona-card.orchestrator .persona-card-name { font-size:16px; margin-top:0; }
 .persona-card-role {
   font-size:12px;
   color:var(--text3);
@@ -9722,7 +9722,7 @@ body.density-compact .file-name { padding: 6px 0; }
   line-height:1.25;
   max-width:150px;
 }
-.persona-card.orchestrator .persona-card-role { font-size:11px; max-width:156px; }
+.persona-card.orchestrator .persona-card-role { font-size:10px; max-width:142px; }
 .persona-card-status, .persona-card-dot { display:none; }
 @keyframes pixel-walk {
   0%,100% { transform:translateY(0) rotate(0deg); }
@@ -10227,7 +10227,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.56</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.57</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11623,6 +11623,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.57', date:'2026-03-10', notes:['Porter was reduced again on the main Agents roster with another smaller orchestrator stage and portrait render size, leaving the detail view unchanged'] },
   { ver:'v0.30.56', date:'2026-03-10', notes:['Porter was trimmed down one more step on the main Agents roster by shrinking both the orchestrator stage box and the requested portrait render size together'] },
   { ver:'v0.30.55', date:'2026-03-10', notes:['Porter was scaled down again on the main Agents roster and the requested portrait render size now matches the stage box, fixing the oversized look and clipped head on the main screen'] },
   { ver:'v0.30.54', date:'2026-03-10', notes:['Porter was scaled down again on the main Agents roster to sit closer to the detail-page proportion instead of dominating the stage','The detail workspace now gives the Chat tab the full canvas, with activity/task/memory summaries removed from the default view and kept behind their own tabs','Create Worker and Create Squad actions moved into the tab rail, the redundant roster subtitle was removed, and the back control was restored as a clear single button','The Who Is Porter brief now anchors to the detail pane instead of the full app overlay, so its placement and close control no longer fight the workspace layout'] },
@@ -23195,7 +23196,7 @@ function renderPersonaOrg() {
     var isSelected = p.id === _selectedPersonaId;
     var isOrch = p.agent_group === 'Orchestrator' || p.orchestrator_only;
     return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + '" data-persona-id="' + p.id + '" onclick="selectPersona(\'' + p.id + '\')">'
-      + '<div class="persona-card-avatar" style="display:flex;align-items:center;justify-content:center;overflow:hidden">' + _personaAvatarMarkup(p, isOrch ? 190 : 128) + '</div>'
+      + '<div class="persona-card-avatar" style="display:flex;align-items:center;justify-content:center;overflow:hidden">' + _personaAvatarMarkup(p, isOrch ? 170 : 128) + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
       + '<div class="persona-card-role">' + escHtml(p.role || (isOrch ? 'Master Orchestrator' : 'Worker')) + '</div>'
       + '</div>';
@@ -34918,7 +34919,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.56"})
+            self.reply_json({"v": "0.30.57"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35080,7 +35081,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.56"
+                health["porter_version"] = "0.30.57"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -36976,7 +36977,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.56'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.57'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -41869,7 +41870,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.56 ready (localhost only)")
+    print(f"\n  Porter v0.30.57 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
