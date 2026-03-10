@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.48 (2026-03-10)
+
+- New workers now receive Porter-managed starter skills automatically based on their role, so worker creation no longer begins as a blank manual capability setup step.
+- The worker Skills tab now shows whether a worker is on Porter-managed defaults or manual overrides, and adds a one-click `Re-curate Skills` action when the role changes.
+- Manual skill edits now explicitly mark a worker as overridden, which keeps the UI honest about whether Porter or the operator is controlling capability coverage.
+- Persona skill APIs now return recommendation metadata so the current UI and future orchestration logic can share the same Porter skill-curation signal.
+
 ## v0.30.47 (2026-03-10)
 
 - Agents now boot with a locked built-in `Porter` master orchestrator instead of exposing `Lobster` as the public boss persona.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.47 — Porter-first agent control plane"""
+"""Porter v0.30.48 — Porter-managed worker skill defaults"""
 
 
 import email
@@ -7606,6 +7606,85 @@ def _persona_chat_selectable(persona: dict | None) -> bool:
     return bool(persona) and _persona_is_public(persona) and not _persona_is_orchestrator_only(persona)
 
 
+def _persona_skill_recommendation_reason(persona: dict | None, skill: dict | None) -> str:
+    if not persona or not skill:
+        return ""
+    role = f"{persona.get('role', '')} {persona.get('agent_group', '')}".lower()
+    text = f"{skill.get('name', '')} {skill.get('id', '')} {skill.get('description', '')}".lower()
+    checks = [
+        ("technical execution", re.compile(r"engineer|technical|cto|backend|frontend|dev"), re.compile(r"git|docker|test|lint|build|deploy|db|sql|code|ci|cd|pipeline")),
+        ("creative and content work", re.compile(r"design|creative|ux|copy|market"), re.compile(r"doc|write|web|search|browse|image|figma|design|sketch|css")),
+        ("research and analysis", re.compile(r"research|strateg|analy"), re.compile(r"search|web|fetch|ai|llm|doc|scrape|data|report")),
+        ("quality assurance", re.compile(r"qa|quality|test|bug"), re.compile(r"test|lint|check|format|security|scan|audit")),
+        ("release and operations", re.compile(r"deploy|release|ops|infra|sre"), re.compile(r"deploy|docker|k8s|kube|ci|cd|pipeline|build|release|monitor")),
+        ("finance and market work", re.compile(r"trad|market|analyst|risk|execut|reconcil|financ|crypto"), re.compile(r"kraken|trade|ticker|ohlc|order|spread|asset|pair|market|price|balance|ledger|portfolio")),
+    ]
+    for reason, role_re, skill_re in checks:
+        if role_re.search(role) and skill_re.search(text):
+            return reason
+    if re.search(r"orchestrat|lead|manage|direct", role) and re.search(r"ai|llm|deploy|git|search|doc", text):
+        return "coordination coverage"
+    return ""
+
+
+def _recommended_skill_names_for_persona(persona: dict | None, available_skills: list[dict] | None = None, limit: int = 6) -> list[str]:
+    if not persona:
+        return []
+    skills = available_skills if available_skills is not None else _load_openclaw_skills()
+    recommended: list[str] = []
+    fallback: list[str] = []
+    for sk in skills or []:
+        name = str(sk.get("name") or sk.get("id") or "").strip()
+        if not name:
+            continue
+        reason = _persona_skill_recommendation_reason(persona, sk)
+        if reason:
+            recommended.append(name)
+        elif sk.get("installed") or sk.get("manual"):
+            fallback.append(name)
+    ordered = []
+    seen = set()
+    for bucket in (recommended, fallback):
+        for name in bucket:
+            if name in seen:
+                continue
+            seen.add(name)
+            ordered.append(name)
+            if len(ordered) >= limit:
+                return ordered
+    return ordered
+
+
+def _persona_get_skill_names(persona_id: str) -> list[str]:
+    try:
+        conn = _db_conn()
+        rows = conn.execute("SELECT skill_name FROM persona_skills WHERE persona_id=? AND enabled=1 ORDER BY skill_name", (persona_id,)).fetchall()
+        conn.close()
+        return [str(r[0]) for r in rows if str(r[0]).strip()]
+    except Exception:
+        return []
+
+
+def _persona_set_skill_names(persona_id: str, skill_names: list[str], managed_by_porter: bool | None = None) -> list[str]:
+    deduped = []
+    seen = set()
+    for raw in skill_names or []:
+        name = str(raw or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        deduped.append(name)
+    conn = _db_conn()
+    conn.execute("DELETE FROM persona_skills WHERE persona_id=?", (persona_id,))
+    for sk in deduped:
+        conn.execute("INSERT OR REPLACE INTO persona_skills (persona_id, skill_name, enabled) VALUES (?,?,1)", (persona_id, sk))
+    if managed_by_porter is not None:
+        conn.execute("UPDATE personas SET managed_by_porter=? WHERE id=?", (1 if managed_by_porter else 0, persona_id))
+    conn.commit()
+    conn.close()
+    return deduped
+
+
 def _ensure_porter_persona() -> None:
     from datetime import datetime, timezone as _tz
     _now_iso = datetime.now(_tz.utc).isoformat()
@@ -10022,7 +10101,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.47</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.48</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11409,6 +11488,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.48', date:'2026-03-10', notes:['New workers now receive Porter-managed starter skills automatically based on their role instead of starting as blank manual shells','Agent Skills now shows whether a worker is on Porter-managed defaults or manual overrides, with a one-click Re-curate action when the role changes','Manual skill edits now explicitly switch a worker off Porter-managed defaults so the UI tells the truth about who is controlling capability coverage','Persona skill APIs now return recommendation metadata so the worker UI and future orchestration logic can share the same Porter skill-curation signal'] },
   { ver:'v0.30.47', date:'2026-03-10', notes:['Agents now boot with a locked built-in Porter master orchestrator instead of exposing Lobster as a peer agent','Porter is orchestrator-only, cannot be selected as a worker, and his core files, skills, and config are no longer editable from the UI','Crypto Squad is removed from the public team surface, while legacy internal dev personas are hidden from normal agent and squad listings','Worker creation and squad management remain available, but public language now frames them as Porter-managed workers rather than peer agents'] },
   { ver:'v0.30.46', date:'2026-03-10', notes:['Models runtime chips now use plain operator language with hover tooltips instead of implementation-heavy tags','Backend config is now schema-driven per runtime, so CLI backends stop exposing meaningless host, port, and token fields','OpenClaw model-control messaging now explains that Porter selection is advisory without showing raw agent-pinning jargon','Runtime/config copy is now environment-scoped so Models still reads correctly for future hosted and connector-based Porter deployments'] },
   { ver:'v0.30.45', date:'2026-03-10', notes:['Bridge v2: added per-backend and per-model scheduler limits with queue and wait tracking across shared dispatch paths','Models tests and live dispatches now persist benchmark history so routing can prefer faster, less-contended lanes','Models cards now surface bridge control truth, benchmark summaries, and live scheduler pressure instead of treating backend selection as equally exact everywhere','Chat streaming now uses the same bridge scheduler semantics as the rest of Porter so the control plane is aligned'] },
@@ -23549,7 +23629,7 @@ function _isSkillRecommended(sk, persona) {
 }
 
 // v0.29.30 — Agent Skills tab: cards, search, installed/discover toggle
-var _psView = 'installed', _psCatFilter = '', _psAllSkills = [], _psPid = '';
+var _psView = 'installed', _psCatFilter = '', _psAllSkills = [], _psPid = '', _psManagedByPorter = false, _psRecommendedCount = 0;
 
 async function _loadPersonaSkills(pid) {
   var container = document.getElementById('pd-skills-list');
@@ -23562,6 +23642,9 @@ async function _loadPersonaSkills(pid) {
       api('/api/openclaw/skills?action=list').catch(function() { return {skills:[]}; })
     ]);
     var assignedNames = ((assigned && assigned.skills) || []).map(function(s) { return s.name; });
+    var recommendedNames = ((assigned && assigned.recommended) || []);
+    _psManagedByPorter = !!(assigned && assigned.managed_by_porter);
+    _psRecommendedCount = recommendedNames.length;
     _psAllSkills = (available && available.skills) || [];
     if (!_psAllSkills.length) {
       container.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No skills available.</div>';
@@ -23569,7 +23652,7 @@ async function _loadPersonaSkills(pid) {
     }
     _psAllSkills.forEach(function(sk) {
       sk._assigned = assignedNames.indexOf(sk.name || sk.id) >= 0;
-      sk._recommended = _isSkillRecommended(sk, p);
+      sk._recommended = recommendedNames.indexOf(sk.name || sk.id) >= 0 || _isSkillRecommended(sk, p);
       sk._category = _inferSkillCategory(sk);
     });
     _psView = 'installed'; _psCatFilter = '';
@@ -23594,7 +23677,17 @@ function _renderPersonaSkills() {
   var discoverCount = skills.filter(function(s) { return !s._assigned; }).length;
 
   // Toolbar: toggle + search
-  var html = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">';
+  var html = '<div style="margin-bottom:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2)">'
+    + 'Porter manages starter capability coverage for workers and can re-curate it when the role changes.'
+    + (_psManagedByPorter
+        ? ' <span style="color:#22c55e">This worker is currently on Porter-managed defaults.</span>'
+        : ' <span style="color:var(--text3)">This worker currently has manual overrides.</span>')
+    + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'
+    + '<button class="btn btn-ghost btn-sm" onclick="_autoCuratePersonaSkills(\'' + pid + '\')" style="font-size:11px">Re-curate Skills</button>'
+    + '<span style="font-size:11px;color:var(--text3);align-self:center">'
+    + (_psRecommendedCount ? (_psRecommendedCount + ' role-based recommendations available') : 'No role-based recommendations available right now')
+    + '</span></div></div>';
+  html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">';
   html += '<div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;flex-shrink:0">';
   html += '<button onclick="_psSetView(\x27installed\x27)" style="font-size:11px;padding:4px 10px;border:none;cursor:pointer;'
     + (_psView === 'installed' ? 'background:var(--accent);color:#fff' : 'background:var(--surface);color:var(--text3)')
@@ -23725,9 +23818,18 @@ async function _togglePersonaSkill(pid, skillName, enabled) {
     var skills = ((current && current.skills) || []).map(function(s) { return s.name; });
     if (enabled && skills.indexOf(skillName) < 0) skills.push(skillName);
     else if (!enabled) skills = skills.filter(function(s) { return s !== skillName; });
-    await api('/api/personas/' + pid + '/skills', {action: 'set', skills: skills});
+    await api('/api/personas/' + pid + '/skills', {action: 'set', skills: skills, managed_by_porter: false});
     toast(enabled ? 'Skill assigned' : 'Skill removed');
   } catch(e) { toast('Failed to update skills', 'err'); }
+}
+
+async function _autoCuratePersonaSkills(pid) {
+  try {
+    var res = await api('/api/personas/' + pid + '/skills', {action:'auto'});
+    if (!res || !res.ok) throw new Error((res && res.error) || 'Auto-curation failed');
+    toast('Porter re-curated ' + ((res.skills || []).length) + ' worker skills', 'ok');
+    _loadPersonaSkills(pid);
+  } catch(e) { toast(e.message || 'Failed to re-curate skills', 'err'); }
 }
 
 // v0.29.33 — Assign a skill to all members of a squad
@@ -24133,7 +24235,7 @@ async function _wizAiSuggest() {
 
 async function createPersonaFromWizard() {
   const name = (document.getElementById('wiz-name').value || '').trim();
-  if (!name) { porterAlert('Missing Field', 'Agent name is required.'); _wizCurrentStep = 1; updateWizUI(); return; }
+  if (!name) { porterAlert('Missing Field', 'Worker name is required.'); _wizCurrentStep = 1; updateWizUI(); return; }
   const data = {
     name,
     role: document.getElementById('wiz-role').value || '',
@@ -24145,7 +24247,8 @@ async function createPersonaFromWizard() {
   };
   const r = await api('/api/personas', data);
   if (r.ok) {
-    _showToast('Persona "' + name + '" created!');
+    var starterCount = ((r.persona && r.persona.starter_skills) || []).length;
+    _showToast('Worker "' + name + '" created' + (starterCount ? ' with ' + starterCount + ' Porter-selected starter skills' : '') + '!');
     closePersonaWizard();
     loadPersonas();
   } else {
@@ -30617,9 +30720,27 @@ def _persona_create(data):
     # Legacy compatibility
     (pdir / "heartbeat.md").write_text("")
 
+    if not is_locked:
+        try:
+            persona = {
+                "id": pid,
+                "name": name,
+                "role": role,
+                "agent_group": data.get("agent_group", ""),
+                "managed_by_porter": managed_by_porter,
+            }
+            recommended = _recommended_skill_names_for_persona(persona)
+            if recommended:
+                _persona_set_skill_names(pid, recommended, managed_by_porter=True)
+                managed_by_porter = 1
+        except Exception as e:
+            log.warning("Could not auto-assign starter skills for %s: %s", pid, e)
+
     return {"id": pid, "name": name, "role": role, "avatar": avatar,
             "preferred_backend": preferred_backend, "soul_hash": soul_hash,
-            "is_public": is_public, "is_locked": is_locked, "orchestrator_only": orchestrator_only}
+            "is_public": is_public, "is_locked": is_locked, "orchestrator_only": orchestrator_only,
+            "managed_by_porter": managed_by_porter,
+            "starter_skills": _persona_get_skill_names(pid)}
 
 def _persona_update(persona_id, data):
     """Update persona DB row + optionally SOUL.md."""
@@ -34319,10 +34440,19 @@ class Handler(BaseHTTPRequestHandler):
         elif re.match(r'^/api/personas/[^/]+/skills$', parsed.path):
             if not self.auth_check(redirect=False): return
             pid = parsed.path.split("/")[3]
+            persona = _persona_by_id(pid)
             conn = _db_conn()
             rows = conn.execute("SELECT skill_name, enabled FROM persona_skills WHERE persona_id=?", (pid,)).fetchall()
             conn.close()
-            self.reply_json({"ok": True, "skills": [{"name": r[0], "enabled": bool(r[1])} for r in rows]})
+            skills = [{"name": r[0], "enabled": bool(r[1])} for r in rows]
+            recommended = _recommended_skill_names_for_persona(persona)
+            self.reply_json({
+                "ok": True,
+                "skills": skills,
+                "recommended": recommended,
+                "managed_by_porter": bool((persona or {}).get("managed_by_porter", 0)),
+                "auto_assign_enabled": not _persona_is_locked(persona),
+            })
 
         elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/memory"):
             if not self.auth_check(redirect=False): return
@@ -34454,7 +34584,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.47"})
+            self.reply_json({"v": "0.30.48"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -34616,7 +34746,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.47"
+                health["porter_version"] = "0.30.48"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -36512,7 +36642,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.47'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.48'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38995,19 +39125,24 @@ class Handler(BaseHTTPRequestHandler):
                 return
             data = self.read_json_body()
             action = data.get("action", "set")
-            conn = _db_conn()
+            persona = _persona_by_id(pid)
             if action == "set":
-                skills = data.get("skills", [])
-                conn.execute("DELETE FROM persona_skills WHERE persona_id=?", (pid,))
-                for sk in skills:
-                    conn.execute("INSERT OR REPLACE INTO persona_skills (persona_id, skill_name, enabled) VALUES (?,?,1)", (pid, sk))
-                conn.commit()
-                conn.close()
-                self.reply_json({"ok": True, "skills": skills})
+                skills = _persona_set_skill_names(pid, data.get("skills", []), managed_by_porter=bool(data.get("managed_by_porter")))
+                self.reply_json({"ok": True, "skills": skills, "managed_by_porter": bool(data.get("managed_by_porter"))})
+            elif action == "auto":
+                recommended = _recommended_skill_names_for_persona(persona)
+                skills = _persona_set_skill_names(pid, recommended, managed_by_porter=True)
+                self.reply_json({"ok": True, "skills": skills, "managed_by_porter": True, "recommended": recommended})
             else:
-                rows = conn.execute("SELECT skill_name, enabled FROM persona_skills WHERE persona_id=?", (pid,)).fetchall()
-                conn.close()
-                self.reply_json({"ok": True, "skills": [{"name": r[0], "enabled": bool(r[1])} for r in rows]})
+                rows = _persona_get_skill_names(pid)
+                recommended = _recommended_skill_names_for_persona(persona)
+                self.reply_json({
+                    "ok": True,
+                    "skills": [{"name": r, "enabled": True} for r in rows],
+                    "recommended": recommended,
+                    "managed_by_porter": bool((persona or {}).get("managed_by_porter", 0)),
+                    "auto_assign_enabled": not _persona_is_locked(persona),
+                })
             return
 
         elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/heartbeat"):
@@ -41391,7 +41526,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.47 ready (localhost only)")
+    print(f"\n  Porter v0.30.48 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
