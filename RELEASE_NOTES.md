@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.55 (2026-03-10)
+
+- Porter was scaled down again on the main Agents roster.
+- The roster now requests a smaller Porter portrait render that actually matches the stage box, fixing the clipped head and oversized presence on the main screen.
+
 ## v0.30.54 (2026-03-10)
 
 - Porter was scaled down again on the main Agents roster so his gallery presence is closer to the detail-page proportion.
