@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.62 (2026-03-10)
+
+- Memory mutations now emit structured telemetry events so directive/concept review activity can be audited and eventually surfaced in PorterHQ.
+- Added design briefs for Memory V2 and runtime/logging hardening to guide the next architecture passes.
+
 ## v0.30.61 (2026-03-10)
 
 - Porter detail actions now open guided creation sessions inside the agent chat for workers, squads, and projects instead of acting like dumb prompt fillers.

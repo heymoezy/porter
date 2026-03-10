@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.61 — Guided creation and concepts refresh"""
+"""Porter v0.30.62 — Memory telemetry hardening"""
 
 
 import email
@@ -10341,7 +10341,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.61</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.62</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11737,6 +11737,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.62', date:'2026-03-10', notes:["Concept and directive mutations now emit structured memory events for operator telemetry, and the runtime design briefs now map the next proper Memory V2 and PorterHQ logging architecture"] },
   { ver:'v0.30.61', date:'2026-03-10', notes:["Porter's detail tabs no longer drag a full divider through empty space, the creation actions now open guided Porter-led worker/squad/project sessions inside the detail chat, Concepts replaces the old Memory label with a clearer directive/concept view, and squad/project mutations now emit richer structured logs for operator visibility"] },
   { ver:'v0.30.60', date:'2026-03-10', notes:["Porter detail chat is cleaner and less boxy, with a stronger send action, and Create Worker/Create Squad now seed Porter's dedicated detail chat instead of kicking the user back to the main chat"] },
   { ver:'v0.30.59', date:'2026-03-10', notes:['Porter detail layout corrected: Back to Agents moved into the upper-right action cluster, the Chat pane now stays within the browser viewport, and Skills is restored as the visible tab label'] },
@@ -35345,7 +35346,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.61"})
+            self.reply_json({"v": "0.30.62"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35507,7 +35508,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.61"
+                health["porter_version"] = "0.30.62"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37403,7 +37404,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.61'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.62'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -40356,8 +40357,11 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                                  (new_fact, ",".join(_cortex_tokenize(new_fact)), mem_id))
                 conn.commit()
                 conn.close()
+                _emit_event("memory:updated", {"id": mem_id, "scope": new_scope or "", "scope_id": new_scope_id or ""})
+                mlog.emit("info", "memory", "memory.update", f"Updated memory {mem_id}", memory_id=mem_id, scope=new_scope or "", scope_id=new_scope_id or "")
                 self.reply_json({"ok": True, "id": mem_id, "fact": new_fact})
             except Exception as e:
+                mlog.emit("error", "memory", "memory.update", str(e), memory_id=mem_id)
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
         # ── Update cortex memory status (POST) ─────────────────────────────
@@ -40377,8 +40381,11 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                              (new_status, mem_id))
                 conn.commit()
                 conn.close()
+                _emit_event("memory:status", {"id": mem_id, "status": new_status})
+                mlog.emit("info", "memory", "memory.status", f"Set memory {mem_id} -> {new_status}", memory_id=mem_id, status=new_status)
                 self.reply_json({"ok": True, "id": mem_id, "status": new_status})
             except Exception as e:
+                mlog.emit("error", "memory", "memory.status", str(e), memory_id=mem_id, status=new_status)
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
         # ── Delete individual cortex memory (POST) ─────────────────────────
@@ -40393,8 +40400,11 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 conn.execute("DELETE FROM cortex_memories WHERE id=?", (mem_id,))
                 conn.commit()
                 conn.close()
+                _emit_event("memory:deleted", {"id": mem_id})
+                mlog.emit("info", "memory", "memory.delete", f"Deleted memory {mem_id}", memory_id=mem_id)
                 self.reply_json({"ok": True, "deleted": mem_id})
             except Exception as e:
+                mlog.emit("error", "memory", "memory.delete", str(e), memory_id=mem_id)
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
         # ── Batch extract all learnings (POST) ────────────────────────────
@@ -42319,7 +42329,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.61 ready (localhost only)")
+    print(f"\n  Porter v0.30.62 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
