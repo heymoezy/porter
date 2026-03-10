@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.49 (2026-03-10)
+
+- Workers now have visible lifecycle state, with temporary vs persistent creation in the wizard and promote/make-temporary controls in the detail view.
+- New workers can be assigned directly into a squad during creation, so the Agents tab no longer forces a detached create-then-organize flow.
+- Worker cards and detail headers now render deterministic Minecraft-style portraits from appearance specs instead of relying only on emoji placeholders.
+- Squad skill assignment flows now use the real persona skill API again, fixing the half-broken editor path that depended on a dead action.
+
 ## v0.30.48 (2026-03-10)
 
 - New workers now receive Porter-managed starter skills automatically based on their role, so worker creation no longer begins as a blank manual capability setup step.

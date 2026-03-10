@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.48 — Porter-managed worker skill defaults"""
+"""Porter v0.30.49 — Worker lifecycle and Minecraft-style portraits"""
 
 
 import email
@@ -7685,6 +7685,60 @@ def _persona_set_skill_names(persona_id: str, skill_names: list[str], managed_by
     return deduped
 
 
+def _appearance_palette_for_persona(name: str = "", role: str = "", temporary: bool = False) -> dict:
+    seeds = [
+        {"skin": "#f1c27d", "hair": "#2f4858", "shirt": "#2b6cb0", "accent": "#f6ad55", "eyes": "#1a202c"},
+        {"skin": "#e0ac69", "hair": "#6b4f3a", "shirt": "#2f855a", "accent": "#f6e05e", "eyes": "#111827"},
+        {"skin": "#c68642", "hair": "#1f2937", "shirt": "#7c3aed", "accent": "#f97316", "eyes": "#0f172a"},
+        {"skin": "#8d5524", "hair": "#f8fafc", "shirt": "#b45309", "accent": "#22c55e", "eyes": "#111827"},
+    ]
+    raw = f"{name}|{role}|{int(temporary)}"
+    idx = sum(ord(ch) for ch in raw) % len(seeds)
+    palette = dict(seeds[idx])
+    role_l = str(role or "").lower()
+    if re.search(r"qa|test|quality|bug", role_l):
+        palette["shirt"] = "#0f766e"
+        palette["accent"] = "#22c55e"
+    elif re.search(r"design|creative|ux|brand", role_l):
+        palette["shirt"] = "#be185d"
+        palette["accent"] = "#fb7185"
+    elif re.search(r"research|analyst|strategy", role_l):
+        palette["shirt"] = "#4338ca"
+        palette["accent"] = "#38bdf8"
+    elif re.search(r"release|ops|infra|deploy|sre", role_l):
+        palette["shirt"] = "#374151"
+        palette["accent"] = "#f59e0b"
+    elif re.search(r"finance|market|crypto|trade", role_l):
+        palette["shirt"] = "#14532d"
+        palette["accent"] = "#10b981"
+    if temporary:
+        palette["accent"] = "#f59e0b"
+    return palette
+
+
+def _default_appearance_spec(name: str = "", role: str = "", temporary: bool = False) -> dict:
+    palette = _appearance_palette_for_persona(name, role, temporary)
+    role_l = str(role or "").lower()
+    accessory = "visor"
+    if re.search(r"qa|test|quality", role_l):
+        accessory = "monocle"
+    elif re.search(r"design|creative|ux", role_l):
+        accessory = "headband"
+    elif re.search(r"research|analyst|strategy", role_l):
+        accessory = "headset"
+    elif re.search(r"release|ops|infra|deploy|sre", role_l):
+        accessory = "helmet"
+    elif re.search(r"finance|market|crypto|trade", role_l):
+        accessory = "visor"
+    return {
+        "style": "minecraft",
+        "palette": palette,
+        "outfit": "operator-jacket" if not temporary else "task-contractor",
+        "accessory": accessory,
+        "temporary": bool(temporary),
+    }
+
+
 def _ensure_porter_persona() -> None:
     from datetime import datetime, timezone as _tz
     _now_iso = datetime.now(_tz.utc).isoformat()
@@ -10101,7 +10155,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.48</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.49</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10397,6 +10451,16 @@ input[type="number"].settings-input { min-width: 60px; }
             <option value="codex">Codex</option>
             <option value="ollama">Ollama</option>
           </select>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--text2)">
+            <input type="checkbox" id="wiz-temporary">
+            Create as a temporary worker Porter can retire after the task
+          </label>
+          <div style="margin-top:10px">
+            <label class="wizard-label" style="margin-bottom:6px">Assign to squad now? (optional)</label>
+            <select id="wiz-squad" class="settings-input">
+              <option value="">No squad yet</option>
+            </select>
+          </div>
         </div>
         <div class="wizard-step" data-step="5">
           <label class="wizard-label">Describe their personality in a few words</label>
@@ -11488,6 +11552,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.49', date:'2026-03-10', notes:['Workers now have visible lifecycle state, with temporary vs persistent creation in the wizard and promote/make-temporary controls in the detail view','New workers can be assigned directly into a squad at creation time so the tab no longer forces a detached create-then-organize flow','Agents cards and detail headers now render deterministic Minecraft-style portraits from appearance specs instead of relying only on emoji placeholders','Squad skill assignment paths now use the real persona skill API again, removing the dead action that left the squad editor half-working'] },
   { ver:'v0.30.48', date:'2026-03-10', notes:['New workers now receive Porter-managed starter skills automatically based on their role instead of starting as blank manual shells','Agent Skills now shows whether a worker is on Porter-managed defaults or manual overrides, with a one-click Re-curate action when the role changes','Manual skill edits now explicitly switch a worker off Porter-managed defaults so the UI tells the truth about who is controlling capability coverage','Persona skill APIs now return recommendation metadata so the worker UI and future orchestration logic can share the same Porter skill-curation signal'] },
   { ver:'v0.30.47', date:'2026-03-10', notes:['Agents now boot with a locked built-in Porter master orchestrator instead of exposing Lobster as a peer agent','Porter is orchestrator-only, cannot be selected as a worker, and his core files, skills, and config are no longer editable from the UI','Crypto Squad is removed from the public team surface, while legacy internal dev personas are hidden from normal agent and squad listings','Worker creation and squad management remain available, but public language now frames them as Porter-managed workers rather than peer agents'] },
   { ver:'v0.30.46', date:'2026-03-10', notes:['Models runtime chips now use plain operator language with hover tooltips instead of implementation-heavy tags','Backend config is now schema-driven per runtime, so CLI backends stop exposing meaningless host, port, and token fields','OpenClaw model-control messaging now explains that Porter selection is advisory without showing raw agent-pinning jargon','Runtime/config copy is now environment-scoped so Models still reads correctly for future hosted and connector-based Porter deployments'] },
@@ -22797,8 +22862,14 @@ async function _assignSkillToSquadFromEdit(squadId) {
       for (var i = 0; i < sq.members.length; i++) {
         var m = sq.members[i];
         try {
-          var r = await api('/api/personas/' + m.id + '/skills', {action: 'assign', skill_id: item.id});
-          if (r && r.ok) count++;
+          var current = await api('/api/personas/' + m.id + '/skills');
+          var skills = ((current && current.skills) || []).map(function(s) { return s.name; });
+          var skillName = item.label || item.id;
+          if (skills.indexOf(skillName) < 0) {
+            skills.push(skillName);
+            var r = await api('/api/personas/' + m.id + '/skills', {action: 'set', skills: skills, managed_by_porter: false});
+            if (r && r.ok) count++;
+          }
         } catch(e) {}
       }
       toast('Skill assigned to ' + count + '/' + sq.members.length + ' members', 'ok');
@@ -22880,14 +22951,24 @@ function renderPersonaOrg() {
     var grpBadge = isOrch
       ? '<div style="font-size:10px;padding:1px 6px;border-radius:3px;background:#f59e0b20;color:#f59e0b;font-weight:700;margin-top:4px;letter-spacing:.3px">MASTER ORCHESTRATOR</div>'
       : (grp ? '<div style="font-size:10px;padding:1px 6px;border-radius:3px;background:' + grpColor + '20;color:' + grpColor + ';font-weight:600;margin-top:4px;letter-spacing:.3px">' + grp + '</div>' : '');
+    var lifecycleBadge = !isOrch
+      ? (p.is_temporary
+          ? '<div style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f59e0b20;color:#f59e0b;font-weight:700;margin-top:2px;letter-spacing:.3px">TEMPORARY</div>'
+          : '<div style="font-size:9px;padding:1px 5px;border-radius:3px;background:#22c55e20;color:#22c55e;font-weight:700;margin-top:2px;letter-spacing:.3px">PERSISTENT</div>')
+      : '';
+    var porterManagedBadge = (!isOrch && p.managed_by_porter)
+      ? '<div style="font-size:9px;padding:1px 5px;border-radius:3px;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);font-weight:700;margin-top:2px;letter-spacing:.3px">PORTER-MANAGED</div>'
+      : '';
     var statusClass = p.status === 'active' ? ' status-active' : p.status === 'error' ? ' status-error' : p.status === 'sleeping' ? ' status-sleeping' : '';
     var _dm = p.dispatch_mode || 'contributor';
     var leaderBadge = (p._isLeader || _dm === 'leader') ? '<div style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f59e0b20;color:#f59e0b;font-weight:700;margin-top:2px;letter-spacing:.3px">LEADER</div>' : '';
     return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + statusClass + '" data-persona-id="' + p.id + '" onmousedown="_pMouseDown(event)" ontouchstart="_pTouchStart(event)" onclick="selectPersona(\'' + p.id + '\')">'
-      + '<div class="persona-card-avatar">' + escHtml(p.avatar || '\u{1F916}') + '</div>'
+      + '<div class="persona-card-avatar" style="display:flex;align-items:center;justify-content:center;overflow:hidden">' + _personaAvatarMarkup(p, 54) + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
       + '<div class="persona-card-role">' + escHtml(p.role || 'General') + '</div>'
       + leaderBadge
+      + lifecycleBadge
+      + porterManagedBadge
       + grpBadge
       + '<div class="persona-card-status">'
       + '<span class="persona-card-dot" style="background:' + dotColor + '"></span>'
@@ -22908,7 +22989,7 @@ function renderPersonaOrg() {
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;padding:4px 0 7px 0;border-bottom:1px solid ' + sq.color + '">'
         + '<span style="width:9px;height:9px;border-radius:50%;background:' + sq.color + ';flex-shrink:0"></span>'
         + '<span style="font-size:13px;font-weight:600;color:var(--text)">' + escHtml(sq.name) + '</span>'
-        + '<span style="font-size:11px;color:var(--text3)">' + members.length + ' agent' + (members.length !== 1 ? 's' : '') + '</span>'
+        + '<span style="font-size:11px;color:var(--text3)">' + members.length + ' worker' + (members.length !== 1 ? 's' : '') + '</span>'
         + '<button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;margin-left:auto" onclick="_editSquad(\'' + sq.id + '\')" title="Configure squad">⚙</button>'
         + '</div>'
         + '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:2px 0">';
@@ -22930,7 +23011,7 @@ function renderPersonaOrg() {
       html += '<div style="margin-bottom:16px">'
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border)">'
         + '<span style="font-size:13px;font-weight:600;color:var(--text3)">Unassigned</span>'
-        + '<span style="font-size:11px;color:var(--text3)">' + unassigned.length + ' agent' + (unassigned.length !== 1 ? 's' : '') + '</span>'
+        + '<span style="font-size:11px;color:var(--text3)">' + unassigned.length + ' worker' + (unassigned.length !== 1 ? 's' : '') + '</span>'
         + '</div>'
         + '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">';
       unassigned.forEach(function(p) { html += cardHtml(p); });
@@ -23164,7 +23245,10 @@ async function selectPersona(id) {
     var bb = document.getElementById('pd-backend-badge2');
     var delBtn = document.getElementById('pd-delete-btn');
     var spBtn = document.getElementById('pd-sp-btn');
-    if (av) av.textContent = p.avatar || '\u{1f916}';
+    if (av) {
+      av.innerHTML = _personaAvatarMarkup(p, 96);
+      av.style.cursor = isLocked ? 'default' : 'pointer';
+    }
     if (nm) nm.textContent = p.name || 'Unnamed';
     if (rl) rl.textContent = p.role || 'No role assigned';
     if (gb) { gb.textContent = isOrchestrator ? 'Master Orchestrator' : (p.agent_group || 'Ungrouped'); var gc = {Orchestrator:'#ef4444',Strategy:'#6366f1',Creative:'#ec4899',Technical:'#06b6d4',Operations:'#f59e0b'}; gb.style.borderColor = isOrchestrator ? '#f59e0b' : (gc[p.agent_group] || 'var(--border)'); gb.style.color = isOrchestrator ? '#f59e0b' : (gc[p.agent_group] || 'var(--text2)'); }
@@ -23255,11 +23339,18 @@ function switchPdTab(tab) {
             + '<button class="btn btn-ghost btn-sm" onclick="_showSystemPrompt(\'' + p.id + '\')">View Core Prompt</button>'
           : '<button class="btn btn-ghost btn-sm" onclick="switchModule(\'overview\');chatWithPersona(\'' + p.id + '\')">Chat with Agent</button>'
             + '<button class="btn btn-ghost btn-sm" onclick="_showSystemPrompt(\'' + p.id + '\')">View System Prompt</button>'
-            + '<button class="btn btn-ghost btn-sm" onclick="switchPdTab(\'identity\')">Edit Identity</button>')
+            + '<button class="btn btn-ghost btn-sm" onclick="switchPdTab(\'identity\')">Edit Identity</button>'
+            + (p.is_temporary
+                ? '<button class="btn btn-ghost btn-sm" onclick="_setWorkerLifecycle(\'' + p.id + '\',false)">Promote to Persistent</button>'
+                : '<button class="btn btn-ghost btn-sm" onclick="_setWorkerLifecycle(\'' + p.id + '\',true)">Make Temporary</button>'))
       + '</div></div>'
       + (p.orchestrator_only
           ? '<div style="margin:0 0 16px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,#f59e0b 8%,transparent);font-size:12px;color:var(--text2)">Porter supervises work, creates or assigns workers, and validates completion. Porter does not execute substantive worker tasks directly.</div>'
-          : '')
+          : '<div style="margin:0 0 16px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2)">'
+            + '<strong>Lifecycle:</strong> ' + (p.is_temporary ? 'Temporary worker' : 'Persistent worker')
+            + ' · <strong>Control:</strong> ' + (p.managed_by_porter ? 'Porter-managed defaults' : 'Manual overrides')
+            + (p.appearance_style === 'minecraft' ? ' · <strong>Identity:</strong> Minecraft-style portrait' : '')
+            + '</div>')
       + '<div style="margin-bottom:16px"><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Assigned Tasks</div>'
       + '<div id="ov-tasks" style="font-size:12px;color:var(--text3)">Loading...</div></div>'
       + '<div style="margin-bottom:16px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:13px;font-weight:600;color:var(--text)">Project Context</span><span id="ov-project-name" style="font-size:11px;color:var(--accent)"></span></div>'
@@ -23869,7 +23960,7 @@ async function _doSquadSkillAssign(squadId, skillName) {
       var skills = ((current && current.skills) || []).map(function(s) { return s.name; });
       if (skills.indexOf(skillName) < 0) {
         skills.push(skillName);
-        await api('/api/personas/' + m.id + '/skills', {action: 'set', skills: skills});
+        await api('/api/personas/' + m.id + '/skills', {action: 'set', skills: skills, managed_by_porter: false});
         count++;
       }
     } catch(e) { console.error('Squad skill assign error for', m.id, e); }
@@ -23983,6 +24074,75 @@ function _pickEmoji(emoji) {
   if (picker) picker.style.display = 'none';
 }
 
+function _hashSeed(str) {
+  var h = 0;
+  str = String(str || '');
+  for (var i = 0; i < str.length; i++) h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function _fallbackAppearancePalette(p) {
+  var seeds = [
+    { skin:'#f1c27d', hair:'#2f4858', shirt:'#2b6cb0', accent:'#f6ad55', eyes:'#1a202c' },
+    { skin:'#e0ac69', hair:'#6b4f3a', shirt:'#2f855a', accent:'#f6e05e', eyes:'#111827' },
+    { skin:'#c68642', hair:'#1f2937', shirt:'#7c3aed', accent:'#f97316', eyes:'#0f172a' },
+    { skin:'#8d5524', hair:'#f8fafc', shirt:'#b45309', accent:'#22c55e', eyes:'#111827' }
+  ];
+  var idx = _hashSeed((p && p.name) + '|' + (p && p.role)) % seeds.length;
+  return seeds[idx];
+}
+
+function _personaAppearanceSpec(p) {
+  var spec = p && p.appearance_spec;
+  if (typeof spec === 'string') {
+    try { spec = JSON.parse(spec); } catch (e) { spec = {}; }
+  }
+  spec = spec || {};
+  spec.palette = spec.palette || _fallbackAppearancePalette(p);
+  return spec;
+}
+
+function _minecraftPortraitSvg(p, size) {
+  var spec = _personaAppearanceSpec(p);
+  var pal = spec.palette || _fallbackAppearancePalette(p);
+  var accessory = String(spec.accessory || '');
+  var temporary = !!(p && p.is_temporary);
+  var s = Number(size || 72);
+  var px = 10;
+  var bodyTop = 44;
+  var accent = temporary ? '#f59e0b' : (pal.accent || '#f6ad55');
+  var accessorySvg = '';
+  if (accessory === 'visor') accessorySvg = '<rect x="16" y="24" width="48" height="8" fill="' + accent + '" opacity="0.9"/>';
+  else if (accessory === 'headset') accessorySvg = '<rect x="10" y="22" width="6" height="22" rx="2" fill="' + accent + '"/><rect x="64" y="22" width="6" height="22" rx="2" fill="' + accent + '"/>';
+  else if (accessory === 'helmet') accessorySvg = '<rect x="10" y="10" width="60" height="16" rx="4" fill="' + accent + '"/>';
+  else if (accessory === 'headband') accessorySvg = '<rect x="10" y="20" width="60" height="8" fill="' + accent + '"/>';
+  else if (accessory === 'monocle') accessorySvg = '<rect x="48" y="30" width="12" height="12" rx="6" fill="none" stroke="' + accent + '" stroke-width="4"/>';
+  var svg = ''
+    + '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="' + s + '" height="' + s + '" shape-rendering="crispEdges">'
+    + '<rect width="80" height="80" rx="10" fill="#101828"/>'
+    + '<rect x="8" y="8" width="64" height="64" rx="8" fill="#1f2937"/>'
+    + '<rect x="18" y="14" width="44" height="14" fill="' + (pal.hair || '#2f4858') + '"/>'
+    + '<rect x="16" y="20" width="48" height="28" fill="' + (pal.skin || '#f1c27d') + '"/>'
+    + '<rect x="24" y="30" width="6" height="6" fill="' + (pal.eyes || '#111827') + '"/>'
+    + '<rect x="50" y="30" width="6" height="6" fill="' + (pal.eyes || '#111827') + '"/>'
+    + '<rect x="30" y="40" width="20" height="4" fill="#7c2d12" opacity="0.65"/>'
+    + accessorySvg
+    + '<rect x="18" y="' + bodyTop + '" width="44" height="22" fill="' + (pal.shirt || '#2b6cb0') + '"/>'
+    + '<rect x="18" y="' + bodyTop + '" width="8" height="22" fill="' + accent + '" opacity="0.85"/>'
+    + '<rect x="54" y="' + bodyTop + '" width="8" height="22" fill="' + accent + '" opacity="0.85"/>'
+    + '<rect x="34" y="' + bodyTop + '" width="12" height="22" fill="#111827" opacity="0.35"/>'
+    + (temporary ? '<rect x="24" y="58" width="32" height="8" fill="#f59e0b"/>' : '')
+    + '</svg>';
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
+function _personaAvatarMarkup(p, size) {
+  if (p && p.appearance_style === 'minecraft') {
+    return '<img src="' + _minecraftPortraitSvg(p, size || 72) + '" alt="' + escHtml((p && p.name) || 'worker') + '" style="width:' + (size || 72) + 'px;height:' + (size || 72) + 'px;display:block;image-rendering:pixelated;border-radius:10px">';
+  }
+  return escHtml((p && p.avatar) || '🤖');
+}
+
 async function _setHookProfile(pid, profile) {
   var r = await api('/api/personas/' + pid, { hook_profile: profile });
   if (r && r.ok) {
@@ -24011,6 +24171,19 @@ async function _saveAgentConfig() {
   } else {
     _showToast('Failed to save routing');
   }
+}
+
+async function _setWorkerLifecycle(pid, makeTemporary) {
+  try {
+    var r = await api('/api/personas/' + pid, { is_temporary: !!makeTemporary });
+    if (r && r.ok) {
+      toast(makeTemporary ? 'Worker marked temporary' : 'Worker promoted to persistent', 'ok');
+      await loadPersonas();
+      setTimeout(function() { selectPersona(pid); }, 150);
+    } else {
+      toast((r && r.error) || 'Failed to update lifecycle', 'err');
+    }
+  } catch (e) { toast('Failed to update lifecycle', 'err'); }
 }
 
 async function _loadAgentEvalResults(pid) {
@@ -24128,6 +24301,17 @@ function openPersonaWizard() {
   });
   const backendSel = document.getElementById('wiz-backend');
   if (backendSel) backendSel.value = '';
+  const temporaryEl = document.getElementById('wiz-temporary');
+  if (temporaryEl) temporaryEl.checked = false;
+  const squadSel = document.getElementById('wiz-squad');
+  if (squadSel) {
+    var squadOptions = '<option value="">No squad yet</option>';
+    (_squads || []).forEach(function(s) {
+      squadOptions += '<option value="' + escHtml(s.id) + '">' + escHtml(s.name) + '</option>';
+    });
+    squadSel.innerHTML = squadOptions;
+    squadSel.value = '';
+  }
   // Build emoji grid
   const grid = document.getElementById('wiz-emoji-grid');
   grid.innerHTML = PERSONA_EMOJIS.map(e =>
@@ -24236,20 +24420,27 @@ async function _wizAiSuggest() {
 async function createPersonaFromWizard() {
   const name = (document.getElementById('wiz-name').value || '').trim();
   if (!name) { porterAlert('Missing Field', 'Worker name is required.'); _wizCurrentStep = 1; updateWizUI(); return; }
+  const role = document.getElementById('wiz-role').value || '';
+  const isTemporary = !!document.getElementById('wiz-temporary')?.checked;
+  const squadId = document.getElementById('wiz-squad')?.value || '';
   const data = {
     name,
-    role: document.getElementById('wiz-role').value || '',
+    role: role,
     avatar: _wizSelectedEmoji,
     preferred_backend: document.getElementById('wiz-backend').value || '',
     personality: document.getElementById('wiz-personality').value || '',
     focus: document.getElementById('wiz-focus').value || '',
     style: document.getElementById('wiz-style').value || '',
+    is_temporary: isTemporary,
+    squad_id: squadId,
+    appearance_style: 'minecraft',
   };
   const r = await api('/api/personas', data);
   if (r.ok) {
     var starterCount = ((r.persona && r.persona.starter_skills) || []).length;
-    _showToast('Worker "' + name + '" created' + (starterCount ? ' with ' + starterCount + ' Porter-selected starter skills' : '') + '!');
+    _showToast((isTemporary ? 'Temporary' : 'Persistent') + ' worker "' + name + '" created' + (starterCount ? ' with ' + starterCount + ' Porter-selected starter skills' : '') + '!');
     closePersonaWizard();
+    await loadSquads();
     loadPersonas();
   } else {
     porterAlert('Creation Failed', r.error || 'Unknown error');
@@ -30640,7 +30831,10 @@ def _persona_create(data):
     is_temporary = 1 if data.get("is_temporary") else 0
     managed_by_porter = 0 if data.get("managed_by_porter") is False else 1
     appearance_style = str(data.get("appearance_style", "") or "")
-    appearance_spec = json.dumps(data.get("appearance_spec", {}))
+    appearance_spec_obj = data.get("appearance_spec", {}) or {}
+    if appearance_style == "minecraft" and not appearance_spec_obj:
+        appearance_spec_obj = _default_appearance_spec(name, role, bool(is_temporary))
+    appearance_spec = json.dumps(appearance_spec_obj)
     from datetime import datetime, timezone as _tz
     now_iso = datetime.now(_tz.utc).isoformat()
 
@@ -34584,7 +34778,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.48"})
+            self.reply_json({"v": "0.30.49"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -34746,7 +34940,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.48"
+                health["porter_version"] = "0.30.49"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -36642,7 +36836,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.48'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.49'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39014,6 +39208,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
             result = _persona_create(data)
             if result:
+                squad_id = str(data.get("squad_id", "") or "").strip()
+                if squad_id:
+                    try:
+                        conn = _db_conn()
+                        conn.execute("INSERT OR IGNORE INTO squad_members (squad_id, persona_id) VALUES (?,?)", (squad_id, result["id"]))
+                        conn.commit()
+                        conn.close()
+                    except Exception as e:
+                        log.warning("Could not add %s to squad %s: %s", result["id"], squad_id, e)
                 _emit_event("persona:created", {"id": result["id"], "name": name})
                 mlog.emit("info", "persona", "persona.create", f"Created persona: {name}", persona_id=result["id"])
                 self.reply_json({"ok": True, "persona": result})
@@ -41526,7 +41729,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.48 ready (localhost only)")
+    print(f"\n  Porter v0.30.49 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
