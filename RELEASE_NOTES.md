@@ -1,5 +1,11 @@
 # Porter Release Notes
 
+## v0.30.64 (2026-03-10)
+
+- Agents now read as a project-first cast instead of exposing squads in the main Porter flow, while backend squad plumbing remains intact behind the scenes for compatibility.
+- Guided `Create Worker` and `Create Project` sessions now show an explicit `Exit Setup` control so users can abandon a creation sequence cleanly instead of starting another one on top of it.
+- Porter detail `Memory`, `Skills`, and `Activity` now seed stronger preview states when live data is sparse, and the fallback worker wizard no longer asks about squads.
+
 ## v0.30.63 (2026-03-10)
 
 - Porter detail page polish: `Memory` is back as the tab label, the send control now better matches the page language, and Porter only animates when he is actually busy.

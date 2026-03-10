@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.63 — Porter detail polish and previews"""
+"""Porter v0.30.64 — Porter-led creation exits and project-first agents"""
 
 
 import email
@@ -7881,7 +7881,7 @@ def _ensure_porter_persona() -> None:
         "Mission: Convert user intent into correct, efficient, auditable outcomes.\n\n"
         "Authority:\n"
         "- Can create or retire temporary workers.\n"
-        "- Can assign squads, workers, runtimes, and skills.\n"
+        "- Can assign workers, projects, runtimes, and skills.\n"
         "- Cannot act as a normal execution worker for substantive tasks.\n"
     )
     _porter_memory = (
@@ -9849,9 +9849,10 @@ body.density-compact .file-name { padding: 6px 0; }
   align-items:flex-end;
   justify-content:center;
   transform-origin:50% 100%;
-  animation:pixel-walk 1.2s steps(2) infinite;
+  animation:none;
   filter:drop-shadow(0 14px 22px rgba(0,0,0,.18));
 }
+.persona-card.is-busy .persona-figure { animation:pixel-walk 1.2s steps(2) infinite; }
 .persona-card.orchestrator .persona-figure { animation:none; }
 .persona-card.orchestrator.is-busy .persona-figure { animation:pixel-hero 1.8s ease-in-out infinite; }
 .persona-card.selected .persona-figure { filter:drop-shadow(0 20px 30px rgba(0,0,0,.24)); }
@@ -9887,7 +9888,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .agent-identity-role { font-size:13px; color:var(--text3); margin-top:4px; }
 .agent-identity-badges { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
 .agent-badge { font-size:10px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:var(--bg); color:var(--text2); }
-.agent-detail-tabs { display:flex; align-items:center; gap:6px; align-self:flex-start; border-bottom:none; flex-wrap:wrap; }
+.agent-detail-tabs { display:inline-flex; align-items:center; gap:6px; align-self:flex-start; border-bottom:none; flex-wrap:wrap; }
 .agent-detail-tabs .pd-tab { padding:8px 16px; border-radius:999px; border:1px solid transparent; }
 .agent-detail-content { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px; min-height:0; }
 
@@ -10340,7 +10341,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.63</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.64</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10501,7 +10502,6 @@ input[type="number"].settings-input { min-width: 60px; }
 
     <!-- Agent Grid -->
     <div id="agents-grid-view">
-      <div id="squad-chips-row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center"></div>
       <div id="persona-org-chart" style="margin-bottom:16px">
         <div id="persona-cards-row" class="persona-cards-row">
           <div class="loading-indicator">Loading personas...</div>
@@ -10639,12 +10639,6 @@ input[type="number"].settings-input { min-width: 60px; }
             <input type="checkbox" id="wiz-temporary">
             Create as a temporary worker Porter can retire after the task
           </label>
-          <div style="margin-top:10px">
-            <label class="wizard-label" style="margin-bottom:6px">Assign to squad now? (optional)</label>
-            <select id="wiz-squad" class="settings-input">
-              <option value="">No squad yet</option>
-            </select>
-          </div>
         </div>
         <div class="wizard-step" data-step="5">
           <label class="wizard-label">Describe their personality in a few words</label>
@@ -11736,6 +11730,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.64', date:'2026-03-10', notes:["Agents now present a project-first cast with no visible squad layer, guided creation flows have an explicit Exit Setup control, fallback worker creation no longer asks for squads, and Porter detail Memory/Skills/Activity render stronger preview states while live data is still sparse"] },
   { ver:'v0.30.63', date:'2026-03-10', notes:["Porter detail polish: the tab rail now feels more intentional, Memory is restored as the tab label, Porter only animates when busy, the detail send control now sits closer to the page language, and Porter Skills/Activity now render reviewable preview states when live data is still sparse"] },
   { ver:'v0.30.62', date:'2026-03-10', notes:["Concept and directive mutations now emit structured memory events for operator telemetry, and the runtime design briefs now map the next proper Memory V2 and PorterHQ logging architecture"] },
   { ver:'v0.30.61', date:'2026-03-10', notes:["Porter's detail tabs no longer drag a full divider through empty space, the creation actions now open guided Porter-led worker/squad/project sessions inside the detail chat, Concepts replaces the old Memory label with a clearer directive/concept view, and squad/project mutations now emit richer structured logs for operator visibility"] },
@@ -16267,7 +16262,6 @@ function _askPorterToCreate(kind) {
   if (!input) return;
   var prompts = {
     worker: 'Porter, create the right worker for this job. Define the role, decide whether it should be temporary or persistent, assign the needed skills, and keep the roster clean.',
-    squad: 'Porter, create a squad only if the work truly needs one. Choose the structure, assign workers intelligently, and keep the setup lean.',
     project: 'Porter, create a project with the right scope, description, and structure so future workers can be assigned cleanly.'
   };
   var prompt = prompts[kind] || prompts.worker;
@@ -16293,7 +16287,7 @@ function _pdChatGetState(pid) {
 }
 
 function _pdCreationTypeLabel(kind) {
-  return kind === 'project' ? 'project' : (kind === 'squad' ? 'squad' : 'worker');
+  return kind === 'project' ? 'project' : 'worker';
 }
 
 function _pdCreationCancelRequested(text) {
@@ -16332,32 +16326,21 @@ function _pdFindNamedItem(text, items) {
 }
 
 async function _pdCreationLoadContext() {
-  var [squadsResp, projectsResp] = await Promise.all([
-    api('/api/squads').catch(function() { return { squads: [] }; }),
+  var [projectsResp] = await Promise.all([
     api('/api/projects').catch(function() { return { projects: [] }; })
   ]);
   return {
-    squads: (squadsResp && squadsResp.squads) || [],
     projects: (projectsResp && projectsResp.projects) || [],
   };
 }
 
 function _pdCreationPrompt(flow) {
-  var ctx = flow.context || { squads: [], projects: [] };
-  var squadNames = (ctx.squads || []).map(function(s) { return s.name; });
+  var ctx = flow.context || { projects: [] };
   var projectNames = (ctx.projects || []).map(function(p) { return p.name; });
   if (flow.kind === 'worker') {
     if (flow.stage === 0) return 'Tell Porter what this worker should own. A short mission is enough, for example: "Handle QA for the Agents redesign."';
     if (flow.stage === 1) return 'Should this worker be temporary or persistent?';
-    if (flow.stage === 2) return 'Should Porter place this worker into an existing squad or keep it as a direct report?'
-      + (squadNames.length ? '\nAvailable squads: ' + squadNames.join(', ') : '\nNo squads exist yet.')
-      + (projectNames.length ? '\nMention a project too if one applies: ' + projectNames.join(', ') : '');
-    return 'Reply `Create it` to proceed or tell Porter what to change.';
-  }
-  if (flow.kind === 'squad') {
-    if (flow.stage === 0) return 'What mission should this squad own?';
-    if (flow.stage === 1) return 'Will this squad start empty, or should Porter expect to create/attach workers to it right away?';
-    if (flow.stage === 2) return 'Should this squad be aligned to an existing project?'
+    if (flow.stage === 2) return 'Should Porter attach this worker to an existing project, or leave it unassigned for now?'
       + (projectNames.length ? '\nProjects: ' + projectNames.join(', ') : '\nNo projects exist yet.');
     return 'Reply `Create it` to proceed or tell Porter what to change.';
   }
@@ -16374,18 +16357,9 @@ function _pdCreationProposal(flow) {
       + 'Name: ' + (draft.name || 'Specialist') + '\n'
       + 'Role: ' + (draft.role || 'Specialist Worker') + '\n'
       + 'Lifecycle: ' + (draft.is_temporary ? 'Temporary' : 'Persistent') + '\n'
-      + 'Placement: ' + (draft.squad_name || 'Direct report') + '\n'
       + 'Project: ' + (draft.project_name || 'None') + '\n'
       + 'Mission: ' + (draft.brief || 'Focused execution lane') + '\n\n'
       + 'Reply `Create it` to create this worker, or tell Porter what to change.';
-  }
-  if (flow.kind === 'squad') {
-    return 'Proposed squad:\n'
-      + 'Name: ' + (draft.name || 'New Squad') + '\n'
-      + 'Mission: ' + (draft.description || 'Focused team mission') + '\n'
-      + 'Starting roster: ' + (draft.roster || 'Empty for now') + '\n'
-      + 'Project: ' + (draft.project_name || 'None') + '\n\n'
-      + 'Reply `Create it` to create this squad, or tell Porter what to change.';
   }
   return 'Proposed project:\n'
     + 'Name: ' + (draft.name || 'New Project') + '\n'
@@ -16399,6 +16373,16 @@ async function _pdChatStartCreation(kind) {
   if (!p) return;
   switchPdTab('overview');
   var state = _pdChatGetState(p.id);
+  if (state.flow) {
+    state.messages.push({
+      role: 'assistant',
+      label: p.name || 'Porter',
+      content: 'Porter is already guiding a ' + _pdCreationTypeLabel(state.flow.kind) + ' setup. Exit the current sequence first if you want to start over.',
+      meta: 'guided creation'
+    });
+    _pdChatRender(p.id);
+    return;
+  }
   var ctx = await _pdCreationLoadContext();
   state.flow = { kind: kind, stage: 0, draft: {}, context: ctx };
   state.messages.push({
@@ -16416,6 +16400,21 @@ async function _pdChatStartCreation(kind) {
   }, 30);
 }
 
+function _pdCancelCreation() {
+  var p = window._selectedPersona;
+  if (!p) return;
+  var state = _pdChatGetState(p.id);
+  if (!state.flow) return;
+  state.flow = null;
+  state.messages.push({
+    role: 'assistant',
+    label: p.name || 'Porter',
+    content: 'Creation cancelled. Porter left the roster unchanged.',
+    meta: 'guided creation'
+  });
+  _pdChatRender(p.id);
+}
+
 async function _pdCreationExecute(p, flow) {
   var draft = flow.draft || {};
   if (flow.kind === 'worker') {
@@ -16423,7 +16422,6 @@ async function _pdCreationExecute(p, flow) {
       name: draft.name || _pdNameFromRole(draft.role),
       role: draft.role || 'Specialist Worker',
       is_temporary: !!draft.is_temporary,
-      squad_id: draft.squad_id || '',
       managed_by_porter: true,
       appearance_style: 'minecraft',
     };
@@ -16433,14 +16431,6 @@ async function _pdCreationExecute(p, flow) {
       await api('/api/projects', { action: 'assign_agent', project_id: draft.project_id, persona_id: created.persona.id }).catch(function() { return null; });
     }
     return 'Worker created: ' + (created.persona.name || payload.name) + '.';
-  }
-  if (flow.kind === 'squad') {
-    var squadRes = await api('/api/squads', { action: 'create', name: draft.name || 'New Squad', color: draft.color || '#f59e0b', description: draft.description || '' });
-    if (!(squadRes && squadRes.ok && squadRes.id)) throw new Error((squadRes && squadRes.error) || 'Squad creation failed');
-    if (draft.project_id) {
-      await api('/api/squads', { action: 'update', id: squadRes.id, project_id: draft.project_id }).catch(function() { return null; });
-    }
-    return 'Squad created: ' + (draft.name || 'New Squad') + '.';
   }
   var projectRes = await api('/api/projects', {
     action: 'create',
@@ -16495,29 +16485,9 @@ async function _pdHandleCreationReply(p, state, text) {
       flow.stage = 2;
       state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
     } else if (flow.stage === 2) {
-      var squad = _pdFindNamedItem(text, (flow.context || {}).squads || []);
       var project = _pdFindNamedItem(text, (flow.context || {}).projects || []);
-      draft.squad_id = squad ? squad.id : '';
-      draft.squad_name = squad ? squad.name : '';
       draft.project_id = project ? project.id : '';
       draft.project_name = project ? project.name : '';
-      flow.stage = 3;
-      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationProposal(flow), meta: 'proposal' });
-    }
-  } else if (flow.kind === 'squad') {
-    if (flow.stage === 0) {
-      draft.description = text;
-      draft.name = /called|named/i.test(lower) ? text.split(/\bcalled\b|\bnamed\b/i).pop().trim() : (_pdNameFromRole(_pdRoleFromBrief(text)).replace(/\bWorker\b/i, '').trim() + ' Squad');
-      flow.stage = 1;
-      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
-    } else if (flow.stage === 1) {
-      draft.roster = text;
-      flow.stage = 2;
-      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
-    } else if (flow.stage === 2) {
-      var proj = _pdFindNamedItem(text, (flow.context || {}).projects || []);
-      draft.project_id = proj ? proj.id : '';
-      draft.project_name = proj ? proj.name : '';
       flow.stage = 3;
       state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationProposal(flow), meta: 'proposal' });
     }
@@ -16548,7 +16518,14 @@ function _pdChatRender(pid) {
     panel.innerHTML = '<div style="padding:18px;color:var(--text3);font-size:12px">Start a dedicated chat here. Porter can orchestrate from this workspace, and workers can be directed in their own lane without leaving the detail view.</div>';
     return;
   }
-  panel.innerHTML = state.messages.map(function(m) {
+  var flowBanner = '';
+  if (state.flow) {
+    flowBanner = '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--accent) 24%, var(--border));border-radius:16px;background:color-mix(in srgb,var(--accent) 7%, transparent)">'
+      + '<div style="min-width:0"><div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Guided Creation</div><div style="font-size:12px;color:var(--text2);margin-top:3px">Porter is guiding a ' + escHtml(_pdCreationTypeLabel(state.flow.kind)) + ' setup. Exit this sequence before starting another one.</div></div>'
+      + '<button class="btn btn-ghost btn-sm" onclick="_pdCancelCreation()" style="margin-left:auto;font-size:11px;border-radius:999px;padding:6px 12px">Exit Setup</button>'
+      + '</div>';
+  }
+  panel.innerHTML = flowBanner + state.messages.map(function(m) {
     var isUser = m.role === 'user';
     var isErr = m.role === 'error';
     var bg = isUser ? 'color-mix(in srgb,var(--accent) 10%, var(--surface))' : isErr ? 'color-mix(in srgb,#ef4444 6%, var(--surface))' : 'color-mix(in srgb,var(--surface) 88%, transparent)';
@@ -22828,7 +22805,6 @@ async function loadPersonas() {
         }
       } catch(x) {}
       renderPersonaOrg();
-      loadSquads();
       // v0.29.26 — Loading timeout for agent grid
       withLoadTimeout('persona-cards-row', 'loadPersonas()', 8000);
       populateChatPersonaBar();
@@ -23266,33 +23242,15 @@ async function loadSquads() {
   try {
     var data = await api('/api/squads');
     _squads = (data && data.squads) || [];
-    renderSquadChips();
   } catch(e) { console.error('loadSquads', e); }
 }
 
 function renderSquadChips() {
-  var row = document.getElementById('squad-chips-row');
-  if (!row) return;
-  if (!_squads.length) {
-    row.style.display = 'none';
-    row.innerHTML = '';
-    return;
-  }
-  row.style.display = 'flex';
-  var chips = '<span style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-right:4px">Squads</span>';
-  if (_activeSquadFilter) {
-    chips += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 11px;border-radius:12px" onclick="_filterSquad(null)">Show Full Cast</button>';
-  }
-  _squads.forEach(function(s) {
-    var active = _activeSquadFilter === s.id;
-    chips += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 11px;border-radius:12px;border:1px solid ' + s.color + ';color:' + (active ? '#fff' : s.color) + ';' + (active ? 'background:' + s.color : '') + '" onclick="_filterSquad(\'' + s.id + '\')">' + escHtml(s.name) + ' <span style="font-size:9px;opacity:0.7">' + s.member_count + '</span></button>';
-  });
-  row.innerHTML = chips;
+  return;
 }
 
 function _filterSquad(squadId) {
-  _activeSquadFilter = _activeSquadFilter === squadId ? null : squadId;
-  renderSquadChips();
+  _activeSquadFilter = null;
   renderPersonaOrg();
 }
 
@@ -23561,7 +23519,6 @@ function renderPersonaOrg() {
     row.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:18px 12px">No workers yet. Ask Porter to create the right worker when the work demands it.</div>';
     return;
   }
-  const groupColors = { Orchestrator:'#ef4444', Strategy:'#6366f1', Creative:'#ec4899', Technical:'#06b6d4', Operations:'#f59e0b' };
   // Sort by sort_order then name
   var sorted = _personas.slice().sort(function(a, b) {
     var oa = typeof a.sort_order === 'number' ? a.sort_order : 50;
@@ -23569,20 +23526,6 @@ function renderPersonaOrg() {
     if (oa !== ob) return oa - ob;
     return (a.name || '').localeCompare(b.name || '');
   });
-  // Build squad membership map: persona_id -> [squad objects]
-  var pSquads = {};
-  _squads.forEach(function(s) {
-    (s.members || []).forEach(function(m) {
-      if (!pSquads[m.id]) pSquads[m.id] = [];
-      pSquads[m.id].push(s);
-    });
-  });
-  // Apply squad filter
-  if (_activeSquadFilter) {
-    sorted = sorted.filter(function(p) {
-      return (pSquads[p.id] || []).some(function(s) { return s.id === _activeSquadFilter; });
-    });
-  }
 
   // Card renderer
   function cardHtml(p) {
@@ -23595,46 +23538,7 @@ function renderPersonaOrg() {
       + '<div class="persona-card-role">' + escHtml(p.role || (isOrch ? 'Master Orchestrator' : 'Worker')) + '</div>'
       + '</div>';
   }
-  // Group by squad — show grouped sections
-  if (!_activeSquadFilter) {
-    var html = '';
-    var rendered = {};
-    _squads.forEach(function(sq) {
-      var members = sorted.filter(function(p) {
-        return (pSquads[p.id] || []).some(function(s) { return s.id === sq.id; });
-      });
-      if (!members.length) return;
-      html += '<div style="margin-bottom:14px">'
-        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;padding:4px 0 7px 0;border-bottom:1px solid ' + sq.color + '">'
-        + '<span style="width:9px;height:9px;border-radius:50%;background:' + sq.color + ';flex-shrink:0"></span>'
-        + '<span style="font-size:13px;font-weight:600;color:var(--text)">' + escHtml(sq.name) + '</span>'
-        + '<button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;margin-left:auto" onclick="_editSquad(\'' + sq.id + '\')" title="Configure squad">⚙</button>'
-        + '</div>'
-        + '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:2px 0">';
-      // Mark leaders for this squad
-      // Mark leaders for this squad
-      var leaderIds = {};
-      (sq.members || []).forEach(function(m) { if (m.squad_role === 'leader') leaderIds[m.id] = true; });
-      members.forEach(function(p) {
-        p._isLeader = !!leaderIds[p.id];
-        html += cardHtml(p);
-        rendered[p.id] = true;
-        p._isLeader = false;
-      });
-      html += '</div></div>';
-    });
-    // Workers not attached to a squad
-    var unassigned = sorted.filter(function(p) { return !rendered[p.id]; });
-    if (unassigned.length) {
-      html += '<div style="margin-bottom:16px"><div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">';
-      unassigned.forEach(function(p) { html += cardHtml(p); });
-      html += '</div></div>';
-    }
-    row.innerHTML = html;
-  } else {
-    // Single squad filtered — flat list
-    row.innerHTML = '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">' + sorted.map(cardHtml).join('') + '</div>';
-  }
+  row.innerHTML = '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">' + sorted.map(cardHtml).join('') + '</div>';
 }
 
 // ── Agent card drag-and-drop (v0.29.31 — pointer-based, not HTML5 DnD) ──
@@ -23872,7 +23776,7 @@ async function selectPersona(id) {
     if (spBtn) spBtn.textContent = isOrchestrator ? 'Who Is Porter' : 'System Prompt';
     if (tabActions) {
       tabActions.innerHTML = isOrchestrator
-        ? '<button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'worker\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Worker</button><button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'squad\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Squad</button><button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'project\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Project</button>'
+        ? '<button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'worker\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Worker</button><button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'project\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Project</button>'
         : '';
     }
     document.querySelectorAll('.pd-tab').forEach(function(btn) {
@@ -23943,9 +23847,9 @@ function switchPdTab(tab) {
     content.innerHTML = '<section style="display:flex;flex-direction:column;height:min(calc(100vh - 330px), 68vh);max-height:calc(100vh - 330px);min-height:420px;padding:4px 2px 2px;background:transparent;box-sizing:border-box">'
       + '<div id="pd-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 14px"></div>'
       + '<div style="margin-top:8px;padding-top:4px">'
-      + '<div style="display:flex;gap:10px;align-items:flex-end;padding:10px;border:1px solid color-mix(in srgb,var(--border) 44%, transparent);border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 99%, transparent),color-mix(in srgb,var(--bg) 99%, transparent))">'
-      + '<textarea id="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate, create workers, or direct a squad...' : 'Send a directive to this worker...') + '" rows="3" onkeydown="_pdChatKey(event)" style="flex:1;min-height:70px;max-height:180px;resize:vertical;background:transparent;color:var(--text);border:none;outline:none;border-radius:14px;padding:10px 10px 8px;font-size:13px;line-height:1.5"></textarea>'
-      + '<button onclick="_pdChatSend()" style="align-self:stretch;min-width:126px;border:1px solid color-mix(in srgb,#f59e0b 34%, var(--border));border-radius:14px;padding:0 14px;background:linear-gradient(180deg,color-mix(in srgb,#f59e0b 20%, var(--surface)),color-mix(in srgb,#f59e0b 10%, var(--bg)));color:#f6c66a;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)">Dispatch</button>'
+      + '<div style="display:flex;gap:10px;align-items:flex-end;padding:10px 12px;border:1px solid color-mix(in srgb,var(--border) 26%, transparent);border-radius:20px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 97%, transparent),color-mix(in srgb,var(--bg) 98%, transparent));box-shadow:inset 0 1px 0 rgba(255,255,255,.03)">'
+      + '<textarea id="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate work, create workers, or shape a project...' : 'Send a directive to this worker...') + '" rows="3" onkeydown="_pdChatKey(event)" style="flex:1;min-height:70px;max-height:180px;resize:vertical;background:transparent;color:var(--text);border:none;outline:none;border-radius:14px;padding:10px 8px 8px;font-size:13px;line-height:1.5"></textarea>'
+      + '<button onclick="_pdChatSend()" style="align-self:stretch;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:118px;border:1px solid color-mix(in srgb,#f59e0b 22%, transparent);border-radius:16px;padding:0 16px;background:linear-gradient(180deg,color-mix(in srgb,#f59e0b 16%, var(--surface)),color-mix(in srgb,#f59e0b 8%, var(--bg)));color:#f7cf84;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;box-shadow:0 10px 20px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.05)">Send <span style=\"font-size:14px;line-height:1\">↗</span></button>'
       + '</div></div></section>';
     _pdChatRender(p.id);
   } else if (tab === 'identity') {
@@ -24083,6 +23987,20 @@ function switchPdTab(tab) {
           var profile = (data && data.profile) || {};
           var core = profile.core || [];
           var reserve = profile.reserve || [];
+          if (p.orchestrator_only && !core.length && !reserve.length) {
+            core = [
+              { name:'GitHub', purpose:'Repository and release coordination across the active project surface.', installed:true },
+              { name:'Healthcheck', purpose:'Runtime and environment verification before and after worker dispatches.', installed:true },
+              { name:'Gemini', purpose:'Deep research lane for long-context investigation and synthesis.', installed:true },
+              { name:'tmux', purpose:'Multi-worker terminal supervision when Porter needs to monitor parallel lanes.', installed:true },
+            ];
+            reserve = [
+              { name:'Skill Creator' },
+              { name:'Coding Agent' },
+              { name:'GoG' },
+              { name:'Weather' },
+            ];
+          }
           var html = '<div style="display:flex;flex-direction:column;gap:16px">'
             + '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Porter Skills</div><div style="font-size:13px;color:var(--text2);line-height:1.6">Porter does not need every available skill. He keeps a tight orchestrator loadout and uses workers for deep execution.</div></div>';
           if (core.length) {
@@ -24114,7 +24032,7 @@ function switchPdTab(tab) {
     content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div style="font-size:12px;color:var(--text3)">Loading skills...</div></div>';
     _loadPersonaSkills(p.id);
   } else if (tab === 'memory') {
-    content.innerHTML = '<div class="loading-indicator">Loading concepts...</div>';
+    content.innerHTML = '<div class="loading-indicator">Loading memory...</div>';
     (async function() {
       try {
         var facts = [];
@@ -24128,8 +24046,16 @@ function switchPdTab(tab) {
           var r = await api('/api/cortex/memories?scope=agent&scope_id=' + p.id + '&limit=50');
           facts = (r && r.memories) || [];
         }
+        if (!facts.length && p.orchestrator_only) {
+          facts = [
+            { id:'preview-memory-1', fact:'Prefer Porter-led creation sessions over raw forms when adding new workers or projects.', confidence:0.92, importance:9, evidence_count:6, memory_type:'directive' },
+            { id:'preview-memory-2', fact:'Keep Porter orchestrator-only. Substantive implementation belongs to workers.', confidence:0.98, importance:10, evidence_count:9, memory_type:'directive' },
+            { id:'preview-memory-3', fact:'Projects should replace visible squads as the main organizational construct in the product UI.', confidence:0.88, importance:8, evidence_count:4, memory_type:'semantic' },
+            { id:'preview-memory-4', fact:'Minecraft-style pixel identity is part of Porter’s product character and should feel proprietary.', confidence:0.74, importance:7, evidence_count:3, memory_type:'semantic' },
+          ];
+        }
         if (!facts.length) {
-          content.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px">No concepts have been distilled yet. Porter will surface durable directives and strategic truths here as they stabilize.</div>';
+          content.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px">No memory has been distilled yet. Porter will surface durable directives and strategic truths here as they stabilize.</div>';
           return;
         }
         var directives = facts.filter(function(f) {
@@ -24139,7 +24065,8 @@ function switchPdTab(tab) {
         var concepts = facts.filter(function(f) { return directives.indexOf(f) < 0; });
         var reviewed = facts.filter(function(f) { return Number(f.confidence || 0) >= 0.7; }).length;
         var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'
-          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Total Concepts</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + facts.length + '</div></div>'
+          + (p.orchestrator_only && String(facts[0].id || '').indexOf('preview-memory-') === 0 ? '<div style="grid-column:1/-1;padding:12px 14px;border:1px dashed color-mix(in srgb,var(--accent) 32%, var(--border));border-radius:16px;background:color-mix(in srgb,var(--accent) 5%, transparent);font-size:12px;color:var(--text2)">Preview memory shown because Porter does not have enough confirmed memory yet. As durable patterns accumulate, this pane will replace these placeholders with live directives and learned truths.</div>' : '')
+          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Total Memory</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + facts.length + '</div></div>'
           + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Directives</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + directives.length + '</div></div>'
           + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">High Trust</div><div style="font-size:26px;font-weight:800;color:#22c55e;margin-top:4px">' + reviewed + '</div></div>'
           + '</div>';
@@ -24152,18 +24079,18 @@ function switchPdTab(tab) {
             + '<div style="display:flex;gap:12px;align-items:center;margin-top:10px;font-size:10px;color:var(--text3)">'
             + '<span>' + (f.evidence_count || 0) + ' evidence</span>'
             + '<span>' + (f.memory_type || 'semantic') + '</span>'
-            + '<button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" onclick="_dismissDirective(\'' + f.id + '\')">Dismiss</button>'
+            + (String(f.id || '').indexOf('preview-memory-') === 0 ? '<span style="margin-left:auto;font-size:10px;color:var(--text3)">Preview</span>' : '<button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" onclick="_dismissDirective(\'' + f.id + '\')">Dismiss</button>')
             + '</div></div>';
         }
         html += '<div style="display:flex;flex-direction:column;gap:16px">';
         html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Operating Directives</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">' + directives.map(function(f) { return _conceptCard(f, 'directive'); }).join('') + '</div></section>';
         if (concepts.length) {
-          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Strategic Concepts</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">' + concepts.map(function(f) { return _conceptCard(f, 'concept'); }).join('') + '</div></section>';
+          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Learned Context</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">' + concepts.map(function(f) { return _conceptCard(f, 'concept'); }).join('') + '</div></section>';
         }
         html += '</div>';
         content.innerHTML = html;
       } catch(e) {
-        content.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load concepts</div>';
+        content.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load memory</div>';
       }
     })();
   } else if (tab === 'config') {
@@ -24999,7 +24926,6 @@ async function createPersonaFromWizard() {
   if (!name) { porterAlert('Missing Field', 'Worker name is required.'); _wizCurrentStep = 1; updateWizUI(); return; }
   const role = document.getElementById('wiz-role').value || '';
   const isTemporary = !!document.getElementById('wiz-temporary')?.checked;
-  const squadId = document.getElementById('wiz-squad')?.value || '';
   const data = {
     name,
     role: role,
@@ -25009,7 +24935,6 @@ async function createPersonaFromWizard() {
     focus: document.getElementById('wiz-focus').value || '',
     style: document.getElementById('wiz-style').value || '',
     is_temporary: isTemporary,
-    squad_id: squadId,
     appearance_style: 'minecraft',
   };
   const r = await api('/api/personas', data);
@@ -25017,7 +24942,6 @@ async function createPersonaFromWizard() {
     var starterCount = ((r.persona && r.persona.starter_skills) || []).length;
     _showToast((isTemporary ? 'Temporary' : 'Persistent') + ' worker "' + name + '" created' + (starterCount ? ' with ' + starterCount + ' Porter-selected starter skills' : '') + '!');
     closePersonaWizard();
-    await loadSquads();
     loadPersonas();
   } else {
     porterAlert('Creation Failed', r.error || 'Unknown error');
@@ -35359,7 +35283,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.63"})
+            self.reply_json({"v": "0.30.64"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35521,7 +35445,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.63"
+                health["porter_version"] = "0.30.64"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37417,7 +37341,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.63'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.64'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42342,7 +42266,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.63 ready (localhost only)")
+    print(f"\n  Porter v0.30.64 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
