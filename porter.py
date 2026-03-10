@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.32 — Startup self-check + /api/self-check endpoint"""
+"""Porter v0.30.33 — System Health card in Runtime tab + self-check UI"""
 
 
 import email
@@ -9664,7 +9664,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.32</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.33</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10259,6 +10259,16 @@ input[type="number"].settings-input { min-width: 60px; }
       <span class="module-title">Runtime</span>
     </div>
     <div class="module-intro">Background runtimes, workflows, and session ingestion plumbing behind Porter Bridge.</div>
+    <div id="runtime-health-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">System Health</span>
+          <span id="health-status-badge" style="font-size:10px;padding:2px 6px;border-radius:999px;background:var(--bg2);color:var(--text3)">checking...</span>
+        </div>
+        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadSelfCheck()">Refresh</button>
+      </div>
+      <div id="runtime-health-checks" style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px"></div>
+    </div>
     <div id="runtime-session-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
         <span style="font-size:13px;font-weight:600;color:var(--text)">Sessions + Extraction</span>
@@ -11031,6 +11041,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.33', date:'2026-03-10', notes:['Runtime tab: System Health card shows self-check results (version, page, DB, threads, config) with pass/fail badges','Self-check threshold fixed (login page ~9KB is healthy, lowered from 10KB to 1KB)','Health card auto-loads when Runtime tab opens, with manual Refresh button'] },
   { ver:'v0.30.32', date:'2026-03-10', notes:['Self-Monitoring Stage 1: startup self-check verifies version endpoint, main page, database, background threads, and config 5s after boot','GET /api/self-check returns last self-check results (checks array, all_ok, summary, timestamp)','Results logged to Mission Control and emitted as system:self_check SSE event'] },
   { ver:'v0.30.31', date:'2026-03-10', notes:['Cross-agent learning: when different agents reinforce similar facts, agent-scoped memories auto-promote to project scope','Project Memory tab now shows agent-scoped memories from all assigned agents alongside project memories, with scope badges','SSE event cortex:cross_agent_promotion fires on scope promotion for real-time UI updates'] },
   { ver:'v0.30.30', date:'2026-03-10', notes:['Agent detail Overview: new Assigned Tasks section shows task-registry tasks assigned to this agent with status, priority, and project badges','Agent detail Overview: new Project Context section shows resolved project name and cross-agent activity feed from /api/projects/<id>/activity','GET /api/personas/<id> now includes resolved project_id for UI project binding'] },
@@ -14939,6 +14950,7 @@ async function _triggerExtractAll() {
 }
 
 async function _loadRuntimeOperations() {
+  _loadSelfCheck();
   _renderRuntimeSessionSummary();
   _preloadSessionCounts();
   _updateExtractionProgress('runtime-extraction-progress');
@@ -14959,6 +14971,36 @@ var _coordinationPanelRefreshTimer = null;
 function _gatewayActivityChip(text, tone) {
   if (!text) return '';
   return '<span class="model-card-chip ' + (tone || 'dim') + '" style="font-size:10px">' + escHtml(text) + '</span>';
+}
+
+async function _loadSelfCheck() {
+  var el = document.getElementById('runtime-health-checks');
+  var badge = document.getElementById('health-status-badge');
+  if (!el) return;
+  try {
+    var data = await api('/api/self-check');
+    if (!data || !data.checks) { el.innerHTML = '<span style="color:var(--text3)">No self-check data</span>'; return; }
+    var allOk = data.all_ok;
+    if (badge) {
+      badge.textContent = allOk ? 'healthy' : 'issues found';
+      badge.style.background = allOk ? 'color-mix(in srgb,#22c55e 15%,transparent)' : 'color-mix(in srgb,#ef4444 15%,transparent)';
+      badge.style.color = allOk ? '#22c55e' : '#ef4444';
+    }
+    el.innerHTML = data.checks.map(function(c) {
+      var ok = c.ok;
+      var color = ok ? '#22c55e' : '#ef4444';
+      var icon = ok ? '\u2713' : '\u2717';
+      var name = (c.check || '').replace(/_/g, ' ');
+      return '<div style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);display:flex;align-items:center;gap:6px;min-width:140px">'
+        + '<span style="color:' + color + ';font-weight:bold">' + icon + '</span>'
+        + '<div><div style="font-size:11px;font-weight:500;color:var(--text)">' + escHtml(name) + '</div>'
+        + '<div style="font-size:10px;color:var(--text3)">' + escHtml((c.detail || '').substring(0, 60)) + '</div></div></div>';
+    }).join('');
+    if (data.ts) {
+      var ago = Math.round((Date.now()/1000 - data.ts) / 60);
+      el.innerHTML += '<div style="font-size:10px;color:var(--text3);display:flex;align-items:center;padding:6px 0">' + ago + 'm ago</div>';
+    }
+  } catch(e) { el.innerHTML = '<span style="color:var(--text3)">Could not load health data</span>'; }
 }
 
 async function _loadGatewayActivity(force) {
@@ -31148,7 +31190,7 @@ def _startup_self_check():
         resp = urllib.request.urlopen(req, timeout=5)
         html = resp.read()
         size = len(html)
-        checks.append({"check": "main_page", "ok": size > 10000, "detail": f"{size} bytes"})
+        checks.append({"check": "main_page", "ok": size > 1000, "detail": f"{size} bytes"})
     except Exception as e:
         checks.append({"check": "main_page", "ok": False, "detail": str(e)[:100]})
     # 3. DB accessible (personas count)
@@ -32594,7 +32636,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"ok": True, **_last_self_check})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.32"})
+            self.reply_json({"v": "0.30.33"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32756,7 +32798,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.32"
+                health["porter_version"] = "0.30.33"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34600,7 +34642,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.32'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.33'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39365,7 +39407,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.32 ready (localhost only)")
+    print(f"\n  Porter v0.30.33 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
