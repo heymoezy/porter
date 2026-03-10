@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.52 — Agents scale and hero-layout corrections"""
+"""Porter v0.30.53 — Agent workspace and capabilities redesign"""
 
 
 import email
@@ -9674,8 +9674,8 @@ body.density-compact .file-name { padding: 6px 0; }
   transition:transform .18s ease, filter .18s ease;
 }
 .persona-card.orchestrator {
-  width:320px;
-  min-height:470px;
+  width:256px;
+  min-height:388px;
 }
 .persona-card:hover { transform:translateY(-5px); filter:brightness(1.05); }
 .persona-card.selected { transform:translateY(-8px) scale(1.02); }
@@ -9704,7 +9704,7 @@ body.density-compact .file-name { padding: 6px 0; }
   justify-content:center;
   overflow:visible;
 }
-.persona-card.orchestrator .persona-card-avatar { width:300px; height:388px; }
+.persona-card.orchestrator .persona-card-avatar { width:224px; height:300px; }
 .persona-card-name {
   font-size:16px;
   font-weight:800;
@@ -9714,7 +9714,7 @@ body.density-compact .file-name { padding: 6px 0; }
   word-wrap:break-word;
   overflow-wrap:break-word;
 }
-.persona-card.orchestrator .persona-card-name { font-size:24px; margin-top:2px; }
+.persona-card.orchestrator .persona-card-name { font-size:21px; margin-top:2px; }
 .persona-card-role {
   font-size:12px;
   color:var(--text3);
@@ -9722,7 +9722,7 @@ body.density-compact .file-name { padding: 6px 0; }
   line-height:1.25;
   max-width:150px;
 }
-.persona-card.orchestrator .persona-card-role { font-size:14px; max-width:240px; }
+.persona-card.orchestrator .persona-card-role { font-size:13px; max-width:210px; }
 .persona-card-status, .persona-card-dot { display:none; }
 @keyframes pixel-walk {
   0%,100% { transform:translateY(0) rotate(0deg); }
@@ -9757,12 +9757,12 @@ body.density-compact .file-name { padding: 6px 0; }
     linear-gradient(180deg,color-mix(in srgb,var(--surface) 94%, transparent),color-mix(in srgb,var(--bg) 96%, transparent));
   border:1px solid var(--border);
   border-radius:20px;
-  padding:12px 22px 18px;
+  padding:8px 16px 12px;
 }
-.agent-identity-card { display:flex; align-items:center; gap:24px; }
+.agent-identity-card { display:flex; align-items:center; gap:16px; }
 .agent-identity-avatar {
-  width:188px;
-  height:232px;
+  width:128px;
+  height:154px;
   display:flex;
   align-items:flex-end;
   justify-content:center;
@@ -9770,9 +9770,9 @@ body.density-compact .file-name { padding: 6px 0; }
   border:none;
   overflow:visible;
 }
-.agent-identity-name { font-size:30px; font-weight:800; color:var(--text); line-height:1; }
-.agent-identity-role { font-size:14px; color:var(--text3); margin-top:6px; }
-.agent-identity-badges { display:flex; gap:6px; flex-wrap:wrap; margin-top:12px; }
+.agent-identity-name { font-size:24px; font-weight:800; color:var(--text); line-height:1; }
+.agent-identity-role { font-size:13px; color:var(--text3); margin-top:4px; }
+.agent-identity-badges { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
 .agent-badge { font-size:10px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:var(--bg); color:var(--text2); }
 .agent-detail-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); }
 .agent-detail-tabs .pd-tab { padding:8px 16px; }
@@ -10227,7 +10227,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.52</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.53</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10385,7 +10385,6 @@ input[type="number"].settings-input { min-width: 60px; }
       <span class="module-title">Agents</span>
       <span style="font-size:12px;color:var(--text3);margin-left:8px">Porter directs the cast. New workers and squads should start with him.</span>
       <div style="flex:1"></div>
-      <button class="btn btn-primary" onclick="_askPorterToCreate('worker')" style="font-size:12px">Ask Porter To Create A Worker</button>
     </div>
 
     <!-- Agent Grid -->
@@ -10401,7 +10400,8 @@ input[type="number"].settings-input { min-width: 60px; }
     <!-- v0.29.1 — Full-page Agent Detail View -->
     <div id="agent-detail-view" class="agent-detail-view" style="display:none">
       <div class="agent-detail-topbar">
-        <button class="btn btn-ghost" onclick="closePersonaDetail()" style="font-size:13px">&larr; Back to Team</button>
+        <button class="btn btn-ghost" onclick="closePersonaDetail()" style="font-size:13px;padding:4px 8px">&larr;</button>
+        <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Agents</div>
         <div style="flex:1"></div>
         <button class="btn btn-ghost btn-sm" id="pd-sp-btn" onclick="_showSystemPrompt(_selectedPersonaId)" style="font-size:11px">Who Is Porter</button>
         <button class="btn btn-ghost btn-sm" id="pd-delete-btn" style="font-size:11px;color:#ef4444" onclick="deletePersona()">Delete</button>
@@ -10421,10 +10421,10 @@ input[type="number"].settings-input { min-width: 60px; }
         </div>
       </div>
       <div class="agent-detail-tabs">
-        <button class="pd-tab active" onclick="switchPdTab('overview')">Overview</button>
+        <button class="pd-tab active" onclick="switchPdTab('overview')">Chat</button>
         <button class="pd-tab" onclick="switchPdTab('identity')">Identity</button>
         <button class="pd-tab" onclick="switchPdTab('activity')">Activity</button>
-        <button class="pd-tab" onclick="switchPdTab('skills')">Skills</button>
+        <button class="pd-tab" onclick="switchPdTab('skills')">Capabilities</button>
         <button class="pd-tab" onclick="switchPdTab('memory')">Memory</button>
         <button class="pd-tab" onclick="switchPdTab('config')">Config</button>
       </div>
@@ -11623,6 +11623,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.53', date:'2026-03-10', notes:['Agent detail now defaults to a dedicated chat workspace instead of a redundant overview, with Porter and workers each getting their own focused conversation lane','Skills are now abstracted as Capabilities in the agent UI, and Porter gets a read-only managed capability surface instead of exposing raw skill plumbing','Activity became a compact dashboard with recent-run metrics and a live timeline, while Memory now presents distilled directives that can be dismissed when they are wrong','The Porter hero scale was rebalanced again and the detail header was compacted so the screen uses space for work instead of chrome'] },
   { ver:'v0.30.52', date:'2026-03-10', notes:['Porter now renders dramatically larger on the Agents landing stage, with tighter name/title spacing so the hero figure actually dominates the roster','Legacy drag-and-drop visuals were stripped from the Agents stage, removing the lingering square clone/gap artifacts from the old card system','Detached workers no longer get a Direct Reports header, so the roster reads as one cleaner stage instead of mixed admin sections','Porter detail header now uses the available vertical space correctly, and the redundant doctrine strip was removed from the main overview because the Who Is Porter brief already covers it'] },
   { ver:'v0.30.51', date:'2026-03-10', notes:['Agents landing now routes creation through Porter instead of exposing +Worker and +Squad controls, with a larger Porter figure and cleaner squad filtering','Porter detail now uses a command-brief layout with no duplicate portrait block, no dispatch or token counters, and clearer task/context/activity sections','Locked Porter identity now opens a curated Who Is Porter brief instead of exposing the raw core prompt directly','Unassigned worker language was replaced with Direct Reports so the roster reads as Porter-managed structure instead of loose admin state'] },
   { ver:'v0.30.50', date:'2026-03-10', notes:['Agents tab no longer uses compact status cards; workers now render as full-figure pixel characters on a stage with just name and title','Porter and worker detail views now use a hero-style profile layout with a large figure render and cleaner command-profile copy instead of a CRUD-heavy header','Idle/status noise was removed from the main gallery so the screen reads as identities and teams first, not backend records','Minecraft-style figure rendering now uses a full-body silhouette with simple walk/hero motion so Porter feels like a real platform character'] },
@@ -16126,6 +16127,105 @@ function _askPorterToCreate(kind) {
   input.focus();
   var pos = input.value.length;
   try { input.setSelectionRange(pos, pos); } catch(e) {}
+}
+
+window._pdChatState = window._pdChatState || {};
+
+function _pdChatGetState(pid) {
+  if (!window._pdChatState[pid]) {
+    window._pdChatState[pid] = { messages: [] };
+  }
+  return window._pdChatState[pid];
+}
+
+function _pdChatRender(pid) {
+  var panel = document.getElementById('pd-chat-thread');
+  if (!panel) return;
+  var state = _pdChatGetState(pid);
+  if (!state.messages.length) {
+    panel.innerHTML = '<div style="padding:18px;color:var(--text3);font-size:12px">Start a dedicated chat here. Porter can orchestrate from this workspace, and workers can be directed in their own lane without leaving the detail view.</div>';
+    return;
+  }
+  panel.innerHTML = state.messages.map(function(m) {
+    var isUser = m.role === 'user';
+    var isErr = m.role === 'error';
+    var bg = isUser ? 'color-mix(in srgb,var(--accent) 12%, var(--bg))' : isErr ? 'color-mix(in srgb,#ef4444 8%, var(--bg))' : 'var(--bg)';
+    var border = isUser ? 'color-mix(in srgb,var(--accent) 30%, var(--border))' : isErr ? 'color-mix(in srgb,#ef4444 28%, var(--border))' : 'var(--border)';
+    return '<div style="padding:12px 14px;border:1px solid ' + border + ';border-radius:16px;background:' + bg + '">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">' + escHtml(m.label || (isUser ? 'You' : 'Agent')) + '</span>'
+      + (m.meta ? '<span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(m.meta) + '</span>' : '') + '</div>'
+      + '<div style="font-size:13px;line-height:1.6;color:' + (isErr ? '#ef4444' : 'var(--text2)') + ';white-space:pre-wrap">' + escHtml(m.content || '') + '</div>'
+      + '</div>';
+  }).join('');
+  panel.scrollTop = panel.scrollHeight;
+}
+
+async function _pdChatSend() {
+  var p = window._selectedPersona;
+  var input = document.getElementById('pd-chat-input');
+  if (!p || !input) return;
+  var text = input.value.trim();
+  if (!text) return;
+  var state = _pdChatGetState(p.id);
+  state.messages.push({ role: 'user', label: 'You', content: text });
+  state.messages.push({ role: 'pending', label: p.name || 'Agent', content: (p.name || 'Agent') + ' is thinking...', meta: p.preferred_backend || 'auto' });
+  input.value = '';
+  _pdChatRender(p.id);
+  try {
+    var payload = { prompt: text, timeout: 120 };
+    if (p.project_id) payload.project_id = p.project_id;
+    var r = await api('/api/personas/' + p.id + '/dispatch', payload, 180000);
+    if (!r || !r.ok) throw new Error((r && r.error) || 'Dispatch failed');
+    await _pdChatPoll(r.run_id, p, state.messages.length - 1);
+  } catch (e) {
+    state.messages[state.messages.length - 1] = { role: 'error', label: p.name || 'Agent', content: e.message || 'Dispatch failed' };
+    _pdChatRender(p.id);
+  }
+}
+
+async function _pdChatPoll(runId, persona, idx) {
+  var state = _pdChatGetState(persona.id);
+  for (var i = 0; i < 60; i++) {
+    await new Promise(function(r) { setTimeout(r, 2000); });
+    try {
+      var runResp = await api('/api/bridge/runs?limit=1&run_id=' + runId, null, 30000);
+      if (!(runResp && runResp.ok && runResp.runs && runResp.runs.length)) continue;
+      var run = runResp.runs[0];
+      if (run.status === 'complete') {
+        var detail = await api('/api/bridge/run?id=' + runId, null, 30000);
+        state.messages[idx] = { role: 'assistant', label: persona.name || 'Agent', content: (detail && detail.run && detail.run.response) || '(no response)', meta: run.backend || persona.preferred_backend || 'auto' };
+        _pdChatRender(persona.id);
+        return;
+      }
+      if (run.status === 'failed') {
+        var failed = await api('/api/bridge/run?id=' + runId, null, 30000);
+        state.messages[idx] = { role: 'error', label: persona.name || 'Agent', content: (failed && failed.run && (failed.run.error || failed.run.response)) || 'Dispatch failed' };
+        _pdChatRender(persona.id);
+        return;
+      }
+    } catch(e) {}
+  }
+  state.messages[idx] = { role: 'error', label: persona.name || 'Agent', content: 'Dispatch timed out.' };
+  _pdChatRender(persona.id);
+}
+
+function _pdChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    _pdChatSend();
+  }
+}
+
+async function _dismissDirective(memoryId) {
+  if (!memoryId) return;
+  try {
+    var r = await api('/api/cortex/memories/' + memoryId + '/status', { status: 'archived' });
+    if (!r || !r.ok) throw new Error((r && r.error) || 'Dismiss failed');
+    if (window._selectedPersona) switchPdTab('overview');
+    toast('Directive dismissed', 'ok');
+  } catch (e) {
+    toast(e.message || 'Dismiss failed', 'err');
+  }
 }
 
 function _toggleInlineSessions(btn, backend, source) {
@@ -23426,62 +23526,35 @@ function switchPdTab(tab) {
   if (!p) return;
   if (tab === 'overview') {
     if (!p) { content.innerHTML = '<div class="loading-indicator">Select an agent</div>'; return; }
-    var summaryText = p.orchestrator_only
-      ? 'Porter receives objectives, designs the plan, creates or assigns the right workers, manages handoffs, and verifies that the work is actually finished. He is the command layer, not the execution layer.'
-      : ((p.is_temporary ? 'Temporary specialist created for a focused lane of work. ' : 'Persistent specialist retained for repeatable execution. ')
-        + (p.managed_by_porter ? 'Porter is currently managing this worker\'s role fit, posture, and starting skills.' : 'This worker has manual customizations layered on top of Porter guidance.'));
-    var doctrine = p.orchestrator_only
-      ? [
-          ['Delegation First', 'Creates or assigns workers before real implementation begins.'],
-          ['Handoff Control', 'Tracks ownership changes and keeps parallel work coherent.'],
-          ['Completion Discipline', 'Does not close the loop until the work is verified.']
-        ]
-      : [
-          [p.is_temporary ? 'Temporary Mandate' : 'Persistent Mandate', p.is_temporary ? 'Built for a specific slice of work and can be retired when the mission is over.' : 'Retained as a reusable specialist inside Porter\'s roster.'],
-          ['Operating Posture', p.managed_by_porter ? 'Uses Porter-managed defaults for skills and execution posture.' : 'Runs with manual capability overrides.' ],
-          ['Execution Role', 'Focused on delivering work, not supervising the system.']
-        ];
-    var doctrineHtml = doctrine.map(function(item) {
-      return '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 95%, transparent),color-mix(in srgb,var(--bg) 98%, transparent))">'
-        + '<div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">' + escHtml(item[0]) + '</div>'
-        + '<div style="font-size:13px;line-height:1.55;color:var(--text2)">' + escHtml(item[1]) + '</div>'
-        + '</div>';
-    }).join('');
-    var doctrineSection = p.orchestrator_only ? '' : '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">' + doctrineHtml + '</div>';
-    content.innerHTML = '<div style="display:flex;flex-direction:column;gap:18px">'
-      + '<div style="padding:20px 22px;border:1px solid var(--border);border-radius:22px;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 10%, transparent),transparent 68%)">'
-      + '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;justify-content:space-between">'
-      + '<div style="min-width:260px;max-width:760px">'
-      + '<div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">' + (p.orchestrator_only ? 'Command Brief' : 'Worker Brief') + '</div>'
-      + '<div style="font-size:17px;line-height:1.7;color:var(--text2)">' + escHtml(summaryText) + '</div>'
-      + '</div>'
+    content.innerHTML = '<div style="display:grid;grid-template-columns:minmax(0,1.28fr) minmax(320px,.92fr);gap:16px;align-items:start">'
+      + '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%, transparent),color-mix(in srgb,var(--bg) 98%, transparent))">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px"><div><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Dedicated Chat</div><div style="font-size:13px;color:var(--text3);margin-top:4px">' + escHtml(p.orchestrator_only ? 'Talk to Porter directly from his command workspace.' : 'Direct this worker in its own execution lane.') + '</div></div>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">'
       + (p.orchestrator_only
-          ? '<button class="btn btn-primary btn-sm" onclick="_askPorterToCreate(\'worker\')">Ask Porter For A Worker</button>'
-            + '<button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'squad\')">Ask Porter For A Squad</button>'
-            + '<button class="btn btn-ghost btn-sm" onclick="_showSystemPrompt(\'' + p.id + '\')">Who Is Porter</button>'
-          : '<button class="btn btn-ghost btn-sm" onclick="switchModule(\'overview\');chatWithPersona(\'' + p.id + '\')">Open Worker Chat</button>'
-            + '<button class="btn btn-ghost btn-sm" onclick="switchPdTab(\'identity\')">Edit Identity</button>'
-            + '<button class="btn btn-ghost btn-sm" onclick="_showSystemPrompt(\'' + p.id + '\')">System Prompt</button>'
-            + (p.is_temporary
-                ? '<button class="btn btn-ghost btn-sm" onclick="_setWorkerLifecycle(\'' + p.id + '\',false)">Promote To Persistent</button>'
-                : '<button class="btn btn-ghost btn-sm" onclick="_setWorkerLifecycle(\'' + p.id + '\',true)">Make Temporary</button>'))
-      + '</div></div></div>'
-      + doctrineSection
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">'
-      + '<section style="padding:18px;border:1px solid var(--border);border-radius:18px;background:var(--surface)">'
-      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Assigned Tasks</div><div style="font-size:11px;color:var(--text3)">' + (p.orchestrator_only ? 'Current supervision lanes' : 'Current execution lanes') + '</div></div>'
-      + '<div id="ov-tasks" style="display:flex;flex-direction:column;gap:8px;color:var(--text3)">Loading...</div>'
-      + '</section>'
-      + '<section style="padding:18px;border:1px solid var(--border);border-radius:18px;background:var(--surface)">'
-      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Project Context</div><div id="ov-project-name" style="font-size:11px;color:var(--accent)"></div></div>'
-      + '<div id="ov-project-ctx" style="display:flex;flex-direction:column;gap:8px;color:var(--text3)"></div>'
-      + '</section>'
-      + '<section style="padding:18px;border:1px solid var(--border);border-radius:18px;background:var(--surface)">'
-      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Recent Activity</div><div style="font-size:11px;color:var(--text3)">Latest bridge signals</div></div>'
+          ? '<button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'worker\')">Create Worker</button><button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'squad\')">Create Squad</button>'
+          : '<button class="btn btn-ghost btn-sm" onclick="switchPdTab(\'identity\')">Edit Identity</button>')
+      + '</div></div>'
+      + '<div id="pd-chat-thread" style="min-height:420px;max-height:62vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 8px"></div>'
+      + '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">'
+      + '<div style="display:flex;gap:10px;align-items:flex-end">'
+      + '<textarea id="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate, create workers, or direct a squad...' : 'Send a directive to this worker...') + '" rows="3" onkeydown="_pdChatKey(event)" style="flex:1;min-height:78px;resize:vertical;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:14px;padding:12px;font-size:13px;line-height:1.5"></textarea>'
+      + '<button class="btn btn-primary" onclick="_pdChatSend()" style="align-self:stretch">Send</button>'
+      + '</div></div></section>'
+      + '<div style="display:flex;flex-direction:column;gap:16px">'
+      + '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Activity</div><button class="btn btn-ghost btn-sm" onclick="switchPdTab(\'activity\')" style="font-size:10px">Open Dashboard</button></div>'
       + '<div id="ov-activity" style="display:flex;flex-direction:column;gap:8px;color:var(--text3)">Loading...</div>'
       + '</section>'
+      + '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Assigned Tasks</div><div style="font-size:11px;color:var(--text3)">' + (p.orchestrator_only ? 'Supervision lanes' : 'Execution lanes') + '</div></div>'
+      + '<div id="ov-tasks" style="display:flex;flex-direction:column;gap:8px;color:var(--text3)">Loading...</div>'
+      + '</section>'
+      + '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Memory Directives</div><button class="btn btn-ghost btn-sm" onclick="switchPdTab(\'memory\')" style="font-size:10px">Open Memory</button></div>'
+      + '<div id="ov-memory" style="display:flex;flex-direction:column;gap:8px;color:var(--text3)">Loading...</div>'
+      + '</section>'
       + '</div></div>';
+    _pdChatRender(p.id);
     (async function() {
       try {
         var runs = await api('/api/bridge/runs?persona_id=' + p.id + '&limit=5');
@@ -23530,42 +23603,24 @@ function switchPdTab(tab) {
         }
       } catch(e) { console.error('tasks fetch', e); }
       try {
-        var projId = p.project_id || '';
-        var projCtx = document.getElementById('ov-project-ctx');
-        var projName = document.getElementById('ov-project-name');
-        if (projId) {
-          var projData = await api('/api/task-registry?project_id=' + projId);
-          var actData = await api('/api/projects/' + projId + '/activity?limit=5');
-          if (projName) {
-            // Try to get project name from task-registry project_name field or activity
-            var pname = '';
-            if (projData && projData.tasks && projData.tasks.length) pname = projData.tasks[0].project_name || '';
-            if (!pname && actData && actData.events && actData.events.length) pname = actData.events[0].project_name || '';
-            if (pname) projName.textContent = pname;
-            else projName.textContent = 'Project ' + projId.substring(0, 8);
-          }
-          if (projCtx && actData && actData.events && actData.events.length) {
-            projCtx.innerHTML = actData.events.slice(0, 5).map(function(ev) {
-              var agName = ev.persona_name || ev.agent || '';
-              var evType = ev.type || ev.event_type || 'activity';
-              var summary = ev.summary || ev.text || ev.message || '';
-              var ts = ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleString() : '';
+        var memEl = document.getElementById('ov-memory');
+        var mems = await api('/api/cortex/memories?scope=agent&scope_id=' + p.id + '&limit=4');
+        var facts = (mems && mems.memories) || [];
+        if (memEl) {
+          if (!facts.length) {
+            memEl.innerHTML = '<div style="padding:10px 0;font-size:12px;color:var(--text3)">No directives distilled yet.</div>';
+          } else {
+            memEl.innerHTML = facts.map(function(f) {
+              var conf = Math.round((f.confidence || 0) * 100);
               return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)">'
-                + '<div style="display:flex;gap:6px;align-items:center">'
-                + (agName ? '<span style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text2)">' + escHtml(agName) + '</span>' : '')
-                + '<span style="font-size:10px;color:var(--text3);text-transform:capitalize">' + escHtml(evType.replace(/_/g, ' ')) + '</span>'
-                + '<span style="font-size:9px;color:var(--text3);margin-left:auto">' + ts + '</span>'
-                + '</div>'
-                + (summary ? '<div style="color:var(--text2);font-size:12px;line-height:1.5;margin-top:5px">' + escHtml(summary.substring(0, 160)) + '</div>' : '')
+                + '<div style="font-size:12px;line-height:1.5;color:var(--text2)">' + escHtml(f.fact || '') + '</div>'
+                + '<div style="display:flex;align-items:center;gap:8px;margin-top:8px"><span style="font-size:10px;color:var(--text3)">' + conf + '% confidence</span><span style="font-size:10px;color:var(--text3)">' + escHtml(f.memory_type || 'directive') + '</span>'
+                + '<button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" onclick="_dismissDirective(\'' + f.id + '\')">Dismiss</button></div>'
                 + '</div>';
             }).join('');
-          } else if (projCtx) {
-            projCtx.innerHTML = '<div style="padding:12px 0;font-size:12px;color:var(--text3)">No recent project context available.</div>';
           }
-        } else {
-          if (projCtx) projCtx.innerHTML = '<div style="padding:12px 0;font-size:12px;color:var(--text3)">No project attached right now.</div>';
         }
-      } catch(e) { console.error('project ctx fetch', e); }
+      } catch(e) {}
     })();
   } else if (tab === 'identity') {
     if (p.is_locked) {
@@ -23656,52 +23711,85 @@ function switchPdTab(tab) {
         content.innerHTML = '<div style="color:var(--text3);font-size:12px">No dispatch activity yet.</div>';
         return;
       }
-      let html = '<div style="display:flex;flex-direction:column;gap:8px">';
-      r.runs.forEach(run => {
-        const st = run.status === 'complete' ? '#22c55e' : run.status === 'failed' ? '#ef4444' : 'var(--text3)';
-        const ago = run.created_at ? new Date(run.created_at * 1000).toLocaleString() : '';
-        html += `<div style="padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-            <span style="width:6px;height:6px;border-radius:50%;background:${st}"></span>
-            <span style="font-size:12px;font-weight:500;color:var(--text)">${escHtml(run.backend || '?')}</span>
-            <span style="font-size:11px;color:var(--text3);margin-left:auto">${ago}</span>
-          </div>
-          <div style="font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(run.prompt_preview || '')}</div>
-          ${run.duration_ms ? '<div style="font-size:10px;color:var(--text3);margin-top:2px">' + run.duration_ms + 'ms · ' + (run.tokens_total || 0) + ' tokens</div>' : ''}
-        </div>`;
-      });
-      html += '</div>';
+      var runs = r.runs || [];
+      var successCount = runs.filter(function(run) { return run.status === 'complete'; }).length;
+      var failCount = runs.filter(function(run) { return run.status === 'failed'; }).length;
+      var durations = runs.map(function(run) { return run.duration_ms || 0; }).filter(Boolean);
+      var avg = durations.length ? Math.round(durations.reduce(function(a, b) { return a + b; }, 0) / durations.length) : 0;
+      var latest = runs.slice(0, 8);
+      var html = '<div style="display:flex;flex-direction:column;gap:16px">'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">'
+        + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Recent Runs</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + runs.length + '</div></div>'
+        + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Completed</div><div style="font-size:26px;font-weight:800;color:#22c55e;margin-top:4px">' + successCount + '</div></div>'
+        + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Issues</div><div style="font-size:26px;font-weight:800;color:' + (failCount ? '#ef4444' : 'var(--text)') + ';margin-top:4px">' + failCount + '</div></div>'
+        + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Avg Response</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + (avg ? (avg + 'ms') : '—') + '</div></div>'
+        + '</div>'
+        + '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Live Timeline</div>'
+        + latest.map(function(run) {
+            var st = run.status === 'complete' ? '#22c55e' : run.status === 'failed' ? '#ef4444' : '#f59e0b';
+            var ago = run.created_at ? new Date(run.created_at * 1000).toLocaleString() : '';
+            return '<div style="padding:12px 0;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:' + st + '"></span><span style="font-size:12px;font-weight:600;color:var(--text)">' + escHtml(run.backend || 'bridge') + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + ago + '</span></div>'
+              + '<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml((run.prompt_preview || run.message || 'Activity').substring(0, 140)) + '</div>'
+              + (run.duration_ms ? '<div style="font-size:10px;color:var(--text3);margin-top:4px">' + run.duration_ms + ' ms</div>' : '')
+              + '</div>';
+          }).join('')
+        + '</div></div>';
       content.innerHTML = html;
     });
   } else if (tab === 'skills') {
     if (p.is_locked) {
-      content.innerHTML = '<div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2)">Porter manages worker capability assignment. Manual skill editing is disabled for locked system agents.</div>';
+      content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div style="font-size:12px;color:var(--text3)">Loading capabilities...</div></div>';
+      (async function() {
+        try {
+          var data = await api('/api/personas/' + p.id + '/skills');
+          var skills = (data && data.skills) || [];
+          var recommended = (data && data.recommended) || [];
+          var html = '<div style="display:flex;flex-direction:column;gap:16px">'
+            + '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Capabilities</div><div style="font-size:13px;color:var(--text2);line-height:1.6">Porter abstracts raw skills into a managed capability layer. These capabilities are system-managed and not edited directly from the product UI.</div></div>';
+          if (skills.length) {
+            html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">';
+            skills.forEach(function(sk) {
+              html += '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(sk.name || '') + '</div><div style="font-size:10px;color:var(--text3);margin-top:5px">Active capability</div></div>';
+            });
+            html += '</div>';
+          }
+          if (recommended.length) {
+            html += '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Managed Capability Coverage</div><div style="display:flex;gap:8px;flex-wrap:wrap">' + recommended.map(function(name) {
+              return '<span style="font-size:11px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:var(--bg);color:var(--text2)">' + escHtml(name) + '</span>';
+            }).join('') + '</div></div>';
+          }
+          html += '</div>';
+          content.innerHTML = html;
+        } catch(e) {
+          content.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load capabilities.</div>';
+        }
+      })();
       return;
     }
-    content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div style="font-size:12px;color:var(--text3)">Loading skills...</div></div>';
+    content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div style="font-size:12px;color:var(--text3)">Loading capabilities...</div></div>';
     _loadPersonaSkills(p.id);
   } else if (tab === 'memory') {
-    // v0.29.1 — Agent-scoped Cortex memories
-    content.innerHTML = '<div class="loading-indicator">Loading memories...</div>';
+    content.innerHTML = '<div class="loading-indicator">Loading memory directives...</div>';
     (async function() {
       try {
         var r = await api('/api/cortex/memories?scope=agent&scope_id=' + p.id + '&limit=50');
         var facts = (r && r.memories) || [];
         if (!facts.length) {
-          content.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px">No memories for this agent yet. Dispatch tasks to build knowledge.</div>';
+          content.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px">No directives for this agent yet. As Porter learns, useful operating directives will distill here.</div>';
           return;
         }
-        var html = '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">' + facts.length + ' memories</div>';
+        var html = '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">' + facts.length + ' directives</div>';
         html += '<div style="display:flex;flex-direction:column;gap:6px">';
         facts.forEach(function(f) {
           var conf = Math.round((f.confidence || 0) * 100);
           var confColor = conf >= 70 ? '#22c55e' : conf >= 40 ? '#f59e0b' : '#ef4444';
-          html += '<div style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px">'
-            + '<div style="font-size:12px;color:var(--text)">' + escHtml(f.fact || '') + '</div>'
-            + '<div style="display:flex;gap:12px;margin-top:4px;font-size:10px;color:var(--text3)">'
+          html += '<div style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:12px">'
+            + '<div style="font-size:12px;line-height:1.55;color:var(--text)">' + escHtml(f.fact || '') + '</div>'
+            + '<div style="display:flex;gap:12px;align-items:center;margin-top:8px;font-size:10px;color:var(--text3)">'
             + '<span style="color:' + confColor + '">' + conf + '% confidence</span>'
             + '<span>' + (f.evidence_count || 0) + ' evidence</span>'
-            + '<span>' + (f.memory_type || 'semantic') + '</span>'
+            + '<span>' + (f.memory_type || 'directive') + '</span>'
+            + '<button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" onclick="_dismissDirective(\'' + f.id + '\')">Dismiss</button>'
             + '</div></div>';
         });
         html += '</div>';
@@ -34899,7 +34987,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.52"})
+            self.reply_json({"v": "0.30.53"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35061,7 +35149,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.52"
+                health["porter_version"] = "0.30.53"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -36957,7 +37045,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.52'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.53'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -41850,7 +41938,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.52 ready (localhost only)")
+    print(f"\n  Porter v0.30.53 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.53 (2026-03-10)
+
+- Agent detail now defaults to a dedicated chat workspace instead of a redundant overview, with Porter and workers each getting their own focused conversation lane.
+- The old `Skills` framing is now abstracted to `Capabilities`, and Porter shows a read-only managed capability surface instead of raw skill plumbing.
+- Activity is now a compact dashboard with recent-run metrics and a live timeline, while Memory presents distilled directives that can be dismissed when they are wrong.
+- Porter’s landing-page scale was rebalanced and the detail header was compacted again so more of the screen is used for work instead of chrome.
+
 ## v0.30.52 (2026-03-10)
 
 - Porter now renders much larger on the Agents landing page, with tighter spacing between the figure, name, and title so the stage finally reads like a hero surface.
