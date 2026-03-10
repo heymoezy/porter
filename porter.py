@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.58 — Porter detail command screen"""
+"""Porter v0.30.59 — Porter detail layout corrections"""
 
 
 import email
@@ -9844,15 +9844,17 @@ body.density-compact .file-name { padding: 6px 0; }
 .persona-card-xp-label { font-size:9px; color:var(--text3); margin-top:2px; }
 
 /* v0.29.1 — Full-page Agent Detail View */
-.agent-detail-view { display:flex; flex-direction:column; gap:12px; }
-.agent-detail-topbar { display:flex; align-items:center; gap:8px; }
+.agent-detail-view { display:flex; flex-direction:column; gap:10px; min-height:0; }
+.agent-detail-topbar { display:flex; align-items:center; justify-content:flex-end; gap:8px; position:relative; z-index:4; }
 .agent-identity-shell {
   background:
     radial-gradient(circle at top, color-mix(in srgb,var(--accent) 12%, transparent), transparent 46%),
     linear-gradient(180deg,color-mix(in srgb,var(--surface) 94%, transparent),color-mix(in srgb,var(--bg) 96%, transparent));
   border:1px solid var(--border);
   border-radius:20px;
-  padding:8px 16px 12px;
+  padding:10px 16px 12px;
+  position:relative;
+  z-index:1;
 }
 .agent-identity-card { display:flex; align-items:center; gap:16px; }
 .agent-identity-avatar {
@@ -9871,7 +9873,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .agent-badge { font-size:10px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:var(--bg); color:var(--text2); }
 .agent-detail-tabs { display:flex; align-items:center; gap:0; border-bottom:1px solid var(--border); }
 .agent-detail-tabs .pd-tab { padding:8px 16px; }
-.agent-detail-content { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px; min-height:400px; }
+.agent-detail-content { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px; min-height:0; }
 
 /* ── Persona Detail — slide-out right panel ──────────────── */
 .persona-detail { position:fixed; top:0; right:0; width:520px; height:100vh; z-index:900;
@@ -10322,7 +10324,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.58</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.59</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10494,10 +10496,10 @@ input[type="number"].settings-input { min-width: 60px; }
     <!-- v0.29.1 — Full-page Agent Detail View -->
     <div id="agent-detail-view" class="agent-detail-view" style="display:none">
       <div class="agent-detail-topbar">
-        <button class="btn btn-ghost" onclick="closePersonaDetail()" style="font-size:13px;padding:4px 10px">&larr; Back to Agents</button>
         <div style="flex:1"></div>
         <button class="btn btn-ghost btn-sm" id="pd-sp-btn" onclick="_showSystemPrompt(_selectedPersonaId)" style="font-size:11px">Who Is Porter</button>
         <button class="btn btn-ghost btn-sm" id="pd-delete-btn" style="font-size:11px;color:#ef4444" onclick="deletePersona()">Delete</button>
+        <button class="btn btn-ghost" onclick="closePersonaDetail()" style="font-size:13px;padding:4px 10px">&larr; Back to Agents</button>
       </div>
       <div class="agent-identity-shell">
         <div class="agent-identity-card">
@@ -10517,7 +10519,7 @@ input[type="number"].settings-input { min-width: 60px; }
         <button class="pd-tab active" onclick="switchPdTab('overview')">Chat</button>
         <button class="pd-tab" onclick="switchPdTab('identity')">Identity</button>
         <button class="pd-tab" onclick="switchPdTab('activity')">Activity</button>
-        <button class="pd-tab" onclick="switchPdTab('skills')">Capabilities</button>
+        <button class="pd-tab" onclick="switchPdTab('skills')">Skills</button>
         <button class="pd-tab" onclick="switchPdTab('memory')">Memory</button>
         <button class="pd-tab" onclick="switchPdTab('config')">Config</button>
         <div style="flex:1"></div>
@@ -11718,6 +11720,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.59', date:'2026-03-10', notes:['Porter detail layout corrected: Back to Agents moved into the upper-right action cluster, the Chat pane now stays within the browser viewport, and Skills is restored as the visible tab label'] },
   { ver:'v0.30.58', date:'2026-03-10', notes:['Who Is Porter and worker brief overlays now trap Escape correctly inside the popup, and the close button is pinned to the popup upper-right corner inside the detail pane'] },
   { ver:'v0.30.57', date:'2026-03-10', notes:['Porter was reduced again on the main Agents roster with another smaller orchestrator stage and portrait render size, leaving the detail view unchanged'] },
   { ver:'v0.30.56', date:'2026-03-10', notes:['Porter was trimmed down one more step on the main Agents roster by shrinking both the orchestrator stage box and the requested portrait render size together'] },
@@ -23653,11 +23656,11 @@ function switchPdTab(tab) {
   if (!p) return;
   if (tab === 'overview') {
     if (!p) { content.innerHTML = '<div class="loading-indicator">Select an agent</div>'; return; }
-    content.innerHTML = '<section style="display:flex;flex-direction:column;height:calc(100vh - 270px);min-height:520px;padding:10px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 97%, transparent),color-mix(in srgb,var(--bg) 99%, transparent))">'
+    content.innerHTML = '<section style="display:flex;flex-direction:column;height:min(calc(100vh - 330px), 68vh);max-height:calc(100vh - 330px);min-height:420px;padding:10px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 97%, transparent),color-mix(in srgb,var(--bg) 99%, transparent));box-sizing:border-box">'
       + '<div id="pd-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:6px"></div>'
       + '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">'
       + '<div style="display:flex;gap:10px;align-items:flex-end">'
-      + '<textarea id="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate, create workers, or direct a squad...' : 'Send a directive to this worker...') + '" rows="3" onkeydown="_pdChatKey(event)" style="flex:1;min-height:88px;resize:vertical;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:14px;padding:12px;font-size:13px;line-height:1.5"></textarea>'
+      + '<textarea id="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate, create workers, or direct a squad...' : 'Send a directive to this worker...') + '" rows="3" onkeydown="_pdChatKey(event)" style="flex:1;min-height:72px;max-height:180px;resize:vertical;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:14px;padding:12px;font-size:13px;line-height:1.5"></textarea>'
       + '<button class="btn btn-primary" onclick="_pdChatSend()" style="align-self:stretch;min-width:92px">Send</button>'
       + '</div></div></section>';
     _pdChatRender(p.id);
@@ -35030,7 +35033,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.58"})
+            self.reply_json({"v": "0.30.59"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35192,7 +35195,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.58"
+                health["porter_version"] = "0.30.59"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37088,7 +37091,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.58'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.59'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -41983,7 +41986,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.58 ready (localhost only)")
+    print(f"\n  Porter v0.30.59 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

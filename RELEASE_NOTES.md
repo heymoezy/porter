@@ -1,5 +1,11 @@
 # Porter Release Notes
 
+## v0.30.59 (2026-03-10)
+
+- Porter detail layout corrected: `Back to Agents` now lives in the upper-right action cluster instead of underneath the avatar.
+- The dedicated chat workspace now stays within the browser viewport instead of stretching below the visible window.
+- `Skills` is restored as the visible tab label in agent detail.
+
 ## v0.30.58 (2026-03-10)
 
 - `Who Is Porter` and worker brief overlays now keep Escape scoped to the popup instead of collapsing the full detail view.
