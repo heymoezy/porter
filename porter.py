@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Porter v0.30.44 — Standup generation: auto-summarize project activity"""
+"""Porter v0.30.45 — Bridge v2 scheduler and unified models control plane"""
 
 
 import email
 import hashlib
+import math
 import logging
 import io
 import json
@@ -463,6 +464,22 @@ def _db_init():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_status ON agent_messages(status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_chain ON agent_messages(chain_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_created ON agent_messages(created_at DESC)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bridge_benchmarks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            benchmark_kind TEXT NOT NULL DEFAULT 'dispatch',
+            backend TEXT NOT NULL,
+            requested_model TEXT DEFAULT '',
+            resolved_model TEXT DEFAULT '',
+            ok INTEGER NOT NULL DEFAULT 0,
+            latency_ms INTEGER DEFAULT 0,
+            error TEXT DEFAULT '',
+            metadata TEXT DEFAULT '{}',
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_bridge_bench_backend_created ON bridge_benchmarks(backend, created_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_bridge_bench_kind_created ON bridge_benchmarks(benchmark_kind, created_at DESC)")
 
     # v0.28.4 — Job proposals from agents
     conn.execute("""
@@ -9847,7 +9864,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.44</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.45</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11234,6 +11251,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.45', date:'2026-03-10', notes:['Bridge v2: added per-backend and per-model scheduler limits with queue and wait tracking across shared dispatch paths','Models tests and live dispatches now persist benchmark history so routing can prefer faster, less-contended lanes','Models cards now surface bridge control truth, benchmark summaries, and live scheduler pressure instead of treating backend selection as equally exact everywhere','Chat streaming now uses the same bridge scheduler semantics as the rest of Porter so the control plane is aligned'] },
   { ver:'v0.30.44', date:'2026-03-10', notes:['Standup generation: auto-summarize dispatch activity per project','GET /api/standup?project_id=X&hours=24 returns dispatch stats, active agents, recent tasks, summary lines','Supports per-project or global (all projects) standup view'] },
   { ver:'v0.30.43', date:'2026-03-10', notes:['Squad-Project binding: squads can now be assigned to projects via project_id column','_resolve_persona_project checks squad binding as fallback (agent in squad → squad has project → project resolved)','Squad update API accepts project_id field','Enables per-squad project dispatch policy without individual agent assignment'] },
   { ver:'v0.30.42', date:'2026-03-10', notes:['Intelligence Dashboard in Runtime tab: backend quality scores, pattern mining insights, self-heal/self-dispatch status','Parallel API fetches for dispatch-scores, intelligence/patterns, self-heal/status, self-dispatch/status','Visual: score cards with color-coded quality (green/yellow/red), insight bullets with purple accent'] },
@@ -12123,7 +12141,7 @@ const CHANGELOG = [
     'Parse extended: extracts "expires in Xd" (auth_expires_at) and profile name from openclaw models status',
   ]},
   { ver:'v0.12.95', date:'2026-02-26', notes:[
-    'Agent cards now display the configured model ID (e.g. openai-codex/gpt-5.3-codex)',
+    'Agent cards now display the configured model ID (e.g. openai-codex/gpt-5.4)',
     'Gemini agent cards show static rate limit summary: 60 req/min · 1,000 req/day',
   ]},
   { ver:'v0.12.94', date:'2026-02-26', notes:[
@@ -17080,7 +17098,7 @@ async function populateChatModels() {
     addModel(value, label, cloudGroup, { disabled: !isUp });
   }
   // Use resolved model names from available data
-  var _ocName = (chatAvail.openclaw || {}).resolved || 'GPT-5.3 Codex';
+  var _ocName = (chatAvail.openclaw || {}).resolved || 'GPT-5.4 Codex';
   var _clName = (chatAvail.claude || {}).resolved || 'claude-opus-4-6';
   var _gmName = (chatAvail.gemini || {}).resolved || 'gemini-2.5-pro';
   var _cdName = (chatAvail.codex || {}).resolved || 'gpt-5.4';
@@ -17417,7 +17435,7 @@ var _defaultSlashCmds = [
 
 var _defaultAtTargets = [
   {cmd: '@claude', desc: 'Anthropic'},
-  {cmd: '@openclaw', desc: 'GPT-5.3 Codex'},
+  {cmd: '@openclaw', desc: 'GPT-5.4 Codex'},
   {cmd: '@gemini', desc: 'Google'},
   {cmd: '@codex', desc: 'OpenAI'},
   {cmd: '@ollama', desc: 'Local'},
@@ -19586,8 +19604,8 @@ function _inferModelId(a) {
   if (a.model_id) return a.model_id;
   const t = (a.type || '').toLowerCase();
   const n = (a.name || '').toLowerCase();
-  if (t.includes('openclaw') || t.includes('codex') || n.includes('openclaw') || n.includes('codex'))
-    return 'gpt-5.3-codex';
+    if (t.includes('openclaw') || t.includes('codex') || n.includes('openclaw') || n.includes('codex'))
+      return 'gpt-5.4';
   if (n.includes('claude') || t.includes('claude'))
     return 'claude-opus-4-6';
   if (n.includes('gemini') || t.includes('gemini'))
@@ -19737,6 +19755,8 @@ var _modelActivityPoller = null;
 var _modelSseId = null;
 var _modelActivityData = {};
 var _modelAvailableData = {};
+var _modelBenchmarkData = {};
+var _modelSchedulerData = {};
 var _modelTestResults = {};
 var _modelTestBatchRunning = false;
 
@@ -19773,6 +19793,58 @@ function _renderStoredTestResult(testId) {
     return '<span style="color:#ef4444" title="' + escHtml(rec.title || rec.label || 'Failed') + '">\u2717 ' + escHtml(rec.label || 'Failed') + '</span>';
   }
   return '';
+}
+
+function _renderModelRuntimeBadges(provider, runtime, availableData) {
+  var p = provider || {};
+  var rt = runtime || {};
+  var av = availableData || {};
+  var badges = [];
+  if (p.id === 'gemini') {
+    var authMode = rt.auth_mode || 'unknown';
+    badges.push(authMode === 'api_key' ? 'API key mode' : (authMode === 'oauth' ? 'OAuth mode' : 'Auth unknown'));
+    badges.push(rt.control_mode === 'exact' ? 'Exact model control' : 'Alias model control');
+  } else if (p.id === 'openclaw') {
+    badges.push('Gateway runtime');
+    badges.push(rt.control_mode === 'agent-default' ? 'Agent-pinned bridge' : 'Exact model control');
+  } else if (p.id === 'claude' && rt.supports_json_output) {
+    badges.push('Structured test path');
+  } else if (p.id === 'codex') {
+    badges.push('Exec JSON runtime');
+  } else if (p.id === 'ollama') {
+    badges.push('Local HTTP runtime');
+  }
+  if (av.resolved && rt.honors_model_selection === false) {
+    badges.push('Selected model is advisory');
+  }
+  if (!badges.length) return '';
+  return '<div class="model-card-runtime">' + badges.map(function(label) {
+    return '<span class="model-card-chip dim">' + escHtml(label) + '</span>';
+  }).join('') + '</div>';
+}
+
+function _renderModelBenchmarkSummary(backendId) {
+  var rec = (_modelBenchmarkData || {})[backendId] || {};
+  if (!rec.samples) return '';
+  var bits = [];
+  if (rec.p50_ms) bits.push('p50 ' + _formatDuration(rec.p50_ms));
+  if (rec.success_rate) bits.push(rec.success_rate + '% success');
+  if (rec.test_samples) bits.push(rec.test_samples + ' tests');
+  return bits.length ? '<div class="model-card-stats">' + bits.join(' · ') + '</div>' : '';
+}
+
+function _renderModelSchedulerSummary(backendId) {
+  var rec = (_modelSchedulerData || {})[backendId] || {};
+  var bits = [];
+  if (rec.running) bits.push(rec.running + '/' + (rec.backend_limit || '?') + ' active');
+  if (rec.waiting) bits.push(rec.waiting + ' queued');
+  if (rec.avg_wait_ms) bits.push('wait ' + _formatDuration(rec.avg_wait_ms));
+  return bits.length ? '<div class="model-card-stats">' + bits.join(' · ') + '</div>' : '';
+}
+
+function _refreshSchedulerSummary(backendId) {
+  var host = document.getElementById('backend-sched-' + backendId);
+  if (host) host.innerHTML = _renderModelSchedulerSummary(backendId);
 }
 
 function _formatDuration(ms) {
@@ -19993,6 +20065,11 @@ async function _runModelTest(btn, backendId, modelId, testId) {
   var t0 = Date.now();
   try {
     var r = await api('/api/models/test', {backend: backendId, model: modelId}, 60000);
+    if (r && r.benchmark_summary) {
+      _modelBenchmarkData[backendId] = r.benchmark_summary;
+      var benchEl = document.getElementById('backend-bench-' + backendId);
+      if (benchEl) benchEl.innerHTML = _renderModelBenchmarkSummary(backendId);
+    }
     var elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     if (r && r.ok) {
       var flakyPass = (r.execution_state === 'flaky');
@@ -20372,6 +20449,8 @@ function _applyModelsSnapshot(snap, opts) {
   }
   _modelActivityData = snap.activity || {};
   _modelAvailableData = snap.backends || {};
+  _modelBenchmarkData = snap.benchmarks || {};
+  _modelSchedulerData = snap.scheduler || {};
   window._modelProviders = snap.providers || [];
   window._modelRuntimes = snap.runtimes || {};
   if (shouldRenderCards) {
@@ -21436,8 +21515,6 @@ function _renderModelCards(data, act) {
     var ba = (act || {})[p.id] || {};
     var activeRuns = ba.active || [];
     var stats = ba.stats || {};
-    var recent = ba.recent || [];
-
     // 24h stats (only shown when there's data)
     var statsHtml = '';
     if (stats.total > 0) {
@@ -21447,6 +21524,8 @@ function _renderModelCards(data, act) {
         + (stats.avg_ms > 0 ? ' · ' + _formatDuration(stats.avg_ms) + ' avg response' : '')
         + '</div>';
     }
+    var benchmarkHtml = _renderModelBenchmarkSummary(p.id);
+    var schedulerHtml = _renderModelSchedulerSummary(p.id);
 
     // Live Trace button (only when actively dispatching)
     var liveTraceBtn = '';
@@ -21474,32 +21553,11 @@ function _renderModelCards(data, act) {
     var _resolvedName = '';
     _avModels.forEach(function(m) { if (m.id === _avResolved) _resolvedName = m.name; });
     if (!_resolvedName) _resolvedName = _avResolved || (p.label || p.id);
-    var _runtimeHtml = '';
-    if (p.id === 'gemini') {
-      var _authMode = _rt.auth_mode || 'unknown';
-      var _controlMode = _authMode === 'api_key' ? 'Strict model control' : 'Alias model control';
-      var _authLabel = _authMode === 'api_key' ? 'API key mode' : (_authMode === 'oauth' ? 'OAuth mode' : 'Auth unknown');
-      _runtimeHtml = '<div class="model-card-runtime">'
-        + '<span class="model-card-chip dim">' + escHtml(_authLabel) + '</span>'
-        + '<span class="model-card-chip dim">' + escHtml(_controlMode) + '</span>'
-        + '</div>';
-    } else if (p.id === 'openclaw') {
-      _runtimeHtml = '<div class="model-card-runtime">'
-        + '<span class="model-card-chip dim">Gateway runtime</span>'
-        + '<span class="model-card-chip dim">Bridge + agent split</span>'
-        + '</div>';
-    } else if (p.id === 'claude' && _rt.supports_json_output) {
-      _runtimeHtml = '<div class="model-card-runtime">'
-        + '<span class="model-card-chip dim">Structured test path</span>'
-        + '</div>';
-    } else if (p.id === 'codex') {
-      _runtimeHtml = '<div class="model-card-runtime">'
-        + '<span class="model-card-chip dim">Exec JSON runtime</span>'
-        + '</div>';
-    } else if (p.id === 'ollama') {
-      _runtimeHtml = '<div class="model-card-runtime">'
-        + '<span class="model-card-chip dim">Local HTTP runtime</span>'
-        + '</div>';
+    var _runtimeHtml = _renderModelRuntimeBadges(p, _rt, _avBk);
+    var _bridgeNoteHtml = '';
+    if (_rt && _rt.honors_model_selection === false) {
+      var note = (_rt.notes && _rt.notes.length) ? _rt.notes[0] : 'Bridge dispatch does not honor exact model selection for this backend yet.';
+      _bridgeNoteHtml = '<div class="model-card-alert">' + escHtml(note) + '</div>';
     }
     // Build model list (replaces dropdown)
     var _selHtml = '';
@@ -21530,7 +21588,10 @@ function _renderModelCards(data, act) {
 
     var updateFootHtml = '<div id="backend-update-foot-' + escHtml(p.id) + '" class="model-card-alert"></div>';
     var statusFootHtml = '<div id="backend-status-foot-' + escHtml(p.id) + '" class="model-card-alert"></div>';
-    var footerHtml = (statsHtml || liveTraceBtn || lastPromptBtn) ? '<div class="model-card-footer">' + statsHtml + liveTraceBtn + lastPromptBtn + '</div>' : '';
+    var footerBody = '<div id="backend-bench-' + escHtml(p.id) + '">' + benchmarkHtml + '</div>'
+      + '<div id="backend-sched-' + escHtml(p.id) + '">' + schedulerHtml + '</div>'
+      + statsHtml + liveTraceBtn + lastPromptBtn;
+    var footerHtml = (benchmarkHtml || schedulerHtml || statsHtml || liveTraceBtn || lastPromptBtn) ? '<div class="model-card-footer">' + footerBody + '</div>' : '';
 
     return '<div class="model-card' + offClass + '" data-model-id="' + escHtml(p.id) + '">'
       + '<div class="model-card-head" style="justify-content:space-between">'
@@ -21545,6 +21606,7 @@ function _renderModelCards(data, act) {
       + '</div>'
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
       + _runtimeHtml
+      + _bridgeNoteHtml
       + _healthChipHtml
       + (p.available ? _selHtml : _installHtml)
       + updateFootHtml
@@ -21673,17 +21735,40 @@ function _connectModelSSE() {
   _modelSseId = _sseSubscribe(function(d) {
     if (!d || !d.type) return;
     var evtData = d.data || {};
-    if (d.type === 'bridge:dispatch') _handleModelDispatch(evtData);
+    if (d.type === 'bridge:queued') _handleModelQueued(evtData);
+    else if (d.type === 'bridge:admit') _handleModelAdmit(evtData);
+    else if (d.type === 'bridge:dispatch') _handleModelDispatch(evtData);
     else if (d.type === 'bridge:response') _handleModelResponse(evtData);
     else if (d.type === 'bridge:error') _handleModelError(evtData);
     else if (d.type === 'bridge:chunk') _handleModelChunk(evtData);
   });
 }
 
+function _handleModelQueued(data) {
+  var bk = data.backend;
+  if (!bk) return;
+  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
+  _modelSchedulerData[bk].waiting = (_modelSchedulerData[bk].waiting || 0) + 1;
+  _refreshSchedulerSummary(bk);
+}
+
+function _handleModelAdmit(data) {
+  var bk = data.backend;
+  if (!bk) return;
+  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
+  _modelSchedulerData[bk].waiting = Math.max(0, (_modelSchedulerData[bk].waiting || 0) - 1);
+  _modelSchedulerData[bk].running = (_modelSchedulerData[bk].running || 0) + 1;
+  if (data.wait_ms) _modelSchedulerData[bk].avg_wait_ms = data.wait_ms;
+  _refreshSchedulerSummary(bk);
+}
+
 function _handleModelDispatch(data) {
   var bk = data.backend;
   var card = document.querySelector('[data-model-id="' + bk + '"]');
   if (!card) return;
+  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
+  if (!_modelSchedulerData[bk].running) _modelSchedulerData[bk].running = 1;
+  _refreshSchedulerSummary(bk);
   var actDiv = card.querySelector('.model-card-activity');
   if (!actDiv) return;
   var started = Date.now() / 1000;
@@ -21716,6 +21801,9 @@ function _handleModelResponse(data) {
   var bk = data.backend;
   var card = document.querySelector('[data-model-id="' + bk + '"]');
   if (!card) return;
+  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
+  _modelSchedulerData[bk].running = Math.max(0, (_modelSchedulerData[bk].running || 0) - 1);
+  _refreshSchedulerSummary(bk);
   var actDiv = card.querySelector('.model-card-activity');
   if (actDiv) {
     actDiv.className = 'model-card-activity idle';
@@ -21736,6 +21824,9 @@ function _handleModelError(data) {
   var bk = data.backend;
   var card = document.querySelector('[data-model-id="' + bk + '"]');
   if (!card) return;
+  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
+  _modelSchedulerData[bk].running = Math.max(0, (_modelSchedulerData[bk].running || 0) - 1);
+  _refreshSchedulerSummary(bk);
   var actDiv = card.querySelector('.model-card-activity');
   if (actDiv) {
     actDiv.className = 'model-card-activity idle';
@@ -24097,7 +24188,7 @@ function renderOrchestration(agents, providers) {
       // Don't duplicate by provider match — but Codex CLI (gpt-5.1) is separate from OpenClaw
       for (const em of modelList) {
         const emid = em.model_id.toLowerCase();
-        // Skip dedup for Codex CLI — it's a direct interface to GPT-5.1, different from OpenClaw's GPT-5.3
+        // Skip dedup for Codex CLI — it's a direct interface to GPT-5.1, different from OpenClaw's GPT-5.4
         if (lm.provider === 'openai' && lm.type === 'cli_agent') continue;
         if (lm.provider === 'openai' && (emid.includes('codex') || emid.includes('gpt'))) return false;
         if (lm.provider === 'anthropic' && emid.includes('claude')) return false;
@@ -27672,8 +27763,6 @@ def _dispatch_openclaw(message, model=None, timeout=120):
     oc_bin = _resolve_cli("openclaw")
     if not oc_bin:
         return {"ok": False, "error": "openclaw CLI not found. Install: npm i -g openclaw"}
-    # Porter routes on provider/model names, but OpenClaw CLI expects a configured agent id here.
-    # For now, keep bridge dispatch pinned to the default main agent instead of misusing model strings.
     agent_id = "main"
     cmd = [oc_bin, "agent", "--agent", agent_id, "--message", message, "--json", "--timeout", str(timeout)]
     log.info("Agent bridge [openclaw]: agent=%s requested_model=%s msg=%s", agent_id, model or "", message[:80])
@@ -27685,7 +27774,8 @@ def _dispatch_openclaw(message, model=None, timeout=120):
     except (json.JSONDecodeError, ValueError):
         # Not JSON — return raw text
         return {"ok": True, "backend": "openclaw", "text": result.stdout.strip(),
-                "model": "gpt-5.3-codex", "duration_ms": 0, "tokens": {}}
+                "model": "gpt-5.4", "duration_ms": 0, "tokens": {},
+                "bridge": _bridge_runtime_semantics("openclaw", model)}
     # Extract text from multiple possible locations
     text = ""
     payloads = resp.get("result", {}).get("payloads", [])
@@ -27703,9 +27793,10 @@ def _dispatch_openclaw(message, model=None, timeout=120):
         "ok": True, "backend": "openclaw",
         "text": text,
         "run_id": resp.get("runId", ""),
-        "model": meta.get("agentMeta", {}).get("model", "gpt-5.3-codex"),
+        "model": meta.get("agentMeta", {}).get("model", "gpt-5.4"),
         "duration_ms": meta.get("durationMs", 0),
         "tokens": meta.get("agentMeta", {}).get("usage", {}),
+        "bridge": _bridge_runtime_semantics("openclaw", model),
     }
 
 def _dispatch_gemini(message, model=None, timeout=120):
@@ -27740,6 +27831,7 @@ def _dispatch_gemini(message, model=None, timeout=120):
         "model": model or "gemini",
         "duration_ms": _elapsed_ms,
         "tokens": {"total": 0},
+        "bridge": _bridge_runtime_semantics("gemini", model or "gemini"),
     }
 
 
@@ -27778,6 +27870,7 @@ def _dispatch_claude(message, model=None, timeout=180):
         "model": model or "claude-code",
         "duration_ms": 0,
         "tokens": {"input": usage.get("input_tokens", 0), "output": usage.get("output_tokens", 0)},
+        "bridge": _bridge_runtime_semantics("claude", model or "claude-code"),
     }
 
 def _dispatch_codex(message, model=None, timeout=120):
@@ -27840,6 +27933,7 @@ def _dispatch_codex(message, model=None, timeout=120):
         "model": codex_model,
         "duration_ms": 0,
         "tokens": {"input": usage.get("input_tokens", 0), "output": usage.get("output_tokens", 0)},
+        "bridge": _bridge_runtime_semantics("codex", codex_model),
     }
 
 def _dispatch_ollama(message, model=None, timeout=120):
@@ -27861,6 +27955,7 @@ def _dispatch_ollama(message, model=None, timeout=120):
         "model": ollama_model,
         "duration_ms": int(data.get("total_duration", 0) / 1e6),  # ns → ms
         "tokens": {"total": data.get("eval_count", 0)},
+        "bridge": _bridge_runtime_semantics("ollama", ollama_model),
     }
 
 def _svg_escape(text: str) -> str:
@@ -28031,6 +28126,7 @@ _backend_version_cache = {"data": None, "ts": 0}
 _backend_latest_cache = {"data": {}, "ts": 0}
 _backend_model_cache = {"data": {}, "ts": {}}
 _backend_runtime_cache = {"data": {}, "ts": {}, "fp": {}}
+_bridge_benchmark_summary_cache = {"data": {}, "ts": 0.0}
 _models_bootstrap_cache = {"data": None, "ts": 0.0, "fp": ""}
 _models_snapshot_cache = {"data": None, "ts": 0.0, "fp": ""}
 _cli_help_cache = {}
@@ -28052,6 +28148,11 @@ def _invalidate_models_payload_cache() -> None:
     _backend_runtime_cache["data"].clear()
     _backend_runtime_cache["ts"].clear()
     _backend_runtime_cache["fp"].clear()
+
+
+def _invalidate_bridge_benchmark_cache() -> None:
+    _bridge_benchmark_summary_cache["data"] = {}
+    _bridge_benchmark_summary_cache["ts"] = 0.0
 
 
 def _cli_binary_fingerprint(binary: str) -> str:
@@ -28239,7 +28340,7 @@ def _backend_runtime_info(backend: str) -> dict:
         help_text = _cli_help_text("openclaw", ("agent",))
         info.update({
             "supports_json_output": "--json" in help_text,
-            "supports_model_flag": "--agent" in help_text,
+            "supports_model_flag": False,
             "supports_headless": True,
         })
     elif backend == "ollama":
@@ -28248,6 +28349,7 @@ def _backend_runtime_info(backend: str) -> dict:
             "supports_model_flag": True,
             "supports_headless": True,
         })
+    info.update(_bridge_runtime_semantics(backend))
     _backend_runtime_cache["data"][backend] = dict(info)
     _backend_runtime_cache["ts"][backend] = now
     _backend_runtime_cache["fp"][backend] = fp
@@ -28432,6 +28534,40 @@ def _model_display_name(model_id: str) -> str:
     if pretty.startswith("gemini-"):
         return "Gemini " + pretty[len("gemini-"):].replace("-", " ").title()
     return pretty
+
+
+def _bridge_runtime_semantics(backend: str, model_id: str = "") -> dict:
+    backend = str(backend or "").strip().lower()
+    model_id = str(model_id or "").strip()
+    if backend == "openclaw":
+        control_mode = "agent-default"
+        notes = ["Bridge dispatch is pinned to OpenClaw agent `main`."]
+        if model_id and model_id not in ("auto", "main"):
+            notes.append("Selected Porter model is advisory until OpenClaw exposes exact model targeting.")
+        return {
+            "control_mode": control_mode,
+            "supports_exact_model": False,
+            "honors_model_selection": False,
+            "bridge_target": "main",
+            "notes": notes,
+        }
+    if backend == "gemini":
+        auth_mode = _gemini_auth_mode()
+        exact = auth_mode == "api_key"
+        return {
+            "control_mode": "exact" if exact else "alias",
+            "supports_exact_model": exact,
+            "honors_model_selection": True,
+            "bridge_target": model_id,
+            "notes": ["OAuth mode may remap Gemini aliases at runtime."] if auth_mode == "oauth" else [],
+        }
+    return {
+        "control_mode": "exact",
+        "supports_exact_model": True,
+        "honors_model_selection": True,
+        "bridge_target": model_id,
+        "notes": [],
+    }
 
 
 def _clean_runtime_model_id(model_id: str) -> str:
@@ -28689,6 +28825,138 @@ def _get_active_model(backend):
                 return m["id"]
         return models[0]["id"] if models else ""
     return choice
+
+
+def _record_bridge_benchmark(benchmark_kind: str, backend: str, requested_model: str = "",
+                             resolved_model: str = "", ok: bool = False, latency_ms: int = 0,
+                             error: str = "", metadata: dict | None = None) -> None:
+    try:
+        conn = _db_conn()
+        conn.execute(
+            """INSERT INTO bridge_benchmarks
+               (benchmark_kind, backend, requested_model, resolved_model, ok, latency_ms, error, metadata, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(benchmark_kind or "dispatch")[:40],
+                str(backend or "")[:40],
+                str(requested_model or "")[:160],
+                str(resolved_model or "")[:160],
+                1 if ok else 0,
+                max(0, int(latency_ms or 0)),
+                str(error or "")[:500],
+                json.dumps(metadata or {}, ensure_ascii=True),
+                time.time(),
+            ),
+        )
+        conn.commit()
+        conn.close()
+        _invalidate_bridge_benchmark_cache()
+    except Exception as e:
+        log.debug("Bridge benchmark record failed: %s", e)
+
+
+def _bridge_benchmark_summary(window_s: int = 86400) -> dict:
+    now = time.time()
+    cache_key = str(int(window_s or 86400))
+    cached = (_bridge_benchmark_summary_cache.get("data") or {}).get(cache_key)
+    if cached and (now - float(_bridge_benchmark_summary_cache.get("ts") or 0.0)) < 30.0:
+        return dict(cached)
+    out = {}
+    try:
+        conn = _db_conn()
+        since = now - max(300, int(window_s or 86400))
+        for backend in PROVIDER_REGISTRY:
+            rows = conn.execute(
+                """SELECT benchmark_kind, requested_model, resolved_model, ok, latency_ms, created_at
+                   FROM bridge_benchmarks
+                   WHERE backend=? AND created_at>=?
+                   ORDER BY created_at DESC LIMIT 200""",
+                (backend, since),
+            ).fetchall()
+            latencies = [int(r["latency_ms"] or 0) for r in rows if int(r["latency_ms"] or 0) > 0]
+            test_rows = [r for r in rows if str(r["benchmark_kind"] or "") == "connectivity"]
+            success_count = sum(1 for r in rows if int(r["ok"] or 0))
+            sample_count = len(rows)
+            success_rate = int(round((success_count / sample_count) * 100)) if sample_count else 0
+            p50 = 0
+            p95 = 0
+            if latencies:
+                ordered = sorted(latencies)
+                p50 = ordered[max(0, min(len(ordered) - 1, len(ordered) // 2))]
+                p95 = ordered[max(0, min(len(ordered) - 1, math.ceil(len(ordered) * 0.95) - 1))]
+            latest = dict(rows[0]) if rows else {}
+            out[backend] = {
+                "samples": sample_count,
+                "success_rate": success_rate,
+                "p50_ms": p50,
+                "p95_ms": p95,
+                "test_samples": len(test_rows),
+                "latest_kind": str(latest.get("benchmark_kind") or ""),
+                "latest_requested_model": str(latest.get("requested_model") or ""),
+                "latest_resolved_model": str(latest.get("resolved_model") or ""),
+                "latest_ok": bool(latest.get("ok")) if latest else False,
+                "latest_at": float(latest.get("created_at") or 0),
+            }
+        conn.close()
+    except Exception as e:
+        log.debug("Bridge benchmark summary failed: %s", e)
+    _bridge_benchmark_summary_cache.setdefault("data", {})[cache_key] = dict(out)
+    _bridge_benchmark_summary_cache["ts"] = now
+    return out
+
+
+def _benchmark_adjusted_route(preferred: str, message: str = "") -> tuple:
+    preferred = str(preferred or "").strip().lower()
+    if not preferred:
+        return (preferred, None)
+    summary = _bridge_benchmark_summary(86400)
+    pref_stats = summary.get(preferred) or {}
+    pref_pressure = _bridge_scheduler_backend_pressure(preferred)
+    if int(pref_stats.get("samples") or 0) < 3:
+        if pref_pressure.get("saturated") and pref_pressure.get("waiting", 0) > 0:
+            return _resolve_with_fallback(preferred, message)
+        return (preferred, None) if _probe_provider(preferred) and not _backend_is_circuit_open(preferred) else _resolve_with_fallback(preferred, message)
+    pref_success = int(pref_stats.get("success_rate") or 0)
+    pref_p50 = int(pref_stats.get("p50_ms") or 0)
+    prefs = _config.get("preferences", {})
+    chain = prefs.get("fallback_chain", _DEFAULT_FALLBACK_CHAIN)
+    best = preferred
+    best_score = None
+    for backend in [preferred] + [bk for bk in chain if bk != preferred]:
+        if not backend:
+            continue
+        if not _probe_provider(backend) or _backend_is_circuit_open(backend):
+            continue
+        stats = summary.get(backend) or {}
+        pressure = _bridge_scheduler_backend_pressure(backend)
+        samples = int(stats.get("samples") or 0)
+        success_rate = int(stats.get("success_rate") or 0)
+        p50 = int(stats.get("p50_ms") or 0)
+        if backend != preferred and samples < 3:
+            continue
+        if backend != preferred and success_rate + 5 < pref_success:
+            continue
+        # Lower score is better. Preserve preferred unless the alternative is materially faster.
+        effective_p50 = p50 or 999999
+        effective_p50 += int(pressure.get("avg_wait_ms", 0) or 0)
+        effective_p50 += int(pressure.get("waiting", 0) or 0) * 300
+        if pressure.get("saturated"):
+            effective_p50 += 1000
+        score = effective_p50 - (success_rate * 20)
+        if backend == preferred:
+            best_score = score
+            continue
+        faster_enough = pref_p50 and effective_p50 and effective_p50 <= int(pref_p50 * 0.75)
+        if best_score is not None and faster_enough and score < best_score:
+            best = backend
+            best_score = score
+    if best != preferred:
+        mlog.emit("info", "routing", "route.benchmark_override",
+                  f"Benchmark override: {preferred} → {best}",
+                  preferred=preferred, override=best,
+                  extra={"preferred": pref_stats, "chosen": summary.get(best) or {}})
+        return (best, None)
+    return _resolve_with_fallback(preferred, message)
 
 
 def _openclaw_gateway_settings() -> dict:
@@ -29197,6 +29465,8 @@ def _models_snapshot(force_versions: bool = False) -> dict:
         "providers": _providers_payload(),
         "activity": {},
         "backends": _models_available_payload(),
+        "benchmarks": _bridge_benchmark_summary(86400),
+        "scheduler": _bridge_scheduler_summary(),
         "versions": _probe_backend_versions(force=force_versions),
         "runtimes": {bk: _backend_runtime_info(bk) for bk in PROVIDER_REGISTRY},
     }
@@ -29220,6 +29490,8 @@ def _models_bootstrap() -> dict:
         "providers": _providers_payload(lightweight=True),
         "activity": {},
         "backends": _models_available_payload(lightweight=True),
+        "benchmarks": _bridge_benchmark_summary(86400),
+        "scheduler": _bridge_scheduler_summary(),
         "versions": _bootstrap_backend_versions(),
         "runtimes": {bk: _backend_runtime_info(bk) for bk in PROVIDER_REGISTRY},
     }
@@ -29262,6 +29534,7 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
     # Resolve "auto" to actual model
     if not model or model == "auto":
         model = _get_active_model(backend) or ""
+    bridge_meta = _bridge_runtime_semantics(backend, model)
 
     t0 = time.time()
     try:
@@ -29315,7 +29588,7 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                         text = "OK"
                 if text:
                     latency_ms = int((time.time() - t0) * 1000)
-                    result = {"ok": True, "model": model, "response": text.strip()[:200], "latency_ms": latency_ms}
+                    result = {"ok": True, "model": model, "response": text.strip()[:200], "latency_ms": latency_ms, "bridge": bridge_meta}
                     if attempt:
                         result["execution_state"] = "flaky"
                         result["attempts"] = attempt + 1
@@ -29345,7 +29618,7 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                 time.sleep(1.0)
             last = attempts[-1] if attempts else {"error": "No response from gateway", "stderr": ""}
             log.warning("Model test fail [openclaw]: model=%s err=%s stderr=%s", model, last.get("error", ""), last.get("stderr", ""))
-            result = {"ok": False, "backend": backend, "model": model, "error": last.get("error", "")[:200], "execution_state": "broken", "attempts": len(attempts)}
+            result = {"ok": False, "backend": backend, "model": model, "error": last.get("error", "")[:200], "execution_state": "broken", "attempts": len(attempts), "bridge": bridge_meta}
             if any(a.get("transient") for a in attempts):
                 result["execution_state"] = "flaky"
             result.update(_model_repair_hint(backend, (last.get("stderr", "") or "") + "\n" + last.get("error", "")))
@@ -29391,7 +29664,7 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                 except Exception:
                     continue
             if text:
-                return {"ok": True, "model": model, "response": text.strip()[:200], "latency_ms": latency_ms}
+                return {"ok": True, "model": model, "response": text.strip()[:200], "latency_ms": latency_ms, "bridge": bridge_meta}
             _cdx_err = (r.stderr or "").strip()[:200] or "Codex returned no text"
             log.warning("Model test fail [codex]: model=%s err=%s stdout=%s", model, _cdx_err, (r.stdout or "").strip()[:500])
             result = {"ok": False, "backend": backend, "model": model, "error": _cdx_err}
@@ -29413,7 +29686,7 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 body = json.loads(resp.read().decode("utf-8", errors="replace") or "{}")
             latency_ms = int((time.time() - t0) * 1000)
-            return {"ok": True, "backend": backend, "model": model, "response": str(body.get("response", "OK")).strip()[:200], "latency_ms": latency_ms}
+            return {"ok": True, "backend": backend, "model": model, "response": str(body.get("response", "OK")).strip()[:200], "latency_ms": latency_ms, "bridge": bridge_meta}
 
         if backend == "gemini":
             gem = _resolve_cli("gemini")
@@ -29442,7 +29715,7 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
             _gem_stdout = (r.stdout or "").strip()
             if "Please visit the following URL to authorize" in _gem_stdout or "accounts.google.com/o/oauth2" in _gem_stdout:
                 _gem_fail_msg = "Gemini CLI requires OAuth re-authorization"
-                result = {"ok": False, "backend": backend, "model": model, "error": _gem_fail_msg, "runtime": {"auth_mode": runtime.get("auth_mode", ""), "resolved_model": _gem_model}}
+                result = {"ok": False, "backend": backend, "model": model, "error": _gem_fail_msg, "runtime": {"auth_mode": runtime.get("auth_mode", ""), "resolved_model": _gem_model}, "bridge": bridge_meta}
                 result.update(_model_repair_hint(backend, "auth oauth reauthorize"))
                 result["repair_hint"] = "Gemini CLI is asking for OAuth login again. Re-authenticate Gemini before relying on model tests."
                 return result
@@ -29452,7 +29725,7 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                 _gem_err = "\n".join(l for l in _gem_err.split("\n") if "YOLO" not in l and "cached credentials" not in l.lower()).strip()
                 _gem_fail_msg = (_gem_err or _gem_stdout or "Gemini failed").strip()[:200]
                 log.warning("Model test fail [gemini]: model=%s rc=%s err=%s stdout=%s", model, r.returncode, _gem_fail_msg, (r.stdout or "").strip()[:500])
-                result = {"ok": False, "backend": backend, "model": model, "error": _gem_fail_msg}
+                result = {"ok": False, "backend": backend, "model": model, "error": _gem_fail_msg, "bridge": bridge_meta}
                 result.update(_model_repair_hint(backend, _gem_fail_msg))
                 result["runtime"] = {"auth_mode": runtime.get("auth_mode", ""), "resolved_model": _gem_model}
                 return result
@@ -29465,7 +29738,7 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                         _gem_text = str(payload.get("text") or payload.get("response") or payload.get("output") or payload.get("result") or "OK")
                 except Exception:
                     pass
-            return {"ok": True, "backend": backend, "model": model, "response": _gem_text.strip()[:200] or "OK", "latency_ms": latency_ms, "runtime": {"auth_mode": runtime.get("auth_mode", ""), "resolved_model": _gem_model}}
+            return {"ok": True, "backend": backend, "model": model, "response": _gem_text.strip()[:200] or "OK", "latency_ms": latency_ms, "runtime": {"auth_mode": runtime.get("auth_mode", ""), "resolved_model": _gem_model}, "bridge": bridge_meta}
 
         if backend == "claude":
             claude_bin = _resolve_cli("claude")
@@ -29490,7 +29763,7 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
             if r.returncode != 0:
                 _cl_fail_msg = (r.stderr or r.stdout or "Claude failed").strip()[:200]
                 log.warning("Model test fail [claude]: model=%s rc=%s err=%s stdout=%s", model, r.returncode, _cl_fail_msg, (r.stdout or "").strip()[:500])
-                result = {"ok": False, "backend": backend, "model": model, "error": _cl_fail_msg}
+                result = {"ok": False, "backend": backend, "model": model, "error": _cl_fail_msg, "bridge": bridge_meta}
                 result.update(_model_repair_hint(backend, _cl_fail_msg))
                 return result
             latency_ms = int((time.time() - t0) * 1000)
@@ -29502,19 +29775,19 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                         _cl_text = str(payload.get("result") or payload.get("text") or payload.get("output") or "OK")
                 except Exception:
                     pass
-            return {"ok": True, "backend": backend, "model": model, "response": _cl_text[:200], "latency_ms": latency_ms}
+            return {"ok": True, "backend": backend, "model": model, "response": _cl_text[:200], "latency_ms": latency_ms, "bridge": bridge_meta}
 
-        result = {"ok": False, "backend": backend, "model": model, "error": f"Unknown backend: {backend}"}
+        result = {"ok": False, "backend": backend, "model": model, "error": f"Unknown backend: {backend}", "bridge": bridge_meta}
         result.update(_model_repair_hint(backend, result["error"]))
         return result
     except subprocess.TimeoutExpired:
         log.warning("Model test timeout: backend=%s model=%s", backend, model)
-        result = {"ok": False, "backend": backend, "model": model, "error": "Timed out"}
+        result = {"ok": False, "backend": backend, "model": model, "error": "Timed out", "bridge": bridge_meta}
         result.update(_model_repair_hint(backend, result["error"]))
         return result
     except Exception as e:
         log.warning("Model test error: backend=%s model=%s err=%s", backend, model, str(e))
-        result = {"ok": False, "backend": backend, "model": model, "error": str(e)[:200]}
+        result = {"ok": False, "backend": backend, "model": model, "error": str(e)[:200], "bridge": bridge_meta}
         result.update(_model_repair_hint(backend, result["error"]))
         return result
 
@@ -29555,7 +29828,7 @@ def _ranked_route():
     # rankings is {model_id: rank_int} where 1=highest priority
     # Map model_id patterns to backends
     model_backend = {
-        "gpt-5.3-codex": "openclaw",
+        "gpt-5.4": "openclaw",
         "openclaw": "openclaw",
         "claude": "claude",
         "gemini": "gemini",
@@ -29575,6 +29848,18 @@ def _ranked_route():
 
 _DEFAULT_FALLBACK_CHAIN = ["codex", "claude", "gemini", "openclaw", "ollama"]
 _backend_breakers = {}
+_BRIDGE_DEFAULT_BACKEND_LIMITS = {"openclaw": 1, "claude": 2, "gemini": 2, "codex": 2, "ollama": 2}
+_BRIDGE_DEFAULT_MODEL_LIMITS = {"openclaw": 1, "claude": 1, "gemini": 1, "codex": 2, "ollama": 1}
+_bridge_scheduler_state = {
+    "running_by_backend": {},
+    "running_by_lane": {},
+    "waiting_by_backend": {},
+    "waiting_by_lane": {},
+    "queue": [],
+    "stats": {},
+}
+_bridge_scheduler_lock = threading.Lock()
+_bridge_scheduler_cond = threading.Condition(_bridge_scheduler_lock)
 
 
 def _backend_breaker_state(backend: str) -> dict:
@@ -29609,6 +29894,110 @@ def _record_backend_dispatch_result(backend: str, ok: bool, error: str = "") -> 
 def _backend_is_circuit_open(backend: str) -> bool:
     state = _backend_breaker_state(backend)
     return float(state.get("open_until") or 0) > time.time()
+
+
+def _bridge_scheduler_limits(backend: str, model: str = "") -> dict:
+    prefs = _config.get("preferences", {}) if isinstance(_config, dict) else {}
+    sched = prefs.get("bridge_scheduler", {}) if isinstance(prefs.get("bridge_scheduler", {}), dict) else {}
+    backend_limits = sched.get("backend_limits", {}) if isinstance(sched.get("backend_limits", {}), dict) else {}
+    model_limits = sched.get("model_limits", {}) if isinstance(sched.get("model_limits", {}), dict) else {}
+    bk = str(backend or "").strip().lower()
+    lane_model = str(model or "").strip() or "_default"
+    backend_limit = max(1, int(backend_limits.get(bk, _BRIDGE_DEFAULT_BACKEND_LIMITS.get(bk, 2)) or 1))
+    model_limit = max(1, int(model_limits.get(bk, _BRIDGE_DEFAULT_MODEL_LIMITS.get(bk, 1)) or 1))
+    return {"backend_limit": backend_limit, "model_limit": model_limit, "lane_key": f"{bk}::{lane_model}", "lane_model": lane_model}
+
+
+def _bridge_scheduler_snapshot() -> dict:
+    with _bridge_scheduler_lock:
+        return {
+            "running_by_backend": dict(_bridge_scheduler_state["running_by_backend"]),
+            "running_by_lane": dict(_bridge_scheduler_state["running_by_lane"]),
+            "waiting_by_backend": dict(_bridge_scheduler_state["waiting_by_backend"]),
+            "waiting_by_lane": dict(_bridge_scheduler_state["waiting_by_lane"]),
+            "queue": list(_bridge_scheduler_state["queue"][-50:]),
+            "stats": dict(_bridge_scheduler_state["stats"]),
+        }
+
+
+def _bridge_scheduler_backend_pressure(backend: str) -> dict:
+    snap = _bridge_scheduler_snapshot()
+    limits = _bridge_scheduler_limits(backend, "")
+    running = int(snap["running_by_backend"].get(backend, 0))
+    waiting = int(snap["waiting_by_backend"].get(backend, 0))
+    stats = snap["stats"].get(backend, {}) if isinstance(snap.get("stats", {}), dict) else {}
+    return {
+        "running": running,
+        "waiting": waiting,
+        "backend_limit": int(limits["backend_limit"]),
+        "saturated": running >= int(limits["backend_limit"]),
+        "avg_wait_ms": int(stats.get("avg_wait_ms", 0) or 0),
+        "max_wait_ms": int(stats.get("max_wait_ms", 0) or 0),
+    }
+
+
+def _bridge_scheduler_summary() -> dict:
+    snap = _bridge_scheduler_snapshot()
+    out = {}
+    for backend in PROVIDER_REGISTRY:
+        pressure = _bridge_scheduler_backend_pressure(backend)
+        stats = snap.get("stats", {}).get(backend, {}) if isinstance(snap.get("stats", {}), dict) else {}
+        out[backend] = {
+            **pressure,
+            "admissions": int(stats.get("admissions", 0) or 0),
+        }
+    return out
+
+
+def _bridge_scheduler_acquire(backend: str, model: str, run_id: str = "", timeout_s: int = 120) -> dict:
+    now = time.time()
+    limits = _bridge_scheduler_limits(backend, model)
+    lane_key = limits["lane_key"]
+    ticket = {"run_id": str(run_id or ""), "backend": backend, "lane_key": lane_key, "queued_at": now}
+    deadline = now + max(30, int(timeout_s or 120) + 30)
+    with _bridge_scheduler_cond:
+        _bridge_scheduler_state["queue"].append(ticket)
+        _bridge_scheduler_state["waiting_by_backend"][backend] = int(_bridge_scheduler_state["waiting_by_backend"].get(backend, 0)) + 1
+        _bridge_scheduler_state["waiting_by_lane"][lane_key] = int(_bridge_scheduler_state["waiting_by_lane"].get(lane_key, 0)) + 1
+        _emit_event("bridge:queued", {"run_id": run_id, "backend": backend, "model": model or "", "lane_key": lane_key})
+        while True:
+            backend_running = int(_bridge_scheduler_state["running_by_backend"].get(backend, 0))
+            lane_running = int(_bridge_scheduler_state["running_by_lane"].get(lane_key, 0))
+            queue_head = next((q for q in _bridge_scheduler_state["queue"] if q.get("backend") == backend and q.get("lane_key") == lane_key), None)
+            can_run = (
+                queue_head is ticket
+                and backend_running < int(limits["backend_limit"])
+                and lane_running < int(limits["model_limit"])
+            )
+            if can_run:
+                _bridge_scheduler_state["queue"] = [q for q in _bridge_scheduler_state["queue"] if q is not ticket]
+                _bridge_scheduler_state["waiting_by_backend"][backend] = max(0, int(_bridge_scheduler_state["waiting_by_backend"].get(backend, 0)) - 1)
+                _bridge_scheduler_state["waiting_by_lane"][lane_key] = max(0, int(_bridge_scheduler_state["waiting_by_lane"].get(lane_key, 0)) - 1)
+                _bridge_scheduler_state["running_by_backend"][backend] = backend_running + 1
+                _bridge_scheduler_state["running_by_lane"][lane_key] = lane_running + 1
+                wait_ms = int((time.time() - now) * 1000)
+                stats = _bridge_scheduler_state["stats"].setdefault(backend, {"admissions": 0, "total_wait_ms": 0, "avg_wait_ms": 0, "max_wait_ms": 0})
+                stats["admissions"] = int(stats.get("admissions", 0)) + 1
+                stats["total_wait_ms"] = int(stats.get("total_wait_ms", 0)) + wait_ms
+                stats["avg_wait_ms"] = int(stats["total_wait_ms"] / max(1, stats["admissions"]))
+                stats["max_wait_ms"] = max(int(stats.get("max_wait_ms", 0)), wait_ms)
+                if wait_ms > 0:
+                    _emit_event("bridge:admit", {"run_id": run_id, "backend": backend, "model": model or "", "wait_ms": wait_ms})
+                return {"wait_ms": wait_ms, "lane_key": lane_key, "backend_limit": limits["backend_limit"], "model_limit": limits["model_limit"]}
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                _bridge_scheduler_state["queue"] = [q for q in _bridge_scheduler_state["queue"] if q is not ticket]
+                _bridge_scheduler_state["waiting_by_backend"][backend] = max(0, int(_bridge_scheduler_state["waiting_by_backend"].get(backend, 0)) - 1)
+                _bridge_scheduler_state["waiting_by_lane"][lane_key] = max(0, int(_bridge_scheduler_state["waiting_by_lane"].get(lane_key, 0)) - 1)
+                raise TimeoutError(f"Bridge queue timeout for {backend}")
+            _bridge_scheduler_cond.wait(timeout=min(1.0, remaining))
+
+
+def _bridge_scheduler_release(backend: str, lane_key: str) -> None:
+    with _bridge_scheduler_cond:
+        _bridge_scheduler_state["running_by_backend"][backend] = max(0, int(_bridge_scheduler_state["running_by_backend"].get(backend, 0)) - 1)
+        _bridge_scheduler_state["running_by_lane"][lane_key] = max(0, int(_bridge_scheduler_state["running_by_lane"].get(lane_key, 0)) - 1)
+        _bridge_scheduler_cond.notify_all()
 
 def _resolve_with_fallback(preferred, message=""):
     """Try preferred backend; if unavailable, walk fallback chain.
@@ -29679,7 +30068,7 @@ def _score_adjusted_route(preferred: str, message: str = "") -> tuple:
 
     pref_stats = _dispatch_scores_cache.get(preferred)
     if not pref_stats or pref_stats["count"] < MIN_DISPATCHES:
-        return _resolve_with_fallback(preferred, message)
+        return _benchmark_adjusted_route(preferred, message)
 
     pref_avg = pref_stats["avg"]
     best_alt = None
@@ -29706,7 +30095,7 @@ def _score_adjusted_route(preferred: str, message: str = "") -> tuple:
             preferred, pref_avg, best_alt, best_alt_avg)
         return (best_alt, None)
 
-    return _resolve_with_fallback(preferred, message)
+    return _benchmark_adjusted_route(preferred, message)
 
 
 def _smart_route(message, project_id="", task_id="", persona_id=""):
@@ -29715,14 +30104,14 @@ def _smart_route(message, project_id="", task_id="", persona_id=""):
     """
     project_hint = _project_route_hint(project_id=project_id, task_id=task_id, persona_id=persona_id)
     if project_hint:
-        return _resolve_with_fallback(project_hint, message)
+        return _benchmark_adjusted_route(project_hint, message)
     # If routing_mode is "ranked", use user-configured rankings
     prefs = _config.get("preferences", {})
     if prefs.get("routing_mode") == "ranked":
         ranked = _ranked_route()
         if ranked:
             preferred = ranked[0]
-            return _resolve_with_fallback(preferred, message)
+            return _benchmark_adjusted_route(preferred, message)
     msg = message.lower().strip()
 
     # Code-related keywords → OpenClaw (Codex is best at code)
@@ -31220,8 +31609,11 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None, chain
     if not run_id:
         run_id = _uuid.uuid4().hex[:12]
     # Resolve active model if none specified
+    requested_model = model
     if model is None:
         model = _get_active_model(backend) or None
+    _sched_lane_key = ""
+    _sched_wait_ms = 0
     fn = PROVIDER_REGISTRY.get(backend, {}).get('dispatch')
     if not fn:
         return {"ok": False, "error": f"Unknown backend: {backend}. Available: {', '.join(PROVIDER_REGISTRY.keys())}", "run_id": run_id}
@@ -31236,6 +31628,24 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None, chain
     _record_agent_message(run_id, "porter", backend, message, status="in_progress", chain_id=chain_id, step_num=step_num)
     _emit_event("bridge:dispatch", {"run_id": run_id, "backend": backend, "prompt": message[:200]})
     mlog.emit("info", "bridge", "bridge.dispatch", f"Dispatch to {backend}", run_id=run_id, backend=backend, trace_id=_get_trace_id())
+    try:
+        _sched = _bridge_scheduler_acquire(backend, model or "", run_id=run_id, timeout_s=timeout)
+        _sched_lane_key = str(_sched.get("lane_key") or "")
+        _sched_wait_ms = int(_sched.get("wait_ms") or 0)
+    except Exception as e:
+        _update_agent_message(run_id, error=str(e)[:500], status="failed", duration_ms=0)
+        _emit_event("bridge:error", {"run_id": run_id, "backend": backend, "error": str(e)[:200]})
+        _record_bridge_benchmark(
+            "dispatch",
+            backend,
+            requested_model=str(requested_model or model or ""),
+            resolved_model=str(model or ""),
+            ok=False,
+            latency_ms=0,
+            error=str(e),
+            metadata={"run_id": run_id, "wait_ms": 0, "lane_key": "", "bridge": _bridge_runtime_semantics(backend, model or "")},
+        )
+        return {"ok": False, "error": str(e)[:500], "run_id": run_id}
     # v0.30.26 — Rate-limit auto-retry with exponential backoff
     _rl_max_retries = 3
     _rl_base_delay = 30  # seconds: 30, 60, 120
@@ -31265,11 +31675,27 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None, chain
         dur_ms = int((_dt.time() - _dt_start) * 1000)
         _ok = bool(_result.get("ok", True))
         _err = str(_result.get("error", "") or "")
+        _resolved_model = str(_result.get("model") or model or "")
         _record_backend_dispatch_result(backend, _ok, _err)
+        _record_bridge_benchmark(
+            "dispatch",
+            backend,
+            requested_model=str(requested_model or model or ""),
+            resolved_model=_resolved_model,
+            ok=_ok,
+            latency_ms=dur_ms,
+            error=_err,
+            metadata={
+                "run_id": run_id,
+                "wait_ms": _sched_wait_ms,
+                "lane_key": _sched_lane_key,
+                "bridge": _result.get("bridge", _bridge_runtime_semantics(backend, _resolved_model)),
+            },
+        )
         _log_delegation(backend, message, _result, dur_ms)
         # Record response
         _update_agent_message(run_id, response=_result.get("text", "")[:5000],
-                              status="complete" if _ok else "failed", model=_result.get("model", ""),
+                              status="complete" if _ok else "failed", model=_resolved_model,
                               tokens=_result.get("tokens", {}).get("total", 0), duration_ms=dur_ms)
         if not _ok and _err:
             _update_agent_message(run_id, error=_err[:500], status="failed", duration_ms=dur_ms)
@@ -31284,10 +31710,28 @@ def dispatch_agent(message, backend, model=None, timeout=120, run_id=None, chain
         dur_ms = int((_dt.time() - _dt_start) * 1000)
         log.error("Agent bridge [%s] exception: %s", backend, e)
         _record_backend_dispatch_result(backend, False, str(e))
+        _record_bridge_benchmark(
+            "dispatch",
+            backend,
+            requested_model=str(requested_model or model or ""),
+            resolved_model=str(model or ""),
+            ok=False,
+            latency_ms=dur_ms,
+            error=str(e),
+            metadata={
+                "run_id": run_id,
+                "wait_ms": _sched_wait_ms,
+                "lane_key": _sched_lane_key,
+                "bridge": _bridge_runtime_semantics(backend, model or ""),
+            },
+        )
         _update_agent_message(run_id, error=str(e)[:500], status="failed", duration_ms=dur_ms)
         _emit_event("bridge:error", {"run_id": run_id, "backend": backend, "error": str(e)[:200]})
         mlog.emit("error", "bridge", "bridge.fail", f"Bridge {backend} failed: {str(e)[:100]}", run_id=run_id, backend=backend, duration_ms=dur_ms, status="error", trace_id=_get_trace_id())
         return {"ok": False, "error": str(e)[:500], "run_id": run_id}
+    finally:
+        if _sched_lane_key:
+            _bridge_scheduler_release(backend, _sched_lane_key)
 
 
 def _record_agent_message(run_id, from_agent, to_agent, message, status="pending", chain_id=None, step_num=0):
@@ -35687,6 +36131,10 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.reply_json({"ok": True, "runs": []})
 
+        elif parsed.path == "/api/bridge/scheduler":
+            if not self.auth_check_cap("orch_read"): return
+            self.reply_json({"ok": True, "scheduler": _bridge_scheduler_summary(), "snapshot": _bridge_scheduler_snapshot()})
+
 
         elif parsed.path == "/api/events":
             if not self.auth_check(redirect=False): return
@@ -35705,7 +36153,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.44'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.45'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -35805,20 +36253,27 @@ class Handler(BaseHTTPRequestHandler):
 
             _stream_run_id = __import__("uuid").uuid4().hex[:12]
             _stream_backend = model_id.split("-")[0] if "-" in model_id else model_id
+            _stream_model_target = ""
+            _stream_lane_key = ""
+            _stream_wait_ms = 0
             # Map model_id prefixes to backend names
             if model_id.startswith("local-ollama-") or model_id == "ollama-local":
                 _stream_backend = "ollama"
+                _stream_model_target = model_id.replace("local-ollama-", "") if model_id.startswith("local-ollama-") else ""
             elif model_id == "openclaw-gateway":
                 _stream_backend = "openclaw"
+                _stream_model_target = _get_active_model("openclaw") or ""
             elif model_id.startswith("gemini-"):
                 _stream_backend = "gemini"
+                _stream_model_target = _get_active_model("gemini") or ""
             elif model_id == "claude-cli":
                 _stream_backend = "claude"
+                _stream_model_target = _get_active_model("claude") or ""
             elif model_id == "codex-cli":
                 _stream_backend = "codex"
+                _stream_model_target = _get_active_model("codex") or ""
             with _streams_lock:
                 _active_streams[_stream_run_id] = {"backend": _stream_backend, "chunks": [], "started_at": __import__("time").time()}
-            _emit_event("bridge:dispatch", {"run_id": _stream_run_id, "backend": _stream_backend, "prompt": prompt[:200], "source": "chat"})
             # v0.28.4 — Loop guard: human chat message resets guard
             _lg_chat_id_stream = chat_id or _stream_run_id
             _loop_guard_check(_lg_chat_id_stream, sender_is_human=True)
@@ -35827,6 +36282,23 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 import urllib.request
                 full_response = ""
+                try:
+                    _stream_sched = _bridge_scheduler_acquire(_stream_backend, _stream_model_target or "", run_id=_stream_run_id, timeout_s=120)
+                    _stream_lane_key = str(_stream_sched.get("lane_key") or "")
+                    _stream_wait_ms = int(_stream_sched.get("wait_ms") or 0)
+                except Exception as _sqe:
+                    _record_bridge_benchmark(
+                        "chat_stream",
+                        _stream_backend,
+                        requested_model=_stream_model_target or model_id,
+                        resolved_model=_stream_model_target or model_id,
+                        ok=False,
+                        latency_ms=0,
+                        error=str(_sqe),
+                        metadata={"run_id": _stream_run_id, "wait_ms": 0, "lane_key": "", "source": "chat"},
+                    )
+                    raise
+                _emit_event("bridge:dispatch", {"run_id": _stream_run_id, "backend": _stream_backend, "prompt": prompt[:200], "source": "chat"})
 
                 if model_id.startswith("local-ollama-"):
                     # Stream from Ollama
@@ -36057,6 +36529,16 @@ class Handler(BaseHTTPRequestHandler):
                 with _streams_lock:
                     _active_streams.pop(_stream_run_id, None)
                 _chat_dur_pre = int((__import__("time").time() - _chat_stream_start) * 1000)
+                _record_bridge_benchmark(
+                    "chat_stream",
+                    _stream_backend,
+                    requested_model=_stream_model_target or model_id,
+                    resolved_model=_stream_model_target or _stream_backend,
+                    ok=True,
+                    latency_ms=_chat_dur_pre,
+                    error="",
+                    metadata={"run_id": _stream_run_id, "wait_ms": _stream_wait_ms, "lane_key": _stream_lane_key, "source": "chat"},
+                )
                 _emit_event("bridge:response", {"run_id": _stream_run_id, "backend": _stream_backend, "ok": True, "duration_ms": _chat_dur_pre, "source": "chat"})
 
                 # Signal done
@@ -36084,6 +36566,17 @@ class Handler(BaseHTTPRequestHandler):
                     threading.Thread(target=_cx_bg, name="cortex-chat-extract", daemon=True).start()
 
             except Exception as e:
+                if _stream_backend:
+                    _record_bridge_benchmark(
+                        "chat_stream",
+                        _stream_backend,
+                        requested_model=_stream_model_target or model_id,
+                        resolved_model=_stream_model_target or _stream_backend,
+                        ok=False,
+                        latency_ms=int((__import__("time").time() - _chat_stream_start) * 1000) if '_chat_stream_start' in dir() else 0,
+                        error=str(e),
+                        metadata={"run_id": _stream_run_id, "wait_ms": _stream_wait_ms, "lane_key": _stream_lane_key, "source": "chat"},
+                    )
                 log.error("Chat stream error: %s", e)
                 _chat_dur = int((__import__("time").time() - _chat_stream_start) * 1000) if '_chat_stream_start' in dir() else 0
                 mlog.emit("error", "chat", "chat.stream.error", f"Chat error: {str(e)[:100]}",
@@ -36093,6 +36586,9 @@ class Handler(BaseHTTPRequestHandler):
                     self.wfile.flush()
                 except Exception as e:
                     log.debug("Skip probe: %s", e)
+            finally:
+                if _stream_lane_key:
+                    _bridge_scheduler_release(_stream_backend, _stream_lane_key)
 
         elif parsed.path == "/api/chat/sessions":
             token = self.get_session_token()
@@ -36617,7 +37113,30 @@ class Handler(BaseHTTPRequestHandler):
             results = {}
             def _run_test(bk):
                 model = _get_active_model(bk)
-                return bk, _test_model_connectivity(bk, model)
+                result = _test_model_connectivity(bk, model)
+                _bridge_meta = result.get("bridge", {}) if isinstance(result.get("bridge"), dict) else {}
+                _resolved_model = str(
+                    result.get("runtime", {}).get("resolved_model")
+                    or _bridge_meta.get("bridge_target")
+                    or result.get("model")
+                    or model
+                )
+                _record_bridge_benchmark(
+                    "connectivity",
+                    bk,
+                    requested_model=model,
+                    resolved_model=_resolved_model,
+                    ok=bool(result.get("ok")),
+                    latency_ms=int(result.get("latency_ms") or 0),
+                    error=str(result.get("error") or ""),
+                    metadata={
+                        "execution_state": result.get("execution_state", ""),
+                        "attempts": result.get("attempts", 0),
+                        "bridge": _bridge_meta,
+                    },
+                )
+                result["benchmark_summary"] = _bridge_benchmark_summary(86400).get(bk, {})
+                return bk, result
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
                 futures = [pool.submit(_run_test, bk) for bk in PROVIDER_REGISTRY]
                 for f in concurrent.futures.as_completed(futures, timeout=90):
@@ -36640,6 +37159,28 @@ class Handler(BaseHTTPRequestHandler):
             _test_bk = str(body.get("backend", body.get("model_id", ""))).strip()
             _test_model = str(body.get("model", "")).strip()
             result = _test_model_connectivity(_test_bk, _test_model)
+            _bridge_meta = result.get("bridge", {}) if isinstance(result.get("bridge"), dict) else {}
+            _resolved_model = str(
+                result.get("runtime", {}).get("resolved_model")
+                or _bridge_meta.get("bridge_target")
+                or result.get("model")
+                or _test_model
+            )
+            _record_bridge_benchmark(
+                "connectivity",
+                _test_bk,
+                requested_model=_test_model,
+                resolved_model=_resolved_model,
+                ok=bool(result.get("ok")),
+                latency_ms=int(result.get("latency_ms") or 0),
+                error=str(result.get("error") or ""),
+                metadata={
+                    "execution_state": result.get("execution_state", ""),
+                    "attempts": result.get("attempts", 0),
+                    "bridge": _bridge_meta,
+                },
+            )
+            result["benchmark_summary"] = _bridge_benchmark_summary(86400).get(_test_bk, {})
             if result.get("ok"):
                 log.info("Model test OK: backend=%s model=%s latency=%sms", _test_bk, result.get("model", ""), result.get("latency_ms", "?"))
                 mlog.emit("info", "models", "models.test.ok",
@@ -40470,7 +41011,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.44 ready (localhost only)")
+    print(f"\n  Porter v0.30.45 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

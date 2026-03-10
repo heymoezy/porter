@@ -1,5 +1,16 @@
 # Porter Release Notes
 
+## v0.30.45 (2026-03-10)
+
+**Bridge V2 Scheduler And Unified Models Control Plane**
+
+- Porter Bridge now enforces per-backend and per-model concurrency limits with queue admission and wait-time tracking, so parallel agent work stops stampeding the same backend lane
+- Shared dispatches and Models connectivity tests now persist structured benchmark history, and routing uses that data plus live scheduler pressure to prefer faster, less-contended backends
+- Models cards now show benchmark summaries, live queue pressure, and honest bridge-control semantics, including explicit notice when a backend does not honor exact model selection
+- Chat streaming now uses the same bridge scheduler semantics as persona/orchestration dispatch, aligning Porter's model traffic under one control plane instead of split execution paths
+
+---
+
 ## v0.30.25 (2026-03-09)
 
 **Squad-Aware Orchestration Routing**
@@ -737,7 +748,7 @@ Based on Moe's design feedback, this release strips the Memory tab down to essen
 
 ### Smart Routing
 - **Porter auto-selects model** based on message content
-- Code/technical → OpenClaw (GPT-5.3 Codex), quick factual → Gemini (fast)
+- Code/technical → OpenClaw (GPT-5.4 Codex), quick factual → Gemini (fast)
 - Word-boundary matching prevents false positives
 
 ### Notifications & Persistence
@@ -1379,7 +1390,7 @@ Major UX overhaul across multiple subsystems:
 
 ## v0.12.95 (2026-02-26)
 
-- Agent cards now display the configured model ID (e.g. `openai-codex/gpt-5.3-codex`).
+- Agent cards now display the configured model ID (e.g. `openai-codex/gpt-5.4`).
 - Gemini agent cards show static rate limit summary: 60 req/min · 1,000 req/day.
 
 ---
