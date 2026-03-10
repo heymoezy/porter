@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.54 (2026-03-10)
+
+- Porter was scaled down again on the main Agents roster so his gallery presence is closer to the detail-page proportion.
+- The detail screen now gives Chat the full workspace by default; activity, memory, and other operational views stay available through their own tabs instead of crowding the main canvas.
+- `Create Worker` and `Create Squad` moved into the tab rail, the unnecessary roster subtitle was removed, and the back control was restored as a clear `Back to Agents` button.
+- `Who Is Porter` now anchors to the detail pane instead of the full app overlay, so the brief reads as part of the workspace rather than a floating global modal.
+
 ## v0.30.53 (2026-03-10)
 
 - Agent detail now defaults to a dedicated chat workspace instead of a redundant overview, with Porter and workers each getting their own focused conversation lane.
