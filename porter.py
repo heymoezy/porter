@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.51 — Porter-first agents command redesign"""
+"""Porter v0.30.52 — Agents scale and hero-layout corrections"""
 
 
 import email
@@ -8582,23 +8582,12 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .flush-wizard-impact span { display:flex; flex-direction:column; gap:2px; }
 .flush-wizard-impact strong { font-size:11px; color:var(--text); }
 .flush-wizard-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
-.persona-card { cursor:grab; user-select:none; -webkit-user-select:none; }
-.persona-card.drag-src { opacity:.25; transform:scale(.96); pointer-events:none; }
+.persona-card { cursor:pointer; user-select:none; -webkit-user-select:none; }
+.persona-card.drag-src { opacity:1; transform:none; pointer-events:auto; }
 .persona-cards-row { min-height:80px; }
 .persona-cards-row .persona-card { transition:transform .15s ease, margin .15s ease; }
-.persona-cards-row .drag-gap {
-  width:130px; min-height:120px; border-radius:10px;
-  background:color-mix(in srgb, var(--accent) 6%, transparent);
-  border:2px dashed color-mix(in srgb, var(--accent) 30%, transparent);
-  flex-shrink:0; transition:width .15s ease, opacity .15s ease;
-  pointer-events:none;
-}
-.drag-clone {
-  position:fixed; pointer-events:none; z-index:9999;
-  opacity:.92; transform:rotate(2deg) scale(1.04);
-  box-shadow:0 16px 40px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.2);
-  transition:none; will-change:left,top;
-}
+.persona-cards-row .drag-gap { display:none; }
+.drag-clone { display:none; }
 .persona-wizard-overlay { position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.4);z-index:999; }
 .persona-wizard-modal { position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:480px;max-height:80vh;background:var(--surface);border-radius:12px;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.25);z-index:1000;overflow:hidden;display:flex;flex-direction:column; }
 .learn-spinner { display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:learn-spin .6s linear infinite;vertical-align:middle;margin-right:4px; }
@@ -9675,7 +9664,7 @@ body.density-compact .file-name { padding: 6px 0; }
   flex-direction:column;
   align-items:center;
   justify-content:flex-end;
-  gap:10px;
+  gap:4px;
   padding:0 8px 8px;
   background:transparent;
   border:none;
@@ -9685,8 +9674,8 @@ body.density-compact .file-name { padding: 6px 0; }
   transition:transform .18s ease, filter .18s ease;
 }
 .persona-card.orchestrator {
-  width:236px;
-  min-height:332px;
+  width:320px;
+  min-height:470px;
 }
 .persona-card:hover { transform:translateY(-5px); filter:brightness(1.05); }
 .persona-card.selected { transform:translateY(-8px) scale(1.02); }
@@ -9695,8 +9684,8 @@ body.density-compact .file-name { padding: 6px 0; }
   position:absolute;
   left:20px;
   right:20px;
-  bottom:46px;
-  height:24px;
+  bottom:34px;
+  height:28px;
   border-radius:999px;
   background:radial-gradient(circle, color-mix(in srgb,var(--accent) 28%, transparent) 0%, transparent 72%);
   opacity:.18;
@@ -9715,7 +9704,7 @@ body.density-compact .file-name { padding: 6px 0; }
   justify-content:center;
   overflow:visible;
 }
-.persona-card.orchestrator .persona-card-avatar { width:208px; height:270px; }
+.persona-card.orchestrator .persona-card-avatar { width:300px; height:388px; }
 .persona-card-name {
   font-size:16px;
   font-weight:800;
@@ -9725,7 +9714,7 @@ body.density-compact .file-name { padding: 6px 0; }
   word-wrap:break-word;
   overflow-wrap:break-word;
 }
-.persona-card.orchestrator .persona-card-name { font-size:20px; }
+.persona-card.orchestrator .persona-card-name { font-size:24px; margin-top:2px; }
 .persona-card-role {
   font-size:12px;
   color:var(--text3);
@@ -9733,7 +9722,7 @@ body.density-compact .file-name { padding: 6px 0; }
   line-height:1.25;
   max-width:150px;
 }
-.persona-card.orchestrator .persona-card-role { font-size:13px; max-width:180px; }
+.persona-card.orchestrator .persona-card-role { font-size:14px; max-width:240px; }
 .persona-card-status, .persona-card-dot { display:none; }
 @keyframes pixel-walk {
   0%,100% { transform:translateY(0) rotate(0deg); }
@@ -9768,9 +9757,9 @@ body.density-compact .file-name { padding: 6px 0; }
     linear-gradient(180deg,color-mix(in srgb,var(--surface) 94%, transparent),color-mix(in srgb,var(--bg) 96%, transparent));
   border:1px solid var(--border);
   border-radius:20px;
-  padding:24px;
+  padding:12px 22px 18px;
 }
-.agent-identity-card { display:flex; align-items:flex-end; gap:24px; }
+.agent-identity-card { display:flex; align-items:center; gap:24px; }
 .agent-identity-avatar {
   width:188px;
   height:232px;
@@ -10238,7 +10227,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.51</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.52</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11634,6 +11623,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.52', date:'2026-03-10', notes:['Porter now renders dramatically larger on the Agents landing stage, with tighter name/title spacing so the hero figure actually dominates the roster','Legacy drag-and-drop visuals were stripped from the Agents stage, removing the lingering square clone/gap artifacts from the old card system','Detached workers no longer get a Direct Reports header, so the roster reads as one cleaner stage instead of mixed admin sections','Porter detail header now uses the available vertical space correctly, and the redundant doctrine strip was removed from the main overview because the Who Is Porter brief already covers it'] },
   { ver:'v0.30.51', date:'2026-03-10', notes:['Agents landing now routes creation through Porter instead of exposing +Worker and +Squad controls, with a larger Porter figure and cleaner squad filtering','Porter detail now uses a command-brief layout with no duplicate portrait block, no dispatch or token counters, and clearer task/context/activity sections','Locked Porter identity now opens a curated Who Is Porter brief instead of exposing the raw core prompt directly','Unassigned worker language was replaced with Direct Reports so the roster reads as Porter-managed structure instead of loose admin state'] },
   { ver:'v0.30.50', date:'2026-03-10', notes:['Agents tab no longer uses compact status cards; workers now render as full-figure pixel characters on a stage with just name and title','Porter and worker detail views now use a hero-style profile layout with a large figure render and cleaner command-profile copy instead of a CRUD-heavy header','Idle/status noise was removed from the main gallery so the screen reads as identities and teams first, not backend records','Minecraft-style figure rendering now uses a full-body silhouette with simple walk/hero motion so Porter feels like a real platform character'] },
   { ver:'v0.30.49', date:'2026-03-10', notes:['Workers now have visible lifecycle state, with temporary vs persistent creation in the wizard and promote/make-temporary controls in the detail view','New workers can be assigned directly into a squad at creation time so the tab no longer forces a detached create-then-organize flow','Agents cards and detail headers now render deterministic Minecraft-style portraits from appearance specs instead of relying only on emoji placeholders','Squad skill assignment paths now use the real persona skill API again, removing the dead action that left the squad editor half-working'] },
@@ -23091,8 +23081,8 @@ function renderPersonaOrg() {
   function cardHtml(p) {
     var isSelected = p.id === _selectedPersonaId;
     var isOrch = p.agent_group === 'Orchestrator' || p.orchestrator_only;
-    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + '" data-persona-id="' + p.id + '" onmousedown="_pMouseDown(event)" ontouchstart="_pTouchStart(event)" onclick="selectPersona(\'' + p.id + '\')">'
-      + '<div class="persona-card-avatar" style="display:flex;align-items:center;justify-content:center;overflow:hidden">' + _personaAvatarMarkup(p, 54) + '</div>'
+    return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + '" data-persona-id="' + p.id + '" onclick="selectPersona(\'' + p.id + '\')">'
+      + '<div class="persona-card-avatar" style="display:flex;align-items:center;justify-content:center;overflow:hidden">' + _personaAvatarMarkup(p, isOrch ? 320 : 128) + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
       + '<div class="persona-card-role">' + escHtml(p.role || (isOrch ? 'Master Orchestrator' : 'Worker')) + '</div>'
       + '</div>';
@@ -23125,14 +23115,10 @@ function renderPersonaOrg() {
       });
       html += '</div></div>';
     });
-    // Unassigned agents
+    // Workers not attached to a squad
     var unassigned = sorted.filter(function(p) { return !rendered[p.id]; });
     if (unassigned.length) {
-      html += '<div style="margin-bottom:16px">'
-        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border)">'
-        + '<span style="font-size:13px;font-weight:600;color:var(--text3)">Direct Reports</span>'
-        + '</div>'
-        + '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">';
+      html += '<div style="margin-bottom:16px"><div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">';
       unassigned.forEach(function(p) { html += cardHtml(p); });
       html += '</div></div>';
     }
@@ -23365,7 +23351,7 @@ async function selectPersona(id) {
     var delBtn = document.getElementById('pd-delete-btn');
     var spBtn = document.getElementById('pd-sp-btn');
     if (av) {
-      av.innerHTML = _personaAvatarMarkup(p, 96);
+      av.innerHTML = _personaAvatarMarkup(p, isOrchestrator ? 210 : 154);
       av.style.cursor = isLocked ? 'default' : 'pointer';
     }
     if (nm) nm.textContent = p.name || 'Unnamed';
@@ -23461,6 +23447,7 @@ function switchPdTab(tab) {
         + '<div style="font-size:13px;line-height:1.55;color:var(--text2)">' + escHtml(item[1]) + '</div>'
         + '</div>';
     }).join('');
+    var doctrineSection = p.orchestrator_only ? '' : '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">' + doctrineHtml + '</div>';
     content.innerHTML = '<div style="display:flex;flex-direction:column;gap:18px">'
       + '<div style="padding:20px 22px;border:1px solid var(--border);border-radius:22px;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 10%, transparent),transparent 68%)">'
       + '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;justify-content:space-between">'
@@ -23480,7 +23467,7 @@ function switchPdTab(tab) {
                 ? '<button class="btn btn-ghost btn-sm" onclick="_setWorkerLifecycle(\'' + p.id + '\',false)">Promote To Persistent</button>'
                 : '<button class="btn btn-ghost btn-sm" onclick="_setWorkerLifecycle(\'' + p.id + '\',true)">Make Temporary</button>'))
       + '</div></div></div>'
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">' + doctrineHtml + '</div>'
+      + doctrineSection
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">'
       + '<section style="padding:18px;border:1px solid var(--border);border-radius:18px;background:var(--surface)">'
       + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Assigned Tasks</div><div style="font-size:11px;color:var(--text3)">' + (p.orchestrator_only ? 'Current supervision lanes' : 'Current execution lanes') + '</div></div>'
@@ -34912,7 +34899,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.51"})
+            self.reply_json({"v": "0.30.52"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35074,7 +35061,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.51"
+                health["porter_version"] = "0.30.52"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -36970,7 +36957,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.51'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.52'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -41863,7 +41850,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.51 ready (localhost only)")
+    print(f"\n  Porter v0.30.52 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

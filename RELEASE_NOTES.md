@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.52 (2026-03-10)
+
+- Porter now renders much larger on the Agents landing page, with tighter spacing between the figure, name, and title so the stage finally reads like a hero surface.
+- The leftover drag-and-drop square/ghost behavior was stripped out of the Agents stage.
+- Detached workers no longer get a `Direct Reports` heading, which removes another leftover admin label from the roster.
+- Porter detail now uses the available header height properly, and the redundant doctrine strip was removed from the main overview because `Who Is Porter` already covers that ground.
+
 ## v0.30.51 (2026-03-10)
 
 - The Agents landing page now routes creation through Porter instead of exposing `+ New Worker` and `+ Squad`, and Porter himself renders larger as the clear center of the roster.
