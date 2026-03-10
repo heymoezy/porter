@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.43 — Squad-Project binding: squads assignable to projects"""
+"""Porter v0.30.44 — Standup generation: auto-summarize project activity"""
 
 
 import email
@@ -9847,7 +9847,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.43</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.44</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11234,6 +11234,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.44', date:'2026-03-10', notes:['Standup generation: auto-summarize dispatch activity per project','GET /api/standup?project_id=X&hours=24 returns dispatch stats, active agents, recent tasks, summary lines','Supports per-project or global (all projects) standup view'] },
   { ver:'v0.30.43', date:'2026-03-10', notes:['Squad-Project binding: squads can now be assigned to projects via project_id column','_resolve_persona_project checks squad binding as fallback (agent in squad → squad has project → project resolved)','Squad update API accepts project_id field','Enables per-squad project dispatch policy without individual agent assignment'] },
   { ver:'v0.30.42', date:'2026-03-10', notes:['Intelligence Dashboard in Runtime tab: backend quality scores, pattern mining insights, self-heal/self-dispatch status','Parallel API fetches for dispatch-scores, intelligence/patterns, self-heal/status, self-dispatch/status','Visual: score cards with color-coded quality (green/yellow/red), insight bullets with purple accent'] },
   { ver:'v0.30.41', date:'2026-03-10', notes:['Pattern mining: analyzes 7-day dispatch history for performance insights','Per-agent success rates + quality scores, per-backend reliability comparison','Common failure patterns (top 5), hourly performance distribution','Runs every 6h, logs insights to Mission Control, GET /api/intelligence/patterns'] },
@@ -30549,6 +30550,115 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
 
 
 
+
+# ── Standup Generation (v0.30.44) ────────────────────────────────────────
+# Auto-summarize recent dispatch activity per project into a standup report.
+
+def _generate_standup(project_id: str = "", hours: int = 24) -> dict:
+    """v0.30.44 — Generate a standup summary for a project (or all projects).
+
+    Returns:
+    - dispatches: count of dispatches in the period
+    - completions: successful dispatches
+    - failures: failed dispatches
+    - agents_active: list of agents that dispatched
+    - top_tasks: recent completed tasks
+    - anomalies: any anomalies detected
+    - insights: from pattern mining
+    """
+    import time as _sut
+    cutoff = _sut.time() - (hours * 3600)
+    report = {
+        "period_hours": hours,
+        "project_id": project_id or "all",
+        "generated_at": _sut.time(),
+        "dispatches": 0,
+        "completions": 0,
+        "failures": 0,
+        "agents_active": [],
+        "top_tasks": [],
+        "anomalies": [],
+        "summary_lines": [],
+    }
+    try:
+        conn = _db_conn()
+        # Dispatch stats
+        if project_id:
+            stats = conn.execute("""
+                SELECT COUNT(*) as total,
+                       SUM(CASE WHEN status='complete' THEN 1 ELSE 0 END) as ok,
+                       SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as fail
+                FROM agent_messages
+                WHERE project_id = ? AND created_at > ?
+            """, (project_id, cutoff)).fetchone()
+        else:
+            stats = conn.execute("""
+                SELECT COUNT(*) as total,
+                       SUM(CASE WHEN status='complete' THEN 1 ELSE 0 END) as ok,
+                       SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as fail
+                FROM agent_messages
+                WHERE created_at > ?
+            """, (cutoff,)).fetchone()
+        report["dispatches"] = stats[0] or 0
+        report["completions"] = stats[1] or 0
+        report["failures"] = stats[2] or 0
+
+        # Active agents
+        if project_id:
+            agents = conn.execute("""
+                SELECT DISTINCT p.name FROM agent_messages am
+                JOIN personas p ON am.persona_id = p.id
+                WHERE am.project_id = ? AND am.created_at > ?
+            """, (project_id, cutoff)).fetchall()
+        else:
+            agents = conn.execute("""
+                SELECT DISTINCT p.name FROM agent_messages am
+                JOIN personas p ON am.persona_id = p.id
+                WHERE am.created_at > ? AND am.persona_id IS NOT NULL
+            """, (cutoff,)).fetchall()
+        report["agents_active"] = [a[0] for a in agents]
+
+        # Recent completed tasks
+        if project_id:
+            tasks = conn.execute("""
+                SELECT title, status, assigned_persona_id FROM tasks
+                WHERE project_id = ? AND updated_at > ?
+                ORDER BY updated_at DESC LIMIT 5
+            """, (project_id, cutoff)).fetchall()
+        else:
+            tasks = conn.execute("""
+                SELECT title, status, assigned_persona_id FROM tasks
+                WHERE updated_at > ?
+                ORDER BY updated_at DESC LIMIT 5
+            """, (cutoff,)).fetchall()
+        report["top_tasks"] = [
+            {"title": t[0], "status": t[1], "agent": t[2] or "unassigned"}
+            for t in tasks
+        ]
+        conn.close()
+    except Exception as e:
+        log.debug("Standup generation error: %s", e)
+        report["error"] = str(e)[:200]
+
+    # Build summary lines
+    lines = []
+    if report["dispatches"] > 0:
+        rate = round((report["completions"] / report["dispatches"]) * 100) if report["dispatches"] > 0 else 0
+        lines.append(f"{report['dispatches']} dispatches ({rate}% success rate)")
+    if report["agents_active"]:
+        lines.append(f"Active agents: {', '.join(report['agents_active'][:5])}")
+    if report["top_tasks"]:
+        done = [t for t in report["top_tasks"] if t["status"] == "complete"]
+        if done:
+            lines.append(f"Completed: {', '.join(t['title'][:40] for t in done[:3])}")
+    if report["failures"] > 0:
+        lines.append(f"{report['failures']} failures — check Mission Control")
+    if not lines:
+        lines.append("No dispatch activity in this period")
+    report["summary_lines"] = lines
+    return report
+
+
 # ── Pattern Mining (v0.30.41) ────────────────────────────────────────────
 # Analyzes dispatch history to find performance trends and surface insights.
 # Runs periodically (every 6h) and stores findings as Cortex project-scoped memories.
@@ -33497,6 +33607,13 @@ class Handler(BaseHTTPRequestHandler):
                 "self_check": _last_self_check.get("summary", "Not run"),
                 "self_heal_enabled": _config.get("preferences", {}).get("self_heal_enabled", False),
             })
+        elif parsed.path == "/api/standup":
+            if not self.auth_check(redirect=False): return
+            qs = urllib.parse.parse_qs(parsed.query)
+            proj_id = qs.get("project_id", [""])[0]
+            hours = int(qs.get("hours", ["24"])[0])
+            report = _generate_standup(project_id=proj_id, hours=min(hours, 168))
+            self.reply_json({"ok": True, **report})
         elif parsed.path == "/api/intelligence/patterns":
             if not self.auth_check(redirect=False): return
             self.reply_json({"ok": True, **_pattern_mining_results})
@@ -33541,7 +33658,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.43"})
+            self.reply_json({"v": "0.30.44"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -33703,7 +33820,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.43"
+                health["porter_version"] = "0.30.44"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -35588,7 +35705,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.43'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.44'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -40353,7 +40470,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.43 ready (localhost only)")
+    print(f"\n  Porter v0.30.44 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
