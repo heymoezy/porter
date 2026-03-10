@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.51 (2026-03-10)
+
+- The Agents landing page now routes creation through Porter instead of exposing `+ New Worker` and `+ Squad`, and Porter himself renders larger as the clear center of the roster.
+- Squad filtering was cleaned up to remove the awkward `All` / `Unassigned` framing in favor of a cleaner full-cast view and `Direct Reports`.
+- Porter detail now uses a command-brief layout with no duplicate portrait, no dispatch/token counters, and more elegant assigned-task, project-context, and recent-activity rails.
+- Locked Porter identity now opens a curated `Who Is Porter` brief instead of exposing the raw core prompt directly.
+
 ## v0.30.50 (2026-03-10)
 
 - The Agents tab no longer uses compact status cards; workers now render as full-figure pixel characters on a stage with just name and title.

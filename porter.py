@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.50 — Agents stage redesign and Porter hero profile"""
+"""Porter v0.30.51 — Porter-first agents command redesign"""
 
 
 import email
@@ -9669,8 +9669,8 @@ body.density-compact .file-name { padding: 6px 0; }
 /* Agent stage redesign */
 .persona-cards-row { display:flex; gap:18px; flex-wrap:wrap; padding:12px 0 6px; align-items:flex-end; }
 .persona-card {
-  width:168px;
-  min-height:252px;
+  width:176px;
+  min-height:270px;
   display:flex;
   flex-direction:column;
   align-items:center;
@@ -9683,6 +9683,10 @@ body.density-compact .file-name { padding: 6px 0; }
   cursor:pointer;
   position:relative;
   transition:transform .18s ease, filter .18s ease;
+}
+.persona-card.orchestrator {
+  width:236px;
+  min-height:332px;
 }
 .persona-card:hover { transform:translateY(-5px); filter:brightness(1.05); }
 .persona-card.selected { transform:translateY(-8px) scale(1.02); }
@@ -9704,16 +9708,16 @@ body.density-compact .file-name { padding: 6px 0; }
   opacity:.55;
 }
 .persona-card-avatar {
-  width:138px;
-  height:182px;
+  width:146px;
+  height:194px;
   display:flex;
   align-items:flex-end;
   justify-content:center;
   overflow:visible;
 }
-.persona-card.orchestrator .persona-card-avatar { width:154px; height:200px; }
+.persona-card.orchestrator .persona-card-avatar { width:208px; height:270px; }
 .persona-card-name {
-  font-size:15px;
+  font-size:16px;
   font-weight:800;
   color:var(--text);
   text-align:center;
@@ -9721,13 +9725,15 @@ body.density-compact .file-name { padding: 6px 0; }
   word-wrap:break-word;
   overflow-wrap:break-word;
 }
+.persona-card.orchestrator .persona-card-name { font-size:20px; }
 .persona-card-role {
-  font-size:11px;
+  font-size:12px;
   color:var(--text3);
   text-align:center;
   line-height:1.25;
   max-width:150px;
 }
+.persona-card.orchestrator .persona-card-role { font-size:13px; max-width:180px; }
 .persona-card-status, .persona-card-dot { display:none; }
 @keyframes pixel-walk {
   0%,100% { transform:translateY(0) rotate(0deg); }
@@ -10232,7 +10238,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.50</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.51</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10388,10 +10394,9 @@ input[type="number"].settings-input { min-width: 60px; }
   <div id="agents-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Agents</span>
-      <button class="btn btn-ghost" onclick="openSquadWizard()" style="font-size:12px">+ Squad</button>
-      <button class="btn btn-primary" onclick="openPersonaWizard()" style="font-size:12px">+ New Worker</button>
-      <button class="btn btn-ghost" onclick="openRulesEditor()" style="font-size:12px">📋 Global Rules</button>
-
+      <span style="font-size:12px;color:var(--text3);margin-left:8px">Porter directs the cast. New workers and squads should start with him.</span>
+      <div style="flex:1"></div>
+      <button class="btn btn-primary" onclick="_askPorterToCreate('worker')" style="font-size:12px">Ask Porter To Create A Worker</button>
     </div>
 
     <!-- Agent Grid -->
@@ -10409,7 +10414,7 @@ input[type="number"].settings-input { min-width: 60px; }
       <div class="agent-detail-topbar">
         <button class="btn btn-ghost" onclick="closePersonaDetail()" style="font-size:13px">&larr; Back to Team</button>
         <div style="flex:1"></div>
-        <button class="btn btn-ghost btn-sm" id="pd-sp-btn" onclick="_showSystemPrompt(_selectedPersonaId)" style="font-size:11px">System Prompt</button>
+        <button class="btn btn-ghost btn-sm" id="pd-sp-btn" onclick="_showSystemPrompt(_selectedPersonaId)" style="font-size:11px">Who Is Porter</button>
         <button class="btn btn-ghost btn-sm" id="pd-delete-btn" style="font-size:11px;color:#ef4444" onclick="deletePersona()">Delete</button>
       </div>
       <div class="agent-identity-shell">
@@ -11629,6 +11634,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.51', date:'2026-03-10', notes:['Agents landing now routes creation through Porter instead of exposing +Worker and +Squad controls, with a larger Porter figure and cleaner squad filtering','Porter detail now uses a command-brief layout with no duplicate portrait block, no dispatch or token counters, and clearer task/context/activity sections','Locked Porter identity now opens a curated Who Is Porter brief instead of exposing the raw core prompt directly','Unassigned worker language was replaced with Direct Reports so the roster reads as Porter-managed structure instead of loose admin state'] },
   { ver:'v0.30.50', date:'2026-03-10', notes:['Agents tab no longer uses compact status cards; workers now render as full-figure pixel characters on a stage with just name and title','Porter and worker detail views now use a hero-style profile layout with a large figure render and cleaner command-profile copy instead of a CRUD-heavy header','Idle/status noise was removed from the main gallery so the screen reads as identities and teams first, not backend records','Minecraft-style figure rendering now uses a full-body silhouette with simple walk/hero motion so Porter feels like a real platform character'] },
   { ver:'v0.30.49', date:'2026-03-10', notes:['Workers now have visible lifecycle state, with temporary vs persistent creation in the wizard and promote/make-temporary controls in the detail view','New workers can be assigned directly into a squad at creation time so the tab no longer forces a detached create-then-organize flow','Agents cards and detail headers now render deterministic Minecraft-style portraits from appearance specs instead of relying only on emoji placeholders','Squad skill assignment paths now use the real persona skill API again, removing the dead action that left the squad editor half-working'] },
   { ver:'v0.30.48', date:'2026-03-10', notes:['New workers now receive Porter-managed starter skills automatically based on their role instead of starting as blank manual shells','Agent Skills now shows whether a worker is on Porter-managed defaults or manual overrides, with a one-click Re-curate action when the role changes','Manual skill edits now explicitly switch a worker off Porter-managed defaults so the UI tells the truth about who is controlling capability coverage','Persona skill APIs now return recommendation metadata so the worker UI and future orchestration logic can share the same Porter skill-curation signal'] },
@@ -16053,6 +16059,13 @@ var _inlineSessionsExpanded = {};
 
 
 async function _showSystemPrompt(personaId) {
+  var persona = window._selectedPersona && window._selectedPersona.id === personaId
+    ? window._selectedPersona
+    : (_personas || []).find(function(p) { return p.id === personaId; });
+  if (persona && persona.orchestrator_only) {
+    _showPersonaBrief(persona);
+    return;
+  }
   try {
     var resp = await api('/api/persona/' + personaId + '/system-prompt');
     if (!resp || !resp.ok) { toast(resp ? resp.error : 'Failed', 'err'); return; }
@@ -16076,6 +16089,53 @@ async function _showSystemPrompt(personaId) {
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
   } catch(e) { toast('Failed to load system prompt', 'err'); }
+}
+
+function _showPersonaBrief(persona) {
+  if (!persona) return;
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.56);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+  function _briefEsc(e) { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', _briefEsc); } }
+  document.addEventListener('keydown', _briefEsc);
+  var title = persona.orchestrator_only ? 'Who Is Porter' : 'Worker Brief';
+  var body = persona.orchestrator_only
+    ? '<div style="font-size:14px;line-height:1.7;color:var(--text2)">Porter is the platform\'s master orchestrator. He interprets objectives, designs the plan, creates or assigns workers, manages handoffs, and verifies completion. Porter does not take on substantive implementation work himself. He remains accountable for coordination quality, worker composition, and the final outcome presented back to the user.</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px">'
+      + '<div style="padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Command Style</div><div style="font-size:13px;color:var(--text)">Calm, exact, supervisory, high-trust.</div></div>'
+      + '<div style="padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Execution Rule</div><div style="font-size:13px;color:var(--text)">Delegates real work to workers and monitors them until complete.</div></div>'
+      + '<div style="padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Identity</div><div style="font-size:13px;color:var(--text)">Locked system persona and public face of the platform.</div></div>'
+      + '</div>'
+    : '<div style="font-size:14px;line-height:1.7;color:var(--text2)">' + escHtml((persona.name || 'This worker') + ' is a ' + (persona.is_temporary ? 'temporary' : 'persistent') + ' worker managed by Porter for focused execution. Role: ' + (persona.role || 'Worker') + '.') + '</div>';
+  var modal = document.createElement('div');
+  modal.style.cssText = 'background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%, transparent),color-mix(in srgb,var(--bg) 97%, transparent));border:1px solid var(--border);border-radius:20px;padding:22px;max-width:760px;width:min(760px,100%);box-shadow:0 18px 60px rgba(0,0,0,.34)';
+  modal.innerHTML = '<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">'
+    + '<div style="display:flex;align-items:flex-end;justify-content:center;min-width:110px;min-height:130px">' + _personaAvatarMarkup(persona, 112) + '</div>'
+    + '<div style="min-width:0"><div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">' + title + '</div>'
+    + '<div style="font-size:28px;font-weight:800;color:var(--text);line-height:1">' + escHtml(persona.name || 'Unnamed') + '</div>'
+    + '<div style="font-size:13px;color:var(--text3);margin-top:6px">' + escHtml(persona.role || (persona.orchestrator_only ? 'Master Orchestrator' : 'Worker')) + '</div></div>'
+    + '<div style="flex:1"></div>'
+    + '<button class="btn btn-ghost" onclick="this.closest(\'div[style*=fixed]\').remove()" style="font-size:14px;padding:4px 10px">×</button></div>'
+    + body;
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+}
+
+function _askPorterToCreate(kind) {
+  _chatAgent = null;
+  buildChatCtxSelectors();
+  switchModule('overview');
+  var input = document.getElementById('chat-input-welcome') || document.getElementById('chat-input');
+  if (!input) return;
+  var prompts = {
+    worker: 'Porter, create the right worker for this job. Define the role, decide whether it should be temporary or persistent, assign the needed skills, and keep the roster clean.',
+    squad: 'Porter, create a squad only if the work truly needs one. Choose the structure, assign workers intelligently, and keep the setup lean.'
+  };
+  input.value = prompts[kind] || prompts.worker;
+  if (typeof _chatAutoGrow === 'function') _chatAutoGrow(input);
+  input.focus();
+  var pos = input.value.length;
+  try { input.setSelectionRange(pos, pos); } catch(e) {}
 }
 
 function _toggleInlineSessions(btn, backend, source) {
@@ -22716,7 +22776,16 @@ async function loadSquads() {
 function renderSquadChips() {
   var row = document.getElementById('squad-chips-row');
   if (!row) return;
-  var chips = '<button class="btn btn-ghost" style="font-size:11px;padding:2px 11px;border-radius:12px;' + (!_activeSquadFilter ? 'background:var(--accent);color:#fff' : '') + '" onclick="_filterSquad(null)">All</button>';
+  if (!_squads.length) {
+    row.style.display = 'none';
+    row.innerHTML = '';
+    return;
+  }
+  row.style.display = 'flex';
+  var chips = '<span style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-right:4px">Squads</span>';
+  if (_activeSquadFilter) {
+    chips += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 11px;border-radius:12px" onclick="_filterSquad(null)">Show Full Cast</button>';
+  }
   _squads.forEach(function(s) {
     var active = _activeSquadFilter === s.id;
     chips += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 11px;border-radius:12px;border:1px solid ' + s.color + ';color:' + (active ? '#fff' : s.color) + ';' + (active ? 'background:' + s.color : '') + '" onclick="_filterSquad(\'' + s.id + '\')">' + escHtml(s.name) + ' <span style="font-size:9px;opacity:0.7">' + s.member_count + '</span></button>';
@@ -22992,7 +23061,7 @@ function renderPersonaOrg() {
   const row = document.getElementById('persona-cards-row');
   if (!row) return;
   if (!_personas.length) {
-    row.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:12px">No workers yet. Click <b>+ New Worker</b> to create one Porter can delegate to.</div>';
+    row.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:18px 12px">No workers yet. Ask Porter to create the right worker when the work demands it.</div>';
     return;
   }
   const groupColors = { Orchestrator:'#ef4444', Strategy:'#6366f1', Creative:'#ec4899', Technical:'#06b6d4', Operations:'#f59e0b' };
@@ -23041,7 +23110,6 @@ function renderPersonaOrg() {
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;padding:4px 0 7px 0;border-bottom:1px solid ' + sq.color + '">'
         + '<span style="width:9px;height:9px;border-radius:50%;background:' + sq.color + ';flex-shrink:0"></span>'
         + '<span style="font-size:13px;font-weight:600;color:var(--text)">' + escHtml(sq.name) + '</span>'
-        + '<span style="font-size:11px;color:var(--text3)">' + members.length + ' worker' + (members.length !== 1 ? 's' : '') + '</span>'
         + '<button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;margin-left:auto" onclick="_editSquad(\'' + sq.id + '\')" title="Configure squad">⚙</button>'
         + '</div>'
         + '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:2px 0">';
@@ -23062,8 +23130,7 @@ function renderPersonaOrg() {
     if (unassigned.length) {
       html += '<div style="margin-bottom:16px">'
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border)">'
-        + '<span style="font-size:13px;font-weight:600;color:var(--text3)">Unassigned</span>'
-        + '<span style="font-size:11px;color:var(--text3)">' + unassigned.length + ' worker' + (unassigned.length !== 1 ? 's' : '') + '</span>'
+        + '<span style="font-size:13px;font-weight:600;color:var(--text3)">Direct Reports</span>'
         + '</div>'
         + '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">';
       unassigned.forEach(function(p) { html += cardHtml(p); });
@@ -23307,7 +23374,7 @@ async function selectPersona(id) {
     if (sb) { sb.textContent = p.managed_by_porter ? 'Porter-managed' : 'Manual'; sb.style.color = p.managed_by_porter ? 'var(--accent)' : 'var(--text3)'; }
     if (bb) bb.textContent = isOrchestrator ? 'Master control only' : (p.preferred_backend || 'Auto-route');
     if (delBtn) delBtn.style.display = isLocked ? 'none' : '';
-    if (spBtn) spBtn.textContent = isLocked ? 'Core Prompt' : 'System Prompt';
+    if (spBtn) spBtn.textContent = isOrchestrator ? 'Who Is Porter' : 'System Prompt';
     document.querySelectorAll('.pd-tab').forEach(function(btn) {
       var _t = btn.textContent.trim().toLowerCase();
       if (isLocked && (_t === 'identity' || _t === 'skills' || _t === 'config')) btn.style.display = 'none';
@@ -23372,111 +23439,109 @@ function switchPdTab(tab) {
   const p = window._selectedPersona;
   if (!p) return;
   if (tab === 'overview') {
-    // v0.29.1 — Overview: stats + recent dispatches + quick actions
     if (!p) { content.innerHTML = '<div class="loading-indicator">Select an agent</div>'; return; }
-    content.innerHTML = '<div style="display:grid;grid-template-columns:minmax(280px,340px) 1fr;gap:18px;align-items:start">'
-      + '<div style="padding:18px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 92%,transparent),color-mix(in srgb,var(--bg) 96%,transparent));text-align:center">'
-      + '<div style="display:flex;justify-content:center;align-items:flex-end;min-height:260px;margin-bottom:10px">' + _personaAvatarMarkup(p, 220) + '</div>'
-      + '<div style="font-size:24px;font-weight:800;color:var(--text);line-height:1">' + escHtml(p.name || 'Unnamed') + '</div>'
-      + '<div style="font-size:13px;color:var(--text3);margin-top:6px">' + escHtml(p.role || (p.orchestrator_only ? 'Master Orchestrator' : 'Worker')) + '</div>'
-      + '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:12px">'
-      + '<span class="agent-badge">' + (p.orchestrator_only ? 'Command Core' : (p.is_temporary ? 'Temporary Worker' : 'Persistent Worker')) + '</span>'
-      + '<span class="agent-badge">' + (p.managed_by_porter ? 'Porter-managed' : 'Manual overrides') + '</span>'
-      + (p.appearance_style === 'minecraft' ? '<span class="agent-badge">Pixel figure</span>' : '')
-      + '</div></div>'
-      + '<div>'
-      + '<div style="padding:16px 18px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 7%,transparent),transparent);margin-bottom:16px">'
-      + '<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">' + (p.orchestrator_only ? 'Command Profile' : 'Worker Profile') + '</div>'
-      + '<div style="font-size:15px;line-height:1.55;color:var(--text2)">'
+    var summaryText = p.orchestrator_only
+      ? 'Porter receives objectives, designs the plan, creates or assigns the right workers, manages handoffs, and verifies that the work is actually finished. He is the command layer, not the execution layer.'
+      : ((p.is_temporary ? 'Temporary specialist created for a focused lane of work. ' : 'Persistent specialist retained for repeatable execution. ')
+        + (p.managed_by_porter ? 'Porter is currently managing this worker\'s role fit, posture, and starting skills.' : 'This worker has manual customizations layered on top of Porter guidance.'));
+    var doctrine = p.orchestrator_only
+      ? [
+          ['Delegation First', 'Creates or assigns workers before real implementation begins.'],
+          ['Handoff Control', 'Tracks ownership changes and keeps parallel work coherent.'],
+          ['Completion Discipline', 'Does not close the loop until the work is verified.']
+        ]
+      : [
+          [p.is_temporary ? 'Temporary Mandate' : 'Persistent Mandate', p.is_temporary ? 'Built for a specific slice of work and can be retired when the mission is over.' : 'Retained as a reusable specialist inside Porter\'s roster.'],
+          ['Operating Posture', p.managed_by_porter ? 'Uses Porter-managed defaults for skills and execution posture.' : 'Runs with manual capability overrides.' ],
+          ['Execution Role', 'Focused on delivering work, not supervising the system.']
+        ];
+    var doctrineHtml = doctrine.map(function(item) {
+      return '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 95%, transparent),color-mix(in srgb,var(--bg) 98%, transparent))">'
+        + '<div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">' + escHtml(item[0]) + '</div>'
+        + '<div style="font-size:13px;line-height:1.55;color:var(--text2)">' + escHtml(item[1]) + '</div>'
+        + '</div>';
+    }).join('');
+    content.innerHTML = '<div style="display:flex;flex-direction:column;gap:18px">'
+      + '<div style="padding:20px 22px;border:1px solid var(--border);border-radius:22px;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 10%, transparent),transparent 68%)">'
+      + '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;justify-content:space-between">'
+      + '<div style="min-width:260px;max-width:760px">'
+      + '<div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">' + (p.orchestrator_only ? 'Command Brief' : 'Worker Brief') + '</div>'
+      + '<div style="font-size:17px;line-height:1.7;color:var(--text2)">' + escHtml(summaryText) + '</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">'
       + (p.orchestrator_only
-          ? 'Porter directs work, creates or assigns workers, manages handoffs, and ensures completion. Porter does not personally execute substantive worker tasks.'
-          : ((p.is_temporary ? 'Temporary specialist created for focused execution. ' : 'Persistent specialist retained for repeated work. ')
-            + (p.managed_by_porter ? 'Porter is currently managing this worker\'s capability defaults and operating posture.' : 'This worker has manual capability overrides layered on top of Porter guidance.')))
-      + '</div></div>'
-      + '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px">'
-      + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center">'
-      + '<div style="font-size:22px;font-weight:700;color:var(--text)" id="ov-dispatches">—</div>'
-      + '<div style="font-size:10px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase">Dispatches</div></div>'
-      + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center">'
-      + '<div style="font-size:22px;font-weight:700;color:var(--text)" id="ov-tokens">—</div>'
-      + '<div style="font-size:10px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase">Tokens</div></div>'
-      + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center">'
-      + '<div style="font-size:22px;font-weight:700;color:var(--text)" id="ov-skills">—</div>'
-      + '<div style="font-size:10px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase">Skills</div></div></div>'
-      + '<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Actions</div>'
-      + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
-      + (p.orchestrator_only
-          ? '<button class="btn btn-ghost btn-sm" onclick="switchModule(\'overview\')">Open Main Chat</button>'
-            + '<button class="btn btn-ghost btn-sm" onclick="_showSystemPrompt(\'' + p.id + '\')">View Core Prompt</button>'
-          : '<button class="btn btn-ghost btn-sm" onclick="switchModule(\'overview\');chatWithPersona(\'' + p.id + '\')">Chat with Agent</button>'
-            + '<button class="btn btn-ghost btn-sm" onclick="_showSystemPrompt(\'' + p.id + '\')">View System Prompt</button>'
+          ? '<button class="btn btn-primary btn-sm" onclick="_askPorterToCreate(\'worker\')">Ask Porter For A Worker</button>'
+            + '<button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'squad\')">Ask Porter For A Squad</button>'
+            + '<button class="btn btn-ghost btn-sm" onclick="_showSystemPrompt(\'' + p.id + '\')">Who Is Porter</button>'
+          : '<button class="btn btn-ghost btn-sm" onclick="switchModule(\'overview\');chatWithPersona(\'' + p.id + '\')">Open Worker Chat</button>'
             + '<button class="btn btn-ghost btn-sm" onclick="switchPdTab(\'identity\')">Edit Identity</button>'
+            + '<button class="btn btn-ghost btn-sm" onclick="_showSystemPrompt(\'' + p.id + '\')">System Prompt</button>'
             + (p.is_temporary
-                ? '<button class="btn btn-ghost btn-sm" onclick="_setWorkerLifecycle(\'' + p.id + '\',false)">Promote to Persistent</button>'
+                ? '<button class="btn btn-ghost btn-sm" onclick="_setWorkerLifecycle(\'' + p.id + '\',false)">Promote To Persistent</button>'
                 : '<button class="btn btn-ghost btn-sm" onclick="_setWorkerLifecycle(\'' + p.id + '\',true)">Make Temporary</button>'))
-      + '</div></div>'
-      + '<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Assigned Tasks</div>'
-      + '<div id="ov-tasks" style="font-size:12px;color:var(--text3)">Loading...</div></div>'
-      + '<div style="margin-bottom:16px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)">Project Context</span><span id="ov-project-name" style="font-size:11px;color:var(--accent)"></span></div>'
-      + '<div id="ov-project-ctx" style="font-size:12px;color:var(--text3)"></div></div>'
-      + '<div><div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Recent Activity</div>'
-      + '<div id="ov-activity" style="font-size:12px;color:var(--text3)">Loading...</div></div>'
+      + '</div></div></div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">' + doctrineHtml + '</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">'
+      + '<section style="padding:18px;border:1px solid var(--border);border-radius:18px;background:var(--surface)">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Assigned Tasks</div><div style="font-size:11px;color:var(--text3)">' + (p.orchestrator_only ? 'Current supervision lanes' : 'Current execution lanes') + '</div></div>'
+      + '<div id="ov-tasks" style="display:flex;flex-direction:column;gap:8px;color:var(--text3)">Loading...</div>'
+      + '</section>'
+      + '<section style="padding:18px;border:1px solid var(--border);border-radius:18px;background:var(--surface)">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Project Context</div><div id="ov-project-name" style="font-size:11px;color:var(--accent)"></div></div>'
+      + '<div id="ov-project-ctx" style="display:flex;flex-direction:column;gap:8px;color:var(--text3)"></div>'
+      + '</section>'
+      + '<section style="padding:18px;border:1px solid var(--border);border-radius:18px;background:var(--surface)">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Recent Activity</div><div style="font-size:11px;color:var(--text3)">Latest bridge signals</div></div>'
+      + '<div id="ov-activity" style="display:flex;flex-direction:column;gap:8px;color:var(--text3)">Loading...</div>'
+      + '</section>'
       + '</div></div>';
-    // Fetch stats
     (async function() {
       try {
         var runs = await api('/api/bridge/runs?persona_id=' + p.id + '&limit=5');
         var el = document.getElementById('ov-activity');
         if (runs && runs.runs && runs.runs.length && el) {
-          var totalTokens = 0;
           el.innerHTML = runs.runs.map(function(r) {
-            totalTokens += r.tokens_total || 0;
             var st = r.status === 'complete' ? '#22c55e' : r.status === 'failed' ? '#ef4444' : '#f59e0b';
             var ago = r.created_at ? new Date(r.created_at * 1000).toLocaleString() : '';
-            return '<div style="padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:4px">'
-              + '<div style="display:flex;align-items:center;gap:6px;justify-content:space-between"><span style="display:flex;align-items:center;gap:6px;color:var(--text)"><span style="width:5px;height:5px;border-radius:50%;background:' + st + ';flex-shrink:0"></span>' + escHtml((r.message || '').substring(0, 80)) + '</span></span>'
-              + '<span style="font-size:10px;color:var(--text3)">' + ago + '</span></div></div>';
+            var meta = [];
+            if (r.backend) meta.push(r.backend);
+            if (r.duration_ms) meta.push(r.duration_ms + ' ms');
+            return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)">'
+              + '<div style="display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:4px"><span style="display:flex;align-items:center;gap:7px;color:var(--text)"><span style="width:7px;height:7px;border-radius:50%;background:' + st + ';flex-shrink:0"></span>' + escHtml((r.message || r.prompt_preview || 'Bridge activity').substring(0, 88)) + '</span>'
+              + '<span style="font-size:10px;color:var(--text3)">' + ago + '</span></div>'
+              + (meta.length ? '<div style="font-size:11px;color:var(--text3);padding-left:14px">' + escHtml(meta.join(' • ')) + '</div>' : '')
+              + '</div>';
           }).join('');
-          var dEl = document.getElementById('ov-dispatches');
-          var tEl = document.getElementById('ov-tokens');
-          if (dEl) dEl.textContent = runs.runs.length + '+';
-          if (tEl) tEl.textContent = totalTokens > 1000 ? Math.round(totalTokens/1000) + 'K' : totalTokens;
         } else if (el) {
-          el.innerHTML = '<div style="color:var(--text3);font-size:12px">No dispatches yet</div>';
+          el.innerHTML = '<div style="padding:12px 0;font-size:12px;color:var(--text3)">No recent activity yet.</div>';
         }
       } catch(e) {}
-      try {
-        var skills = await api('/api/personas/' + p.id + '/skills');
-        var sEl = document.getElementById('ov-skills');
-        if (sEl && skills && skills.skills) sEl.textContent = skills.skills.length;
-      } catch(e) {}
-      // v0.30.30 — Fetch assigned tasks for this agent
       try {
         var tasksRes = await api('/api/task-registry?assigned_to=' + p.id);
         var tEl = document.getElementById('ov-tasks');
         if (tasksRes && tasksRes.tasks && tasksRes.tasks.length && tEl) {
           var statusColors = {pending:'#f59e0b',in_progress:'#3b82f6',complete:'#22c55e',failed:'#ef4444',cancelled:'var(--text3)'};
-          var statusIcons = {pending:'\u25CB',in_progress:'\u25D4',complete:'\u25CF',failed:'\u2716',cancelled:'\u2014'};
+          var statusIcons = {pending:'○',in_progress:'◔',complete:'●',failed:'✖',cancelled:'—'};
           tEl.innerHTML = tasksRes.tasks.slice(0, 8).map(function(t) {
             var sc = statusColors[t.status] || 'var(--text3)';
             var si = statusIcons[t.status] || '\u25CB';
-            var pri = t.priority === 'urgent' ? '<span style="color:#ef4444;font-size:9px;margin-left:4px">URGENT</span>'
-              : t.priority === 'high' ? '<span style="color:#f59e0b;font-size:9px;margin-left:4px">HIGH</span>' : '';
-            var proj = t.project_name ? '<span style="color:var(--accent);font-size:10px;margin-left:6px">' + escHtml(t.project_name) + '</span>' : '';
-            return '<div style="padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:4px;display:flex;align-items:center;gap:8px">'
-              + '<span style="color:' + sc + ';font-size:12px;flex-shrink:0">' + si + '</span>'
-              + '<span style="color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(t.title || t.id) + pri + proj + '</span>'
-              + '<span style="font-size:10px;color:var(--text3);flex-shrink:0">' + (t.status || '').replace('_',' ') + '</span>'
+            var pri = t.priority === 'urgent' ? '<span style="color:#ef4444;font-size:9px;letter-spacing:.08em;text-transform:uppercase">Urgent</span>'
+              : t.priority === 'high' ? '<span style="color:#f59e0b;font-size:9px;letter-spacing:.08em;text-transform:uppercase">High</span>' : '';
+            return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:var(--bg);display:flex;align-items:flex-start;gap:10px">'
+              + '<span style="color:' + sc + ';font-size:13px;flex-shrink:0;line-height:1.3">' + si + '</span>'
+              + '<div style="min-width:0;flex:1"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="color:var(--text);font-size:13px;font-weight:600">' + escHtml(t.title || t.id) + '</span>' + pri + '</div>'
+              + (t.project_name ? '<div style="font-size:11px;color:var(--accent);margin-top:3px">' + escHtml(t.project_name) + '</div>' : '')
+              + '</div>'
+              + '<span style="font-size:10px;color:var(--text3);flex-shrink:0;text-transform:capitalize">' + escHtml((t.status || '').replace('_',' ')) + '</span>'
               + '</div>';
           }).join('');
           if (tasksRes.tasks.length > 8) {
-            tEl.innerHTML += '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:4px">+' + (tasksRes.tasks.length - 8) + ' more</div>';
+            tEl.innerHTML += '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:4px">+' + (tasksRes.tasks.length - 8) + ' more lanes</div>';
           }
         } else if (tEl) {
-          tEl.innerHTML = '<div style="color:var(--text3);font-size:11px;padding:4px 0">No tasks assigned</div>';
+          tEl.innerHTML = '<div style="padding:12px 0;font-size:12px;color:var(--text3)">No tasks assigned right now.</div>';
         }
       } catch(e) { console.error('tasks fetch', e); }
-      // v0.30.30 — Fetch project context if agent has assigned project
       try {
         var projId = p.project_id || '';
         var projCtx = document.getElementById('ov-project-ctx');
@@ -23498,20 +23563,20 @@ function switchPdTab(tab) {
               var evType = ev.type || ev.event_type || 'activity';
               var summary = ev.summary || ev.text || ev.message || '';
               var ts = ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleString() : '';
-              return '<div style="padding:4px 8px;border-left:2px solid var(--accent);margin-bottom:4px">'
+              return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)">'
                 + '<div style="display:flex;gap:6px;align-items:center">'
-                + (agName ? '<span style="font-size:10px;font-weight:600;color:var(--text2)">' + escHtml(agName) + '</span>' : '')
-                + '<span style="font-size:10px;color:var(--text3)">' + escHtml(evType) + '</span>'
+                + (agName ? '<span style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text2)">' + escHtml(agName) + '</span>' : '')
+                + '<span style="font-size:10px;color:var(--text3);text-transform:capitalize">' + escHtml(evType.replace(/_/g, ' ')) + '</span>'
                 + '<span style="font-size:9px;color:var(--text3);margin-left:auto">' + ts + '</span>'
                 + '</div>'
-                + (summary ? '<div style="color:var(--text2);font-size:11px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(summary.substring(0, 120)) + '</div>' : '')
+                + (summary ? '<div style="color:var(--text2);font-size:12px;line-height:1.5;margin-top:5px">' + escHtml(summary.substring(0, 160)) + '</div>' : '')
                 + '</div>';
             }).join('');
           } else if (projCtx) {
-            projCtx.innerHTML = '<div style="color:var(--text3);font-size:11px">No recent project activity</div>';
+            projCtx.innerHTML = '<div style="padding:12px 0;font-size:12px;color:var(--text3)">No recent project context available.</div>';
           }
         } else {
-          if (projCtx) projCtx.innerHTML = '<div style="color:var(--text3);font-size:11px">No project assigned</div>';
+          if (projCtx) projCtx.innerHTML = '<div style="padding:12px 0;font-size:12px;color:var(--text3)">No project attached right now.</div>';
         }
       } catch(e) { console.error('project ctx fetch', e); }
     })();
@@ -34847,7 +34912,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.50"})
+            self.reply_json({"v": "0.30.51"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35009,7 +35074,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.50"
+                health["porter_version"] = "0.30.51"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -36905,7 +36970,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.50'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.51'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -41798,7 +41863,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.50 ready (localhost only)")
+    print(f"\n  Porter v0.30.51 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
