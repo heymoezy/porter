@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.38 — Score-based routing: smart router learns from dispatch quality"""
+"""Porter v0.30.39 — Failure context injection: dispatches learn from past mistakes"""
 
 
 import email
@@ -2500,7 +2500,52 @@ def _build_context_suffix(persona_id, message="", project_id="", task_id=""):
             parts.append(proj_ctx)
     except Exception:
         pass
+    # v0.30.39 — Inject failure lessons from recent failed dispatches
+    try:
+        _fail_ctx = _build_failure_context(persona_id, backend="", message=message)
+        if _fail_ctx:
+            parts.append(_fail_ctx)
+    except Exception:
+        pass
     return "\n\n".join(parts)
+
+
+
+
+def _build_failure_context(persona_id: str, backend: str, message: str = "") -> str:
+    """v0.30.39 — Cortex-driven optimization: extract recent failure patterns for this agent+backend.
+
+    Looks at the last 24h of failed dispatches for this persona and backend.
+    If failures exist, returns a brief context block summarizing what went wrong
+    so the agent can avoid repeating the same mistakes.
+    """
+    try:
+        conn = _db_conn()
+        rows = conn.execute("""
+            SELECT error, created_at FROM agent_messages
+            WHERE persona_id = ? AND status = 'failed'
+              AND created_at > strftime('%s','now') - 86400
+            ORDER BY created_at DESC LIMIT 5
+        """, (persona_id,)).fetchall()
+        conn.close()
+        if not rows:
+            return ""
+        # Deduplicate error messages
+        seen = set()
+        unique_errors = []
+        for r in rows:
+            err = (r[0] or "")[:100].strip()
+            if err and err not in seen:
+                seen.add(err)
+                unique_errors.append(err)
+        if not unique_errors:
+            return ""
+        error_list = "\n".join(f"- {e}" for e in unique_errors[:3])
+        return (f"--- Recent Failures (last 24h) ---\n"
+                f"Previous dispatches to you failed with:\n{error_list}\n"
+                f"Avoid approaches that led to these errors.\n---")
+    except Exception:
+        return ""
 
 
 def _run_cap_checks(force: bool = False):
@@ -9778,7 +9823,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.38</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.39</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11155,6 +11200,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.39', date:'2026-03-10', notes:['Cortex-driven optimization: failed dispatch errors from last 24h injected into agent context','Agents see what went wrong in recent failures so they can avoid repeating mistakes','Deduplicated error summaries (max 3 unique errors) appended to dispatch context suffix'] },
   { ver:'v0.30.38', date:'2026-03-10', notes:['Score-based routing: smart router considers backend quality scores when choosing dispatch target','After 10+ dispatches per backend, routes override to higher-scoring alternatives (>15pt threshold)','Applied to all 4 routing paths: code, factual, short messages, and default','Logged to Mission Control when score override triggers'] },
   { ver:'v0.30.37', date:'2026-03-10', notes:['Dispatch result scoring: heuristic quality score (0-100) per response based on success, substance, speed, clean dispatch, verification','Per-backend score cache with rolling averages','quality_score + backend columns added to agent_messages table','GET /api/dispatch-scores returns per-backend and per-agent score aggregates (last 24h)'] },
   { ver:'v0.30.36', date:'2026-03-10', notes:['Self-Healing Stage 2: auto-rollback on critical self-check failure (version endpoint or DB down)','Rollback uses git revert + systemctl restart with loop-prevention flag (/tmp/porter_rollback_attempted)','Config drift detection: hourly comparison of in-memory config vs porter_config.json on disk','GET /api/self-heal/status returns rollback state, config drift hash, and self-heal status'] },
@@ -33093,7 +33139,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.38"})
+            self.reply_json({"v": "0.30.39"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -33255,7 +33301,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.38"
+                health["porter_version"] = "0.30.39"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -35140,7 +35186,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.38'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.39'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39905,7 +39951,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.38 ready (localhost only)")
+    print(f"\n  Porter v0.30.39 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
