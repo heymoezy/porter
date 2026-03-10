@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.64 — Porter-led creation exits and project-first agents"""
+"""Porter v0.30.65 — Porter-managed skills and cleaner product nav"""
 
 
 import email
@@ -7686,6 +7686,11 @@ def _persona_set_skill_names(persona_id: str, skill_names: list[str], managed_by
 
 
 _PORTER_PRIMARY_SKILLS = [
+    "project-architect",
+    "worker-architect",
+    "memory-curator",
+    "runtime-auditor",
+    "avatar-art-director",
     "coding-agent",
     "github",
     "gh-issues",
@@ -7701,6 +7706,11 @@ _PORTER_RESERVE_SKILLS = [
 ]
 
 _PORTER_SKILL_PURPOSE = {
+    "project-architect": "Shapes new projects, scope boundaries, and execution lanes before Porter commits them.",
+    "worker-architect": "Designs the right worker role, lifecycle, and loadout for a delegated task.",
+    "memory-curator": "Distills durable directives and learned truths into reviewable memory.",
+    "runtime-auditor": "Inspects runtime state, routing pressure, failures, and operator telemetry for drift.",
+    "avatar-art-director": "Turns agent role and temperament into Porter-owned pixel identity direction.",
     "coding-agent": "Delegated implementation lane for real code execution and edits.",
     "github": "Repository, branch, and pull request coordination.",
     "gh-issues": "Issue intake, triage, and queue shaping.",
@@ -10264,14 +10274,10 @@ input[type="number"].settings-input { min-width: 60px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
       <span class="mnav-label">Chat</span>
     </button>
-    <div class="mnav-group-label">Squads</div>
+    <div class="mnav-group-label">Cast</div>
     <button class="mnav-item" id="mnav-agents" onclick="switchModule('agents')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
       <span class="mnav-label">Agents</span>
-    </button>
-    <button class="mnav-item" id="mnav-skills" onclick="switchModule('skills')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-      <span class="mnav-label">Skills</span>
     </button>
 
     <div class="mnav-group-label">Operations</div>
@@ -10341,7 +10347,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.64</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.65</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10886,50 +10892,6 @@ input[type="number"].settings-input { min-width: 60px; }
       <div id="capabilities-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"></div>
     </div>
 
-  </div>
-
-  <!-- Skills panel — OpenClaw skill browser -->
-  <div id="skills-module" class="module-panel">
-    <div class="module-hdr">
-      <span class="module-title">Skills</span>
-      <div style="display:flex;align-items:center;gap:6px">
-        <span id="wf-skills-count" style="font-size:11px;color:var(--text3)"></span>
-        <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="loadSkills()">&#8635;</button>
-      </div>
-    </div>
-
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
-      <input type="text" id="wf-skill-filter" placeholder="Search skills..." oninput="filterWorkflowSkills()"
-        style="flex:1;padding:7px 12px;font-size:12px;background:var(--raised);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:inherit">
-      <div id="wf-cat-chips" style="display:flex;gap:4px;flex-wrap:wrap"></div>
-      <button id="wf-show-all-btn" class="btn btn-ghost" style="font-size:11px;padding:3px 10px;white-space:nowrap" onclick="toggleShowAllSkills()">Show all</button>
-      <button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;white-space:nowrap" onclick="toggleCreateSkillForm()">+ New</button>
-    </div>
-
-    <div id="wf-create-form" style="display:none;margin-bottom:14px;padding:16px 20px;border:1px solid var(--accent);border-radius:8px;background:color-mix(in srgb,var(--accent) 4%,var(--bg))">
-      <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:12px">New manual skill</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div style="grid-column:1/-1">
-          <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:3px;display:block">Name *</label>
-          <input type="text" id="wf-new-skill-name" placeholder="e.g. deploy-staging" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;background:var(--raised);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:inherit">
-        </div>
-        <div style="grid-column:1/-1">
-          <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:3px;display:block">Description</label>
-          <input type="text" id="wf-new-skill-desc" placeholder="What does this skill do?" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;background:var(--raised);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:inherit">
-        </div>
-        <div>
-          <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);margin-bottom:3px;display:block">Emoji</label>
-          <input type="text" id="wf-new-skill-emoji" placeholder="\u2699" style="width:80px;box-sizing:border-box;padding:8px 10px;font-size:13px;background:var(--raised);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:inherit">
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:14px">
-        <button class="btn btn-accent" style="font-size:12px;padding:6px 16px" onclick="createSkill()">Create skill</button>
-        <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;color:var(--text3)" onclick="toggleCreateSkillForm()">Cancel</button>
-      </div>
-    </div>
-
-    <div id="wf-skills-summary" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:14px"></div>
-    <div id="wf-skills-grid" style="display:flex;flex-direction:column;gap:16px"></div>
   </div>
 
   <!-- Workflows panel — automations only -->
@@ -11730,6 +11692,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.65', date:'2026-03-10', notes:["The standalone Skills nav has been removed from the product surface, Porter now carries a broader internal skill loadout with new project, worker, memory, runtime, and avatar direction skills, and skill-facing copy now routes users back through Porter instead of a separate admin screen"] },
   { ver:'v0.30.64', date:'2026-03-10', notes:["Agents now present a project-first cast with no visible squad layer, guided creation flows have an explicit Exit Setup control, fallback worker creation no longer asks for squads, and Porter detail Memory/Skills/Activity render stronger preview states while live data is still sparse"] },
   { ver:'v0.30.63', date:'2026-03-10', notes:["Porter detail polish: the tab rail now feels more intentional, Memory is restored as the tab label, Porter only animates when busy, the detail send control now sits closer to the page language, and Porter Skills/Activity now render reviewable preview states when live data is still sparse"] },
   { ver:'v0.30.62', date:'2026-03-10', notes:["Concept and directive mutations now emit structured memory events for operator telemetry, and the runtime design briefs now map the next proper Memory V2 and PorterHQ logging architecture"] },
@@ -13802,6 +13765,7 @@ function switchModule(name) {
     if (pn) pn.value = '';
     if (pc) pc.value = '';
   }
+  if (name === 'skills') name = 'agents';
   _currentModule = name;
   document.querySelectorAll('.mnav-item').forEach(el =>
     el.classList.toggle('active', el.id === 'mnav-' + name));
@@ -13889,7 +13853,7 @@ function switchModule(name) {
       }, 60000);
     }, tasks: function() { /* tasks merged into projects */ }, agents: function() { loadAgents(); }, projects: function() { loadProjects(); }, admin: loadAdmin,
     files: loadLocations, policies: loadPolicy,
-    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, skills: loadSkills, cortex: function(){ withLoadTimeout('cx-memory-list','_loadCortexTab()'); _loadCortexTab(); }, system: function(){ withLoadTimeout('wf-system-grid','loadWorkflowRegistry()'); loadWorkflowRegistry(); }, workflows: function(){}, settings: syncSettingsUI,
+    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, cortex: function(){ withLoadTimeout('cx-memory-list','_loadCortexTab()'); _loadCortexTab(); }, system: function(){ withLoadTimeout('wf-system-grid','loadWorkflowRegistry()'); loadWorkflowRegistry(); }, workflows: function(){}, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -13999,7 +13963,7 @@ async function _loadSkillWorkflows() {
     var installed = skills.filter(function(s) { return s.installed; });
     if (countEl) countEl.textContent = installed.length + ' skill' + (installed.length !== 1 ? 's' : '');
     if (!installed.length) {
-      grid.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px"><div style="font-size:20px;opacity:.4;margin-bottom:6px">\u26a1</div>No installed skills<br><span style="font-size:11px">Install skills from the Skills tab</span></div>';
+      grid.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px"><div style="font-size:20px;opacity:.4;margin-bottom:6px">\u26a1</div>No installed skills<br><span style="font-size:11px">Porter can create or assign the right skill when needed</span></div>';
       return;
     }
     grid.innerHTML = installed.map(function(sk) {
@@ -23438,7 +23402,7 @@ async function _loadSquadSkills(squadId, memberIds) {
     var data = await api('/api/personas/' + memberIds[0] + '/skills');
     var skills = (data && data.skills) || [];
     if (!skills.length) {
-      el.innerHTML = '<span style="color:var(--text3)">No skills assigned. Use the Skills tab to assign skills to squad members.</span>';
+      el.innerHTML = '<span style="color:var(--text3)">No skills assigned yet. Porter can curate these when needed.</span>';
       return;
     }
     var html = '<div style="display:flex;flex-wrap:wrap;gap:4px">';
@@ -23989,16 +23953,16 @@ function switchPdTab(tab) {
           var reserve = profile.reserve || [];
           if (p.orchestrator_only && !core.length && !reserve.length) {
             core = [
-              { name:'GitHub', purpose:'Repository and release coordination across the active project surface.', installed:true },
-              { name:'Healthcheck', purpose:'Runtime and environment verification before and after worker dispatches.', installed:true },
-              { name:'Gemini', purpose:'Deep research lane for long-context investigation and synthesis.', installed:true },
-              { name:'tmux', purpose:'Multi-worker terminal supervision when Porter needs to monitor parallel lanes.', installed:true },
+              { name:'Project Architect', purpose:'Shapes new projects, scope boundaries, success bars, and execution lanes before Porter commits them.', installed:true },
+              { name:'Worker Architect', purpose:'Designs the right worker role, lifecycle, and loadout for delegated work.', installed:true },
+              { name:'Memory Curator', purpose:'Distills durable directives and learned truths into reviewable memory.', installed:true },
+              { name:'Runtime Auditor', purpose:'Inspects runtime drift, queue pressure, failures, and telemetry gaps before they surface to users.', installed:true },
             ];
             reserve = [
+              { name:'Avatar Art Director' },
+              { name:'GitHub' },
+              { name:'Gemini' },
               { name:'Skill Creator' },
-              { name:'Coding Agent' },
-              { name:'GoG' },
-              { name:'Weather' },
             ];
           }
           var html = '<div style="display:flex;flex-direction:column;gap:16px">'
@@ -35283,7 +35247,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.64"})
+            self.reply_json({"v": "0.30.65"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35445,7 +35409,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.64"
+                health["porter_version"] = "0.30.65"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37341,7 +37305,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.64'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.65'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42266,7 +42230,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.64 ready (localhost only)")
+    print(f"\n  Porter v0.30.65 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

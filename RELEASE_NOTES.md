@@ -1,5 +1,11 @@
 # Porter Release Notes
 
+## v0.30.65 (2026-03-10)
+
+- Removed the standalone `Skills` tab from the main product nav so skill management no longer competes with Porter as the control surface.
+- Added new Porter-owned internal skills for project shaping, worker design, memory curation, runtime auditing, and avatar art direction under `runtime/skills/`.
+- Updated skill-facing copy so users are guided back through Porter rather than a separate skills admin workflow.
+
 ## v0.30.64 (2026-03-10)
 
 - Agents now read as a project-first cast instead of exposing squads in the main Porter flow, while backend squad plumbing remains intact behind the scenes for compatibility.
