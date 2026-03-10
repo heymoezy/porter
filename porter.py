@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.29 — Auto-fallback dispatch + rate-limit retry + leader/contributor modes"""
+"""Porter v0.30.30 — Agent detail shows assigned tasks + project context"""
 
 
 import email
@@ -9645,7 +9645,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.29</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.30</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11012,6 +11012,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.30', date:'2026-03-10', notes:['Agent detail Overview: new Assigned Tasks section shows task-registry tasks assigned to this agent with status, priority, and project badges','Agent detail Overview: new Project Context section shows resolved project name and cross-agent activity feed from /api/projects/<id>/activity','GET /api/personas/<id> now includes resolved project_id for UI project binding'] },
   { ver:'v0.30.29', date:'2026-03-09', notes:['Models tab fix: client timeout raised from 15s to 45s so model endpoints no longer abort mid-load','Snapshot and bootstrap cache TTL extended from 10s to 120s — stops cold-cache rebuilds every 10 seconds','Removed blocking capability checks from snapshot and bootstrap HTTP handlers (saved 8s per request)','Model catalog fetching now parallelized across all 5 backends instead of sequential (saved 4s)'] },
   { ver:'v0.30.28', date:'2026-03-09', notes:['Cortex extraction now prefers local Ollama (no rate limits) before trying cloud backends','Batch extraction: Extract Now button processes recent unextracted dispatches on demand','Cortex squad filter wired up — filter memories by squad membership','Backend health-aware extraction skips rate-limited backends automatically'] },
   { ver:'v0.30.27', date:'2026-03-09', notes:['Backend health tracking: rate-limited backends enter cooldown and auto-recover when watchdog confirms they are back','Dispatch skips rate-limited backends immediately instead of wasting a timeout discovering the limit again','Rate limits hidden in successful response text are now caught and trigger auto-fallback','Watchdog probes recovering backends every 30s and marks them available when they respond','New API: GET /api/backend-health shows cooldown status and failure counts per backend'] },
@@ -22545,6 +22546,10 @@ function switchPdTab(tab) {
       + '<button class="btn btn-ghost btn-sm" onclick="_showSystemPrompt(\'' + p.id + '\')">View System Prompt</button>'
       + '<button class="btn btn-ghost btn-sm" onclick="switchPdTab(\'identity\')">Edit Identity</button>'
       + '</div></div>'
+      + '<div style="margin-bottom:16px"><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Assigned Tasks</div>'
+      + '<div id="ov-tasks" style="font-size:12px;color:var(--text3)">Loading...</div></div>'
+      + '<div style="margin-bottom:16px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:13px;font-weight:600;color:var(--text)">Project Context</span><span id="ov-project-name" style="font-size:11px;color:var(--accent)"></span></div>'
+      + '<div id="ov-project-ctx" style="font-size:12px;color:var(--text3)"></div></div>'
       + '<div><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Recent Activity</div>'
       + '<div id="ov-activity" style="font-size:12px;color:var(--text3)">Loading...</div></div>';
     // Fetch stats
@@ -22575,6 +22580,70 @@ function switchPdTab(tab) {
         var sEl = document.getElementById('ov-skills');
         if (sEl && skills && skills.skills) sEl.textContent = skills.skills.length;
       } catch(e) {}
+      // v0.30.30 — Fetch assigned tasks for this agent
+      try {
+        var tasksRes = await api('/api/task-registry?assigned_to=' + p.id);
+        var tEl = document.getElementById('ov-tasks');
+        if (tasksRes && tasksRes.tasks && tasksRes.tasks.length && tEl) {
+          var statusColors = {pending:'#f59e0b',in_progress:'#3b82f6',complete:'#22c55e',failed:'#ef4444',cancelled:'var(--text3)'};
+          var statusIcons = {pending:'\u25CB',in_progress:'\u25D4',complete:'\u25CF',failed:'\u2716',cancelled:'\u2014'};
+          tEl.innerHTML = tasksRes.tasks.slice(0, 8).map(function(t) {
+            var sc = statusColors[t.status] || 'var(--text3)';
+            var si = statusIcons[t.status] || '\u25CB';
+            var pri = t.priority === 'urgent' ? '<span style="color:#ef4444;font-size:9px;margin-left:4px">URGENT</span>'
+              : t.priority === 'high' ? '<span style="color:#f59e0b;font-size:9px;margin-left:4px">HIGH</span>' : '';
+            var proj = t.project_name ? '<span style="color:var(--accent);font-size:10px;margin-left:6px">' + escHtml(t.project_name) + '</span>' : '';
+            return '<div style="padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:4px;display:flex;align-items:center;gap:8px">'
+              + '<span style="color:' + sc + ';font-size:12px;flex-shrink:0">' + si + '</span>'
+              + '<span style="color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(t.title || t.id) + pri + proj + '</span>'
+              + '<span style="font-size:10px;color:var(--text3);flex-shrink:0">' + (t.status || '').replace('_',' ') + '</span>'
+              + '</div>';
+          }).join('');
+          if (tasksRes.tasks.length > 8) {
+            tEl.innerHTML += '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:4px">+' + (tasksRes.tasks.length - 8) + ' more</div>';
+          }
+        } else if (tEl) {
+          tEl.innerHTML = '<div style="color:var(--text3);font-size:11px;padding:4px 0">No tasks assigned</div>';
+        }
+      } catch(e) { console.error('tasks fetch', e); }
+      // v0.30.30 — Fetch project context if agent has assigned project
+      try {
+        var projId = p.project_id || '';
+        var projCtx = document.getElementById('ov-project-ctx');
+        var projName = document.getElementById('ov-project-name');
+        if (projId) {
+          var projData = await api('/api/task-registry?project_id=' + projId);
+          var actData = await api('/api/projects/' + projId + '/activity?limit=5');
+          if (projName) {
+            // Try to get project name from task-registry project_name field or activity
+            var pname = '';
+            if (projData && projData.tasks && projData.tasks.length) pname = projData.tasks[0].project_name || '';
+            if (!pname && actData && actData.events && actData.events.length) pname = actData.events[0].project_name || '';
+            if (pname) projName.textContent = pname;
+            else projName.textContent = 'Project ' + projId.substring(0, 8);
+          }
+          if (projCtx && actData && actData.events && actData.events.length) {
+            projCtx.innerHTML = actData.events.slice(0, 5).map(function(ev) {
+              var agName = ev.persona_name || ev.agent || '';
+              var evType = ev.type || ev.event_type || 'activity';
+              var summary = ev.summary || ev.text || ev.message || '';
+              var ts = ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleString() : '';
+              return '<div style="padding:4px 8px;border-left:2px solid var(--accent);margin-bottom:4px">'
+                + '<div style="display:flex;gap:6px;align-items:center">'
+                + (agName ? '<span style="font-size:10px;font-weight:600;color:var(--text2)">' + escHtml(agName) + '</span>' : '')
+                + '<span style="font-size:10px;color:var(--text3)">' + escHtml(evType) + '</span>'
+                + '<span style="font-size:9px;color:var(--text3);margin-left:auto">' + ts + '</span>'
+                + '</div>'
+                + (summary ? '<div style="color:var(--text2);font-size:11px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(summary.substring(0, 120)) + '</div>' : '')
+                + '</div>';
+            }).join('');
+          } else if (projCtx) {
+            projCtx.innerHTML = '<div style="color:var(--text3);font-size:11px">No recent project activity</div>';
+          }
+        } else {
+          if (projCtx) projCtx.innerHTML = '<div style="color:var(--text3);font-size:11px">No project assigned</div>';
+        }
+      } catch(e) { console.error('project ctx fetch', e); }
     })();
   } else if (tab === 'identity') {
     // Dynamic files from API response
@@ -32392,6 +32461,11 @@ class Handler(BaseHTTPRequestHandler):
                         "content": fpath.read_text(),
                         "size": fpath.stat().st_size
                     })
+            # v0.30.30 — Resolve project assignment for UI
+            try:
+                persona["project_id"] = _resolve_persona_project(pid)
+            except Exception:
+                persona["project_id"] = ""
             self.reply_json({"ok": True, "persona": persona})
 
         elif parsed.path == "/api/agents":
@@ -32416,7 +32490,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.29"})
+            self.reply_json({"v": "0.30.30"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -32578,7 +32652,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.29"
+                health["porter_version"] = "0.30.30"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -34422,7 +34496,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.29'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.30'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39185,7 +39259,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.29 ready (localhost only)")
+    print(f"\n  Porter v0.30.30 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
