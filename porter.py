@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.39 — Failure context injection: dispatches learn from past mistakes"""
+"""Porter v0.30.40 — Self-dispatch: Porter triggers agent work autonomously"""
 
 
 import email
@@ -7368,6 +7368,11 @@ def _detect_anomalies():
                 if a["metric"] == "failure_rate" and a.get("ratio", 0) > 3:
                     mlog.emit("error", "telemetry", "anomaly.critical",
                         f"Critical: {a['detail']}")
+            # v0.30.40 — Self-dispatch: react to anomalies
+            try:
+                _self_dispatch_on_anomaly(anomalies)
+            except Exception:
+                pass
         else:
             log.debug("Anomaly detection: no anomalies (checked %d agents)", len(baselines))
     except Exception as e:
@@ -9823,7 +9828,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.39</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.40</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11200,6 +11205,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.40', date:'2026-03-10', notes:['Self-dispatch: Porter creates internal tasks and dispatches to agents autonomously','Triggers: anomaly detection (routes to BugBanisher), health failures (routes to Vision/LogicLord)','Rate-limited: max 5 self-dispatches per hour, opt-in via self_dispatch_enabled preference','GET /api/self-dispatch/status shows recent auto-dispatches and rate limit state'] },
   { ver:'v0.30.39', date:'2026-03-10', notes:['Cortex-driven optimization: failed dispatch errors from last 24h injected into agent context','Agents see what went wrong in recent failures so they can avoid repeating mistakes','Deduplicated error summaries (max 3 unique errors) appended to dispatch context suffix'] },
   { ver:'v0.30.38', date:'2026-03-10', notes:['Score-based routing: smart router considers backend quality scores when choosing dispatch target','After 10+ dispatches per backend, routes override to higher-scoring alternatives (>15pt threshold)','Applied to all 4 routing paths: code, factual, short messages, and default','Logged to Mission Control when score override triggers'] },
   { ver:'v0.30.37', date:'2026-03-10', notes:['Dispatch result scoring: heuristic quality score (0-100) per response based on success, substance, speed, clean dispatch, verification','Per-backend score cache with rolling averages','quality_score + backend columns added to agent_messages table','GET /api/dispatch-scores returns per-backend and per-agent score aggregates (last 24h)'] },
@@ -31677,6 +31683,13 @@ def _startup_self_check():
         critical_failed = [c["check"] for c in checks if not c["ok"] and c["check"] in ("version_endpoint", "database")]
         if critical_failed:
             _attempt_auto_rollback(critical_failed, fail_detail)
+        # v0.30.40 — Self-dispatch: investigate non-critical health failures
+        non_critical_failed = [c["check"] for c in checks if not c["ok"] and c["check"] not in ("version_endpoint", "database")]
+        if non_critical_failed and not critical_failed:
+            try:
+                _self_dispatch_on_health_failure(non_critical_failed)
+            except Exception:
+                pass
     global _last_self_check
     _last_self_check = {"checks": checks, "all_ok": all_ok, "summary": summary, "ts": _sct.time()}
     _emit_event("system:self_check", {"checks": checks, "all_ok": all_ok, "summary": summary})
@@ -33110,6 +33123,18 @@ class Handler(BaseHTTPRequestHandler):
                 "self_check": _last_self_check.get("summary", "Not run"),
                 "self_heal_enabled": _config.get("preferences", {}).get("self_heal_enabled", False),
             })
+        elif parsed.path == "/api/self-dispatch/status":
+            if not self.auth_check(redirect=False): return
+            with _self_dispatch_lock:
+                recent = list(_self_dispatch_log[-20:])
+            prefs = _config.get("preferences", {})
+            self.reply_json({
+                "ok": True,
+                "enabled": prefs.get("self_dispatch_enabled", False),
+                "max_per_hour": _SELF_DISPATCH_MAX_PER_HOUR,
+                "recent_count": len([d for d in recent if d["ts"] > time.time() - 3600]),
+                "recent": recent,
+            })
         elif parsed.path == "/api/dispatch-scores":
             if not self.auth_check(redirect=False): return
             # Return per-backend score aggregates + recent per-agent scores
@@ -33139,7 +33164,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.39"})
+            self.reply_json({"v": "0.30.40"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -33301,7 +33326,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.39"
+                health["porter_version"] = "0.30.40"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -35186,7 +35211,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.39'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.40'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39951,7 +39976,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.39 ready (localhost only)")
+    print(f"\n  Porter v0.30.40 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
