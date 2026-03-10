@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.47 (2026-03-10)
+
+- Agents now boot with a locked built-in `Porter` master orchestrator instead of exposing `Lobster` as the public boss persona.
+- Porter is now `orchestrator-only`: he cannot be selected as a worker target, and his core prompt, skills, files, and config are no longer editable from the normal Agents UI.
+- `Crypto Squad` is removed from the public team surface, while legacy internal dev personas are hidden from normal persona and squad listings.
+- Worker and squad creation remain available, but the UI now frames them as Porter-managed workers rather than peer agents.
+
 ## v0.30.46 (2026-03-10)
 
 - Models runtime tags now use clearer operator wording with hover tooltips instead of implementation-heavy labels like internal JSON/test-path jargon.

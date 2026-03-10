@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.46 — Models runtime clarity and environment-scoped backend config"""
+"""Porter v0.30.47 — Porter-first agent control plane"""
 
 
 import email
@@ -517,6 +517,23 @@ def _db_init():
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_personas_status ON personas(status)")
+    for _sql in [
+        "ALTER TABLE personas ADD COLUMN is_system INTEGER DEFAULT 0",
+        "ALTER TABLE personas ADD COLUMN is_public INTEGER DEFAULT 1",
+        "ALTER TABLE personas ADD COLUMN is_locked INTEGER DEFAULT 0",
+        "ALTER TABLE personas ADD COLUMN is_master INTEGER DEFAULT 0",
+        "ALTER TABLE personas ADD COLUMN orchestrator_only INTEGER DEFAULT 0",
+        "ALTER TABLE personas ADD COLUMN is_temporary INTEGER DEFAULT 0",
+        "ALTER TABLE personas ADD COLUMN managed_by_porter INTEGER DEFAULT 0",
+        "ALTER TABLE personas ADD COLUMN appearance_style TEXT DEFAULT ''",
+        "ALTER TABLE personas ADD COLUMN appearance_spec TEXT DEFAULT '{}'",
+        "ALTER TABLE personas ADD COLUMN skin_asset_path TEXT DEFAULT ''",
+        "ALTER TABLE personas ADD COLUMN portrait_asset_path TEXT DEFAULT ''",
+    ]:
+        try:
+            conn.execute(_sql)
+        except Exception:
+            pass
 
     # Migrate: add chain_id + step_num if missing
     _am_cols = [r["name"] for r in conn.execute("PRAGMA table_info(agent_messages)").fetchall()]
@@ -670,6 +687,12 @@ def _db_migrate_chats():
         log.warning("%d chats failed to migrate", errors)
 TASKS_REGISTRY_DIR  = RUNTIME_DIR / "task-registry"
 AUDIT_LOG           = RUNTIME_DIR / "audit.jsonl"
+
+PORTER_PERSONA_ID = "porter-core"
+_LEGACY_INTERNAL_PERSONAS = {
+    "lobster", "vision", "sage", "pretty", "quill", "pixel", "logiclord",
+    "bugbanisher", "deploydude", "flash", "guardian", "ledger", "marketwatch",
+}
 
 # ── Capability Registry ───────────────────────────────────────────────────────
 # Each entry: id, label, install URL, features list, check lambda → {ok, version}
@@ -7566,6 +7589,141 @@ def ensure_persona_dirs():
         rules_path.write_text("# Global Rules\n\nAll personas must follow these rules.\n\n" +
                               "\n".join(f"- {r.get('text', '')}" for r in _config.get("rules", [])) + "\n")
 
+
+def _persona_is_locked(persona: dict | None) -> bool:
+    return bool(persona and int(persona.get("is_locked") or 0))
+
+
+def _persona_is_public(persona: dict | None) -> bool:
+    return bool(persona and int(persona.get("is_public", 1) or 0))
+
+
+def _persona_is_orchestrator_only(persona: dict | None) -> bool:
+    return bool(persona and int(persona.get("orchestrator_only") or 0))
+
+
+def _persona_chat_selectable(persona: dict | None) -> bool:
+    return bool(persona) and _persona_is_public(persona) and not _persona_is_orchestrator_only(persona)
+
+
+def _ensure_porter_persona() -> None:
+    from datetime import datetime, timezone as _tz
+    _now_iso = datetime.now(_tz.utc).isoformat()
+    _appearance = {
+        "style": "minecraft",
+        "seed": "porter-core",
+        "palette": "navy-amber",
+        "outfit": "operator-jacket",
+        "role_marker": "command-badge",
+        "vibe": "calm-strategic",
+    }
+    _porter_soul = (
+        "# SOUL.md - Porter\n\n"
+        "- Name: Porter\n"
+        "- Role: Master Orchestrator\n"
+        "- Principle: Porter orchestrates, workers execute.\n"
+        "- Mode: calm, direct, systems-first, accountable.\n"
+        "- Rule: never pretend to have executed work that was delegated.\n"
+        "- Rule: delegate substantive implementation, research, design, QA, and file/tool execution to workers.\n"
+        "- Rule: keep the user's experience coherent and truthful.\n"
+    )
+    _porter_identity = (
+        "# IDENTITY.md - Porter\n\n"
+        "- Name: Porter\n"
+        "- Role: Master Orchestrator\n"
+        "- Style: Minecraft-like command operator\n"
+        f"- Created: {_now_iso}\n"
+    )
+    _porter_role = (
+        "# ROLE_CARD.md - Porter\n\n"
+        "Mission: Convert user intent into correct, efficient, auditable outcomes.\n\n"
+        "Authority:\n"
+        "- Can create or retire temporary workers.\n"
+        "- Can assign squads, workers, runtimes, and skills.\n"
+        "- Cannot act as a normal execution worker for substantive tasks.\n"
+    )
+    _porter_memory = (
+        "# MEMORY.md - Porter\n\n"
+        "Durable rules for Porter.\n\n"
+        "## Hard Rules\n\n"
+        "- Porter orchestrates; workers execute.\n"
+        "- Keep delegation truthful and explicit.\n"
+        "- Prefer the minimum effective delegation pattern.\n"
+    )
+    _porter_user = (
+        "# USER.md - Porter\n\n"
+        "Operator preferences are managed at the product and policy layer.\n"
+    )
+    try:
+        conn = _db_conn()
+        porter = conn.execute("SELECT * FROM personas WHERE id=? OR lower(name)='porter' ORDER BY created_at LIMIT 1", (PORTER_PERSONA_ID,)).fetchone()
+        lobster = conn.execute("SELECT * FROM personas WHERE lower(name)='lobster' ORDER BY created_at LIMIT 1").fetchone()
+        if porter:
+            _source_id = porter["id"]
+            conn.execute(
+                """UPDATE personas
+                   SET id=?, name='Porter', role='Master Orchestrator', agent_group='Orchestrator',
+                       preferred_backend='', fallback_backends='[]',
+                       is_system=1, is_public=1, is_locked=1, is_master=1, orchestrator_only=1,
+                       is_temporary=0, managed_by_porter=1, appearance_style='minecraft',
+                       appearance_spec=?, sort_order=0
+                   WHERE id=?""",
+                (PORTER_PERSONA_ID, json.dumps(_appearance), _source_id)
+            )
+            if _source_id != PORTER_PERSONA_ID:
+                conn.execute("UPDATE squad_members SET persona_id=? WHERE persona_id=?", (PORTER_PERSONA_ID, _source_id))
+        elif lobster:
+            conn.execute(
+                """UPDATE personas
+                   SET id=?, name='Porter', role='Master Orchestrator', agent_group='Orchestrator',
+                       preferred_backend='', fallback_backends='[]',
+                       is_system=1, is_public=1, is_locked=1, is_master=1, orchestrator_only=1,
+                       is_temporary=0, managed_by_porter=1, appearance_style='minecraft',
+                       appearance_spec=?, sort_order=0
+                   WHERE id=?""",
+                (PORTER_PERSONA_ID, json.dumps(_appearance), lobster["id"])
+            )
+            conn.execute("UPDATE squad_members SET persona_id=? WHERE persona_id=?", (PORTER_PERSONA_ID, lobster["id"]))
+        else:
+            conn.execute(
+                """INSERT INTO personas
+                   (id, name, role, avatar, preferred_backend, fallback_backends, status, soul_hash, agent_group,
+                    created_at, config, sort_order, is_system, is_public, is_locked, is_master, orchestrator_only,
+                    is_temporary, managed_by_porter, appearance_style, appearance_spec)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (PORTER_PERSONA_ID, "Porter", "Master Orchestrator", "🧭", "", "[]", "idle", "", "Orchestrator",
+                 _now_iso, "{}", 0, 1, 1, 1, 1, 1, 0, 1, "minecraft", json.dumps(_appearance))
+            )
+        for row in conn.execute("SELECT id, name FROM personas").fetchall():
+            _id = str(row["id"] or "")
+            _name = str(row["name"] or "").strip().lower()
+            if _id == PORTER_PERSONA_ID:
+                continue
+            if _name in _LEGACY_INTERNAL_PERSONAS:
+                conn.execute(
+                    "UPDATE personas SET is_public=0, managed_by_porter=1, is_system=1 WHERE id=?",
+                    (_id,)
+                )
+        conn.execute("DELETE FROM squad_members WHERE persona_id=?", (PORTER_PERSONA_ID,))
+        conn.execute("DELETE FROM squads WHERE lower(name)='crypto squad'")
+        conn.execute("DELETE FROM squad_members WHERE squad_id NOT IN (SELECT id FROM squads)")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.warning("Porter persona bootstrap failed: %s", e)
+    _pdir = PERSONAS_DIR / PORTER_PERSONA_ID
+    _pdir.mkdir(parents=True, exist_ok=True)
+    (_pdir / "memory").mkdir(exist_ok=True)
+    for _fname, _content in {
+        "SOUL.md": _porter_soul,
+        "IDENTITY.md": _porter_identity,
+        "ROLE_CARD.md": _porter_role,
+        "MEMORY.md": _porter_memory,
+        "USER.md": _porter_user,
+        "heartbeat.md": "",
+    }.items():
+        (_pdir / _fname).write_text(_content)
+
 # ── helpers ───────────────────────────────────────────────────────────────
 
 def safe_resolve(root_key, rel=""):
@@ -9864,7 +10022,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.46</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.47</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10021,7 +10179,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="module-hdr">
       <span class="module-title">Agents</span>
       <button class="btn btn-ghost" onclick="openSquadWizard()" style="font-size:12px">+ Squad</button>
-      <button class="btn btn-primary" onclick="openPersonaWizard()" style="font-size:12px">+ New Agent</button>
+      <button class="btn btn-primary" onclick="openPersonaWizard()" style="font-size:12px">+ New Worker</button>
       <button class="btn btn-ghost" onclick="openRulesEditor()" style="font-size:12px">📋 Global Rules</button>
 
     </div>
@@ -10039,7 +10197,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <!-- v0.29.1 — Full-page Agent Detail View -->
     <div id="agent-detail-view" class="agent-detail-view" style="display:none">
       <div class="agent-detail-topbar">
-        <button class="btn btn-ghost" onclick="closePersonaDetail()" style="font-size:13px">&larr; Back to Agents</button>
+        <button class="btn btn-ghost" onclick="closePersonaDetail()" style="font-size:13px">&larr; Back to Team</button>
         <div style="flex:1"></div>
         <button class="btn btn-ghost btn-sm" id="pd-sp-btn" onclick="_showSystemPrompt(_selectedPersonaId)" style="font-size:11px">System Prompt</button>
         <button class="btn btn-ghost btn-sm" id="pd-delete-btn" style="font-size:11px;color:#ef4444" onclick="deletePersona()">Delete</button>
@@ -10128,8 +10286,8 @@ input[type="number"].settings-input { min-width: 60px; }
       <div class="persona-detail-header">
         <span class="persona-detail-avatar">&#10024;</span>
         <div>
-          <div class="persona-detail-name">Create New Agent</div>
-          <div class="persona-detail-role">New agents automatically benefit from shared Cortex memory</div>
+          <div class="persona-detail-name">Create New Worker</div>
+          <div class="persona-detail-role">Create a worker Porter can assign, supervise, and reuse</div>
         </div>
         <div style="margin-left:auto">
           <button class="btn btn-ghost" onclick="closePersonaWizard()">Cancel</button>
@@ -10137,7 +10295,7 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
       <div id="wizard-steps" class="wizard-steps">
         <div class="wizard-step active" data-step="1">
-          <label class="wizard-label">What should this agent be called?</label>
+          <label class="wizard-label">What should this worker be called?</label>
           <input id="wiz-name" class="settings-input" placeholder="e.g. Monica, DevBot, QA Lead">
         </div>
         <div class="wizard-step" data-step="2">
@@ -10147,7 +10305,7 @@ input[type="number"].settings-input { min-width: 60px; }
           <div id="wiz-ai-status" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
         </div>
         <div class="wizard-step" data-step="3">
-          <label class="wizard-label">Pick an avatar</label>
+          <label class="wizard-label">Pick a worker avatar</label>
           <div id="wiz-emoji-grid" class="emoji-grid"></div>
         </div>
         <div class="wizard-step" data-step="4">
@@ -11251,6 +11409,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.47', date:'2026-03-10', notes:['Agents now boot with a locked built-in Porter master orchestrator instead of exposing Lobster as a peer agent','Porter is orchestrator-only, cannot be selected as a worker, and his core files, skills, and config are no longer editable from the UI','Crypto Squad is removed from the public team surface, while legacy internal dev personas are hidden from normal agent and squad listings','Worker creation and squad management remain available, but public language now frames them as Porter-managed workers rather than peer agents'] },
   { ver:'v0.30.46', date:'2026-03-10', notes:['Models runtime chips now use plain operator language with hover tooltips instead of implementation-heavy tags','Backend config is now schema-driven per runtime, so CLI backends stop exposing meaningless host, port, and token fields','OpenClaw model-control messaging now explains that Porter selection is advisory without showing raw agent-pinning jargon','Runtime/config copy is now environment-scoped so Models still reads correctly for future hosted and connector-based Porter deployments'] },
   { ver:'v0.30.45', date:'2026-03-10', notes:['Bridge v2: added per-backend and per-model scheduler limits with queue and wait tracking across shared dispatch paths','Models tests and live dispatches now persist benchmark history so routing can prefer faster, less-contended lanes','Models cards now surface bridge control truth, benchmark summaries, and live scheduler pressure instead of treating backend selection as equally exact everywhere','Chat streaming now uses the same bridge scheduler semantics as the rest of Porter so the control plane is aligned'] },
   { ver:'v0.30.44', date:'2026-03-10', notes:['Standup generation: auto-summarize dispatch activity per project','GET /api/standup?project_id=X&hours=24 returns dispatch stats, active agents, recent tasks, summary lines','Supports per-project or global (all projects) standup view'] },
@@ -14659,7 +14818,7 @@ async function _projAssignAgent(pid) {
   var proj = _projList.find(function(p) { return p.id === pid; });
   if (!proj) return;
   var assigned = proj.assigned_personas || [];
-  var available = (_personas || []).filter(function(p) { return assigned.indexOf(p.id) < 0; });
+  var available = (_personas || []).filter(function(p) { return !p.orchestrator_only && assigned.indexOf(p.id) < 0; });
   if (!available.length) { toast('All agents already assigned'); return; }
   var items = available.map(function(p) { return {id: p.id, avatar: p.avatar || '\u{1f916}', label: p.name, sub: p.role || p.agent_group || 'Agent'}; });
   _porterSelect('Assign Agent', items, async function(item) {
@@ -17445,6 +17604,7 @@ function _getAtTargets() {
   var targets = [];
   // Add personas first (agents)
   (_personas || []).forEach(function(p) {
+    if (p.orchestrator_only) return;
     var slug = (p.name || '').toLowerCase().replace(/\s+/g, '');
     if (slug) targets.push({cmd: '@' + slug, desc: (p.avatar || '') + ' ' + (p.role || p.agent_group || 'Agent')});
   });
@@ -17588,6 +17748,7 @@ function _showAtIndicator(el) {
   var modelLabels = {claude:'Claude',gemini:'Gemini',openclaw:'OpenClaw',codex:'Codex',ollama:'Ollama'};
   var personaLookup = {};
   (_personas || []).forEach(function(p) {
+    if (p.orchestrator_only) return;
     var slug = (p.name || '').toLowerCase().replace(/\s+/g, '');
     if (slug) personaLookup[slug] = { name: p.name, avatar: p.avatar || '' };
   });
@@ -17988,6 +18149,7 @@ function chatSend() {
   var _atModels = ['claude','gemini','openclaw','ollama','codex'];
   // Add persona names to @mention list
   (_personas || []).forEach(function(p) {
+    if (p.orchestrator_only) return;
     var slug = (p.name || '').toLowerCase().replace(/\s+/g, '');
     if (slug && _atModels.indexOf(slug) === -1) _atModels.push(slug);
   });
@@ -21940,6 +22102,7 @@ function _ctxToggle(event, type) {
     html += '<div class="chat-ctx-opt' + (!_chatAgent ? ' selected' : '') + '" onclick="_ctxPick(event,\'agent\',null)">No Agent</div>';
     html += '<div class="chat-ctx-divider"></div>';
     (_personas || []).forEach(function(p) {
+      if (p.orchestrator_only) return;
       html += '<div class="chat-ctx-opt' + (_chatAgent && _chatAgent.id === p.id ? ' selected' : '') + '" onclick="_ctxPick(event,\'agent\',\'' + p.id + '\')">'
         + '<span class="ctx-opt-avatar">' + (p.avatar || '🤖') + '</span>' + escHtml(p.name) + '</div>';
     });
@@ -22006,6 +22169,7 @@ function _ctxPick(event, type, value) {
   if (type === 'agent') {
     if (value) {
       _chatAgent = (_personas || []).find(function(p) { return p.id === value; }) || null;
+      if (_chatAgent && _chatAgent.orchestrator_only) _chatAgent = null;
     } else {
       _chatAgent = null;
     }
@@ -22045,6 +22209,7 @@ function _ctxPick(event, type, value) {
 
 async function _dispatchToPersonaChat(persona, message) {
   if (!persona || !persona.id) { toast('Invalid agent selected','err'); return; }
+  if (persona.orchestrator_only) { toast(persona.name + ' coordinates work but does not execute worker tasks', 'warn'); return; }
   // Dispatch a message to a persona via chat, showing response as assistant message
   var waitIdx = _chatMessages.length;
   _chatMessages.push({ role: 'assistant', content: '\u23f3 ' + persona.name + ' is thinking...', model: persona.preferred_backend || 'auto', _pending: true });
@@ -22150,6 +22315,11 @@ async function _pollPersonaResponse(runId, persona, waitIdx) {
 async function chatWithPersona(personaId) {
   var persona = _personas.find(function(p) { return p.id === personaId; });
   if (persona) {
+    if (persona.orchestrator_only) {
+      toast('Porter coordinates work from the main chat and is not selectable as a worker', 'warn');
+      switchModule('overview');
+      return;
+    }
     _chatAgent = persona;
     buildChatCtxSelectors();
   }
@@ -22593,7 +22763,7 @@ function renderPersonaOrg() {
   const row = document.getElementById('persona-cards-row');
   if (!row) return;
   if (!_personas.length) {
-    row.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:12px">No personas yet. Click <b>+ New Agent</b> to create one.</div>';
+    row.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:12px">No workers yet. Click <b>+ New Worker</b> to create one Porter can delegate to.</div>';
     return;
   }
   const groupColors = { Orchestrator:'#ef4444', Strategy:'#6366f1', Creative:'#ec4899', Technical:'#06b6d4', Operations:'#f59e0b' };
@@ -22624,10 +22794,12 @@ function renderPersonaOrg() {
     var dotColor = p.status === 'active' ? '#22c55e' : p.status === 'sleeping' ? '#f59e0b' : 'var(--text3)';
     var statusLabel = p.status === 'active' ? 'active' : p.status === 'sleeping' ? 'sleeping' : 'idle';
     var isSelected = p.id === _selectedPersonaId;
-    var isOrch = p.agent_group === 'Orchestrator';
+    var isOrch = p.agent_group === 'Orchestrator' || p.orchestrator_only;
     var grp = p.agent_group || '';
     var grpColor = groupColors[grp] || 'var(--text3)';
-    var grpBadge = grp ? '<div style="font-size:10px;padding:1px 6px;border-radius:3px;background:' + grpColor + '20;color:' + grpColor + ';font-weight:600;margin-top:4px;letter-spacing:.3px">' + grp + '</div>' : '';
+    var grpBadge = isOrch
+      ? '<div style="font-size:10px;padding:1px 6px;border-radius:3px;background:#f59e0b20;color:#f59e0b;font-weight:700;margin-top:4px;letter-spacing:.3px">MASTER ORCHESTRATOR</div>'
+      : (grp ? '<div style="font-size:10px;padding:1px 6px;border-radius:3px;background:' + grpColor + '20;color:' + grpColor + ';font-weight:600;margin-top:4px;letter-spacing:.3px">' + grp + '</div>' : '');
     var statusClass = p.status === 'active' ? ' status-active' : p.status === 'error' ? ' status-error' : p.status === 'sleeping' ? ' status-sleeping' : '';
     var _dm = p.dispatch_mode || 'contributor';
     var leaderBadge = (p._isLeader || _dm === 'leader') ? '<div style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f59e0b20;color:#f59e0b;font-weight:700;margin-top:2px;letter-spacing:.3px">LEADER</div>' : '';
@@ -22902,18 +23074,29 @@ async function selectPersona(id) {
     if (!r || !r.ok) return;
     var p = r.persona;
     window._selectedPersona = p;
+    var isLocked = !!p.is_locked;
+    var isOrchestrator = !!p.orchestrator_only;
     var av = document.getElementById('pd-avatar2');
     var nm = document.getElementById('pd-name2');
     var rl = document.getElementById('pd-role2');
     var gb = document.getElementById('pd-group-badge2');
     var sb = document.getElementById('pd-status-badge2');
     var bb = document.getElementById('pd-backend-badge2');
+    var delBtn = document.getElementById('pd-delete-btn');
+    var spBtn = document.getElementById('pd-sp-btn');
     if (av) av.textContent = p.avatar || '\u{1f916}';
     if (nm) nm.textContent = p.name || 'Unnamed';
     if (rl) rl.textContent = p.role || 'No role assigned';
-    if (gb) { gb.textContent = p.agent_group || 'Ungrouped'; var gc = {Orchestrator:'#ef4444',Strategy:'#6366f1',Creative:'#ec4899',Technical:'#06b6d4',Operations:'#f59e0b'}; gb.style.borderColor = gc[p.agent_group] || 'var(--border)'; gb.style.color = gc[p.agent_group] || 'var(--text2)'; }
-    if (sb) { sb.textContent = p.status || 'idle'; sb.style.color = p.status === 'active' ? '#22c55e' : p.status === 'error' ? '#ef4444' : 'var(--text3)'; }
-    if (bb) bb.textContent = p.preferred_backend || 'auto-route';
+    if (gb) { gb.textContent = isOrchestrator ? 'Master Orchestrator' : (p.agent_group || 'Ungrouped'); var gc = {Orchestrator:'#ef4444',Strategy:'#6366f1',Creative:'#ec4899',Technical:'#06b6d4',Operations:'#f59e0b'}; gb.style.borderColor = isOrchestrator ? '#f59e0b' : (gc[p.agent_group] || 'var(--border)'); gb.style.color = isOrchestrator ? '#f59e0b' : (gc[p.agent_group] || 'var(--text2)'); }
+    if (sb) { sb.textContent = isOrchestrator ? 'supervising' : (p.status || 'idle'); sb.style.color = isOrchestrator ? '#f59e0b' : (p.status === 'active' ? '#22c55e' : p.status === 'error' ? '#ef4444' : 'var(--text3)'); }
+    if (bb) bb.textContent = isOrchestrator ? 'orchestrator-only' : (p.preferred_backend || 'auto-route');
+    if (delBtn) delBtn.style.display = isLocked ? 'none' : '';
+    if (spBtn) spBtn.textContent = isLocked ? 'Core Prompt' : 'System Prompt';
+    document.querySelectorAll('.pd-tab').forEach(function(btn) {
+      var _t = btn.textContent.trim().toLowerCase();
+      if (isLocked && (_t === 'identity' || _t === 'skills' || _t === 'config')) btn.style.display = 'none';
+      else btn.style.display = '';
+    });
     switchPdTab('overview');
   } catch(e) { console.error('selectPersona failed', e); if (typeof toast === 'function') toast('Failed to open agent','err'); }
 }
@@ -22921,7 +23104,7 @@ async function selectPersona(id) {
 // v0.29.5 — Inline edit for identity card fields
 function _editCardField(field) {
   var p = window._selectedPersona;
-  if (!p) return;
+  if (!p || p.is_locked) return;
   var elId = field === 'avatar' ? 'pd-avatar2' : field === 'name' ? 'pd-name2' : 'pd-role2';
   var el = document.getElementById(elId);
   if (!el || el.querySelector('input')) return;
@@ -22987,10 +23170,16 @@ function switchPdTab(tab) {
       + '<div style="font-size:10px;color:var(--text3)">Skills</div></div></div>'
       + '<div style="margin-bottom:16px"><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Quick Actions</div>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
-      + '<button class="btn btn-ghost btn-sm" onclick="switchModule(\'overview\');chatWithPersona(\'' + p.id + '\')">Chat with Agent</button>'
-      + '<button class="btn btn-ghost btn-sm" onclick="_showSystemPrompt(\'' + p.id + '\')">View System Prompt</button>'
-      + '<button class="btn btn-ghost btn-sm" onclick="switchPdTab(\'identity\')">Edit Identity</button>'
+      + (p.orchestrator_only
+          ? '<button class="btn btn-ghost btn-sm" onclick="switchModule(\'overview\')">Open Main Chat</button>'
+            + '<button class="btn btn-ghost btn-sm" onclick="_showSystemPrompt(\'' + p.id + '\')">View Core Prompt</button>'
+          : '<button class="btn btn-ghost btn-sm" onclick="switchModule(\'overview\');chatWithPersona(\'' + p.id + '\')">Chat with Agent</button>'
+            + '<button class="btn btn-ghost btn-sm" onclick="_showSystemPrompt(\'' + p.id + '\')">View System Prompt</button>'
+            + '<button class="btn btn-ghost btn-sm" onclick="switchPdTab(\'identity\')">Edit Identity</button>')
       + '</div></div>'
+      + (p.orchestrator_only
+          ? '<div style="margin:0 0 16px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,#f59e0b 8%,transparent);font-size:12px;color:var(--text2)">Porter supervises work, creates or assigns workers, and validates completion. Porter does not execute substantive worker tasks directly.</div>'
+          : '')
       + '<div style="margin-bottom:16px"><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Assigned Tasks</div>'
       + '<div id="ov-tasks" style="font-size:12px;color:var(--text3)">Loading...</div></div>'
       + '<div style="margin-bottom:16px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:13px;font-weight:600;color:var(--text)">Project Context</span><span id="ov-project-name" style="font-size:11px;color:var(--accent)"></span></div>'
@@ -23091,6 +23280,10 @@ function switchPdTab(tab) {
       } catch(e) { console.error('project ctx fetch', e); }
     })();
   } else if (tab === 'identity') {
+    if (p.is_locked) {
+      content.innerHTML = '<div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2)">Porter is a locked system persona. Core identity files are managed by the platform and are not editable from the product UI.</div>';
+      return;
+    }
     // Dynamic files from API response
     var _filesRaw = (p.files || []).map(function(f) {
       var key = f.filename.replace(/\.md$/,'').replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
@@ -23193,6 +23386,10 @@ function switchPdTab(tab) {
       content.innerHTML = html;
     });
   } else if (tab === 'skills') {
+    if (p.is_locked) {
+      content.innerHTML = '<div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2)">Porter manages worker capability assignment. Manual skill editing is disabled for locked system agents.</div>';
+      return;
+    }
     content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div style="font-size:12px;color:var(--text3)">Loading skills...</div></div>';
     _loadPersonaSkills(p.id);
   } else if (tab === 'memory') {
@@ -23226,6 +23423,10 @@ function switchPdTab(tab) {
       }
     })();
   } else if (tab === 'config') {
+    if (p.is_locked) {
+      content.innerHTML = '<div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2)">Porter is orchestrator-only. Runtime policy, delegation posture, and approvals should be configured at the platform level rather than through per-agent worker settings.</div>';
+      return;
+    }
     let fb = [];
     try { fb = JSON.parse(p.fallback_backends || '[]'); } catch(e){}
     var backends = Object.keys(window._providerRegistry || {openclaw:1,claude:1,gemini:1,codex:1,ollama:1});
@@ -30131,6 +30332,8 @@ def _project_route_hint(project_id="", task_id="", persona_id=""):
         assigned_persona = str(task.get("assigned_persona_id") or "").strip()
         if assigned_persona:
             persona = _persona_by_id(assigned_persona)
+            if _persona_is_orchestrator_only(persona):
+                return ""
             preferred = str((persona or {}).get("preferred_backend") or "").strip().lower()
             if preferred in PROVIDER_REGISTRY:
                 return preferred
@@ -30139,12 +30342,16 @@ def _project_route_hint(project_id="", task_id="", persona_id=""):
     assigned = [str(x).strip() for x in (proj or {}).get("assigned_personas", []) if str(x).strip()]
     if persona_id and persona_id in assigned:
         persona = _persona_by_id(persona_id)
+        if _persona_is_orchestrator_only(persona):
+            return ""
         preferred = str((persona or {}).get("preferred_backend") or "").strip().lower()
         if preferred in PROVIDER_REGISTRY:
             return preferred
     preferreds = []
     for assigned_persona in assigned:
         persona = _persona_by_id(assigned_persona)
+        if _persona_is_orchestrator_only(persona):
+            continue
         preferred = str((persona or {}).get("preferred_backend") or "").strip().lower()
         if preferred in PROVIDER_REGISTRY:
             preferreds.append(preferred)
@@ -30251,11 +30458,14 @@ def _persona_by_id(persona_id):
         log.debug("_persona_by_id error: %s", e)
         return None
 
-def _persona_list():
-    """List all personas from SQLite."""
+def _persona_list(public_only: bool = False):
+    """List personas from SQLite."""
     try:
         conn = _db_conn()
-        rows = conn.execute("SELECT * FROM personas ORDER BY sort_order, created_at").fetchall()
+        if public_only:
+            rows = conn.execute("SELECT * FROM personas WHERE coalesce(is_public,1)=1 ORDER BY sort_order, created_at").fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM personas ORDER BY sort_order, created_at").fetchall()
         conn.close()
         return [dict(r) for r in rows]
     except Exception as e:
@@ -30263,7 +30473,7 @@ def _persona_list():
         return []
 
 
-def _squad_list():
+def _squad_list(public_only: bool = False):
     """Return all squads with member counts."""
     try:
         conn = _db_conn()
@@ -30276,16 +30486,23 @@ def _squad_list():
         result = []
         for s in squads:
             members = conn.execute(
-                "SELECT p.id, p.name, p.avatar, p.role, p.status, sm.role as squad_role "
+                "SELECT p.id, p.name, p.avatar, p.role, p.status, sm.role as squad_role, coalesce(p.is_public,1) as is_public "
                 "FROM squad_members sm JOIN personas p ON sm.persona_id = p.id "
                 "WHERE sm.squad_id=? ORDER BY sm.position", (s[0],)
             ).fetchall()
+            member_rows = []
+            for m in members:
+                if public_only and not bool(int(m[6] or 0)):
+                    continue
+                member_rows.append({"id": m[0], "name": m[1], "avatar": m[2], "role": m[3],
+                             "status": m[4], "squad_role": m[5]})
+            if public_only and not member_rows:
+                continue
             result.append({
                 "id": s[0], "name": s[1], "description": s[2] or "",
                 "dispatch_policy": s[3], "color": s[4], "active": bool(s[5]),
                 "member_count": s[6], "project_id": s[7] or "",
-                "members": [{"id": m[0], "name": m[1], "avatar": m[2], "role": m[3],
-                             "status": m[4], "squad_role": m[5]} for m in members]
+                "members": member_rows
             })
         conn.close()
         return result
@@ -30306,12 +30523,21 @@ def _persona_create(data):
     """Create a new persona, writing DB row + filesystem."""
     import hashlib
     pid = data.get("id") or secrets.token_hex(8)
-    name = data.get("name", "New Agent")
+    name = data.get("name", "New Worker")
     role = data.get("role", "")
     avatar = data.get("avatar", "🤖")
     preferred_backend = data.get("preferred_backend", "")
     fallback_backends = json.dumps(data.get("fallback_backends", []))
     config_json = json.dumps(data.get("config", {}))
+    is_system = 1 if data.get("is_system") else 0
+    is_public = 0 if data.get("is_public") is False else 1
+    is_locked = 1 if data.get("is_locked") else 0
+    is_master = 1 if data.get("is_master") else 0
+    orchestrator_only = 1 if data.get("orchestrator_only") else 0
+    is_temporary = 1 if data.get("is_temporary") else 0
+    managed_by_porter = 0 if data.get("managed_by_porter") is False else 1
+    appearance_style = str(data.get("appearance_style", "") or "")
+    appearance_spec = json.dumps(data.get("appearance_spec", {}))
     from datetime import datetime, timezone as _tz
     now_iso = datetime.now(_tz.utc).isoformat()
 
@@ -30332,9 +30558,11 @@ def _persona_create(data):
     try:
         conn = _db_conn()
         conn.execute(
-            """INSERT INTO personas (id, name, role, avatar, preferred_backend, fallback_backends, status, soul_hash, created_at, config)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (pid, name, role, avatar, preferred_backend, fallback_backends, "idle", soul_hash, now_iso, config_json)
+            """INSERT INTO personas (id, name, role, avatar, preferred_backend, fallback_backends, status, soul_hash, created_at, config,
+               is_system, is_public, is_locked, is_master, orchestrator_only, is_temporary, managed_by_porter, appearance_style, appearance_spec)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (pid, name, role, avatar, preferred_backend, fallback_backends, "idle", soul_hash, now_iso, config_json,
+             is_system, is_public, is_locked, is_master, orchestrator_only, is_temporary, managed_by_porter, appearance_style, appearance_spec)
         )
         conn.commit()
         conn.close()
@@ -30390,13 +30618,24 @@ def _persona_create(data):
     (pdir / "heartbeat.md").write_text("")
 
     return {"id": pid, "name": name, "role": role, "avatar": avatar,
-            "preferred_backend": preferred_backend, "soul_hash": soul_hash}
+            "preferred_backend": preferred_backend, "soul_hash": soul_hash,
+            "is_public": is_public, "is_locked": is_locked, "orchestrator_only": orchestrator_only}
 
 def _persona_update(persona_id, data):
     """Update persona DB row + optionally SOUL.md."""
     import hashlib
+    current = _persona_by_id(persona_id)
+    if not current:
+        return False
+    if _persona_is_locked(current):
+        mutable = {"status", "last_active"}
+        if any(k not in mutable for k in data.keys()):
+            log.warning("Blocked update to locked persona %s", persona_id)
+            return False
     sets, vals = [], []
-    for field in ("name", "role", "avatar", "preferred_backend", "status", "heartbeat_cron", "hook_profile", "agent_group", "dispatch_mode"):
+    for field in ("name", "role", "avatar", "preferred_backend", "status", "heartbeat_cron", "hook_profile", "agent_group", "dispatch_mode",
+                  "is_public", "is_locked", "is_master", "orchestrator_only", "is_temporary", "managed_by_porter", "appearance_style",
+                  "skin_asset_path", "portrait_asset_path"):
         if field in data:
             sets.append(f"{field}=?")
             vals.append(data[field])
@@ -30409,6 +30648,9 @@ def _persona_update(persona_id, data):
     if "config" in data:
         sets.append("config=?")
         vals.append(json.dumps(data["config"]))
+    if "appearance_spec" in data:
+        sets.append("appearance_spec=?")
+        vals.append(json.dumps(data["appearance_spec"]))
     # SOUL.md update
     soul_text = data.get("soul_text")
     if soul_text is not None:
@@ -30434,6 +30676,10 @@ def _persona_update(persona_id, data):
 def _persona_delete(persona_id):
     """Delete persona from DB + filesystem."""
     import shutil
+    current = _persona_by_id(persona_id)
+    if _persona_is_locked(current):
+        log.warning("Blocked delete of locked persona %s", persona_id)
+        return False
     try:
         conn = _db_conn()
         conn.execute("DELETE FROM personas WHERE id=?", (persona_id,))
@@ -30457,6 +30703,9 @@ def _persona_get_soul(persona_id):
 
 def _persona_update_soul(persona_id, instruction):
     """Append a shaping instruction to a persona's SOUL.md."""
+    if _persona_is_locked(_persona_by_id(persona_id)):
+        log.warning("Blocked soul update for locked persona %s", persona_id)
+        return
     soul_path = PERSONAS_DIR / persona_id / "SOUL.md"
     soul_path.parent.mkdir(parents=True, exist_ok=True)
     existing = soul_path.read_text().strip() if soul_path.exists() else ""
@@ -30680,6 +30929,8 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     persona = _persona_by_id(persona_id)
     if not persona:
         return {"ok": False, "error": f"Persona not found: {persona_id}", "run_id": run_id}
+    if _persona_is_orchestrator_only(persona):
+        return {"ok": False, "error": f"{persona.get('name', 'This persona')} is orchestrator-only and cannot execute worker tasks.", "run_id": run_id}
 
     # v0.28.4 — Loop guard check (agent dispatch = not human)
     _lg_chat_id = chain_id or run_id or ""
@@ -32818,10 +33069,12 @@ def _project_assigned_persona_ids(project_id: str = "", task_id: str = "") -> li
     if task:
         assigned_persona = str(task.get("assigned_persona_id") or "").strip()
         if assigned_persona:
-            return [assigned_persona]
+            persona = _persona_by_id(assigned_persona)
+            return [] if _persona_is_orchestrator_only(persona) else [assigned_persona]
     pid = str(project_id or "").strip()
     proj = _project_by_id(pid) if pid else None
-    return [str(x).strip() for x in (proj or {}).get("assigned_personas", []) if str(x).strip()]
+    return [str(x).strip() for x in (proj or {}).get("assigned_personas", [])
+            if str(x).strip() and not _persona_is_orchestrator_only(_persona_by_id(str(x).strip()))]
 
 
 def _project_squad_policy_context(project_assigned: list[str]) -> dict:
@@ -34001,7 +34254,7 @@ class Handler(BaseHTTPRequestHandler):
         # ── Persona CRUD (GET) ──────────────────────────────────────
         elif parsed.path == "/api/personas":
             if not self.auth_check(redirect=False): return
-            personas = _persona_list()
+            personas = _persona_list(public_only=True)
             self.reply_json({"ok": True, "personas": personas})
 
 
@@ -34035,7 +34288,7 @@ class Handler(BaseHTTPRequestHandler):
         # v0.29.8 — Squads API
         elif parsed.path == "/api/squads":
             if not self.auth_check(redirect=False): return
-            self.reply_json({"ok": True, "squads": _squad_list()})
+            self.reply_json({"ok": True, "squads": _squad_list(public_only=True)})
 
         elif parsed.path == "/api/personas/stats":
             # v0.28.54 — Per-agent cortex confidence + evidence stats
@@ -34094,7 +34347,7 @@ class Handler(BaseHTTPRequestHandler):
             persona["soul_text"] = _persona_get_soul(pid)
             pdir = PERSONAS_DIR / pid
             persona["files"] = []
-            if pdir.exists():
+            if pdir.exists() and not _persona_is_locked(persona):
                 for fpath in sorted(pdir.glob("*.md")):
                     persona["files"].append({
                         "filename": fpath.name,
@@ -34201,7 +34454,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.46"})
+            self.reply_json({"v": "0.30.47"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -34363,7 +34616,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.46"
+                health["porter_version"] = "0.30.47"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -36259,7 +36512,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.46'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.47'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38626,6 +38879,9 @@ class Handler(BaseHTTPRequestHandler):
             if not name:
                 self.reply_json({"ok": False, "error": "name is required"}, 400)
                 return
+            if str(data.get("id", "")).strip() == PORTER_PERSONA_ID or str(name).strip().lower() == "porter":
+                self.reply_json({"ok": False, "error": "Porter is a built-in system agent and cannot be created manually"}, 400)
+                return
             result = _persona_create(data)
             if result:
                 _emit_event("persona:created", {"id": result["id"], "name": name})
@@ -38644,6 +38900,9 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/shape"):
             if not self.auth_check(redirect=False): return
             pid = parsed.path.split("/")[3]
+            if _persona_is_locked(_persona_by_id(pid)):
+                self.reply_json({"ok": False, "error": "Locked system agents cannot be shaped from chat"}, 403)
+                return
             data = self.read_json_body()
             instruction = data.get('instruction', '').strip() if data else ''
             if not instruction:
@@ -38655,6 +38914,8 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/file"):
             if not self.auth_check(redirect=False): return
             pid = parsed.path.split("/")[3]
+            if _persona_is_locked(_persona_by_id(pid)):
+                self.reply_json({"ok": False, "error": "Locked system agents do not expose editable files"}, 403); return
             pdir = PERSONAS_DIR / pid
             if not pdir.exists():
                 self.reply_json({"ok": False, "error": "Persona not found"}, 404); return
@@ -38729,6 +38990,9 @@ class Handler(BaseHTTPRequestHandler):
             pid = parts[2] if len(parts) >= 4 else ""
             if not pid:
                 self.reply_json({"ok": False, "error": "Missing persona ID"}, 400); return
+            if _persona_is_locked(_persona_by_id(pid)):
+                self.reply_json({"ok": False, "error": "Porter manages skills for locked system agents"}, 403)
+                return
             data = self.read_json_body()
             action = data.get("action", "set")
             conn = _db_conn()
@@ -41083,6 +41347,7 @@ if __name__ == "__main__":
     ensure_memory_dirs()
     ensure_persona_dirs()
     _db_init()  # Initialize SQLite DB + purge expired sessions
+    _ensure_porter_persona()
     mlog.start()  # Start Mission Control log system
     _db_migrate_chats()  # Migrate JSON chats to SQLite
     _treg_load()  # populate task registry from SQLite (needs _db_init first)
@@ -41126,7 +41391,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.46 ready (localhost only)")
+    print(f"\n  Porter v0.30.47 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
