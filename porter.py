@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.42 — Intelligence Dashboard: self-orchestration status in Runtime tab"""
+"""Porter v0.30.43 — Squad-Project binding: squads assignable to projects"""
 
 
 import email
@@ -2741,6 +2741,20 @@ def _resolve_persona_project(persona_id: str, explicit_project_id: str | None = 
     matches = _persona_project_ids(persona_id)
     if len(matches) == 1:
         return matches[0]
+    # v0.30.43 — Squad-project binding: check if agent's squad has a project
+    try:
+        conn = _db_conn()
+        squad_proj = conn.execute(
+            "SELECT s.project_id FROM squads s "
+            "JOIN squad_members sm ON s.id = sm.squad_id "
+            "WHERE sm.persona_id = ? AND s.project_id != '' AND s.active = 1 "
+            "LIMIT 1", (persona_id,)
+        ).fetchone()
+        conn.close()
+        if squad_proj and squad_proj[0]:
+            return squad_proj[0]
+    except Exception:
+        pass
     return ""
 
 
@@ -6939,6 +6953,7 @@ def _init_trace_tables():
         dispatch_policy TEXT DEFAULT 'best_fit',
         color TEXT DEFAULT '#6366f1',
         active INTEGER DEFAULT 1,
+        project_id TEXT DEFAULT '',
         created_at REAL DEFAULT (strftime('%s','now'))
     )""")
     conn.execute("""
@@ -6949,6 +6964,10 @@ def _init_trace_tables():
         position INTEGER DEFAULT 50,
         PRIMARY KEY (squad_id, persona_id)
     )""")
+    # v0.30.43 — Squad-Project binding
+    _sq_cols = [r["name"] for r in conn.execute("PRAGMA table_info(squads)").fetchall()]
+    if "project_id" not in _sq_cols:
+        conn.execute("ALTER TABLE squads ADD COLUMN project_id TEXT DEFAULT ''")
     # v0.29.25 — Hook Profiles: dispatch strictness per agent
     try:
         conn.execute("ALTER TABLE personas ADD COLUMN hook_profile TEXT DEFAULT 'balanced'")
@@ -9828,7 +9847,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.42</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.43</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11215,6 +11234,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.43', date:'2026-03-10', notes:['Squad-Project binding: squads can now be assigned to projects via project_id column','_resolve_persona_project checks squad binding as fallback (agent in squad → squad has project → project resolved)','Squad update API accepts project_id field','Enables per-squad project dispatch policy without individual agent assignment'] },
   { ver:'v0.30.42', date:'2026-03-10', notes:['Intelligence Dashboard in Runtime tab: backend quality scores, pattern mining insights, self-heal/self-dispatch status','Parallel API fetches for dispatch-scores, intelligence/patterns, self-heal/status, self-dispatch/status','Visual: score cards with color-coded quality (green/yellow/red), insight bullets with purple accent'] },
   { ver:'v0.30.41', date:'2026-03-10', notes:['Pattern mining: analyzes 7-day dispatch history for performance insights','Per-agent success rates + quality scores, per-backend reliability comparison','Common failure patterns (top 5), hourly performance distribution','Runs every 6h, logs insights to Mission Control, GET /api/intelligence/patterns'] },
   { ver:'v0.30.40', date:'2026-03-10', notes:['Self-dispatch: Porter creates internal tasks and dispatches to agents autonomously','Triggers: anomaly detection (routes to BugBanisher), health failures (routes to Vision/LogicLord)','Rate-limited: max 5 self-dispatches per hour, opt-in via self_dispatch_enabled preference','GET /api/self-dispatch/status shows recent auto-dispatches and rate limit state'] },
@@ -29760,7 +29780,7 @@ def _squad_list():
         conn = _db_conn()
         squads = conn.execute(
             "SELECT s.id, s.name, s.description, s.dispatch_policy, s.color, s.active, "
-            "COUNT(sm.persona_id) as member_count "
+            "COUNT(sm.persona_id) as member_count, s.project_id "
             "FROM squads s LEFT JOIN squad_members sm ON s.id = sm.squad_id "
             "GROUP BY s.id ORDER BY s.name"
         ).fetchall()
@@ -29774,7 +29794,7 @@ def _squad_list():
             result.append({
                 "id": s[0], "name": s[1], "description": s[2] or "",
                 "dispatch_policy": s[3], "color": s[4], "active": bool(s[5]),
-                "member_count": s[6],
+                "member_count": s[6], "project_id": s[7] or "",
                 "members": [{"id": m[0], "name": m[1], "avatar": m[2], "role": m[3],
                              "status": m[4], "squad_role": m[5]} for m in members]
             })
@@ -33521,7 +33541,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.42"})
+            self.reply_json({"v": "0.30.43"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -33683,7 +33703,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.42"
+                health["porter_version"] = "0.30.43"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -35568,7 +35588,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.42'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.43'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -37783,7 +37803,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not sid:
                     self.reply_json({"ok": False, "error": "id required"}, 400); return
                 sets, vals = [], []
-                for f in ("name", "description", "dispatch_policy", "color"):
+                for f in ("name", "description", "dispatch_policy", "color", "project_id"):
                     if f in body:
                         sets.append(f"{f}=?"); vals.append(body[f])
                 if "active" in body:
@@ -40333,7 +40353,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.42 ready (localhost only)")
+    print(f"\n  Porter v0.30.43 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
