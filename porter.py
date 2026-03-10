@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.41 — Pattern mining: dispatch history analysis for routing insights"""
+"""Porter v0.30.42 — Intelligence Dashboard: self-orchestration status in Runtime tab"""
 
 
 import email
@@ -9828,7 +9828,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.41</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.42</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10432,6 +10432,16 @@ input[type="number"].settings-input { min-width: 60px; }
         <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadSelfCheck()">Refresh</button>
       </div>
       <div id="runtime-health-checks" style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px"></div>
+    </div>
+    <div id="runtime-intelligence-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">Intelligence</span>
+          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:color-mix(in srgb,#8b5cf6 15%,transparent);color:#8b5cf6">Self-Orchestration</span>
+        </div>
+        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadIntelligence()">Refresh</button>
+      </div>
+      <div id="runtime-intelligence-content" style="font-size:12px;color:var(--text3)">Loading intelligence data...</div>
     </div>
     <div id="runtime-session-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
@@ -11205,6 +11215,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.42', date:'2026-03-10', notes:['Intelligence Dashboard in Runtime tab: backend quality scores, pattern mining insights, self-heal/self-dispatch status','Parallel API fetches for dispatch-scores, intelligence/patterns, self-heal/status, self-dispatch/status','Visual: score cards with color-coded quality (green/yellow/red), insight bullets with purple accent'] },
   { ver:'v0.30.41', date:'2026-03-10', notes:['Pattern mining: analyzes 7-day dispatch history for performance insights','Per-agent success rates + quality scores, per-backend reliability comparison','Common failure patterns (top 5), hourly performance distribution','Runs every 6h, logs insights to Mission Control, GET /api/intelligence/patterns'] },
   { ver:'v0.30.40', date:'2026-03-10', notes:['Self-dispatch: Porter creates internal tasks and dispatches to agents autonomously','Triggers: anomaly detection (routes to BugBanisher), health failures (routes to Vision/LogicLord)','Rate-limited: max 5 self-dispatches per hour, opt-in via self_dispatch_enabled preference','GET /api/self-dispatch/status shows recent auto-dispatches and rate limit state'] },
   { ver:'v0.30.39', date:'2026-03-10', notes:['Cortex-driven optimization: failed dispatch errors from last 24h injected into agent context','Agents see what went wrong in recent failures so they can avoid repeating mistakes','Deduplicated error summaries (max 3 unique errors) appended to dispatch context suffix'] },
@@ -15121,8 +15132,70 @@ async function _triggerExtractAll() {
   toast('No sessions to extract');
 }
 
+
+
+async function _loadIntelligence() {
+  var el = document.getElementById('runtime-intelligence-content');
+  if (!el) return;
+  try {
+    var [scores, patterns, selfHeal, selfDispatch] = await Promise.all([
+      api('/api/dispatch-scores'),
+      api('/api/intelligence/patterns'),
+      api('/api/self-heal/status'),
+      api('/api/self-dispatch/status')
+    ]);
+    var html = '';
+    // Backend scores
+    if (scores && scores.cache && Object.keys(scores.cache).length > 0) {
+      html += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:4px">Backend Quality Scores</div>';
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+      for (var bk in scores.cache) {
+        var s = scores.cache[bk];
+        var color = s.avg >= 70 ? '#22c55e' : s.avg >= 50 ? '#eab308' : '#ef4444';
+        html += '<div style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);min-width:120px">'
+          + '<div style="font-size:11px;font-weight:500;color:var(--text)">' + escHtml(bk) + '</div>'
+          + '<div style="font-size:16px;font-weight:700;color:' + color + '">' + (s.avg || 0).toFixed(1) + '</div>'
+          + '<div style="font-size:10px;color:var(--text3)">' + (s.count || 0) + ' dispatches</div>'
+          + '</div>';
+      }
+      html += '</div></div>';
+    }
+    // Pattern mining insights
+    if (patterns && patterns.insights && patterns.insights.length > 0) {
+      html += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:4px">Insights</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:4px">';
+      patterns.insights.forEach(function(insight) {
+        html += '<div style="padding:4px 8px;border-left:2px solid #8b5cf6;font-size:11px;color:var(--text2)">' + escHtml(insight) + '</div>';
+      });
+      html += '</div></div>';
+    }
+    // Self-heal + self-dispatch status
+    var statusParts = [];
+    if (selfHeal) {
+      var rb = selfHeal.auto_rollback || {};
+      statusParts.push('Rollback: ' + (rb.state || 'none'));
+      statusParts.push('Self-heal: ' + (selfHeal.self_heal_enabled ? 'on' : 'off'));
+    }
+    if (selfDispatch) {
+      statusParts.push('Self-dispatch: ' + (selfDispatch.enabled ? 'on' : 'off') + ' (' + (selfDispatch.recent_count || 0) + '/5 this hour)');
+    }
+    if (statusParts.length) {
+      html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">';
+      statusParts.forEach(function(s) {
+        html += '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:var(--bg);border:1px solid var(--border);color:var(--text3)">' + escHtml(s) + '</span>';
+      });
+      html += '</div>';
+    }
+    if (!html) html = '<span style="color:var(--text3)">No intelligence data yet (dispatches needed)</span>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<span style="color:var(--text3)">Failed to load intelligence data</span>';
+  }
+}
+
 async function _loadRuntimeOperations() {
   _loadSelfCheck();
+  _loadIntelligence();
   _renderRuntimeSessionSummary();
   _preloadSessionCounts();
   _updateExtractionProgress('runtime-extraction-progress');
@@ -33448,7 +33521,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.41"})
+            self.reply_json({"v": "0.30.42"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -33610,7 +33683,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.41"
+                health["porter_version"] = "0.30.42"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -35495,7 +35568,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.41'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.42'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -40260,7 +40333,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.41 ready (localhost only)")
+    print(f"\n  Porter v0.30.42 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
