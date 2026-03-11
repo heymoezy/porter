@@ -1,5 +1,11 @@
 # Porter Release Notes
 
+## v0.31.2 (2026-03-11)
+
+- Launchpad now uses durable state and artifact language instead of memory-era starter copy.
+- Project scaffolding writes a canonical `STATE.md` alongside a compatibility `MEMORY.md`.
+- Launchpad seeds real structured directives and project notes so first-run users land in a meaningful starter project instead of an empty shell.
+
 ## v0.31.1 (2026-03-11)
 
 - Pulse now loads directly from live ops, gateway activity, orchestration, and bridge pressure instead of depending on the legacy workflow registry path.

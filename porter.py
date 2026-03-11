@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.1 — Cut Pulse loose from legacy workflows and add structured state authoring"""
+"""Porter v0.31.2 — Move Launchpad onto durable state and artifact language"""
 
 
 import email
@@ -3246,12 +3246,19 @@ def scaffold_project_dir(project_id: str, project_name: str) -> "Path":
             f"Created: {now_iso}\n\n"
             "## Overview\n\n## Goals\n\n## Notes\n"
         )
+    sm = proj_dir / "STATE.md"
+    if not sm.exists():
+        sm.write_text(
+            f"# Project State: {project_name}\n\n"
+            "*Durable project state for directives, decisions, notes, and artifact context.*\n\n"
+            "## Directives\n\n## Decisions\n\n## Notes\n\n## Artifact Context\n"
+        )
     mm = proj_dir / "MEMORY.md"
     if not mm.exists():
         mm.write_text(
             f"# Project Memory: {project_name}\n\n"
-            "*Project-scoped memory for all agents working on this project.*\n\n"
-            "## Context\n\n## Decisions\n\n## Status\n"
+            "This file remains only for compatibility with older Porter paths.\n\n"
+            "Use `STATE.md` and the structured State view as the canonical source of durable project memory.\n"
         )
     sj = proj_dir / "settings.json"
     if not sj.exists():
@@ -3288,7 +3295,7 @@ def _bootstrap_shared_docs(shared_dir: "Path", project_name: str, created: str):
             f"# {project_name} — Operating Protocol\n\n"
             "## Agent Assignment\n\n"
             "## Communication Rules\n\n"
-            "## Learning Flush Schedule\n\n"
+            "## State Review Rhythm\n\n"
             "## Quality Gates\n"
         ),
         "ARCHITECTURE_JOURNAL.md": (
@@ -3334,15 +3341,20 @@ def _seed_launchpad_workspace(project_id: str, created: str | None = None) -> No
         "## Notes\n"
         "Use Porter here to learn the product without polluting your real work.\n"
     )
-    (proj_dir / "MEMORY.md").write_text(
-        "# Project Memory: Launchpad\n\n"
-        "*Persistent project state for learning how Porter manages workers, directives, and artifacts.*\n\n"
-        "## Context\n"
-        "- This is the starter project every new user should understand first.\n\n"
-        "## Decisions\n"
+    (proj_dir / "STATE.md").write_text(
+        "# Project State: Launchpad\n\n"
+        "*Durable project state for learning how Porter manages workers, directives, and artifacts.*\n\n"
+        "## Directives\n"
         "- Keep the experience lightweight and guided.\n\n"
-        "## Status\n"
-        "- Ready for first-run exploration.\n"
+        "## Decisions\n"
+        "- Use Launchpad to learn Porter without polluting real work.\n\n"
+        "## Notes\n"
+        "- This is the starter project every new user should understand first.\n"
+    )
+    (proj_dir / "MEMORY.md").write_text(
+        "# Launchpad Memory\n\n"
+        "This file remains only for compatibility with older Porter paths.\n\n"
+        "Launchpad's canonical durable context now lives in `STATE.md` and in the structured State tab.\n"
     )
     (proj_dir / "settings.json").write_text(json.dumps({
         "project_id": project_id,
@@ -3396,6 +3408,34 @@ def _seed_launchpad_workspace(project_id: str, created: str | None = None) -> No
     )
 
 
+def _seed_launchpad_state(project_id: str) -> None:
+    """Ensure Launchpad starts with durable structured state, not just files."""
+    pid = str(project_id or "").strip()
+    if not pid:
+        return
+    try:
+        directives = _state_list_directives("project", pid)
+        notes = _state_get_project_notes(pid, limit=20)
+        wanted_directives = [
+            "Use Launchpad to learn Porter through one clean worker, one real objective, and one project artifact.",
+            "Keep Launchpad lightweight; graduate meaningful work into a real project instead of turning this into a dumping ground.",
+        ]
+        existing_text = {str(d.get("text") or "").strip() for d in directives}
+        for text in wanted_directives:
+            if text not in existing_text:
+                _state_add_directive("project", pid, text, source="system", confidence=1.0)
+        wanted_notes = {
+            "starter": "Launchpad is the first-run training lane. It exists to teach Porter’s project, worker, state, and artifact model quickly.",
+            "outcome": "A successful Launchpad session ends with one approved worker, one durable directive, and a transition into a real project.",
+        }
+        existing_notes = {(str(n.get("note_kind") or "").strip(), str(n.get("body") or "").strip()) for n in notes}
+        for note_kind, body in wanted_notes.items():
+            if (note_kind, body) not in existing_notes:
+                _state_add_project_note(pid, note_kind, body, source="system", created_by="porter")
+    except Exception as e:
+        log.debug("Launchpad state seed failed: %s", e)
+
+
 def _migrate_legacy_porter_app_project(cfg: dict) -> bool:
     """Rename the legacy starter project to Launchpad and refresh its docs."""
     changed = False
@@ -3415,6 +3455,7 @@ def _migrate_legacy_porter_app_project(cfg: dict) -> bool:
         proj["updated_at"] = time.time()
         try:
             _seed_launchpad_workspace(str(proj.get("id") or "").strip())
+            _seed_launchpad_state(str(proj.get("id") or "").strip())
         except Exception as e:
             log.debug("Launchpad workspace migration failed: %s", e)
         changed = True
@@ -3445,6 +3486,7 @@ def _ensure_launchpad_project(cfg: dict) -> bool:
     cfg["active_project_id"] = pid
     try:
         _seed_launchpad_workspace(pid)
+        _seed_launchpad_state(pid)
     except Exception as e:
         log.debug("Launchpad seed failed: %s", e)
     return True
@@ -11298,7 +11340,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.1</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.2</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12457,6 +12499,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.2', date:'2026-03-11', notes:["Launchpad now uses durable state and artifact language instead of memory-era starter copy, project scaffolding writes a canonical STATE.md alongside a compatibility MEMORY.md, and Launchpad seeds real structured directives and project notes so new users land in a meaningful first-run project instead of an empty shell"] },
   { ver:'v0.31.1', date:'2026-03-11', notes:["Pulse now loads directly from live ops, gateway activity, orchestration, and bridge pressure instead of depending on the legacy workflow surface, internal-only compatibility workflows are hidden from the normal registry API, and Agent/Project State tabs now support adding durable directives and notes directly so structured memory becomes editable rather than passive"] },
   { ver:'v0.31.0', date:'2026-03-11', notes:["Porter chat now buffers raw stream fragments into smoother visible updates instead of repainting every tiny chunk, Codex stream text is merged more cleanly so sentences stop collapsing together, and previously attached images stay referable through lightweight context hints without resending the full image bytes every turn"] },
   { ver:'v0.30.99', date:'2026-03-11', notes:["Fixed the Codex chat resume command to match the installed CLI syntax by removing the unsupported `--ask-for-approval` flag from `codex exec`"] },
@@ -36609,7 +36652,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.1"})
+            self.reply_json({"v": "0.31.2"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36771,7 +36814,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.1"
+                health["porter_version"] = "0.31.2"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38715,7 +38758,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.1'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.2'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43755,6 +43798,13 @@ if __name__ == "__main__":
     _state_seed_defaults()
     _purge_legacy_cortex_dev_memories()
     _ensure_porter_persona()
+    try:
+        for _proj in (_config.get("projects", []) or []):
+            if str(_proj.get("name") or "").strip() == "Launchpad":
+                _seed_launchpad_state(str(_proj.get("id") or "").strip())
+                break
+    except Exception as e:
+        log.debug("Launchpad state bootstrap skipped: %s", e)
     mlog.start()  # Start Mission Control log system
     _db_migrate_chats()  # Migrate JSON chats to SQLite
     _treg_load()  # populate task registry from SQLite (needs _db_init first)
@@ -43798,7 +43848,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.1 ready (localhost only)")
+    print(f"\n  Porter v0.31.2 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
