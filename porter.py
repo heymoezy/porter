@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.5 — Rebuild Pulse and Projects around live routing"""
+"""Porter v0.31.6 — Chat model switching: natural language backend selection for all chats"""
 
 
 import email
@@ -11483,7 +11483,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.5</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.6</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12599,6 +12599,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.6', date:'2026-03-11', notes:["Chat model switching restored: removed hardcoded Codex override from Porter chat, all chats now use smart routing by default, say 'use claude' or 'switch to gemini' in any chat to change backends on the fly"] },
   { ver:'v0.31.5', date:'2026-03-11', notes:["Pulse is now a compact live routing dashboard instead of a stack of oversized admin boxes, showing recent task routing, backend lanes, queue depth, and active runs in one coherent surface","Projects now uses the same tab-rail language as Agents, the project landing page drops the legacy card grid for a stronger Porter-led layout, and the user-facing project workflow attachment UI has been removed from the active product flow"] },
   { ver:'v0.31.4', date:'2026-03-11', notes:["Porter chat now honors explicit runtime requests like `use Ollama` or `switch to Claude` instead of silently forcing Codex on the Porter lane, so model-switch requests can route through the intended chat backend when that lane is available"] },
   { ver:'v0.31.3', date:'2026-03-11', notes:["Launchpad project activity is now filtered to recent, project-relevant work instead of leaking stale legacy dispatch noise, Pulse has a cleaner live-console visual treatment instead of stacked admin slabs, and Porter chat stops appending repetitive runtime boilerplate so his voice reads like the orchestrator instead of the underlying coding runtime"] },
@@ -17683,7 +17684,7 @@ async function _pdChatStreamPorter(persona, state, promptText, userText, idx) {
   return await new Promise(function(resolve) {
     var projectId = persona && persona.project_id ? persona.project_id : '';
     var chatId = _pdChatEnsureId(persona, state);
-    var url = '/api/chat/stream?model=codex-cli'
+    var url = '/api/chat/stream?model=auto'
       + '&prompt=' + encodeURIComponent(promptText)
       + '&route=general'
       + '&chat_id=' + encodeURIComponent(chatId)
@@ -36617,7 +36618,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.5"})
+            self.reply_json({"v": "0.31.6"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36779,7 +36780,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.5"
+                health["porter_version"] = "0.31.6"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38723,7 +38724,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.5'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.6'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38774,8 +38775,6 @@ class Handler(BaseHTTPRequestHandler):
             explicit_model = _requested_chat_model_id(prompt_analyzed, model_param)
             if explicit_model and explicit_model not in ("auto", "") and explicit_model != model_param:
                 qs["model"] = [explicit_model]
-            elif is_porter_chat and model_param in ("auto", ""):
-                qs["model"] = ["codex-cli"]
             elif model_param in ("auto", "") or model_param.startswith("general"):
                 if prompt_analyzed and prompt_analyzed != "SAVED":
                     _route_backend, _route_model = _smart_route(prompt_analyzed)
@@ -43815,7 +43814,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.5 ready (localhost only)")
+    print(f"\n  Porter v0.31.6 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
