@@ -3,7 +3,7 @@
 Canonical project-first operating view.
 
 ## Portfolio
-1. Porter App
+1. Launchpad
 2. Dubai License (DFSA)
 3. Porter Website
 4. YMC.Capital Website
@@ -15,7 +15,7 @@ Do not navigate by raw file list unless needed.
 
 ## Quick Reference Syntax
 Use:
-- `Project: Porter App`
+- `Project: Launchpad`
 - `Project: Dubai License (DFSA)`
 - `Project: Porter Website`
 - `Project: YMC.Capital Website`

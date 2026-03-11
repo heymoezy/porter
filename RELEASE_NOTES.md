@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.89 (2026-03-11)
+
+- The legacy seeded `Porter App` project is now migrated to `Launchpad` in config and workspace docs.
+- Startup now includes a self-healing migration for older local state, and Pulse has been simplified into a tighter live operations view instead of a stacked runtime admin slab.
+
 ## v0.30.88 (2026-03-11)
 
 - The last hardcoded `Porter App` fallback in task migration now resolves the active project name dynamically instead of assuming Porter is building itself.

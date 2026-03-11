@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.88 — Remove hardcoded Porter App fallback and add design briefs"""
+"""Porter v0.30.89 — Migrate starter project and simplify Pulse"""
 
 
 import email
@@ -3281,6 +3281,114 @@ def _bootstrap_shared_docs(shared_dir: "Path", project_name: str, created: str):
             fp.write_text(content)
 
 
+def _seed_launchpad_workspace(project_id: str, created: str | None = None) -> None:
+    """Rewrite the legacy starter project into the Launchpad template."""
+    from datetime import datetime, timezone
+    created = created or datetime.now(timezone.utc).isoformat()
+    proj_dir = AGENT_WORKSPACE_DIR / "projects" / project_id
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    (proj_dir / "artifacts").mkdir(exist_ok=True)
+    (proj_dir / "PROJECT.md").write_text(
+        "# Project: Launchpad\n\n"
+        f"ID: {project_id}\n"
+        f"Created: {created}\n\n"
+        "## Overview\n"
+        "Launchpad is the guided starter project for learning how Porter runs work.\n\n"
+        "## Goals\n"
+        "- create or approve one worker\n"
+        "- define one real objective\n"
+        "- review project state and artifacts\n"
+        "- graduate into a real project\n\n"
+        "## Notes\n"
+        "Use Porter here to learn the product without polluting your real work.\n"
+    )
+    (proj_dir / "MEMORY.md").write_text(
+        "# Project Memory: Launchpad\n\n"
+        "*Persistent project state for learning how Porter manages workers, directives, and artifacts.*\n\n"
+        "## Context\n"
+        "- This is the starter project every new user should understand first.\n\n"
+        "## Decisions\n"
+        "- Keep the experience lightweight and guided.\n\n"
+        "## Status\n"
+        "- Ready for first-run exploration.\n"
+    )
+    (proj_dir / "settings.json").write_text(json.dumps({
+        "project_id": project_id,
+        "name": "Launchpad",
+        "memory_isolation": "project",
+        "agents": [],
+    }, indent=2))
+    shared = proj_dir / "00_SHARED"
+    shared.mkdir(exist_ok=True)
+    (shared / "PROJECT_BRIEF.md").write_text(
+        "# Launchpad — Project Brief\n\n"
+        f"Created: {created}\n\n"
+        "## Problem\n"
+        "New users need to understand Porter through use, not through legacy internal project clutter.\n\n"
+        "## Solution\n"
+        "Provide a guided starter project where Porter can create workers, shape a plan, and produce artifacts safely.\n\n"
+        "## Scope\n"
+        "- one worker creation\n"
+        "- one directive\n"
+        "- one artifact or deliverable\n"
+        "- one transition into a real project\n\n"
+        "## Non-Negotiables\n"
+        "- keep it clean\n"
+        "- no internal Porter development residue\n"
+        "- explain through action\n\n"
+        "## Success Looks Like\n"
+        "The user understands how Porter orchestrates projects, workers, state, and artifacts.\n"
+    )
+    (shared / "SUCCESS_CRITERIA.md").write_text(
+        "# Launchpad — Success Criteria\n\n"
+        "## Product Outcomes\n"
+        "- user approves a worker\n"
+        "- user sees persistent state update\n"
+        "- user sees an artifact appear in the project lane\n\n"
+        "## Early KPIs\n"
+        "- first worker created\n"
+        "- first directive recorded\n"
+        "- first real project created from Launchpad\n"
+    )
+    (shared / "OPERATING_PROTOCOL.md").write_text(
+        "# Launchpad — Operating Protocol\n\n"
+        "## Agent Assignment\n"
+        "- Porter remains the orchestrator\n"
+        "- workers are created only when needed\n\n"
+        "## Communication Rules\n"
+        "- keep setup guided and concise\n"
+        "- explain why Porter is proposing a worker or project change\n\n"
+        "## Quality Gates\n"
+        "- no clutter\n"
+        "- no hidden state changes without approval\n"
+    )
+
+
+def _migrate_legacy_porter_app_project(cfg: dict) -> bool:
+    """Rename the legacy starter project to Launchpad and refresh its docs."""
+    changed = False
+    for proj in cfg.get("projects", []) or []:
+        if str(proj.get("name") or "").strip() != "Porter App":
+            continue
+        proj["name"] = "Launchpad"
+        proj["description"] = (
+            "Guided starter project for learning how Porter manages workers, "
+            "projects, state, and artifacts."
+        )
+        proj["success_bar"] = (
+            "Create one worker, review one artifact, and launch one real project."
+        )
+        proj["type"] = "manual"
+        proj["assigned_personas"] = []
+        proj["updated_at"] = time.time()
+        try:
+            _seed_launchpad_workspace(str(proj.get("id") or "").strip())
+        except Exception as e:
+            log.debug("Launchpad workspace migration failed: %s", e)
+        changed = True
+    return changed
+
+
 def resolve_project_memory(project_id: "str | None", agent_id: "str | None",
                            filename: str) -> dict:
     """
@@ -6008,6 +6116,8 @@ def load_config() -> dict:
         changed = True
     if "active_project_id" not in cfg:
         cfg["active_project_id"] = None
+        changed = True
+    if _migrate_legacy_porter_app_project(cfg):
         changed = True
 
     # ── preferences (merge so new keys are always present) ──
@@ -10986,7 +11096,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.88</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.89</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11484,89 +11594,77 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="module-hdr">
       <span class="module-title">Pulse</span>
     </div>
-    <div class="module-intro">Live operator view for Porter. Watch what is healthy, what is failing, what is active now, and where work is moving.</div>
-    <div id="pulse-ops-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:13px;font-weight:600;color:var(--text)">Live Ops</span>
-          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Operator Feed</span>
+    <div class="module-intro">A live look at what Porter is doing right now. Health, recent events, bridge pressure, and runtime traffic belong here. Old history does not.</div>
+    <div style="display:grid;grid-template-columns:minmax(420px,1.35fr) minmax(280px,.95fr);gap:14px;margin-bottom:14px">
+      <div id="pulse-ops-stage" style="padding:16px 18px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 98%,transparent),color-mix(in srgb,var(--bg) 96%,transparent));border:1px solid var(--border);border-radius:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--text)">Now</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:4px">Recent incidents, operator signals, and the things Porter needs attention on first.</div>
+          </div>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadPulseOps(true)">Refresh</button>
         </div>
-        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadPulseOps(true)">Refresh</button>
+        <div id="pulse-ops-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px"></div>
+        <div id="pulse-ops-feed" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Recent incidents, bridge issues, and live operator signals. If Porter is misbehaving in the wild, it should become obvious here quickly.</div>
-      <div id="pulse-ops-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px"></div>
-      <div id="pulse-ops-feed" style="display:flex;flex-direction:column;gap:8px"></div>
-    </div>
-    <div style="display:grid;grid-template-columns:minmax(280px,1fr) minmax(320px,1.2fr);gap:14px;margin-bottom:14px">
-    <div id="runtime-health-stage" style="padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:13px;font-weight:600;color:var(--text)">Health</span>
-          <span id="health-status-badge" style="font-size:10px;padding:2px 6px;border-radius:999px;background:var(--bg2);color:var(--text3)">checking...</span>
+      <div style="display:grid;grid-template-rows:auto auto;gap:14px">
+        <div id="runtime-health-stage" style="padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:13px;font-weight:700;color:var(--text)">Health</span>
+              <span id="health-status-badge" style="font-size:10px;padding:2px 6px;border-radius:999px;background:var(--bg2);color:var(--text3)">checking...</span>
+            </div>
+            <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadSelfCheck()">Refresh</button>
+          </div>
+          <div id="runtime-health-checks" style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px"></div>
         </div>
-        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadSelfCheck()">Refresh</button>
-      </div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Fast read on whether Porter is healthy enough to trust right now.</div>
-      <div id="runtime-health-checks" style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px"></div>
-    </div>
-    <div id="runtime-intelligence-stage" style="padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:13px;font-weight:600;color:var(--text)">Signals</span>
-          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:color-mix(in srgb,#8b5cf6 15%,transparent);color:#8b5cf6">Routing</span>
+        <div id="runtime-intelligence-stage" style="padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:13px;font-weight:700;color:var(--text)">Runtimes</span>
+              <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Routing</span>
+            </div>
+            <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadIntelligence()">Refresh</button>
+          </div>
+          <div id="runtime-intelligence-content" style="font-size:12px;color:var(--text3)">Loading runtime signals...</div>
         </div>
-        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadIntelligence()">Refresh</button>
       </div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Higher-level routing and reliability signals pulled out of the noise.</div>
-      <div id="runtime-intelligence-content" style="font-size:12px;color:var(--text3)">Loading signal data...</div>
-    </div>
-    </div>
-    <div id="runtime-gateway-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:13px;font-weight:600;color:var(--text)">Gateway Activity</span>
-          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Recent Only</span>
-        </div>
-        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadGatewayActivity(true)">Refresh</button>
-      </div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Only fresh gateway traffic belongs here. Older history stays in logs, not in Pulse.</div>
-      <div id="runtime-gateway-activity" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:14px">
-    <div id="runtime-orch-stage" style="padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+      <div id="runtime-gateway-stage" style="padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--text)">Gateway Activity</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:4px">Recent-only runtime traffic across the live gateways.</div>
+          </div>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadGatewayActivity(true)">Refresh</button>
+        </div>
+        <div id="runtime-gateway-activity" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+      <div id="runtime-coordination-stage" style="padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--text)">Bridge Lane</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:4px">Claims, conflicts, and dispatch pressure moving through Porter Bridge.</div>
+          </div>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadCoordinationPanel(true)">Refresh</button>
+        </div>
+        <div id="runtime-coordination-panel" style="display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+    </div>
+    <div id="runtime-orch-stage" style="padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:16px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:13px;font-weight:600;color:var(--text)">Runs</span>
-          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Orchestration</span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text)">Active Runs</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">Current orchestration runs and their latest state.</div>
         </div>
         <div style="display:flex;gap:4px">
           <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_newOrchRun()">+ New Run</button>
           <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadOrchRuns()">Refresh</button>
         </div>
       </div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Current and recent orchestration runs.</div>
       <div id="runtime-orch-runs" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
-    <div id="runtime-coordination-stage" style="padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:13px;font-weight:600;color:var(--text)">Bridge Lane</span>
-          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Coordination</span>
-        </div>
-        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadCoordinationPanel(true)">Refresh</button>
-      </div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Active claims, conflicts, and recent bridge-native coordination results.</div>
-      <div id="runtime-coordination-panel" style="display:flex;flex-direction:column;gap:10px"></div>
-    </div>
-    </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div>
-        <div style="font-size:13px;font-weight:600;color:var(--text)">Background Flows</div>
-        <div style="font-size:12px;color:var(--text3);margin-top:4px">Automation and maintenance loops still running behind Porter.</div>
-      </div>
-      <span id="wf-sys-count" style="font-size:11px;color:var(--text3)"></span>
-    </div>
-    <div id="wf-system-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px"></div>
   </div>
 
   <div id="workflows-module" class="module-panel">
@@ -12157,6 +12255,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.89', date:'2026-03-11', notes:["The legacy seeded `Porter App` project is now migrated to `Launchpad` in config and workspace docs, startup includes a self-healing migration for older local state, and Pulse has been simplified into a tighter live operations view instead of a stacked runtime admin slab"] },
   { ver:'v0.30.88', date:'2026-03-11', notes:["The last hardcoded `Porter App` fallback in task migration now resolves the active project name dynamically instead of assuming Porter is building itself, and the next redesign tranche is documented with explicit briefs for a first-run `Launchpad` project and a full dark/light theme overhaul"] },
   { ver:'v0.30.87', date:'2026-03-11', notes:["Pulse is now a cleaner single operator surface instead of sharing shipped UI with a hidden Cortex product: the retired Cortex module and Cortex settings page are removed from the client, dead extraction/session-summary helpers are stripped from the live bundle, and Gateway Activity stays focused on recent operational truth instead of stale memory-era residue"] },
   { ver:'v0.30.86', date:'2026-03-11', notes:["Project artifacts now sync into a structured project_artifacts registry instead of existing only as loose files on disk, the Artifacts tab shows source metadata from that registry, and this lays the first real foundation for artifact-aware project memory and provenance"] },
@@ -14343,7 +14442,10 @@ async function loadWorkflowRegistry() {
   var countEl = document.getElementById('wf-sys-count');
   _connectSystemRuntimeSse();
   _loadRuntimeOperations();
-  if (!grid) return;
+  if (!grid) {
+    if (countEl) countEl.textContent = '';
+    return;
+  }
   grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--text3);font-size:12px">Loading workflows...</div>';
   try {
     var data = await api('/api/workflows');
@@ -36108,7 +36210,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.88"})
+            self.reply_json({"v": "0.30.89"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36270,7 +36372,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.88"
+                health["porter_version"] = "0.30.89"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38214,7 +38316,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.88'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.89'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43205,7 +43307,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.88 ready (localhost only)")
+    print(f"\n  Porter v0.30.89 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
