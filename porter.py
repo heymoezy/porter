@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.68 — Fix sticky models load rail"""
+"""Porter v0.30.69 — Remove stale persona wording from models"""
 
 
 import email
@@ -10347,7 +10347,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.68</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.69</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10994,7 +10994,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
     <!-- Backends sub-tab -->
     <div id="models-backends-tab">
-      <div class="module-intro">AI backends available to Porter. Each persona routes through one of these.</div>
+      <div class="module-intro">AI backends available to Porter. Porter and his workers route through these runtimes.</div>
       <div id="models-load-status" class="models-load-status"></div>
       <div id="models-grid" class="models-grid">
         <div class="loading-indicator">Loading models...</div>
@@ -11692,6 +11692,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.69', date:'2026-03-11', notes:["Removed stale persona wording from the Models intro so the page now speaks in Porter and worker language instead of leaking an internal data-model term"] },
   { ver:'v0.30.68', date:'2026-03-11', notes:["Fixed the Models load rail so it clears once cards are actually on screen, removed the misleading stage counter, and tightened the staged loading copy so it no longer implies fake gateway or model counts"] },
   { ver:'v0.30.67', date:'2026-03-11', notes:["Models now loads as a live staged page instead of reading like one blocked render, with user-facing progress steps as gateways, models, health, and versions come online; benchmark labels now use plain language like Typical response instead of raw p50 jargon"] },
   { ver:'v0.30.66', date:'2026-03-11', notes:["Models cards now use lighter benchmark summaries instead of repeating the full p50/success/test string on every footer, OpenClaw bridge truth is reduced to smaller advisory chips instead of a large warning block, and Codex update commands are now always available when a newer version is detected"] },
@@ -35290,7 +35291,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.68"})
+            self.reply_json({"v": "0.30.69"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35452,7 +35453,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.68"
+                health["porter_version"] = "0.30.69"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37348,7 +37349,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.68'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.69'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42273,7 +42274,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.68 ready (localhost only)")
+    print(f"\n  Porter v0.30.69 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

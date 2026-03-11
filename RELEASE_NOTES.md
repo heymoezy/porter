@@ -1,5 +1,9 @@
 # Porter Release Notes
 
+## v0.30.69 (2026-03-11)
+
+- Removed stale `persona` wording from the Models intro so the page now uses Porter and worker language consistently.
+
 ## v0.30.68 (2026-03-11)
 
 - Fixed the Models load rail so it disappears once cards are actually rendered instead of hanging around after the page is already live.
