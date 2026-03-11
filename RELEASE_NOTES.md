@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.92 (2026-03-11)
+
+- Agent-detail chat now shrinks more gracefully in smaller browser widths, with a responsive composer that can tighten or stack instead of holding onto an oversized minimum height.
+- Image attachment previews now fit cleanly inside their thumbnails instead of cropping awkwardly.
+
 ## v0.30.91 (2026-03-11)
 
 - Agent-detail chats now show uploaded image attachments as thumbnail previews instead of plain filenames, making image context read more like a real chat workspace.

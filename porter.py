@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.91 — Fix agent resize glitch and image attachment previews"""
+"""Porter v0.30.92 — Refine agent chat composer responsiveness"""
 
 
 import email
@@ -9625,6 +9625,21 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 98%, transparent),color-mix(in srgb,var(--bg) 99%, transparent));
   box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
 }
+.pd-chat-input {
+  flex:1;
+  min-height:44px;
+  max-height:140px;
+  resize:none;
+  background:transparent;
+  color:var(--text);
+  border:none;
+  outline:none;
+  border-radius:14px;
+  padding:10px 8px 8px;
+  font-size:13px;
+  line-height:1.5;
+  overflow-y:auto;
+}
 .pd-send-btn {
   align-self:stretch;
   display:inline-flex;
@@ -9652,6 +9667,26 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   border-color:color-mix(in srgb,#f59e0b 42%, transparent);
 }
 .pd-send-btn:active { transform:translateY(0); }
+.pd-chat-composer.compact {
+  align-items:stretch;
+}
+.pd-chat-composer.compact .pd-send-btn {
+  min-width:92px;
+  padding:0 12px;
+}
+.pd-chat-composer.stack {
+  flex-direction:column;
+  gap:8px;
+  padding:10px;
+}
+.pd-chat-composer.stack .pd-chat-input {
+  width:100%;
+  max-height:112px;
+}
+.pd-chat-composer.stack .pd-send-btn {
+  align-self:flex-end;
+  min-height:42px;
+}
 .pd-send-btn .pd-send-icon {
   width:20px;
   height:20px;
@@ -9715,17 +9750,20 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .pd-chat-attachment-thumb {
   width:100%;
-  aspect-ratio:1.2/1;
+  aspect-ratio:1/1;
   border-radius:12px;
   overflow:hidden;
   background:color-mix(in srgb,var(--bg) 88%, transparent);
   border:1px solid color-mix(in srgb,var(--border) 72%, transparent);
+  display:flex;
+  align-items:center;
+  justify-content:center;
 }
 .pd-chat-attachment-thumb img {
   width:100%;
   height:100%;
   display:block;
-  object-fit:cover;
+  object-fit:contain;
 }
 .pd-chat-attachment-info {
   min-width:0;
@@ -11170,7 +11208,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.91</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.92</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12329,6 +12367,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.92', date:'2026-03-11', notes:["Agent-detail chat now collapses more gracefully in smaller browser widths, with a responsive composer layout and cleaner image attachment previews that fit instead of cropping awkwardly"] },
   { ver:'v0.30.91', date:'2026-03-11', notes:["Agent-detail chats now render uploaded image attachments as thumbnail previews instead of plain filenames, and the hidden configure panel no longer flashes stray text across Agents during browser resize"] },
   { ver:'v0.30.90', date:'2026-03-11', notes:["New installs now seed a proper `Launchpad` starter project automatically when no projects exist, make it active on first run, and scaffold the guided starter workspace instead of leaving the product with no canonical project lane"] },
   { ver:'v0.30.89', date:'2026-03-11', notes:["The legacy seeded `Porter App` project is now migrated to `Launchpad` in config and workspace docs, startup includes a self-healing migration for older local state, and Pulse has been simplified into a tighter live operations view instead of a stacked runtime admin slab"] },
@@ -17908,6 +17947,16 @@ function _autoSizeTextarea(ta) {
   var h = Math.max(ta.scrollHeight, 40);
   ta.style.height = h + 'px';
 }
+function _pdSyncComposerLayout() {
+  var shell = document.getElementById('pd-chat-shell');
+  var composer = shell ? shell.querySelector('.pd-chat-composer') : null;
+  var input = document.getElementById('pd-chat-input');
+  if (!composer || !input) return;
+  var width = composer.clientWidth || (shell ? shell.clientWidth : window.innerWidth);
+  composer.classList.toggle('compact', width <= 760);
+  composer.classList.toggle('stack', width <= 560);
+  _autoSizeTextarea(input);
+}
 function _autoSizeAllLearnTextareas() {
   document.querySelectorAll('.sess-learn-text').forEach(function(ta) {
     if (ta.value && ta.offsetParent !== null) _autoSizeTextarea(ta);
@@ -17916,6 +17965,10 @@ function _autoSizeAllLearnTextareas() {
 // Auto-resize on input
 document.addEventListener('input', function(e) {
   if (e.target.classList.contains('sess-learn-text')) _autoSizeTextarea(e.target);
+  if (e.target.id === 'pd-chat-input') _pdSyncComposerLayout();
+});
+window.addEventListener('resize', function() {
+  if (document.getElementById('pd-chat-input')) _pdSyncComposerLayout();
 });
 
 async function _showSessionLearnings(btn, sid, source) {
@@ -24779,10 +24832,11 @@ function switchPdTab(tab) {
       + '</div>'
       + '<div id="pd-chat-drop-zone" class="pd-chat-drop-zone" style="display:none">Drop files into Porter chat</div>'
       + '<div class="pd-chat-composer">'
-      + '<textarea id="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate work, create workers, or shape a project...' : 'Send a directive to this worker...') + '" rows="3" onkeydown="_pdChatKey(event)" style="flex:1;min-height:70px;max-height:180px;resize:vertical;background:transparent;color:var(--text);border:none;outline:none;border-radius:14px;padding:10px 8px 8px;font-size:13px;line-height:1.5"></textarea>'
+      + '<textarea id="pd-chat-input" class="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate work, create workers, or shape a project...' : 'Send a directive to this worker...') + '" rows="1" onkeydown="_pdChatKey(event)"></textarea>'
       + '<button class="pd-send-btn" onclick="_pdChatSend()"><span>' + (p.orchestrator_only ? 'Send To Porter' : 'Send To Worker') + '</span><span class="pd-send-icon">↗</span></button>'
       + '</div><input id="pd-chat-file-input" type="file" multiple style="display:none" onchange="_pdChatHandleFileInput(event)"></div></section>';
     _pdChatRender(p.id);
+    setTimeout(_pdSyncComposerLayout, 0);
   } else if (tab === 'identity') {
     if (p.is_locked) {
       content.innerHTML = '<div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2)">Porter is a locked system persona. Core identity files are managed by the platform and are not editable from the product UI.</div>';
@@ -36297,7 +36351,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.91"})
+            self.reply_json({"v": "0.30.92"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36459,7 +36513,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.91"
+                health["porter_version"] = "0.30.92"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38403,7 +38457,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.91'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.92'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43396,7 +43450,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.91 ready (localhost only)")
+    print(f"\n  Porter v0.30.92 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
