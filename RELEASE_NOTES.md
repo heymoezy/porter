@@ -1,5 +1,11 @@
 # Porter Release Notes
 
+## v0.30.85 (2026-03-11)
+
+- The operator surface is now `Pulse` instead of a split Runtime/Logs pair, with live ops cards and recent event feed folded into one place.
+- Hidden admin routing now resolves into `Pulse`, and stale Cortex settings are no longer reachable from Settings.
+- Startup now purges stale legacy Cortex memories about Porter app development so the new state system stops inheriting polluted build-history residue.
+
 ## v0.30.84 (2026-03-11)
 
 - Runtime now hides the retired `Cortex Consolidation` and `Memory Extraction` workflows from the active operator surface.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.84 — Runtime and copy align with structured state"""
+"""Porter v0.30.85 — Pulse replaces Runtime and stale dev memory is purged"""
 
 
 import email
@@ -2867,6 +2867,37 @@ def _state_seed_defaults():
         conn.close()
     except Exception as e:
         log.warning("State seed failed: %s", e)
+
+
+def _purge_legacy_cortex_dev_memories():
+    """Remove stale app-development memories from the legacy Cortex ledger."""
+    patterns = [
+        "%porter was created by%",
+        "%porter helps improve inter-agent communication%",
+        "%porter automatically identifies vague user prompts%",
+        "%porter ensures that all interactions with the platform are handled%",
+        "%porter can be configured to optimize worker performance%",
+        "%porter handles the runtime and outcome of tasks%",
+        "%porter ensures that workers follow the guidelines%",
+        "%porter maintains consistency and quality across the platform%",
+        "%market opportunity for porter%",
+        "%porter's unique advantage%",
+        "%porter's strategic direction%",
+        "%moe is interested in analyzing external product ideas%",
+    ]
+    try:
+        conn = _db_conn()
+        removed = 0
+        for pat in patterns:
+            before = conn.total_changes
+            conn.execute("DELETE FROM cortex_memories WHERE lower(fact) LIKE ?", (pat,))
+            removed += conn.total_changes - before
+        conn.commit()
+        conn.close()
+        if removed:
+            log.info("Purged %d legacy cortex dev memories", removed)
+    except Exception as e:
+        log.warning("Legacy cortex purge failed: %s", e)
 
 
 def _state_list_directives(scope_type: str = "", scope_id: str = "", include_dismissed: bool = False) -> list[dict]:
@@ -10856,14 +10887,14 @@ input[type="number"].settings-input { min-width: 60px; }
     </button>
     <button class="mnav-item" id="mnav-system" onclick="switchModule('system')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-      <span class="mnav-label">Runtime</span>
+      <span class="mnav-label">Pulse</span>
     </button>
     <div class="mnav-group-label">Config</div>
     <button class="mnav-item" id="mnav-capabilities" onclick="switchModule('capabilities')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
       <span class="mnav-label">Extensions</span>
     </button>
-    <button class="mnav-item" id="mnav-admin" onclick="switchModule('admin')">
+    <button class="mnav-item" id="mnav-admin" style="display:none" onclick="switchModule('admin')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       <span class="mnav-label">Logs</span>
     </button>
@@ -10898,7 +10929,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.84</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.85</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11394,9 +11425,21 @@ input[type="number"].settings-input { min-width: 60px; }
   <!-- Workflows panel — automations only -->
   <div id="system-module" class="module-panel">
     <div class="module-hdr">
-      <span class="module-title">Runtime</span>
+      <span class="module-title">Pulse</span>
     </div>
-    <div class="module-intro">Background runtimes, workflows, and session ingestion plumbing behind Porter Bridge.</div>
+    <div class="module-intro">Live operator view for Porter. Watch health, bridge traffic, orchestration lanes, and critical events without dropping into raw infrastructure screens.</div>
+    <div id="pulse-ops-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">Live Ops</span>
+          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Operator Feed</span>
+        </div>
+        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadPulseOps(true)">Refresh</button>
+      </div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Recent incidents, bridge issues, and live operator signals. If Porter is misbehaving in the wild, it should become obvious here quickly.</div>
+      <div id="pulse-ops-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px"></div>
+      <div id="pulse-ops-feed" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
     <div id="runtime-health-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px">
@@ -11419,10 +11462,10 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
     <div id="runtime-session-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span style="font-size:13px;font-weight:600;color:var(--text)">Sessions + Extraction</span>
-        <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Temporary</span>
+        <span style="font-size:13px;font-weight:600;color:var(--text)">Session Trace</span>
+        <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Bridge Intake</span>
       </div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">This is a temporary holding area until session provenance and memory extraction move into Cortex.</div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Temporary intake counters for session imports and bridge-side chat traces. Durable project state now lives in Agents and Projects, not here.</div>
       <div id="runtime-extraction-progress" style="margin:0 0 12px;padding:0"><div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px"><div style="display:flex;align-items:center;gap:8px"><span class="learn-spinner"></span><span style="font-size:12px;color:var(--text3)">Loading extraction status...</span></div></div></div>
       <div id="runtime-session-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px"></div>
     </div>
@@ -12189,6 +12232,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.85', date:'2026-03-11', notes:["The operator surface is now Pulse instead of a split Runtime/Logs pair, with live ops cards and event feed folded into one place; hidden admin routing now resolves into Pulse, stale Cortex settings are no longer reachable from Settings, and startup purges legacy Porter-development cortex memories so the new state system stops inheriting polluted app-build residue"] },
   { ver:'v0.30.84', date:'2026-03-11', notes:["Runtime now hides the retired Cortex consolidation and memory extraction workflows from the active operator surface, and the remaining global tour/sidebar copy now matches the real Porter IA instead of talking about legacy Chat/Memory/Files tabs"] },
   { ver:'v0.30.83', date:'2026-03-11', notes:["Memory V3 cutover: public Cortex entry is removed from the product surface, Agents and Projects now use structured State views instead of the old extractive memory browser, and directive dismissal now updates structured state instead of legacy cortex rows"] },
   { ver:'v0.30.82', date:'2026-03-11', notes:["Top-level Files has been removed from the public nav, old files routing now resolves back into Projects, each project now gets a real artifacts/ directory, and the project detail view separates project artifacts from canonical project docs instead of pretending the workspace file chain is the same thing as artifacts"] },
@@ -14231,6 +14275,7 @@ function _isCoordinationEventType(type) {
 }
 function switchModule(name) {
   if (name === 'overview') name = 'agents';
+  if (name === 'admin') name = 'system';
   // v0.29.11 — Stop phantom pollers when leaving their tabs
   if (_currentModule === 'admin' && name !== 'admin') {
     if (_mcMetricsTimer) { clearInterval(_mcMetricsTimer); _mcMetricsTimer = null; }
@@ -14261,6 +14306,7 @@ function switchModule(name) {
     if (_gatewayActivityPoller) { clearInterval(_gatewayActivityPoller); _gatewayActivityPoller = null; }
     if (_gatewayActivityRefreshTimer) { clearTimeout(_gatewayActivityRefreshTimer); _gatewayActivityRefreshTimer = null; }
     if (_gatewayActivitySseId) { _sseUnsubscribe(_gatewayActivitySseId); _gatewayActivitySseId = null; }
+    if (_pulseOpsPoller) { clearInterval(_pulseOpsPoller); _pulseOpsPoller = null; }
     if (_orchRunsPoller) { clearInterval(_orchRunsPoller); _orchRunsPoller = null; }
     if (_orchRunsRefreshTimer) { clearTimeout(_orchRunsRefreshTimer); _orchRunsRefreshTimer = null; }
     if (_coordinationPanelPoller) { clearInterval(_coordinationPanelPoller); _coordinationPanelPoller = null; }
@@ -16185,6 +16231,7 @@ async function _loadIntelligence() {
 }
 
 async function _loadRuntimeOperations() {
+  _loadPulseOps();
   _loadSelfCheck();
   _loadIntelligence();
   _renderRuntimeSessionSummary();
@@ -16203,6 +16250,61 @@ var _orchRunsPoller = null;
 var _orchRunsRefreshTimer = null;
 var _coordinationPanelPoller = null;
 var _coordinationPanelRefreshTimer = null;
+var _pulseOpsPoller = null;
+
+async function _loadPulseOps(force) {
+  var cards = document.getElementById('pulse-ops-cards');
+  var feed = document.getElementById('pulse-ops-feed');
+  if (!cards || !feed) return;
+  if (!force && !cards.innerHTML.trim()) {
+    cards.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg);font-size:12px;color:var(--text3)">Loading pulse...</div>';
+    feed.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg);font-size:12px;color:var(--text3)">Loading live ops feed...</div>';
+  }
+  try {
+    var [metrics, events] = await Promise.all([
+      api('/api/logs/metrics').catch(function() { return null; }),
+      api('/api/logs/query?limit=12').catch(function() { return null; })
+    ]);
+    var m = metrics || {};
+    var evs = (events && events.events) || [];
+    var metricCards = [
+      { label: 'Open Incidents', value: Number(m.open_incidents || 0), tone: Number(m.open_incidents || 0) ? '#ef4444' : 'var(--text)' },
+      { label: 'Errors (5m)', value: Number(m.errors_5m || 0), tone: Number(m.errors_5m || 0) ? '#ef4444' : 'var(--text)' },
+      { label: 'Timeouts (5m)', value: Number(m.timeouts_5m || 0), tone: Number(m.timeouts_5m || 0) ? '#f59e0b' : 'var(--text)' },
+      { label: 'Events / Min', value: Number(m.events_per_min || 0), tone: 'var(--text)' }
+    ];
+    cards.innerHTML = metricCards.map(function(card) {
+      return '<div style="padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">' + escHtml(card.label) + '</div><div style="font-size:28px;font-weight:800;color:' + card.tone + ';margin-top:6px">' + escHtml(String(card.value)) + '</div></div>';
+    }).join('');
+    if (!evs.length) {
+      feed.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg);font-size:12px;color:var(--text3)">No operator events yet.</div>';
+      return;
+    }
+    feed.innerHTML = evs.slice(0, 8).map(function(e) {
+      var sev = String(e.severity || 'info').toLowerCase();
+      var color = sev === 'critical' || sev === 'error' ? '#ef4444' : (sev === 'warn' || sev === 'warning' ? '#f59e0b' : '#22c55e');
+      var chips = [
+        e.domain ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(e.domain) + '</span>' : '',
+        e.event_type ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(e.event_type) + '</span>' : '',
+        e.backend ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(e.backend) + '</span>' : '',
+        e.trace_id ? '<span class="model-card-chip dim" style="font-size:10px">trace ' + escHtml(String(e.trace_id).slice(0, 8)) + '</span>' : ''
+      ].filter(Boolean).join('');
+      return '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--bg)">'
+        + '<div style="display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:6px"><div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:' + color + '"></span><span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(e.message || e.event_type || 'event') + '</span></div><span style="font-size:10px;color:var(--text3)">' + escHtml(_relativeTime(e.ts || 0)) + '</span></div>'
+        + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' + chips + '</div>'
+        + '<div style="font-size:11px;color:var(--text3)">' + escHtml((e.detail || e.error || '').substring(0, 220)) + '</div>'
+        + '</div>';
+    }).join('');
+  } catch (e) {
+    cards.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg);font-size:12px;color:#ef4444">Could not load live ops.</div>';
+    feed.innerHTML = '';
+  }
+  if (!_pulseOpsPoller) {
+    _pulseOpsPoller = setInterval(function() {
+      if (_currentModule === 'system') _loadPulseOps(true);
+    }, 30000);
+  }
+}
 
 function _gatewayActivityChip(text, tone) {
   if (!text) return '';
@@ -16306,6 +16408,9 @@ function _connectGatewayActivitySse() {
     else if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleGatewayActivityRefresh(220);
     else if (_isCoordinationEventType(d.type)) _scheduleGatewayActivityRefresh(180);
     if (d.type && d.type.indexOf('orch:') === 0 && _currentModule === 'system') { _scheduleOrchRunsRefresh(120); }
+    if (_currentModule === 'system' && (d.type === 'log:event' || d.type === 'log:incident' || d.type === 'log:remediation')) {
+      _loadPulseOps(true);
+    }
   });
   if (!_gatewayActivityPoller) {
     _gatewayActivityPoller = setInterval(function() {
@@ -18269,6 +18374,7 @@ function closeSettings() {
 }
 function switchSettingsTab(tab) {
   if (tab === 'usage') tab = 'agents';
+  if (tab === 'cortex') tab = 'changelog';
   const modules = ['tasks','agents','policy','policies'];
   if (modules.includes(tab)) { switchModule(tab === 'policy' ? 'policies' : tab); return; }
   stopTsPolling();
@@ -18281,7 +18387,6 @@ function switchSettingsTab(tab) {
     setTimeout(populateChangelog, 0);
   }
   if (tab === 'apikeys') { loadApiKeys(); }
-  if (tab === 'cortex') { loadCortexStats(); }
 }
 
 function loadCortexStats() {
@@ -29484,8 +29589,8 @@ document.addEventListener('keydown', function(e) {
   // Number keys 1-9: switch tabs
   var tabMap = {
     '1': 'agents', '2': 'projects', '3': 'models',
-    '4': 'projects', '5': 'workflows', '6': 'files',
-    '7': 'models', '8': 'cortex', '9': 'system'
+    '4': 'system', '5': 'workflows', '6': 'capabilities',
+    '7': 'settings', '8': 'models', '9': 'system'
   };
   if (tabMap[e.key]) {
     e.preventDefault();
@@ -36234,7 +36339,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.84"})
+            self.reply_json({"v": "0.30.85"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36396,7 +36501,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.84"
+                health["porter_version"] = "0.30.85"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38314,7 +38419,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.84'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.85'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43260,6 +43365,7 @@ if __name__ == "__main__":
     ensure_persona_dirs()
     _db_init()  # Initialize SQLite DB + purge expired sessions
     _state_seed_defaults()
+    _purge_legacy_cortex_dev_memories()
     _ensure_porter_persona()
     mlog.start()  # Start Mission Control log system
     _db_migrate_chats()  # Migrate JSON chats to SQLite
@@ -43304,7 +43410,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.84 ready (localhost only)")
+    print(f"\n  Porter v0.30.85 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
