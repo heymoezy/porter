@@ -1,5 +1,11 @@
 # Porter Release Notes
 
+## v0.31.12 (2026-03-11)
+
+- Folded the old Pulse surface back into `Logs`, so the live routing strip, backend lanes, recent task routing, and active runs now live on one operator page instead of splitting across two weak tabs.
+- Strengthened Projects with a Porter-led landing layout, a dedicated project chat lane, and a cleaner tab rail focused on `Chat`, `Activity`, `Agents`, `Artifacts`, and `State`.
+- Launchpad activity now filters out stale legacy residue more aggressively, so starter projects stop showing old Porter-building-Porter noise.
+
 ## v0.31.11 (2026-03-11)
 
 - Restored `Logs` as a visible first-class surface and added a direct `Logs` action back into Pulse so runtime tracing is no longer buried.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.11 — Restore logs visibility and add in-chat lane control"""
+"""Porter v0.31.12 — Fold Pulse into Logs and strengthen Projects"""
 
 
 import email
@@ -5630,7 +5630,7 @@ def _project_activity_feed(project_id: str, limit: int = 20) -> list:
     if updated_at > cutoff:
         cutoff = updated_at
     if str(proj.get("name") or "").strip().lower() == "launchpad":
-        cutoff = max(cutoff, now_ts - 2 * 3600)
+        cutoff = max(cutoff, now_ts - 30 * 60)
     try:
         conn = _db_conn()
         trace_rows = conn.execute(
@@ -8977,7 +8977,7 @@ body {
     </svg>
     <div>
       <div class="login-logo-name">porter</div>
-      <div class="login-logo-sub">Mission Control</div>
+      <div class="login-logo-sub">Orchestrator</div>
     </div>
   </div>
   <div class="login-field">
@@ -11034,12 +11034,12 @@ body.density-compact .file-name { padding: 6px 0; }
 .pulse-status-strip .ps-item { display:inline-flex; align-items:center; gap:5px; }
 .pulse-status-strip .ps-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
 .pulse-status-strip .ps-val { font-weight:700; color:var(--text); }
-.pulse-board { display:flex; flex-direction:column; gap:14px; }
+.pulse-board { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1.2fr) minmax(300px,.85fr); gap:14px; }
 .pulse-pane { padding:14px 16px; border:1px solid var(--border); border-radius:12px; background:var(--surface); min-height:0; }
 .pulse-pane-title { font-size:13px; font-weight:700; color:var(--text); margin-bottom:2px; }
 .pulse-routing-list, .pulse-lane-list, .pulse-runs-list { display:flex; flex-direction:column; gap:8px; }
-.pulse-routing-list { max-height:600px; overflow:auto; padding-right:2px; }
-.pulse-runs-list { max-height:320px; overflow:auto; padding-right:2px; }
+.pulse-routing-list { max-height:420px; overflow:auto; padding-right:2px; }
+.pulse-runs-list { max-height:420px; overflow:auto; padding-right:2px; }
 .pulse-route-card { padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--bg); }
 .pulse-route-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:4px; }
 .pulse-route-title { font-size:12px; font-weight:600; color:var(--text); line-height:1.4; }
@@ -11052,6 +11052,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .pulse-lane-status { font-size:10px; font-weight:700; }
 @media (max-width: 1100px) {
   .project-stage { grid-template-columns:1fr; }
+  .pulse-board { grid-template-columns:1fr; }
 }
 
 /* ── Persona Detail — slide-out right panel ──────────────── */
@@ -11414,7 +11415,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </svg>
     <div class="logo-text">
       <span class="logo-name">porter</span>
-      <span class="logo-sub">Mission Control</span>
+      <span class="logo-sub">Orchestrator</span>
     </div>
     <!-- notifications removed: dead code, no callers -->
     <button class="hbg-btn" id="hbgBtn" onclick="toggleSidebar()" title="Toggle sidebar">
@@ -11442,9 +11443,9 @@ input[type="number"].settings-input { min-width: 60px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
       <span class="mnav-label">Models</span>
     </button>
-    <button class="mnav-item" id="mnav-system" onclick="switchModule('system')">
+    <button class="mnav-item" id="mnav-system" style="display:none" onclick="switchModule('admin')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-      <span class="mnav-label">Pulse</span>
+      <span class="mnav-label">Logs</span>
     </button>
     <div class="mnav-group-label">Config</div>
     <button class="mnav-item" id="mnav-capabilities" onclick="switchModule('capabilities')">
@@ -11486,7 +11487,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.11</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.12</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11934,11 +11935,29 @@ input[type="number"].settings-input { min-width: 60px; }
   <div id="projects-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Projects</span>
-      <button class="btn btn-primary" onclick="_askPorterToCreate('project')" style="font-size:12px">Ask Porter To Create A Project</button>
+      <button class="btn btn-primary" onclick="_askPorterToCreate('project')" style="font-size:12px">Create Project With Porter</button>
     </div>
 
     <div id="projects-list-view" style="padding:0">
-      <div id="proj-stats-bar" style="display:flex;gap:12px;flex-wrap:wrap;padding:8px 0 12px;margin-bottom:6px;font-size:11px;color:var(--text3)"></div>
+      <div class="project-stage" style="margin-bottom:16px">
+        <div class="project-stage-panel">
+          <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Project Control</div>
+          <div style="font-size:32px;font-weight:900;color:var(--text);line-height:1.02;max-width:14ch">Porter runs projects as guided lanes.</div>
+          <div style="font-size:14px;line-height:1.65;color:var(--text2);margin-top:10px;max-width:58ch">Each project should carry one clear objective, durable state, the right artifacts, and the right workers. Porter should help keep the lane disciplined.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
+            <button class="btn btn-primary" onclick="_askPorterToCreate('project')" style="font-size:12px">Start With Porter</button>
+            <button class="btn btn-ghost" onclick="_projOpenActiveOrFirst()" style="font-size:12px">Open Active Project</button>
+          </div>
+        </div>
+        <div class="project-stage-panel">
+          <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Operating Model</div>
+          <div id="proj-stats-bar" style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--text3)"></div>
+          <div style="display:grid;gap:10px;margin-top:12px">
+            <div style="padding:12px 14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:12px;font-weight:700;color:var(--text)">Projects own state and artifacts</div><div style="font-size:12px;line-height:1.55;color:var(--text3);margin-top:4px">Files, screenshots, briefs, and outputs should live inside the project lane instead of floating around as generic filesystem clutter.</div></div>
+            <div style="padding:12px 14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:12px;font-weight:700;color:var(--text)">Porter should guide setup</div><div style="font-size:12px;line-height:1.55;color:var(--text3);margin-top:4px">Creation, worker assignment, and refinement should happen through Porter so the structure stays clean and reviewable.</div></div>
+          </div>
+        </div>
+      </div>
       <div id="proj-grid" class="project-roster">
         <div class="loading-indicator">Loading projects...</div>
       </div>
@@ -11946,14 +11965,14 @@ input[type="number"].settings-input { min-width: 60px; }
     <div id="project-detail-view" style="display:none">
       <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-ghost" onclick="_projBack()" style="font-size:12px">&larr; Back</button>
+        <button class="btn btn-ghost" onclick="_projBack()" style="font-size:12px">&larr; Back To Projects</button>
         <span id="proj-detail-name" style="font-size:16px;font-weight:600;color:var(--text)"></span>
         <span id="proj-detail-status" style="font-size:10px;padding:2px 8px;border-radius:4px"></span>
         </div>
         <div id="proj-detail-actions" style="display:flex;gap:8px;flex-wrap:wrap"></div>
       </div>
       <div id="proj-detail-tabs" class="agent-detail-tabs project-detail-tabs project-tab-rail"></div>
-      <div id="proj-detail-content"></div>
+      <div id="proj-detail-content" class="agent-detail-content"></div>
     </div>
   </div>
 
@@ -12033,7 +12052,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div id="admin-module" class="module-panel">
     <div class="mc-header">
-      <span class="mc-title">Mission Control</span>
+      <span class="mc-title">Logs</span>
       <span id="mc-badge" class="mc-live-badge live"><span class="mc-dot"></span>LIVE</span>
       <span id="mc-rate" class="mc-rate">0 events/min</span>
       <span id="mc-err-rate" class="mc-rate" style="color:var(--err)">0 errors</span>
@@ -12046,6 +12065,24 @@ input[type="number"].settings-input { min-width: 60px; }
         <button class="btn btn-ghost" style="font-size:11px" onclick="mcClearFilters()">Clear</button>
         <button class="btn btn-ghost" style="font-size:11px" onclick="mcExport()">Export</button>
         <button class="btn btn-ghost" style="font-size:11px;color:var(--err)" onclick="mcSwitchTab('report');mcShowReportForm()">Report Bug</button>
+      </div>
+    </div>
+
+    <div id="pulse-status-strip-admin" class="pulse-status-strip" style="padding-top:2px;padding-bottom:10px"></div>
+    <div class="pulse-grid" style="margin-bottom:14px">
+      <div class="pulse-board">
+        <div class="pulse-pane">
+          <div class="pulse-pane-title">Lane Routing</div>
+          <div id="runtime-coordination-panel-admin" style="margin-top:8px"></div>
+        </div>
+        <div class="pulse-pane">
+          <div class="pulse-pane-title">Recent Tasks</div>
+          <div id="runtime-gateway-activity-admin" class="pulse-routing-list" style="margin-top:8px"></div>
+        </div>
+        <div class="pulse-pane">
+          <div class="pulse-pane-title">Active Runs</div>
+          <div id="runtime-orch-runs-admin" class="pulse-runs-list" style="margin-top:8px"></div>
+        </div>
       </div>
     </div>
 
@@ -12587,6 +12624,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.12', date:'2026-03-11', notes:["Pulse is no longer a separate user-facing surface: Logs now carries the live routing strip, backend lanes, recent task routing, and active runs in one place","Projects now uses a stronger Porter-led landing layout and a dedicated project chat lane, with the tab rail reduced to Chat, Activity, Agents, Artifacts, and State","Launchpad activity now filters out stale legacy residue more aggressively, and Logs no longer remaps into the old Pulse module"] },
   { ver:'v0.31.11', date:'2026-03-11', notes:["Logs are visible again as a first-class surface, with a direct Logs action back in Pulse so operational tracing is no longer buried","Agent-detail chat now includes an explicit lane selector in the chat toolbar, so switching between Auto, Codex, Claude, Gemini, OpenClaw, and Ollama happens inside the chat itself instead of relying only on natural-language prompts"] },
   { ver:'v0.31.10', date:'2026-03-11', notes:["Pulse layout: single-column stack (no more 2-column split), Backend Lanes rendered as compact table instead of 5 individual cards, Lanes shown first with Routing and Runs below"] },
   { ver:'v0.31.9', date:'2026-03-11', notes:["Broader chat model-switching triggers: 'switch model to', 'change to', 'change model to', 'try' now all work for natural language backend switching"] },
@@ -14656,11 +14694,22 @@ function _isCoordinationEventType(type) {
 }
 function switchModule(name) {
   if (name === 'overview') name = 'agents';
-  if (name === 'admin') name = 'system';
+  if (name === 'system') name = 'admin';
   // v0.29.11 — Stop phantom pollers when leaving their tabs
-  if (_currentModule === 'admin' && name !== 'admin') {
+  if ((_currentModule === 'admin' || _currentModule === 'system') && name !== 'admin') {
     if (_mcMetricsTimer) { clearInterval(_mcMetricsTimer); _mcMetricsTimer = null; }
     if (_mcSseId) { _sseUnsubscribe(_mcSseId); _mcSseId = null; }
+    if (_gatewayActivityPoller) { clearInterval(_gatewayActivityPoller); _gatewayActivityPoller = null; }
+    if (_gatewayActivityRefreshTimer) { clearTimeout(_gatewayActivityRefreshTimer); _gatewayActivityRefreshTimer = null; }
+    if (_gatewayActivitySseId) { _sseUnsubscribe(_gatewayActivitySseId); _gatewayActivitySseId = null; }
+    if (_pulseOpsPoller) { clearInterval(_pulseOpsPoller); _pulseOpsPoller = null; }
+    if (_orchRunsPoller) { clearInterval(_orchRunsPoller); _orchRunsPoller = null; }
+    if (_orchRunsRefreshTimer) { clearTimeout(_orchRunsRefreshTimer); _orchRunsRefreshTimer = null; }
+    if (_coordinationPanelPoller) { clearInterval(_coordinationPanelPoller); _coordinationPanelPoller = null; }
+    if (_coordinationPanelRefreshTimer) { clearTimeout(_coordinationPanelRefreshTimer); _coordinationPanelRefreshTimer = null; }
+    if (window._systemRuntimeSseId) { _sseUnsubscribe(window._systemRuntimeSseId); window._systemRuntimeSseId = null; }
+    if (window._systemRuntimeRefreshTimer) { clearTimeout(window._systemRuntimeRefreshTimer); window._systemRuntimeRefreshTimer = null; }
+    if (window._wfRefreshTimer) { clearTimeout(window._wfRefreshTimer); window._wfRefreshTimer = null; }
   }
   if (_currentModule === 'overview' && name !== 'overview') {
     if (_overviewRefreshTimer) { clearTimeout(_overviewRefreshTimer); _overviewRefreshTimer = null; }
@@ -14682,19 +14731,6 @@ function switchModule(name) {
     if (_projActivityRefreshTimer) { clearTimeout(_projActivityRefreshTimer); _projActivityRefreshTimer = null; }
     if (_projActivitySseId) { _sseUnsubscribe(_projActivitySseId); _projActivitySseId = null; }
     window._projActivityCurrent = '';
-  }
-  if (_currentModule === 'system' && name !== 'system') {
-    if (_gatewayActivityPoller) { clearInterval(_gatewayActivityPoller); _gatewayActivityPoller = null; }
-    if (_gatewayActivityRefreshTimer) { clearTimeout(_gatewayActivityRefreshTimer); _gatewayActivityRefreshTimer = null; }
-    if (_gatewayActivitySseId) { _sseUnsubscribe(_gatewayActivitySseId); _gatewayActivitySseId = null; }
-    if (_pulseOpsPoller) { clearInterval(_pulseOpsPoller); _pulseOpsPoller = null; }
-    if (_orchRunsPoller) { clearInterval(_orchRunsPoller); _orchRunsPoller = null; }
-    if (_orchRunsRefreshTimer) { clearTimeout(_orchRunsRefreshTimer); _orchRunsRefreshTimer = null; }
-    if (_coordinationPanelPoller) { clearInterval(_coordinationPanelPoller); _coordinationPanelPoller = null; }
-    if (_coordinationPanelRefreshTimer) { clearTimeout(_coordinationPanelRefreshTimer); _coordinationPanelRefreshTimer = null; }
-    if (window._systemRuntimeSseId) { _sseUnsubscribe(window._systemRuntimeSseId); window._systemRuntimeSseId = null; }
-    if (window._systemRuntimeRefreshTimer) { clearTimeout(window._systemRuntimeRefreshTimer); window._systemRuntimeRefreshTimer = null; }
-    if (window._wfRefreshTimer) { clearTimeout(window._wfRefreshTimer); window._wfRefreshTimer = null; }
   }
 
   if (name !== 'settings') closeSettings();
@@ -14783,7 +14819,7 @@ function switchModule(name) {
       }, 60000);
     }, tasks: function() { /* tasks merged into projects */ }, agents: function() { loadAgents(); }, projects: function() { loadProjects(); }, admin: loadAdmin,
     files: loadLocations, policies: loadPolicy,
-    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, system: function(){ _loadRuntimeOperations(); }, settings: syncSettingsUI,
+    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, system: loadAdmin, admin: loadAdmin, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -14803,7 +14839,7 @@ async function loadWorkflowRegistry() {
   grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--text3);font-size:12px">Loading workflows...</div>';
   try {
     var data = await api('/api/workflows');
-    if (!data || !data.workflows) { grid.innerHTML = '<div class="empty-state" style="padding:40px 20px"><div style="font-size:28px;opacity:.4">\u2699\ufe0f</div><p>No workflows registered</p><p style="font-size:12px;color:var(--text3);margin-top:-4px">Pulse workflows appear here when configured</p></div>'; return; }
+    if (!data || !data.workflows) { grid.innerHTML = '<div class="empty-state" style="padding:40px 20px"><div style="font-size:28px;opacity:.4">\u2699\ufe0f</div><p>No workflows registered</p><p style="font-size:12px;color:var(--text3);margin-top:-4px">Internal automation workflows appear here when configured</p></div>'; return; }
     var hiddenWorkflowIds = { cortex_consolidation: true, memory_extraction: true };
     var wfs = (data.workflows || []).filter(function(wf) { return !hiddenWorkflowIds[wf.id]; });
     if (countEl) countEl.textContent = wfs.length + ' workflow' + (wfs.length !== 1 ? 's' : '');
@@ -15534,7 +15570,7 @@ function _renderProjList() {
   if (!grid) return;
   if (!_projList.length) {
     grid.innerHTML = '<div style="padding:40px 20px;text-align:center"><div style="font-size:15px;color:var(--text2);margin-bottom:16px">No projects yet</div>'
-      + '<button class="btn btn-primary" onclick="_askPorterToCreate(\'project\')" style="font-size:12px">Create a Project</button></div>';
+      + '<button class="btn btn-primary" onclick="_askPorterToCreate(\'project\')" style="font-size:12px">Create With Porter</button></div>';
     if (statsBar) statsBar.innerHTML = '';
     return;
   }
@@ -15543,30 +15579,36 @@ function _renderProjList() {
   var totalAgents = 0;
   _projList.forEach(function(p) { totalAgents += (p.assigned_personas || []).length; });
   if (statsBar) {
-    statsBar.innerHTML = '<span class="model-card-chip dim">' + _projList.length + ' projects</span>'
+    statsBar.innerHTML = '<span class="model-card-chip dim">' + _projList.length + ' project lane' + (_projList.length !== 1 ? 's' : '') + '</span>'
       + '<span class="model-card-chip dim">' + active + ' active</span>'
-      + '<span class="model-card-chip dim">' + completed + ' completed</span>'
-      + '<span class="model-card-chip dim">' + totalAgents + ' worker assignments</span>';
+      + '<span class="model-card-chip dim">' + completed + ' closed</span>'
+      + '<span class="model-card-chip dim">' + totalAgents + ' worker assignment' + (totalAgents !== 1 ? 's' : '') + '</span>';
   }
   var html = '<div class="project-roster">';
   _projList.forEach(function(p) {
     var isActive = p.id === _projActive;
     var agentCount = (p.assigned_personas || []).length;
     var done = !!p.completed_at;
-    var typeLabel = done ? 'Completed' : (p.type === 'autonomous' ? 'Autonomous' : 'Active');
+    var typeLabel = done ? 'Completed' : (p.type === 'autonomous' ? 'Autonomous' : 'Guided');
     var dateStr = p.created_at ? _projFmtDate(p.created_at * 1000) : '';
     html += '<div class="project-row' + (isActive ? ' is-active' : '') + '" onclick="_projOpen(\x27' + p.id + '\x27)">';
     html += '<div><div class="project-row-title">' + escHtml(p.name || 'Untitled') + '</div>';
-    html += '<div class="project-row-copy">' + escHtml(p.description || '') + '</div></div>';
+    html += '<div class="project-row-copy">' + escHtml(p.description || p.success_bar || 'No project brief yet.') + '</div></div>';
     html += '<div class="project-row-meta">';
     html += '<span class="model-card-chip ' + (done ? 'ok' : 'dim') + '">' + escHtml(typeLabel) + '</span>';
-    if (isActive) html += '<span class="model-card-chip ok">Active</span>';
+    if (isActive) html += '<span class="model-card-chip ok">Current Lane</span>';
     html += '</div>';
-    html += '<div class="project-row-stats"><span>' + agentCount + ' worker' + (agentCount !== 1 ? 's' : '') + '</span>' + (dateStr ? '<span>' + dateStr + '</span>' : '') + '</div>';
+    html += '<div class="project-row-stats"><span>' + agentCount + ' worker' + (agentCount !== 1 ? 's' : '') + '</span>' + (dateStr ? '<span>' + dateStr + '</span>' : '') + (p.success_bar ? '<span>success bar set</span>' : '') + '</div>';
     html += '</div>';
   });
   html += '</div>';
   grid.innerHTML = html;
+}
+
+function _projOpenActiveOrFirst() {
+  if (!_projList.length) { _askPorterToCreate('project'); return; }
+  var target = _projList.find(function(p) { return p.id === _projActive; }) || _projList[0];
+  if (target) _projOpen(target.id);
 }
 
 async function _projCreate() {
@@ -15609,8 +15651,8 @@ async function _projOpen(id) {
   _projTab = 'chat';
   var actions = document.getElementById('proj-detail-actions');
   if (actions) {
-    actions.innerHTML = '<button class="btn btn-ghost" style="font-size:12px" onclick="_askPorterToCreate(\'worker\')">Create Worker</button>'
-      + '<button class="btn btn-primary" style="font-size:12px" onclick="_askPorterToCreate(\'project\')">Refine With Porter</button>';
+    actions.innerHTML = '<button class="btn btn-ghost" style="font-size:12px" onclick="_projKickoff(\'worker\')">Create Worker</button>'
+      + '<button class="btn btn-primary" style="font-size:12px" onclick="_projKickoff(\'project\')">Refine Project</button>';
   }
   _renderProjTabs();
   _renderProjTabContent();
@@ -15623,10 +15665,10 @@ function _renderProjTabs() {
   var agentCount = (proj.assigned_personas || []).length;
   var items = [
     {id:'chat', label:'Chat'},
+    {id:'activity', label:'Activity'},
     {id:'agents', label:'Agents' + (agentCount ? ' (' + agentCount + ')' : '')},
     {id:'artifacts', label:'Artifacts'},
-    {id:'state', label:'State'},
-    {id:'settings', label:'Settings'}
+    {id:'state', label:'State'}
   ];
   tabs.innerHTML = items.map(function(t) {
     var active = _projTab === t.id;
@@ -15653,16 +15695,36 @@ async function _renderProjTabContent() {
   var html = '';
 
   if (_projTab === 'chat') {
-    if (proj.success_bar) {
-      html += '<div style="padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);margin-bottom:14px;display:flex;gap:8px;align-items:baseline">';
-      html += '<span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);flex-shrink:0">Success bar</span>';
-      html += '<span style="font-size:13px;color:var(--text)">' + escHtml(proj.success_bar) + '</span></div>';
-    }
+    html += '<section id="proj-chat-shell" class="pd-chat-shell" style="display:flex;flex-direction:column;height:min(calc(100vh - 330px), 68vh);max-height:calc(100vh - 330px);min-height:420px;padding:4px 2px 2px;background:transparent;box-sizing:border-box">'
+      + '<div id="proj-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 14px"></div>'
+      + '<div style="margin-top:8px;padding-top:4px">'
+      + '<div class="pd-chat-toolbar">'
+      + '<button class="pd-chat-toolbtn" onclick="_projNewChat()">＋ New Chat</button>'
+      + '<button class="pd-chat-toolbtn" onclick="_projKickoff(\'worker\')">Create Worker</button>'
+      + '<button class="pd-chat-toolbtn" onclick="_projKickoff(\'project\')">Refine Project</button>'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap">'
+      + '<span id="proj-chat-model-note" style="font-size:11px;color:var(--text3)">Lane: Auto</span>'
+      + '<select id="proj-chat-model-sel" onchange="_projChatSetModel(this.value)" style="font-size:11px;padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:var(--bg);color:var(--text)">' + _pdChatModelOptions().map(function(opt) { return '<option value="' + escHtml(opt.value) + '">' + escHtml(opt.label) + '</option>'; }).join('') + '</select>'
+      + '</div>'
+      + '</div>'
+      + '<div class="pd-chat-composer">'
+      + '<textarea id="proj-chat-input" class="pd-chat-input" placeholder="Ask Porter to shape this project, assign workers, or tighten the plan..." rows="1" onkeydown="_projChatKey(event)"></textarea>'
+      + '<button class="pd-send-btn" onclick="_projChatSend()"><span>Send To Porter</span><span class="pd-send-icon">↗</span></button>'
+      + '</div></div></section>';
+    content.innerHTML = html;
+    var projState = _projChatGetState(proj.id);
+    var projLane = document.getElementById('proj-chat-model-sel');
+    if (projLane) projLane.value = projState.modelOverride || '';
+    _projChatSetModel(projState.modelOverride || '');
+    _projChatRender(proj.id);
+    return;
+
+  } else if (_projTab === 'activity') {
     html += '<div style="display:flex;flex-direction:column;gap:10px">';
     html += '<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap">';
     html += '<span style="font-size:13px;font-weight:600;color:var(--text)">Recent Activity</span>';
     html += '<div style="display:flex;gap:8px"><span class="model-card-chip dim" style="font-size:10px">' + (proj.assigned_personas || []).length + ' workers</span>';
-    html += '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(proj.type === 'autonomous' ? 'Autonomous' : 'Manual') + '</span></div>';
+    html += '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(proj.type === 'autonomous' ? 'Autonomous' : 'Guided') + '</span></div>';
     html += '</div>';
     html += '<div id="proj-activity-list" style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text3)">Loading...</div>';
     html += '</div>';
@@ -15692,13 +15754,6 @@ async function _renderProjTabContent() {
         var avatar = p ? (p.avatar || '\u{1f916}') : '\u{1f916}';
         var role = p ? (p.role || '') : '';
         var backend = p ? (p.preferred_backend || 'Bridge-selected at run time') : '';
-        var group = p ? (p.agent_group || '') : '';
-        var skillCount = (p && p.skills) ? p.skills.length : 0;
-        // Find squad membership
-        var squadName = '';
-        (_squads || []).forEach(function(sq) {
-          if (sq.members && sq.members.indexOf(pid) >= 0) squadName = sq.name;
-        });
         html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);font-size:12px;min-width:200px;cursor:pointer" onclick="switchModule(\x27agents\x27);selectPersona(\x27' + pid + '\x27)">';
         html += '<span style="font-size:22px">' + avatar + '</span>';
         html += '<div style="flex:1;min-width:0">';
@@ -15706,8 +15761,7 @@ async function _renderProjTabContent() {
         if (role) html += '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + escHtml(role) + '</div>';
         html += '<div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">';
         if (backend) html += '<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:var(--raised);color:var(--text3)">' + escHtml(backend) + '</span>';
-        if (squadName) html += '<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:color-mix(in srgb, var(--accent) 15%, var(--bg));color:var(--accent)">' + escHtml(squadName) + '</span>';
-        if (skillCount) html += '<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:var(--raised);color:var(--text3)">' + skillCount + ' skills</span>';
+        if (p && p.managed_by_porter) html += '<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:color-mix(in srgb, var(--accent) 15%, var(--bg));color:var(--accent)">Porter-managed</span>';
         html += '</div></div>';
         html += '<button onclick="event.stopPropagation();_projUnassign(\x27' + proj.id + '\x27,\x27' + pid + '\x27)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 2px;flex-shrink:0" title="Remove">&times;</button>';
         html += '</div>';
@@ -15750,6 +15804,212 @@ async function _renderProjTabContent() {
   content.innerHTML = html;
 }
 
+window._projChatState = window._projChatState || {};
+
+function _projChatGetState(pid) {
+  if (!window._projChatState[pid]) {
+    window._projChatState[pid] = { messages: [], chatId: '', sessionSeq: 0, greetingSeed: Date.now(), modelOverride: '' };
+  }
+  return window._projChatState[pid];
+}
+
+function _projChatEnsureId(projectId, state) {
+  if (state.chatId) return state.chatId;
+  state.sessionSeq = Number(state.sessionSeq || 0) + 1;
+  state.chatId = 'proj-' + projectId + '-' + Date.now().toString(36) + '-' + state.sessionSeq;
+  return state.chatId;
+}
+
+function _projChatSetModel(value) {
+  var proj = window._projCurrent;
+  if (!proj) return;
+  var state = _projChatGetState(proj.id);
+  state.modelOverride = value || '';
+  var badge = document.getElementById('proj-chat-model-note');
+  if (badge) badge.textContent = state.modelOverride ? ('Lane: ' + _pdChatModelLabel(state.modelOverride)) : 'Lane: Auto';
+}
+
+function _projChatComposePrompt(project, state, userText) {
+  var parts = ['Project lane: ' + (project.name || 'Untitled')];
+  if (project.description) parts.push('Project brief: ' + project.description);
+  if (project.success_bar) parts.push('Success bar: ' + project.success_bar);
+  var hist = (state.messages || []).filter(function(m) { return m.role === 'user' || m.role === 'assistant'; }).slice(-2);
+  if (hist.length) {
+    parts.push('Recent conversation:\n' + hist.map(function(m) {
+      return (m.role === 'user' ? 'User: ' : 'Assistant: ') + String(m.content || '').slice(0, 280);
+    }).join('\n\n'));
+  }
+  parts.push('New request:\n' + userText);
+  return parts.join('\n\n');
+}
+
+function _projGreetingCopy(project, state) {
+  var greetings = [
+    "Hi, I'm Porter. Let's shape " + (project.name || 'this project') + ". What needs to happen next?",
+    "Porter here. Give me the next move for " + (project.name || 'this project') + " and I'll keep the lane clean.",
+    "Let's run " + (project.name || 'this project') + " properly. What should Porter tighten, assign, or create?",
+    "I'm on " + (project.name || 'this project') + ". What should I organize first?"
+  ];
+  var seed = Number(state && state.greetingSeed ? state.greetingSeed : Date.now());
+  return greetings[Math.abs(seed) % greetings.length];
+}
+
+function _projChatRender(pid) {
+  var panel = document.getElementById('proj-chat-thread');
+  var project = window._projCurrent;
+  if (!panel || !project || project.id !== pid) return;
+  var state = _projChatGetState(pid);
+  if (!state.messages.length) {
+    panel.innerHTML = '<div class="pd-chat-empty">' + escHtml(_projGreetingCopy(project, state)) + '</div>';
+    return;
+  }
+  panel.innerHTML = state.messages.map(function(m) {
+    var isUser = m.role === 'user';
+    var isErr = m.role === 'error';
+    var isPending = m.role === 'pending';
+    var bg = isUser ? 'color-mix(in srgb,var(--accent) 10%, var(--surface))' : isErr ? 'color-mix(in srgb,#ef4444 6%, var(--surface))' : 'color-mix(in srgb,var(--surface) 88%, transparent)';
+    var border = isUser ? 'color-mix(in srgb,var(--accent) 18%, transparent)' : isErr ? 'color-mix(in srgb,#ef4444 18%, transparent)' : 'color-mix(in srgb,var(--border) 72%, transparent)';
+    if (isPending) {
+      return '<div class="pd-chat-msg pending orchestrator" style="border:1px solid ' + border + '">'
+        + '<div class="pd-chat-avatar">' + _personaAvatarMarkup({ name: 'Porter', orchestrator_only: true }, 78) + '</div>'
+        + '<div style="min-width:0;display:flex;flex-direction:column;gap:6px">'
+        + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Porter</span>'
+        + (m.meta ? '<span style="font-size:10px;color:var(--text3)">' + escHtml(m.meta) + '</span>' : '') + '</div>'
+        + '<div class="pd-chat-pulse" aria-label="Porter is responding"><span class="pd-chat-pulse-dot"></span><span class="pd-chat-pulse-dot"></span><span class="pd-chat-pulse-dot"></span></div>'
+        + '</div></div>';
+    }
+    return '<div class="pd-chat-msg" style="border:1px solid ' + border + ';background:' + bg + '">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">' + escHtml(m.label || (isUser ? 'You' : 'Porter')) + '</span>'
+      + (m.meta ? '<span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(m.meta) + '</span>' : '') + '</div>'
+      + '<div style="font-size:13px;line-height:1.6;color:' + (isErr ? '#ef4444' : 'var(--text2)') + ';white-space:pre-wrap">' + escHtml(m.content || '') + '</div>'
+      + '</div>';
+  }).join('');
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function _projNewChat() {
+  var project = window._projCurrent;
+  if (!project) return;
+  var state = _projChatGetState(project.id);
+  state.messages = [];
+  state.chatId = '';
+  state.greetingSeed = Date.now() + Math.floor(Math.random() * 1000);
+  _projChatRender(project.id);
+}
+
+function _projKickoff(kind) {
+  var project = window._projCurrent;
+  if (!project) return;
+  _projTab = 'chat';
+  _renderProjTabs();
+  _renderProjTabContent();
+  var state = _projChatGetState(project.id);
+  var message = kind === 'worker'
+    ? 'Porter is ready to shape a worker for ' + (project.name || 'this project') + '. Tell him what the worker should own and he should keep the assignment inside this project lane.'
+    : 'Porter is ready to refine ' + (project.name || 'this project') + '. Tell him what should change, tighten, or become explicit in the project lane.';
+  state.messages.push({ role: 'assistant', label: 'Porter', content: message, meta: 'project lane' });
+  _projChatRender(project.id);
+  var input = document.getElementById('proj-chat-input');
+  if (input) input.focus();
+}
+
+function _projChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    _projChatSend();
+  }
+}
+
+async function _projChatSend() {
+  var project = window._projCurrent;
+  var input = document.getElementById('proj-chat-input');
+  if (!project || !input) return;
+  var text = input.value.trim();
+  if (!text) return;
+  var state = _projChatGetState(project.id);
+  var promptBody = _projChatComposePrompt(project, state, text);
+  state.messages.push({ role: 'user', label: 'You', content: text });
+  state.messages.push({ role: 'pending', label: 'Porter', content: '...', meta: state.modelOverride ? _pdChatModelLabel(state.modelOverride) : 'Auto' });
+  input.value = '';
+  _projChatRender(project.id);
+  await new Promise(function(resolve) {
+    var idx = state.messages.length - 1;
+    var chatId = _projChatEnsureId(project.id, state);
+    var url = '/api/chat/stream?model=' + encodeURIComponent(state.modelOverride || 'auto')
+      + '&prompt=' + encodeURIComponent(promptBody)
+      + '&route=general'
+      + '&chat_id=' + encodeURIComponent(chatId)
+      + '&project_id=' + encodeURIComponent(project.id)
+      + '&persona_name=' + encodeURIComponent('Porter')
+      + '&raw_text=' + encodeURIComponent(text);
+    var full = '';
+    var buffered = '';
+    var flushTimer = null;
+    function flushBuffered(force) {
+      if (!buffered && !force) return;
+      if (buffered) {
+        full += buffered;
+        buffered = '';
+      }
+      state.messages[idx] = { role: 'assistant', label: 'Porter', content: full, meta: state.messages[idx] && state.messages[idx].meta ? state.messages[idx].meta : (state.modelOverride ? _pdChatModelLabel(state.modelOverride) : 'Auto'), streaming: !force };
+      _projChatRender(project.id);
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+    }
+    var evtSource = new EventSource(url);
+    evtSource.onmessage = function(e) {
+      try {
+        var data = JSON.parse(e.data);
+        if (data.error) {
+          state.messages[idx] = { role: 'error', label: 'Porter', content: data.error, meta: data.runtime_label || (state.modelOverride ? _pdChatModelLabel(state.modelOverride) : 'Auto') };
+          _projChatRender(project.id);
+          evtSource.close();
+          resolve();
+          return;
+        }
+        if (data.runtime_label && !data.token && !data.done) {
+          var existing = state.messages[idx] || { role: 'pending', label: 'Porter', content: '...' };
+          existing.meta = data.runtime_label;
+          state.messages[idx] = existing;
+          _projChatRender(project.id);
+          return;
+        }
+        if (data.token) {
+          if (data.runtime_label && state.messages[idx]) state.messages[idx].meta = data.runtime_label;
+          buffered += data.token;
+          if (!flushTimer) flushTimer = setTimeout(function() { flushBuffered(false); }, 45);
+          return;
+        }
+        if (data.done) {
+          if (data.runtime_label && state.messages[idx]) state.messages[idx].meta = data.runtime_label;
+          flushBuffered(true);
+          state.messages[idx] = {
+            role: 'assistant',
+            label: 'Porter',
+            content: data.full_response || full || '(no response)',
+            meta: data.runtime_label || _runtimeLabel(data.backend_used, data.model_used, state.modelOverride ? _pdChatModelLabel(state.modelOverride) : 'Auto'),
+            streaming: false
+          };
+          _projChatRender(project.id);
+          evtSource.close();
+          resolve();
+        }
+      } catch (err) {}
+    };
+    evtSource.onerror = function() {
+      flushBuffered(true);
+      if (!full) {
+        state.messages[idx] = { role: 'error', label: 'Porter', content: 'Connection lost before Porter could respond.', meta: state.modelOverride ? _pdChatModelLabel(state.modelOverride) : 'Auto' };
+        _projChatRender(project.id);
+      }
+      evtSource.close();
+      resolve();
+    };
+  });
+}
+
 async function _projLoadActivity(pid) {
   var el = document.getElementById('proj-activity-list');
   if (!el) return;
@@ -15786,11 +16046,11 @@ async function _projLoadActivity(pid) {
 }
 
 function _scheduleProjActivityRefresh(delayMs) {
-  if (_currentModule !== 'projects' || _projTab !== 'chat' || !window._projActivityCurrent) return;
+  if (_currentModule !== 'projects' || _projTab !== 'activity' || !window._projActivityCurrent) return;
   if (_projActivityRefreshTimer) return;
   _projActivityRefreshTimer = setTimeout(function() {
     _projActivityRefreshTimer = null;
-    if (_currentModule === 'projects' && _projTab === 'chat' && window._projActivityCurrent) {
+    if (_currentModule === 'projects' && _projTab === 'activity' && window._projActivityCurrent) {
       _projLoadActivity(window._projActivityCurrent);
     }
   }, Math.max(80, delayMs || 250));
@@ -15806,7 +16066,7 @@ function _connectProjActivityLive() {
   });
   if (!_projActivityPoller) {
     _projActivityPoller = setInterval(function() {
-      if (_currentModule === 'projects' && _projTab === 'chat' && window._projActivityCurrent) {
+      if (_currentModule === 'projects' && _projTab === 'activity' && window._projActivityCurrent) {
         _projLoadActivity(window._projActivityCurrent);
       }
     }, 30000);
@@ -16406,7 +16666,7 @@ var _coordinationPanelRefreshTimer = null;
 var _pulseOpsPoller = null;
 
 async function _loadPulseOps(force) {
-  var strip = document.getElementById('pulse-status-strip');
+  var strip = document.getElementById(_currentModule === 'admin' ? 'pulse-status-strip-admin' : 'pulse-status-strip');
   if (!strip) return;
   try {
     var [metrics, schedRes, runsRes, dispatchRes] = await Promise.all([
@@ -16443,7 +16703,7 @@ async function _loadPulseOps(force) {
   }
   if (!_pulseOpsPoller) {
     _pulseOpsPoller = setInterval(function() {
-      if (_currentModule === 'system') _loadPulseOps(true);
+      if (_currentModule === 'admin') _loadPulseOps(true);
     }, 30000);
   }
 }
@@ -16484,7 +16744,7 @@ async function _loadSelfCheck() {
 }
 
 async function _loadGatewayActivity(force) {
-  var host = document.getElementById('runtime-gateway-activity');
+  var host = document.getElementById(_currentModule === 'admin' ? 'runtime-gateway-activity-admin' : 'runtime-gateway-activity');
   if (!host) return;
   if (!force && !host.innerHTML.trim()) {
     host.innerHTML = '<div class="pulse-route-card"><div class="pulse-route-title">Loading routing map...</div><div class="pulse-route-copy">Waiting for recent dispatch data.</div></div>';
@@ -16534,11 +16794,11 @@ async function _loadGatewayActivity(force) {
 }
 
 function _scheduleGatewayActivityRefresh(delayMs) {
-  if (_currentModule !== 'system') return;
+  if (_currentModule !== 'admin') return;
   if (_gatewayActivityRefreshTimer) return;
   _gatewayActivityRefreshTimer = setTimeout(function() {
     _gatewayActivityRefreshTimer = null;
-    if (_currentModule === 'system') {
+    if (_currentModule === 'admin') {
       _loadGatewayActivity(true);
       _loadOrchRuns();
     }
@@ -16552,14 +16812,14 @@ function _connectGatewayActivitySse() {
     if (d.type === 'bridge:dispatch') _scheduleGatewayActivityRefresh(120);
     else if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleGatewayActivityRefresh(220);
     else if (_isCoordinationEventType(d.type)) _scheduleGatewayActivityRefresh(180);
-    if (d.type && d.type.indexOf('orch:') === 0 && _currentModule === 'system') { _scheduleOrchRunsRefresh(120); }
-    if (_currentModule === 'system' && (d.type === 'log:event' || d.type === 'log:incident' || d.type === 'log:remediation')) {
+    if (d.type && d.type.indexOf('orch:') === 0 && _currentModule === 'admin') { _scheduleOrchRunsRefresh(120); }
+    if (_currentModule === 'admin' && (d.type === 'log:event' || d.type === 'log:incident' || d.type === 'log:remediation')) {
       _loadPulseOps(true);
     }
   });
   if (!_gatewayActivityPoller) {
     _gatewayActivityPoller = setInterval(function() {
-      if (_currentModule === 'system') _loadGatewayActivity(true);
+      if (_currentModule === 'admin') _loadGatewayActivity(true);
     }, 30000);
   }
 }
@@ -16603,7 +16863,7 @@ function _renderOrchRunCard(run) {
 }
 
 async function _loadOrchRuns(force) {
-  var host = document.getElementById('runtime-orch-runs');
+  var host = document.getElementById(_currentModule === 'admin' ? 'runtime-orch-runs-admin' : 'runtime-orch-runs');
   if (!host) return;
   if (!force && !host.innerHTML.trim()) {
     host.innerHTML = '<div class="pulse-route-card"><div class="pulse-route-title">Loading active runs...</div><div class="pulse-route-copy">Waiting for Porter\'s current run state.</div></div>';
@@ -16624,11 +16884,11 @@ async function _loadOrchRuns(force) {
 }
 
 function _scheduleOrchRunsRefresh(delayMs) {
-  if (_currentModule !== 'system') return;
+  if (_currentModule !== 'admin') return;
   if (_orchRunsRefreshTimer) return;
   _orchRunsRefreshTimer = setTimeout(function() {
     _orchRunsRefreshTimer = null;
-    if (_currentModule === 'system') _loadOrchRuns(true);
+    if (_currentModule === 'admin') _loadOrchRuns(true);
   }, Math.max(60, delayMs || 220));
 }
 
@@ -16738,7 +16998,7 @@ function _coordinationPanelCard(title, bodyHtml, tone) {
 }
 
 async function _loadCoordinationPanel(force) {
-  var host = document.getElementById('runtime-coordination-panel');
+  var host = document.getElementById(_currentModule === 'admin' ? 'runtime-coordination-panel-admin' : 'runtime-coordination-panel');
   if (!host) return;
   if (!force && !host.innerHTML.trim()) {
     host.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">Loading lanes…</div>';
@@ -16782,20 +17042,20 @@ async function _loadCoordinationPanel(force) {
 }
 
 function _scheduleCoordinationPanelRefresh(delayMs) {
-  if (_currentModule !== 'system') return;
+  if (_currentModule !== 'admin') return;
   if (_coordinationPanelRefreshTimer) return;
   _coordinationPanelRefreshTimer = setTimeout(function() {
     _coordinationPanelRefreshTimer = null;
-    if (_currentModule === 'system') _loadCoordinationPanel(true);
+    if (_currentModule === 'admin') _loadCoordinationPanel(true);
   }, Math.max(60, delayMs || 220));
 }
 
 function _scheduleSystemRuntimeRefresh(delayMs) {
-  if (_currentModule !== 'system') return;
+  if (_currentModule !== 'admin') return;
   if (window._systemRuntimeRefreshTimer) return;
   window._systemRuntimeRefreshTimer = setTimeout(function() {
     window._systemRuntimeRefreshTimer = null;
-    if (_currentModule === 'system') {
+    if (_currentModule === 'admin') {
       _loadPulseOps(true);
       _loadGatewayActivity(true);
       _loadOrchRuns(true);
@@ -16817,7 +17077,7 @@ function _connectSystemRuntimeSse() {
   });
   if (!_coordinationPanelPoller) {
     _coordinationPanelPoller = setInterval(function() {
-      if (_currentModule === 'system') _loadCoordinationPanel(true);
+      if (_currentModule === 'admin') _loadCoordinationPanel(true);
     }, 30000);
   }
 }
@@ -19468,7 +19728,7 @@ function chatAutoResize(el) { _chatAutoGrow(el); }
 
 // ── Guided tour (vanilla JS) ────────────────────────────────────────────────
 var _tourSteps = [
-  { sel: '.sidebar', title: 'Sidebar Navigation', desc: 'Switch between the active Porter surfaces: Agents, Projects, Models, Pulse, and operator tools.' },
+  { sel: '.sidebar', title: 'Sidebar Navigation', desc: 'Switch between the active Porter surfaces: Agents, Projects, Models, Logs, and operator tools.' },
   { sel: '#chat-input', title: 'Chat Input', desc: 'Type messages to your AI models. Use / for commands, @ to target a specific backend.' },
   { sel: '#chat-model, .chat-model-sel', title: 'Model Selector', desc: 'Choose which AI model responds. Cloud models (OpenClaw, Gemini, Codex) and local (Ollama) are grouped.' },
   { sel: '#chat-dashboard, .chat-dash', title: 'Dashboard', desc: 'Live model status cards. Click a card to start chatting with that backend.' },
@@ -20662,6 +20922,7 @@ async function loadDelegationLog() {
 
 async function loadAdmin() {
   mcInit();
+  _loadRuntimeOperations();
 }
 
 async function mcInit() {
@@ -35815,7 +36076,7 @@ LANDING_PAGE = """<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Porter — Your AI Infrastructure Hub</title>
-<meta name="description" content="Self-hosted AI hub. Route conversations to Claude, GPT, Gemini, and local models. Manage files, memory, and workflows from one place.">
+<meta name="description" content="Project-first AI orchestration for agents, models, artifacts, and logs in one place.">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#111113;--surface:#1a1a1e;--raised:#222226;--border:#2e2e33;--accent:#6366f1;--accent-d:#4f46e5;--text:#e4e4e7;--text2:#a1a1aa;--text3:#71717a}
@@ -35901,19 +36162,19 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <p>One endpoint, many backends. Route tasks to any model with @backend prefix. Porter decides or you override. Your call.</p>
   </div>
   <div class="landing-feat">
-    <div class="landing-feat-icon">&#128464;</div>
-    <h3>Mission Control</h3>
-    <p>Browse, upload, search, and manage files across multiple mount points. Batch operations, zip downloads, inline preview.</p>
+    <div class="landing-feat-icon">&#128203;</div>
+    <h3>Projects And Artifacts</h3>
+    <p>Keep work inside clean project lanes with durable state, attached workers, and artifact-aware outputs instead of generic file clutter.</p>
   </div>
   <div class="landing-feat">
     <div class="landing-feat-icon">&#129504;</div>
-    <h3>Memory Orchestration</h3>
-    <p>How AI agents remember. Instructions, persistent memory, shared plane, session history. Educational three-layer view.</p>
+    <h3>Durable State</h3>
+    <p>Use directives, notes, and artifacts as persistent project truth. Porter should remember the work, not just summarize old chats.</p>
   </div>
   <div class="landing-feat">
     <div class="landing-feat-icon">&#128736;</div>
-    <h3>50+ Skills</h3>
-    <p>OpenClaw skills accessible through chat. /commands invoke agents. Automate workflows with cron jobs. No code required.</p>
+    <h3>Agent Capabilities</h3>
+    <p>Porter can shape workers, route tasks, and switch runtimes inside the chat lane without forcing users through raw admin plumbing.</p>
   </div>
   <div class="landing-feat">
     <div class="landing-feat-icon">&#128274;</div>
@@ -36623,7 +36884,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.11"})
+            self.reply_json({"v": "0.31.12"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36785,7 +37046,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.11"
+                health["porter_version"] = "0.31.12"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38729,7 +38990,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.11'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.12'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43819,7 +44080,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.11 ready (localhost only)")
+    print(f"\n  Porter v0.31.12 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
