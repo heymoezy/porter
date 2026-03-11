@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.80 — Agents-first chat consolidation"""
+"""Porter v0.30.81 — Real image transport for chat attachments"""
 
 
 import email
@@ -10622,7 +10622,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.80</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.81</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11913,6 +11913,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.81', date:'2026-03-11', notes:["Chat attachments now persist correctly from Porter detail chat, uploaded screenshots are sent to Codex as real image inputs instead of fake text markers, auto-routed image chats can fall back to Codex when needed, and guided worker creation copy is now generic and context-aware instead of hardwired to Porter software development"] },
   { ver:'v0.30.80', date:'2026-03-11', notes:["Agents is now the default landing surface and old overview routing now resolves into the Porter/Agents experience instead of opening the legacy general chat; Porter detail chat now keeps its own session history, creation flows start in a clean sub-session, fresh drag-and-drop attachments render immediately even before the first message, and Porter opens with rotating friendlier greetings instead of stale helper copy"] },
   { ver:'v0.30.79', date:'2026-03-11', notes:["Porter detail chat now accepts drag-and-drop file uploads directly into the chat workspace, with a proper drop target and the same attachment pipeline as the explicit upload control"] },
   { ver:'v0.30.78', date:'2026-03-11', notes:["Porter detail chat now has real session controls for new chat, clear chat, and file uploads, and uploaded files become explicit chat context instead of staying outside the conversation lane; the detail chat shell was tightened again so Porter can work from a cleaner dedicated lane without forcing everything through the main chat"] },
@@ -16529,13 +16530,16 @@ async function _pdPersistAttachments(chatId, attachments) {
     if (!file || file.persisted || !file.data) continue;
     try {
       var r = await api('/api/chat/attachments', {
-        action: 'add',
+        action: 'upload',
         chat_id: chatId,
         filename: file.name,
         content_type: file.mimeType || 'application/octet-stream',
         data: file.data
       }, 30000);
-      if (r && r.ok) file.persisted = true;
+      if (r && r.ok) {
+        file.persisted = true;
+        if (r.attachment_id) file.id = r.attachment_id;
+      }
     } catch (e) {}
   }
 }
@@ -16802,11 +16806,35 @@ async function _pdCreationLoadContext() {
   };
 }
 
+function _pdCreationExamples(kind, ctx) {
+  ctx = ctx || {};
+  if (kind === 'project') {
+    return [
+      'Launch a customer onboarding project',
+      'Run a Q2 research initiative',
+      'Set up an event planning lane'
+    ];
+  }
+  var examples = [
+    'Own customer support triage for new inbound requests',
+    'Research competitors and summarize the landscape',
+    'Prepare weekly content for the marketing calendar',
+    'Coordinate hiring outreach for design candidates',
+    'Track operations issues and escalate blockers'
+  ];
+  if ((ctx.projects || []).length) {
+    examples.unshift('Support the "' + (ctx.projects[0].name || 'current') + '" project with focused execution');
+  }
+  return examples.slice(0, 3);
+}
+
 function _pdCreationPrompt(flow) {
   var ctx = flow.context || { projects: [] };
   var projectNames = (ctx.projects || []).map(function(p) { return p.name; });
+  var examples = _pdCreationExamples(flow.kind, ctx);
   if (flow.kind === 'worker') {
-    if (flow.stage === 0) return 'Tell Porter what this worker should own. A short mission is enough, for example: "Handle QA for the Agents redesign."';
+    if (flow.stage === 0) return 'Tell Porter what this worker should own. A short mission is enough.'
+      + (examples.length ? '\nExamples: ' + examples.map(function(x) { return '"' + x + '"'; }).join(' · ') : '');
     if (flow.stage === 1) return 'Should Porter attach this worker to an existing project, or leave it unassigned for now?'
       + (projectNames.length ? '\nProjects: ' + projectNames.join(', ') : '\nNo projects exist yet.');
     if (flow.stage === 2) return 'Should this worker be temporary or persistent?';
@@ -16867,7 +16895,7 @@ async function _pdChatStartCreation(kind) {
   state.messages.push({
     role: 'assistant',
     label: p.name || 'Porter',
-    content: 'Porter will guide this ' + _pdCreationTypeLabel(kind) + ' creation so the roster stays clean, the project lineage stays intact, and nothing changes without approval.\n\n' + _pdCreationPrompt(state.flow),
+    content: 'Porter will guide this ' + _pdCreationTypeLabel(kind) + ' creation carefully, keep the structure clean, and wait for approval before changing anything.\n\n' + _pdCreationPrompt(state.flow),
     meta: 'guided creation'
   });
   _pdChatRender(p.id);
@@ -29384,6 +29412,38 @@ def _agent_env():
     env["PATH"] = str(Path.home() / ".npm-global/bin") + ":" + env.get("PATH", "")
     return env
 
+
+def _chat_attachment_rows(chat_id: str):
+    """Load persisted attachments for a chat session."""
+    if not chat_id:
+        return []
+    try:
+        conn = _db_conn()
+        rows = conn.execute(
+            "SELECT id, filename, content_type, size, data FROM chat_attachments WHERE chat_id = ? ORDER BY created_at ASC",
+            (chat_id,),
+        ).fetchall()
+        conn.close()
+        return rows or []
+    except Exception as e:
+        log.warning("Chat attachment load failed for %s: %s", chat_id, e)
+        return []
+
+
+def _chat_image_attachment_rows(chat_id: str):
+    """Return only image attachments for a chat session."""
+    rows = _chat_attachment_rows(chat_id)
+    return [r for r in rows if str(r["content_type"] or "").lower().startswith("image/")]
+
+
+def _chat_runtime_supports_images(model_id: str) -> bool:
+    """Whether the active chat runtime can accept real image payloads."""
+    if not model_id:
+        return False
+    if model_id == "codex-cli":
+        return True
+    return False
+
 def _dispatch_openclaw(message, model=None, timeout=120):
     """Invoke OpenClaw agent CLI and return normalized response."""
     import subprocess
@@ -35908,7 +35968,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.80"})
+            self.reply_json({"v": "0.30.81"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36070,7 +36130,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.80"
+                health["porter_version"] = "0.30.81"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37967,7 +38027,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.80'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.81'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38039,6 +38099,21 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"error": "model and prompt required"}, 400)
                 return
 
+            _chat_images = _chat_image_attachment_rows(chat_id)
+            _image_count = len(_chat_images)
+            if _image_count and not _chat_runtime_supports_images(model_id):
+                if model_param in ("auto", "") or model_param.startswith("general"):
+                    if _resolve_cli("codex"):
+                        model_id = "codex-cli"
+                        qs["model"] = [model_id]
+                        log.info("Chat image fallback: %s image(s) rerouted to codex-cli for %s", _image_count, chat_id or "adhoc")
+                    else:
+                        self.reply_json({"error": "This chat received image attachments, but the active runtime cannot inspect images and no multimodal fallback is available."}, 400)
+                        return
+                else:
+                    self.reply_json({"error": "The selected runtime cannot inspect image attachments in chat yet. Switch to Codex or send text-only context."}, 400)
+                    return
+
             # Porter context: tell models they're operating within Porter
             _persona_name_param = qs.get("persona_name", [""])[0]
             if str(_persona_name_param or "").strip().lower() == "porter":
@@ -38082,7 +38157,7 @@ class Handler(BaseHTTPRequestHandler):
             # v0.28.4 — Loop guard: human chat message resets guard
             _lg_chat_id_stream = chat_id or _stream_run_id
             _loop_guard_check(_lg_chat_id_stream, sender_is_human=True)
-            mlog.emit("info", "chat", "chat.stream.start", f"Chat stream: {model_id}", model=model_id, prompt_len=len(prompt))
+            mlog.emit("info", "chat", "chat.stream.start", f"Chat stream: {model_id}", model=model_id, prompt_len=len(prompt), image_count=_image_count)
 
             try:
                 import urllib.request
@@ -38283,48 +38358,67 @@ class Handler(BaseHTTPRequestHandler):
                         self.wfile.flush()
                     else:
                         import subprocess as _sp
+                        import tempfile as _tmp
                         codex_model = os.environ.get("PORTER_CODEX_MODEL", "").strip() or _get_active_model("codex") or "gpt-5.4"
                         _cdx_cmd = [cdx_bin, "exec", "--ephemeral", "--json", "--skip-git-repo-check", "-m", codex_model, prompt]
-                        _proc = _sp.Popen(_cdx_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env(), cwd=str(Path.home()))
-                        for _line in iter(_proc.stdout.readline, ''):
-                            if not _line.strip():
-                                continue
+                        _codex_temp_images = []
+                        for _img in _chat_images:
                             try:
-                                _evt = json.loads(_line)
-                                _etype = _evt.get("type", "")
-                                if _etype == "item.completed":
-                                    _item = _evt.get("item", {})
-                                    if _item.get("type") == "agent_message":
-                                        _msg = _item.get("text", "")
-                                        if not _msg:
-                                            _parts = [p.get("text","") for p in (_item.get("content",[]) or []) if isinstance(p, dict) and p.get("text")]
-                                            _msg = "".join(_parts).strip()
-                                        if _msg:
-                                            full_response += _msg
-                                            self.wfile.write(f"data: {json.dumps({'token': _msg})}\n\n".encode())
-                                            self.wfile.flush()
-                                            _stream_chunk(_stream_run_id, _stream_backend, _msg)
-                                    elif _item.get("type") == "tool_call":
-                                        _tool = _item.get("name", "tool")
-                                        _tnote = f"\n`> {_tool}`\n"
-                                        full_response += _tnote
-                                        self.wfile.write(f"data: {json.dumps({'token': _tnote})}\n\n".encode())
-                                        self.wfile.flush()
-                                        _stream_chunk(_stream_run_id, _stream_backend, _tnote)
-                                elif _etype == "error":
-                                    _emsg = _evt.get("message", "Codex error")
-                                    self.wfile.write(f"data: {json.dumps({'error': _emsg})}\n\n".encode())
-                                    self.wfile.flush()
-                            except (json.JSONDecodeError, ValueError):
-                                full_response += _line
-                                self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
-                                self.wfile.flush()
-                                _stream_chunk(_stream_run_id, _stream_backend, _line)
+                                _suffix = Path(str(_img["filename"] or "image")).suffix or ".png"
+                                with _tmp.NamedTemporaryFile(prefix="porter-chat-image-", suffix=_suffix, delete=False) as _tf:
+                                    _tf.write(_img["data"] or b"")
+                                    _codex_temp_images.append(_tf.name)
+                            except Exception as _img_err:
+                                log.warning("Codex image prep failed for %s: %s", _img["filename"], _img_err)
+                        for _img_path in _codex_temp_images:
+                            _cdx_cmd.extend(["--image", _img_path])
                         try:
-                            _proc.wait(timeout=10)
-                        except _sp.TimeoutExpired:
-                            _proc.kill()
-                            log.warning("Codex process killed after timeout")
+                            _proc = _sp.Popen(_cdx_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env(), cwd=str(Path.home()))
+                            for _line in iter(_proc.stdout.readline, ''):
+                                if not _line.strip():
+                                    continue
+                                try:
+                                    _evt = json.loads(_line)
+                                    _etype = _evt.get("type", "")
+                                    if _etype == "item.completed":
+                                        _item = _evt.get("item", {})
+                                        if _item.get("type") == "agent_message":
+                                            _msg = _item.get("text", "")
+                                            if not _msg:
+                                                _parts = [p.get("text","") for p in (_item.get("content",[]) or []) if isinstance(p, dict) and p.get("text")]
+                                                _msg = "".join(_parts).strip()
+                                            if _msg:
+                                                full_response += _msg
+                                                self.wfile.write(f"data: {json.dumps({'token': _msg})}\n\n".encode())
+                                                self.wfile.flush()
+                                                _stream_chunk(_stream_run_id, _stream_backend, _msg)
+                                        elif _item.get("type") == "tool_call":
+                                            _tool = _item.get("name", "tool")
+                                            _tnote = f"\n`> {_tool}`\n"
+                                            full_response += _tnote
+                                            self.wfile.write(f"data: {json.dumps({'token': _tnote})}\n\n".encode())
+                                            self.wfile.flush()
+                                            _stream_chunk(_stream_run_id, _stream_backend, _tnote)
+                                    elif _etype == "error":
+                                        _emsg = _evt.get("message", "Codex error")
+                                        self.wfile.write(f"data: {json.dumps({'error': _emsg})}\n\n".encode())
+                                        self.wfile.flush()
+                                except (json.JSONDecodeError, ValueError):
+                                    full_response += _line
+                                    self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
+                                    self.wfile.flush()
+                                    _stream_chunk(_stream_run_id, _stream_backend, _line)
+                            try:
+                                _proc.wait(timeout=10)
+                            except _sp.TimeoutExpired:
+                                _proc.kill()
+                                log.warning("Codex process killed after timeout")
+                        finally:
+                            for _img_path in _codex_temp_images:
+                                try:
+                                    os.unlink(_img_path)
+                                except Exception:
+                                    pass
 
                 else:
                     self.wfile.write(f"data: {json.dumps({'error': 'Unknown model: ' + model_id})}\n\n".encode())
@@ -42891,7 +42985,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.80 ready (localhost only)")
+    print(f"\n  Porter v0.30.81 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

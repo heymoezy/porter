@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.81 (2026-03-11)
+
+- Fixed Porter detail chat attachment persistence so uploaded files actually save immediately instead of waiting for a later setup action.
+- Chat screenshots now go to Codex as real `--image` inputs when Codex is the active or auto-selected runtime, instead of being flattened into fake text markers that left Porter blind.
+- Auto-routed image chats now fail honestly or fall back to Codex when available, rather than pretending unsupported runtimes inspected the image.
+- Guided worker creation copy is now generic and context-aware instead of hardwired to Porter software-development examples.
+
 ## v0.30.80 (2026-03-11)
 
 - Agents is now the default landing surface, and old overview/chat routing now resolves into the Porter/Agents experience instead of leading users back into the legacy general chat.
