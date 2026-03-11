@@ -1,5 +1,9 @@
 # Porter Release Notes
 
+## v0.30.95 (2026-03-11)
+
+- Agent-detail chat image attachments now render in a smaller footprint so previews feel closer to compact chat attachments instead of oversized mini-cards.
+
 ## v0.30.94 (2026-03-11)
 
 - Porter detail chat now skips generic auto-routing and goes straight to Codex by default, so the first response path does less work before the stream starts.

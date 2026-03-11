@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.94 — Speed up Porter chat startup"""
+"""Porter v0.30.95 — Tighten chat attachment thumbnail sizing"""
 
 
 import email
@@ -9741,14 +9741,14 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .pd-chat-attachment.image {
   flex-direction:column;
   align-items:flex-start;
-  gap:6px;
-  width:148px;
-  padding:8px;
+  gap:5px;
+  width:116px;
+  padding:7px;
 }
 .pd-chat-attachment-thumb {
   width:100%;
   aspect-ratio:1/1;
-  border-radius:12px;
+  border-radius:10px;
   overflow:hidden;
   background:color-mix(in srgb,var(--bg) 88%, transparent);
   border:1px solid color-mix(in srgb,var(--border) 72%, transparent);
@@ -11205,7 +11205,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.94</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.95</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12364,6 +12364,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.95', date:'2026-03-11', notes:["Agent-detail chat image attachments now render in a smaller footprint so screenshot and image previews feel closer to compact chat attachments instead of oversized mini-cards"] },
   { ver:'v0.30.94', date:'2026-03-11', notes:["Porter detail chat now skips generic auto-routing and goes straight to Codex by default, trims carried conversation/file context more aggressively, exposes the selected runtime immediately when the stream opens, and logs first-token timing so chat latency can be tuned with real TTFT data"] },
   { ver:'v0.30.93', date:'2026-03-11', notes:["Fixed the attachment upload regression caused by a local `secrets` import shadowing the shared module inside the API handler, which was surfacing as a `cannot access local variable` error during chat uploads"] },
   { ver:'v0.30.92', date:'2026-03-11', notes:["Agent-detail chat now collapses more gracefully in smaller browser widths, with a responsive composer layout and cleaner image attachment previews that fit instead of cropping awkwardly"] },
@@ -36358,7 +36359,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.94"})
+            self.reply_json({"v": "0.30.95"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36520,7 +36521,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.94"
+                health["porter_version"] = "0.30.95"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38464,7 +38465,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.94'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.95'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43486,7 +43487,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.94 ready (localhost only)")
+    print(f"\n  Porter v0.30.95 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
