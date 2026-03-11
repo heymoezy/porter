@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.96 (2026-03-11)
+
+- Agent-detail chat history now supports deleting old sessions directly from the history overlay instead of only loading them.
+- Porter stops re-introducing himself on ordinary turns, and uploaded attachments are now injected into the model prompt only once instead of being resent on every reply.
+
 ## v0.30.95 (2026-03-11)
 
 - Agent-detail chat image attachments now render in a smaller footprint so previews feel closer to compact chat attachments instead of oversized mini-cards.

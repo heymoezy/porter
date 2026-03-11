@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.95 — Tighten chat attachment thumbnail sizing"""
+"""Porter v0.30.96 — Fix agent chat history management and attachment reuse"""
 
 
 import email
@@ -8562,6 +8562,7 @@ def _porter_chat_identity_prompt() -> str:
         "You are Porter, the platform's Master Orchestrator.\n"
         "Voice: warm, friendly, confident, concise. Greet naturally. Never say 'Hi. What do you need?'\n"
         "Porter orchestrates, improves prompts, assigns or creates workers, and owns the outcome. Workers execute.\n"
+        "Do not keep re-introducing yourself on ordinary turns. Only introduce yourself at the start of a fresh chat, or when the user asks who you are.\n"
         "Keep replies lean and useful. Be explicit about the runtime/model in use.\n\n"
     )
 
@@ -11205,7 +11206,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.95</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.96</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12364,6 +12365,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.96', date:'2026-03-11', notes:["Agent-detail chat history now supports deleting old sessions directly from the history overlay, Porter stops re-introducing himself on ordinary turns, and uploaded attachments are only injected into the model prompt once instead of being resent on every reply"] },
   { ver:'v0.30.95', date:'2026-03-11', notes:["Agent-detail chat image attachments now render in a smaller footprint so screenshot and image previews feel closer to compact chat attachments instead of oversized mini-cards"] },
   { ver:'v0.30.94', date:'2026-03-11', notes:["Porter detail chat now skips generic auto-routing and goes straight to Codex by default, trims carried conversation/file context more aggressively, exposes the selected runtime immediately when the stream opens, and logs first-token timing so chat latency can be tuned with real TTFT data"] },
   { ver:'v0.30.93', date:'2026-03-11', notes:["Fixed the attachment upload regression caused by a local `secrets` import shadowing the shared module inside the API handler, which was surfacing as a `cannot access local variable` error during chat uploads"] },
@@ -16896,9 +16898,10 @@ function _pdChatComposePrompt(state, userText) {
       return (m.role === 'user' ? 'User: ' : 'Assistant: ') + String(m.content || '').slice(0, 280);
     }).join('\n\n'));
   }
-  if ((state.attachments || []).length) {
+  var freshAttachments = (state.attachments || []).filter(function(f) { return !f.injected; });
+  if (freshAttachments.length) {
     var ctx = '';
-    state.attachments.forEach(function(f) {
+    freshAttachments.forEach(function(f) {
       if (f.isImage) {
         ctx += '\n--- File: ' + f.name + ' (image attached) ---\n[Image: ' + f.name + ', type: ' + (f.mimeType || 'image') + ']\n--- End ' + f.name + ' ---\n';
       } else {
@@ -16944,18 +16947,65 @@ async function _pdOpenHistory() {
       toast('No saved chats for ' + (p.name || 'this agent'));
       return;
     }
-    _porterSelect((p.name || 'Agent') + ' Chat History', sessions.map(function(s) {
-      return {
-        id: s.id,
-        label: s.title || (p.name || 'Agent') + ' chat',
-        sub: (s.updated || '').slice(0, 16).replace('T', ' ') || s.id
-      };
-    }), function(sel) {
-      if (sel && sel.id) _pdLoadChatSession(sel.id);
-    });
+    _pdShowHistoryOverlay(p, sessions);
   } catch (e) {
     toast('Failed to load chat history', 'err');
   }
+}
+
+function _pdCloseHistoryOverlay() {
+  var overlay = document.getElementById('pd-history-overlay');
+  if (overlay) overlay.remove();
+}
+
+function _pdShowHistoryOverlay(persona, sessions) {
+  _pdCloseHistoryOverlay();
+  var currentState = _pdChatGetState(persona.id);
+  var currentChatId = String((currentState && currentState.chatId) || '');
+  var rows = sessions.map(function(s) {
+    var sid = String(s.id || '');
+    var active = sid === currentChatId;
+    var title = escHtml(s.title || (persona.name || 'Agent') + ' chat');
+    var stamp = escHtml((s.updated || '').slice(0, 16).replace('T', ' ') || sid);
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:' + (active ? 'color-mix(in srgb,var(--accent) 8%, var(--surface))' : 'var(--surface)') + '">'
+      + '<button class="btn btn-ghost" style="flex:1;min-width:0;text-align:left;padding:0;background:none;border:none;color:var(--text);cursor:pointer" onclick="_pdSelectHistorySession(\'' + escHtml(sid).replace(/'/g, "\\'") + '\')">'
+      + '<div style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + title + '</div>'
+      + '<div style="font-size:10px;color:var(--text3);margin-top:4px">' + stamp + (active ? ' · open now' : '') + '</div>'
+      + '</button>'
+      + '<button class="btn btn-ghost" style="font-size:11px;padding:6px 10px;color:#ef4444" onclick="_pdDeleteHistorySession(\'' + escHtml(sid).replace(/'/g, "\\'") + '\')">Delete</button>'
+      + '</div>';
+  }).join('');
+  var overlay = document.createElement('div');
+  overlay.id = 'pd-history-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:10020;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.42)';
+  overlay.innerHTML = '<div style="width:min(560px,92vw);max-height:min(72vh,680px);display:flex;flex-direction:column;border:1px solid var(--border);border-radius:18px;background:var(--raised);box-shadow:0 24px 80px rgba(0,0,0,.35)">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;border-bottom:1px solid var(--border)"><div><div style="font-size:14px;font-weight:800;color:var(--text)">' + escHtml((persona.name || 'Agent') + ' Chat History') + '</div><div style="font-size:11px;color:var(--text3);margin-top:4px">Load or delete saved chats for this agent.</div></div><button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="_pdCloseHistoryOverlay()">Close</button></div>'
+    + '<div style="padding:14px;display:flex;flex-direction:column;gap:10px;overflow:auto">' + rows + '</div>'
+    + '</div>';
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) _pdCloseHistoryOverlay(); });
+  document.body.appendChild(overlay);
+}
+
+function _pdSelectHistorySession(chatId) {
+  _pdCloseHistoryOverlay();
+  _pdLoadChatSession(chatId);
+}
+
+async function _pdDeleteHistorySession(chatId) {
+  var p = window._selectedPersona;
+  if (!p || !chatId) return;
+  _porterConfirm('Delete Chat', 'Delete this saved chat permanently?', async function() {
+    var resp = await api('/api/chat', { action: 'delete', chat_id: chatId }, 30000);
+    if (!(resp && resp.ok)) {
+      toast((resp && resp.error) || 'Delete failed', 'err');
+      return;
+    }
+    var state = _pdChatGetState(p.id);
+    if (String(state.chatId || '') === String(chatId)) _pdNewChat();
+    _pdCloseHistoryOverlay();
+    toast('Chat deleted', 'ok');
+    _pdOpenHistory();
+  }, {danger: true, okLabel: 'Delete'});
 }
 
 async function _pdLoadChatSession(chatId) {
@@ -16988,7 +17038,8 @@ async function _pdLoadChatSession(chatId) {
           mimeType: att.content_type || 'file',
           isImage: /^image\//i.test(att.content_type || ''),
           previewUrl: /^image\//i.test(att.content_type || '') ? ('/api/chat/attachments/download?id=' + encodeURIComponent(att.id) + '&inline=1') : '',
-          persisted: true
+          persisted: true,
+          injected: true
         });
       });
     });
@@ -17035,7 +17086,8 @@ async function _pdAttachLocalFiles(fileList) {
           isImage: isImage,
           content: textContent,
           data: b64,
-          persisted: false
+          persisted: false,
+          injected: false
         });
       };
       reader.onerror = function() { resolve(null); };
@@ -17572,6 +17624,7 @@ async function _pdChatSend() {
   if (!text) return;
   var state = _pdChatGetState(p.id);
   var promptBody = _pdChatComposePrompt(state, text);
+  var promptAttachmentIds = (state.attachments || []).filter(function(f) { return !f.injected; }).map(function(f) { return f.id; });
   state.messages.push({ role: 'user', label: 'You', content: text });
   state.messages.push({ role: 'pending', label: p.name || 'Agent', content: _pendingDispatchCopy(p), meta: _pendingDispatchMeta(p) });
   input.value = '';
@@ -17583,6 +17636,11 @@ async function _pdChatSend() {
   }
   if ((state.attachments || []).length) {
     await _pdPersistAttachments(_pdChatEnsureId(p, state), state.attachments);
+  }
+  if (promptAttachmentIds.length) {
+    (state.attachments || []).forEach(function(file) {
+      if (promptAttachmentIds.indexOf(file.id) >= 0) file.injected = true;
+    });
   }
   if (p.orchestrator_only) {
     await _pdChatStreamPorter(p, state, promptBody, text, state.messages.length - 1);
@@ -29428,6 +29486,7 @@ document.addEventListener('keydown', function(e) {
   const inInput = tag === 'input' || tag === 'textarea' || document.activeElement.isContentEditable;
 
   if (e.key === 'Escape') {
+    if (document.getElementById('pd-history-overlay')) { _pdCloseHistoryOverlay(); return; }
     if (document.getElementById('shortcutsOverlay').style.display !== 'none') { toggleShortcuts(); return; }
     if (document.getElementById('fpOverlay').style.display !== 'none') { closeFolderPicker(); return; }
     if (document.getElementById('overlay').style.display !== 'none') { closeModal(); return; }
@@ -36359,7 +36418,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.95"})
+            self.reply_json({"v": "0.30.96"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36521,7 +36580,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.95"
+                health["porter_version"] = "0.30.96"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38465,7 +38524,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.95'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.96'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43487,7 +43546,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.95 ready (localhost only)")
+    print(f"\n  Porter v0.30.96 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
