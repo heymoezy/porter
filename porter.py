@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.97 — Reuse Codex chat sessions across turns"""
+"""Porter v0.30.98 — Clean Pulse language and document chat caching direction"""
 
 
 import email
@@ -255,7 +255,7 @@ _wf_register("telemetry_rollup", "Telemetry Rollup",
     "Aggregates agent telemetry hourly and daily",
     interval="1h", interval_s=3600)
 _wf_register("memory_extraction", "Memory Extraction",
-    "Extracts facts from chat responses into cortex memory",
+    "Internal legacy extractor retained only for compatibility while structured state replaces cortex-era memory",
     interval="per-response", interval_s=0,
     )
 
@@ -11249,7 +11249,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.97</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.98</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12408,6 +12408,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.98', date:'2026-03-11', notes:["Pulse and tour copy now stop leaking stale Runtime-era language, the remaining internal memory-extraction workflow is described as compatibility-only instead of product truth, and the chat-latency prompt-caching notes are now checked into research so the next speed tranche has a documented direction"] },
   { ver:'v0.30.97', date:'2026-03-11', notes:["Codex-backed chats now preserve and reuse Codex thread ids across turns instead of always starting fresh ephemeral sessions, chat metadata is merged instead of overwritten so resume state survives ordinary saves, and the Codex CLI path now runs with `--ask-for-approval never` to avoid extra approval-policy friction"] },
   { ver:'v0.30.96', date:'2026-03-11', notes:["Agent-detail chat history now supports deleting old sessions directly from the history overlay, Porter stops re-introducing himself on ordinary turns, and uploaded attachments are only injected into the model prompt once instead of being resent on every reply"] },
   { ver:'v0.30.95', date:'2026-03-11', notes:["Agent-detail chat image attachments now render in a smaller footprint so screenshot and image previews feel closer to compact chat attachments instead of oversized mini-cards"] },
@@ -14610,7 +14611,7 @@ async function loadWorkflowRegistry() {
   grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--text3);font-size:12px">Loading workflows...</div>';
   try {
     var data = await api('/api/workflows');
-    if (!data || !data.workflows) { grid.innerHTML = '<div class="empty-state" style="padding:40px 20px"><div style="font-size:28px;opacity:.4">\u2699\ufe0f</div><p>No workflows registered</p><p style="font-size:12px;color:var(--text3);margin-top:-4px">Runtime workflows appear here when configured</p></div>'; return; }
+    if (!data || !data.workflows) { grid.innerHTML = '<div class="empty-state" style="padding:40px 20px"><div style="font-size:28px;opacity:.4">\u2699\ufe0f</div><p>No workflows registered</p><p style="font-size:12px;color:var(--text3);margin-top:-4px">Pulse workflows appear here when configured</p></div>'; return; }
     var hiddenWorkflowIds = { cortex_consolidation: true, memory_extraction: true };
     var wfs = (data.workflows || []).filter(function(wf) { return !hiddenWorkflowIds[wf.id]; });
     if (countEl) countEl.textContent = wfs.length + ' workflow' + (wfs.length !== 1 ? 's' : '');
@@ -19323,7 +19324,7 @@ function chatAutoResize(el) { _chatAutoGrow(el); }
 
 // ── Guided tour (vanilla JS) ────────────────────────────────────────────────
 var _tourSteps = [
-  { sel: '.sidebar', title: 'Sidebar Navigation', desc: 'Switch between the active Porter surfaces: Agents, Projects, Models, Runtime, and operator tools.' },
+  { sel: '.sidebar', title: 'Sidebar Navigation', desc: 'Switch between the active Porter surfaces: Agents, Projects, Models, Pulse, and operator tools.' },
   { sel: '#chat-input', title: 'Chat Input', desc: 'Type messages to your AI models. Use / for commands, @ to target a specific backend.' },
   { sel: '#chat-model, .chat-model-sel', title: 'Model Selector', desc: 'Choose which AI model responds. Cloud models (OpenClaw, Gemini, Codex) and local (Ollama) are grouped.' },
   { sel: '#chat-dashboard, .chat-dash', title: 'Dashboard', desc: 'Live model status cards. Click a card to start chatting with that backend.' },
@@ -36462,7 +36463,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.97"})
+            self.reply_json({"v": "0.30.98"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36624,7 +36625,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.97"
+                health["porter_version"] = "0.30.98"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38568,7 +38569,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.97'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.98'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43602,7 +43603,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.97 ready (localhost only)")
+    print(f"\n  Porter v0.30.98 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

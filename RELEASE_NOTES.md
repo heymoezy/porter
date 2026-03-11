@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.98 (2026-03-11)
+
+- Pulse and tour copy now stop leaking stale Runtime-era language.
+- The remaining internal memory-extraction workflow is now described as compatibility-only instead of product truth, and the chat-latency prompt-caching notes are checked into research for the next speed tranche.
+
 ## v0.30.97 (2026-03-11)
 
 - Codex-backed chats now preserve and reuse Codex thread ids across turns instead of always starting fresh ephemeral sessions.
