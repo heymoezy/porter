@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.77 — Porter identity and detail chat polish"""
+"""Porter v0.30.78 — Porter detail chat controls and attachments"""
 
 
 import email
@@ -9074,6 +9074,18 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .pd-chat-msg.pending.worker .pd-chat-avatar .persona-figure {
   animation:pixel-walk 1s steps(2) infinite;
 }
+.pd-chat-msg.streaming .pd-chat-avatar {
+  width:48px;
+  min-width:48px;
+  height:58px;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+}
+.pd-chat-msg.streaming .pd-chat-avatar .persona-figure {
+  animation:pixel-hero 1.15s ease-in-out infinite;
+  filter:drop-shadow(0 10px 16px rgba(0,0,0,.18));
+}
 .pd-chat-pulse {
   display:inline-flex;
   align-items:center;
@@ -9140,6 +9152,71 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   background:rgba(255,255,255,.1);
   font-size:12px;
 }
+.pd-chat-toolbar {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:2px 0 10px;
+  flex-wrap:wrap;
+}
+.pd-chat-toolbtn {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:7px 11px;
+  border-radius:999px;
+  border:1px solid color-mix(in srgb,var(--border) 82%, transparent);
+  background:color-mix(in srgb,var(--surface) 92%, transparent);
+  color:var(--text2);
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.04em;
+  cursor:pointer;
+  transition:border-color .12s ease, transform .12s ease, color .12s ease;
+}
+.pd-chat-toolbtn:hover {
+  border-color:color-mix(in srgb,#f59e0b 34%, transparent);
+  color:var(--text);
+  transform:translateY(-1px);
+}
+.pd-chat-attachments {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:0 0 10px;
+}
+.pd-chat-attachment {
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  max-width:100%;
+  padding:8px 10px;
+  border-radius:14px;
+  border:1px solid color-mix(in srgb,var(--border) 80%, transparent);
+  background:color-mix(in srgb,var(--surface) 92%, transparent);
+}
+.pd-chat-attachment-name {
+  font-size:11px;
+  color:var(--text2);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width:220px;
+}
+.pd-chat-attachment-meta {
+  font-size:10px;
+  color:var(--text3);
+}
+.pd-chat-attachment-remove {
+  border:none;
+  background:none;
+  color:var(--text3);
+  cursor:pointer;
+  font-size:14px;
+  line-height:1;
+  padding:0;
+}
+.pd-chat-attachment-remove:hover { color:#ef4444; }
 .chat-stop-btn {
   display:none; padding:4px 14px; font-size:11px; border-radius:6px;
   border:1px solid var(--danger,#dc3545); background:none; color:var(--danger,#dc3545);
@@ -10538,7 +10615,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.77</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.78</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11829,6 +11906,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.78', date:'2026-03-11', notes:["Porter detail chat now has real session controls for new chat, clear chat, and file uploads, and uploaded files become explicit chat context instead of staying outside the conversation lane; the detail chat shell was tightened again so Porter can work from a cleaner dedicated lane without forcing everything through the main chat"] },
   { ver:'v0.30.77', date:'2026-03-11', notes:["Porter detail chat now uses visual motion-first pending states instead of repetitive routing text, the composer and send control were redesigned to feel like Porter rather than generic admin UI, and Porter's identity prompt was cut down so greetings and 'Who is Porter?' resolve quickly and correctly with a warmer voice; Porter skills are now split between public orchestration coverage and internal platform/operator coverage, with prompt architecture elevated as a first-class core skill"] },
   { ver:'v0.30.76', date:'2026-03-11', notes:["Chat structural speed pass: removed the remaining artificial stream reveal layer, stopped replaying fake typing for persona responses, reduced worker/persona completion polling to 250ms, trimmed default history and inline file payloads again, and clarified runtime-selection language while routes resolve"] },
   { ver:'v0.30.75', date:'2026-03-11', notes:["Chat speed overhaul: removed artificial token reveal delays from streamed chat, cut persona chat polling from 2s to 250ms with no fake typing animation, trimmed default history/file payload size again, and made runtime selection/status labels clearer while the route is being resolved"] },
@@ -16395,9 +16473,149 @@ window._pdChatState = window._pdChatState || {};
 
 function _pdChatGetState(pid) {
   if (!window._pdChatState[pid]) {
-    window._pdChatState[pid] = { messages: [] };
+    window._pdChatState[pid] = { messages: [], attachments: [], chatId: '', sessionSeq: 0 };
   }
   return window._pdChatState[pid];
+}
+
+function _pdChatEnsureId(persona, state) {
+  if (state.chatId) return state.chatId;
+  state.sessionSeq = Number(state.sessionSeq || 0) + 1;
+  state.chatId = 'pd-' + (persona && persona.id ? persona.id : 'porter') + '-' + Date.now().toString(36) + '-' + state.sessionSeq;
+  return state.chatId;
+}
+
+function _pdChatComposePrompt(state, userText) {
+  state = state || { messages: [], attachments: [] };
+  var parts = [];
+  var hist = (state.messages || []).filter(function(m) { return m.role === 'user' || m.role === 'assistant'; }).slice(-4);
+  if (hist.length) {
+    parts.push('Conversation history:\n' + hist.map(function(m) {
+      return (m.role === 'user' ? 'User: ' : 'Assistant: ') + String(m.content || '').slice(0, 500);
+    }).join('\n\n'));
+  }
+  if ((state.attachments || []).length) {
+    var ctx = '';
+    state.attachments.forEach(function(f) {
+      if (f.isImage) {
+        ctx += '\n--- File: ' + f.name + ' (image attached) ---\n[Image: ' + f.name + ', type: ' + (f.mimeType || 'image') + ']\n--- End ' + f.name + ' ---\n';
+      } else {
+        ctx += '\n--- File: ' + f.name + ' ---\n' + String(f.content || '').slice(0, 3000) + '\n--- End ' + f.name + ' ---\n';
+      }
+    });
+    parts.push('Context files:' + ctx);
+  }
+  parts.push('New message:\n' + userText);
+  return parts.join('\n\n');
+}
+
+async function _pdPersistAttachments(chatId, attachments) {
+  attachments = Array.isArray(attachments) ? attachments : [];
+  for (var i = 0; i < attachments.length; i++) {
+    var file = attachments[i];
+    if (!file || file.persisted || !file.data) continue;
+    try {
+      var r = await api('/api/chat/attachments', {
+        action: 'add',
+        chat_id: chatId,
+        filename: file.name,
+        content_type: file.mimeType || 'application/octet-stream',
+        data: file.data
+      }, 30000);
+      if (r && r.ok) file.persisted = true;
+    } catch (e) {}
+  }
+}
+
+function _pdChooseFiles() {
+  var input = document.getElementById('pd-chat-file-input');
+  if (input) input.click();
+}
+
+async function _pdAttachLocalFiles(fileList) {
+  var p = window._selectedPersona;
+  if (!p || !fileList || !fileList.length) return;
+  var state = _pdChatGetState(p.id);
+  var files = Array.from(fileList);
+  var readOne = function(file) {
+    return new Promise(function(resolve) {
+      var reader = new FileReader();
+      reader.onload = function() {
+        var result = reader.result || '';
+        var mime = file.type || 'application/octet-stream';
+        var isImage = /^image\//i.test(mime);
+        var textContent = '';
+        var b64 = '';
+        if (typeof result === 'string' && result.indexOf('base64,') >= 0) {
+          b64 = result.split('base64,')[1] || '';
+        }
+        if (!isImage) {
+          try {
+            textContent = atob(b64).slice(0, 12000);
+          } catch (e) {
+            textContent = '';
+          }
+        }
+        resolve({
+          id: 'pd-file-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7),
+          name: file.name,
+          size: file.size || 0,
+          mimeType: mime,
+          isImage: isImage,
+          content: textContent,
+          data: b64,
+          persisted: false
+        });
+      };
+      reader.onerror = function() { resolve(null); };
+      reader.readAsDataURL(file);
+    });
+  };
+  for (var i = 0; i < files.length; i++) {
+    var loaded = await readOne(files[i]);
+    if (loaded) state.attachments.push(loaded);
+  }
+  _pdChatRender(p.id);
+}
+
+function _pdChatHandleFileInput(e) {
+  var files = e && e.target ? e.target.files : null;
+  if (files && files.length) _pdAttachLocalFiles(files);
+  if (e && e.target) e.target.value = '';
+}
+
+function _pdRemoveAttachment(attId) {
+  var p = window._selectedPersona;
+  if (!p) return;
+  var state = _pdChatGetState(p.id);
+  state.attachments = (state.attachments || []).filter(function(f) { return f.id !== attId; });
+  _pdChatRender(p.id);
+}
+
+function _pdNewChat() {
+  var p = window._selectedPersona;
+  if (!p) return;
+  var state = _pdChatGetState(p.id);
+  state.messages = [];
+  state.attachments = [];
+  state.flow = null;
+  state.chatId = '';
+  _pdChatRender(p.id);
+}
+
+async function _pdClearChat() {
+  var p = window._selectedPersona;
+  if (!p) return;
+  var state = _pdChatGetState(p.id);
+  var oldId = state.chatId;
+  state.messages = [];
+  state.attachments = [];
+  state.flow = null;
+  state.chatId = '';
+  _pdChatRender(p.id);
+  if (oldId) {
+    try { await api('/api/chat', { action: 'delete', chat_id: oldId }, 30000); } catch (e) {}
+  }
 }
 
 function _pdCreationTypeLabel(kind) {
@@ -16670,6 +16888,18 @@ function _pdChatRender(pid) {
     return;
   }
   var flowBanner = '';
+  var attachmentStrip = '';
+  if ((state.attachments || []).length) {
+    attachmentStrip = '<div class="pd-chat-attachments">' + state.attachments.map(function(file) {
+      var sizeLabel = file.size ? Math.max(1, Math.round(file.size / 1024)) + ' KB' : '';
+      return '<div class="pd-chat-attachment">'
+        + '<div style="font-size:14px">' + (file.isImage ? '🖼️' : '📄') + '</div>'
+        + '<div style="min-width:0"><div class="pd-chat-attachment-name">' + escHtml(file.name || 'Attachment') + '</div>'
+        + '<div class="pd-chat-attachment-meta">' + escHtml(sizeLabel || (file.mimeType || 'file')) + '</div></div>'
+        + '<button class="pd-chat-attachment-remove" onclick="_pdRemoveAttachment(\'' + escHtml(file.id).replace(/'/g, "\\'") + '\')" title="Remove attachment">×</button>'
+        + '</div>';
+    }).join('') + '</div>';
+  }
   if (state.flow) {
     var stepNow = Number(state.flow.stage || 0) + 1;
     var totalSteps = state.flow.kind === 'project' ? 5 : 4;
@@ -16678,7 +16908,7 @@ function _pdChatRender(pid) {
       + '<button class="btn btn-ghost btn-sm" onclick="_pdCancelCreation()" style="margin-left:auto;font-size:11px;border-radius:999px;padding:6px 12px">Exit Setup</button>'
       + '</div>';
   }
-  panel.innerHTML = flowBanner + state.messages.map(function(m) {
+  panel.innerHTML = flowBanner + attachmentStrip + state.messages.map(function(m) {
     var isUser = m.role === 'user';
     var isErr = m.role === 'error';
     var isPending = m.role === 'pending';
@@ -16695,11 +16925,13 @@ function _pdChatRender(pid) {
         + '<div class="pd-chat-pulse" aria-label="Porter is responding"><span class="pd-chat-pulse-dot"></span><span class="pd-chat-pulse-dot"></span><span class="pd-chat-pulse-dot"></span></div>'
         + '</div></div>';
     }
-    return '<div class="pd-chat-msg' + (m.streaming ? ' streaming' : '') + '" style="border:1px solid ' + border + ';background:' + bg + '">'
-      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">' + escHtml(m.label || (isUser ? 'You' : 'Agent')) + '</span>'
+    var inner = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">' + escHtml(m.label || (isUser ? 'You' : 'Agent')) + '</span>'
       + (m.meta ? '<span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(m.meta) + '</span>' : '') + '</div>'
-      + '<div style="font-size:13px;line-height:1.6;color:' + (isErr ? '#ef4444' : 'var(--text2)') + ';white-space:pre-wrap">' + escHtml(m.content || '') + '</div>'
-      + '</div>';
+      + '<div style="font-size:13px;line-height:1.6;color:' + (isErr ? '#ef4444' : 'var(--text2)') + ';white-space:pre-wrap">' + escHtml(m.content || '') + '</div>';
+    if (m.streaming && persona && !isUser && !isErr) {
+      inner = '<div style="display:flex;gap:12px;align-items:flex-start"><div class="pd-chat-avatar">' + _personaAvatarMarkup(persona, 62) + '</div><div style="min-width:0;flex:1">' + inner + '</div></div>';
+    }
+    return '<div class="pd-chat-msg' + (m.streaming ? ' streaming' : '') + '" style="border:1px solid ' + border + ';background:' + bg + '">' + inner + '</div>';
   }).join('');
   panel.scrollTop = panel.scrollHeight;
 }
@@ -16722,12 +16954,12 @@ function _pendingDispatchMeta(persona) {
   return 'selecting runtime';
 }
 
-async function _pdChatStreamPorter(persona, state, userText, idx) {
+async function _pdChatStreamPorter(persona, state, promptText, userText, idx) {
   return await new Promise(function(resolve) {
     var projectId = persona && persona.project_id ? persona.project_id : '';
-    var chatId = 'pd-' + (persona && persona.id ? persona.id : 'porter');
+    var chatId = _pdChatEnsureId(persona, state);
     var url = '/api/chat/stream?model=auto'
-      + '&prompt=' + encodeURIComponent(userText)
+      + '&prompt=' + encodeURIComponent(promptText)
       + '&route=general'
       + '&chat_id=' + encodeURIComponent(chatId)
       + '&project_id=' + encodeURIComponent(projectId)
@@ -16783,6 +17015,7 @@ async function _pdChatSend() {
   var text = input.value.trim();
   if (!text) return;
   var state = _pdChatGetState(p.id);
+  var promptBody = _pdChatComposePrompt(state, text);
   state.messages.push({ role: 'user', label: 'You', content: text });
   state.messages.push({ role: 'pending', label: p.name || 'Agent', content: _pendingDispatchCopy(p), meta: _pendingDispatchMeta(p) });
   input.value = '';
@@ -16792,12 +17025,15 @@ async function _pdChatSend() {
     await _pdHandleCreationReply(p, state, text);
     return;
   }
+  if ((state.attachments || []).length) {
+    await _pdPersistAttachments(_pdChatEnsureId(p, state), state.attachments);
+  }
   if (p.orchestrator_only) {
-    await _pdChatStreamPorter(p, state, text, state.messages.length - 1);
+    await _pdChatStreamPorter(p, state, promptBody, text, state.messages.length - 1);
     return;
   }
   try {
-    var payload = { prompt: text, timeout: 120 };
+    var payload = { prompt: promptBody, timeout: 120 };
     if (p.project_id) payload.project_id = p.project_id;
     var r = await api('/api/personas/' + p.id + '/dispatch', payload, 180000);
     if (!r || !r.ok) throw new Error((r && r.error) || 'Dispatch failed');
@@ -24070,10 +24306,15 @@ function switchPdTab(tab) {
     content.innerHTML = '<section style="display:flex;flex-direction:column;height:min(calc(100vh - 330px), 68vh);max-height:calc(100vh - 330px);min-height:420px;padding:4px 2px 2px;background:transparent;box-sizing:border-box">'
       + '<div id="pd-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 14px"></div>'
       + '<div style="margin-top:8px;padding-top:4px">'
+      + '<div class="pd-chat-toolbar">'
+      + '<button class="pd-chat-toolbtn" onclick="_pdNewChat()">＋ New Chat</button>'
+      + '<button class="pd-chat-toolbtn" onclick="_pdClearChat()">Clear Chat</button>'
+      + '<button class="pd-chat-toolbtn" onclick="_pdChooseFiles()">Upload Files</button>'
+      + '</div>'
       + '<div class="pd-chat-composer">'
       + '<textarea id="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate work, create workers, or shape a project...' : 'Send a directive to this worker...') + '" rows="3" onkeydown="_pdChatKey(event)" style="flex:1;min-height:70px;max-height:180px;resize:vertical;background:transparent;color:var(--text);border:none;outline:none;border-radius:14px;padding:10px 8px 8px;font-size:13px;line-height:1.5"></textarea>'
       + '<button class="pd-send-btn" onclick="_pdChatSend()"><span>' + (p.orchestrator_only ? 'Send To Porter' : 'Send To Worker') + '</span><span class="pd-send-icon">↗</span></button>'
-      + '</div></div></section>';
+      + '</div><input id="pd-chat-file-input" type="file" multiple style="display:none" onchange="_pdChatHandleFileInput(event)"></div></section>';
     _pdChatRender(p.id);
   } else if (tab === 'identity') {
     if (p.is_locked) {
@@ -35551,7 +35792,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.77"})
+            self.reply_json({"v": "0.30.78"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35713,7 +35954,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.77"
+                health["porter_version"] = "0.30.78"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37610,7 +37851,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.77'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.78'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42534,7 +42775,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.77 ready (localhost only)")
+    print(f"\n  Porter v0.30.78 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

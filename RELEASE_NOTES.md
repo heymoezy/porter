@@ -1,5 +1,11 @@
 # Porter Release Notes
 
+## v0.30.78 (2026-03-11)
+
+- Porter detail chat now has explicit `New Chat`, `Clear Chat`, and `Upload Files` controls instead of acting like one endless opaque session.
+- Uploaded files now become visible chat context inside the Porter detail lane itself.
+- Tightened the detail chat shell again so Porter’s dedicated lane behaves more like a real chat workspace instead of a thin admin panel.
+
 ## v0.30.77 (2026-03-11)
 
 - Porter detail chat now uses a motion-first pending state instead of repetitive routing copy, so the wait state reads as Porter being active rather than generic status text.
