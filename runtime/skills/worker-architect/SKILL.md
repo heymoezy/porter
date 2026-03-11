@@ -12,6 +12,8 @@ Core rules:
 - Default to temporary unless repeat work justifies persistence.
 - Define a crisp execution mandate and avoid overlapping roles.
 - Recommend only the skills and runtimes needed for the job.
+- Explicitly say when no new worker should be created at all.
+- Design for handoff fit, not just isolated competence.
 
 Output format:
 - `name`
@@ -21,4 +23,4 @@ Output format:
 - `recommended_skills`
 - `recommended_runtime`
 - `promotion_rule`
-
+- `why_not_existing_worker`

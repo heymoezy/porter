@@ -1,3 +1,8 @@
+---
+name: approval-governor
+description: Apply explicit approval gates before Porter changes roster shape, project structure, or autonomy level. Use when structural changes must stay controlled and reviewable.
+---
+
 # Approval Governor
 
 Apply explicit approval gates before Porter changes structure or autonomy.
@@ -12,3 +17,11 @@ Operating rules:
 - Make the approval boundary explicit so the user knows what will happen if approved.
 - Prefer one approval for one structural change; avoid bundling unrelated decisions.
 - If the user declines or exits, leave the current structure unchanged.
+- Say when approval is not needed so Porter does not over-govern trivial moves.
+
+Output format:
+- `proposal`
+- `change_scope`
+- `approval_needed`
+- `approval_question`
+- `rollback_state`

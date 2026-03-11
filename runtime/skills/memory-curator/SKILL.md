@@ -12,6 +12,8 @@ Core rules:
 - Separate directives from contextual knowledge.
 - Prefer concise memory statements with clear evidence.
 - Flag low-confidence memory for review rather than promoting it aggressively.
+- Never fabricate memory to fill an empty state.
+- Make disputed directives dismissible instead of silently overwriting them.
 
 Output format:
 - `fact`
@@ -19,4 +21,3 @@ Output format:
 - `confidence`
 - `why_it_matters`
 - `dismiss_if`
-

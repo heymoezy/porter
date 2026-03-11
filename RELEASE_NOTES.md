@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.73 (2026-03-11)
+
+- Removed fake Porter profile items from the Agents detail page. Activity and Memory now use live state and honest empty states instead of preview placeholders.
+- Strengthened Porter's locked persona doctrine and added new internal orchestration skills for lean chat control, delegation governance, runtime selection, and directive review.
+- Leaned out chat startup by routing on the raw user message, trimming Porter context injection, and reducing history bloat before first dispatch.
+- Resolved backend/model labels now surface in the active chat flow instead of lingering on `auto`, and stale squad-era UI was removed from the active Agents surface.
+
 ## v0.30.72 (2026-03-11)
 
 - Agents detail now includes an `Org` view so Porter and each worker show their placement inside the current command structure.

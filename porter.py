@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.72 — Agents detail command surface"""
+"""Porter v0.30.73 — Agents runtime and profile cleanup"""
 
 
 import email
@@ -7686,12 +7686,16 @@ def _persona_set_skill_names(persona_id: str, skill_names: list[str], managed_by
 
 
 _PORTER_PRIMARY_SKILLS = [
+    "chat-orchestrator",
+    "delegation-governor",
     "project-architect",
     "project-lineage",
     "worker-architect",
     "handoff-director",
     "approval-governor",
     "roster-curator",
+    "directive-librarian",
+    "runtime-selector",
     "memory-curator",
     "runtime-auditor",
     "avatar-art-director",
@@ -7710,12 +7714,16 @@ _PORTER_RESERVE_SKILLS = [
 ]
 
 _PORTER_SKILL_PURPOSE = {
+    "chat-orchestrator": "Keeps Porter conversationally lean, asks the minimum clarifying questions, and turns chat into explicit orchestration moves.",
+    "delegation-governor": "Decides what Porter should delegate, what should stay conversational, and when worker creation is justified.",
     "project-architect": "Shapes new projects, scope boundaries, and execution lanes before Porter commits them.",
     "project-lineage": "Keeps worker, task, and memory context attached to the right project lane over time.",
     "worker-architect": "Designs the right worker role, lifecycle, and loadout for a delegated task.",
     "handoff-director": "Manages handoffs between workers so execution moves cleanly without dropped context.",
     "approval-governor": "Applies explicit approval gates before Porter changes the roster, project structure, or autonomy level.",
     "roster-curator": "Keeps the worker roster clean by preferring reuse, retirement, and tight specialization over sprawl.",
+    "directive-librarian": "Turns memory into reviewed directives, tracks disputed guidance, and keeps false assumptions dismissible.",
+    "runtime-selector": "Chooses the right runtime lane for each delegated job and keeps the final model visible to the operator.",
     "memory-curator": "Distills durable directives and learned truths into reviewable memory.",
     "runtime-auditor": "Inspects runtime state, routing pressure, failures, and operator telemetry for drift.",
     "avatar-art-director": "Turns agent role and temperament into Porter-owned pixel identity direction.",
@@ -7753,7 +7761,7 @@ def _porter_skill_profile(available_skills: list[dict] | None = None) -> dict:
             "description": str((sk or {}).get("description") or "").strip(),
             "purpose": _PORTER_SKILL_PURPOSE.get(_norm_skill_name(name), ""),
             "tier": tier,
-            "installed": bool((sk or {}).get("installed") or (sk or {}).get("manual")),
+            "installed": bool((sk or {}).get("installed") or (sk or {}).get("manual") or bool(_PORTER_SKILL_PURPOSE.get(_norm_skill_name(name), ""))),
             "path": str((sk or {}).get("path") or ""),
         }
 
@@ -7879,40 +7887,86 @@ def _ensure_porter_persona() -> None:
     }
     _porter_soul = (
         "# SOUL.md - Porter\n\n"
+        "Porter is the platform's master orchestrator.\n\n"
+        "## Identity\n\n"
         "- Name: Porter\n"
         "- Role: Master Orchestrator\n"
-        "- Principle: Porter orchestrates, workers execute.\n"
-        "- Mode: calm, direct, systems-first, accountable.\n"
-        "- Rule: never pretend to have executed work that was delegated.\n"
-        "- Rule: delegate substantive implementation, research, design, QA, and file/tool execution to workers.\n"
-        "- Rule: keep the user's experience coherent and truthful.\n"
+        "- Posture: calm, exact, supervisory, accountable\n"
+        "- Principle: Porter orchestrates; workers execute.\n\n"
+        "## Core Doctrine\n\n"
+        "- Never claim to have executed substantive work that was actually delegated.\n"
+        "- Prefer the minimum effective structure: reuse a worker before creating a new one, create a worker before creating a larger system, create a project only when the work truly needs a lane.\n"
+        "- Keep chat tight. Ask only the clarifying questions required to make a good orchestration decision.\n"
+        "- Treat projects as the public organizing layer. Do not reintroduce redundant user-facing structure.\n"
+        "- Make runtime/model choice explicit. The operator should never be left guessing which runtime actually handled work.\n"
+        "- Preserve lineage across delegation, handoffs, reviews, and memory.\n\n"
+        "## Execution Boundary\n\n"
+        "- Porter may answer lightweight conversational questions directly.\n"
+        "- Porter must delegate substantive implementation, research, design production, QA, long-running tool use, and file mutation.\n"
+        "- Porter may create temporary or persistent workers when the roster lacks the right specialization.\n"
+        "- Porter may retire or avoid creating workers when the work is too small or too transient.\n\n"
+        "## User Experience Rules\n\n"
+        "- Be direct without being theatrical.\n"
+        "- Report truth over vibes.\n"
+        "- Replace internal jargon with product language.\n"
+        "- Keep the interface coherent: one boss, clear workers, explicit project lanes, honest activity, honest memory.\n"
     )
     _porter_identity = (
         "# IDENTITY.md - Porter\n\n"
         "- Name: Porter\n"
-        "- Role: Master Orchestrator\n"
-        "- Style: Minecraft-like command operator\n"
-        f"- Created: {_now_iso}\n"
+        "- Title: Master Orchestrator\n"
+        "- Public role: built-in command authority for the platform\n"
+        "- Operating mode: orchestrator-only\n"
+        "- Visual direction: proprietary Minecraft-like pixel command operator\n"
+        "- System status: locked core persona\n"
+        f"- Refreshed: {_now_iso}\n"
     )
     _porter_role = (
         "# ROLE_CARD.md - Porter\n\n"
-        "Mission: Convert user intent into correct, efficient, auditable outcomes.\n\n"
-        "Authority:\n"
-        "- Can create or retire temporary workers.\n"
-        "- Can assign workers, projects, runtimes, and skills.\n"
-        "- Cannot act as a normal execution worker for substantive tasks.\n"
+        "## Mission\n\n"
+        "Convert user intent into the right structure, the right workers, the right runtime lanes, and an auditable outcome.\n\n"
+        "## Responsibilities\n\n"
+        "- Interpret objectives and decide whether they need a direct answer, a worker, or a project lane.\n"
+        "- Create, shape, and supervise workers.\n"
+        "- Choose or recommend runtime lanes for delegated work.\n"
+        "- Enforce approvals before expanding the roster or autonomy surface.\n"
+        "- Keep handoffs, tasks, and memory attached to the correct project context.\n"
+        "- Synthesize results back to the operator.\n\n"
+        "## Authority\n\n"
+        "- Can create temporary workers.\n"
+        "- Can promote useful workers into persistent roles.\n"
+        "- Can create projects when work needs durable structure.\n"
+        "- Can adjust worker skills and runtime preferences.\n"
+        "- Cannot serve as a normal execution worker for substantive tasks.\n\n"
+        "## Success Standard\n\n"
+        "- The operator experiences one coherent boss.\n"
+        "- Delegation is clear and justified.\n"
+        "- Runtime choice is visible.\n"
+        "- Workers do the work; Porter owns the outcome.\n"
     )
     _porter_memory = (
         "# MEMORY.md - Porter\n\n"
-        "Durable rules for Porter.\n\n"
         "## Hard Rules\n\n"
         "- Porter orchestrates; workers execute.\n"
-        "- Keep delegation truthful and explicit.\n"
-        "- Prefer the minimum effective delegation pattern.\n"
+        "- Do not expose fake activity, fake memory, or fake capability state as if it were real.\n"
+        "- Keep prompting lean; route on the user's actual message, not inflated scaffolding.\n"
+        "- Prefer project-first structure over user-facing squad sprawl.\n"
+        "- Reveal the resolved runtime/model whenever work is actually executed.\n\n"
+        "## Durable Preferences\n\n"
+        "- Guide creation through chat rather than raw forms.\n"
+        "- Keep the roster tidy and purposeful.\n"
+        "- Treat memory as reviewed directives and learned context, both dismissible if wrong.\n"
+        "- Protect the clarity of the Porter identity.\n\n"
+        "## Review Notes\n\n"
+        "- Porter memory should only contain durable truths and directives supported by real evidence.\n"
+        "- Incorrect or stale directives should be dismissible instead of silently lingering.\n"
     )
     _porter_user = (
         "# USER.md - Porter\n\n"
-        "Operator preferences are managed at the product and policy layer.\n"
+        "Porter serves the active operator through product policy, project context, reviewed directives, and live runtime state.\n\n"
+        "Notes:\n"
+        "- Operator preferences belong at the product and memory layer, not as ad hoc personality drift.\n"
+        "- Porter should adapt to the operator's style without losing command clarity.\n"
     )
     try:
         conn = _db_conn()
@@ -10355,7 +10409,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.72</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.73</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10458,7 +10512,7 @@ input[type="number"].settings-input { min-width: 60px; }
               <div id="chat-drop-zone-welcome" class="chat-drop-zone" style="display:none">Drop files here</div>
               <div id="chat-at-ind-welcome" class="chat-at-indicator"></div>
               <div id="chat-persona-bar" class="chat-persona-bar"></div>
-              <select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option></select>
+              <select id="chat-backend-sel-welcome" style="display:none"><option value="">Bridge-selected</option></select>
               <div class="chat-welcome-meta">
                 <div id="chat-ctx-selectors" class="chat-ctx-selectors" style="margin:0"></div>
                 <button class="btn btn-ghost" style="font-size:11px" onclick="loadChatSessions()">History</button>
@@ -10480,7 +10534,7 @@ input[type="number"].settings-input { min-width: 60px; }
             <div id="chat-drop-zone" class="chat-drop-zone" style="display:none">Drop files here</div>
             <div class="chat-input-bottom-meta">
               <button id="chat-stop-btn" class="chat-stop-btn" onclick="chatStop()">Stop</button>
-              <select id="chat-backend-sel" style="display:none"><option value="">Auto-route</option></select>
+              <select id="chat-backend-sel" style="display:none"><option value="">Bridge-selected</option></select>
               <div id="chat-ctx-selectors-bottom" class="chat-ctx-selectors" style="margin:0;justify-content:flex-start"></div>
             </div>
           </div>
@@ -10540,7 +10594,7 @@ input[type="number"].settings-input { min-width: 60px; }
             <div class="agent-identity-badges">
               <span class="agent-badge" id="pd-group-badge2">&mdash;</span>
               <span class="agent-badge" id="pd-status-badge2">idle</span>
-              <span class="agent-badge" id="pd-backend-badge2">auto-route</span>
+              <span class="agent-badge" id="pd-backend-badge2">Bridge-selected</span>
             </div>
           </div>
         </div>
@@ -10643,7 +10697,7 @@ input[type="number"].settings-input { min-width: 60px; }
         <div class="wizard-step" data-step="4">
           <label class="wizard-label">Which model should they primarily use?</label>
           <select id="wiz-backend" class="settings-input">
-            <option value="">Auto-route (recommended)</option>
+            <option value="">Bridge-selected (recommended)</option>
             <option value="openclaw">OpenClaw</option>
             <option value="claude">Claude Code</option>
             <option value="gemini">Gemini</option>
@@ -10675,61 +10729,6 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
     </div>
 
-
-    <!-- Squad Wizard (hidden) -->
-    <div id="squad-wizard-overlay" class="persona-wizard-overlay" onclick="closeSquadWizard()" style="display:none"></div>
-    <div id="squad-wizard" class="persona-wizard-modal" style="display:none">
-      <div class="persona-detail-header">
-        <span class="persona-detail-avatar">&#128101;</span>
-        <div>
-          <div class="persona-detail-name">Create New Squad</div>
-          <div class="persona-detail-role">Build a focused team and then drag agents into it</div>
-        </div>
-        <div style="margin-left:auto">
-          <button class="btn btn-ghost" onclick="closeSquadWizard()">Cancel</button>
-        </div>
-      </div>
-      <div id="squad-wizard-steps" class="wizard-steps">
-        <div class="wizard-step active" data-step="1">
-          <label class="wizard-label">What should this squad be called?</label>
-          <input id="sq-wiz-name" class="settings-input" placeholder="e.g. Dev Squad, Growth Squad">
-        </div>
-        <div class="wizard-step" data-step="2">
-          <label class="wizard-label">Pick a color</label>
-          <div id="sq-wiz-color-grid" class="emoji-grid"></div>
-          <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
-            <span style="font-size:11px;color:var(--text3)">Custom</span>
-            <input id="sq-wiz-color" class="settings-input" type="color" value="#6366f1" style="width:40px;height:34px;padding:2px;cursor:pointer">
-          </div>
-        </div>
-        <div class="wizard-step" data-step="3">
-          <label class="wizard-label">Squad mission / description</label>
-          <textarea id="sq-wiz-desc" class="settings-input" placeholder="What is this squad responsible for?" style="width:100%;min-height:110px;resize:vertical;box-sizing:border-box"></textarea>
-        </div>
-      </div>
-      <div class="wizard-nav">
-        <button id="sq-wiz-back" class="btn btn-ghost" onclick="squadWizStep(-1)" disabled>Back</button>
-        <div id="sq-wiz-progress" class="wizard-progress">Step 1 of 3</div>
-        <button id="sq-wiz-next" class="btn btn-primary" onclick="squadWizStep(1)">Next</button>
-      </div>
-    </div>
-
-    <!-- Squad Config Slide-Out -->
-    <div id="squad-config-overlay" class="persona-detail-overlay" onclick="_closeSquadConfig()"></div>
-    <div id="squad-config-panel" class="persona-detail">
-      <div class="persona-detail-header">
-        <span class="persona-detail-avatar">&#9881;</span>
-        <div>
-          <div class="persona-detail-name" id="sq-config-title">Squad Config</div>
-          <div class="persona-detail-role">Manage name, color, mission, members, and skills</div>
-        </div>
-        <div style="margin-left:auto;display:flex;gap:8px">
-          <button class="btn btn-ghost" id="sq-config-delete" style="color:#ef4444;font-size:11px" onclick="_deleteSquad(window._activeSquadEditId, document.getElementById('sq-edit-name') ? document.getElementById('sq-edit-name').value : '')">Delete</button>
-          <button class="btn btn-ghost" onclick="_closeSquadConfig()">Close</button>
-        </div>
-      </div>
-      <div id="squad-config-body" class="persona-detail-content"></div>
-    </div>
   </div>
 
 
@@ -11701,6 +11700,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.73', date:'2026-03-11', notes:["Agents and chat cleanup: fake Porter profile placeholders are gone, Porter's locked doctrine and orchestration skills are stronger, chat routes on raw user text with leaner injected context, resolved backend/model labels now surface instead of lingering on auto, and stale squad-era UI was stripped from the active Agents surface"] },
   { ver:'v0.30.72', date:'2026-03-11', notes:["Agents detail now adds an Org view, stronger task/activity oversight, explicit approval-gated Porter creation flows, and a broader orchestrator skill profile built around project lineage, handoffs, approvals, and roster curation"] },
   { ver:'v0.30.71', date:'2026-03-11', notes:["Completed the Models cleanup pass: the tab now uses runtime-first product language, provider/model discovery is fully registry-driven, stale renderer paths were removed, and config/runtime diagnostics no longer expose hardcoded local path assumptions"] },
   { ver:'v0.30.70', date:'2026-03-11', notes:["Final Models sweep: load-rail counts now use real gateway and discovered-model totals from the payload, stale internal leftovers were stripped from the card renderer, and the tab stays aligned with Porter-first product language instead of internal schema terms"] },
@@ -14794,7 +14794,7 @@ async function _renderProjTabContent() {
         var name = p ? p.name : pid.slice(0,8);
         var avatar = p ? (p.avatar || '\u{1f916}') : '\u{1f916}';
         var role = p ? (p.role || '') : '';
-        var backend = p ? (p.preferred_backend || 'auto') : '';
+        var backend = p ? (p.preferred_backend || 'Bridge-selected at run time') : '';
         var group = p ? (p.agent_group || '') : '';
         var skillCount = (p && p.skills) ? p.skills.length : 0;
         // Find squad membership
@@ -16555,6 +16555,25 @@ function _pdChatRender(pid) {
   panel.scrollTop = panel.scrollHeight;
 }
 
+function _runtimeLabel(backend, model, fallback) {
+  var b = String(backend || '').trim();
+  var m = String(model || '').trim();
+  if (m && b && m.toLowerCase() !== b.toLowerCase()) return b + ' · ' + m;
+  if (m) return m;
+  if (b) return b;
+  return fallback || 'runtime pending';
+}
+
+function _pendingDispatchCopy(persona) {
+  if (persona && persona.orchestrator_only) return 'Shaping delegation through Porter...';
+  return 'Dispatching through Porter Bridge...';
+}
+
+function _pendingDispatchMeta(persona) {
+  if (persona && persona.preferred_backend) return _runtimeLabel(persona.preferred_backend, '', '');
+  return 'resolving runtime';
+}
+
 async function _pdChatSend() {
   var p = window._selectedPersona;
   var input = document.getElementById('pd-chat-input');
@@ -16563,7 +16582,7 @@ async function _pdChatSend() {
   if (!text) return;
   var state = _pdChatGetState(p.id);
   state.messages.push({ role: 'user', label: 'You', content: text });
-  state.messages.push({ role: 'pending', label: p.name || 'Agent', content: (p.name || 'Agent') + ' is thinking...', meta: p.preferred_backend || 'auto' });
+  state.messages.push({ role: 'pending', label: p.name || 'Agent', content: _pendingDispatchCopy(p), meta: _pendingDispatchMeta(p) });
   input.value = '';
   _pdChatRender(p.id);
   if (p.orchestrator_only && state.flow) {
@@ -16593,19 +16612,20 @@ async function _pdChatPoll(runId, persona, idx) {
       var run = runResp.runs[0];
       if (run.status === 'complete') {
         var detail = await api('/api/bridge/run?id=' + runId, null, 30000);
-        state.messages[idx] = { role: 'assistant', label: persona.name || 'Agent', content: (detail && detail.run && detail.run.response) || '(no response)', meta: run.backend || persona.preferred_backend || 'auto' };
+        var meta = _runtimeLabel((detail && detail.run && detail.run.backend) || run.backend, (detail && detail.run && detail.run.model) || run.model, _pendingDispatchMeta(persona));
+        state.messages[idx] = { role: 'assistant', label: persona.name || 'Agent', content: (detail && detail.run && detail.run.response) || '(no response)', meta: meta };
         _pdChatRender(persona.id);
         return;
       }
       if (run.status === 'failed') {
         var failed = await api('/api/bridge/run?id=' + runId, null, 30000);
-        state.messages[idx] = { role: 'error', label: persona.name || 'Agent', content: (failed && failed.run && (failed.run.error || failed.run.response)) || 'Dispatch failed' };
+        state.messages[idx] = { role: 'error', label: persona.name || 'Agent', content: (failed && failed.run && (failed.run.error || failed.run.response)) || 'Dispatch failed', meta: _runtimeLabel((failed && failed.run && failed.run.backend) || run.backend, (failed && failed.run && failed.run.model) || run.model, _pendingDispatchMeta(persona)) };
         _pdChatRender(persona.id);
         return;
       }
     } catch(e) {}
   }
-  state.messages[idx] = { role: 'error', label: persona.name || 'Agent', content: 'Dispatch timed out.' };
+  state.messages[idx] = { role: 'error', label: persona.name || 'Agent', content: 'Dispatch timed out.', meta: _pendingDispatchMeta(persona) };
   _pdChatRender(persona.id);
 }
 
@@ -18173,7 +18193,7 @@ function renderChatMessages(streamUpdate) {
       + '<div id="chat-drop-zone-welcome" class="chat-drop-zone" style="display:none">Drop files here</div>'
       + '<div id="chat-at-ind-welcome" class="chat-at-indicator"></div>'
       + '<div id="chat-persona-bar" class="chat-persona-bar"></div>'
-      + '<select id="chat-backend-sel-welcome" style="display:none"><option value="">Auto-route</option></select>'
+      + '<select id="chat-backend-sel-welcome" style="display:none"><option value="">Bridge-selected</option></select>'
       + '<div class="chat-welcome-meta">'
       + '<div id="chat-ctx-selectors" class="chat-ctx-selectors" style="margin:0"></div>'
       + '<button class="btn btn-ghost" style="font-size:11px" onclick="loadChatSessions()">History</button>'
@@ -18741,7 +18761,7 @@ function chatSend() {
           lines.push('**' + (g || 'Ungrouped') + '**');
           grouped[g].forEach(function(p) {
             var dot = p.status === 'active' ? '🟢' : p.status === 'sleeping' ? '🟡' : '⚪';
-            lines.push(dot + ' ' + (p.avatar || '') + ' **' + p.name + '** — ' + (p.role || 'General') + ' (' + (p.preferred_backend || 'auto') + ')');
+            lines.push(dot + ' ' + (p.avatar || '') + ' **' + p.name + '** — ' + (p.role || 'General') + ' (' + (p.preferred_backend || 'Bridge-selected') + ')');
           });
           lines.push('');
         });
@@ -18927,11 +18947,6 @@ function chatSend() {
     var slug = (p.name || '').toLowerCase().replace(/\s+/g, '');
     if (slug && _atModels.indexOf(slug) === -1) _atModels.push(slug);
   });
-  // v0.29.10 — Add squad names to @mention list
-  (_squads || []).forEach(function(s) {
-    var slug = (s.name || '').toLowerCase().replace(/\s+/g, '');
-    if (slug && _atModels.indexOf(slug) === -1) _atModels.push(slug);
-  });
   var _atRe = new RegExp('@(' + _atModels.join('|') + ')\\b', 'gi');
   var _atMatches = [];
   var _m;
@@ -18960,23 +18975,7 @@ function chatSend() {
         // Dispatch via persona layer
         _dispatchToPersonaChat(_matchedPersona, _msg1);
       } else {
-        // v0.29.10 — Check if it's a squad name
-        var _matchedSquad = (_squads || []).find(function(s) {
-          return (s.name || '').toLowerCase().replace(/\s+/g, '') === _mentionName;
-        });
-        if (_matchedSquad && _matchedSquad.members && _matchedSquad.members.length > 0) {
-          // Pick best-fit member (first active, or first member)
-          var _bestMember = _matchedSquad.members.find(function(m) { return m.status === 'active'; }) || _matchedSquad.members[0];
-          var _fullPersona = (_personas || []).find(function(p) { return p.id === _bestMember.id; });
-          if (_fullPersona) {
-            _chatMessages[_chatMessages.length - 1].content += ' [via ' + escHtml(_matchedSquad.name) + ' squad]';
-            _dispatchToPersonaChat(_fullPersona, _msg1);
-          } else {
-            toast('Squad member not found', 'err');
-          }
-        } else {
-          invokeAgent(_msg1, _atMatches[0].model);
-        }
+        invokeAgent(_msg1, _atMatches[0].model);
       }
     } else {
       // Multi-@ chain: @model1 <task> ... @model2 <task>
@@ -19003,14 +19002,14 @@ function chatSend() {
     _chatId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
   }
 
-  // Build prompt with conversation history + route context + attached files
+  // Build a lean prompt with recent history + route context + attached files
   let fullPrompt = '';
   // Multi-turn: include recent conversation history
   var histMsgs = _chatMessages.filter(function(m) { return m.role === 'user' || m.role === 'assistant'; });
   if (histMsgs.length > 0) {
-    var recent = histMsgs.slice(-10);
+    var recent = histMsgs.slice(-6);
     fullPrompt = 'Conversation history:\n' + recent.map(function(m) {
-      return (m.role === 'user' ? 'User: ' : 'Assistant: ') + m.content.slice(0, 2000);
+      return (m.role === 'user' ? 'User: ' : 'Assistant: ') + m.content.slice(0, 900);
     }).join('\n\n') + '\n\nNew message:\n';
   }
   fullPrompt += text;
@@ -19080,7 +19079,7 @@ function chatSend() {
         return;
       }
       if (data.done) {
-        var resolvedModel = data.model_used || modelId;
+        var resolvedModel = data.runtime_label || _runtimeLabel(data.backend_used, data.model_used, modelId);
         if (_chatStreamRevealBuffer.length || _chatStreamRevealTimer) {
           _chatStreamPendingDone = true;
           modelId = resolvedModel;
@@ -23037,7 +23036,7 @@ async function _dispatchToPersonaChat(persona, message) {
   if (persona.orchestrator_only) { toast(persona.name + ' coordinates work but does not execute worker tasks', 'warn'); return; }
   // Dispatch a message to a persona via chat, showing response as assistant message
   var waitIdx = _chatMessages.length;
-  _chatMessages.push({ role: 'assistant', content: '\u23f3 ' + persona.name + ' is thinking...', model: persona.preferred_backend || 'auto', _pending: true });
+  _chatMessages.push({ role: 'assistant', content: _pendingDispatchCopy(persona), model: _pendingDispatchMeta(persona), _pending: true });
   _chatStreaming = true;
   _updateStopBtn(true);
   renderChatMessages();
@@ -23069,12 +23068,12 @@ async function _dispatchToPersonaChat(persona, message) {
   }
 }
 
-async function _typePersonaResponse(waitIdx, fullText, persona) {
+async function _typePersonaResponse(waitIdx, fullText, persona, runtimeLabel) {
   var words = fullText.split(/( +)/);
   var revealed = '';
   var chunkSize = 3; // words per tick
   _chatMessages[waitIdx] = {
-    role: 'assistant', content: '', model: persona.preferred_backend || 'auto', persona_name: persona.name
+    role: 'assistant', content: '', model: runtimeLabel || _pendingDispatchMeta(persona), persona_name: persona.name
   };
   for (var wi = 0; wi < words.length; wi += chunkSize) {
     revealed += words.slice(wi, wi + chunkSize).join('');
@@ -23087,23 +23086,15 @@ async function _typePersonaResponse(waitIdx, fullText, persona) {
   _updateStopBtn(false);
   renderChatMessages();
   if (_chatId) {
-    _save_chat_message_local(_chatId, persona.preferred_backend || 'auto',
+    _save_chat_message_local(_chatId, runtimeLabel || _pendingDispatchMeta(persona),
       _chatMessages.filter(function(m){return m.role==='user'}).pop().content || '',
       fullText, persona.name);
   }
 }
 
 async function _pollPersonaResponse(runId, persona, waitIdx) {
-  var dots = 0;
-  var baseMsg = persona.name + ' is thinking';
   for (var i = 0; i < 60; i++) {
     await new Promise(r => setTimeout(r, 2000));
-    // Update dots animation in waiting message
-    dots = (dots + 1) % 4;
-    if (_chatMessages[waitIdx] && _chatMessages[waitIdx]._pending) {
-      _chatMessages[waitIdx].content = '\u23f3 ' + baseMsg + '.'.repeat(dots + 1);
-      (function(){var _pe=document.querySelector(".chat-msg:last-child .chat-msg-body");if(_pe)_pe.innerHTML=escHtml(_chatMessages[waitIdx].content)})();
-    }
     try {
       const r = await api('/api/bridge/runs?limit=1&run_id=' + runId, null, 30000);
       if (r.ok && r.runs && r.runs.length > 0) {
@@ -23111,14 +23102,15 @@ async function _pollPersonaResponse(runId, persona, waitIdx) {
         if (run.status === 'complete') {
           const detail = await api('/api/bridge/run?id=' + runId, null, 30000);
           var responseText = (detail && detail.run && detail.run.response) || '(no response)';
+          var runtimeLabel = _runtimeLabel((detail && detail.run && detail.run.backend) || run.backend, (detail && detail.run && detail.run.model) || run.model, _pendingDispatchMeta(persona));
           // Typing animation: reveal text progressively
-          await _typePersonaResponse(waitIdx, responseText, persona);
+          await _typePersonaResponse(waitIdx, responseText, persona, runtimeLabel);
           return;
         }
         if (run.status === 'failed') {
           const detail = await api('/api/bridge/run?id=' + runId, null, 30000);
           var errText = (detail && detail.run && detail.run.error) || (detail && detail.run && detail.run.response) || 'Dispatch failed — backend may have timed out.';
-          _chatMessages[waitIdx] = { role: 'error', content: errText, model: persona.preferred_backend || 'auto' };
+          _chatMessages[waitIdx] = { role: 'error', content: errText, model: _runtimeLabel((detail && detail.run && detail.run.backend) || run.backend, (detail && detail.run && detail.run.model) || run.model, _pendingDispatchMeta(persona)) };
           _chatMessages[waitIdx]._pending = false;
           _chatStreaming = false;
           _updateStopBtn(false);
@@ -23302,7 +23294,7 @@ function _updateRoutePreview() {
   } else if (persona && persona.preferred_backend) {
     parts.push(persona.preferred_backend);
   } else {
-    parts.push('auto');
+    parts.push('Bridge-selected at send time');
   }
   el.innerHTML = parts.length ? '<span style="font-size:10px;color:var(--text3);display:flex;align-items:center;gap:4px">\u2192 ' + parts.join(' \u2022 ') + '</span>' : '';
 }
@@ -23840,7 +23832,7 @@ async function selectPersona(id) {
     if (rl) rl.textContent = p.role || 'No role assigned';
     if (gb) { gb.textContent = isOrchestrator ? 'Command Core' : (p.is_temporary ? 'Temporary Worker' : 'Persistent Worker'); gb.style.borderColor = isOrchestrator ? '#f59e0b' : 'var(--border)'; gb.style.color = isOrchestrator ? '#f59e0b' : 'var(--text2)'; }
     if (sb) { sb.textContent = p.managed_by_porter ? 'Porter-managed' : 'Manual'; sb.style.color = p.managed_by_porter ? 'var(--accent)' : 'var(--text3)'; }
-    if (bb) bb.textContent = isOrchestrator ? 'Master control only' : (p.preferred_backend || 'Auto-route');
+    if (bb) bb.textContent = isOrchestrator ? 'Delegates work' : (p.preferred_backend || 'Bridge-selected at run time');
     if (delBtn) delBtn.style.display = isLocked ? 'none' : '';
     if (spBtn) spBtn.textContent = isOrchestrator ? 'Who Is Porter' : 'System Prompt';
     if (tabActions) {
@@ -23916,9 +23908,9 @@ function switchPdTab(tab) {
     content.innerHTML = '<section style="display:flex;flex-direction:column;height:min(calc(100vh - 330px), 68vh);max-height:calc(100vh - 330px);min-height:420px;padding:4px 2px 2px;background:transparent;box-sizing:border-box">'
       + '<div id="pd-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 14px"></div>'
       + '<div style="margin-top:8px;padding-top:4px">'
-      + '<div style="display:flex;gap:10px;align-items:flex-end;padding:10px 12px;border:1px solid color-mix(in srgb,var(--border) 26%, transparent);border-radius:20px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 97%, transparent),color-mix(in srgb,var(--bg) 98%, transparent));box-shadow:inset 0 1px 0 rgba(255,255,255,.03)">'
+      + '<div style="display:flex;gap:10px;align-items:flex-end;padding:10px 12px;border:1px solid color-mix(in srgb,var(--border) 20%, transparent);border-radius:20px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 98%, transparent),color-mix(in srgb,var(--bg) 99%, transparent));box-shadow:inset 0 1px 0 rgba(255,255,255,.03)">'
       + '<textarea id="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate work, create workers, or shape a project...' : 'Send a directive to this worker...') + '" rows="3" onkeydown="_pdChatKey(event)" style="flex:1;min-height:70px;max-height:180px;resize:vertical;background:transparent;color:var(--text);border:none;outline:none;border-radius:14px;padding:10px 8px 8px;font-size:13px;line-height:1.5"></textarea>'
-      + '<button onclick="_pdChatSend()" style="align-self:stretch;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:118px;border:1px solid color-mix(in srgb,#f59e0b 22%, transparent);border-radius:16px;padding:0 16px;background:linear-gradient(180deg,color-mix(in srgb,#f59e0b 16%, var(--surface)),color-mix(in srgb,#f59e0b 8%, var(--bg)));color:#f7cf84;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;box-shadow:0 10px 20px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.05)">Send <span style=\"font-size:14px;line-height:1\">↗</span></button>'
+      + '<button onclick="_pdChatSend()" style="align-self:stretch;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:132px;border:1px solid color-mix(in srgb,#f59e0b 30%, transparent);border-radius:18px;padding:0 18px;background:linear-gradient(180deg,color-mix(in srgb,#f59e0b 26%, var(--surface)),color-mix(in srgb,#b45309 16%, var(--bg)));color:#fff4d6;font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;box-shadow:0 12px 28px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.08)">' + (p.orchestrator_only ? 'Direct Porter' : 'Dispatch Worker') + ' <span style=\"font-size:14px;line-height:1\">↗</span></button>'
       + '</div></div></section>';
     _pdChatRender(p.id);
   } else if (tab === 'identity') {
@@ -24063,26 +24055,13 @@ function switchPdTab(tab) {
       var runs = (results[0] && results[0].ok && results[0].runs) ? results[0].runs : [];
       var tasks = (results[1] && results[1].ok && results[1].tasks) ? results[1].tasks : [];
       var projects = (results[2] && results[2].projects) ? results[2].projects : [];
-      var usePreview = !!p.orchestrator_only && runs.length < 4;
-      if (usePreview) {
-        runs = [
-          { status:'running', backend:'codex', duration_ms:1420, prompt_preview:'Directing QA Sentinel to verify Agents redesign regressions.', created_at:(Date.now()/1000)-120, project_id:'preview-project-1' },
-          { status:'complete', backend:'gemini', duration_ms:3180, prompt_preview:'Researching hosted telemetry patterns for PorterHQ field diagnostics.', created_at:(Date.now()/1000)-420, project_id:'preview-project-2' },
-          { status:'complete', backend:'openclaw', duration_ms:2260, prompt_preview:'Spinning up a temporary worker for UI cleanup and handoff.', created_at:(Date.now()/1000)-760, project_id:'preview-project-1' },
-          { status:'failed', backend:'claude', duration_ms:5100, prompt_preview:'Worker retry triggered after routing lane saturation.', created_at:(Date.now()/1000)-1080, project_id:'preview-project-3' },
-          { status:'complete', backend:'ollama', duration_ms:6400, prompt_preview:'Local draft pass for low-priority synthesis before final merge.', created_at:(Date.now()/1000)-1560, project_id:'preview-project-2' },
-        ];
-      }
       var personaTasks = tasks.filter(function(task) { return String(task.assigned_persona_id || '') === String(p.id || ''); });
       var openTasks = personaTasks.filter(function(task) { return !/complete|done|cancelled/i.test(String(task.status || '')); });
       var successCount = runs.filter(function(run) { return run.status === 'complete'; }).length;
       var failCount = runs.filter(function(run) { return run.status === 'failed'; }).length;
       var durations = runs.map(function(run) { return run.duration_ms || 0; }).filter(Boolean);
       var avg = durations.length ? Math.round(durations.reduce(function(a, b) { return a + b; }, 0) / durations.length) : 0;
-      var approvalItems = p.orchestrator_only ? [
-        { title:'Create Worker Approval', detail:'QA Sentinel proposed for Agents redesign verification lane.', state:'awaiting' },
-        { title:'Project Scope Approval', detail:'Runtime cleanup project proposed as autonomous after initial shape pass.', state:'review' }
-      ] : [];
+      var approvalItems = [];
       var handoffItems = runs.slice(0, 4).map(function(run) {
         return {
           title: (run.backend || 'bridge') + ' lane',
@@ -24092,7 +24071,6 @@ function switchPdTab(tab) {
         };
       });
       var html = '<div style="display:flex;flex-direction:column;gap:16px">'
-        + (usePreview ? '<div style="padding:12px 14px;border:1px dashed color-mix(in srgb,var(--accent) 32%, var(--border));border-radius:16px;background:color-mix(in srgb,var(--accent) 5%, transparent);font-size:12px;color:var(--text2)">Preview state shown because Porter does not have enough live activity yet. This is the intended command-dashboard shape once real orchestration history fills in.</div>' : '')
         + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">'
         + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Recent Runs</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + runs.length + '</div></div>'
         + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Open Tasks</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + openTasks.length + '</div></div>'
@@ -24102,23 +24080,19 @@ function switchPdTab(tab) {
         + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">';
       if (p.orchestrator_only) {
         html += '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Approval Queue</div>'
-          + approvalItems.map(function(item) {
+          + (approvalItems.length ? approvalItems.map(function(item) {
             return '<div style="padding:12px 0;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px"><span class="model-card-chip warn" style="font-size:10px">' + escHtml(item.state) + '</span><span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(item.title) + '</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(item.detail) + '</div></div>';
-          }).join('') + '</section>';
+          }).join('') : '<div style="font-size:12px;color:var(--text3)">No approvals are waiting right now.</div>') + '</section>';
       }
       html += '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Recent Tasks</div>'
         + ((openTasks.length ? openTasks : personaTasks.slice(0, 4)).map(function(task) {
             return '<div style="padding:12px 0;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px"><span class="model-card-chip dim" style="font-size:10px">' + escHtml(task.priority || 'normal') + '</span><span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(task.title || 'Task') + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(task.status || 'pending') + '</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(task.description || task.project_name || 'Task tracked through Porter.') + '</div></div>';
           }).join('') || '<div style="font-size:12px;color:var(--text3)">No tracked tasks yet.</div>') + '</section>';
       html += '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">' + (p.orchestrator_only ? 'Handoffs & Oversight' : 'Recent Work') + '</div>'
-        + handoffItems.map(function(item) {
+        + (handoffItems.length ? handoffItems.map(function(item) {
             return '<div style="padding:12px 0;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:' + (item.ok ? '#22c55e' : '#f59e0b') + '"></span><span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(item.title) + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(_relativeTime(item.ts)) + '</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(item.detail) + '</div></div>';
-          }).join('') + '</section>';
+          }).join('') : '<div style="font-size:12px;color:var(--text3)">No recent orchestration history yet.</div>') + '</section>';
       html += '</div></div>';
-      if (!runs.length && !personaTasks.length && !usePreview) {
-        content.innerHTML = '<div style="color:var(--text3);font-size:12px">No activity yet.</div>';
-        return;
-      }
       content.innerHTML = html;
     });
   } else if (tab === 'skills') {
@@ -24131,20 +24105,6 @@ function switchPdTab(tab) {
           var profile = (data && data.profile) || {};
           var core = profile.core || [];
           var reserve = profile.reserve || [];
-          if (p.orchestrator_only && !core.length && !reserve.length) {
-            core = [
-              { name:'Project Architect', purpose:'Shapes new projects, scope boundaries, success bars, and execution lanes before Porter commits them.', installed:true },
-              { name:'Worker Architect', purpose:'Designs the right worker role, lifecycle, and loadout for delegated work.', installed:true },
-              { name:'Memory Curator', purpose:'Distills durable directives and learned truths into reviewable memory.', installed:true },
-              { name:'Runtime Auditor', purpose:'Inspects runtime drift, queue pressure, failures, and telemetry gaps before they surface to users.', installed:true },
-            ];
-            reserve = [
-              { name:'Avatar Art Director' },
-              { name:'GitHub' },
-              { name:'Gemini' },
-              { name:'Skill Creator' },
-            ];
-          }
           var html = '<div style="display:flex;flex-direction:column;gap:16px">'
             + '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Porter Skills</div><div style="font-size:13px;color:var(--text2);line-height:1.6">Porter does not need every available skill. He keeps a tight orchestrator loadout and uses workers for deep execution.</div></div>';
           if (core.length) {
@@ -24190,14 +24150,6 @@ function switchPdTab(tab) {
           var r = await api('/api/cortex/memories?scope=agent&scope_id=' + p.id + '&limit=50');
           facts = (r && r.memories) || [];
         }
-        if (!facts.length && p.orchestrator_only) {
-          facts = [
-            { id:'preview-memory-1', fact:'Prefer Porter-led creation sessions over raw forms when adding new workers or projects.', confidence:0.92, importance:9, evidence_count:6, memory_type:'directive' },
-            { id:'preview-memory-2', fact:'Keep Porter orchestrator-only. Substantive implementation belongs to workers.', confidence:0.98, importance:10, evidence_count:9, memory_type:'directive' },
-            { id:'preview-memory-3', fact:'Projects should replace visible squads as the main organizational construct in the product UI.', confidence:0.88, importance:8, evidence_count:4, memory_type:'semantic' },
-            { id:'preview-memory-4', fact:'Minecraft-style pixel identity is part of Porter’s product character and should feel proprietary.', confidence:0.74, importance:7, evidence_count:3, memory_type:'semantic' },
-          ];
-        }
         if (!facts.length) {
           content.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px">No memory has been distilled yet. Porter will surface durable directives and strategic truths here as they stabilize.</div>';
           return;
@@ -24211,7 +24163,6 @@ function switchPdTab(tab) {
         var reviewQueue = facts.filter(function(f) { return Number(f.confidence || 0) < 0.7; }).length;
         var projectScoped = facts.filter(function(f) { return String(f.scope || '').toLowerCase() === 'project'; }).length;
         var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'
-          + (p.orchestrator_only && String(facts[0].id || '').indexOf('preview-memory-') === 0 ? '<div style="grid-column:1/-1;padding:12px 14px;border:1px dashed color-mix(in srgb,var(--accent) 32%, var(--border));border-radius:16px;background:color-mix(in srgb,var(--accent) 5%, transparent);font-size:12px;color:var(--text2)">Preview memory shown because Porter does not have enough confirmed memory yet. As durable patterns accumulate, this pane will replace these placeholders with live directives and learned truths.</div>' : '')
           + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Total Memory</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + facts.length + '</div></div>'
           + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Directives</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + directives.length + '</div></div>'
           + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">High Trust</div><div style="font-size:26px;font-weight:800;color:#22c55e;margin-top:4px">' + reviewed + '</div></div>'
@@ -24226,7 +24177,7 @@ function switchPdTab(tab) {
             + '<div style="display:flex;gap:12px;align-items:center;margin-top:10px;font-size:10px;color:var(--text3)">'
             + '<span>' + (f.evidence_count || 0) + ' evidence</span>'
             + '<span>' + (f.memory_type || 'semantic') + '</span>'
-            + (String(f.id || '').indexOf('preview-memory-') === 0 ? '<span style="margin-left:auto;font-size:10px;color:var(--text3)">Preview</span>' : '<button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" onclick="_dismissDirective(\'' + f.id + '\')">Dismiss</button>')
+            + '<button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" onclick="_dismissDirective(\'' + f.id + '\')">Dismiss</button>'
             + '</div></div>';
         }
         html += '<div style="display:flex;flex-direction:column;gap:16px">';
@@ -24269,7 +24220,7 @@ function switchPdTab(tab) {
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
       + '<div class="settings-field"><label>Preferred Backend</label>'
       + '  <select class="settings-input" id="pd-cfg-backend">'
-      + '    <option value="">Auto-route</option>'
+      + '    <option value="">Bridge-selected</option>'
       + backends.map(k => '<option value="' + k + '"' + (p.preferred_backend === k ? ' selected' : '') + '>' + k + '</option>').join('')
       + '  </select></div>'
       + '<div class="settings-field"><label>Fallback Chain</label>'
@@ -35430,7 +35381,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.72"})
+            self.reply_json({"v": "0.30.73"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35592,7 +35543,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.72"
+                health["porter_version"] = "0.30.73"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37489,7 +37440,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.72'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.73'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -37529,12 +37480,12 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/chat/stream":
             if not self.auth_check(redirect=False): return
             qs = parse_qs(parsed.query)
+            raw_text = unquote(qs.get("raw_text", [""])[0]) if qs.get("raw_text", [""]) else ""
 
             # Smart routing: if model is "auto" or starts with "general", pick best backend
             model_param = qs.get("model", [""])[0]
             if model_param in ("auto", "") or model_param.startswith("general"):
-                prompt_param = qs.get("prompt", [""])[0]
-                # parse_qs does not fully unquote, so we do it here for analysis
+                prompt_param = raw_text or qs.get("prompt", [""])[0]
                 prompt_analyzed = unquote(prompt_param) if prompt_param else ""
 
                 if prompt_analyzed and prompt_analyzed != "SAVED":
@@ -37566,16 +37517,7 @@ class Handler(BaseHTTPRequestHandler):
             if not _persona_name_param:
                 # General chat (no persona) — inject Porter awareness
                 _porter_ctx = (
-                    "[System context: You are responding within Porter, an AI orchestration platform. "
-                    "Porter manages multiple AI backends (OpenClaw/GPT, Claude, Gemini, Codex, Ollama), "
-                    "agent personas with memory files, Porter Cortex (auto-memory system), "
-                    "file management, project workflows, and dispatch routing.]\n\n"
-                    "[Response style: Optimize for reading feel — polished, not dense. "
-                    "Front-load the key answer. Use short paragraphs with clean rhythm. "
-                    "Use markdown deliberately: **bold headers**, concise bullet lists, `inline code` for identifiers. "
-                    "Structure longer answers with 2-4 labeled sections (e.g., **What\u2019s Happening**, **Fix**, **Next Step**). "
-                    "Keep headers minimal and attractive. Avoid walls of text. "
-                    "End cleanly without boilerplate. Make it feel smooth, readable, and editorial.]\n\n"
+                    "You are responding inside Porter. Be clear, concise, truthful, and structured only when it helps.\n\n"
                 )
                 prompt = _porter_ctx + prompt
 
@@ -37878,7 +37820,8 @@ class Handler(BaseHTTPRequestHandler):
                 _emit_event("bridge:response", {"run_id": _stream_run_id, "backend": _stream_backend, "ok": True, "duration_ms": _chat_dur_pre, "source": "chat"})
 
                 # Signal done
-                self.wfile.write(f"data: {json.dumps({'done': True, 'full_response': full_response, 'model_used': _stream_backend})}\n\n".encode())
+                _runtime_label = f"{_stream_backend} · {_stream_model_target}" if _stream_model_target else _stream_backend
+                self.wfile.write(f"data: {json.dumps({'done': True, 'full_response': full_response, 'model_used': _stream_model_target or _stream_backend, 'backend_used': _stream_backend, 'runtime_label': _runtime_label})}\n\n".encode())
                 self.wfile.flush()
                 _chat_dur = int((__import__("time").time() - _chat_stream_start) * 1000)
                 mlog.emit("info", "chat", "chat.stream.complete", f"Chat done: {model_id} ({_chat_dur}ms)",
@@ -37888,8 +37831,8 @@ class Handler(BaseHTTPRequestHandler):
                 if chat_id and full_response:
                     _stream_project = qs.get("project_id", [""])[0]
                     _stream_persona = qs.get("persona_name", [""])[0]
-                    _raw_text = unquote(qs.get("raw_text", [""])[0]) or prompt
-                    _save_chat_message(chat_id, model_id, _raw_text, full_response,
+                    _raw_text = raw_text or prompt
+                    _save_chat_message(chat_id, _runtime_label, _raw_text, full_response,
                                        project_id=_stream_project, persona_name=_stream_persona)
 
                 # Cortex: extract facts from chat response in background
@@ -42421,7 +42364,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.72 ready (localhost only)")
+    print(f"\n  Porter v0.30.73 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
