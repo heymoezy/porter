@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.78 — Porter detail chat controls and attachments"""
+"""Porter v0.30.79 — Porter detail chat drag and drop"""
 
 
 import email
@@ -9217,6 +9217,21 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   padding:0;
 }
 .pd-chat-attachment-remove:hover { color:#ef4444; }
+.pd-chat-shell.drag-over .pd-chat-composer,
+.pd-chat-shell.drag-over #pd-chat-thread {
+  border-color:color-mix(in srgb,#f59e0b 34%, var(--border));
+  box-shadow:0 0 0 2px color-mix(in srgb,#f59e0b 15%, transparent);
+}
+.pd-chat-drop-zone {
+  margin:0 0 10px;
+  padding:20px 16px;
+  text-align:center;
+  font-size:12px;
+  color:#f5b041;
+  border:2px dashed color-mix(in srgb,#f59e0b 60%, transparent);
+  border-radius:18px;
+  background:color-mix(in srgb,#f59e0b 7%, transparent);
+}
 .chat-stop-btn {
   display:none; padding:4px 14px; font-size:11px; border-radius:6px;
   border:1px solid var(--danger,#dc3545); background:none; color:var(--danger,#dc3545);
@@ -10615,7 +10630,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.78</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.79</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11906,6 +11921,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.79', date:'2026-03-11', notes:["Porter detail chat now accepts drag-and-drop file uploads directly into the chat workspace, with a proper drop target and the same attachment pipeline as the explicit upload control"] },
   { ver:'v0.30.78', date:'2026-03-11', notes:["Porter detail chat now has real session controls for new chat, clear chat, and file uploads, and uploaded files become explicit chat context instead of staying outside the conversation lane; the detail chat shell was tightened again so Porter can work from a cleaner dedicated lane without forcing everything through the main chat"] },
   { ver:'v0.30.77', date:'2026-03-11', notes:["Porter detail chat now uses visual motion-first pending states instead of repetitive routing text, the composer and send control were redesigned to feel like Porter rather than generic admin UI, and Porter's identity prompt was cut down so greetings and 'Who is Porter?' resolve quickly and correctly with a warmer voice; Porter skills are now split between public orchestration coverage and internal platform/operator coverage, with prompt architecture elevated as a first-class core skill"] },
   { ver:'v0.30.76', date:'2026-03-11', notes:["Chat structural speed pass: removed the remaining artificial stream reveal layer, stopped replaying fake typing for persona responses, reduced worker/persona completion polling to 250ms, trimmed default history and inline file payloads again, and clarified runtime-selection language while routes resolve"] },
@@ -16582,6 +16598,44 @@ function _pdChatHandleFileInput(e) {
   var files = e && e.target ? e.target.files : null;
   if (files && files.length) _pdAttachLocalFiles(files);
   if (e && e.target) e.target.value = '';
+}
+
+function _pdChatDragEnter(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  var shell = document.getElementById('pd-chat-shell');
+  if (!shell) return;
+  shell.classList.add('drag-over');
+  var zone = document.getElementById('pd-chat-drop-zone');
+  if (zone) zone.style.display = '';
+}
+
+function _pdChatDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+function _pdChatDragLeave(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  var shell = document.getElementById('pd-chat-shell');
+  if (!shell) return;
+  var related = e.relatedTarget;
+  if (related && shell.contains(related)) return;
+  shell.classList.remove('drag-over');
+  var zone = document.getElementById('pd-chat-drop-zone');
+  if (zone) zone.style.display = 'none';
+}
+
+function _pdChatDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  var shell = document.getElementById('pd-chat-shell');
+  if (shell) shell.classList.remove('drag-over');
+  var zone = document.getElementById('pd-chat-drop-zone');
+  if (zone) zone.style.display = 'none';
+  var files = e && e.dataTransfer ? e.dataTransfer.files : null;
+  if (files && files.length) _pdAttachLocalFiles(files);
 }
 
 function _pdRemoveAttachment(attId) {
@@ -24303,7 +24357,7 @@ function switchPdTab(tab) {
   if (!p) return;
   if (tab === 'overview') {
     if (!p) { content.innerHTML = '<div class="loading-indicator">Select an agent</div>'; return; }
-    content.innerHTML = '<section style="display:flex;flex-direction:column;height:min(calc(100vh - 330px), 68vh);max-height:calc(100vh - 330px);min-height:420px;padding:4px 2px 2px;background:transparent;box-sizing:border-box">'
+    content.innerHTML = '<section id="pd-chat-shell" class="pd-chat-shell" style="display:flex;flex-direction:column;height:min(calc(100vh - 330px), 68vh);max-height:calc(100vh - 330px);min-height:420px;padding:4px 2px 2px;background:transparent;box-sizing:border-box" ondragover="_pdChatDragOver(event)" ondrop="_pdChatDrop(event)" ondragleave="_pdChatDragLeave(event)" ondragenter="_pdChatDragEnter(event)">'
       + '<div id="pd-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 14px"></div>'
       + '<div style="margin-top:8px;padding-top:4px">'
       + '<div class="pd-chat-toolbar">'
@@ -24311,6 +24365,7 @@ function switchPdTab(tab) {
       + '<button class="pd-chat-toolbtn" onclick="_pdClearChat()">Clear Chat</button>'
       + '<button class="pd-chat-toolbtn" onclick="_pdChooseFiles()">Upload Files</button>'
       + '</div>'
+      + '<div id="pd-chat-drop-zone" class="pd-chat-drop-zone" style="display:none">Drop files into Porter chat</div>'
       + '<div class="pd-chat-composer">'
       + '<textarea id="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate work, create workers, or shape a project...' : 'Send a directive to this worker...') + '" rows="3" onkeydown="_pdChatKey(event)" style="flex:1;min-height:70px;max-height:180px;resize:vertical;background:transparent;color:var(--text);border:none;outline:none;border-radius:14px;padding:10px 8px 8px;font-size:13px;line-height:1.5"></textarea>'
       + '<button class="pd-send-btn" onclick="_pdChatSend()"><span>' + (p.orchestrator_only ? 'Send To Porter' : 'Send To Worker') + '</span><span class="pd-send-icon">↗</span></button>'
@@ -35792,7 +35847,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.78"})
+            self.reply_json({"v": "0.30.79"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35954,7 +36009,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.78"
+                health["porter_version"] = "0.30.79"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37851,7 +37906,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.78'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.79'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42775,7 +42830,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.78 ready (localhost only)")
+    print(f"\n  Porter v0.30.79 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

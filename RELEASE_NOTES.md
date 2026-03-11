@@ -1,5 +1,9 @@
 # Porter Release Notes
 
+## v0.30.79 (2026-03-11)
+
+- Porter detail chat now accepts drag-and-drop files directly into the chat workspace instead of forcing the upload button path.
+
 ## v0.30.78 (2026-03-11)
 
 - Porter detail chat now has explicit `New Chat`, `Clear Chat`, and `Upload Files` controls instead of acting like one endless opaque session.
