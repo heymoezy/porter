@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.88 (2026-03-11)
+
+- The last hardcoded `Porter App` fallback in task migration now resolves the active project name dynamically instead of assuming Porter is building itself.
+- Added the next redesign briefs for a first-run `Launchpad` project and a full dark/light theme overhaul so the remaining project/theme migration is explicit before implementation.
+
 ## v0.30.87 (2026-03-11)
 
 - Pulse has been cleaned up into a single current operator surface instead of sharing shipped UI with a hidden Cortex product.

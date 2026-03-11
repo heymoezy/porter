@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.87 — Pulse cleanup and hidden Cortex UI removal"""
+"""Porter v0.30.88 — Remove hardcoded Porter App fallback and add design briefs"""
 
 
 import email
@@ -2737,14 +2737,21 @@ def _migrate_checkpoint_to_registry():
         if not found:
             # Create a new task registry entry
             import uuid
+            active_project_id = str(_config.get("active_project_id") or "").strip()
+            active_project_name = ""
+            if active_project_id:
+                try:
+                    active_project_name = (_project_by_id(active_project_id) or {}).get("name", "")
+                except Exception:
+                    active_project_name = ""
             task = {
                 "id": str(uuid.uuid4()),
                 "title": f"Migrated: {item[:80]}",
                 "description": f"Auto-migrated from checkpoint.md: {item}",
                 "status": "pending",
                 "priority": "normal",
-                "project_id": _config.get("active_project_id", ""),
-                "project_name": "Porter App",
+                "project_id": active_project_id,
+                "project_name": active_project_name or "Active Project",
                 "tags": ["migrated", "checkpoint"],
                 "sort_order": 50,
                 "assigned_agent_id": None,
@@ -10979,7 +10986,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.87</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.88</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12150,6 +12157,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.88', date:'2026-03-11', notes:["The last hardcoded `Porter App` fallback in task migration now resolves the active project name dynamically instead of assuming Porter is building itself, and the next redesign tranche is documented with explicit briefs for a first-run `Launchpad` project and a full dark/light theme overhaul"] },
   { ver:'v0.30.87', date:'2026-03-11', notes:["Pulse is now a cleaner single operator surface instead of sharing shipped UI with a hidden Cortex product: the retired Cortex module and Cortex settings page are removed from the client, dead extraction/session-summary helpers are stripped from the live bundle, and Gateway Activity stays focused on recent operational truth instead of stale memory-era residue"] },
   { ver:'v0.30.86', date:'2026-03-11', notes:["Project artifacts now sync into a structured project_artifacts registry instead of existing only as loose files on disk, the Artifacts tab shows source metadata from that registry, and this lays the first real foundation for artifact-aware project memory and provenance"] },
   { ver:'v0.30.85', date:'2026-03-11', notes:["The operator surface is now Pulse instead of a split Runtime/Logs pair, with live ops cards and event feed folded into one place; hidden admin routing now resolves into Pulse, stale Cortex settings are no longer reachable from Settings, and startup purges legacy Porter-development cortex memories so the new state system stops inheriting polluted app-build residue"] },
@@ -36100,7 +36108,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.87"})
+            self.reply_json({"v": "0.30.88"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36262,7 +36270,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.87"
+                health["porter_version"] = "0.30.88"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38206,7 +38214,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.87'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.88'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43197,7 +43205,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.87 ready (localhost only)")
+    print(f"\n  Porter v0.30.88 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
