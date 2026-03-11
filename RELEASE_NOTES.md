@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.31.0 (2026-03-11)
+
+- Porter chat now buffers raw stream fragments into smoother visible updates instead of repainting every tiny chunk.
+- Codex stream text is merged more cleanly so sentences stop collapsing together, and previously attached images stay referable through lightweight context hints without resending the full image bytes every turn.
+
 ## v0.30.99 (2026-03-11)
 
 - Fixed the Codex chat resume command to match the installed CLI syntax by removing the unsupported `--ask-for-approval` flag from `codex exec`.

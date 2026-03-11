@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.99 — Fix Codex resume CLI arguments"""
+"""Porter v0.31.0 — Improve chat stream quality and image carryover"""
 
 
 import email
@@ -8131,6 +8131,23 @@ def _chat_update_metadata(chat_id, patch):
     except Exception as e:
         log.debug("chat metadata update failed for %s: %s", chat_id, e)
 
+def _merge_stream_text(existing: str, chunk: str) -> str:
+    base = str(existing or "")
+    frag = str(chunk or "")
+    if not frag:
+        return base
+    if not base:
+        return frag
+    if base.endswith((" ", "\n", "\t", "(", "[", "{", "/", "-", "—")):
+        return base + frag
+    if frag.startswith((" ", "\n", "\t", ".", ",", "!", "?", ";", ":", ")", "]", "}", "/", "-", "—")):
+        return base + frag
+    if base.endswith((".", "!", "?", ":", ";", ",")):
+        return base + " " + frag
+    if base[-1].isalnum() and frag[:1].isalnum():
+        return base + " " + frag
+    return base + frag
+
 def ensure_chat_dirs():
     CHAT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -11249,7 +11266,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.99</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.0</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12408,6 +12425,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.0', date:'2026-03-11', notes:["Porter chat now buffers raw stream fragments into smoother visible updates instead of repainting every tiny chunk, Codex stream text is merged more cleanly so sentences stop collapsing together, and previously attached images stay referable through lightweight context hints without resending the full image bytes every turn"] },
   { ver:'v0.30.99', date:'2026-03-11', notes:["Fixed the Codex chat resume command to match the installed CLI syntax by removing the unsupported `--ask-for-approval` flag from `codex exec`"] },
   { ver:'v0.30.98', date:'2026-03-11', notes:["Pulse and tour copy now stop leaking stale Runtime-era language, the remaining internal memory-extraction workflow is described as compatibility-only instead of product truth, and the chat-latency prompt-caching notes are now checked into research so the next speed tranche has a documented direction"] },
   { ver:'v0.30.97', date:'2026-03-11', notes:["Codex-backed chats now preserve and reuse Codex thread ids across turns instead of always starting fresh ephemeral sessions, and chat metadata is merged instead of overwritten so resume state survives ordinary saves"] },
@@ -16956,6 +16974,12 @@ function _pdChatComposePrompt(state, userText) {
     });
     parts.push('Context files:' + ctx);
   }
+  var priorRefs = (state.attachments || []).filter(function(f) { return !!f.injected; });
+  if (priorRefs.length && /\b(this|that|image|screenshot|picture|pic|photo|diagram|mockup|ui)\b/i.test(String(userText || ''))) {
+    parts.push('Previously attached context still in scope:\n' + priorRefs.slice(-3).map(function(f) {
+      return '- ' + (f.isImage ? 'Image' : 'File') + ': ' + f.name;
+    }).join('\n'));
+  }
   parts.push('New message:\n' + userText);
   return parts.join('\n\n');
 }
@@ -17613,6 +17637,21 @@ async function _pdChatStreamPorter(persona, state, promptText, userText, idx) {
       + '&persona_name=' + encodeURIComponent(persona && persona.name ? persona.name : 'Porter')
       + '&raw_text=' + encodeURIComponent(userText);
     var full = '';
+    var buffered = '';
+    var flushTimer = null;
+    function flushBuffered(force) {
+      if (!buffered && !force) return;
+      if (buffered) {
+        full += buffered;
+        buffered = '';
+      }
+      state.messages[idx] = { role: 'assistant', label: persona.name || 'Porter', content: full, meta: state.messages[idx] && state.messages[idx].meta ? state.messages[idx].meta : _pendingDispatchMeta(persona), streaming: !force };
+      _pdChatRender(persona.id);
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+    }
     var evtSource = new EventSource(url);
     evtSource.onmessage = function(e) {
       try {
@@ -17632,12 +17671,14 @@ async function _pdChatStreamPorter(persona, state, promptText, userText, idx) {
           return;
         }
         if (data.token) {
-          full += data.token;
-          state.messages[idx] = { role: 'assistant', label: persona.name || 'Porter', content: full, meta: data.runtime_label || _pendingDispatchMeta(persona), streaming: true };
-          _pdChatRender(persona.id);
+          if (data.runtime_label && state.messages[idx]) state.messages[idx].meta = data.runtime_label;
+          buffered += data.token;
+          if (!flushTimer) flushTimer = setTimeout(function() { flushBuffered(false); }, 45);
           return;
         }
         if (data.done) {
+          if (data.runtime_label && state.messages[idx]) state.messages[idx].meta = data.runtime_label;
+          flushBuffered(true);
           state.messages[idx] = {
             role: 'assistant',
             label: persona.name || 'Porter',
@@ -17652,6 +17693,7 @@ async function _pdChatStreamPorter(persona, state, promptText, userText, idx) {
       } catch (err) {}
     };
     evtSource.onerror = function() {
+      flushBuffered(true);
       if (!full) {
         state.messages[idx] = { role: 'error', label: persona.name || 'Porter', content: 'Connection lost before Porter could respond.', meta: _pendingDispatchMeta(persona) };
         _pdChatRender(persona.id);
@@ -36464,7 +36506,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.99"})
+            self.reply_json({"v": "0.31.0"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36626,7 +36668,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.99"
+                health["porter_version"] = "0.31.0"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38570,7 +38612,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.99'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.0'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38967,17 +39009,17 @@ class Handler(BaseHTTPRequestHandler):
                                             _msg = _item.get("text", "")
                                             if not _msg:
                                                 _parts = [p.get("text","") for p in (_item.get("content",[]) or []) if isinstance(p, dict) and p.get("text")]
-                                                _msg = "".join(_parts).strip()
+                                                _msg = " ".join([str(p).strip() for p in _parts if str(p).strip()]).strip()
                                             if _msg:
                                                 _note_first_token()
-                                                full_response += _msg
-                                                self.wfile.write(f"data: {json.dumps({'token': _msg})}\n\n".encode())
+                                                full_response = _merge_stream_text(full_response, _msg)
+                                                self.wfile.write(f"data: {json.dumps({'token': _merge_stream_text('', _msg)})}\n\n".encode())
                                                 self.wfile.flush()
                                                 _stream_chunk(_stream_run_id, _stream_backend, _msg)
                                         elif _item.get("type") == "tool_call":
                                             _tool = _item.get("name", "tool")
                                             _tnote = f"\n`> {_tool}`\n"
-                                            full_response += _tnote
+                                            full_response = _merge_stream_text(full_response, _tnote)
                                             self.wfile.write(f"data: {json.dumps({'token': _tnote})}\n\n".encode())
                                             self.wfile.flush()
                                             _stream_chunk(_stream_run_id, _stream_backend, _tnote)
@@ -38987,8 +39029,8 @@ class Handler(BaseHTTPRequestHandler):
                                         self.wfile.flush()
                                 except (json.JSONDecodeError, ValueError):
                                     _note_first_token()
-                                    full_response += _line
-                                    self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
+                                    full_response = _merge_stream_text(full_response, _line)
+                                    self.wfile.write(f"data: {json.dumps({'token': _merge_stream_text('', _line)})}\n\n".encode())
                                     self.wfile.flush()
                                     _stream_chunk(_stream_run_id, _stream_backend, _line)
                             try:
@@ -43604,7 +43646,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.99 ready (localhost only)")
+    print(f"\n  Porter v0.31.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
