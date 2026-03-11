@@ -1,5 +1,9 @@
 # Porter Release Notes
 
+## v0.30.93 (2026-03-11)
+
+- Fixed the chat attachment upload regression caused by a local `secrets` import shadowing the shared module inside the API handler, which was surfacing as a `cannot access local variable 'secrets'` error.
+
 ## v0.30.92 (2026-03-11)
 
 - Agent-detail chat now shrinks more gracefully in smaller browser widths, with a responsive composer that can tighten or stack instead of holding onto an oversized minimum height.

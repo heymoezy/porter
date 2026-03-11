@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.92 — Refine agent chat composer responsiveness"""
+"""Porter v0.30.93 — Fix attachment upload secrets scoping bug"""
 
 
 import email
@@ -11208,7 +11208,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.92</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.93</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12367,6 +12367,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.93', date:'2026-03-11', notes:["Fixed the attachment upload regression caused by a local `secrets` import shadowing the shared module inside the API handler, which was surfacing as a `cannot access local variable` error during chat uploads"] },
   { ver:'v0.30.92', date:'2026-03-11', notes:["Agent-detail chat now collapses more gracefully in smaller browser widths, with a responsive composer layout and cleaner image attachment previews that fit instead of cropping awkwardly"] },
   { ver:'v0.30.91', date:'2026-03-11', notes:["Agent-detail chats now render uploaded image attachments as thumbnail previews instead of plain filenames, and the hidden configure panel no longer flashes stray text across Agents during browser resize"] },
   { ver:'v0.30.90', date:'2026-03-11', notes:["New installs now seed a proper `Launchpad` starter project automatically when no projects exist, make it active on first run, and scaffold the guided starter workspace instead of leaving the product with no canonical project lane"] },
@@ -36351,7 +36352,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.92"})
+            self.reply_json({"v": "0.30.93"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36513,7 +36514,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.92"
+                health["porter_version"] = "0.30.93"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38457,7 +38458,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.92'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.93'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -41825,7 +41826,6 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 if not rule_text:
                     self.reply_json({"ok": False, "error": "text required"}, 400)
                     return
-                import secrets
                 rule_id = "custom-" + secrets.token_hex(4)
                 rules = _get_rules()
                 rules.append({"id": rule_id, "text": rule_text, "category": category})
@@ -43450,7 +43450,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.92 ready (localhost only)")
+    print(f"\n  Porter v0.30.93 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
