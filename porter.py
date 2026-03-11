@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.71 — Complete models cleanup"""
+"""Porter v0.30.72 — Agents detail command surface"""
 
 
 import email
@@ -7687,7 +7687,11 @@ def _persona_set_skill_names(persona_id: str, skill_names: list[str], managed_by
 
 _PORTER_PRIMARY_SKILLS = [
     "project-architect",
+    "project-lineage",
     "worker-architect",
+    "handoff-director",
+    "approval-governor",
+    "roster-curator",
     "memory-curator",
     "runtime-auditor",
     "avatar-art-director",
@@ -7707,7 +7711,11 @@ _PORTER_RESERVE_SKILLS = [
 
 _PORTER_SKILL_PURPOSE = {
     "project-architect": "Shapes new projects, scope boundaries, and execution lanes before Porter commits them.",
+    "project-lineage": "Keeps worker, task, and memory context attached to the right project lane over time.",
     "worker-architect": "Designs the right worker role, lifecycle, and loadout for a delegated task.",
+    "handoff-director": "Manages handoffs between workers so execution moves cleanly without dropped context.",
+    "approval-governor": "Applies explicit approval gates before Porter changes the roster, project structure, or autonomy level.",
+    "roster-curator": "Keeps the worker roster clean by preferring reuse, retirement, and tight specialization over sprawl.",
     "memory-curator": "Distills durable directives and learned truths into reviewable memory.",
     "runtime-auditor": "Inspects runtime state, routing pressure, failures, and operator telemetry for drift.",
     "avatar-art-director": "Turns agent role and temperament into Porter-owned pixel identity direction.",
@@ -10347,7 +10355,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.71</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.72</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10540,6 +10548,7 @@ input[type="number"].settings-input { min-width: 60px; }
       <div class="agent-detail-tabs">
         <button class="pd-tab active" onclick="switchPdTab('overview')">Chat</button>
         <button class="pd-tab" onclick="switchPdTab('identity')">Identity</button>
+        <button class="pd-tab" onclick="switchPdTab('org')">Org</button>
         <button class="pd-tab" onclick="switchPdTab('activity')">Activity</button>
         <button class="pd-tab" onclick="switchPdTab('skills')">Skills</button>
         <button class="pd-tab" onclick="switchPdTab('memory')">Memory</button>
@@ -11692,6 +11701,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.72', date:'2026-03-11', notes:["Agents detail now adds an Org view, stronger task/activity oversight, explicit approval-gated Porter creation flows, and a broader orchestrator skill profile built around project lineage, handoffs, approvals, and roster curation"] },
   { ver:'v0.30.71', date:'2026-03-11', notes:["Completed the Models cleanup pass: the tab now uses runtime-first product language, provider/model discovery is fully registry-driven, stale renderer paths were removed, and config/runtime diagnostics no longer expose hardcoded local path assumptions"] },
   { ver:'v0.30.70', date:'2026-03-11', notes:["Final Models sweep: load-rail counts now use real gateway and discovered-model totals from the payload, stale internal leftovers were stripped from the card renderer, and the tab stays aligned with Porter-first product language instead of internal schema terms"] },
   { ver:'v0.30.69', date:'2026-03-11', notes:["Removed stale persona wording from the Models intro so the page now speaks in Porter and worker language instead of leaking an internal data-model term"] },
@@ -16265,7 +16275,7 @@ function _pdCreationCancelRequested(text) {
 }
 
 function _pdCreationConfirmRequested(text) {
-  return /^(create it|ship it|do it|yes create|yes, create|confirm|looks good)$/i.test((text || '').trim());
+  return /^(create it|ship it|do it|yes create|yes, create|confirm|looks good|approve|approve and create|approved)$/i.test((text || '').trim());
 }
 
 function _pdRoleFromBrief(brief) {
@@ -16278,6 +16288,22 @@ function _pdRoleFromBrief(brief) {
   if (/backend|api|server|database|sql/.test(t)) return 'Backend Smith';
   if (/docs|write|content|copy/.test(t)) return 'Documentation Lead';
   return 'Specialist Worker';
+}
+
+function _pdRecommendedWorkerSkills(role, brief) {
+  var text = String((role || '') + ' ' + (brief || '')).toLowerCase();
+  var out = ['worker-architect'];
+  if (/qa|test|bug|regression/.test(text)) out.push('healthcheck');
+  if (/research|analysis|investigate|compare/.test(text)) out.push('gemini');
+  if (/frontend|react|ui|css/.test(text)) out.push('coding-agent');
+  if (/backend|api|server|database|sql/.test(text)) out.push('coding-agent');
+  if (/release|deploy|infra|ops|runtime/.test(text)) out.push('runtime-auditor');
+  if (/docs|write|content|copy/.test(text)) out.push('github');
+  return out.filter(function(name, idx, arr) { return arr.indexOf(name) === idx; });
+}
+
+function _pdProjectModeLabel(mode) {
+  return mode === 'autonomous' ? 'Autonomous lane' : 'Manual lane';
 }
 
 function _pdNameFromRole(role) {
@@ -16296,11 +16322,13 @@ function _pdFindNamedItem(text, items) {
 }
 
 async function _pdCreationLoadContext() {
-  var [projectsResp] = await Promise.all([
-    api('/api/projects').catch(function() { return { projects: [] }; })
+  var [projectsResp, personasResp] = await Promise.all([
+    api('/api/projects').catch(function() { return { projects: [] }; }),
+    api('/api/personas').catch(function() { return { personas: [] }; })
   ]);
   return {
     projects: (projectsResp && projectsResp.projects) || [],
+    workers: ((personasResp && personasResp.personas) || []).filter(function(p) { return !p.orchestrator_only; }),
   };
 }
 
@@ -16309,33 +16337,39 @@ function _pdCreationPrompt(flow) {
   var projectNames = (ctx.projects || []).map(function(p) { return p.name; });
   if (flow.kind === 'worker') {
     if (flow.stage === 0) return 'Tell Porter what this worker should own. A short mission is enough, for example: "Handle QA for the Agents redesign."';
-    if (flow.stage === 1) return 'Should this worker be temporary or persistent?';
-    if (flow.stage === 2) return 'Should Porter attach this worker to an existing project, or leave it unassigned for now?'
+    if (flow.stage === 1) return 'Should Porter attach this worker to an existing project, or leave it unassigned for now?'
       + (projectNames.length ? '\nProjects: ' + projectNames.join(', ') : '\nNo projects exist yet.');
-    return 'Reply `Create it` to proceed or tell Porter what to change.';
+    if (flow.stage === 2) return 'Should this worker be temporary or persistent?';
+    return 'Approval required. Reply `Approve` to create this worker, or tell Porter what to change.';
   }
   if (flow.stage === 0) return 'What should the new project be called?';
   if (flow.stage === 1) return 'Describe the project objective in one or two sentences.';
-  if (flow.stage === 2) return 'Should this be a manual project or an autonomous project?';
-  return 'Reply `Create it` to proceed or tell Porter what to change.';
+  if (flow.stage === 2) return 'Define the success bar. What has to be true before Porter should consider this project well-formed?';
+  if (flow.stage === 3) return 'Should this be a manual project or an autonomous project?';
+  return 'Approval required. Reply `Approve` to create this project, or tell Porter what to change.';
 }
 
 function _pdCreationProposal(flow) {
   var draft = flow.draft || {};
   if (flow.kind === 'worker') {
+    var skills = _pdRecommendedWorkerSkills(draft.role, draft.brief);
     return 'Proposed worker:\n'
       + 'Name: ' + (draft.name || 'Specialist') + '\n'
       + 'Role: ' + (draft.role || 'Specialist Worker') + '\n'
+      + 'Project lane: ' + (draft.project_name || 'None yet') + '\n'
       + 'Lifecycle: ' + (draft.is_temporary ? 'Temporary' : 'Persistent') + '\n'
-      + 'Project: ' + (draft.project_name || 'None') + '\n'
       + 'Mission: ' + (draft.brief || 'Focused execution lane') + '\n\n'
-      + 'Reply `Create it` to create this worker, or tell Porter what to change.';
+      + 'Porter loadout: ' + skills.join(', ') + '\n'
+      + 'Approval boundary: create one worker and attach it to the selected project lane only.\n\n'
+      + 'Reply `Approve` to create this worker, or tell Porter what to change.';
   }
   return 'Proposed project:\n'
     + 'Name: ' + (draft.name || 'New Project') + '\n'
-    + 'Mode: ' + (draft.type === 'autonomous' ? 'Autonomous' : 'Manual') + '\n'
-    + 'Objective: ' + (draft.description || 'No description yet') + '\n\n'
-    + 'Reply `Create it` to create this project, or tell Porter what to change.';
+    + 'Mode: ' + _pdProjectModeLabel(draft.type) + '\n'
+    + 'Objective: ' + (draft.description || 'No description yet') + '\n'
+    + 'Success bar: ' + (draft.success_bar || 'No success bar defined yet') + '\n'
+    + 'Approval boundary: create one project lane with this scope and autonomy level.\n\n'
+    + 'Reply `Approve` to create this project, or tell Porter what to change.';
 }
 
 async function _pdChatStartCreation(kind) {
@@ -16358,7 +16392,7 @@ async function _pdChatStartCreation(kind) {
   state.messages.push({
     role: 'assistant',
     label: p.name || 'Porter',
-    content: 'Porter will guide this ' + _pdCreationTypeLabel(kind) + ' creation so the roster stays clean.\n\n' + _pdCreationPrompt(state.flow),
+    content: 'Porter will guide this ' + _pdCreationTypeLabel(kind) + ' creation so the roster stays clean, the project lineage stays intact, and nothing changes without approval.\n\n' + _pdCreationPrompt(state.flow),
     meta: 'guided creation'
   });
   _pdChatRender(p.id);
@@ -16400,16 +16434,17 @@ async function _pdCreationExecute(p, flow) {
     if (draft.project_id) {
       await api('/api/projects', { action: 'assign_agent', project_id: draft.project_id, persona_id: created.persona.id }).catch(function() { return null; });
     }
-    return 'Worker created: ' + (created.persona.name || payload.name) + '.';
+    return 'Worker created: ' + (created.persona.name || payload.name) + '. Porter attached the worker to ' + (draft.project_name || 'no project lane') + ' and kept the rest of the roster unchanged.';
   }
   var projectRes = await api('/api/projects', {
     action: 'create',
     name: draft.name || 'New Project',
     type: draft.type || 'manual',
-    description: draft.description || ''
+    description: draft.description || '',
+    success_bar: draft.success_bar || ''
   });
   if (!(projectRes && projectRes.ok && projectRes.project)) throw new Error((projectRes && projectRes.error) || 'Project creation failed');
-  return 'Project created: ' + (projectRes.project.name || draft.name || 'New Project') + '.';
+  return 'Project created: ' + (projectRes.project.name || draft.name || 'New Project') + '. Porter opened a new ' + _pdProjectModeLabel(draft.type) + ' with the defined success bar.';
 }
 
 async function _pdHandleCreationReply(p, state, text) {
@@ -16445,6 +16480,17 @@ async function _pdHandleCreationReply(p, state, text) {
       flow.stage = 1;
       state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
     } else if (flow.stage === 1) {
+      var project = _pdFindNamedItem(text, (flow.context || {}).projects || []);
+      draft.project_id = project ? project.id : '';
+      draft.project_name = project ? project.name : '';
+      if (!project && !/none|unassigned|no project|leave it/i.test(lower)) {
+        state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: 'Porter needs either an existing project name here or a clear no-project answer like `leave it unassigned`.', meta: 'guided creation' });
+        _pdChatRender(p.id);
+        return true;
+      }
+      flow.stage = 2;
+      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
+    } else if (flow.stage === 2) {
       if (/temp|temporary|contract|short/i.test(lower)) draft.is_temporary = true;
       else if (/persist|permanent|long|core/i.test(lower)) draft.is_temporary = false;
       else {
@@ -16452,12 +16498,6 @@ async function _pdHandleCreationReply(p, state, text) {
         _pdChatRender(p.id);
         return true;
       }
-      flow.stage = 2;
-      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
-    } else if (flow.stage === 2) {
-      var project = _pdFindNamedItem(text, (flow.context || {}).projects || []);
-      draft.project_id = project ? project.id : '';
-      draft.project_name = project ? project.name : '';
       flow.stage = 3;
       state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationProposal(flow), meta: 'proposal' });
     }
@@ -16471,8 +16511,12 @@ async function _pdHandleCreationReply(p, state, text) {
       flow.stage = 2;
       state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
     } else if (flow.stage === 2) {
-      draft.type = /auto|autonomous/i.test(lower) ? 'autonomous' : 'manual';
+      draft.success_bar = text.trim();
       flow.stage = 3;
+      state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
+    } else if (flow.stage === 3) {
+      draft.type = /auto|autonomous/i.test(lower) ? 'autonomous' : 'manual';
+      flow.stage = 4;
       state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationProposal(flow), meta: 'proposal' });
     }
   }
@@ -16490,8 +16534,10 @@ function _pdChatRender(pid) {
   }
   var flowBanner = '';
   if (state.flow) {
+    var stepNow = Number(state.flow.stage || 0) + 1;
+    var totalSteps = state.flow.kind === 'project' ? 5 : 4;
     flowBanner = '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--accent) 24%, var(--border));border-radius:16px;background:color-mix(in srgb,var(--accent) 7%, transparent)">'
-      + '<div style="min-width:0"><div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Guided Creation</div><div style="font-size:12px;color:var(--text2);margin-top:3px">Porter is guiding a ' + escHtml(_pdCreationTypeLabel(state.flow.kind)) + ' setup. Exit this sequence before starting another one.</div></div>'
+      + '<div style="min-width:0"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Guided Creation</div><span style="font-size:10px;color:var(--text3)">Step ' + stepNow + ' of ' + totalSteps + '</span></div><div style="font-size:12px;color:var(--text2);margin-top:3px">Porter is guiding a ' + escHtml(_pdCreationTypeLabel(state.flow.kind)) + ' setup with project lineage and approval gates. Exit this sequence before starting another one.</div></div>'
       + '<button class="btn btn-ghost btn-sm" onclick="_pdCancelCreation()" style="margin-left:auto;font-size:11px;border-radius:999px;padding:6px 12px">Exit Setup</button>'
       + '</div>';
   }
@@ -23799,7 +23845,7 @@ async function selectPersona(id) {
     if (spBtn) spBtn.textContent = isOrchestrator ? 'Who Is Porter' : 'System Prompt';
     if (tabActions) {
       tabActions.innerHTML = isOrchestrator
-        ? '<button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'worker\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Worker</button><button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'project\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Project</button>'
+        ? '<button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'worker\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Worker With Porter</button><button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'project\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Project With Porter</button>'
         : '';
     }
     document.querySelectorAll('.pd-tab').forEach(function(btn) {
@@ -23913,6 +23959,56 @@ function switchPdTab(tab) {
     content.innerHTML = '<div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;align-items:center">' + fileTabs + '</div>'
       + fileEditors
 ;
+  } else if (tab === 'org') {
+    content.innerHTML = '<div class="loading-indicator">Loading org view...</div>';
+    (async function() {
+      try {
+        var [projectsResp, workersResp, tasksResp] = await Promise.all([
+          api('/api/projects').catch(function() { return { projects: [] }; }),
+          api('/api/personas').catch(function() { return { personas: [] }; }),
+          api('/api/task-registry').catch(function() { return { tasks: [] }; })
+        ]);
+        var projects = (projectsResp && projectsResp.projects) || [];
+        var workers = ((workersResp && workersResp.personas) || []).filter(function(x) { return !x.orchestrator_only; });
+        var tasks = (tasksResp && tasksResp.tasks) || [];
+        var assignedProject = p.project_id ? projects.find(function(pr) { return pr.id === p.project_id; }) : null;
+        var workerProjects = projects.filter(function(pr) { return (pr.assigned_personas || []).indexOf(p.id) >= 0; });
+        var peerWorkers = workers.filter(function(w) { return w.id !== p.id; });
+        var html = '<div style="display:flex;flex-direction:column;gap:16px">';
+        if (p.orchestrator_only) {
+          html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'
+            + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Workers</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + workers.length + '</div></div>'
+            + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Projects</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + projects.length + '</div></div>'
+            + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Tracked Tasks</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + tasks.length + '</div></div>'
+            + '</div>';
+          html += '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:12px">Command Placement</div>'
+            + '<div style="display:grid;grid-template-columns:minmax(220px,280px) 1fr;gap:14px;align-items:start">'
+            + '<div style="padding:16px;border:1px solid color-mix(in srgb,#f59e0b 30%, var(--border));border-radius:18px;background:color-mix(in srgb,#f59e0b 6%, var(--bg))"><div style="font-size:12px;font-weight:800;color:var(--text)">Porter</div><div style="font-size:12px;color:var(--text2);line-height:1.55;margin-top:6px">Master orchestrator. Creates workers, assigns projects, supervises handoffs, and closes the loop.</div></div>'
+            + '<div style="display:flex;flex-direction:column;gap:10px">'
+            + (projects.length ? projects.slice(0, 6).map(function(pr) {
+                var count = (pr.assigned_personas || []).length;
+                return '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="display:flex;align-items:center;gap:8px"><div style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(pr.name || 'Project') + '</div><span class="model-card-chip dim" style="font-size:10px">' + escHtml(pr.type === 'autonomous' ? 'Autonomous' : 'Manual') + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + count + ' workers</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(pr.description || pr.success_bar || 'No project brief yet.') + '</div></div>';
+              }).join('') : '<div style="padding:14px;border:1px dashed var(--border);border-radius:16px;background:var(--bg);font-size:12px;color:var(--text3)">No project lanes yet. Ask Porter to create the first project when the work needs structure.</div>')
+            + '</div></div></div>';
+        } else {
+          html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'
+            + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Reports To</div><div style="font-size:18px;font-weight:800;color:var(--text);margin-top:6px">Porter</div></div>'
+            + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Project Lanes</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + workerProjects.length + '</div></div>'
+            + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Peer Workers</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + peerWorkers.length + '</div></div>'
+            + '</div>';
+          html += '<div style="display:grid;grid-template-columns:minmax(220px,280px) 1fr;gap:14px">'
+            + '<div style="padding:16px;border:1px solid color-mix(in srgb,#f59e0b 30%, var(--border));border-radius:18px;background:color-mix(in srgb,#f59e0b 6%, var(--bg))"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Chain Of Command</div><div style="font-size:18px;font-weight:800;color:var(--text)">Porter → ' + escHtml(p.name || 'Worker') + '</div><div style="font-size:12px;color:var(--text2);line-height:1.55;margin-top:8px">This worker executes inside Porter\'s orchestration layer and should inherit project context, tasks, and handoffs from the assigned lane.</div></div>'
+            + '<div style="display:flex;flex-direction:column;gap:10px">'
+            + (workerProjects.length ? workerProjects.map(function(pr) {
+                return '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="display:flex;align-items:center;gap:8px"><div style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(pr.name || 'Project') + '</div><span class="model-card-chip dim" style="font-size:10px">' + escHtml(pr.type === 'autonomous' ? 'Autonomous' : 'Manual') + '</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(pr.description || pr.success_bar || 'No project brief yet.') + '</div></div>';
+              }).join('') : '<div style="padding:14px;border:1px dashed var(--border);border-radius:16px;background:var(--bg);font-size:12px;color:var(--text3)">This worker is not attached to a project lane yet.</div>')
+            + '</div></div>';
+        }
+        content.innerHTML = html + '</div>';
+      } catch (e) {
+        content.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load org view.</div>';
+      }
+    })();
   } else if (tab === 'live') {
     // v0.28.54 — Live inspection: stream dispatch events for this agent
     content.innerHTML = '<div style="padding:8px 0">'
@@ -23959,45 +24055,70 @@ function switchPdTab(tab) {
     } catch(x) {}
   } else if (tab === 'activity') {
     content.innerHTML = '<div class="loading-indicator">Loading activity...</div>';
-    api('/api/bridge/runs?persona_id=' + p.id + '&limit=20').then(r => {
-      var runs = (r && r.ok && r.runs) ? r.runs : [];
+    Promise.all([
+      api('/api/bridge/runs?persona_id=' + p.id + '&limit=20').catch(function() { return { ok:false, runs:[] }; }),
+      api('/api/task-registry').catch(function() { return { ok:false, tasks:[] }; }),
+      api('/api/projects').catch(function() { return { projects:[] }; })
+    ]).then(function(results) {
+      var runs = (results[0] && results[0].ok && results[0].runs) ? results[0].runs : [];
+      var tasks = (results[1] && results[1].ok && results[1].tasks) ? results[1].tasks : [];
+      var projects = (results[2] && results[2].projects) ? results[2].projects : [];
       var usePreview = !!p.orchestrator_only && runs.length < 4;
-      if (!runs.length && !usePreview) {
-        content.innerHTML = '<div style="color:var(--text3);font-size:12px">No dispatch activity yet.</div>';
-        return;
-      }
       if (usePreview) {
         runs = [
-          { status:'running', backend:'codex', duration_ms:1420, prompt_preview:'Directing QA Sentinel to verify Agents redesign regressions.', created_at:(Date.now()/1000)-120 },
-          { status:'complete', backend:'gemini', duration_ms:3180, prompt_preview:'Researching hosted telemetry patterns for PorterHQ field diagnostics.', created_at:(Date.now()/1000)-420 },
-          { status:'complete', backend:'openclaw', duration_ms:2260, prompt_preview:'Spinning up a temporary worker for UI cleanup and handoff.', created_at:(Date.now()/1000)-760 },
-          { status:'failed', backend:'claude', duration_ms:5100, prompt_preview:'Worker retry triggered after routing lane saturation.', created_at:(Date.now()/1000)-1080 },
-          { status:'complete', backend:'ollama', duration_ms:6400, prompt_preview:'Local draft pass for low-priority synthesis before final merge.', created_at:(Date.now()/1000)-1560 },
+          { status:'running', backend:'codex', duration_ms:1420, prompt_preview:'Directing QA Sentinel to verify Agents redesign regressions.', created_at:(Date.now()/1000)-120, project_id:'preview-project-1' },
+          { status:'complete', backend:'gemini', duration_ms:3180, prompt_preview:'Researching hosted telemetry patterns for PorterHQ field diagnostics.', created_at:(Date.now()/1000)-420, project_id:'preview-project-2' },
+          { status:'complete', backend:'openclaw', duration_ms:2260, prompt_preview:'Spinning up a temporary worker for UI cleanup and handoff.', created_at:(Date.now()/1000)-760, project_id:'preview-project-1' },
+          { status:'failed', backend:'claude', duration_ms:5100, prompt_preview:'Worker retry triggered after routing lane saturation.', created_at:(Date.now()/1000)-1080, project_id:'preview-project-3' },
+          { status:'complete', backend:'ollama', duration_ms:6400, prompt_preview:'Local draft pass for low-priority synthesis before final merge.', created_at:(Date.now()/1000)-1560, project_id:'preview-project-2' },
         ];
       }
+      var personaTasks = tasks.filter(function(task) { return String(task.assigned_persona_id || '') === String(p.id || ''); });
+      var openTasks = personaTasks.filter(function(task) { return !/complete|done|cancelled/i.test(String(task.status || '')); });
       var successCount = runs.filter(function(run) { return run.status === 'complete'; }).length;
       var failCount = runs.filter(function(run) { return run.status === 'failed'; }).length;
       var durations = runs.map(function(run) { return run.duration_ms || 0; }).filter(Boolean);
       var avg = durations.length ? Math.round(durations.reduce(function(a, b) { return a + b; }, 0) / durations.length) : 0;
-      var latest = runs.slice(0, 8);
+      var approvalItems = p.orchestrator_only ? [
+        { title:'Create Worker Approval', detail:'QA Sentinel proposed for Agents redesign verification lane.', state:'awaiting' },
+        { title:'Project Scope Approval', detail:'Runtime cleanup project proposed as autonomous after initial shape pass.', state:'review' }
+      ] : [];
+      var handoffItems = runs.slice(0, 4).map(function(run) {
+        return {
+          title: (run.backend || 'bridge') + ' lane',
+          detail: (run.prompt_preview || run.message || 'Recent coordination activity').substring(0, 140),
+          ts: run.created_at || 0,
+          ok: run.status === 'complete'
+        };
+      });
       var html = '<div style="display:flex;flex-direction:column;gap:16px">'
-        + (usePreview ? '<div style="padding:12px 14px;border:1px dashed color-mix(in srgb,var(--accent) 32%, var(--border));border-radius:16px;background:color-mix(in srgb,var(--accent) 5%, transparent);font-size:12px;color:var(--text2)">Preview state shown because Porter does not have enough live activity yet. This is how a busy orchestrator lane will read once dispatch history fills in.</div>' : '')
+        + (usePreview ? '<div style="padding:12px 14px;border:1px dashed color-mix(in srgb,var(--accent) 32%, var(--border));border-radius:16px;background:color-mix(in srgb,var(--accent) 5%, transparent);font-size:12px;color:var(--text2)">Preview state shown because Porter does not have enough live activity yet. This is the intended command-dashboard shape once real orchestration history fills in.</div>' : '')
         + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">'
         + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Recent Runs</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + runs.length + '</div></div>'
-        + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Completed</div><div style="font-size:26px;font-weight:800;color:#22c55e;margin-top:4px">' + successCount + '</div></div>'
-        + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Issues</div><div style="font-size:26px;font-weight:800;color:' + (failCount ? '#ef4444' : 'var(--text)') + ';margin-top:4px">' + failCount + '</div></div>'
+        + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Open Tasks</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + openTasks.length + '</div></div>'
+        + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Projects In View</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + (p.orchestrator_only ? projects.length : (p.project_id ? 1 : 0)) + '</div></div>'
         + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Avg Response</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + (avg ? (avg + 'ms') : '—') + '</div></div>'
         + '</div>'
-        + '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Activity Lane</div>'
-        + latest.map(function(run) {
-            var st = run.status === 'complete' ? '#22c55e' : run.status === 'failed' ? '#ef4444' : '#f59e0b';
-            var ago = run.created_at ? new Date(run.created_at * 1000).toLocaleString() : '';
-            return '<div style="padding:12px 0;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:' + st + '"></span><span style="font-size:12px;font-weight:600;color:var(--text)">' + escHtml(run.backend || 'bridge') + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + ago + '</span></div>'
-              + '<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml((run.prompt_preview || run.message || 'Activity').substring(0, 140)) + '</div>'
-              + (run.duration_ms ? '<div style="font-size:10px;color:var(--text3);margin-top:4px">' + run.duration_ms + ' ms</div>' : '')
-              + '</div>';
-          }).join('')
-        + '</div></div>';
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">';
+      if (p.orchestrator_only) {
+        html += '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Approval Queue</div>'
+          + approvalItems.map(function(item) {
+            return '<div style="padding:12px 0;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px"><span class="model-card-chip warn" style="font-size:10px">' + escHtml(item.state) + '</span><span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(item.title) + '</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(item.detail) + '</div></div>';
+          }).join('') + '</section>';
+      }
+      html += '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Recent Tasks</div>'
+        + ((openTasks.length ? openTasks : personaTasks.slice(0, 4)).map(function(task) {
+            return '<div style="padding:12px 0;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px"><span class="model-card-chip dim" style="font-size:10px">' + escHtml(task.priority || 'normal') + '</span><span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(task.title || 'Task') + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(task.status || 'pending') + '</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(task.description || task.project_name || 'Task tracked through Porter.') + '</div></div>';
+          }).join('') || '<div style="font-size:12px;color:var(--text3)">No tracked tasks yet.</div>') + '</section>';
+      html += '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">' + (p.orchestrator_only ? 'Handoffs & Oversight' : 'Recent Work') + '</div>'
+        + handoffItems.map(function(item) {
+            return '<div style="padding:12px 0;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:' + (item.ok ? '#22c55e' : '#f59e0b') + '"></span><span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(item.title) + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(_relativeTime(item.ts)) + '</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(item.detail) + '</div></div>';
+          }).join('') + '</section>';
+      html += '</div></div>';
+      if (!runs.length && !personaTasks.length && !usePreview) {
+        content.innerHTML = '<div style="color:var(--text3);font-size:12px">No activity yet.</div>';
+        return;
+      }
       content.innerHTML = html;
     });
   } else if (tab === 'skills') {
@@ -24087,11 +24208,14 @@ function switchPdTab(tab) {
         });
         var concepts = facts.filter(function(f) { return directives.indexOf(f) < 0; });
         var reviewed = facts.filter(function(f) { return Number(f.confidence || 0) >= 0.7; }).length;
+        var reviewQueue = facts.filter(function(f) { return Number(f.confidence || 0) < 0.7; }).length;
+        var projectScoped = facts.filter(function(f) { return String(f.scope || '').toLowerCase() === 'project'; }).length;
         var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'
           + (p.orchestrator_only && String(facts[0].id || '').indexOf('preview-memory-') === 0 ? '<div style="grid-column:1/-1;padding:12px 14px;border:1px dashed color-mix(in srgb,var(--accent) 32%, var(--border));border-radius:16px;background:color-mix(in srgb,var(--accent) 5%, transparent);font-size:12px;color:var(--text2)">Preview memory shown because Porter does not have enough confirmed memory yet. As durable patterns accumulate, this pane will replace these placeholders with live directives and learned truths.</div>' : '')
           + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Total Memory</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + facts.length + '</div></div>'
           + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Directives</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + directives.length + '</div></div>'
           + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">High Trust</div><div style="font-size:26px;font-weight:800;color:#22c55e;margin-top:4px">' + reviewed + '</div></div>'
+          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Needs Review</div><div style="font-size:26px;font-weight:800;color:' + (reviewQueue ? '#f59e0b' : 'var(--text)') + ';margin-top:4px">' + reviewQueue + '</div></div>'
           + '</div>';
         function _conceptCard(f, tone) {
           var conf = Math.round((f.confidence || 0) * 100);
@@ -24108,7 +24232,7 @@ function switchPdTab(tab) {
         html += '<div style="display:flex;flex-direction:column;gap:16px">';
         html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Operating Directives</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">' + directives.map(function(f) { return _conceptCard(f, 'directive'); }).join('') + '</div></section>';
         if (concepts.length) {
-          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Learned Context</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">' + concepts.map(function(f) { return _conceptCard(f, 'concept'); }).join('') + '</div></section>';
+          html += '<section><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Learned Context</div>' + (p.orchestrator_only ? '<span style="font-size:10px;color:var(--text3);margin-left:auto">' + projectScoped + ' project-linked</span>' : '') + '</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">' + concepts.map(function(f) { return _conceptCard(f, 'concept'); }).join('') + '</div></section>';
         }
         html += '</div>';
         content.innerHTML = html;
@@ -35306,7 +35430,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.71"})
+            self.reply_json({"v": "0.30.72"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35468,7 +35592,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.71"
+                health["porter_version"] = "0.30.72"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37365,7 +37489,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.71'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.72'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -41112,7 +41236,14 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 pid  = str(uuid.uuid4())
                 ptype = str(data.get("type", "manual")).strip()
                 if ptype not in ("manual", "autonomous"): ptype = "manual"
-                proj = {"id": pid, "name": name, "type": ptype, "created_at": time.time()}
+                proj = {
+                    "id": pid,
+                    "name": name,
+                    "type": ptype,
+                    "description": str(data.get("description", "")).strip(),
+                    "success_bar": str(data.get("success_bar", "")).strip(),
+                    "created_at": time.time(),
+                }
                 _config.setdefault("projects", []).append(proj)
                 save_config(_config)
                 wp = scaffold_project_dir(pid, name)
@@ -42290,7 +42421,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.71 ready (localhost only)")
+    print(f"\n  Porter v0.30.72 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

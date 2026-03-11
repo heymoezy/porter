@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.72 (2026-03-11)
+
+- Agents detail now includes an `Org` view so Porter and each worker show their placement inside the current command structure.
+- Porter-led worker and project creation now uses explicit approval-gated chat flows with project-lineage context and clearer structural proposals.
+- Porter Activity and Memory were upgraded into a stronger command surface with recent tasks, approvals, oversight lanes, and richer review signals.
+- Added new Porter-owned orchestration skills for project lineage, handoff control, approval governance, and roster curation.
+
 ## v0.30.71 (2026-03-11)
 
 - Completed the Models cleanup pass: the tab now uses runtime-first Porter language end to end instead of leaking old internal terms.
