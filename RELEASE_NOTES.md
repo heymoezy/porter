@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.86 (2026-03-11)
+
+- Project artifacts now sync into a structured `project_artifacts` registry instead of existing only as loose files on disk.
+- The `Artifacts` tab now surfaces source metadata from that registry, creating the first proper provenance layer for project uploads and outputs.
+
 ## v0.30.85 (2026-03-11)
 
 - The operator surface is now `Pulse` instead of a split Runtime/Logs pair, with live ops cards and recent event feed folded into one place.

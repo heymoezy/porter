@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.85 — Pulse replaces Runtime and stale dev memory is purged"""
+"""Porter v0.30.86 — Project artifacts become structured records"""
 
 
 import email
@@ -560,6 +560,23 @@ def _db_init():
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_notes_agent_status ON agent_notes(agent_id, status, created_at DESC)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS project_artifacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id TEXT NOT NULL,
+            relative_path TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'file',
+            mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+            source TEXT NOT NULL DEFAULT 'workspace',
+            created_by TEXT DEFAULT '',
+            size INTEGER NOT NULL DEFAULT 0,
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            updated_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            UNIQUE(project_id, relative_path)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_project_artifacts_project ON project_artifacts(project_id, created_at DESC)")
     for _sql in [
         "ALTER TABLE personas ADD COLUMN is_system INTEGER DEFAULT 0",
         "ALTER TABLE personas ADD COLUMN is_public INTEGER DEFAULT 1",
@@ -3345,6 +3362,33 @@ def _project_artifact_listing(project_id: str) -> dict:
             return "archive"
         return "file"
 
+    def _sync_project_artifact_record(relative_path: str, filename: str, kind: str, mime_type: str, size: int):
+        try:
+            conn = _db_conn()
+            row = conn.execute(
+                "SELECT id, source, created_by, created_at FROM project_artifacts WHERE project_id=? AND relative_path=?",
+                (project_id, relative_path),
+            ).fetchone()
+            if row:
+                conn.execute(
+                    "UPDATE project_artifacts SET filename=?, kind=?, mime_type=?, size=?, updated_at=strftime('%s','now') WHERE id=?",
+                    (filename, kind, mime_type, size, row["id"]),
+                )
+                meta = dict(row)
+            else:
+                conn.execute(
+                    "INSERT INTO project_artifacts (project_id, relative_path, filename, kind, mime_type, size) VALUES (?, ?, ?, ?, ?, ?)",
+                    (project_id, relative_path, filename, kind, mime_type, size),
+                )
+                new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                meta = {"id": new_id, "source": "workspace", "created_by": "", "created_at": time.time()}
+            conn.commit()
+            conn.close()
+            return meta
+        except Exception as e:
+            log.debug("Artifact sync failed for %s/%s: %s", project_id, relative_path, e)
+            return {"id": None, "source": "workspace", "created_by": "", "created_at": 0}
+
     artifacts = []
     for fp in sorted(artifacts_dir.rglob("*")):
         if not fp.is_file():
@@ -3352,12 +3396,18 @@ def _project_artifact_listing(project_id: str) -> dict:
         rel = str(fp.relative_to(artifacts_dir))
         mime_type, _ = mimetypes.guess_type(str(fp))
         st = fp.stat()
+        kind = _artifact_kind(mime_type or "", fp.name)
+        meta = _sync_project_artifact_record(rel, fp.name, kind, mime_type or "application/octet-stream", st.st_size)
         artifacts.append({
+            "id": meta.get("id"),
             "name": fp.name,
             "path": str(fp),
             "relative_path": rel,
             "mime_type": mime_type or "application/octet-stream",
-            "kind": _artifact_kind(mime_type or "", fp.name),
+            "kind": kind,
+            "source": meta.get("source") or "workspace",
+            "created_by": meta.get("created_by") or "",
+            "created_at": meta.get("created_at") or 0,
             "size": st.st_size,
             "size_human": human_size(st.st_size),
             "mtime": st.st_mtime,
@@ -10929,7 +10979,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.85</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.86</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12232,6 +12282,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.86', date:'2026-03-11', notes:["Project artifacts now sync into a structured project_artifacts registry instead of existing only as loose files on disk, the Artifacts tab shows source metadata from that registry, and this lays the first real foundation for artifact-aware project memory and provenance"] },
   { ver:'v0.30.85', date:'2026-03-11', notes:["The operator surface is now Pulse instead of a split Runtime/Logs pair, with live ops cards and event feed folded into one place; hidden admin routing now resolves into Pulse, stale Cortex settings are no longer reachable from Settings, and startup purges legacy Porter-development cortex memories so the new state system stops inheriting polluted app-build residue"] },
   { ver:'v0.30.84', date:'2026-03-11', notes:["Runtime now hides the retired Cortex consolidation and memory extraction workflows from the active operator surface, and the remaining global tour/sidebar copy now matches the real Porter IA instead of talking about legacy Chat/Memory/Files tabs"] },
   { ver:'v0.30.83', date:'2026-03-11', notes:["Memory V3 cutover: public Cortex entry is removed from the product surface, Agents and Projects now use structured State views instead of the old extractive memory browser, and directive dismissal now updates structured state instead of legacy cortex rows"] },
@@ -15515,6 +15566,7 @@ async function _projLoadArtifacts(pid) {
         html += '<div style="flex:1;min-width:0">';
         html += '<div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(a.name || a.relative_path || 'artifact') + '</div>';
         html += '<div style="font-size:10px;color:var(--text3);margin-top:3px">' + escHtml(a.relative_path || '') + ' · ' + escHtml(a.size_human || '') + ' · ' + escHtml(a.modified_ago || '') + '</div>';
+        html += '<div style="font-size:10px;color:var(--text3);margin-top:3px">' + escHtml(a.source || 'workspace') + (a.created_by ? (' · ' + escHtml(a.created_by)) : '') + '</div>';
         html += '</div>';
         html += '</div>';
       });
@@ -36339,7 +36391,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.85"})
+            self.reply_json({"v": "0.30.86"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36501,7 +36553,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.85"
+                health["porter_version"] = "0.30.86"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38419,7 +38471,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.85'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.86'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43410,7 +43462,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.85 ready (localhost only)")
+    print(f"\n  Porter v0.30.86 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
