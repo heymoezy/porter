@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.90 (2026-03-11)
+
+- New installs now seed a proper `Launchpad` starter project automatically when no projects exist.
+- `Launchpad` is made active on first run and gets a guided starter workspace instead of leaving the product with no canonical project lane.
+
 ## v0.30.89 (2026-03-11)
 
 - The legacy seeded `Porter App` project is now migrated to `Launchpad` in config and workspace docs.

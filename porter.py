@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.89 — Migrate starter project and simplify Pulse"""
+"""Porter v0.30.90 — Seed Launchpad on first run"""
 
 
 import email
@@ -3389,6 +3389,35 @@ def _migrate_legacy_porter_app_project(cfg: dict) -> bool:
     return changed
 
 
+def _ensure_launchpad_project(cfg: dict) -> bool:
+    """Seed the first-run Launchpad project when no projects exist yet."""
+    projects = cfg.get("projects", []) or []
+    if projects:
+        return False
+    pid = str(uuid.uuid4())
+    project = {
+        "id": pid,
+        "name": "Launchpad",
+        "type": "manual",
+        "description": (
+            "Guided starter project for learning how Porter manages workers, "
+            "projects, state, and artifacts."
+        ),
+        "success_bar": (
+            "Create one worker, review one artifact, and launch one real project."
+        ),
+        "created_at": time.time(),
+        "assigned_personas": [],
+    }
+    cfg["projects"] = [project]
+    cfg["active_project_id"] = pid
+    try:
+        _seed_launchpad_workspace(pid)
+    except Exception as e:
+        log.debug("Launchpad seed failed: %s", e)
+    return True
+
+
 def resolve_project_memory(project_id: "str | None", agent_id: "str | None",
                            filename: str) -> dict:
     """
@@ -6118,6 +6147,8 @@ def load_config() -> dict:
         cfg["active_project_id"] = None
         changed = True
     if _migrate_legacy_porter_app_project(cfg):
+        changed = True
+    if _ensure_launchpad_project(cfg):
         changed = True
 
     # ── preferences (merge so new keys are always present) ──
@@ -11096,7 +11127,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.89</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.90</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12255,6 +12286,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.90', date:'2026-03-11', notes:["New installs now seed a proper `Launchpad` starter project automatically when no projects exist, make it active on first run, and scaffold the guided starter workspace instead of leaving the product with no canonical project lane"] },
   { ver:'v0.30.89', date:'2026-03-11', notes:["The legacy seeded `Porter App` project is now migrated to `Launchpad` in config and workspace docs, startup includes a self-healing migration for older local state, and Pulse has been simplified into a tighter live operations view instead of a stacked runtime admin slab"] },
   { ver:'v0.30.88', date:'2026-03-11', notes:["The last hardcoded `Porter App` fallback in task migration now resolves the active project name dynamically instead of assuming Porter is building itself, and the next redesign tranche is documented with explicit briefs for a first-run `Launchpad` project and a full dark/light theme overhaul"] },
   { ver:'v0.30.87', date:'2026-03-11', notes:["Pulse is now a cleaner single operator surface instead of sharing shipped UI with a hidden Cortex product: the retired Cortex module and Cortex settings page are removed from the client, dead extraction/session-summary helpers are stripped from the live bundle, and Gateway Activity stays focused on recent operational truth instead of stale memory-era residue"] },
@@ -36210,7 +36242,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.89"})
+            self.reply_json({"v": "0.30.90"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36372,7 +36404,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.89"
+                health["porter_version"] = "0.30.90"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38316,7 +38348,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.89'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.90'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43307,7 +43339,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.89 ready (localhost only)")
+    print(f"\n  Porter v0.30.90 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
