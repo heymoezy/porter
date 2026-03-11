@@ -1,5 +1,11 @@
 # Porter Release Notes
 
+## v0.30.66 (2026-03-11)
+
+- Models cards now show a lighter benchmark signal instead of repeating the full `p50 · success · tests` footer on every card.
+- OpenClaw bridge truth is now expressed through smaller advisory runtime chips instead of a large warning paragraph in the card body.
+- Codex update commands are now hardened so the update action still appears when a newer Codex version is detected.
+
 ## v0.30.65 (2026-03-10)
 
 - Removed the standalone `Skills` tab from the main product nav so skill management no longer competes with Porter as the control surface.

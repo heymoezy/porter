@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.65 — Porter-managed skills and cleaner product nav"""
+"""Porter v0.30.66 — Models card cleanup and codex updates"""
 
 
 import email
@@ -10347,7 +10347,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.65</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.66</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11692,6 +11692,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.66', date:'2026-03-11', notes:["Models cards now use lighter benchmark summaries instead of repeating the full p50/success/test string on every footer, OpenClaw bridge truth is reduced to smaller advisory chips instead of a large warning block, and Codex update commands are now always available when a newer version is detected"] },
   { ver:'v0.30.65', date:'2026-03-10', notes:["The standalone Skills nav has been removed from the product surface, Porter now carries a broader internal skill loadout with new project, worker, memory, runtime, and avatar direction skills, and skill-facing copy now routes users back through Porter instead of a separate admin screen"] },
   { ver:'v0.30.64', date:'2026-03-10', notes:["Agents now present a project-first cast with no visible squad layer, guided creation flows have an explicit Exit Setup control, fallback worker creation no longer asks for squads, and Porter detail Memory/Skills/Activity render stronger preview states while live data is still sparse"] },
   { ver:'v0.30.63', date:'2026-03-10', notes:["Porter detail polish: the tab rail now feels more intentional, Memory is restored as the tab label, Porter only animates when busy, the detail send control now sits closer to the page language, and Porter Skills/Activity now render reviewable preview states when live data is still sparse"] },
@@ -16609,8 +16610,9 @@ function _showUpdateModal(backend, version) {
   var cmds = {
     openclaw: 'npm update -g openclaw',
     ollama: 'curl -fsSL https://ollama.com/install.sh | sh',
-    codex: 'npm update -g @openai/codex',
-    gemini: 'npm update -g @anthropic-ai/gemini'
+    codex: 'npm i -g @openai/codex@latest',
+    gemini: 'npm i -g @google/gemini-cli@latest',
+    claude: 'npm i -g @anthropic-ai/claude-code@latest'
   };
   var cmd = cmds[backend] || 'Check the ' + backend + ' docs for update instructions';
   var modal = document.createElement('div');
@@ -20695,11 +20697,12 @@ function _renderModelRuntimeBadges(provider, runtime, availableData) {
 function _renderModelBenchmarkSummary(backendId) {
   var rec = (_modelBenchmarkData || {})[backendId] || {};
   if (!rec.samples) return '';
-  var bits = [];
-  if (rec.p50_ms) bits.push('p50 ' + _formatDuration(rec.p50_ms));
-  if (rec.success_rate) bits.push(rec.success_rate + '% success');
-  if (rec.test_samples) bits.push(rec.test_samples + ' tests');
-  return bits.length ? '<div class="model-card-stats">' + bits.join(' · ') + '</div>' : '';
+  var detail = [];
+  if (rec.p50_ms) detail.push('p50 ' + _formatDuration(rec.p50_ms));
+  if (rec.success_rate) detail.push(rec.success_rate + '% success');
+  if (rec.test_samples) detail.push(rec.test_samples + ' tests');
+  var label = rec.p50_ms ? ('p50 ' + _formatDuration(rec.p50_ms)) : ((rec.test_samples || rec.samples) + ' tests');
+  return '<div class="model-card-stats" title="' + escHtml(detail.join(' · ')) + '">' + escHtml(label) + '</div>';
 }
 
 function _renderModelSchedulerSummary(backendId) {
@@ -21293,6 +21296,12 @@ function _applyModelVersions(versionMap) {
         if (html) html += ' ';
         html += '<span style="font-size:10px;color:#f59e0b;font-weight:600">Latest ' + escHtml(_lstr) + '</span>';
       }
+    }
+    if (!vd.update_cmd) {
+      if (bk === 'codex') vd.update_cmd = 'npm i -g @openai/codex@latest';
+      else if (bk === 'claude') vd.update_cmd = 'npm i -g @anthropic-ai/claude-code@latest';
+      else if (bk === 'gemini') vd.update_cmd = 'npm i -g @google/gemini-cli@latest';
+      else if (bk === 'openclaw') vd.update_cmd = 'npm update -g openclaw';
     }
     el.innerHTML = html || '<span style="font-size:10px;color:var(--text3)">Checking version…</span>';
     if (updEl) {
@@ -22442,10 +22451,6 @@ function _renderModelCards(data, act) {
     if (!_resolvedName) _resolvedName = _avResolved || (p.label || p.id);
     var _runtimeHtml = _renderModelRuntimeBadges(p, _rt, _avBk);
     var _bridgeNoteHtml = '';
-    if (_rt && _rt.honors_model_selection === false) {
-      var note = (_rt.notes && _rt.notes.length) ? _rt.notes[0] : 'This backend treats the selected model as a preference until exact model switching is available.';
-      _bridgeNoteHtml = '<div class="model-card-alert">' + escHtml(note) + '</div>';
-    }
     // Build model list (replaces dropdown)
     var _selHtml = '';
     if (_avModels.length > 0) {
@@ -29540,9 +29545,9 @@ def _bridge_runtime_semantics(backend: str, model_id: str = "") -> dict:
     model_id = str(model_id or "").strip()
     if backend == "openclaw":
         control_mode = "agent-default"
-        notes = ["OpenClaw currently executes through its configured primary agent rather than an exact Porter-selected model."]
+        notes = ["OpenClaw currently treats Porter model selection as advisory."]
         if model_id and model_id not in ("auto", "main"):
-            notes.append("The selected Porter model is currently a preference signal until OpenClaw exposes exact model targeting.")
+            notes.append("Exact model switching is not available on this OpenClaw path yet.")
         return {
             "control_mode": control_mode,
             "supports_exact_model": False,
@@ -29581,8 +29586,8 @@ def _runtime_chip_definitions(backend: str, runtime: dict | None = None, availab
         })
         if runtime.get("honors_model_selection") is False:
             chips.append({
-                "label": "Primary Agent",
-                "tooltip": "OpenClaw currently executes through its configured primary agent, so Porter model selection is advisory rather than an exact runtime switch.",
+                "label": "Advisory Selection",
+                "tooltip": "OpenClaw treats Porter model selection as advisory on this path instead of switching to an exact model target.",
             })
     elif backend == "gemini":
         auth_mode = str(runtime.get("auth_mode") or "unknown").strip().lower()
@@ -29625,8 +29630,8 @@ def _runtime_chip_definitions(backend: str, runtime: dict | None = None, availab
         })
     if available.get("resolved") and runtime.get("honors_model_selection") is False:
         chips.append({
-            "label": "Model Advisory",
-            "tooltip": "The model picker still matters for operator intent and diagnostics, but this backend cannot yet honor it as an exact runtime switch.",
+            "label": "Model Preference",
+            "tooltip": "The model picker still matters for operator intent and diagnostics, but this backend cannot honor it as an exact runtime switch yet.",
         })
     return chips
 
@@ -35247,7 +35252,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.65"})
+            self.reply_json({"v": "0.30.66"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35409,7 +35414,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.65"
+                health["porter_version"] = "0.30.66"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37305,7 +37310,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.65'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.66'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42230,7 +42235,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.65 ready (localhost only)")
+    print(f"\n  Porter v0.30.66 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
