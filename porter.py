@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.76 — Chat structural speed pass"""
+"""Porter v0.30.77 — Porter identity and detail chat polish"""
 
 
 import email
@@ -7687,6 +7687,7 @@ def _persona_set_skill_names(persona_id: str, skill_names: list[str], managed_by
 
 _PORTER_PRIMARY_SKILLS = [
     "chat-orchestrator",
+    "prompt-architect",
     "delegation-governor",
     "project-architect",
     "project-lineage",
@@ -7697,6 +7698,9 @@ _PORTER_PRIMARY_SKILLS = [
     "directive-librarian",
     "runtime-selector",
     "memory-curator",
+]
+
+_PORTER_INTERNAL_SKILLS = [
     "runtime-auditor",
     "avatar-art-director",
     "coding-agent",
@@ -7715,6 +7719,7 @@ _PORTER_RESERVE_SKILLS = [
 
 _PORTER_SKILL_PURPOSE = {
     "chat-orchestrator": "Keeps Porter conversationally lean, asks the minimum clarifying questions, and turns chat into explicit orchestration moves.",
+    "prompt-architect": "Repairs weak user prompts, sharpens worker briefs, and improves inter-agent handoffs before work is delegated.",
     "delegation-governor": "Decides what Porter should delegate, what should stay conversational, and when worker creation is justified.",
     "project-architect": "Shapes new projects, scope boundaries, and execution lanes before Porter commits them.",
     "project-lineage": "Keeps worker, task, and memory context attached to the right project lane over time.",
@@ -7766,8 +7771,9 @@ def _porter_skill_profile(available_skills: list[dict] | None = None) -> dict:
         }
 
     core = [item for item in (_entry(name, "core") for name in _PORTER_PRIMARY_SKILLS) if item]
+    internal = [item for item in (_entry(name, "internal") for name in _PORTER_INTERNAL_SKILLS) if item]
     reserve = [item for item in (_entry(name, "reserve") for name in _PORTER_RESERVE_SKILLS) if item]
-    covered = {_norm_skill_name(item["id"]) for item in core + reserve}
+    covered = {_norm_skill_name(item["id"]) for item in core + internal + reserve}
     available = []
     for sk in skills or []:
         sid = _norm_skill_name(sk.get("id") or sk.get("name"))
@@ -7784,6 +7790,7 @@ def _porter_skill_profile(available_skills: list[dict] | None = None) -> dict:
         })
     return {
         "core": core,
+        "internal": internal,
         "reserve": reserve,
         "available": available,
         "available_count": len(skills or []),
@@ -7793,7 +7800,7 @@ def _porter_skill_profile(available_skills: list[dict] | None = None) -> dict:
 def _ensure_porter_skill_profile() -> None:
     try:
         profile = _porter_skill_profile()
-        target = [str(item.get("name") or "").strip() for item in profile.get("core", []) if str(item.get("name") or "").strip()]
+        target = [str(item.get("name") or "").strip() for item in (profile.get("core", []) + profile.get("internal", [])) if str(item.get("name") or "").strip()]
         if not target:
             return
         current = _persona_get_skill_names(PORTER_PERSONA_ID)
@@ -8038,6 +8045,27 @@ def _ensure_porter_persona() -> None:
     }.items():
         (_pdir / _fname).write_text(_content)
     _ensure_porter_skill_profile()
+
+
+def _porter_chat_identity_prompt() -> str:
+    return (
+        "You are Porter, the built-in Master Orchestrator of this platform.\n"
+        "Voice: warm, friendly, confident, concise.\n"
+        "On greetings, reply as Porter himself with a welcoming line and a short offer to help. Never use the cold stock phrase 'Hi. What do you need?'\n"
+        "If asked who you are, answer directly: Porter is the platform's master orchestrator who shapes work, improves prompts, creates or assigns workers, selects runtime lanes, supervises handoffs, and owns the outcome.\n"
+        "Porter orchestrates; workers execute. Do not describe Porter as just an interface, wrapper, or host shell.\n"
+        "Porter is an expert prompter: repair vague user prompts, tighten worker briefs, and improve inter-agent communication before delegation.\n"
+        "Keep replies lean and useful. When work is executed, make the actual runtime/model visible.\n\n"
+    )
+
+
+def _general_chat_identity_prompt() -> str:
+    return (
+        "You are responding inside Porter.\n"
+        "Porter is the platform's built-in Master Orchestrator.\n"
+        "If the user asks about Porter, describe him as the orchestration authority that shapes work, assigns or creates workers, selects runtime lanes, and keeps outcomes accountable.\n"
+        "Be clear, concise, truthful, and structured only when it helps.\n\n"
+    )
 
 # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -9010,6 +9038,107 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 @keyframes chat-think {
   0%,80%,100% { opacity:.3; transform:scale(.8); }
   40% { opacity:1; transform:scale(1.1); }
+}
+.pd-chat-empty {
+  padding:22px 18px;
+  border:1px solid color-mix(in srgb,var(--border) 72%, transparent);
+  border-radius:20px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%, transparent),color-mix(in srgb,var(--bg) 99%, transparent));
+  color:var(--text3);
+  font-size:12px;
+  line-height:1.7;
+}
+.pd-chat-msg {
+  padding:12px 14px;
+  border-radius:18px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.02);
+}
+.pd-chat-msg.pending {
+  display:flex;
+  align-items:center;
+  gap:14px;
+  background:color-mix(in srgb,var(--surface) 92%, transparent);
+}
+.pd-chat-msg.pending .pd-chat-avatar {
+  width:60px;
+  min-width:60px;
+  height:72px;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+}
+.pd-chat-msg.pending .pd-chat-avatar .persona-figure {
+  animation:pixel-hero 1.15s ease-in-out infinite;
+  filter:drop-shadow(0 12px 20px rgba(0,0,0,.22));
+}
+.pd-chat-msg.pending.worker .pd-chat-avatar .persona-figure {
+  animation:pixel-walk 1s steps(2) infinite;
+}
+.pd-chat-pulse {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+}
+.pd-chat-pulse-dot {
+  width:8px;
+  height:8px;
+  border-radius:999px;
+  background:color-mix(in srgb,#f59e0b 88%, #fff 12%);
+  box-shadow:0 0 0 1px rgba(245,158,11,.18);
+  animation:pd-chat-pulse 1.1s ease-in-out infinite;
+}
+.pd-chat-pulse-dot:nth-child(2) { animation-delay:.14s; }
+.pd-chat-pulse-dot:nth-child(3) { animation-delay:.28s; }
+@keyframes pd-chat-pulse {
+  0%,80%,100% { opacity:.28; transform:translateY(0) scale(.86); }
+  40% { opacity:1; transform:translateY(-3px) scale(1); }
+}
+.pd-chat-composer {
+  display:flex;
+  gap:10px;
+  align-items:flex-end;
+  padding:10px 12px;
+  border:1px solid color-mix(in srgb,var(--border) 20%, transparent);
+  border-radius:22px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 98%, transparent),color-mix(in srgb,var(--bg) 99%, transparent));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
+}
+.pd-send-btn {
+  align-self:stretch;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  min-width:118px;
+  border:1px solid color-mix(in srgb,#f59e0b 28%, transparent);
+  border-radius:16px;
+  padding:0 16px;
+  background:
+    linear-gradient(180deg,color-mix(in srgb,#f59e0b 20%, var(--surface)),color-mix(in srgb,#78350f 20%, var(--bg)));
+  color:#fff5dd;
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  cursor:pointer;
+  box-shadow:0 10px 24px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.08);
+  transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.pd-send-btn:hover {
+  transform:translateY(-1px);
+  box-shadow:0 14px 28px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.1);
+  border-color:color-mix(in srgb,#f59e0b 42%, transparent);
+}
+.pd-send-btn:active { transform:translateY(0); }
+.pd-send-btn .pd-send-icon {
+  width:20px;
+  height:20px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(255,255,255,.1);
+  font-size:12px;
 }
 .chat-stop-btn {
   display:none; padding:4px 14px; font-size:11px; border-radius:6px;
@@ -10409,7 +10538,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.76</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.77</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11700,6 +11829,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.77', date:'2026-03-11', notes:["Porter detail chat now uses visual motion-first pending states instead of repetitive routing text, the composer and send control were redesigned to feel like Porter rather than generic admin UI, and Porter's identity prompt was cut down so greetings and 'Who is Porter?' resolve quickly and correctly with a warmer voice; Porter skills are now split between public orchestration coverage and internal platform/operator coverage, with prompt architecture elevated as a first-class core skill"] },
   { ver:'v0.30.76', date:'2026-03-11', notes:["Chat structural speed pass: removed the remaining artificial stream reveal layer, stopped replaying fake typing for persona responses, reduced worker/persona completion polling to 250ms, trimmed default history and inline file payloads again, and clarified runtime-selection language while routes resolve"] },
   { ver:'v0.30.75', date:'2026-03-11', notes:["Chat speed overhaul: removed artificial token reveal delays from streamed chat, cut persona chat polling from 2s to 250ms with no fake typing animation, trimmed default history/file payload size again, and made runtime selection/status labels clearer while the route is being resolved"] },
   { ver:'v0.30.74', date:'2026-03-11', notes:["Fixed Porter detail chat startup: Porter no longer goes through the blocked worker persona-dispatch path and now streams directly through chat runtime, removing the fake waiting state and the extra 2-second polling penalty on first response"] },
@@ -16206,10 +16336,11 @@ function _showPersonaBrief(persona) {
   document.addEventListener('keydown', _briefEsc, true);
   var title = persona.orchestrator_only ? 'Who Is Porter' : 'Worker Brief';
   var body = persona.orchestrator_only
-    ? '<div style="font-size:14px;line-height:1.7;color:var(--text2)">Porter is the platform\'s master orchestrator. He interprets objectives, designs the plan, creates or assigns workers, manages handoffs, and verifies completion. Porter does not take on substantive implementation work himself. He remains accountable for coordination quality, worker composition, and the final outcome presented back to the user.</div>'
+    ? '<div style="font-size:14px;line-height:1.7;color:var(--text2)">Porter is the platform\'s master orchestrator. He interprets objectives, improves weak prompts, designs the plan, creates or assigns workers, manages handoffs, and verifies completion. Porter does not take on substantive implementation work himself. He remains accountable for coordination quality, communication quality, worker composition, and the final outcome presented back to the user.</div>'
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px">'
       + '<div style="padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Command Style</div><div style="font-size:13px;color:var(--text)">Calm, exact, supervisory, high-trust.</div></div>'
       + '<div style="padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Execution Rule</div><div style="font-size:13px;color:var(--text)">Delegates real work to workers and monitors them until complete.</div></div>'
+      + '<div style="padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Prompt Discipline</div><div style="font-size:13px;color:var(--text)">Repairs rough prompts and sharpens worker handoffs before execution starts.</div></div>'
       + '<div style="padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Identity</div><div style="font-size:13px;color:var(--text)">Locked system persona and public face of the platform.</div></div>'
       + '</div>'
     : '<div style="font-size:14px;line-height:1.7;color:var(--text2)">' + escHtml((persona.name || 'This worker') + ' is a ' + (persona.is_temporary ? 'temporary' : 'persistent') + ' worker managed by Porter for focused execution. Role: ' + (persona.role || 'Worker') + '.') + '</div>';
@@ -16531,8 +16662,11 @@ function _pdChatRender(pid) {
   var panel = document.getElementById('pd-chat-thread');
   if (!panel) return;
   var state = _pdChatGetState(pid);
+  var persona = (window._selectedPersona && window._selectedPersona.id === pid) ? window._selectedPersona : null;
   if (!state.messages.length) {
-    panel.innerHTML = '<div style="padding:18px;color:var(--text3);font-size:12px">Start a dedicated chat here. Porter can orchestrate from this workspace, and workers can be directed in their own lane without leaving the detail view.</div>';
+    panel.innerHTML = '<div class="pd-chat-empty">' + escHtml(persona && persona.orchestrator_only
+      ? 'Porter works best from this dedicated lane. Ask him to shape a plan, create the right worker, or set up a project without leaving the detail view.'
+      : 'Use this dedicated lane to direct this worker without losing the rest of the command surface.') + '</div>';
     return;
   }
   var flowBanner = '';
@@ -16547,9 +16681,21 @@ function _pdChatRender(pid) {
   panel.innerHTML = flowBanner + state.messages.map(function(m) {
     var isUser = m.role === 'user';
     var isErr = m.role === 'error';
+    var isPending = m.role === 'pending';
     var bg = isUser ? 'color-mix(in srgb,var(--accent) 10%, var(--surface))' : isErr ? 'color-mix(in srgb,#ef4444 6%, var(--surface))' : 'color-mix(in srgb,var(--surface) 88%, transparent)';
     var border = isUser ? 'color-mix(in srgb,var(--accent) 18%, transparent)' : isErr ? 'color-mix(in srgb,#ef4444 18%, transparent)' : 'color-mix(in srgb,var(--border) 72%, transparent)';
-    return '<div style="padding:12px 14px;border:1px solid ' + border + ';border-radius:18px;background:' + bg + ';box-shadow:inset 0 1px 0 rgba(255,255,255,.02)">'
+    if (isPending) {
+      var pendingPersona = persona || { name: (m.label || 'Agent') };
+      var pendingClass = pendingPersona && pendingPersona.orchestrator_only ? 'pending orchestrator' : 'pending worker';
+      return '<div class="pd-chat-msg ' + pendingClass + '" style="border:1px solid ' + border + '">'
+        + '<div class="pd-chat-avatar">' + _personaAvatarMarkup(pendingPersona, pendingPersona && pendingPersona.orchestrator_only ? 78 : 68) + '</div>'
+        + '<div style="min-width:0;display:flex;flex-direction:column;gap:6px">'
+        + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">' + escHtml(m.label || 'Agent') + '</span>'
+        + (m.meta ? '<span style="font-size:10px;color:var(--text3)">' + escHtml(m.meta) + '</span>' : '') + '</div>'
+        + '<div class="pd-chat-pulse" aria-label="Porter is responding"><span class="pd-chat-pulse-dot"></span><span class="pd-chat-pulse-dot"></span><span class="pd-chat-pulse-dot"></span></div>'
+        + '</div></div>';
+    }
+    return '<div class="pd-chat-msg' + (m.streaming ? ' streaming' : '') + '" style="border:1px solid ' + border + ';background:' + bg + '">'
       + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">' + escHtml(m.label || (isUser ? 'You' : 'Agent')) + '</span>'
       + (m.meta ? '<span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(m.meta) + '</span>' : '') + '</div>'
       + '<div style="font-size:13px;line-height:1.6;color:' + (isErr ? '#ef4444' : 'var(--text2)') + ';white-space:pre-wrap">' + escHtml(m.content || '') + '</div>'
@@ -16568,8 +16714,7 @@ function _runtimeLabel(backend, model, fallback) {
 }
 
 function _pendingDispatchCopy(persona) {
-  if (persona && persona.orchestrator_only) return 'Porter is routing the request...';
-  return 'Dispatching through Porter Bridge...';
+  return '...';
 }
 
 function _pendingDispatchMeta(persona) {
@@ -16586,6 +16731,7 @@ async function _pdChatStreamPorter(persona, state, userText, idx) {
       + '&route=general'
       + '&chat_id=' + encodeURIComponent(chatId)
       + '&project_id=' + encodeURIComponent(projectId)
+      + '&persona_name=' + encodeURIComponent(persona && persona.name ? persona.name : 'Porter')
       + '&raw_text=' + encodeURIComponent(userText);
     var full = '';
     var evtSource = new EventSource(url);
@@ -16601,7 +16747,7 @@ async function _pdChatStreamPorter(persona, state, userText, idx) {
         }
         if (data.token) {
           full += data.token;
-          state.messages[idx] = { role: 'assistant', label: persona.name || 'Porter', content: full, meta: data.runtime_label || _pendingDispatchMeta(persona) };
+          state.messages[idx] = { role: 'assistant', label: persona.name || 'Porter', content: full, meta: data.runtime_label || _pendingDispatchMeta(persona), streaming: true };
           _pdChatRender(persona.id);
           return;
         }
@@ -16610,7 +16756,8 @@ async function _pdChatStreamPorter(persona, state, userText, idx) {
             role: 'assistant',
             label: persona.name || 'Porter',
             content: data.full_response || full || '(no response)',
-            meta: data.runtime_label || _runtimeLabel(data.backend_used, data.model_used, _pendingDispatchMeta(persona))
+            meta: data.runtime_label || _runtimeLabel(data.backend_used, data.model_used, _pendingDispatchMeta(persona)),
+            streaming: false
           };
           _pdChatRender(persona.id);
           evtSource.close();
@@ -23923,9 +24070,9 @@ function switchPdTab(tab) {
     content.innerHTML = '<section style="display:flex;flex-direction:column;height:min(calc(100vh - 330px), 68vh);max-height:calc(100vh - 330px);min-height:420px;padding:4px 2px 2px;background:transparent;box-sizing:border-box">'
       + '<div id="pd-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 14px"></div>'
       + '<div style="margin-top:8px;padding-top:4px">'
-      + '<div style="display:flex;gap:10px;align-items:flex-end;padding:10px 12px;border:1px solid color-mix(in srgb,var(--border) 20%, transparent);border-radius:20px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 98%, transparent),color-mix(in srgb,var(--bg) 99%, transparent));box-shadow:inset 0 1px 0 rgba(255,255,255,.03)">'
+      + '<div class="pd-chat-composer">'
       + '<textarea id="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate work, create workers, or shape a project...' : 'Send a directive to this worker...') + '" rows="3" onkeydown="_pdChatKey(event)" style="flex:1;min-height:70px;max-height:180px;resize:vertical;background:transparent;color:var(--text);border:none;outline:none;border-radius:14px;padding:10px 8px 8px;font-size:13px;line-height:1.5"></textarea>'
-      + '<button onclick="_pdChatSend()" style="align-self:stretch;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:132px;border:1px solid color-mix(in srgb,#f59e0b 30%, transparent);border-radius:18px;padding:0 18px;background:linear-gradient(180deg,color-mix(in srgb,#f59e0b 26%, var(--surface)),color-mix(in srgb,#b45309 16%, var(--bg)));color:#fff4d6;font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;box-shadow:0 12px 28px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.08)">' + (p.orchestrator_only ? 'Direct Porter' : 'Dispatch Worker') + ' <span style=\"font-size:14px;line-height:1\">↗</span></button>'
+      + '<button class="pd-send-btn" onclick="_pdChatSend()"><span>' + (p.orchestrator_only ? 'Send To Porter' : 'Send To Worker') + '</span><span class="pd-send-icon">↗</span></button>'
       + '</div></div></section>';
     _pdChatRender(p.id);
   } else if (tab === 'identity') {
@@ -24119,15 +24266,23 @@ function switchPdTab(tab) {
           var skills = (data && data.skills) || [];
           var profile = (data && data.profile) || {};
           var core = profile.core || [];
+          var internal = profile.internal || [];
           var reserve = profile.reserve || [];
           var html = '<div style="display:flex;flex-direction:column;gap:16px">'
-            + '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Porter Skills</div><div style="font-size:13px;color:var(--text2);line-height:1.6">Porter does not need every available skill. He keeps a tight orchestrator loadout and uses workers for deep execution.</div></div>';
+            + '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Porter Skills</div><div style="font-size:13px;color:var(--text2);line-height:1.6">Porter\'s public skill set should describe why the platform is powerful for users: clearer prompts, better orchestration, cleaner delegation, stronger runtime selection, and reviewed memory. Internal platform-building skills are tracked separately.</div></div>';
           if (core.length) {
             html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">';
             core.forEach(function(sk) {
               html += '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="display:flex;align-items:center;gap:8px"><div style="font-size:12px;font-weight:800;color:var(--text)">' + escHtml(sk.name || '') + '</div><span class="model-card-chip ok" style="font-size:10px">' + (sk.installed ? 'Core' : 'Planned') + '</span></div><div style="font-size:11px;color:var(--text2);line-height:1.55;margin-top:8px">' + escHtml(sk.purpose || sk.description || 'Command coverage') + '</div></div>';
             });
             html += '</div>';
+          }
+          if (internal.length) {
+            html += '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Internal Operator Skills</div><span style="font-size:10px;color:var(--text3);margin-left:auto">For PorterHQ and platform maintenance</span></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">'
+              + internal.map(function(sk) {
+                  return '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(sk.name || '') + '</div><div style="font-size:11px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(sk.purpose || sk.description || 'Internal coverage') + '</div></div>';
+                }).join('')
+              + '</div></div>';
           }
           if (reserve.length) {
             html += '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Reserve Skills</div><div style="display:flex;gap:8px;flex-wrap:wrap">' + reserve.map(function(sk) {
@@ -35396,7 +35551,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.76"})
+            self.reply_json({"v": "0.30.77"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35558,7 +35713,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.76"
+                health["porter_version"] = "0.30.77"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37455,7 +37610,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.76'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.77'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -37529,11 +37684,11 @@ class Handler(BaseHTTPRequestHandler):
 
             # Porter context: tell models they're operating within Porter
             _persona_name_param = qs.get("persona_name", [""])[0]
-            if not _persona_name_param:
+            if str(_persona_name_param or "").strip().lower() == "porter":
+                prompt = _porter_chat_identity_prompt() + prompt
+            elif not _persona_name_param:
                 # General chat (no persona) — inject Porter awareness
-                _porter_ctx = (
-                    "You are responding inside Porter. Be clear, concise, truthful, and structured only when it helps.\n\n"
-                )
+                _porter_ctx = _general_chat_identity_prompt()
                 prompt = _porter_ctx + prompt
 
             self.send_response(200)
@@ -42379,7 +42534,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.76 ready (localhost only)")
+    print(f"\n  Porter v0.30.77 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

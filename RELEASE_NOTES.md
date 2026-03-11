@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.77 (2026-03-11)
+
+- Porter detail chat now uses a motion-first pending state instead of repetitive routing copy, so the wait state reads as Porter being active rather than generic status text.
+- Redesigned the detail chat composer and send control to fit the Porter surface better.
+- Slimmed Porter’s identity injection prompt so greetings and `Who is Porter?` resolve faster and with the correct self-identity.
+- Split Porter’s skill profile into public orchestration skills and internal platform/operator skills, and promoted prompt architecture into the core Porter skill set.
+
 ## v0.30.76 (2026-03-11)
 
 - Completed a structural chat speed pass focused on perceived and real responsiveness.
