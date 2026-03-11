@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.83 (2026-03-11)
+
+- Memory V3 cutover: removed the public `Cortex` product entry so Porter no longer presents extractive chat/session memory as the core memory system.
+- Agent and Project detail now use structured `State` views built around directives, project notes, agent notes, and artifact-aware project state.
+- Directive dismissal now updates structured state directly instead of writing back through the legacy cortex memory browser.
+- Legacy `files` and `cortex` routes now resolve into the active Projects experience for compatibility while the old systems are retired from the public surface.
+
 ## v0.30.82 (2026-03-11)
 
 - Removed the public top-level `Files` nav item so Porter no longer presents a generic filesystem browser as a core product area.

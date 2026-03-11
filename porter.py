@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.82 — Project-scoped artifacts replace top-level files"""
+"""Porter v0.30.83 — Structured state replaces public Cortex memory"""
 
 
 import email
@@ -102,6 +102,7 @@ DEFAULT_PREFERENCES: dict = {
     "cortex_max_facts":         5,
     "cortex_inject_limit":      5,
     "cortex_consolidate_hours": 6,
+    "memory_auto_extract":      False,
 
     # Context Hygiene
     "hygiene_enabled":              True,
@@ -517,6 +518,48 @@ def _db_init():
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_personas_status ON personas(status)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS directives (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope_type TEXT NOT NULL DEFAULT 'global',
+            scope_id TEXT DEFAULT '',
+            text TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            source TEXT NOT NULL DEFAULT 'system',
+            confidence REAL NOT NULL DEFAULT 1.0,
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            updated_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_directives_scope_status ON directives(scope_type, scope_id, status)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS project_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id TEXT NOT NULL,
+            note_kind TEXT NOT NULL DEFAULT 'summary',
+            body TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            source TEXT NOT NULL DEFAULT 'system',
+            created_by TEXT DEFAULT '',
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            updated_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_project_notes_project_status ON project_notes(project_id, status, created_at DESC)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS agent_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent_id TEXT NOT NULL,
+            note_kind TEXT NOT NULL DEFAULT 'scope',
+            body TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            source TEXT NOT NULL DEFAULT 'system',
+            created_by TEXT DEFAULT '',
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            updated_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_notes_agent_status ON agent_notes(agent_id, status, created_at DESC)")
     for _sql in [
         "ALTER TABLE personas ADD COLUMN is_system INTEGER DEFAULT 0",
         "ALTER TABLE personas ADD COLUMN is_public INTEGER DEFAULT 1",
@@ -2462,9 +2505,9 @@ def _build_project_dispatch_context(project_id, persona_id="", task_id="", messa
         pass
 
     try:
-        cortex_ctx = _cortex_inject_context(message, persona_id=persona_id, project_id=pid)
-        if cortex_ctx:
-            parts.append(cortex_ctx[:1000])
+        state_ctx = _project_state_context(pid, persona_id=persona_id, limit=5)
+        if state_ctx:
+            parts.append(state_ctx[:1200])
     except Exception:
         pass
 
@@ -2796,6 +2839,191 @@ def _resolve_persona_project(persona_id: str, explicit_project_id: str | None = 
     except Exception:
         pass
     return ""
+
+
+_DEFAULT_PORTER_DIRECTIVES = [
+    "Porter orchestrates work and delegates execution to workers.",
+    "Workers should stay inside their assigned scope and hand off cleanly when work crosses a boundary.",
+    "Project state, directives, and artifacts are durable memory; chat history is not.",
+    "Active runtime and model choice should always remain visible to the operator.",
+]
+
+
+def _state_seed_defaults():
+    """Ensure Porter has a small set of durable system directives."""
+    try:
+        conn = _db_conn()
+        for text in _DEFAULT_PORTER_DIRECTIVES:
+            exists = conn.execute(
+                "SELECT id FROM directives WHERE scope_type='global' AND scope_id='' AND text=? AND status!='dismissed' LIMIT 1",
+                (text,),
+            ).fetchone()
+            if not exists:
+                conn.execute(
+                    "INSERT INTO directives (scope_type, scope_id, text, status, source, confidence) VALUES ('global', '', ?, 'active', 'system', 1.0)",
+                    (text,),
+                )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.warning("State seed failed: %s", e)
+
+
+def _state_list_directives(scope_type: str = "", scope_id: str = "", include_dismissed: bool = False) -> list[dict]:
+    try:
+        conn = _db_conn()
+        where = []
+        params = []
+        if scope_type:
+            where.append("scope_type = ?")
+            params.append(scope_type)
+        if scope_id:
+            where.append("scope_id = ?")
+            params.append(scope_id)
+        if not include_dismissed:
+            where.append("status != 'dismissed'")
+        sql = "SELECT id, scope_type, scope_id, text, status, source, confidence, created_at, updated_at FROM directives"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY created_at DESC, id DESC"
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        log.debug("State directives load failed: %s", e)
+        return []
+
+
+def _state_set_directive_status(directive_id: str | int, status: str) -> bool:
+    try:
+        conn = _db_conn()
+        conn.execute("UPDATE directives SET status=?, updated_at=strftime('%s','now') WHERE id=?", (status, directive_id))
+        changed = conn.total_changes > 0
+        conn.commit()
+        conn.close()
+        return changed
+    except Exception as e:
+        log.warning("Directive status update failed for %s: %s", directive_id, e)
+        return False
+
+
+def _state_add_project_note(project_id: str, note_kind: str, body: str, source: str = "system", created_by: str = ""):
+    if not str(project_id or "").strip() or not str(body or "").strip():
+        return
+    try:
+        conn = _db_conn()
+        conn.execute(
+            "INSERT INTO project_notes (project_id, note_kind, body, status, source, created_by) VALUES (?, ?, ?, 'active', ?, ?)",
+            (str(project_id).strip(), str(note_kind or "summary").strip(), str(body).strip(), str(source or "system").strip(), str(created_by or "").strip()),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.warning("Project note insert failed for %s: %s", project_id, e)
+
+
+def _state_add_agent_note(agent_id: str, note_kind: str, body: str, source: str = "system", created_by: str = ""):
+    if not str(agent_id or "").strip() or not str(body or "").strip():
+        return
+    try:
+        conn = _db_conn()
+        conn.execute(
+            "INSERT INTO agent_notes (agent_id, note_kind, body, status, source, created_by) VALUES (?, ?, ?, 'active', ?, ?)",
+            (str(agent_id).strip(), str(note_kind or "scope").strip(), str(body).strip(), str(source or "system").strip(), str(created_by or "").strip()),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.warning("Agent note insert failed for %s: %s", agent_id, e)
+
+
+def _state_get_project_notes(project_id: str, limit: int = 40) -> list[dict]:
+    try:
+        conn = _db_conn()
+        rows = conn.execute(
+            "SELECT id, project_id, note_kind, body, status, source, created_by, created_at, updated_at FROM project_notes WHERE project_id=? AND status='active' ORDER BY created_at DESC LIMIT ?",
+            (str(project_id or "").strip(), max(1, int(limit or 40))),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        log.debug("Project notes load failed for %s: %s", project_id, e)
+        return []
+
+
+def _state_get_agent_notes(agent_id: str, limit: int = 40) -> list[dict]:
+    try:
+        conn = _db_conn()
+        rows = conn.execute(
+            "SELECT id, agent_id, note_kind, body, status, source, created_by, created_at, updated_at FROM agent_notes WHERE agent_id=? AND status='active' ORDER BY created_at DESC LIMIT ?",
+            (str(agent_id or "").strip(), max(1, int(limit or 40))),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        log.debug("Agent notes load failed for %s: %s", agent_id, e)
+        return []
+
+
+def _project_state_payload(project_id: str) -> dict:
+    proj = _project_by_id(project_id) or {}
+    artifact_info = _project_artifact_listing(project_id)
+    directives = _state_list_directives("project", str(project_id or "").strip())
+    notes = _state_get_project_notes(project_id, limit=50)
+    return {
+        "project": dict(proj),
+        "directives": directives,
+        "notes": notes,
+        "artifacts": {
+            "count": artifact_info.get("artifact_count", 0),
+            "dir": artifact_info.get("artifacts_dir", ""),
+            "docs_count": artifact_info.get("project_docs_count", 0),
+        },
+    }
+
+
+def _agent_state_payload(agent_id: str) -> dict:
+    persona = _persona_by_id(agent_id) or {}
+    project_ids = _persona_project_ids(agent_id)
+    project_states = [_project_state_payload(pid) for pid in project_ids[:3]]
+    directives = _state_list_directives("agent", str(agent_id or "").strip())
+    notes = _state_get_agent_notes(agent_id, limit=40)
+    if persona and persona.get("orchestrator_only"):
+        directives = _state_list_directives("global") + directives
+    return {
+        "agent": dict(persona),
+        "directives": directives,
+        "notes": notes,
+        "projects": project_states,
+    }
+
+
+def _project_state_context(project_id: str, persona_id: str = "", limit: int = 6) -> str:
+    payload = _project_state_payload(project_id)
+    proj = payload.get("project") or {}
+    if not proj:
+        return ""
+    parts = []
+    directives = payload.get("directives") or []
+    notes = payload.get("notes") or []
+    if directives:
+        parts.append("Project directives:\n" + "\n".join(f"- {d.get('text','')[:180]}" for d in directives[:4] if d.get("text")))
+    if notes:
+        note_lines = []
+        for n in notes[:limit]:
+            line = f"- {str(n.get('note_kind') or 'note').replace('_',' ')}: {str(n.get('body') or '')[:180]}"
+            note_lines.append(line)
+        if note_lines:
+            parts.append("Project state notes:\n" + "\n".join(note_lines))
+    artifact_meta = payload.get("artifacts") or {}
+    if artifact_meta.get("count"):
+        parts.append(f"Project artifacts: {artifact_meta.get('count')} in {artifact_meta.get('dir')}")
+    return "\n\n".join(parts).strip()
+
+
+def _memory_auto_extract_enabled() -> bool:
+    """Whether generic chat/dispatch extraction should write durable memory."""
+    return bool(_config.get("preferences", {}).get("memory_auto_extract", False))
 
 
 def _parse_kv_table(block: str) -> dict:
@@ -10626,11 +10854,6 @@ input[type="number"].settings-input { min-width: 60px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
       <span class="mnav-label">Models</span>
     </button>
-    <button class="mnav-item" id="mnav-cortex" onclick="switchModule('cortex')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-      <span class="mnav-label">Cortex</span>
-
-    </button>
     <button class="mnav-item" id="mnav-system" onclick="switchModule('system')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
       <span class="mnav-label">Runtime</span>
@@ -10675,7 +10898,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.82</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.83</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10871,7 +11094,7 @@ input[type="number"].settings-input { min-width: 60px; }
         <button class="pd-tab" onclick="switchPdTab('org')">Org</button>
         <button class="pd-tab" onclick="switchPdTab('activity')">Activity</button>
         <button class="pd-tab" onclick="switchPdTab('skills')">Skills</button>
-        <button class="pd-tab" onclick="switchPdTab('memory')">Memory</button>
+        <button class="pd-tab" onclick="switchPdTab('state')">State</button>
         <button class="pd-tab" onclick="switchPdTab('config')">Config</button>
         <div style="flex:1"></div>
         <div id="pd-tab-actions" style="display:flex;gap:8px;padding-right:8px"></div>
@@ -11966,6 +12189,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.83', date:'2026-03-11', notes:["Memory V3 cutover: public Cortex entry is removed from the product surface, Agents and Projects now use structured State views instead of the old extractive memory browser, and directive dismissal now updates structured state instead of legacy cortex rows"] },
   { ver:'v0.30.82', date:'2026-03-11', notes:["Top-level Files has been removed from the public nav, old files routing now resolves back into Projects, each project now gets a real artifacts/ directory, and the project detail view separates project artifacts from canonical project docs instead of pretending the workspace file chain is the same thing as artifacts"] },
   { ver:'v0.30.81', date:'2026-03-11', notes:["Chat attachments now persist correctly from Porter detail chat, uploaded screenshots are sent to Codex as real image inputs instead of fake text markers, auto-routed image chats can fall back to Codex when needed, and guided worker creation copy is now generic and context-aware instead of hardwired to Porter software development"] },
   { ver:'v0.30.80', date:'2026-03-11', notes:["Agents is now the default landing surface and old overview routing now resolves into the Porter/Agents experience instead of opening the legacy general chat; Porter detail chat now keeps its own session history, creation flows start in a clean sub-session, fresh drag-and-drop attachments render immediately even before the first message, and Porter opens with rotating friendlier greetings instead of stale helper copy"] },
@@ -14058,6 +14282,7 @@ function switchModule(name) {
     if (pc) pc.value = '';
   }
   if (name === 'files') name = 'projects';
+  if (name === 'cortex') name = 'projects';
   if (name === 'skills') name = 'agents';
   _currentModule = name;
   document.querySelectorAll('.mnav-item').forEach(el =>
@@ -14988,7 +15213,7 @@ function _renderProjTabs() {
     {id:'agents', label:'Agents' + (agentCount ? ' (' + agentCount + ')' : '')},
     {id:'artifacts', label:'Artifacts'},
     {id:'workflows', label:'Workflows' + ((proj.workflows||[]).length ? ' (' + (proj.workflows||[]).length + ')' : '')},
-    {id:'memory', label:'Memory'},
+    {id:'state', label:'State'},
     {id:'settings', label:'Settings'}
   ];
   tabs.innerHTML = items.map(function(t) {
@@ -15000,6 +15225,7 @@ function _renderProjTabs() {
 }
 
 function _projSwitchTab(t) {
+  if (t === 'memory') t = 'state';
   _projTab = t;
   if (t !== 'overview' && _projActivityRefreshTimer) {
     clearTimeout(_projActivityRefreshTimer);
@@ -15120,17 +15346,10 @@ async function _renderProjTabContent() {
       return;
     }
 
-  } else if (_projTab === 'memory') {
-    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">';
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Project Knowledge</div>';
-    html += '<button class="btn btn-ghost" onclick="_projShowBrief(\x27' + proj.id + '\x27)" style="font-size:10px;padding:2px 8px">Brief</button>';
-    html += '<div style="flex:1"></div>';
-    html += '<input type="text" id="proj-mem-search" placeholder="Search memories..." oninput="_projFilterMemory(this.value)" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);width:180px;outline:none">';
-    html += '<span id="proj-mem-count" style="font-size:10px;color:var(--text3)"></span>';
-    html += '</div>';
-    html += '<div id="proj-memory-list" style="font-size:12px;color:var(--text3)">Loading...</div>';
+  } else if (_projTab === 'state') {
+    html += '<div id="proj-state-view" style="font-size:12px;color:var(--text3)">Loading...</div>';
     content.innerHTML = html;
-    _projLoadMemory(proj.id);
+    _projLoadState(proj.id);
     return;
 
   } else if (_projTab === 'settings') {
@@ -15331,116 +15550,58 @@ async function _projShowBrief(pid) {
     porterAlert('Knowledge Brief', html);
   } catch(e) { toast('Failed to load brief', 'err'); }
 }
-var _projMemories = [];
-function _projFilterMemory(query) {
-  var q = (query || '').toLowerCase().trim();
-  var filtered = q ? _projMemories.filter(function(m) { return ((m.fact || '') + ' ' + (m.keywords || '')).toLowerCase().indexOf(q) >= 0; }) : _projMemories;
-  _renderProjMemories(filtered);
-}
-function _renderProjMemories(memories) {
-  var el = document.getElementById('proj-memory-list');
-  if (!el) return;
-  var countEl = document.getElementById('proj-mem-count');
-  if (countEl) countEl.textContent = memories.length + ' memor' + (memories.length === 1 ? 'y' : 'ies');
-  if (!memories.length) {
-    el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text3)">No memories match.<br><span style="font-size:10px">Memories are created when agents work on this project.</span></div>';
-    return;
-  }
-  var html = '<div style="display:flex;flex-direction:column;gap:6px">';
-  memories.forEach(function(m) {
-    var conf = Math.round((m.confidence || 0.5) * 100);
-    var imp = Math.min(10, Math.max(1, m.importance || 5));
-    var impBars = '';
-    for (var i = 1; i <= 5; i++) {
-      var filled = i <= Math.ceil(imp / 2);
-      impBars += '<span style="display:inline-block;width:8px;height:4px;border-radius:1px;margin-right:1px;background:' + (filled ? 'var(--accent,#3b82f6)' : 'var(--border)') + '"></span>';
-    }
-    var statusDot = (m.status === 'archived') ? '#6b7280' : '#22c55e';
-    var age = '';
-    if (m.created_at) {
-      var secs = Math.floor(Date.now()/1000 - m.created_at);
-      if (secs < 3600) age = Math.floor(secs/60) + 'm ago';
-      else if (secs < 86400) age = Math.floor(secs/3600) + 'h ago';
-      else age = Math.floor(secs/86400) + 'd ago';
-    }
-    html += '<div style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)" data-mem-id="' + (m.id || '') + '">';
-    html += '<div style="display:flex;align-items:flex-start;gap:6px">';
-    html += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + statusDot + ';margin-top:5px;flex-shrink:0"></span>';
-    html += '<div style="flex:1;min-width:0">';
-    html += '<div style="font-size:12px;color:var(--text);line-height:1.4">' + escHtml(m.fact || m.content || '') + '</div>';
-    html += '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">';
-    html += '<span style="font-size:10px;color:var(--text3)" title="Confidence: ' + conf + '%">' + impBars + ' ' + conf + '%</span>';
-    if (m.evidence_count > 1) html += '<span style="font-size:10px;color:var(--text3)" title="Reinforced ' + m.evidence_count + ' times">' + m.evidence_count + 'x</span>';
-    if (m.use_count) html += '<span style="font-size:10px;color:var(--text3)" title="Injected ' + m.use_count + ' times">used ' + m.use_count + 'x</span>';
-    if (age) html += '<span style="font-size:10px;color:var(--text3)">' + age + '</span>';
-    if (m._agentScoped) html += '<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:color-mix(in srgb,#06b6d4 15%,transparent);color:#06b6d4">agent</span>';
-    if (m.source_id) {
-      var persona = (_personas || []).find(function(p) { return p.id === m.source_id; });
-      if (persona) html += '<span style="font-size:10px;color:var(--text3)">' + escHtml((persona.avatar || '') + ' ' + persona.name) + '</span>';
-    }
-    html += '</div></div>';
-    html += '<div style="display:flex;gap:4px;flex-shrink:0">';
-    if (m.status !== 'archived') html += '<button onclick="_projArchiveMem(' + m.id + ',this)" class="btn btn-ghost" style="font-size:9px;padding:1px 5px" title="Archive">arc</button>';
-    else html += '<button onclick="_projRestoreMem(' + m.id + ',this)" class="btn btn-ghost" style="font-size:9px;padding:1px 5px" title="Restore">rst</button>';
-    html += '<button onclick="_projDeleteMem(' + m.id + ',this)" class="btn btn-ghost" style="font-size:9px;padding:1px 5px;color:#ef4444" title="Delete">del</button>';
-    html += '</div></div></div>';
-  });
-  html += '</div>';
-  el.innerHTML = html;
-}
-async function _projArchiveMem(id, btn) {
-  btn.disabled = true;
-  var r = await api('/api/cortex/memories/' + id + '/status', {status: 'archived'});
-  if (r && r.ok) { toast('Archived', 'ok'); var proj = window._projCurrent; if (proj) _projLoadMemory(proj.id); }
-  else { toast('Failed', 'err'); btn.disabled = false; }
-}
-async function _projRestoreMem(id, btn) {
-  btn.disabled = true;
-  var r = await api('/api/cortex/memories/' + id + '/status', {status: 'active'});
-  if (r && r.ok) { toast('Restored', 'ok'); var proj = window._projCurrent; if (proj) _projLoadMemory(proj.id); }
-  else { toast('Failed', 'err'); btn.disabled = false; }
-}
-async function _projDeleteMem(id, btn) {
-  if (!confirm('Delete this memory permanently?')) return;
-  btn.disabled = true;
-  var r = await api('/api/cortex/memories/' + id + '/delete', {});
-  if (r && r.ok) { toast('Deleted', 'ok'); var proj = window._projCurrent; if (proj) _projLoadMemory(proj.id); }
-  else { toast('Failed', 'err'); btn.disabled = false; }
-}
-async function _projLoadMemory(pid) {
-  var el = document.getElementById('proj-memory-list');
+async function _projLoadState(pid) {
+  var el = document.getElementById('proj-state-view');
   if (!el) return;
   try {
-    // v0.30.31 — Fetch project-scoped + agent-scoped memories from assigned agents
-    var data = await api('/api/cortex/memories?scope=project&scope_id=' + pid);
-    var projMems = (data && data.memories) || [];
-    // Also fetch agent-scoped memories from assigned agents
-    var proj = window._projCurrent || {};
-    var assigned = proj.assigned_personas || [];
-    var agentMems = [];
-    for (var ai = 0; ai < assigned.length; ai++) {
-      try {
-        var ad = await api('/api/cortex/memories?scope=agent&scope_id=' + assigned[ai] + '&limit=20');
-        if (ad && ad.memories) agentMems = agentMems.concat(ad.memories.map(function(m) { m._agentScoped = true; return m; }));
-      } catch(e) {}
-    }
-    // Merge: project first (sorted by confidence), then agent memories
-    data = data || {};
-    data.memories = projMems.concat(agentMems).sort(function(a, b) {
-      // Project scope first, then by confidence
-      if (a.scope === 'project' && b.scope !== 'project') return -1;
-      if (b.scope === 'project' && a.scope !== 'project') return 1;
-      return (b.confidence || 0.5) - (a.confidence || 0.5);
-    });
-    _projMemories = (data && data.memories) || [];
-    if (!_projMemories.length) {
-      el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text3)">No project-scoped memories yet.<br><span style="font-size:10px">Memories are created when agents work on this project.</span></div>';
-      var countEl = document.getElementById('proj-mem-count');
-      if (countEl) countEl.textContent = '0 memories';
+    var payload = await api('/api/projects/' + pid + '/state');
+    var directives = (payload && payload.directives) || [];
+    var notes = (payload && payload.notes) || [];
+    var artifacts = (payload && payload.artifacts) || {};
+    var project = (payload && payload.project) || {};
+    var activeNotes = notes.filter(function(n) { return (n.status || 'active') === 'active'; });
+    var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'
+      + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Directives</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + directives.length + '</div></div>'
+      + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Project Notes</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + activeNotes.length + '</div></div>'
+      + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Artifacts</div><div style="font-size:26px;font-weight:800;color:#22c55e;margin-top:4px">' + Number(artifacts.count || 0) + '</div></div>'
+      + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">State Model</div><div style="font-size:18px;font-weight:800;color:var(--text);margin-top:8px">Persistent</div></div>'
+      + '</div>';
+    if (!directives.length && !activeNotes.length) {
+      html += '<div style="padding:18px;border:1px dashed var(--border);border-radius:16px;background:var(--surface);color:var(--text3);text-align:center">No durable project state has been recorded yet.<br><span style="font-size:11px">Porter will keep directives, decisions, and project notes here as the work evolves.</span></div>';
+      el.innerHTML = html;
       return;
     }
-    _renderProjMemories(_projMemories);
-  } catch(e) { el.innerHTML = '<span style="color:var(--text3)">Could not load memories</span>'; }
+    html += '<div style="display:flex;flex-direction:column;gap:16px">';
+    if (project.description || project.success_bar) {
+      html += '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Project Brief</div>';
+      if (project.description) html += '<div style="font-size:13px;color:var(--text);line-height:1.65;margin-bottom:8px">' + escHtml(project.description) + '</div>';
+      if (project.success_bar) html += '<div style="font-size:12px;color:var(--text2);line-height:1.6"><span style="color:var(--text3)">Success bar:</span> ' + escHtml(project.success_bar) + '</div>';
+      html += '</section>';
+    }
+    if (directives.length) {
+      html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Operating Directives</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">';
+      directives.forEach(function(d) {
+        var conf = Math.round(Number(d.confidence || 1) * 100);
+        html += '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:color-mix(in srgb,var(--accent) 5%, var(--bg))">'
+          + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="model-card-chip ok" style="font-size:10px">Directive</span><span style="font-size:10px;color:' + (conf >= 70 ? '#22c55e' : '#f59e0b') + ';margin-left:auto">' + conf + '% confidence</span></div>'
+          + '<div style="font-size:12px;line-height:1.6;color:var(--text)">' + escHtml(d.text || '') + '</div>'
+          + '<div style="display:flex;gap:12px;align-items:center;margin-top:10px;font-size:10px;color:var(--text3)"><span>' + escHtml(d.source || 'system') + '</span><span>' + escHtml(d.scope_type || 'project') + '</span></div>'
+          + '</div>';
+      });
+      html += '</div></section>';
+    }
+    if (activeNotes.length) {
+      html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Project Notes</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">';
+      activeNotes.forEach(function(n) {
+        html += '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="model-card-chip dim" style="font-size:10px">' + escHtml(n.note_kind || 'note') + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(_relativeTime(n.created_at || 0)) + '</span></div><div style="font-size:12px;line-height:1.6;color:var(--text)">' + escHtml(n.body || '') + '</div></div>';
+      });
+      html += '</div></section>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<span style="color:var(--text3)">Could not load project state</span>';
+  }
 }
 
 async function _projAssignAgent(pid) {
@@ -17319,9 +17480,9 @@ function _pdChatKey(e) {
 async function _dismissDirective(memoryId) {
   if (!memoryId) return;
   try {
-    var r = await api('/api/cortex/memories/' + memoryId + '/status', { status: 'archived' });
+    var r = await api('/api/state/directives/' + memoryId + '/status', { status: 'dismissed' });
     if (!r || !r.ok) throw new Error((r && r.error) || 'Dismiss failed');
-    if (window._selectedPersona) switchPdTab('overview');
+    if (window._selectedPersona) switchPdTab('state');
     toast('Directive dismissed', 'ok');
   } catch (e) {
     toast(e.message || 'Dismiss failed', 'err');
@@ -24533,6 +24694,7 @@ function closePersonaDetail() {
 }
 
 function switchPdTab(tab) {
+  if (tab === 'memory') tab = 'state';
   document.querySelectorAll('.pd-tab').forEach(t => t.classList.remove('active'));
   var _activeTab = document.querySelector(`.pd-tab[onclick*="${tab}"]`);
   if (_activeTab) _activeTab.classList.add('active');
@@ -24778,60 +24940,68 @@ function switchPdTab(tab) {
     }
     content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div style="font-size:12px;color:var(--text3)">Loading skills...</div></div>';
     _loadPersonaSkills(p.id);
-  } else if (tab === 'memory') {
-    content.innerHTML = '<div class="loading-indicator">Loading memory...</div>';
+  } else if (tab === 'state') {
+    content.innerHTML = '<div class="loading-indicator">Loading state...</div>';
     (async function() {
       try {
-        var facts = [];
-        if (p.orchestrator_only) {
-          var [globalMem, projectMem] = await Promise.all([
-            api('/api/cortex/memories?scope=global&limit=40').catch(function() { return { memories: [] }; }),
-            api('/api/cortex/memories?scope=project&limit=20').catch(function() { return { memories: [] }; })
-          ]);
-          facts = ((globalMem && globalMem.memories) || []).concat((projectMem && projectMem.memories) || []);
-        } else {
-          var r = await api('/api/cortex/memories?scope=agent&scope_id=' + p.id + '&limit=50');
-          facts = (r && r.memories) || [];
-        }
-        if (!facts.length) {
-          content.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px">No memory has been distilled yet. Porter will surface durable directives and strategic truths here as they stabilize.</div>';
+        var payload = await api('/api/personas/' + p.id + '/state');
+        var directives = (payload && payload.directives) || [];
+        var notes = (payload && payload.notes) || [];
+        var projects = (payload && payload.projects) || [];
+        if (!directives.length && !notes.length && !projects.length) {
+          content.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px">No durable state has been recorded yet.</div>';
           return;
         }
-        var directives = facts.filter(function(f) {
-          var txt = String(f.fact || '').toLowerCase();
-          return /^keep |^prefer |^avoid |^present |^m oe|approval|required|wants|should/.test(txt) || (f.importance || 0) >= 7;
-        });
-        var concepts = facts.filter(function(f) { return directives.indexOf(f) < 0; });
-        var reviewed = facts.filter(function(f) { return Number(f.confidence || 0) >= 0.7; }).length;
-        var reviewQueue = facts.filter(function(f) { return Number(f.confidence || 0) < 0.7; }).length;
-        var projectScoped = facts.filter(function(f) { return String(f.scope || '').toLowerCase() === 'project'; }).length;
+        var activeProjects = projects.filter(function(pr) { return pr && pr.project; });
+        var openNotes = notes.filter(function(n) { return (n.status || 'active') === 'active'; });
         var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'
-          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Total Memory</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + facts.length + '</div></div>'
           + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Directives</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + directives.length + '</div></div>'
-          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">High Trust</div><div style="font-size:26px;font-weight:800;color:#22c55e;margin-top:4px">' + reviewed + '</div></div>'
-          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Needs Review</div><div style="font-size:26px;font-weight:800;color:' + (reviewQueue ? '#f59e0b' : 'var(--text)') + ';margin-top:4px">' + reviewQueue + '</div></div>'
+          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Notes</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + openNotes.length + '</div></div>'
+          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Projects</div><div style="font-size:26px;font-weight:800;color:#22c55e;margin-top:4px">' + activeProjects.length + '</div></div>'
+          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Mode</div><div style="font-size:18px;font-weight:800;color:var(--text);margin-top:8px">Structured State</div></div>'
           + '</div>';
-        function _conceptCard(f, tone) {
-          var conf = Math.round((f.confidence || 0) * 100);
-          var confColor = conf >= 70 ? '#22c55e' : conf >= 40 ? '#f59e0b' : '#ef4444';
-          return '<div style="padding:14px;background:' + (tone === 'directive' ? 'color-mix(in srgb,var(--accent) 5%, var(--bg))' : 'var(--bg)') + ';border:1px solid var(--border);border-radius:16px">'
-            + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="model-card-chip ' + (tone === 'directive' ? 'ok' : 'dim') + '" style="font-size:10px">' + (tone === 'directive' ? 'Directive' : 'Concept') + '</span><span style="font-size:10px;color:' + confColor + ';margin-left:auto">' + conf + '% confidence</span></div>'
-            + '<div style="font-size:12px;line-height:1.6;color:var(--text)">' + escHtml(f.fact || '') + '</div>'
+        function _directiveCard(f) {
+          var conf = Math.round(Number(f.confidence || 1) * 100);
+          return '<div style="padding:14px;background:color-mix(in srgb,var(--accent) 5%, var(--bg));border:1px solid var(--border);border-radius:16px">'
+            + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="model-card-chip ok" style="font-size:10px">Directive</span><span style="font-size:10px;color:' + (conf >= 70 ? '#22c55e' : '#f59e0b') + ';margin-left:auto">' + conf + '% confidence</span></div>'
+            + '<div style="font-size:12px;line-height:1.6;color:var(--text)">' + escHtml(f.text || '') + '</div>'
             + '<div style="display:flex;gap:12px;align-items:center;margin-top:10px;font-size:10px;color:var(--text3)">'
-            + '<span>' + (f.evidence_count || 0) + ' evidence</span>'
-            + '<span>' + (f.memory_type || 'semantic') + '</span>'
+            + '<span>' + escHtml(f.scope_type || 'global') + '</span>'
+            + '<span>' + escHtml(f.source || 'system') + '</span>'
             + '<button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" onclick="_dismissDirective(\'' + f.id + '\')">Dismiss</button>'
             + '</div></div>';
         }
+        function _noteCard(n, kindLabel) {
+          return '<div style="padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:16px">'
+            + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="model-card-chip dim" style="font-size:10px">' + escHtml(kindLabel) + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(n.note_kind || 'note') + '</span></div>'
+            + '<div style="font-size:12px;line-height:1.6;color:var(--text)">' + escHtml(n.body || '') + '</div></div>';
+        }
         html += '<div style="display:flex;flex-direction:column;gap:16px">';
-        html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Operating Directives</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">' + directives.map(function(f) { return _conceptCard(f, 'directive'); }).join('') + '</div></section>';
-        if (concepts.length) {
-          html += '<section><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Learned Context</div>' + (p.orchestrator_only ? '<span style="font-size:10px;color:var(--text3);margin-left:auto">' + projectScoped + ' project-linked</span>' : '') + '</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">' + concepts.map(function(f) { return _conceptCard(f, 'concept'); }).join('') + '</div></section>';
+        if (directives.length) {
+          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Operating Directives</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">' + directives.map(function(f) { return _directiveCard(f); }).join('') + '</div></section>';
+        }
+        if (openNotes.length) {
+          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">' + (p.orchestrator_only ? 'Porter Notes' : 'Agent Notes') + '</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">' + openNotes.map(function(n) { return _noteCard(n, p.orchestrator_only ? 'Porter Note' : 'Agent Note'); }).join('') + '</div></section>';
+        }
+        if (activeProjects.length) {
+          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Project State</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">';
+          activeProjects.forEach(function(pr) {
+            var projData = pr.project || {};
+            var prNotes = pr.notes || [];
+            var prDirectives = pr.directives || [];
+            html += '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)">';
+            html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="font-size:13px;font-weight:700;color:var(--text)">' + escHtml(projData.name || projData.id || 'Project') + '</div><span class="model-card-chip dim" style="margin-left:auto;font-size:10px">' + escHtml(projData.type || 'project') + '</span></div>';
+            if (projData.description) html += '<div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:10px">' + escHtml(projData.description) + '</div>';
+            html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><span class="model-card-chip dim" style="font-size:10px">' + prDirectives.length + ' directives</span><span class="model-card-chip dim" style="font-size:10px">' + prNotes.length + ' notes</span><span class="model-card-chip dim" style="font-size:10px">' + ((pr.artifacts || {}).count || 0) + ' artifacts</span></div>';
+            if (prNotes.length) html += '<div style="font-size:11px;color:var(--text3)">' + escHtml((prNotes[0].body || '').slice(0, 180)) + '</div>';
+            html += '</div>';
+          });
+          html += '</div></section>';
         }
         html += '</div>';
         content.innerHTML = html;
       } catch(e) {
-        content.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load memory</div>';
+        content.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load state</div>';
       }
     })();
   } else if (tab === 'config') {
@@ -32847,8 +33017,8 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
                 except Exception as _pe:
                     log.debug("Job proposal insert failed: %s", _pe)
 
-    # Cortex: extract facts from this dispatch in background
-    if result.get("ok") and result.get("text"):
+    # Legacy extractive memory is disabled by default in Memory V3.
+    if _memory_auto_extract_enabled() and result.get("ok") and result.get("text"):
         _cortex_msg = message
         _cortex_resp = result.get("text", "")
         _cortex_pid = persona_id
@@ -35933,6 +36103,11 @@ class Handler(BaseHTTPRequestHandler):
             mem = _persona_get_memory(pid)
             self.reply_json({"ok": True, **mem})
 
+        elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/state"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path.split("/")[3]
+            self.reply_json({"ok": True, **_agent_state_payload(pid)})
+
         elif parsed.path == "/api/personas/rules":
             if not self.auth_check(redirect=False): return
             rules_text = _persona_get_rules()
@@ -36057,7 +36232,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.82"})
+            self.reply_json({"v": "0.30.83"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36219,7 +36394,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.82"
+                health["porter_version"] = "0.30.83"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -36814,6 +36989,13 @@ class Handler(BaseHTTPRequestHandler):
                 })
             self.reply_json({"ok": True, "memories": memories, "total": total,
                              "limit": limit_n, "offset": offset_n})
+
+        elif parsed.path == "/api/state/directives":
+            if not self.auth_check(redirect=False): return
+            scope_type = qs.get("scope_type", [""])[0].strip()
+            scope_id = qs.get("scope_id", [""])[0].strip()
+            include_dismissed = qs.get("include_dismissed", ["0"])[0].strip().lower() in ("1", "true", "yes")
+            self.reply_json({"ok": True, "directives": _state_list_directives(scope_type, scope_id, include_dismissed)})
 
         # v0.28.4 — Job proposals API
         elif parsed.path == "/api/jobs/proposals":
@@ -37669,6 +37851,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": "project not found"}, 404); return
             self.reply_json({"ok": True, **_project_artifact_listing(pid)})
 
+        elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/state"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path[len("/api/projects/"):-len("/state")]
+            if not any(p.get("id") == pid for p in _config.get("projects", [])):
+                self.reply_json({"ok": False, "error": "project not found"}, 404); return
+            self.reply_json({"ok": True, **_project_state_payload(pid)})
+
         elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/brief"):
             if not self.auth_check(redirect=False): return
             _parts = parsed.path.split("/")
@@ -38123,7 +38312,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.82'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.83'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38552,8 +38741,8 @@ class Handler(BaseHTTPRequestHandler):
                     _save_chat_message(chat_id, _runtime_label, _raw_text, full_response,
                                        project_id=_stream_project, persona_name=_stream_persona)
 
-                # Cortex: extract facts from chat response in background
-                if full_response and len(full_response) >= _config.get("preferences", {}).get("cortex_min_response_len", 100):
+                # Legacy extractive memory is disabled by default in Memory V3.
+                if _memory_auto_extract_enabled() and full_response and len(full_response) >= _config.get("preferences", {}).get("cortex_min_response_len", 100):
                     _cx_prompt = prompt
                     _cx_resp = full_response
                     _cx_be = _stream_backend
@@ -41152,6 +41341,23 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 mlog.emit("error", "memory", "memory.delete", str(e), memory_id=mem_id)
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
+        elif parsed.path.startswith("/api/state/directives/") and parsed.path.endswith("/status"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.split("/")
+            directive_id = parts[4] if len(parts) >= 6 else ""
+            if not directive_id:
+                self.reply_json({"ok": False, "error": "Missing directive ID"}, 400); return
+            data = self.read_json_body()
+            new_status = str(data.get("status", "")).strip().lower()
+            if new_status not in ("active", "dismissed", "superseded"):
+                self.reply_json({"ok": False, "error": "Status must be active, dismissed, or superseded"}, 400); return
+            if _state_set_directive_status(directive_id, new_status):
+                _emit_event("memory:status", {"id": directive_id, "status": new_status, "kind": "directive"})
+                mlog.emit("info", "memory", "directive.status", f"Set directive {directive_id} -> {new_status}", directive_id=directive_id, status=new_status)
+                self.reply_json({"ok": True, "id": directive_id, "status": new_status})
+            else:
+                self.reply_json({"ok": False, "error": "Directive not found"}, 404)
+
         # ── Batch extract all learnings (POST) ────────────────────────────
         elif parsed.path == "/api/sessions/extract-all":
             if not self.auth_check(redirect=False): return
@@ -41907,6 +42113,11 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 _config.setdefault("projects", []).append(proj)
                 save_config(_config)
                 wp = scaffold_project_dir(pid, name)
+                _state_add_project_note(pid, "summary", f"Project created: {name}", source="system", created_by="porter")
+                if proj.get("description"):
+                    _state_add_project_note(pid, "summary", proj["description"], source="human", created_by="operator")
+                if proj.get("success_bar"):
+                    _state_add_project_note(pid, "success_bar", proj["success_bar"], source="human", created_by="operator")
                 _emit_event("project:created", {"id": pid, "name": name, "type": ptype})
                 mlog.emit("info", "project", "project.create", f"Created project: {name}", project_id=pid)
                 self.reply_json({"ok": True, "project": {
@@ -41970,6 +42181,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                             sd["agents"] = assigned
                             sj.write_text(json.dumps(sd, indent=2))
                         except Exception: pass
+                    _state_add_project_note(pid, "assignment", f"Assigned worker {persona_id} to project {pid}.", source="system", created_by="porter")
                 mlog.emit("info", "project", "project.assign_agent", f"Assigned persona {persona_id} to project {pid}", project_id=pid, persona_id=persona_id)
                 self.reply_json({"ok": True, "assigned_personas": proj.get("assigned_personas", [])})
 
@@ -41997,6 +42209,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                             sd["agents"] = assigned
                             sj.write_text(json.dumps(sd, indent=2))
                         except Exception: pass
+                    _state_add_project_note(pid, "assignment", f"Unassigned worker {persona_id} from project {pid}.", source="system", created_by="porter")
                 mlog.emit("info", "project", "project.unassign_agent", f"Unassigned persona {persona_id} from project {pid}", project_id=pid, persona_id=persona_id)
                 self.reply_json({"ok": True, "assigned_personas": proj.get("assigned_personas", [])})
 
@@ -42012,9 +42225,15 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     proj["name"] = str(data["name"]).strip()
                 if "description" in data:
                     proj["description"] = str(data.get("description", "")).strip()
+                    if proj["description"]:
+                        _state_add_project_note(pid, "summary", proj["description"], source="human", created_by="operator")
                 if "type" in data:
                     t = str(data["type"]).strip()
                     if t in ("manual", "autonomous"): proj["type"] = t
+                if "success_bar" in data:
+                    proj["success_bar"] = str(data.get("success_bar", "")).strip()
+                    if proj["success_bar"]:
+                        _state_add_project_note(pid, "success_bar", proj["success_bar"], source="human", created_by="operator")
                 if "memory_isolation" in data:
                     proj["memory_isolation"] = str(data["memory_isolation"]).strip()
                 # Project metrics
@@ -42048,6 +42267,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                         sj.write_text(json.dumps(sdata, indent=2))
                     except Exception as e:
                         log.debug("Ignored: %s", e)
+                _state_add_project_note(pid, "decision", f"Project settings updated for {proj.get('name', pid)}.", source="system", created_by="porter")
                 _emit_event("project:updated", {"id": pid})
                 mlog.emit("info", "project", "project.update", f"Updated project: {pid}", project_id=pid)
                 self.reply_json({"ok": True, "project": proj})
@@ -43037,6 +43257,7 @@ if __name__ == "__main__":
     ensure_memory_dirs()
     ensure_persona_dirs()
     _db_init()  # Initialize SQLite DB + purge expired sessions
+    _state_seed_defaults()
     _ensure_porter_persona()
     mlog.start()  # Start Mission Control log system
     _db_migrate_chats()  # Migrate JSON chats to SQLite
@@ -43081,7 +43302,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.82 ready (localhost only)")
+    print(f"\n  Porter v0.30.83 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
