@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.83 — Structured state replaces public Cortex memory"""
+"""Porter v0.30.84 — Runtime and copy align with structured state"""
 
 
 import email
@@ -10898,7 +10898,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.83</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.84</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12189,6 +12189,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.84', date:'2026-03-11', notes:["Runtime now hides the retired Cortex consolidation and memory extraction workflows from the active operator surface, and the remaining global tour/sidebar copy now matches the real Porter IA instead of talking about legacy Chat/Memory/Files tabs"] },
   { ver:'v0.30.83', date:'2026-03-11', notes:["Memory V3 cutover: public Cortex entry is removed from the product surface, Agents and Projects now use structured State views instead of the old extractive memory browser, and directive dismissal now updates structured state instead of legacy cortex rows"] },
   { ver:'v0.30.82', date:'2026-03-11', notes:["Top-level Files has been removed from the public nav, old files routing now resolves back into Projects, each project now gets a real artifacts/ directory, and the project detail view separates project artifacts from canonical project docs instead of pretending the workspace file chain is the same thing as artifacts"] },
   { ver:'v0.30.81', date:'2026-03-11', notes:["Chat attachments now persist correctly from Porter detail chat, uploaded screenshots are sent to Codex as real image inputs instead of fake text markers, auto-routed image chats can fall back to Codex when needed, and guided worker creation copy is now generic and context-aware instead of hardwired to Porter software development"] },
@@ -14389,7 +14390,8 @@ async function loadWorkflowRegistry() {
   try {
     var data = await api('/api/workflows');
     if (!data || !data.workflows) { grid.innerHTML = '<div class="empty-state" style="padding:40px 20px"><div style="font-size:28px;opacity:.4">\u2699\ufe0f</div><p>No workflows registered</p><p style="font-size:12px;color:var(--text3);margin-top:-4px">Runtime workflows appear here when configured</p></div>'; return; }
-    var wfs = data.workflows;
+    var hiddenWorkflowIds = { cortex_consolidation: true, memory_extraction: true };
+    var wfs = (data.workflows || []).filter(function(wf) { return !hiddenWorkflowIds[wf.id]; });
     if (countEl) countEl.textContent = wfs.length + ' workflow' + (wfs.length !== 1 ? 's' : '');
     grid.innerHTML = wfs.map(function(wf) {
       var dotColor = wf.running ? '#3b82f6' : wf.status === 'active' ? '#22c55e' : wf.status === 'paused' ? '#9ca3af' : '#ef4444';
@@ -19089,7 +19091,7 @@ function chatAutoResize(el) { _chatAutoGrow(el); }
 
 // ── Guided tour (vanilla JS) ────────────────────────────────────────────────
 var _tourSteps = [
-  { sel: '.sidebar', title: 'Sidebar Navigation', desc: 'Switch between tabs: Chat, Orchestration, Memory, Projects, Files, and more.' },
+  { sel: '.sidebar', title: 'Sidebar Navigation', desc: 'Switch between the active Porter surfaces: Agents, Projects, Models, Runtime, and operator tools.' },
   { sel: '#chat-input', title: 'Chat Input', desc: 'Type messages to your AI models. Use / for commands, @ to target a specific backend.' },
   { sel: '#chat-model, .chat-model-sel', title: 'Model Selector', desc: 'Choose which AI model responds. Cloud models (OpenClaw, Gemini, Codex) and local (Ollama) are grouped.' },
   { sel: '#chat-dashboard, .chat-dash', title: 'Dashboard', desc: 'Live model status cards. Click a card to start chatting with that backend.' },
@@ -36232,7 +36234,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.83"})
+            self.reply_json({"v": "0.30.84"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36394,7 +36396,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.83"
+                health["porter_version"] = "0.30.84"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38312,7 +38314,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.83'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.84'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43302,7 +43304,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.83 ready (localhost only)")
+    print(f"\n  Porter v0.30.84 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

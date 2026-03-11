@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.84 (2026-03-11)
+
+- Runtime now hides the retired `Cortex Consolidation` and `Memory Extraction` workflows from the active operator surface.
+- Remaining sidebar/tour copy now matches Porter’s real product IA instead of talking about legacy Chat, Memory, and Files tabs.
+
 ## v0.30.83 (2026-03-11)
 
 - Memory V3 cutover: removed the public `Cortex` product entry so Porter no longer presents extractive chat/session memory as the core memory system.
