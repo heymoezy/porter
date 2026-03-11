@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.75 — Chat speed overhaul"""
+"""Porter v0.30.76 — Chat structural speed pass"""
 
 
 import email
@@ -10409,7 +10409,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.75</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.76</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11700,6 +11700,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.76', date:'2026-03-11', notes:["Chat structural speed pass: removed the remaining artificial stream reveal layer, stopped replaying fake typing for persona responses, reduced worker/persona completion polling to 250ms, trimmed default history and inline file payloads again, and clarified runtime-selection language while routes resolve"] },
   { ver:'v0.30.75', date:'2026-03-11', notes:["Chat speed overhaul: removed artificial token reveal delays from streamed chat, cut persona chat polling from 2s to 250ms with no fake typing animation, trimmed default history/file payload size again, and made runtime selection/status labels clearer while the route is being resolved"] },
   { ver:'v0.30.74', date:'2026-03-11', notes:["Fixed Porter detail chat startup: Porter no longer goes through the blocked worker persona-dispatch path and now streams directly through chat runtime, removing the fake waiting state and the extra 2-second polling penalty on first response"] },
   { ver:'v0.30.73', date:'2026-03-11', notes:["Agents and chat cleanup: fake Porter profile placeholders are gone, Porter's locked doctrine and orchestration skills are stronger, chat routes on raw user text with leaner injected context, resolved backend/model labels now surface instead of lingering on auto, and stale squad-era UI was stripped from the active Agents surface"] },
@@ -35395,7 +35396,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.75"})
+            self.reply_json({"v": "0.30.76"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35557,7 +35558,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.75"
+                health["porter_version"] = "0.30.76"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37454,7 +37455,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.75'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.76'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42378,7 +42379,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.75 ready (localhost only)")
+    print(f"\n  Porter v0.30.76 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.76 (2026-03-11)
+
+- Completed a structural chat speed pass focused on perceived and real responsiveness.
+- Removed the remaining client-side stream reveal delay so streamed chat now paints tokens immediately.
+- Removed fake typing playback from persona/worker responses and kept their bridge completion checks at 250ms.
+- Reduced carried history and capped inline text-file payloads more aggressively so the first request does less work before execution.
+
 ## v0.30.75 (2026-03-11)
 
 - Reworked chat for speed: streamed chat now renders tokens immediately instead of going through the old client-side reveal effect.
