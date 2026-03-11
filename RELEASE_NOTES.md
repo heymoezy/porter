@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.67 (2026-03-11)
+
+- Models now comes alive in clearer stages as gateways, model lists, health, and versions report in, instead of using internal language like “hydrating”.
+- Benchmark labels now use plain language such as `Typical response` instead of raw `p50` jargon.
+
 ## v0.30.66 (2026-03-11)
 
 - Models cards now show a lighter benchmark signal instead of repeating the full `p50 · success · tests` footer on every card.
