@@ -7701,15 +7701,11 @@ _PORTER_PRIMARY_SKILLS = [
 ]
 
 _PORTER_INTERNAL_SKILLS = [
-    "runtime-auditor",
-    "avatar-art-director",
-    "coding-agent",
-    "github",
-    "gh-issues",
-    "gemini",
-    "healthcheck",
-    "tmux",
     "skill-creator",
+    "tmux",
+    "avatar-art-director",
+    "runtime-auditor",
+    "healthcheck",
 ]
 
 _PORTER_RESERVE_SKILLS = [
@@ -14714,10 +14710,10 @@ function _buildSkillCard(sk) {
 }
 
 function _useSkillInChat(skillName) {
-  // Switch to Chat tab and pre-fill the /command
-  switchModule('overview');
+  switchModule('agents');
   setTimeout(function() {
-    var input = document.getElementById('chat-input');
+    selectPersona('porter-core');
+    var input = document.getElementById('pd-chat-input');
     if (input) {
       input.value = '/' + skillName + ' ';
       input.focus();
@@ -17501,8 +17497,8 @@ async function _maSessionChat(sessionId, source, name) {
     var panel = document.getElementById('model-activity-panel');
     if (overlay) overlay.classList.remove('open');
     if (panel) panel.classList.remove('open');
-    // Switch to Chat tab
-    switchModule('overview');
+    switchModule('agents');
+    setTimeout(function() { selectPersona('porter-core'); }, 80);
     // Inject session content as context
     _chatContextFiles.push({
       path: 'session://' + source + '/' + sessionId,
@@ -23656,8 +23652,8 @@ async function chatWithPersona(personaId) {
   var persona = _personas.find(function(p) { return p.id === personaId; });
   if (persona) {
     if (persona.orchestrator_only) {
-      toast('Porter coordinates work from the main chat and is not selectable as a worker', 'warn');
-      switchModule('overview');
+      switchModule('agents');
+      setTimeout(function() { selectPersona(persona.id); }, 80);
       return;
     }
     _chatAgent = persona;
@@ -24634,23 +24630,15 @@ function switchPdTab(tab) {
           var skills = (data && data.skills) || [];
           var profile = (data && data.profile) || {};
           var core = profile.core || [];
-          var internal = profile.internal || [];
           var reserve = profile.reserve || [];
           var html = '<div style="display:flex;flex-direction:column;gap:16px">'
-            + '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Porter Skills</div><div style="font-size:13px;color:var(--text2);line-height:1.6">Porter\'s public skill set should describe why the platform is powerful for users: clearer prompts, better orchestration, cleaner delegation, stronger runtime selection, and reviewed memory. Internal platform-building skills are tracked separately.</div></div>';
+            + '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Porter Skills</div><div style="font-size:13px;color:var(--text2);line-height:1.6">Porter\'s skill set should explain why the platform is powerful for users: clearer prompts, better orchestration, cleaner delegation, stronger runtime selection, and reviewed memory.</div></div>';
           if (core.length) {
             html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">';
             core.forEach(function(sk) {
               html += '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="display:flex;align-items:center;gap:8px"><div style="font-size:12px;font-weight:800;color:var(--text)">' + escHtml(sk.name || '') + '</div><span class="model-card-chip ok" style="font-size:10px">' + (sk.installed ? 'Core' : 'Planned') + '</span></div><div style="font-size:11px;color:var(--text2);line-height:1.55;margin-top:8px">' + escHtml(sk.purpose || sk.description || 'Command coverage') + '</div></div>';
             });
             html += '</div>';
-          }
-          if (internal.length) {
-            html += '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)">Internal Operator Skills</div><span style="font-size:10px;color:var(--text3);margin-left:auto">For PorterHQ and platform maintenance</span></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">'
-              + internal.map(function(sk) {
-                  return '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(sk.name || '') + '</div><div style="font-size:11px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(sk.purpose || sk.description || 'Internal coverage') + '</div></div>';
-                }).join('')
-              + '</div></div>';
           }
           if (reserve.length) {
             html += '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Reserve Skills</div><div style="display:flex;gap:8px;flex-wrap:wrap">' + reserve.map(function(sk) {
@@ -27944,7 +27932,7 @@ function _scheduleOverviewRefresh(delayMs) {
 }
 
 async function init() {
-  switchModule('overview');
+  switchModule('agents');
   loadSettings();
   populateChangelog();
   var [meData, nodeData] = await Promise.all([loadMe(), api('/api/nodes')]);
