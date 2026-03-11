@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.79 — Porter detail chat drag and drop"""
+"""Porter v0.30.80 — Agents-first chat consolidation"""
 
 
 import email
@@ -10553,12 +10553,8 @@ input[type="number"].settings-input { min-width: 60px; }
     </button>
   </div>
   <nav class="module-nav">
-    <button class="mnav-item active" id="mnav-overview" onclick="switchModule('overview')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      <span class="mnav-label">Chat</span>
-    </button>
     <div class="mnav-group-label">Cast</div>
-    <button class="mnav-item" id="mnav-agents" onclick="switchModule('agents')">
+    <button class="mnav-item active" id="mnav-agents" onclick="switchModule('agents')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
       <span class="mnav-label">Agents</span>
     </button>
@@ -10630,7 +10626,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.79</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.80</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10700,7 +10696,7 @@ input[type="number"].settings-input { min-width: 60px; }
   <div id="file-results-footer" style="display:none"></div>
 
   <!-- module panels -->
-  <div id="overview-module" class="module-panel active">
+  <div id="overview-module" class="module-panel">
     <div class="chat-container">
       <div class="chat-route-bar" id="chat-route-bar" style="display:none">
         <span class="module-title" style="font-size:16px">Chat</span>
@@ -10783,7 +10779,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <div id="treg-list"><div class="loading-indicator" style="justify-content:center;padding:32px 0">Loading tasks</div></div>
   </div>
 
-  <div id="agents-module" class="module-panel">
+  <div id="agents-module" class="module-panel active">
     <div class="module-hdr">
       <span class="module-title">Agents</span>
       <div style="flex:1"></div>
@@ -11921,6 +11917,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.80', date:'2026-03-11', notes:["Agents is now the default landing surface and old overview routing now resolves into the Porter/Agents experience instead of opening the legacy general chat; Porter detail chat now keeps its own session history, creation flows start in a clean sub-session, fresh drag-and-drop attachments render immediately even before the first message, and Porter opens with rotating friendlier greetings instead of stale helper copy"] },
   { ver:'v0.30.79', date:'2026-03-11', notes:["Porter detail chat now accepts drag-and-drop file uploads directly into the chat workspace, with a proper drop target and the same attachment pipeline as the explicit upload control"] },
   { ver:'v0.30.78', date:'2026-03-11', notes:["Porter detail chat now has real session controls for new chat, clear chat, and file uploads, and uploaded files become explicit chat context instead of staying outside the conversation lane; the detail chat shell was tightened again so Porter can work from a cleaner dedicated lane without forcing everything through the main chat"] },
   { ver:'v0.30.77', date:'2026-03-11', notes:["Porter detail chat now uses visual motion-first pending states instead of repetitive routing text, the composer and send control were redesigned to feel like Porter rather than generic admin UI, and Porter's identity prompt was cut down so greetings and 'Who is Porter?' resolve quickly and correctly with a warmer voice; Porter skills are now split between public orchestration coverage and internal platform/operator coverage, with prompt architecture elevated as a first-class core skill"] },
@@ -13950,13 +13947,14 @@ function renderConfigSummary(d) {
 }
 
 // ── module system ──
-let _currentModule = 'overview';
+let _currentModule = 'agents';
 let _overviewRefreshTimer = null;
 window._lastAgents = [];
 function _isCoordinationEventType(type) {
   return typeof type === 'string' && type.indexOf('coordination:') === 0;
 }
 function switchModule(name) {
+  if (name === 'overview') name = 'agents';
   // v0.29.11 — Stop phantom pollers when leaving their tabs
   if (_currentModule === 'admin' && name !== 'admin') {
     if (_mcMetricsTimer) { clearInterval(_mcMetricsTimer); _mcMetricsTimer = null; }
@@ -16466,30 +16464,18 @@ function _askPorterToCreate(kind) {
     _pdChatStartCreation(kind);
     return;
   }
-  var input = document.getElementById('chat-input-welcome') || document.getElementById('chat-input');
-  if (!input) return;
-  var prompts = {
-    worker: 'Porter, create the right worker for this job. Define the role, decide whether it should be temporary or persistent, assign the needed skills, and keep the roster clean.',
-    project: 'Porter, create a project with the right scope, description, and structure so future workers can be assigned cleanly.'
-  };
-  var prompt = prompts[kind] || prompts.worker;
-  _chatAgent = null;
-  buildChatCtxSelectors();
-  switchModule('overview');
-  input = document.getElementById('chat-input-welcome') || document.getElementById('chat-input');
-  if (!input) return;
-  input.value = prompt;
-  if (typeof _chatAutoGrow === 'function') _chatAutoGrow(input);
-  input.focus();
-  var pos = input.value.length;
-  try { input.setSelectionRange(pos, pos); } catch(e) {}
+  switchModule('agents');
+  setTimeout(function() {
+    selectPersona('porter-core');
+    setTimeout(function() { _pdChatStartCreation(kind); }, 120);
+  }, 40);
 }
 
 window._pdChatState = window._pdChatState || {};
 
 function _pdChatGetState(pid) {
   if (!window._pdChatState[pid]) {
-    window._pdChatState[pid] = { messages: [], attachments: [], chatId: '', sessionSeq: 0 };
+    window._pdChatState[pid] = { messages: [], attachments: [], chatId: '', sessionSeq: 0, greetingSeed: Date.now() };
   }
   return window._pdChatState[pid];
 }
@@ -16499,6 +16485,21 @@ function _pdChatEnsureId(persona, state) {
   state.sessionSeq = Number(state.sessionSeq || 0) + 1;
   state.chatId = 'pd-' + (persona && persona.id ? persona.id : 'porter') + '-' + Date.now().toString(36) + '-' + state.sessionSeq;
   return state.chatId;
+}
+
+function _pdGreetingCopy(state, persona) {
+  if (!(persona && persona.orchestrator_only)) {
+    return 'Ready when you are. Drop in a directive, revision, or context file and this lane will keep the work focused.';
+  }
+  var greetings = [
+    "Hi, I'm Porter. Let's get to work. How can I help you today?",
+    "Porter here. What are we trying to get done?",
+    "Hi, I'm Porter. Give me the objective and I'll shape the right approach.",
+    "Porter reporting in. What should we tackle first?",
+    "Hi, I'm Porter. Point me at the work and I'll organize the next move."
+  ];
+  var seed = Number(state && state.greetingSeed ? state.greetingSeed : Date.now());
+  return greetings[Math.abs(seed) % greetings.length];
 }
 
 function _pdChatComposePrompt(state, userText) {
@@ -16540,6 +16541,71 @@ async function _pdPersistAttachments(chatId, attachments) {
       }, 30000);
       if (r && r.ok) file.persisted = true;
     } catch (e) {}
+  }
+}
+
+async function _pdOpenHistory() {
+  var p = window._selectedPersona;
+  if (!p) return;
+  try {
+    var resp = await api('/api/chat/sessions');
+    var sessions = ((resp && resp.sessions) || []).filter(function(s) {
+      return String(s.id || '').indexOf('pd-' + p.id + '-') === 0;
+    });
+    if (!sessions.length) {
+      toast('No saved chats for ' + (p.name || 'this agent'));
+      return;
+    }
+    _porterSelect((p.name || 'Agent') + ' Chat History', sessions.map(function(s) {
+      return {
+        id: s.id,
+        label: s.title || (p.name || 'Agent') + ' chat',
+        sub: (s.updated || '').slice(0, 16).replace('T', ' ') || s.id
+      };
+    }), function(sel) {
+      if (sel && sel.id) _pdLoadChatSession(sel.id);
+    });
+  } catch (e) {
+    toast('Failed to load chat history', 'err');
+  }
+}
+
+async function _pdLoadChatSession(chatId) {
+  var p = window._selectedPersona;
+  if (!p || !chatId) return;
+  try {
+    var resp = await api('/api/chat', { action: 'load', chat_id: chatId }, 30000);
+    if (!(resp && resp.ok && resp.chat)) throw new Error((resp && resp.error) || 'Load failed');
+    var state = _pdChatGetState(p.id);
+    state.chatId = chatId;
+    state.flow = null;
+    state.messages = ((resp.chat.messages || [])).map(function(m) {
+      return {
+        role: m.role === 'assistant' ? 'assistant' : m.role,
+        label: m.role === 'user' ? 'You' : (p.name || 'Agent'),
+        content: m.content || '',
+        meta: m.model_id || ''
+      };
+    });
+    var seen = {};
+    state.attachments = [];
+    (resp.chat.messages || []).forEach(function(m) {
+      (m.attachments || []).forEach(function(att) {
+        if (!att || seen[att.id]) return;
+        seen[att.id] = true;
+        state.attachments.push({
+          id: att.id,
+          name: att.filename,
+          size: att.size || 0,
+          mimeType: att.content_type || 'file',
+          isImage: /^image\//i.test(att.content_type || ''),
+          persisted: true
+        });
+      });
+    });
+    _pdChatRender(p.id);
+  } catch (e) {
+    toast(e.message || 'Failed to load chat', 'err');
   }
 }
 
@@ -16654,6 +16720,7 @@ function _pdNewChat() {
   state.attachments = [];
   state.flow = null;
   state.chatId = '';
+  state.greetingSeed = Date.now() + Math.floor(Math.random() * 1000);
   _pdChatRender(p.id);
 }
 
@@ -16666,6 +16733,7 @@ async function _pdClearChat() {
   state.attachments = [];
   state.flow = null;
   state.chatId = '';
+  state.greetingSeed = Date.now() + Math.floor(Math.random() * 1000);
   _pdChatRender(p.id);
   if (oldId) {
     try { await api('/api/chat', { action: 'delete', chat_id: oldId }, 30000); } catch (e) {}
@@ -16792,6 +16860,11 @@ async function _pdChatStartCreation(kind) {
     });
     _pdChatRender(p.id);
     return;
+  }
+  if (state.messages.length || (state.attachments || []).length) {
+    state.messages = [];
+    state.attachments = [];
+    state.chatId = '';
   }
   var ctx = await _pdCreationLoadContext();
   state.flow = { kind: kind, stage: 0, draft: {}, context: ctx };
@@ -16935,13 +17008,6 @@ function _pdChatRender(pid) {
   if (!panel) return;
   var state = _pdChatGetState(pid);
   var persona = (window._selectedPersona && window._selectedPersona.id === pid) ? window._selectedPersona : null;
-  if (!state.messages.length) {
-    panel.innerHTML = '<div class="pd-chat-empty">' + escHtml(persona && persona.orchestrator_only
-      ? 'Porter works best from this dedicated lane. Ask him to shape a plan, create the right worker, or set up a project without leaving the detail view.'
-      : 'Use this dedicated lane to direct this worker without losing the rest of the command surface.') + '</div>';
-    return;
-  }
-  var flowBanner = '';
   var attachmentStrip = '';
   if ((state.attachments || []).length) {
     attachmentStrip = '<div class="pd-chat-attachments">' + state.attachments.map(function(file) {
@@ -16954,6 +17020,11 @@ function _pdChatRender(pid) {
         + '</div>';
     }).join('') + '</div>';
   }
+  if (!state.messages.length) {
+    panel.innerHTML = attachmentStrip + '<div class="pd-chat-empty">' + escHtml(_pdGreetingCopy(state, persona)) + '</div>';
+    return;
+  }
+  var flowBanner = '';
   if (state.flow) {
     var stepNow = Number(state.flow.stage || 0) + 1;
     var totalSteps = state.flow.kind === 'project' ? 5 : 4;
@@ -24362,6 +24433,7 @@ function switchPdTab(tab) {
       + '<div style="margin-top:8px;padding-top:4px">'
       + '<div class="pd-chat-toolbar">'
       + '<button class="pd-chat-toolbtn" onclick="_pdNewChat()">＋ New Chat</button>'
+      + '<button class="pd-chat-toolbtn" onclick="_pdOpenHistory()">History</button>'
       + '<button class="pd-chat-toolbtn" onclick="_pdClearChat()">Clear Chat</button>'
       + '<button class="pd-chat-toolbtn" onclick="_pdChooseFiles()">Upload Files</button>'
       + '</div>'
@@ -29102,9 +29174,10 @@ document.addEventListener('keydown', function(e) {
   // Ctrl+K: focus chat input
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
     e.preventDefault();
-    switchModule('overview');
-    setTimeout(function() {
-      var ci = document.getElementById('chat-input');
+  switchModule('agents');
+  setTimeout(function() {
+      selectPersona('porter-core');
+      var ci = document.getElementById('pd-chat-input');
       if (ci) ci.focus();
     }, 100);
     return;
@@ -29133,7 +29206,7 @@ document.addEventListener('keydown', function(e) {
 
   // Number keys 1-9: switch tabs
   var tabMap = {
-    '1': 'overview', '2': 'agents', '3': 'skills',
+    '1': 'agents', '2': 'projects', '3': 'models',
     '4': 'projects', '5': 'workflows', '6': 'files',
     '7': 'models', '8': 'cortex', '9': 'system'
   };
@@ -35847,7 +35920,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.79"})
+            self.reply_json({"v": "0.30.80"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36009,7 +36082,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.79"
+                health["porter_version"] = "0.30.80"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37906,7 +37979,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.79'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.80'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42830,7 +42903,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.79 ready (localhost only)")
+    print(f"\n  Porter v0.30.80 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

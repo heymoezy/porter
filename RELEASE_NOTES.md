@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.80 (2026-03-11)
+
+- Agents is now the default landing surface, and old overview/chat routing now resolves into the Porter/Agents experience instead of leading users back into the legacy general chat.
+- Porter detail chat now has its own history picker, and guided worker/project setup starts in a clean Porter sub-session instead of colliding with the current thread.
+- Fixed the detail-chat drag/drop bug on fresh chats: dropped files now appear immediately even before the first message.
+- Porter’s empty-state greeting is now friendly and rotates between variants instead of repeating the same cold helper copy.
+
 ## v0.30.79 (2026-03-11)
 
 - Porter detail chat now accepts drag-and-drop files directly into the chat workspace instead of forcing the upload button path.
