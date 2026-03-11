@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.91 (2026-03-11)
+
+- Agent-detail chats now show uploaded image attachments as thumbnail previews instead of plain filenames, making image context read more like a real chat workspace.
+- The hidden configuration slide-out no longer leaks its old `Configure` title across the Agents screen during browser resize or responsive reflow.
+
 ## v0.30.90 (2026-03-11)
 
 - New installs now seed a proper `Launchpad` starter project automatically when no projects exist.

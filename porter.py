@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.90 — Seed Launchpad on first run"""
+"""Porter v0.30.91 — Fix agent resize glitch and image attachment previews"""
 
 
 import email
@@ -9696,6 +9696,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   margin:0 0 10px;
 }
 .pd-chat-attachment {
+  position:relative;
   display:inline-flex;
   align-items:center;
   gap:8px;
@@ -9704,6 +9705,31 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   border-radius:14px;
   border:1px solid color-mix(in srgb,var(--border) 80%, transparent);
   background:color-mix(in srgb,var(--surface) 92%, transparent);
+}
+.pd-chat-attachment.image {
+  flex-direction:column;
+  align-items:flex-start;
+  gap:6px;
+  width:148px;
+  padding:8px;
+}
+.pd-chat-attachment-thumb {
+  width:100%;
+  aspect-ratio:1.2/1;
+  border-radius:12px;
+  overflow:hidden;
+  background:color-mix(in srgb,var(--bg) 88%, transparent);
+  border:1px solid color-mix(in srgb,var(--border) 72%, transparent);
+}
+.pd-chat-attachment-thumb img {
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit:cover;
+}
+.pd-chat-attachment-info {
+  min-width:0;
+  width:100%;
 }
 .pd-chat-attachment-name {
   font-size:11px;
@@ -9719,12 +9745,25 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .pd-chat-attachment-remove {
   border:none;
-  background:none;
+  background:color-mix(in srgb,var(--bg) 82%, transparent);
   color:var(--text3);
   cursor:pointer;
   font-size:14px;
   line-height:1;
   padding:0;
+  width:22px;
+  height:22px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+}
+.pd-chat-attachment.image .pd-chat-attachment-remove {
+  position:absolute;
+  top:8px;
+  right:8px;
+  z-index:1;
 }
 .pd-chat-attachment-remove:hover { color:#ef4444; }
 .pd-chat-shell.drag-over .pd-chat-composer,
@@ -10777,9 +10816,13 @@ body.density-compact .file-name { padding: 6px 0; }
 .config-panel {
   position:fixed; top:0; right:-460px; width:460px; height:100vh;
   background:var(--surface); border-left:1px solid var(--border);
-  display:flex; flex-direction:column; z-index:50; transition:right .2s ease;
+  display:flex; flex-direction:column; z-index:50; transition:right .2s ease, opacity .15s ease, visibility .15s ease;
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  overflow:hidden;
 }
-.config-panel.open { right:0; }
+.config-panel.open { right:0; opacity:1; visibility:visible; pointer-events:auto; }
 .config-header {
   display:flex; align-items:center; gap:10px; padding:14px 16px;
   border-bottom:1px solid var(--border); flex-shrink:0;
@@ -11127,7 +11170,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.90</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.91</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12049,7 +12092,7 @@ input[type="number"].settings-input { min-width: 60px; }
 <!-- Config slide-out panel — outside all module divs so it works from any tab -->
 <div class="config-panel" id="configPanel">
   <div class="config-header">
-    <span class="config-title" id="configPanelTitle">Configure</span>
+    <span class="config-title" id="configPanelTitle"></span>
     <button class="btn btn-icon" onclick="closeConfigPanel()" title="Close">&times;</button>
   </div>
   <div class="config-body" id="configPanelBody"></div>
@@ -12286,6 +12329,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.91', date:'2026-03-11', notes:["Agent-detail chats now render uploaded image attachments as thumbnail previews instead of plain filenames, and the hidden configure panel no longer flashes stray text across Agents during browser resize"] },
   { ver:'v0.30.90', date:'2026-03-11', notes:["New installs now seed a proper `Launchpad` starter project automatically when no projects exist, make it active on first run, and scaffold the guided starter workspace instead of leaving the product with no canonical project lane"] },
   { ver:'v0.30.89', date:'2026-03-11', notes:["The legacy seeded `Porter App` project is now migrated to `Launchpad` in config and workspace docs, startup includes a self-healing migration for older local state, and Pulse has been simplified into a tighter live operations view instead of a stacked runtime admin slab"] },
   { ver:'v0.30.88', date:'2026-03-11', notes:["The last hardcoded `Porter App` fallback in task migration now resolves the active project name dynamically instead of assuming Porter is building itself, and the next redesign tranche is documented with explicit briefs for a first-run `Launchpad` project and a full dark/light theme overhaul"] },
@@ -16904,6 +16948,7 @@ async function _pdLoadChatSession(chatId) {
           size: att.size || 0,
           mimeType: att.content_type || 'file',
           isImage: /^image\//i.test(att.content_type || ''),
+          previewUrl: /^image\//i.test(att.content_type || '') ? ('/api/chat/attachments/download?id=' + encodeURIComponent(att.id) + '&inline=1') : '',
           persisted: true
         });
       });
@@ -17341,9 +17386,19 @@ function _pdChatRender(pid) {
   if ((state.attachments || []).length) {
     attachmentStrip = '<div class="pd-chat-attachments">' + state.attachments.map(function(file) {
       var sizeLabel = file.size ? Math.max(1, Math.round(file.size / 1024)) + ' KB' : '';
+      var removeBtn = '<button class="pd-chat-attachment-remove" onclick="_pdRemoveAttachment(\'' + escHtml(file.id).replace(/'/g, "\\'") + '\')" title="Remove attachment">×</button>';
+      if (file.isImage) {
+        var previewSrc = file.previewUrl || (file.data ? ('data:' + (file.mimeType || 'image/png') + ';base64,' + file.data) : '');
+        return '<div class="pd-chat-attachment image">'
+          + removeBtn
+          + '<div class="pd-chat-attachment-thumb">' + (previewSrc ? '<img src="' + escHtml(previewSrc) + '" alt="' + escHtml(file.name || 'Image attachment') + '">' : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--text3)">🖼️</div>') + '</div>'
+          + '<div class="pd-chat-attachment-info"><div class="pd-chat-attachment-name">' + escHtml(file.name || 'Image') + '</div>'
+          + '<div class="pd-chat-attachment-meta">' + escHtml(sizeLabel || (file.mimeType || 'image')) + '</div></div>'
+          + '</div>';
+      }
       return '<div class="pd-chat-attachment">'
-        + '<div style="font-size:14px">' + (file.isImage ? '🖼️' : '📄') + '</div>'
-        + '<div style="min-width:0"><div class="pd-chat-attachment-name">' + escHtml(file.name || 'Attachment') + '</div>'
+        + '<div style="font-size:14px">📄</div>'
+        + '<div class="pd-chat-attachment-info"><div class="pd-chat-attachment-name">' + escHtml(file.name || 'Attachment') + '</div>'
         + '<div class="pd-chat-attachment-meta">' + escHtml(sizeLabel || (file.mimeType || 'file')) + '</div></div>'
         + '<button class="pd-chat-attachment-remove" onclick="_pdRemoveAttachment(\'' + escHtml(file.id).replace(/'/g, "\\'") + '\')" title="Remove attachment">×</button>'
         + '</div>';
@@ -36242,7 +36297,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.90"})
+            self.reply_json({"v": "0.30.91"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36404,7 +36459,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.90"
+                health["porter_version"] = "0.30.91"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38348,7 +38403,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.90'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.91'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38864,6 +38919,7 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/chat/attachments/download":
             if not self.auth_check(redirect=False): return
             att_id = qs.get("id", [""])[0]
+            inline = qs.get("inline", ["0"])[0] == "1"
             if not att_id:
                 self.reply_json({"error": "id required"}, 400); return
             try:
@@ -38876,7 +38932,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", row["content_type"] or "application/octet-stream")
                 self.send_header("Content-Length", str(row["size"]))
-                self.send_header("Content-Disposition", f'attachment; filename="{row["filename"]}"')
+                disposition = "inline" if inline else "attachment"
+                self.send_header("Content-Disposition", f'{disposition}; filename="{row["filename"]}"')
                 self.end_headers()
                 self.wfile.write(row["data"])
             except Exception as e:
@@ -43339,7 +43396,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.90 ready (localhost only)")
+    print(f"\n  Porter v0.30.91 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
