@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.3 — Clean Launchpad activity, strengthen Porter voice, and redesign Pulse"""
+"""Porter v0.31.4 — Honor explicit chat lane switches in Porter chat"""
 
 
 import email
@@ -8733,6 +8733,37 @@ def _general_chat_identity_prompt() -> str:
         "Be clear, concise, truthful, and structured only when it helps.\n\n"
     )
 
+
+def _requested_chat_model_id(message: str, current_model: str = "") -> str:
+    text = str(message or "").strip().lower()
+    if not text:
+        return str(current_model or "").strip()
+    checks = [
+        ("ollama", "ollama-local"),
+        ("codex", "codex-cli"),
+        ("claude", "claude-cli"),
+        ("gemini", "gemini-cli-auto"),
+        ("openclaw", "openclaw-gateway"),
+    ]
+    trigger_prefixes = (
+        "use ",
+        "switch to ",
+        "talk to me via ",
+        "chat via ",
+        "chat with me via ",
+        "let's use ",
+        "route this through ",
+        "run this through ",
+    )
+    for needle, model_id in checks:
+        if needle not in text:
+            continue
+        if any(prefix + needle in text for prefix in trigger_prefixes):
+            return model_id
+        if f"using {needle}" in text or f"via {needle}" in text or f"on {needle}" in text:
+            return model_id
+    return str(current_model or "").strip()
+
 # ── helpers ───────────────────────────────────────────────────────────────
 
 def safe_resolve(root_key, rel=""):
@@ -11365,10 +11396,6 @@ input[type="number"].settings-input { min-width: 60px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
       <span class="mnav-label">Projects</span>
     </button>
-    <button class="mnav-item" id="mnav-workflows" onclick="switchModule('workflows')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-      <span class="mnav-label">Workflows</span>
-    </button>
     <div class="mnav-group-label">Intelligence</div>
     <button class="mnav-item" id="mnav-models" onclick="switchModule('models')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
@@ -11418,7 +11445,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.3</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.4</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11986,18 +12013,6 @@ input[type="number"].settings-input { min-width: 60px; }
         </div>
       </div>
       <div id="runtime-orch-runs" style="display:flex;flex-direction:column;gap:8px"></div>
-    </div>
-  </div>
-
-  <div id="workflows-module" class="module-panel">
-    <div class="module-hdr">
-      <span class="module-title">Workflows</span>
-    </div>
-    <div class="module-intro">Custom user-defined workflows with triggers, conditions, and multi-step agent chains.</div>
-    <div style="padding:32px;text-align:center;color:var(--text3);font-size:13px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">
-      <div style="font-size:24px;margin-bottom:8px;opacity:.5">&#128679;</div>
-      <div style="font-weight:500;color:var(--text2);margin-bottom:4px">Coming Soon</div>
-      <div>Build multi-step agent chains with triggers and conditions.</div>
     </div>
   </div>
 
@@ -12577,6 +12592,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.4', date:'2026-03-11', notes:["Porter chat now honors explicit runtime requests like `use Ollama` or `switch to Claude` instead of silently forcing Codex on the Porter lane, so model-switch requests can route through the intended chat backend when that lane is available"] },
   { ver:'v0.31.3', date:'2026-03-11', notes:["Launchpad project activity is now filtered to recent, project-relevant work instead of leaking stale legacy dispatch noise, Pulse has a cleaner live-console visual treatment instead of stacked admin slabs, and Porter chat stops appending repetitive runtime boilerplate so his voice reads like the orchestrator instead of the underlying coding runtime"] },
   { ver:'v0.31.2', date:'2026-03-11', notes:["Launchpad now uses durable state and artifact language instead of memory-era starter copy, project scaffolding writes a canonical STATE.md alongside a compatibility MEMORY.md, and Launchpad seeds real structured directives and project notes so new users land in a meaningful first-run project instead of an empty shell"] },
   { ver:'v0.31.1', date:'2026-03-11', notes:["Pulse now loads directly from live ops, gateway activity, orchestration, and bridge pressure instead of depending on the legacy workflow surface, internal-only compatibility workflows are hidden from the normal registry API, and Agent/Project State tabs now support adding durable directives and notes directly so structured memory becomes editable rather than passive"] },
@@ -14765,7 +14781,7 @@ function switchModule(name) {
       }, 60000);
     }, tasks: function() { /* tasks merged into projects */ }, agents: function() { loadAgents(); }, projects: function() { loadProjects(); }, admin: loadAdmin,
     files: loadLocations, policies: loadPolicy,
-    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, system: function(){ _loadRuntimeOperations(); }, workflows: function(){}, settings: syncSettingsUI,
+    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, system: function(){ _loadRuntimeOperations(); }, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -15596,7 +15612,7 @@ async function _projOpen(id) {
     sb.style.color = done ? '#22c55e' : '#3b82f6';
   }
   window._projCurrent = proj;
-  _projTab = 'overview';
+  _projTab = 'chat';
   _renderProjTabs();
   _renderProjTabContent();
 }
@@ -15606,17 +15622,16 @@ function _renderProjTabs() {
   if (!tabs) return;
   var proj = window._projCurrent || {};
   var agentCount = (proj.assigned_personas || []).length;
-    var items = [
-    {id:'overview', label:'Overview'},
+  var items = [
+    {id:'chat', label:'Chat'},
     {id:'agents', label:'Agents' + (agentCount ? ' (' + agentCount + ')' : '')},
     {id:'artifacts', label:'Artifacts'},
-    {id:'workflows', label:'Workflows' + ((proj.workflows||[]).length ? ' (' + (proj.workflows||[]).length + ')' : '')},
     {id:'state', label:'State'},
     {id:'settings', label:'Settings'}
   ];
   tabs.innerHTML = items.map(function(t) {
     var active = _projTab === t.id;
-    return '<button onclick="_projSwitchTab(\x27' + t.id + '\x27)" style="font-size:11px;padding:4px 12px;border:none;border-radius:6px;cursor:pointer;'
+    return '<button onclick="_projSwitchTab(\x27' + t.id + '\x27)" style="font-size:12px;padding:7px 14px;border:none;border-radius:10px;cursor:pointer;font-weight:' + (active ? '700' : '600') + ';'
       + (active ? 'background:var(--accent);color:#fff' : 'background:transparent;color:var(--text3)')
       + '">' + t.label + '</button>';
   }).join('');
@@ -15624,8 +15639,9 @@ function _renderProjTabs() {
 
 function _projSwitchTab(t) {
   if (t === 'memory') t = 'state';
+  if (t === 'overview' || t === 'workflows') t = 'chat';
   _projTab = t;
-  if (t !== 'overview' && _projActivityRefreshTimer) {
+  if (t !== 'chat' && _projActivityRefreshTimer) {
     clearTimeout(_projActivityRefreshTimer);
     _projActivityRefreshTimer = null;
   }
@@ -15639,37 +15655,39 @@ async function _renderProjTabContent() {
   var proj = window._projCurrent;
   var html = '';
 
-  if (_projTab === 'overview') {
-    // Project name + description
-    html += '<div style="padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:12px">';
-    html += '<div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:6px">' + escHtml(proj.name || 'Untitled') + '</div>';
-    html += '<div style="font-size:12px;color:var(--text2);line-height:1.5">' + escHtml(proj.description || 'No description set. Add one in Settings.') + '</div>';
-    html += '</div>';
-    // Info grid
-    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">';
-    // Type
-    html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">';
-    html += '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Type</div>';
-    html += '<div style="font-size:13px;font-weight:500;color:var(--text)">' + (proj.type === 'autonomous' ? 'Autonomous' : 'Manual') + '</div></div>';
-    // Status
+  if (_projTab === 'chat') {
     var isActive = proj.id === _projActive;
-    html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">';
-    html += '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Status</div>';
-    html += '<div style="font-size:13px;font-weight:500;color:' + (isActive ? 'var(--accent)' : 'var(--text)') + '">' + (proj.completed_at ? 'Completed' : (isActive ? 'Active' : 'Inactive')) + '</div></div>';
-    // Created
-    html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">';
-    html += '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Created</div>';
-    html += '<div style="font-size:13px;font-weight:500;color:var(--text)">' + (proj.created_at ? _projFmtDate(proj.created_at * 1000) : 'Unknown') + '</div></div>';
+    html += '<div style="display:grid;grid-template-columns:minmax(320px,1.15fr) minmax(280px,.85fr);gap:16px;align-items:start">';
+    html += '<div style="padding:18px 20px;border:1px solid color-mix(in srgb,var(--accent) 18%,var(--border));border-radius:20px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%,transparent),color-mix(in srgb,var(--bg) 98%,transparent))">';
+    html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px">';
+    html += '<div><div style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:6px">' + escHtml(proj.name || 'Untitled') + '</div>';
+    html += '<div style="font-size:14px;line-height:1.65;color:var(--text2)">' + escHtml(proj.description || 'Porter can define the brief, create the right workers, and keep this project on track.') + '</div></div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">';
+    html += '<span class="model-card-chip ' + (isActive ? 'ok' : 'dim') + '" style="font-size:11px">' + (isActive ? 'Active Project' : 'Project Lane') + '</span>';
+    html += '<span class="model-card-chip dim" style="font-size:11px">' + escHtml(proj.type === 'autonomous' ? 'Autonomous' : 'Manual') + '</span>';
+    html += '</div></div>';
+    if (proj.success_bar) {
+      html += '<div style="padding:14px 16px;border:1px solid var(--border);border-radius:16px;background:var(--bg);margin-bottom:14px">';
+      html += '<div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Success Bar</div>';
+      html += '<div style="font-size:13px;line-height:1.65;color:var(--text)">' + escHtml(proj.success_bar) + '</div></div>';
+    }
+    html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">';
+    html += '<button class="btn btn-primary" style="font-size:12px" onclick="_pdChatStartCreation(\'worker\')">Ask Porter To Create A Worker</button>';
+    html += '<button class="btn btn-ghost" style="font-size:12px" onclick="_pdChatStartCreation(\'project\')">Refine This Project With Porter</button>';
     html += '</div>';
-    // Stats row
-    html += '<div style="display:flex;gap:16px;font-size:11px;color:var(--text3)">';
-    html += '<span>' + (proj.assigned_personas || []).length + ' agents</span>';
-    html += '<span>' + (proj.tokens_used || 0).toLocaleString() + ' tokens</span>';
+    html += '<div style="font-size:12px;color:var(--text3);line-height:1.6">This lane should be Porter-led. Use it to shape the plan, create the right worker, tighten the success bar, or redirect the project without leaving the chat.</div>';
     html += '</div>';
-    html += '<div style="margin-top:14px">';
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Recent Activity</div>';
-    html += '<div id="proj-activity-list" style="display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--text3)">Loading...</div>';
-    html += '</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:12px">';
+    html += '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)">';
+    html += '<div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Project At A Glance</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">';
+    html += '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Workers</div><div style="font-size:24px;font-weight:800;color:var(--text);margin-top:4px">' + (proj.assigned_personas || []).length + '</div></div>';
+    html += '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Created</div><div style="font-size:16px;font-weight:800;color:var(--text);margin-top:8px">' + escHtml(proj.created_at ? _projFmtDate(proj.created_at * 1000) : 'Unknown') + '</div></div>';
+    html += '</div></div>';
+    html += '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)">';
+    html += '<div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Recent Activity</div>';
+    html += '<div id="proj-activity-list" style="display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--text3)">Loading...</div>';
+    html += '</div></div></div>';
     content.innerHTML = html;
     _projLoadActivity(proj.id);
     return;
@@ -15726,23 +15744,6 @@ async function _renderProjTabContent() {
     content.innerHTML = html;
     _projLoadArtifacts(proj.id);
     return;
-
-  } else if (_projTab === 'workflows') {
-    var attached = proj.workflows || [];
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Attached Workflows (' + attached.length + ')</div>';
-    html += '<button onclick="_projAttachWf(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:11px">+ Attach</button>';
-    html += '</div>';
-    if (!attached.length) {
-      html += '<div style="padding:16px;text-align:center;color:var(--text3);font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">';
-      html += 'No workflows attached.<br><span style="font-size:11px">Attach system workflows to scope them to this project.</span>';
-      html += '</div>';
-    } else {
-      html += '<div id="proj-wf-list" style="display:flex;flex-direction:column;gap:8px">Loading...</div>';
-      content.innerHTML = html;
-      _projLoadWorkflows(proj.id, attached);
-      return;
-    }
 
   } else if (_projTab === 'state') {
     html += '<div id="proj-state-view" style="font-size:12px;color:var(--text3)">Loading...</div>';
@@ -36731,7 +36732,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.3"})
+            self.reply_json({"v": "0.31.4"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36893,7 +36894,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.3"
+                health["porter_version"] = "0.31.4"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38837,7 +38838,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.3'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.4'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38880,15 +38881,17 @@ class Handler(BaseHTTPRequestHandler):
             raw_text = unquote(qs.get("raw_text", [""])[0]) if qs.get("raw_text", [""]) else ""
             persona_name = qs.get("persona_name", [""])[0].strip()
             is_porter_chat = persona_name.lower() == "porter"
+            prompt_param = raw_text or qs.get("prompt", [""])[0]
+            prompt_analyzed = unquote(prompt_param) if prompt_param else ""
 
             # Smart routing: if model is "auto" or starts with "general", pick best backend
             model_param = qs.get("model", [""])[0]
-            if is_porter_chat and model_param in ("auto", ""):
+            explicit_model = _requested_chat_model_id(prompt_analyzed, model_param)
+            if explicit_model and explicit_model not in ("auto", "") and explicit_model != model_param:
+                qs["model"] = [explicit_model]
+            elif is_porter_chat and model_param in ("auto", ""):
                 qs["model"] = ["codex-cli"]
             elif model_param in ("auto", "") or model_param.startswith("general"):
-                prompt_param = raw_text or qs.get("prompt", [""])[0]
-                prompt_analyzed = unquote(prompt_param) if prompt_param else ""
-
                 if prompt_analyzed and prompt_analyzed != "SAVED":
                     _route_backend, _route_model = _smart_route(prompt_analyzed)
                     log.info("Smart route: %s → %s", prompt_analyzed[:40], _route_backend)
@@ -43927,7 +43930,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.3 ready (localhost only)")
+    print(f"\n  Porter v0.31.4 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

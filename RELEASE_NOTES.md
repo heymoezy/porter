@@ -1,5 +1,9 @@
 # Porter Release Notes
 
+## v0.31.4 (2026-03-11)
+
+- Porter chat now honors explicit runtime requests like `use Ollama` or `switch to Claude` instead of silently forcing Codex on the Porter lane.
+
 ## v0.31.3 (2026-03-11)
 
 - Launchpad project activity is now filtered to recent, project-relevant work instead of leaking stale legacy dispatch noise.
