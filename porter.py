@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.93 — Fix attachment upload secrets scoping bug"""
+"""Porter v0.30.94 — Speed up Porter chat startup"""
 
 
 import email
@@ -8559,13 +8559,10 @@ def _ensure_porter_persona() -> None:
 
 def _porter_chat_identity_prompt() -> str:
     return (
-        "You are Porter, the built-in Master Orchestrator of this platform.\n"
-        "Voice: warm, friendly, confident, concise.\n"
-        "On greetings, reply as Porter himself with a welcoming line and a short offer to help. Never use the cold stock phrase 'Hi. What do you need?'\n"
-        "If asked who you are, answer directly: Porter is the platform's master orchestrator who shapes work, improves prompts, creates or assigns workers, selects runtime lanes, supervises handoffs, and owns the outcome.\n"
-        "Porter orchestrates; workers execute. Do not describe Porter as just an interface, wrapper, or host shell.\n"
-        "Porter is an expert prompter: repair vague user prompts, tighten worker briefs, and improve inter-agent communication before delegation.\n"
-        "Keep replies lean and useful. When work is executed, make the actual runtime/model visible.\n\n"
+        "You are Porter, the platform's Master Orchestrator.\n"
+        "Voice: warm, friendly, confident, concise. Greet naturally. Never say 'Hi. What do you need?'\n"
+        "Porter orchestrates, improves prompts, assigns or creates workers, and owns the outcome. Workers execute.\n"
+        "Keep replies lean and useful. Be explicit about the runtime/model in use.\n\n"
     )
 
 
@@ -11208,7 +11205,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.93</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.94</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12367,6 +12364,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.94', date:'2026-03-11', notes:["Porter detail chat now skips generic auto-routing and goes straight to Codex by default, trims carried conversation/file context more aggressively, exposes the selected runtime immediately when the stream opens, and logs first-token timing so chat latency can be tuned with real TTFT data"] },
   { ver:'v0.30.93', date:'2026-03-11', notes:["Fixed the attachment upload regression caused by a local `secrets` import shadowing the shared module inside the API handler, which was surfacing as a `cannot access local variable` error during chat uploads"] },
   { ver:'v0.30.92', date:'2026-03-11', notes:["Agent-detail chat now collapses more gracefully in smaller browser widths, with a responsive composer layout and cleaner image attachment previews that fit instead of cropping awkwardly"] },
   { ver:'v0.30.91', date:'2026-03-11', notes:["Agent-detail chats now render uploaded image attachments as thumbnail previews instead of plain filenames, and the hidden configure panel no longer flashes stray text across Agents during browser resize"] },
@@ -16891,10 +16889,10 @@ function _pdGreetingCopy(state, persona) {
 function _pdChatComposePrompt(state, userText) {
   state = state || { messages: [], attachments: [] };
   var parts = [];
-  var hist = (state.messages || []).filter(function(m) { return m.role === 'user' || m.role === 'assistant'; }).slice(-4);
+  var hist = (state.messages || []).filter(function(m) { return m.role === 'user' || m.role === 'assistant'; }).slice(-2);
   if (hist.length) {
     parts.push('Conversation history:\n' + hist.map(function(m) {
-      return (m.role === 'user' ? 'User: ' : 'Assistant: ') + String(m.content || '').slice(0, 500);
+      return (m.role === 'user' ? 'User: ' : 'Assistant: ') + String(m.content || '').slice(0, 280);
     }).join('\n\n'));
   }
   if ((state.attachments || []).length) {
@@ -16903,7 +16901,7 @@ function _pdChatComposePrompt(state, userText) {
       if (f.isImage) {
         ctx += '\n--- File: ' + f.name + ' (image attached) ---\n[Image: ' + f.name + ', type: ' + (f.mimeType || 'image') + ']\n--- End ' + f.name + ' ---\n';
       } else {
-        ctx += '\n--- File: ' + f.name + ' ---\n' + String(f.content || '').slice(0, 3000) + '\n--- End ' + f.name + ' ---\n';
+        ctx += '\n--- File: ' + f.name + ' ---\n' + String(f.content || '').slice(0, 1600) + '\n--- End ' + f.name + ' ---\n';
       }
     });
     parts.push('Context files:' + ctx);
@@ -17499,6 +17497,7 @@ function _pendingDispatchCopy(persona) {
 }
 
 function _pendingDispatchMeta(persona) {
+  if (persona && persona.orchestrator_only) return 'codex';
   if (persona && persona.preferred_backend) return _runtimeLabel(persona.preferred_backend, '', '');
   return 'selecting runtime';
 }
@@ -17507,7 +17506,7 @@ async function _pdChatStreamPorter(persona, state, promptText, userText, idx) {
   return await new Promise(function(resolve) {
     var projectId = persona && persona.project_id ? persona.project_id : '';
     var chatId = _pdChatEnsureId(persona, state);
-    var url = '/api/chat/stream?model=auto'
+    var url = '/api/chat/stream?model=codex-cli'
       + '&prompt=' + encodeURIComponent(promptText)
       + '&route=general'
       + '&chat_id=' + encodeURIComponent(chatId)
@@ -17524,6 +17523,13 @@ async function _pdChatStreamPorter(persona, state, promptText, userText, idx) {
           _pdChatRender(persona.id);
           evtSource.close();
           resolve();
+          return;
+        }
+        if (data.runtime_label && !data.token && !data.done) {
+          var existing = state.messages[idx] || { role: 'pending', label: persona.name || 'Porter', content: _pendingDispatchCopy(persona) };
+          existing.meta = data.runtime_label;
+          state.messages[idx] = existing;
+          _pdChatRender(persona.id);
           return;
         }
         if (data.token) {
@@ -36352,7 +36358,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.93"})
+            self.reply_json({"v": "0.30.94"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36514,7 +36520,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.93"
+                health["porter_version"] = "0.30.94"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38458,7 +38464,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.93'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.94'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38499,10 +38505,14 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             qs = parse_qs(parsed.query)
             raw_text = unquote(qs.get("raw_text", [""])[0]) if qs.get("raw_text", [""]) else ""
+            persona_name = qs.get("persona_name", [""])[0].strip()
+            is_porter_chat = persona_name.lower() == "porter"
 
             # Smart routing: if model is "auto" or starts with "general", pick best backend
             model_param = qs.get("model", [""])[0]
-            if model_param in ("auto", "") or model_param.startswith("general"):
+            if is_porter_chat and model_param in ("auto", ""):
+                qs["model"] = ["codex-cli"]
+            elif model_param in ("auto", "") or model_param.startswith("general"):
                 prompt_param = raw_text or qs.get("prompt", [""])[0]
                 prompt_analyzed = unquote(prompt_param) if prompt_param else ""
 
@@ -38546,7 +38556,7 @@ class Handler(BaseHTTPRequestHandler):
                     return
 
             # Porter context: tell models they're operating within Porter
-            _persona_name_param = qs.get("persona_name", [""])[0]
+            _persona_name_param = persona_name
             if str(_persona_name_param or "").strip().lower() == "porter":
                 prompt = _porter_chat_identity_prompt() + prompt
             elif not _persona_name_param:
@@ -38561,6 +38571,17 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("X-Accel-Buffering", "no")
             self.end_headers()
             _chat_stream_start = __import__("time").time()
+            _chat_first_token_ms = 0
+
+            def _note_first_token():
+                nonlocal _chat_first_token_ms
+                if _chat_first_token_ms:
+                    return
+                _chat_first_token_ms = int((__import__("time").time() - _chat_stream_start) * 1000)
+                mlog.emit("info", "chat", "chat.stream.first_token",
+                          f"First token in {_chat_first_token_ms}ms",
+                          model=model_id, backend=_stream_backend if '_stream_backend' in locals() else "",
+                          duration_ms=_chat_first_token_ms, image_count=_image_count)
 
             _stream_run_id = __import__("uuid").uuid4().hex[:12]
             _stream_backend = model_id.split("-")[0] if "-" in model_id else model_id
@@ -38610,6 +38631,9 @@ class Handler(BaseHTTPRequestHandler):
                     )
                     raise
                 _emit_event("bridge:dispatch", {"run_id": _stream_run_id, "backend": _stream_backend, "prompt": prompt[:200], "source": "chat"})
+                _runtime_label_hint = f"{_stream_backend} · {_stream_model_target}" if _stream_model_target else _stream_backend
+                self.wfile.write(f"data: {json.dumps({'runtime_label': _runtime_label_hint, 'backend_used': _stream_backend, 'model_used': _stream_model_target or _stream_backend})}\n\n".encode())
+                self.wfile.flush()
 
                 if model_id.startswith("local-ollama-"):
                     # Stream from Ollama
@@ -38626,6 +38650,7 @@ class Handler(BaseHTTPRequestHandler):
                             chunk = json.loads(line)
                             token = chunk.get("response", "")
                             if token:
+                                _note_first_token()
                                 full_response += token
                                 self.wfile.write(f"data: {json.dumps({'token': token})}\n\n".encode())
                                 self.wfile.flush()
@@ -38640,6 +38665,8 @@ class Handler(BaseHTTPRequestHandler):
                     oc_result = dispatch_agent(prompt, "openclaw", timeout=120)
                     if oc_result.get("ok"):
                         full_response = oc_result.get("text", "")
+                        if full_response:
+                            _note_first_token()
                         self.wfile.write(f"data: {json.dumps({'token': full_response})}\n\n".encode())
                         self.wfile.flush()
                     else:
@@ -38673,6 +38700,7 @@ class Handler(BaseHTTPRequestHandler):
                                 chunk = json.loads(line)
                                 token = chunk.get("response", "")
                                 if token:
+                                    _note_first_token()
                                     full_response += token
                                     self.wfile.write(f"data: {json.dumps({'token': token})}\n\n".encode())
                                     self.wfile.flush()
@@ -38706,6 +38734,8 @@ class Handler(BaseHTTPRequestHandler):
                             for _line in iter(_proc.stdout.readline, ''):
                                 if any(_line.strip().startswith(s) for s in _skip_prefixes):
                                     continue
+                                if _line:
+                                    _note_first_token()
                                 full_response += _line
                                 self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
                                 self.wfile.flush()
@@ -38743,6 +38773,7 @@ class Handler(BaseHTTPRequestHandler):
                                 if _etype == "assistant" and _evt.get("message", {}).get("content"):
                                     for _blk in _evt["message"]["content"]:
                                         if _blk.get("type") == "text" and _blk.get("text"):
+                                            _note_first_token()
                                             full_response += _blk["text"]
                                             self.wfile.write(f"data: {json.dumps({'token': _blk['text']})}\n\n".encode())
                                             self.wfile.flush()
@@ -38757,6 +38788,7 @@ class Handler(BaseHTTPRequestHandler):
                                 elif _etype == "content_block_delta":
                                     _delta = _evt.get("delta", {})
                                     if _delta.get("type") == "text_delta" and _delta.get("text"):
+                                        _note_first_token()
                                         full_response += _delta["text"]
                                         self.wfile.write(f"data: {json.dumps({'token': _delta['text']})}\n\n".encode())
                                         self.wfile.flush()
@@ -38765,12 +38797,14 @@ class Handler(BaseHTTPRequestHandler):
                                     # Final result — extract text if not already captured
                                     _rtxt = _evt.get("result", "")
                                     if _rtxt and not full_response:
+                                        _note_first_token()
                                         full_response = _rtxt
                                         self.wfile.write(f"data: {json.dumps({'token': _rtxt})}\n\n".encode())
                                         self.wfile.flush()
                                         _stream_chunk(_stream_run_id, _stream_backend, _rtxt)
                             except (json.JSONDecodeError, ValueError):
                                 # Non-JSON line — send as-is
+                                _note_first_token()
                                 full_response += _line
                                 self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
                                 self.wfile.flush()
@@ -38819,6 +38853,7 @@ class Handler(BaseHTTPRequestHandler):
                                                 _parts = [p.get("text","") for p in (_item.get("content",[]) or []) if isinstance(p, dict) and p.get("text")]
                                                 _msg = "".join(_parts).strip()
                                             if _msg:
+                                                _note_first_token()
                                                 full_response += _msg
                                                 self.wfile.write(f"data: {json.dumps({'token': _msg})}\n\n".encode())
                                                 self.wfile.flush()
@@ -38835,6 +38870,7 @@ class Handler(BaseHTTPRequestHandler):
                                         self.wfile.write(f"data: {json.dumps({'error': _emsg})}\n\n".encode())
                                         self.wfile.flush()
                                 except (json.JSONDecodeError, ValueError):
+                                    _note_first_token()
                                     full_response += _line
                                     self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
                                     self.wfile.flush()
@@ -38877,7 +38913,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.flush()
                 _chat_dur = int((__import__("time").time() - _chat_stream_start) * 1000)
                 mlog.emit("info", "chat", "chat.stream.complete", f"Chat done: {model_id} ({_chat_dur}ms)",
-                          model=model_id, duration_ms=_chat_dur, response_chars=len(full_response))
+                          model=model_id, duration_ms=_chat_dur, response_chars=len(full_response), ttft_ms=_chat_first_token_ms)
 
                 # Auto-save to chat history if chat_id provided
                 if chat_id and full_response:
@@ -38911,7 +38947,7 @@ class Handler(BaseHTTPRequestHandler):
                 log.error("Chat stream error: %s", e)
                 _chat_dur = int((__import__("time").time() - _chat_stream_start) * 1000) if '_chat_stream_start' in dir() else 0
                 mlog.emit("error", "chat", "chat.stream.error", f"Chat error: {str(e)[:100]}",
-                          model=model_id, duration_ms=_chat_dur, error=str(e)[:200])
+                          model=model_id, duration_ms=_chat_dur, error=str(e)[:200], ttft_ms=_chat_first_token_ms)
                 try:
                     self.wfile.write(f"data: {json.dumps({'error': str(e)})}\n\n".encode())
                     self.wfile.flush()
@@ -43450,7 +43486,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.93 ready (localhost only)")
+    print(f"\n  Porter v0.30.94 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

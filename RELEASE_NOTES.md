@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.94 (2026-03-11)
+
+- Porter detail chat now skips generic auto-routing and goes straight to Codex by default, so the first response path does less work before the stream starts.
+- Porter chat carries less historical/file context by default, exposes the selected runtime immediately when the stream opens, and logs first-token timing so remaining latency can be measured directly.
+
 ## v0.30.93 (2026-03-11)
 
 - Fixed the chat attachment upload regression caused by a local `secrets` import shadowing the shared module inside the API handler, which was surfacing as a `cannot access local variable 'secrets'` error.
