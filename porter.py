@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.96 — Fix agent chat history management and attachment reuse"""
+"""Porter v0.30.97 — Reuse Codex chat sessions across turns"""
 
 
 import email
@@ -8069,6 +8069,12 @@ def _save_chat_message(chat_id, model_id, user_msg, assistant_msg, project_id=""
         else:
             # Update metadata with current context
             _upd_meta = {}
+            try:
+                _meta_row = conn.execute("SELECT metadata FROM chats WHERE id = ?", (chat_id,)).fetchone()
+                if _meta_row and _meta_row[0]:
+                    _upd_meta = json.loads(_meta_row[0] or "{}")
+            except Exception:
+                _upd_meta = {}
             if persona_name:
                 _upd_meta["persona_name"] = persona_name
             if model_id:
@@ -8087,6 +8093,43 @@ def _save_chat_message(chat_id, model_id, user_msg, assistant_msg, project_id=""
         conn.close()
     except Exception as e:
         log.warning("Chat save failed: %s", e)
+
+def _chat_metadata(chat_id):
+    try:
+        cid = str(chat_id or "").strip()
+        if not cid:
+            return {}
+        conn = _db_conn()
+        row = conn.execute("SELECT metadata FROM chats WHERE id = ?", (cid,)).fetchone()
+        conn.close()
+        if not row or not row[0]:
+            return {}
+        return json.loads(row[0] or "{}")
+    except Exception as e:
+        log.debug("chat metadata load failed for %s: %s", chat_id, e)
+        return {}
+
+def _chat_update_metadata(chat_id, patch):
+    try:
+        cid = str(chat_id or "").strip()
+        patch = dict(patch or {})
+        if not cid or not patch:
+            return
+        conn = _db_conn()
+        row = conn.execute("SELECT metadata FROM chats WHERE id = ?", (cid,)).fetchone()
+        current = {}
+        if row and row[0]:
+            try:
+                current = json.loads(row[0] or "{}")
+            except Exception:
+                current = {}
+        current.update({k: v for k, v in patch.items() if v not in (None, "")})
+        conn.execute("UPDATE chats SET metadata = ?, updated_at = ? WHERE id = ?",
+                     (json.dumps(current), time.time(), cid))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.debug("chat metadata update failed for %s: %s", chat_id, e)
 
 def ensure_chat_dirs():
     CHAT_DIR.mkdir(parents=True, exist_ok=True)
@@ -11206,7 +11249,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.96</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.97</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12365,6 +12408,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.97', date:'2026-03-11', notes:["Codex-backed chats now preserve and reuse Codex thread ids across turns instead of always starting fresh ephemeral sessions, chat metadata is merged instead of overwritten so resume state survives ordinary saves, and the Codex CLI path now runs with `--ask-for-approval never` to avoid extra approval-policy friction"] },
   { ver:'v0.30.96', date:'2026-03-11', notes:["Agent-detail chat history now supports deleting old sessions directly from the history overlay, Porter stops re-introducing himself on ordinary turns, and uploaded attachments are only injected into the model prompt once instead of being resent on every reply"] },
   { ver:'v0.30.95', date:'2026-03-11', notes:["Agent-detail chat image attachments now render in a smaller footprint so screenshot and image previews feel closer to compact chat attachments instead of oversized mini-cards"] },
   { ver:'v0.30.94', date:'2026-03-11', notes:["Porter detail chat now skips generic auto-routing and goes straight to Codex by default, trims carried conversation/file context more aggressively, exposes the selected runtime immediately when the stream opens, and logs first-token timing so chat latency can be tuned with real TTFT data"] },
@@ -36418,7 +36462,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.96"})
+            self.reply_json({"v": "0.30.97"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36580,7 +36624,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.96"
+                health["porter_version"] = "0.30.97"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38524,7 +38568,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.96'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.97'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38885,8 +38929,16 @@ class Handler(BaseHTTPRequestHandler):
                         import subprocess as _sp
                         import tempfile as _tmp
                         codex_model = os.environ.get("PORTER_CODEX_MODEL", "").strip() or _get_active_model("codex") or "gpt-5.4"
-                        _cdx_cmd = [cdx_bin, "exec", "--ephemeral", "--json", "--skip-git-repo-check", "-m", codex_model, prompt]
+                        _chat_meta = _chat_metadata(chat_id) if chat_id else {}
+                        _codex_thread_id = str((_chat_meta or {}).get("codex_thread_id") or "").strip()
+                        _cdx_cmd = [cdx_bin, "exec"]
+                        if _codex_thread_id:
+                            _cdx_cmd.extend(["resume", "--json", "--skip-git-repo-check", "--ask-for-approval", "never", "-m", codex_model, _codex_thread_id, prompt])
+                            log.info("Codex chat resume: %s → %s", chat_id or "adhoc", _codex_thread_id[:12])
+                        else:
+                            _cdx_cmd.extend(["--json", "--skip-git-repo-check", "--ask-for-approval", "never", "-m", codex_model, prompt])
                         _codex_temp_images = []
+                        _codex_thread_started = ""
                         for _img in _chat_images:
                             try:
                                 _suffix = Path(str(_img["filename"] or "image")).suffix or ".png"
@@ -38905,7 +38957,9 @@ class Handler(BaseHTTPRequestHandler):
                                 try:
                                     _evt = json.loads(_line)
                                     _etype = _evt.get("type", "")
-                                    if _etype == "item.completed":
+                                    if _etype == "thread.started":
+                                        _codex_thread_started = str(_evt.get("thread_id") or "").strip()
+                                    elif _etype == "item.completed":
                                         _item = _evt.get("item", {})
                                         if _item.get("type") == "agent_message":
                                             _msg = _item.get("text", "")
@@ -38980,6 +39034,8 @@ class Handler(BaseHTTPRequestHandler):
                     _stream_project = qs.get("project_id", [""])[0]
                     _stream_persona = qs.get("persona_name", [""])[0]
                     _raw_text = raw_text or prompt
+                    if model_id == "codex-cli" and '_codex_thread_started' in locals() and _codex_thread_started:
+                        _chat_update_metadata(chat_id, {"codex_thread_id": _codex_thread_started})
                     _save_chat_message(chat_id, _runtime_label, _raw_text, full_response,
                                        project_id=_stream_project, persona_name=_stream_persona)
 
@@ -43546,7 +43602,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.96 ready (localhost only)")
+    print(f"\n  Porter v0.30.97 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

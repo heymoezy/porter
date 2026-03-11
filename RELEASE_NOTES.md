@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.97 (2026-03-11)
+
+- Codex-backed chats now preserve and reuse Codex thread ids across turns instead of always starting fresh ephemeral sessions.
+- Chat metadata is now merged instead of overwritten so resume state survives normal saves, and the Codex CLI lane now runs with `--ask-for-approval never`.
+
 ## v0.30.96 (2026-03-11)
 
 - Agent-detail chat history now supports deleting old sessions directly from the history overlay instead of only loading them.
