@@ -1,5 +1,11 @@
 # Porter Release Notes
 
+## v0.31.1 (2026-03-11)
+
+- Pulse now loads directly from live ops, gateway activity, orchestration, and bridge pressure instead of depending on the legacy workflow registry path.
+- Internal-only compatibility workflows such as cortex consolidation and memory extraction are hidden from the normal workflow API surface.
+- Agent and Project State tabs now support adding durable directives and notes directly, so structured memory becomes editable instead of passive.
+
 ## v0.31.0 (2026-03-11)
 
 - Porter chat now buffers raw stream fragments into smoother visible updates instead of repainting every tiny chunk.

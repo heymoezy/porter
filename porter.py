@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.0 — Improve chat stream quality and image carryover"""
+"""Porter v0.31.1 — Cut Pulse loose from legacy workflows and add structured state authoring"""
 
 
 import email
@@ -131,7 +131,7 @@ _HYGIENE_MERGED_MARKER = "(Merged into SOUL.md — see SOUL.md for full content)
 _wf_lock = threading.Lock()
 _wf_registry: dict = {}  # workflow_id -> workflow dict
 
-def _wf_register(wf_id, name, description, wf_type="system", interval="", interval_s=0, config_keys=None):
+def _wf_register(wf_id, name, description, wf_type="system", interval="", interval_s=0, config_keys=None, exposed=True):
     """Register a system workflow in the registry."""
     with _wf_lock:
         _wf_registry[wf_id] = {
@@ -141,6 +141,7 @@ def _wf_register(wf_id, name, description, wf_type="system", interval="", interv
             "last_run": None, "next_run": None, "run_count": 0,
             "error_count": 0, "last_error": None, "last_result": None,
             "last_duration_s": 0, "history": [], "started_at": None,
+            "exposed": bool(exposed),
         }
 
 def _wf_start_run(wf_id):
@@ -240,6 +241,7 @@ def _run_if_due(wf_id, fn):
 _wf_register("cortex_consolidation", "Cortex Consolidation",
     "Merges similar memories and archives stale ones",
     interval="6h", interval_s=6*3600,
+    exposed=False,
     )
 _wf_register("context_hygiene", "Context Hygiene",
     "Prunes old logs, caps soul files, archives stale memories",
@@ -257,6 +259,7 @@ _wf_register("telemetry_rollup", "Telemetry Rollup",
 _wf_register("memory_extraction", "Memory Extraction",
     "Internal legacy extractor retained only for compatibility while structured state replaces cortex-era memory",
     interval="per-response", interval_s=0,
+    exposed=False,
     )
 
 _wf_register("agent_watchdog", "Agent Watchdog",
@@ -2960,6 +2963,35 @@ def _state_set_directive_status(directive_id: str | int, status: str) -> bool:
     except Exception as e:
         log.warning("Directive status update failed for %s: %s", directive_id, e)
         return False
+
+
+def _state_add_directive(scope_type: str, scope_id: str, text: str, source: str = "operator", confidence: float = 1.0):
+    scope = str(scope_type or "").strip().lower()
+    scope_ref = str(scope_id or "").strip()
+    body = str(text or "").strip()
+    if scope not in {"global", "project", "agent"} or not body:
+        return None
+    if scope == "global":
+        scope_ref = ""
+    elif not scope_ref:
+        return None
+    try:
+        conf = max(0.0, min(1.0, float(confidence if confidence is not None else 1.0)))
+    except Exception:
+        conf = 1.0
+    try:
+        conn = _db_conn()
+        cur = conn.execute(
+            "INSERT INTO directives (scope_type, scope_id, text, status, source, confidence) VALUES (?, ?, ?, 'active', ?, ?)",
+            (scope, scope_ref, body, str(source or "operator").strip(), conf),
+        )
+        new_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return new_id
+    except Exception as e:
+        log.warning("Directive insert failed for %s/%s: %s", scope, scope_ref, e)
+        return None
 
 
 def _state_add_project_note(project_id: str, note_kind: str, body: str, source: str = "system", created_by: str = ""):
@@ -11266,7 +11298,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.0</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.1</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12425,6 +12457,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.1', date:'2026-03-11', notes:["Pulse now loads directly from live ops, gateway activity, orchestration, and bridge pressure instead of depending on the legacy workflow surface, internal-only compatibility workflows are hidden from the normal registry API, and Agent/Project State tabs now support adding durable directives and notes directly so structured memory becomes editable rather than passive"] },
   { ver:'v0.31.0', date:'2026-03-11', notes:["Porter chat now buffers raw stream fragments into smoother visible updates instead of repainting every tiny chunk, Codex stream text is merged more cleanly so sentences stop collapsing together, and previously attached images stay referable through lightweight context hints without resending the full image bytes every turn"] },
   { ver:'v0.30.99', date:'2026-03-11', notes:["Fixed the Codex chat resume command to match the installed CLI syntax by removing the unsupported `--ask-for-approval` flag from `codex exec`"] },
   { ver:'v0.30.98', date:'2026-03-11', notes:["Pulse and tour copy now stop leaking stale Runtime-era language, the remaining internal memory-extraction workflow is described as compatibility-only instead of product truth, and the chat-latency prompt-caching notes are now checked into research so the next speed tranche has a documented direction"] },
@@ -14610,7 +14643,7 @@ function switchModule(name) {
       }, 60000);
     }, tasks: function() { /* tasks merged into projects */ }, agents: function() { loadAgents(); }, projects: function() { loadProjects(); }, admin: loadAdmin,
     files: loadLocations, policies: loadPolicy,
-    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, system: function(){ withLoadTimeout('wf-system-grid','loadWorkflowRegistry()'); loadWorkflowRegistry(); }, workflows: function(){}, settings: syncSettingsUI,
+    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, system: function(){ _loadRuntimeOperations(); }, workflows: function(){}, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -15804,7 +15837,11 @@ async function _projLoadState(pid) {
     var artifacts = (payload && payload.artifacts) || {};
     var project = (payload && payload.project) || {};
     var activeNotes = notes.filter(function(n) { return (n.status || 'active') === 'active'; });
-    var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'
+    var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+      + '<div style="font-size:12px;color:var(--text2);line-height:1.6;max-width:720px">Persistent state keeps project directives, decisions, and notes separate from chat. Porter can build on this without dragging old conversations along.</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptDirective(\'project\', \'' + escHtml(pid) + '\')">Add Directive</button><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptProjectNote(\'' + escHtml(pid) + '\')">Add Note</button></div>'
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'
       + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Directives</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + directives.length + '</div></div>'
       + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Project Notes</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + activeNotes.length + '</div></div>'
       + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Artifacts</div><div style="font-size:26px;font-weight:800;color:#22c55e;margin-top:4px">' + Number(artifacts.count || 0) + '</div></div>'
@@ -16373,8 +16410,12 @@ async function _loadPulseOps(force) {
     cards.innerHTML = metricCards.map(function(card) {
       return '<div style="padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">' + escHtml(card.label) + '</div><div style="font-size:28px;font-weight:800;color:' + card.tone + ';margin-top:6px">' + escHtml(String(card.value)) + '</div></div>';
     }).join('');
+    evs = evs.filter(function(e) {
+      var hay = [e.domain, e.event_type, e.message, e.detail, e.error].join(' ').toLowerCase();
+      return hay.indexOf('cortex') < 0 && hay.indexOf('memory extraction') < 0 && hay.indexOf('porter app') < 0;
+    });
     if (!evs.length) {
-      feed.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg);font-size:12px;color:var(--text3)">No operator events yet.</div>';
+      feed.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg);font-size:12px;color:var(--text3)">No recent operator events in the current window.</div>';
       return;
     }
     feed.innerHTML = evs.slice(0, 8).map(function(e) {
@@ -16445,15 +16486,18 @@ async function _loadGatewayActivity(force) {
     host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">Loading gateway activity…</div>';
   }
   try {
-    var qs = force ? '?limit=18&max_age_s=1800&_=' + Date.now() : '?limit=18&max_age_s=1800';
+    var qs = force ? '?limit=18&max_age_s=600&_=' + Date.now() : '?limit=18&max_age_s=600';
     var res = await api('/api/admin/dispatch-log' + qs);
     if (!res || !res.ok) {
       host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:#ef4444">Failed to load gateway activity.</div>';
       return;
     }
-    var rows = res.dispatches || [];
+    var rows = (res.dispatches || []).filter(function(r) {
+      var hay = [r.to, r.model, r.persona_name, r.project_name, r.prompt, r.response_preview, r.error].join(' ').toLowerCase();
+      return hay.indexOf('cortex') < 0 && hay.indexOf('memory extraction') < 0 && hay.indexOf('porter app') < 0;
+    });
     if (!rows.length) {
-      host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">No recent gateway activity in the last 30 minutes.</div>';
+      host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">No recent gateway activity in the last 10 minutes.</div>';
       return;
     }
     host.innerHTML = rows.map(function(r) {
@@ -16475,7 +16519,7 @@ async function _loadGatewayActivity(force) {
         + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + chips + '</div>'
         + '<span style="font-size:10px;color:' + (tone === 'ok' ? '#22c55e' : (tone === 'err' ? '#ef4444' : '#f59e0b')) + ';font-weight:600">' + escHtml((r.status || 'unknown').toUpperCase()) + '</span>'
         + '</div>'
-        + '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">' + escHtml((r.prompt || '').substring(0, 120) || '(no prompt recorded)') + '</div>'
+        + '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">' + escHtml((r.prompt || '').substring(0, 100) || '(no prompt recorded)') + '</div>'
         + '<div style="font-size:11px;color:var(--text3)">' + escHtml((detail || '').substring(0, 220)) + '</div>'
         + '</div>';
     }).join('');
@@ -16796,7 +16840,9 @@ function _scheduleSystemRuntimeRefresh(delayMs) {
   window._systemRuntimeRefreshTimer = setTimeout(function() {
     window._systemRuntimeRefreshTimer = null;
     if (_currentModule === 'system') {
-      _wfRefreshSystemOnly();
+      _loadPulseOps(true);
+      _loadGatewayActivity(true);
+      _loadOrchRuns(true);
       _loadCoordinationPanel(true);
     }
   }, Math.max(80, delayMs || 250));
@@ -17790,6 +17836,59 @@ async function _dismissDirective(memoryId) {
   } catch (e) {
     toast(e.message || 'Dismiss failed', 'err');
   }
+}
+
+async function _statePromptDirective(scopeType, scopeId) {
+  _porterPrompt('Add Directive', [
+    {name: 'text', label: 'Directive', type: 'textarea', placeholder: scopeType === 'project' ? 'Keep deliverables lightweight and approval-ready.' : 'Escalate ambiguity instead of guessing.'},
+    {name: 'confidence', label: 'Confidence', placeholder: '1.0'}
+  ], async function(vals) {
+    var text = String(vals.text || '').trim();
+    if (!text) { toast('Directive required', 'err'); return; }
+    var confidence = parseFloat(vals.confidence || '1');
+    var res = await api('/api/state/directives', { action: 'create', scope_type: scopeType, scope_id: scopeId, text: text, confidence: isFinite(confidence) ? confidence : 1 });
+    if (res && res.ok) {
+      toast('Directive saved', 'ok');
+      if (_selectedPersonaId && _selectedPersonaId === scopeId) switchPdTab('state');
+      if (window._projCurrent && window._projCurrent.id === scopeId) _projLoadState(scopeId);
+    } else {
+      toast((res && res.error) || 'Failed to save directive', 'err');
+    }
+  }, {okLabel: 'Save'});
+}
+
+async function _statePromptProjectNote(projectId) {
+  _porterPrompt('Add Project Note', [
+    {name: 'note_kind', label: 'Kind', placeholder: 'decision'},
+    {name: 'body', label: 'Note', type: 'textarea', placeholder: 'Keep the first release lightweight and approval-ready.'}
+  ], async function(vals) {
+    var body = String(vals.body || '').trim();
+    if (!body) { toast('Note required', 'err'); return; }
+    var res = await api('/api/projects/' + enc(projectId) + '/state/notes', { note_kind: vals.note_kind || 'decision', body: body });
+    if (res && res.ok) {
+      toast('Project note saved', 'ok');
+      _projLoadState(projectId);
+    } else {
+      toast((res && res.error) || 'Failed to save note', 'err');
+    }
+  }, {okLabel: 'Save'});
+}
+
+async function _statePromptAgentNote(agentId) {
+  _porterPrompt('Add Agent Note', [
+    {name: 'note_kind', label: 'Kind', placeholder: 'scope'},
+    {name: 'body', label: 'Note', type: 'textarea', placeholder: 'Keep this worker focused on handoff-ready research.'}
+  ], async function(vals) {
+    var body = String(vals.body || '').trim();
+    if (!body) { toast('Note required', 'err'); return; }
+    var res = await api('/api/personas/' + enc(agentId) + '/state/notes', { note_kind: vals.note_kind || 'scope', body: body });
+    if (res && res.ok) {
+      toast('Agent note saved', 'ok');
+      if (_selectedPersonaId === agentId) switchPdTab('state');
+    } else {
+      toast((res && res.error) || 'Failed to save note', 'err');
+    }
+  }, {okLabel: 'Save'});
 }
 
 function _toggleInlineSessions(btn, backend, source) {
@@ -25222,12 +25321,16 @@ function switchPdTab(tab) {
         var notes = (payload && payload.notes) || [];
         var projects = (payload && payload.projects) || [];
         if (!directives.length && !notes.length && !projects.length) {
-          content.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px">No durable state has been recorded yet.</div>';
+          content.innerHTML = '<div style="display:flex;flex-direction:column;gap:10px"><div style="font-size:12px;color:var(--text3);padding:8px">No durable state has been recorded yet.</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptDirective(\'agent\', \'' + escHtml(p.id) + '\')">Add Directive</button><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptAgentNote(\'' + escHtml(p.id) + '\')">Add Note</button></div></div>';
           return;
         }
         var activeProjects = projects.filter(function(pr) { return pr && pr.project; });
         var openNotes = notes.filter(function(n) { return (n.status || 'active') === 'active'; });
-        var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'
+        var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+          + '<div style="font-size:12px;color:var(--text2);line-height:1.6;max-width:720px">' + (p.orchestrator_only ? 'Porter keeps durable directives and reviewed notes here so the project stays aligned across workers and projects.' : 'This worker keeps reviewed directives and durable notes here so handoffs stay clean.') + '</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptDirective(\'agent\', \'' + escHtml(p.id) + '\')">Add Directive</button><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptAgentNote(\'' + escHtml(p.id) + '\')">Add Note</button></div>'
+          + '</div>'
+          + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'
           + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Directives</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + directives.length + '</div></div>'
           + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Notes</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + openNotes.length + '</div></div>'
           + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Projects</div><div style="font-size:26px;font-weight:800;color:#22c55e;margin-top:4px">' + activeProjects.length + '</div></div>'
@@ -36506,7 +36609,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.0"})
+            self.reply_json({"v": "0.31.1"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36668,7 +36771,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.0"
+                health["porter_version"] = "0.31.1"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38612,7 +38715,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.0'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.1'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39214,7 +39317,8 @@ class Handler(BaseHTTPRequestHandler):
         # ── Workflow Registry (GET) ────────────────────────────────────────────
         elif parsed.path == "/api/workflows":
             if not self.auth_check(redirect=False): return
-            self.reply_json({"ok": True, "workflows": _handle_wf_list()})
+            include_internal = str(parse_qs(parsed.query).get("include_internal", ["0"])[0]).strip().lower() in {"1", "true", "yes"}
+            self.reply_json({"ok": True, "workflows": _handle_wf_list(include_internal=include_internal)})
 
         else:
             self.reply_html("<h1>Not found</h1>", 404)
@@ -41702,6 +41806,52 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             else:
                 self.reply_json({"ok": False, "error": "Directive not found"}, 404)
 
+        elif parsed.path == "/api/state/directives":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body() or {}
+            if str(data.get("action", "")).strip() != "create":
+                self.reply_json({"ok": False, "error": "Unsupported action"}, 400); return
+            scope_type = str(data.get("scope_type", "")).strip().lower()
+            scope_id = str(data.get("scope_id", "")).strip()
+            text = str(data.get("text", "")).strip()
+            confidence = data.get("confidence", 1)
+            new_id = _state_add_directive(scope_type, scope_id, text, source="operator", confidence=confidence)
+            if not new_id:
+                self.reply_json({"ok": False, "error": "Could not save directive"}, 400); return
+            _emit_event("memory:updated", {"id": new_id, "kind": "directive", "scope_type": scope_type, "scope_id": scope_id})
+            mlog.emit("info", "state", "directive.create", f"Created {scope_type} directive", directive_id=new_id, scope_type=scope_type, scope_id=scope_id)
+            self.reply_json({"ok": True, "id": new_id})
+
+        elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/state/notes"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path[len("/api/projects/"):-len("/state/notes")]
+            if not any(p.get("id") == pid for p in _config.get("projects", [])):
+                self.reply_json({"ok": False, "error": "project not found"}, 404); return
+            data = self.read_json_body() or {}
+            body = str(data.get("body", "")).strip()
+            if not body:
+                self.reply_json({"ok": False, "error": "body required"}, 400); return
+            note_kind = str(data.get("note_kind", "decision")).strip() or "decision"
+            _state_add_project_note(pid, note_kind, body, source="operator", created_by="operator")
+            _emit_event("memory:updated", {"kind": "project_note", "project_id": pid, "note_kind": note_kind})
+            mlog.emit("info", "state", "project.note", f"Saved project note for {pid}", project_id=pid, note_kind=note_kind)
+            self.reply_json({"ok": True, "project_id": pid, "note_kind": note_kind})
+
+        elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/state/notes"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path.split("/")[3]
+            if not _persona_by_id(pid):
+                self.reply_json({"ok": False, "error": "Persona not found"}, 404); return
+            data = self.read_json_body() or {}
+            body = str(data.get("body", "")).strip()
+            if not body:
+                self.reply_json({"ok": False, "error": "body required"}, 400); return
+            note_kind = str(data.get("note_kind", "scope")).strip() or "scope"
+            _state_add_agent_note(pid, note_kind, body, source="operator", created_by="operator")
+            _emit_event("memory:updated", {"kind": "agent_note", "agent_id": pid, "note_kind": note_kind})
+            mlog.emit("info", "state", "agent.note", f"Saved agent note for {pid}", agent_id=pid, note_kind=note_kind)
+            self.reply_json({"ok": True, "agent_id": pid, "note_kind": note_kind})
+
         # ── Batch extract all learnings (POST) ────────────────────────────
         elif parsed.path == "/api/sessions/extract-all":
             if not self.auth_check(redirect=False): return
@@ -43338,23 +43488,25 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
 
 # ── Workflow Registry API ─────────────────────────────────────────────────
 
-def _handle_wf_list():
+def _handle_wf_list(include_internal: bool = False):
     """GET /api/workflows — list all workflows with stats + config values."""
     prefs = _config.get("preferences", {})
     # v0.28.34 — Trigger descriptions for each workflow
     _wf_triggers = {
-        "cortex_consolidation": "Timer: runs every configured interval. Merges duplicate memories, archives stale ones (>30d unused).",
+        "cortex_consolidation": "Internal compatibility timer. Retains old cortex-era cleanup while structured state replaces it.",
         "context_hygiene": "Timer: runs every configured interval. Prunes old log entries, caps oversized SOUL files, archives stale agent memories.",
         "capability_checks": "Timer: polls all AI backends and system tools to detect availability changes.",
         "heartbeat": "Timer: pings each agent with heartbeat_enabled=1 on their configured cron schedule.",
         "telemetry_rollup": "Timer: aggregates raw agent telemetry into hourly and daily summary rows.",
-        "memory_extraction": "Event: fires after every chat response. Extracts facts from AI responses into cortex memory.",
+        "memory_extraction": "Internal compatibility hook. Legacy extraction remains only so older paths do not break during the structured-state cutover.",
         "agent_backend_eval": "Timer: weekly cycle through agents testing each backend for response quality and latency.",
         "error_self_heal": "Timer: scans recent error logs for recurring patterns and attempts auto-remediation.",
     }
     result = []
     with _wf_lock:
         for wf_id, wf in _wf_registry.items():
+            if not include_internal and not bool(wf.get("exposed", True)):
+                continue
             entry = dict(wf)
             entry["running"] = bool(wf.get("started_at"))
             if wf.get("started_at"):
@@ -43646,7 +43798,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.0 ready (localhost only)")
+    print(f"\n  Porter v0.31.1 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
