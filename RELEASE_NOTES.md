@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.68 (2026-03-11)
+
+- Fixed the Models load rail so it disappears once cards are actually rendered instead of hanging around after the page is already live.
+- Removed the misleading staged count from the rail and tightened the wording so it no longer implies fake gateway or model totals.
+
 ## v0.30.67 (2026-03-11)
 
 - Models now comes alive in clearer stages as gateways, model lists, health, and versions report in, instead of using internal language like “hydrating”.

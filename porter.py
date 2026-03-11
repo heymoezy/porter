@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.67 — Progressive models loading"""
+"""Porter v0.30.68 — Fix sticky models load rail"""
 
 
 import email
@@ -10347,7 +10347,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.67</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.68</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11692,6 +11692,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.68', date:'2026-03-11', notes:["Fixed the Models load rail so it clears once cards are actually on screen, removed the misleading stage counter, and tightened the staged loading copy so it no longer implies fake gateway or model counts"] },
   { ver:'v0.30.67', date:'2026-03-11', notes:["Models now loads as a live staged page instead of reading like one blocked render, with user-facing progress steps as gateways, models, health, and versions come online; benchmark labels now use plain language like Typical response instead of raw p50 jargon"] },
   { ver:'v0.30.66', date:'2026-03-11', notes:["Models cards now use lighter benchmark summaries instead of repeating the full p50/success/test string on every footer, OpenClaw bridge truth is reduced to smaller advisory chips instead of a large warning block, and Codex update commands are now always available when a newer version is detected"] },
   { ver:'v0.30.65', date:'2026-03-10', notes:["The standalone Skills nav has been removed from the product surface, Porter now carries a broader internal skill loadout with new project, worker, memory, runtime, and avatar direction skills, and skill-facing copy now routes users back through Porter instead of a separate admin screen"] },
@@ -21373,10 +21374,9 @@ function _renderModelsLoading(stage, opts) {
   }
 }
 
-function _renderModelsProgress(step, detail, done, total) {
+function _renderModelsProgress(step, detail) {
   var label = step || 'Loading models...';
-  var suffix = (typeof done === 'number' && total) ? (' (' + done + '/' + total + ')') : '';
-  _renderModelsLoading(label + suffix, { detail: detail || '' });
+  _renderModelsLoading(label, { detail: detail || '' });
 }
 
 function _showModelsLoadFailure(message) {
@@ -21390,15 +21390,24 @@ function _showModelsLoadFailure(message) {
 async function loadModels() {
   var loadSeq = ++_modelsLoadSeq;
   try {
-    var progress = { done: 0, total: 4 };
+    var loadingState = { bootstrap: false, snapshot: false, health: false, versions: false };
     function markProgress(step, detail) {
-      progress.done = Math.min(progress.total, progress.done + 1);
-      _renderModelsProgress(step, detail, progress.done, progress.total);
+      if (loadSeq !== _modelsLoadSeq) return;
+      _renderModelsProgress(step, detail);
+    }
+    function markDone(key) {
+      loadingState[key] = true;
+      if (loadSeq !== _modelsLoadSeq) return;
+      if (_modelsRenderedOnce && (loadingState.snapshot || loadingState.bootstrap)) {
+        setTimeout(function() {
+          if (loadSeq === _modelsLoadSeq) _renderModelsLoading('');
+        }, 500);
+      }
     }
     if (!_modelsRenderedOnce) {
-      _renderModelsProgress('Bringing model gateways online', 'Porter will paint cards first, then fill them in as each backend reports ready.', 0, progress.total);
+      _renderModelsProgress('Bringing model gateways online', 'Porter will paint cards first, then fill them in as each backend reports ready.');
     } else {
-      _renderModelsProgress('Refreshing model status', 'Cards stay visible while Porter refreshes them in the background.', 0, progress.total);
+      _renderModelsProgress('Refreshing model status', 'Cards stay visible while Porter refreshes them in the background.');
     }
     if (!_modelSseId) _connectModelSSE();
     var snapshotApplied = false;
@@ -21412,8 +21421,10 @@ async function loadModels() {
         bootstrapApplied = true;
         markProgress('Gateway structure ready', 'Porter found the available backends and put them on screen.');
       }
+      markDone('bootstrap');
     }).catch(function(e) {
       if (loadSeq !== _modelsLoadSeq) return;
+      markDone('bootstrap');
       _reportModelsClientError('models-bootstrap-hydrate', e || new Error('Bootstrap hydrate failed'));
     });
     snapPromise.then(function(snap) {
@@ -21421,10 +21432,12 @@ async function loadModels() {
       if (snap && snap.providers) {
         snapshotApplied = true;
         _applyModelsSnapshot(snap, { preferStable: true });
-        markProgress('Models discovered', 'The gateways are now reporting their current model lists and runtime state.');
+        markProgress('Models discovered', 'Gateway cards are now filling in with their current model lists.');
       }
+      markDone('snapshot');
     }).catch(function(e) {
       if (loadSeq !== _modelsLoadSeq) return;
+      markDone('snapshot');
       _reportModelsClientError('models-snapshot-hydrate', e || new Error('Snapshot hydrate failed'));
       if (!bootstrapApplied && !_modelsRenderedOnce) {
         _showModelsLoadFailure('Live snapshot timed out before any Models data rendered.');
@@ -21439,18 +21452,19 @@ async function loadModels() {
         _applyBackendHealthChips(h.backends);
         markProgress('Gateway health checked', 'Live backend health and repair signals are now on the cards.');
       }
-    }).catch(function() {});
+      markDone('health');
+    }).catch(function() { markDone('health'); });
     fetch('/api/models/versions?refresh=1', {credentials:'same-origin'})
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(vers) {
         if (loadSeq !== _modelsLoadSeq) return;
         _applyModelVersions((vers && vers.versions) ? vers.versions : {});
         markProgress('Versions checked', 'Installed and latest versions are now filled in for each backend.');
-        _renderModelsLoading('');
+        markDone('versions');
       }).catch(function(e) {
         if (loadSeq !== _modelsLoadSeq) return;
         _reportModelsClientError('models-versions', e || new Error('Version probe failed'));
-        _renderModelsLoading('');
+        markDone('versions');
       });
   } catch(e) {
     _showModelsLoadFailure((e && e.message) || 'Models failed to load');
@@ -35276,7 +35290,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.67"})
+            self.reply_json({"v": "0.30.68"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35438,7 +35452,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.67"
+                health["porter_version"] = "0.30.68"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37334,7 +37348,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.67'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.68'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42259,7 +42273,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.67 ready (localhost only)")
+    print(f"\n  Porter v0.30.68 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
