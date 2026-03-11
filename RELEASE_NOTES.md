@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.87 (2026-03-11)
+
+- Pulse has been cleaned up into a single current operator surface instead of sharing shipped UI with a hidden Cortex product.
+- The retired Cortex module and Cortex settings page are removed from the client, dead extraction/session-summary helpers are stripped from the live bundle, and Gateway Activity stays focused on recent operational truth instead of stale memory-era residue.
+
 ## v0.30.86 (2026-03-11)
 
 - Project artifacts now sync into a structured `project_artifacts` registry instead of existing only as loose files on disk.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.86 — Project artifacts become structured records"""
+"""Porter v0.30.87 — Pulse cleanup and hidden Cortex UI removal"""
 
 
 import email
@@ -10979,7 +10979,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.86</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.87</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11477,7 +11477,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="module-hdr">
       <span class="module-title">Pulse</span>
     </div>
-    <div class="module-intro">Live operator view for Porter. Watch health, bridge traffic, orchestration lanes, and critical events without dropping into raw infrastructure screens.</div>
+    <div class="module-intro">Live operator view for Porter. Watch what is healthy, what is failing, what is active now, and where work is moving.</div>
     <div id="pulse-ops-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px">
@@ -11490,72 +11490,73 @@ input[type="number"].settings-input { min-width: 60px; }
       <div id="pulse-ops-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px"></div>
       <div id="pulse-ops-feed" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
-    <div id="runtime-health-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+    <div style="display:grid;grid-template-columns:minmax(280px,1fr) minmax(320px,1.2fr);gap:14px;margin-bottom:14px">
+    <div id="runtime-health-stage" style="padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:13px;font-weight:600;color:var(--text)">System Health</span>
+          <span style="font-size:13px;font-weight:600;color:var(--text)">Health</span>
           <span id="health-status-badge" style="font-size:10px;padding:2px 6px;border-radius:999px;background:var(--bg2);color:var(--text3)">checking...</span>
         </div>
         <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadSelfCheck()">Refresh</button>
       </div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Fast read on whether Porter is healthy enough to trust right now.</div>
       <div id="runtime-health-checks" style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px"></div>
     </div>
-    <div id="runtime-intelligence-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+    <div id="runtime-intelligence-stage" style="padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:13px;font-weight:600;color:var(--text)">Intelligence</span>
-          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:color-mix(in srgb,#8b5cf6 15%,transparent);color:#8b5cf6">Self-Orchestration</span>
+          <span style="font-size:13px;font-weight:600;color:var(--text)">Signals</span>
+          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:color-mix(in srgb,#8b5cf6 15%,transparent);color:#8b5cf6">Routing</span>
         </div>
         <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadIntelligence()">Refresh</button>
       </div>
-      <div id="runtime-intelligence-content" style="font-size:12px;color:var(--text3)">Loading intelligence data...</div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Higher-level routing and reliability signals pulled out of the noise.</div>
+      <div id="runtime-intelligence-content" style="font-size:12px;color:var(--text3)">Loading signal data...</div>
     </div>
-    <div id="runtime-session-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span style="font-size:13px;font-weight:600;color:var(--text)">Session Trace</span>
-        <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Bridge Intake</span>
-      </div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Temporary intake counters for session imports and bridge-side chat traces. Durable project state now lives in Agents and Projects, not here.</div>
-      <div id="runtime-extraction-progress" style="margin:0 0 12px;padding:0"><div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px"><div style="display:flex;align-items:center;gap:8px"><span class="learn-spinner"></span><span style="font-size:12px;color:var(--text3)">Loading extraction status...</span></div></div></div>
-      <div id="runtime-session-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px"></div>
     </div>
     <div id="runtime-gateway-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:13px;font-weight:600;color:var(--text)">Gateway Activity</span>
-          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Live Ops</span>
+          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Recent Only</span>
         </div>
         <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadGatewayActivity(true)">Refresh</button>
       </div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Recent real dispatch activity across all model gateways. If it is not here, Porter is not seeing it.</div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Only fresh gateway traffic belongs here. Older history stays in logs, not in Pulse.</div>
       <div id="runtime-gateway-activity" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
-    <div id="runtime-orch-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:14px">
+    <div id="runtime-orch-stage" style="padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:13px;font-weight:600;color:var(--text)">Orchestration Engine</span>
-          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Multi-Model</span>
+          <span style="font-size:13px;font-weight:600;color:var(--text)">Runs</span>
+          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Orchestration</span>
         </div>
         <div style="display:flex;gap:4px">
           <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_newOrchRun()">+ New Run</button>
           <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadOrchRuns()">Refresh</button>
         </div>
       </div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Real orchestration: Porter plans goals into steps, scores backends by capability, dispatches to the best model, retries failures, and reassigns stalled work.</div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Current and recent orchestration runs.</div>
       <div id="runtime-orch-runs" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
-    <div id="runtime-coordination-stage" style="margin:0 0 14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+    <div id="runtime-coordination-stage" style="padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:13px;font-weight:600;color:var(--text)">Coordination Bridge</span>
-          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Live Ledger</span>
+          <span style="font-size:13px;font-weight:600;color:var(--text)">Bridge Lane</span>
+          <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Coordination</span>
         </div>
         <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadCoordinationPanel(true)">Refresh</button>
       </div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Active model claims, coordination conflicts, and recent bridge-native coordination results. If autonomous work is happening through Porter Bridge, it should show up here.</div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:12px">Active claims, conflicts, and recent bridge-native coordination results.</div>
       <div id="runtime-coordination-panel" style="display:flex;flex-direction:column;gap:10px"></div>
     </div>
+    </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text)">Background Flows</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:4px">Automation and maintenance loops still running behind Porter.</div>
+      </div>
       <span id="wf-sys-count" style="font-size:11px;color:var(--text3)"></span>
     </div>
     <div id="wf-system-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px"></div>
@@ -11590,93 +11591,6 @@ input[type="number"].settings-input { min-width: 60px; }
         <div class="loading-indicator">Loading models...</div>
       </div>
     </div>
-
-  </div>
-
-  <div id="cortex-module" class="module-panel">
-    <div class="module-hdr">
-      <span class="module-title">Cortex</span>
-      <div style="flex:1"></div>
-      <button class="btn btn-ghost" style="margin-left:4px" onclick="_loadCortexTab()">&#8635;</button>
-      <button class="btn btn-ghost" style="margin-left:4px;font-size:11px" onclick="_cortexBatchExtract(this)">Extract Now</button>
-    </div>
-
-    <!-- Extraction progress banner -->
-    <div id="cx-extract-banner" style="display:none;padding:8px 28px;font-size:13px;font-weight:500;color:var(--text);background:linear-gradient(90deg,var(--surface),color-mix(in srgb,var(--accent) 15%,var(--surface)),var(--surface));background-size:200% 100%;animation:cx-shimmer 1.5s ease infinite;border-bottom:1px solid var(--border)">
-      &#x2728; Extracting memories&hellip;
-    </div>
-
-    <!-- Stats bar -->
-    <div id="cx-stats-bar" style="display:flex;gap:12px;padding:8px 28px;background:var(--surface);border-bottom:1px solid var(--border);font-size:13px">
-      <span style="color:var(--text2)"><strong id="cx-total2" style="color:var(--accent)">—</strong> memories</span>
-      <span style="color:var(--text3)"><strong id="cx-24h2">—</strong> new today</span>
-      <span style="margin-left:auto"><span id="cx-status2" style="font-weight:600;color:var(--green,#4ade80)">—</span></span>
-    </div>
-
-    <!-- MAIN VIEW: Graph + Side Inbox -->
-    <div id="cx-main-view" style="display:flex;height:calc(100vh - 180px);overflow:hidden">
-      <!-- Graph (left, takes most space) -->
-      <div style="flex:1;display:flex;flex-direction:column;min-width:0">
-        <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border)">
-          <div style="font-size:13px;font-weight:600;color:var(--text)">Memory Map</div>
-          <div style="display:flex;gap:2px;margin-left:12px">
-            <button class="btn btn-ghost gf-btn active" onclick="_graphFilterScope('all',this)" style="font-size:10px;padding:2px 6px">All</button>
-            <button class="btn btn-ghost gf-btn" onclick="_graphFilterScope('agent',this)" style="font-size:10px;padding:2px 6px">Agent</button>
-            <button class="btn btn-ghost gf-btn" onclick="_graphFilterScope('project',this)" style="font-size:10px;padding:2px 6px">Project</button>
-            <button class="btn btn-ghost gf-btn" onclick="_graphFilterScope('global',this)" style="font-size:10px;padding:2px 6px">Global</button>
-          </div>
-          <div style="flex:1"></div>
-          <button class="btn btn-ghost" onclick="_graphZoomIn()" style="font-size:10px;padding:2px 8px" title="Zoom in">+</button>
-          <button class="btn btn-ghost" onclick="_graphZoomOut()" style="font-size:10px;padding:2px 8px" title="Zoom out">&minus;</button>
-          <button class="btn btn-ghost" onclick="_fitGraphToView()" style="font-size:10px;padding:2px 8px" title="Fit to view">Fit</button>
-          <button class="btn btn-ghost" onclick="_centerGraph()" style="font-size:10px;padding:2px 8px" title="Center (reset zoom)">Center</button>
-          <button id="cx-lock-btn" class="btn btn-ghost" onclick="_toggleGraphLock()" style="font-size:10px;padding:2px 8px" title="Unlock layout">&#x1f512;</button>
-        </div>
-        <div style="flex:1;position:relative;overflow:hidden">
-          <canvas id="cx-graph-canvas" width="700" height="500" style="width:100%;height:100%;cursor:grab"></canvas>
-          <div id="cx-graph-tooltip" style="display:none;position:absolute;pointer-events:none;background:var(--bg3,#1a1a2e);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:12px;color:var(--text);box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;max-width:220px"></div>
-        </div>
-        <div style="display:flex;gap:12px;padding:6px 16px;border-top:1px solid var(--border);font-size:10px;color:var(--text3)">
-          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22d3ee;margin-right:3px"></span>Agent</span>
-          <span><span style="display:inline-block;width:10px;height:8px;border-radius:2px;background:#fbbf24;margin-right:3px"></span>Project</span>
-          <span><svg width="10" height="10" viewBox="0 0 10 10" style="margin-right:3px;vertical-align:middle"><polygon points="5,0.5 9.3,2.75 9.3,7.25 5,9.5 0.7,7.25 0.7,2.75" fill="#4ade80"/></svg>Global</span>
-          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#8b5cf6;margin-right:3px"></span>Cortex</span>
-          <span style="margin-left:auto">Drag to pin &#x2022; Double-click to unpin &#x2022; Scroll to zoom</span>
-        </div>
-      </div>
-      <!-- Inbox sidebar (right) -->
-      <div id="cx-inbox-sidebar" style="width:340px;min-width:0;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg2);overflow:hidden">
-        <div style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
-          <div style="font-size:13px;font-weight:600;color:var(--text)">Learnings</div>
-
-          <div style="flex:1"></div>
-
-        </div>
-        <div style="padding:4px 12px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;gap:3px;flex-wrap:wrap">
-          <button class="btn btn-ghost cx-scope-filter active" onclick="_filterCortexScope('all',this)" style="font-size:10px;padding:2px 7px">All</button>
-          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('agent',this)" style="font-size:10px;padding:2px 7px;color:#06b6d4">Agent</button>
-          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('project',this)" style="font-size:10px;padding:2px 7px;color:#f59e0b">Project</button>
-          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('global',this)" style="font-size:10px;padding:2px 7px;color:#22c55e">Global</button>
-          <button class="btn btn-ghost cx-scope-filter" onclick="_filterCortexScope('unassigned',this)" style="font-size:10px;padding:2px 7px;color:#f87171">Unassigned</button>
-        </div>
-        <div id="cx-squad-filter-row" style="display:flex;gap:4px;align-items:center;padding:4px 28px 0;flex-wrap:wrap"></div>
-        <div style="padding:4px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
-          <input type="text" id="cx-search" placeholder="Search..." oninput="_searchCortexMemories(this.value)" style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none;box-sizing:border-box" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
-        </div>
-        <div id="cx-filter-bar" style="display:none;padding:4px 12px;border-bottom:1px solid var(--border);flex-shrink:0;background:color-mix(in srgb,var(--accent) 8%,var(--bg2))">
-          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)">
-            <span>&#x1f50d;</span>
-            <span id="cx-filter-label">Filtered</span>
-            <div style="flex:1"></div>
-            <button class="btn btn-ghost" onclick="_clearCortexFilter()" style="font-size:10px;padding:2px 8px;color:var(--accent)">Show all</button>
-          </div>
-        </div>
-        <div id="cx-memory-list" style="flex:1;overflow-y:auto">
-          <div style="padding:20px;text-align:center;font-size:12px;color:var(--text3)">Loading...</div>
-        </div>
-      </div>
-    </div>
-
 
   </div>
 
@@ -11992,52 +11906,6 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
 
     </div><!-- /settings-content -->
-      <!-- Cortex page -->
-      <div class="settings-page" id="spage-cortex">
-        <div class="settings-page-title">Porter Cortex</div>
-        <p style="color:var(--text3);font-size:12px;margin-bottom:16px">Auto-memory system — agents learn from every dispatch</p>
-        <div id="cortex-stats" style="margin-bottom:20px">
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
-            <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
-              <div style="font-size:20px;font-weight:700;color:var(--accent)" id="cx-total">—</div>
-              <div style="font-size:10px;color:var(--text3)">Active</div>
-            </div>
-            <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
-              <div style="font-size:20px;font-weight:700;color:var(--text2)" id="cx-merged">—</div>
-              <div style="font-size:10px;color:var(--text3)">Merged</div>
-            </div>
-            <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
-              <div style="font-size:20px;font-weight:700;color:var(--text2)" id="cx-24h">—</div>
-              <div style="font-size:10px;color:var(--text3)">Last 24h</div>
-            </div>
-            <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
-              <div style="font-size:20px;font-weight:700;color:var(--green)" id="cx-enabled">—</div>
-              <div style="font-size:10px;color:var(--text3)">Status</div>
-            </div>
-          </div>
-        </div>
-        <div class="settings-field">
-          <label>Enabled</label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" id="cx-toggle" onchange="saveCortexConfig()" checked>
-            <span style="font-size:12px;color:var(--text3)">Extract and route memories automatically</span>
-          </label>
-        </div>
-        <div class="settings-field">
-          <label>Min response length</label>
-          <input type="number" class="settings-input" id="cx-min-len" value="100" min="20" max="1000" style="width:120px" onchange="saveCortexConfig()">
-          <span style="font-size:11px;color:var(--text3);margin-top:4px;display:block">Responses shorter than this are skipped</span>
-        </div>
-        <div class="settings-field">
-          <label>Max facts per extraction</label>
-          <input type="number" class="settings-input" id="cx-max-facts" value="8" min="1" max="20" style="width:120px" onchange="saveCortexConfig()">
-        </div>
-        <div class="settings-field">
-          <label>Inject limit</label>
-          <input type="number" class="settings-input" id="cx-inject-limit" value="5" min="1" max="20" style="width:120px" onchange="saveCortexConfig()">
-          <span style="font-size:11px;color:var(--text3);margin-top:4px;display:block">Max memories injected per dispatch</span>
-        </div>
-      </div>
 
   </div><!-- /settingsPanel -->
 
@@ -12282,6 +12150,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.87', date:'2026-03-11', notes:["Pulse is now a cleaner single operator surface instead of sharing shipped UI with a hidden Cortex product: the retired Cortex module and Cortex settings page are removed from the client, dead extraction/session-summary helpers are stripped from the live bundle, and Gateway Activity stays focused on recent operational truth instead of stale memory-era residue"] },
   { ver:'v0.30.86', date:'2026-03-11', notes:["Project artifacts now sync into a structured project_artifacts registry instead of existing only as loose files on disk, the Artifacts tab shows source metadata from that registry, and this lays the first real foundation for artifact-aware project memory and provenance"] },
   { ver:'v0.30.85', date:'2026-03-11', notes:["The operator surface is now Pulse instead of a split Runtime/Logs pair, with live ops cards and event feed folded into one place; hidden admin routing now resolves into Pulse, stale Cortex settings are no longer reachable from Settings, and startup purges legacy Porter-development cortex memories so the new state system stops inheriting polluted app-build residue"] },
   { ver:'v0.30.84', date:'2026-03-11', notes:["Runtime now hides the retired Cortex consolidation and memory extraction workflows from the active operator surface, and the remaining global tour/sidebar copy now matches the real Porter IA instead of talking about legacy Chat/Memory/Files tabs"] },
@@ -14412,8 +14281,6 @@ function switchModule(name) {
         window._cortexSseId = _sseSubscribe(function(d) {
           try {
             if (d.type === 'cortex:extracting') {
-              var banner = document.getElementById('cx-extract-banner');
-              if (banner) banner.style.display = '';
               // Show extracting indicator in chat
               var chatMod = document.getElementById('overview-module');
               if (chatMod && chatMod.classList.contains('active')) {
@@ -14429,8 +14296,6 @@ function switchModule(name) {
             if (d.type === 'cortex:update' && d.data) {
               _updateCortexBadge(d.data.new_1h || 0);
               _scheduleOverviewRefresh(180);
-              var banner2 = document.getElementById('cx-extract-banner');
-              if (banner2) banner2.style.display = 'none';
               // Update chat extraction indicator
               var cxChatEx = document.getElementById('cx-chat-extract');
               if (cxChatEx) {
@@ -14442,18 +14307,6 @@ function switchModule(name) {
                   cxChatEx.innerHTML = '<span style="color:var(--text3)">No new memories</span>';
                 }
                 setTimeout(function() { if (cxChatEx.parentNode) { cxChatEx.style.transition='opacity 0.5s'; cxChatEx.style.opacity='0'; setTimeout(function(){ if(cxChatEx.parentNode) cxChatEx.remove(); },600); } }, 4000);
-              }
-              // If on Cortex tab, refresh inbox
-              var cxMod = document.getElementById('cortex-module');
-              if (cxMod && cxMod.classList.contains('active')) {
-                var url = '/api/cortex/memories';
-                api(url).then(function(mems) {
-                  if (mems && mems.memories) {
-                    _cortexMemories = mems.memories;
-                    _renderCortexMemories(_cortexMemories);
-
-                  }
-                }).catch(function(){});
               }
             }
             if (d.type === 'bridge:dispatch') _scheduleOverviewRefresh(120);
@@ -14469,7 +14322,7 @@ function switchModule(name) {
       }, 60000);
     }, tasks: function() { /* tasks merged into projects */ }, agents: function() { loadAgents(); }, projects: function() { loadProjects(); }, admin: loadAdmin,
     files: loadLocations, policies: loadPolicy,
-    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, cortex: function(){ withLoadTimeout('cx-memory-list','_loadCortexTab()'); _loadCortexTab(); }, system: function(){ withLoadTimeout('wf-system-grid','loadWorkflowRegistry()'); loadWorkflowRegistry(); }, workflows: function(){}, settings: syncSettingsUI,
+    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, system: function(){ withLoadTimeout('wf-system-grid','loadWorkflowRegistry()'); loadWorkflowRegistry(); }, workflows: function(){}, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -16124,102 +15977,6 @@ function _memAgeBadge(ts) {
 
 
 var _maSessionsData = [];
-var _maSessionCounts = {}; // {source: {count: N}}
-
-async function _preloadSessionCounts() {
-  ['claude','openclaw','gemini','codex','ollama'].forEach(async function(src) {
-    try {
-      var resp = await api('/api/sessions?source=' + src);
-      if (resp && resp.ok !== false) {
-        _maSessionCounts[src] = { count: resp.count || 0 };
-        _renderRuntimeSessionSummary();
-      }
-    } catch(e) { /* ignore */ }
-  });
-}
-
-function _renderRuntimeSessionSummary() {
-  var wrap = document.getElementById('runtime-session-summary');
-  if (!wrap) return;
-  var labels = {claude:'Claude', openclaw:'OpenClaw', gemini:'Gemini', codex:'Codex', ollama:'Ollama'};
-  wrap.innerHTML = ['claude','openclaw','gemini','codex','ollama'].map(function(src) {
-    var count = ((_maSessionCounts || {})[src] || {}).count || 0;
-    return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px">'
-      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
-      + '<span style="font-size:12px;font-weight:600;color:var(--text)">' + escHtml(labels[src] || src) + '</span>'
-      + '<span style="margin-left:auto;font-size:11px;color:' + (count > 0 ? 'var(--accent)' : 'var(--text3)') + '">' + count + ' session' + (count !== 1 ? 's' : '') + '</span>'
-      + '</div>'
-      + '<div style="font-size:11px;color:var(--text3)">Extraction and review will migrate into Cortex.</div>'
-      + '</div>';
-  }).join('');
-}
-
-async function _updateExtractionProgress(targetId) {
-  try {
-    var resp = await api('/api/cortex/stats');
-    if (!resp) return;
-    var total = resp.sessions_total || 0;
-    var extracted = resp.sessions_extracted || 0;
-    var remaining = Math.max(0, total - extracted);
-    var bar = document.getElementById(targetId || 'runtime-extraction-progress');
-    if (!bar) return;
-    var pct = total > 0 ? Math.min(100, Math.round(extracted / total * 100)) : 0;
-    var isRunning = _extractAllRunning;
-    var dotColor = isRunning ? '#3b82f6' : (remaining > 0 ? '#3b82f6' : '#22c55e');
-    var dotAnim = isRunning ? ';animation:cx-blink 1s ease-in-out infinite' : '';
-    var statusLabel = isRunning ? 'Extracting...' : (remaining > 0 ? remaining + ' pending' : 'All extracted');
-    bar.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px">'
-      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
-      + '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0' + dotAnim + '"></span>'
-      + '<span style="font-weight:600;font-size:13px;color:var(--text)">Memory Extraction</span>'
-      + '<span style="margin-left:auto;font-size:11px;color:var(--text3)">' + statusLabel + '</span>'
-      + '</div>'
-      + (isRunning
-        ? '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:8px;background:color-mix(in srgb,#3b82f6 8%,transparent);border:1px solid color-mix(in srgb,#3b82f6 20%,transparent);border-radius:6px">'
-          + '<span class="learn-spinner"></span>'
-          + '<span style="font-size:11px;color:#60a5fa;font-weight:500">Extracting learnings...</span>'
-          + '<div style="flex:1;height:4px;background:rgba(59,130,246,0.15);border-radius:2px;overflow:hidden"><div style="height:100%;background:#3b82f6;border-radius:2px;animation:wf-progress 2s ease-in-out infinite"></div></div>'
-          + '</div>'
-        : '')
-      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
-      + '<div style="flex:1;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden">'
-      + '<div style="height:100%;width:' + pct + '%;background:' + (pct >= 100 ? '#22c55e' : '#3b82f6') + ';border-radius:3px;transition:width 0.3s' + (isRunning ? ';animation:wf-progress 2s ease-in-out infinite' : '') + '"></div>'
-      + '</div>'
-      + '<span style="font-size:11px;color:var(--text3);white-space:nowrap">' + extracted + '/' + total + ' (' + pct + '%)</span>'
-      + '</div>'
-      + '<div style="display:flex;gap:6px">'
-      + (isRunning
-        ? '<button class="btn btn-ghost" style="font-size:11px;color:#60a5fa" onclick="_extractAllRunning=false;_updateExtractionProgress(\'' + (targetId || 'runtime-extraction-progress') + '\')">\u23F8 Stop</button>'
-        : (remaining > 0
-          ? '<button class="btn btn-ghost" style="font-size:11px" onclick="_triggerExtractAll()">\u25B6 Extract All</button>'
-          : '<button class="btn btn-ghost" style="font-size:11px;opacity:0.5" disabled>\u2713 Complete</button>'))
-      + '</div>'
-      + '</div>';
-    // Auto-refresh while extracting
-    if (isRunning) setTimeout(function() { _updateExtractionProgress(targetId || 'runtime-extraction-progress'); }, 3000);
-  } catch(e) {}
-}
-
-async function _triggerExtractAll() {
-  // Trigger extraction for each backend that has sessions
-  var sources = ['claude','openclaw','gemini','codex','ollama'];
-  for (var i = 0; i < sources.length; i++) {
-    var cnt = ((_maSessionCounts || {})[sources[i]] || {}).count;
-    if (cnt > 0) {
-      // Load sessions for this source then extract
-      try {
-        var resp = await api('/api/sessions?source=' + sources[i]);
-        if (resp && resp.sessions) {
-          _maSessionsData = resp.sessions;
-          _extractAllLearnings(sources[i]);
-          _updateExtractionProgress('runtime-extraction-progress');
-          return; // one source at a time
-        }
-      } catch(e) {}
-    }
-  }
-  toast('No sessions to extract');
-}
 
 
 
@@ -16286,9 +16043,6 @@ async function _loadRuntimeOperations() {
   _loadPulseOps();
   _loadSelfCheck();
   _loadIntelligence();
-  _renderRuntimeSessionSummary();
-  _preloadSessionCounts();
-  _updateExtractionProgress('runtime-extraction-progress');
   _connectGatewayActivitySse();
   _loadGatewayActivity();
   _loadOrchRuns();
@@ -16400,7 +16154,7 @@ async function _loadGatewayActivity(force) {
     host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">Loading gateway activity…</div>';
   }
   try {
-    var qs = force ? '?limit=18&_=' + Date.now() : '?limit=18';
+    var qs = force ? '?limit=18&max_age_s=1800&_=' + Date.now() : '?limit=18&max_age_s=1800';
     var res = await api('/api/admin/dispatch-log' + qs);
     if (!res || !res.ok) {
       host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:#ef4444">Failed to load gateway activity.</div>';
@@ -16408,7 +16162,7 @@ async function _loadGatewayActivity(force) {
     }
     var rows = res.dispatches || [];
     if (!rows.length) {
-      host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">No gateway activity recorded yet.</div>';
+      host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">No recent gateway activity in the last 30 minutes.</div>';
       return;
     }
     host.innerHTML = rows.map(function(r) {
@@ -16416,8 +16170,8 @@ async function _loadGatewayActivity(force) {
       var chips = [
         _gatewayActivityChip(r.to || '', tone),
         _gatewayActivityChip(r.model || '', 'dim'),
-        _gatewayActivityChip(r.persona_id ? ('agent ' + r.persona_id) : '', 'dim'),
-        _gatewayActivityChip(r.project_id ? ('project ' + r.project_id) : '', 'dim'),
+        _gatewayActivityChip(r.persona_name || '', 'dim'),
+        _gatewayActivityChip(r.project_name || '', 'dim'),
         _gatewayActivityChip(r.task_id ? ('task ' + r.task_id) : '', 'dim'),
         _gatewayActivityChip(r.duration_ms ? _formatDuration(r.duration_ms) : '', 'dim'),
         _gatewayActivityChip(_relativeTime(r.created_at), 'dim')
@@ -16430,7 +16184,7 @@ async function _loadGatewayActivity(force) {
         + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + chips + '</div>'
         + '<span style="font-size:10px;color:' + (tone === 'ok' ? '#22c55e' : (tone === 'err' ? '#ef4444' : '#f59e0b')) + ';font-weight:600">' + escHtml((r.status || 'unknown').toUpperCase()) + '</span>'
         + '</div>'
-        + '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">' + escHtml((r.prompt || '').substring(0, 180) || '(no prompt recorded)') + '</div>'
+        + '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">' + escHtml((r.prompt || '').substring(0, 120) || '(no prompt recorded)') + '</div>'
         + '<div style="font-size:11px;color:var(--text3)">' + escHtml((detail || '').substring(0, 220)) + '</div>'
         + '</div>';
     }).join('');
@@ -18440,45 +18194,6 @@ function switchSettingsTab(tab) {
   }
   if (tab === 'apikeys') { loadApiKeys(); }
 }
-
-function loadCortexStats() {
-  fetch('/api/cortex/stats', {credentials:'same-origin'}).then(r=>r.json()).then(function(d) {
-    if (!d.ok) return;
-    var el = function(id) { return document.getElementById(id); };
-    if (el('cx-total')) el('cx-total').textContent = d.total_active || 0;
-    if (el('cx-merged')) el('cx-merged').textContent = d.total_merged || 0;
-    if (el('cx-24h')) el('cx-24h').textContent = d.last_24h || 0;
-    if (el('cx-enabled')) { el('cx-enabled').textContent = d.enabled ? 'ON' : 'OFF'; el('cx-enabled').style.color = d.enabled ? 'var(--green, #4ade80)' : 'var(--red, #f87171)'; }
-    if (el('cx-toggle')) el('cx-toggle').checked = d.enabled;
-  }).catch(function(){});
-  // Load current config values
-  fetch('/api/config/summary', {credentials:'same-origin'}).then(r=>r.json()).then(function(d) {
-    var p = (d && d.preferences) ? d.preferences : {};
-    var el = function(id) { return document.getElementById(id); };
-    if (el('cx-toggle') && p.cortex_enabled !== undefined) el('cx-toggle').checked = p.cortex_enabled;
-    if (el('cx-min-len') && p.cortex_min_response_len) el('cx-min-len').value = p.cortex_min_response_len;
-    if (el('cx-max-facts') && p.cortex_max_facts) el('cx-max-facts').value = p.cortex_max_facts;
-    if (el('cx-inject-limit') && p.cortex_inject_limit) el('cx-inject-limit').value = p.cortex_inject_limit;
-  }).catch(function(){});
-}
-
-function saveCortexConfig() {
-  var el = function(id) { return document.getElementById(id); };
-  var data = {
-    cortex_enabled: el('cx-toggle') ? el('cx-toggle').checked : true,
-    cortex_min_response_len: el('cx-min-len') ? parseInt(el('cx-min-len').value) || 100 : 100,
-    cortex_max_facts: el('cx-max-facts') ? parseInt(el('cx-max-facts').value) || 8 : 8,
-    cortex_inject_limit: el('cx-inject-limit') ? parseInt(el('cx-inject-limit').value) || 5 : 5,
-  };
-  fetch('/api/cortex/config', {method:'POST', credentials:'same-origin',
-    headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
-  }).then(r=>r.json()).then(function(d) {
-    if (d.ok) toast('Cortex settings saved');
-    loadCortexStats();
-  }).catch(function(){ toast('Failed to save Cortex config', 'err'); });
-}
-
-
 
 // ── API Keys ─────────────────────────────────────────────────────────────
 var _apiKeyDefs = [
@@ -22556,13 +22271,7 @@ async function _loadCortexTab() {
   try {
     var stats = await api('/api/cortex/stats');
     if (stats) {
-      var t = document.getElementById('cx-total2'); if (t) t.textContent = stats.total_active || 0;
-      var h = document.getElementById('cx-24h2'); if (h) h.textContent = stats.last_24h || 0;
-      var st = document.getElementById('cx-status2'); if (st) { st.innerHTML = stats.enabled ? '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:var(--green,#4ade80);animation:cx-blink 1.5s ease-in-out infinite"></span>Live</span>' : '<span style="color:var(--red,#f87171)">Off</span>'; }
-      // Unrouted count
       var new1h = stats.new_1h || 0;
-      var n1El = document.getElementById('cx-new1h2'); if (n1El) n1El.textContent = new1h;
-      // Nav badge — show hourly count
       _updateCortexBadge(new1h);
     }
   } catch(e) {}
@@ -36391,7 +36100,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.86"})
+            self.reply_json({"v": "0.30.87"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36553,7 +36262,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.86"
+                health["porter_version"] = "0.30.87"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -36666,18 +36375,42 @@ class Handler(BaseHTTPRequestHandler):
             limit = min(int(qs.get("limit", ["20"])[0]), 100)
             backend_filter = qs.get("backend", [""])[0]
             try:
+                max_age_s = max(0, min(int(qs.get("max_age_s", ["0"])[0]), 86400))
+            except (TypeError, ValueError):
+                max_age_s = 0
+            try:
                 conn = _db_conn()
+                where = ["message NOT LIKE '%memory extraction system%'"]
+                params = []
                 if backend_filter:
-                    rows = conn.execute(
-                        "SELECT run_id, from_agent, to_agent, message, response, status, model, tokens_total, duration_ms, created_at, error, persona_id, project_id, task_id "
-                        "FROM agent_messages WHERE to_agent=? AND message NOT LIKE '%memory extraction system%' ORDER BY created_at DESC LIMIT ?", (backend_filter, limit)).fetchall()
-                else:
-                    rows = conn.execute(
-                        "SELECT run_id, from_agent, to_agent, message, response, status, model, tokens_total, duration_ms, created_at, error, persona_id, project_id, task_id "
-                        "FROM agent_messages ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+                    where.append("to_agent=?")
+                    params.append(backend_filter)
+                if max_age_s > 0:
+                    where.append("created_at > ?")
+                    params.append(time.time() - max_age_s)
+                where_sql = " WHERE " + " AND ".join(where)
+                if backend_filter:
+                    pass
+                rows = conn.execute(
+                    "SELECT run_id, from_agent, to_agent, message, response, status, model, tokens_total, duration_ms, created_at, error, persona_id, project_id, task_id "
+                    f"FROM agent_messages{where_sql} ORDER BY created_at DESC LIMIT ?",
+                    tuple(params + [limit])
+                ).fetchall()
                 conn.close()
                 dispatches = []
                 for r in rows:
+                    persona_name = ""
+                    project_name = ""
+                    if r[11]:
+                        try:
+                            persona_name = (_persona_by_id(r[11]) or {}).get("name", "")
+                        except Exception:
+                            persona_name = ""
+                    if r[12]:
+                        try:
+                            project_name = (_project_by_id(r[12]) or {}).get("name", "")
+                        except Exception:
+                            project_name = ""
                     dispatches.append({
                         "run_id": r[0], "from": r[1], "to": r[2],
                         "prompt": r[3][:2000] if r[3] else "", "prompt_len": len(r[3] or ""),
@@ -36686,6 +36419,8 @@ class Handler(BaseHTTPRequestHandler):
                         "tokens": r[7], "duration_ms": r[8],
                         "created_at": r[9], "error": r[10] or "",
                         "persona_id": r[11] or "", "project_id": r[12] or "", "task_id": r[13] or "",
+                        "persona_name": persona_name,
+                        "project_name": project_name,
                     })
                 self.reply_json({"ok": True, "dispatches": dispatches, "count": len(dispatches)})
             except Exception as e:
@@ -38471,7 +38206,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.86'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.87'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43462,7 +43197,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.86 ready (localhost only)")
+    print(f"\n  Porter v0.30.87 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
