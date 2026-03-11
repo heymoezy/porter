@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.82 (2026-03-11)
+
+- Removed the public top-level `Files` nav item so Porter no longer presents a generic filesystem browser as a core product area.
+- Added a real `artifacts/` directory to each project workspace and a new project-scoped artifacts API.
+- Project detail now separates `Artifacts` from `Project Docs`, so Porter stops conflating deliverables and uploads with canonical workspace/governance files.
+- Old `files` routing now resolves back into `Projects` for compatibility while the legacy file browser remains internal-only.
+
 ## v0.30.81 (2026-03-11)
 
 - Fixed Porter detail chat attachment persistence so uploaded files actually save immediately instead of waiting for a later setup action.

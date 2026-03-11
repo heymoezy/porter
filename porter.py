@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.81 — Real image transport for chat attachments"""
+"""Porter v0.30.82 — Project-scoped artifacts replace top-level files"""
 
 
 import email
@@ -2921,6 +2921,7 @@ def scaffold_project_dir(project_id: str, project_name: str) -> "Path":
     from datetime import datetime, timezone
     proj_dir = AGENT_WORKSPACE_DIR / "projects" / project_id
     proj_dir.mkdir(parents=True, exist_ok=True)
+    (proj_dir / "artifacts").mkdir(exist_ok=True)
     now_iso = datetime.now(timezone.utc).isoformat()
     pm = proj_dir / "PROJECT.md"
     if not pm.exists():
@@ -3054,6 +3055,62 @@ def _project_file_chain(project_id: str) -> list:
             "modified_ago": _time_ago(st.st_mtime) if st else "",
         })
     return chain
+
+
+def _project_artifact_listing(project_id: str) -> dict:
+    """Return project-scoped artifacts plus canonical project docs."""
+    import mimetypes
+
+    proj_dir = scaffold_project_dir(project_id, project_id)
+    artifacts_dir = proj_dir / "artifacts"
+    docs = _project_file_chain(project_id)
+
+    def _artifact_kind(mime_type: str, filename: str) -> str:
+        mime_type = str(mime_type or "").lower()
+        suffix = Path(filename).suffix.lower()
+        if mime_type.startswith("image/"):
+            return "image"
+        if mime_type in ("application/pdf",):
+            return "pdf"
+        if mime_type.startswith("video/"):
+            return "video"
+        if mime_type.startswith("audio/"):
+            return "audio"
+        if suffix in {".md", ".txt", ".rtf"}:
+            return "doc"
+        if suffix in {".doc", ".docx", ".odt"}:
+            return "doc"
+        if suffix in {".csv", ".tsv", ".xlsx", ".xls", ".json"}:
+            return "data"
+        if suffix in {".zip", ".tar", ".gz"}:
+            return "archive"
+        return "file"
+
+    artifacts = []
+    for fp in sorted(artifacts_dir.rglob("*")):
+        if not fp.is_file():
+            continue
+        rel = str(fp.relative_to(artifacts_dir))
+        mime_type, _ = mimetypes.guess_type(str(fp))
+        st = fp.stat()
+        artifacts.append({
+            "name": fp.name,
+            "path": str(fp),
+            "relative_path": rel,
+            "mime_type": mime_type or "application/octet-stream",
+            "kind": _artifact_kind(mime_type or "", fp.name),
+            "size": st.st_size,
+            "size_human": human_size(st.st_size),
+            "mtime": st.st_mtime,
+            "modified_ago": _time_ago(st.st_mtime),
+        })
+    return {
+        "artifacts_dir": str(artifacts_dir),
+        "artifacts": artifacts,
+        "artifact_count": len(artifacts),
+        "project_docs": docs,
+        "project_docs_count": sum(1 for d in docs if d.get("exists")),
+    }
 
 
 def _load_integrations() -> dict:
@@ -10564,10 +10621,6 @@ input[type="number"].settings-input { min-width: 60px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
       <span class="mnav-label">Workflows</span>
     </button>
-    <button class="mnav-item" id="mnav-files" onclick="closeSettings(); switchModule('files')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-      <span class="mnav-label">Files</span>
-    </button>
     <div class="mnav-group-label">Intelligence</div>
     <button class="mnav-item" id="mnav-models" onclick="switchModule('models')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
@@ -10622,7 +10675,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.81</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.82</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11913,6 +11966,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.82', date:'2026-03-11', notes:["Top-level Files has been removed from the public nav, old files routing now resolves back into Projects, each project now gets a real artifacts/ directory, and the project detail view separates project artifacts from canonical project docs instead of pretending the workspace file chain is the same thing as artifacts"] },
   { ver:'v0.30.81', date:'2026-03-11', notes:["Chat attachments now persist correctly from Porter detail chat, uploaded screenshots are sent to Codex as real image inputs instead of fake text markers, auto-routed image chats can fall back to Codex when needed, and guided worker creation copy is now generic and context-aware instead of hardwired to Porter software development"] },
   { ver:'v0.30.80', date:'2026-03-11', notes:["Agents is now the default landing surface and old overview routing now resolves into the Porter/Agents experience instead of opening the legacy general chat; Porter detail chat now keeps its own session history, creation flows start in a clean sub-session, fresh drag-and-drop attachments render immediately even before the first message, and Porter opens with rotating friendlier greetings instead of stale helper copy"] },
   { ver:'v0.30.79', date:'2026-03-11', notes:["Porter detail chat now accepts drag-and-drop file uploads directly into the chat workspace, with a proper drop target and the same attachment pipeline as the explicit upload control"] },
@@ -14003,6 +14057,7 @@ function switchModule(name) {
     if (pn) pn.value = '';
     if (pc) pc.value = '';
   }
+  if (name === 'files') name = 'projects';
   if (name === 'skills') name = 'agents';
   _currentModule = name;
   document.querySelectorAll('.mnav-item').forEach(el =>
@@ -14928,10 +14983,10 @@ function _renderProjTabs() {
   if (!tabs) return;
   var proj = window._projCurrent || {};
   var agentCount = (proj.assigned_personas || []).length;
-  var items = [
+    var items = [
     {id:'overview', label:'Overview'},
     {id:'agents', label:'Agents' + (agentCount ? ' (' + agentCount + ')' : '')},
-    {id:'files', label:'Files'},
+    {id:'artifacts', label:'Artifacts'},
     {id:'workflows', label:'Workflows' + ((proj.workflows||[]).length ? ' (' + (proj.workflows||[]).length + ')' : '')},
     {id:'memory', label:'Memory'},
     {id:'settings', label:'Settings'}
@@ -15042,10 +15097,10 @@ async function _renderProjTabContent() {
     // Add agent
     html += '<div style="margin-top:8px"><button onclick="_projAssignAgent(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:11px">+ Assign Agent</button></div>';
 
-  } else if (_projTab === 'files') {
-    html += '<div id="proj-files-list" style="font-size:12px;color:var(--text3)">Loading...</div>';
+  } else if (_projTab === 'artifacts') {
+    html += '<div id="proj-artifacts-list" style="font-size:12px;color:var(--text3)">Loading...</div>';
     content.innerHTML = html;
-    _projLoadFiles(proj.id);
+    _projLoadArtifacts(proj.id);
     return;
 
   } else if (_projTab === 'workflows') {
@@ -15162,27 +15217,61 @@ function _connectProjActivityLive() {
   }
 }
 
-async function _projLoadFiles(pid) {
-  var el = document.getElementById('proj-files-list');
+async function _projLoadArtifacts(pid) {
+  var el = document.getElementById('proj-artifacts-list');
   if (!el) return;
   try {
-    var data = await api('/api/projects/' + pid + '/files');
-    if (!data || !data.files) { el.innerHTML = '<span style="color:var(--text3)">No files</span>'; return; }
-    var html = '<div style="display:flex;flex-direction:column;gap:4px">';
-    data.files.forEach(function(f) {
-      var name = f.path ? f.path.split('/').pop() : f.name || 'unknown';
-      var exists = f.exists;
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:4px;background:var(--surface);font-size:11px">';
-      html += '<span style="width:6px;height:6px;border-radius:50%;background:' + (exists ? '#22c55e' : 'var(--text3)') + '"></span>';
-      html += '<span style="color:var(--text)">' + escHtml(name) + '</span>';
-      if (exists && f.size) html += '<span style="color:var(--text3);margin-left:auto">' + (f.size > 1024 ? Math.round(f.size/1024) + 'KB' : f.size + 'B') + '</span>';
-      if (!exists) html += '<span style="color:var(--text3);margin-left:auto">not created</span>';
+    var data = await api('/api/projects/' + pid + '/artifacts');
+    if (!data || !data.ok) {
+      el.innerHTML = '<span style="color:var(--text3)">Could not load artifacts</span>';
+      return;
+    }
+    var artifacts = data.artifacts || [];
+    var docs = data.project_docs || [];
+    var html = '';
+
+    html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);margin-bottom:12px">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">';
+    html += '<div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Artifacts</div>';
+    html += '<div style="font-size:13px;color:var(--text2);margin-top:4px">Project uploads and generated outputs live inside this project. Raw filesystem browsing is no longer the public Porter surface.</div></div>';
+    html += '<div style="font-size:11px;color:var(--text3)">Directory: <code style="font-size:10px">' + escHtml(data.artifacts_dir || '') + '</code></div>';
+    html += '</div></div>';
+
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Project Artifacts (' + artifacts.length + ')</div>';
+    if (!artifacts.length) {
+      html += '<div style="padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text3);text-align:center;margin-bottom:14px">No artifacts yet.<br><span style="font-size:11px">When Porter or a worker starts saving deliverables, they should land in this project artifact lane.</span></div>';
+    } else {
+      html += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">';
+      artifacts.forEach(function(a) {
+        html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
+        html += '<span class="model-card-chip dim" style="font-size:10px;min-width:52px;text-align:center">' + escHtml(a.kind || 'file') + '</span>';
+        html += '<div style="flex:1;min-width:0">';
+        html += '<div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(a.name || a.relative_path || 'artifact') + '</div>';
+        html += '<div style="font-size:10px;color:var(--text3);margin-top:3px">' + escHtml(a.relative_path || '') + ' · ' + escHtml(a.size_human || '') + ' · ' + escHtml(a.modified_ago || '') + '</div>';
+        html += '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Project Docs</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:6px">';
+    docs.forEach(function(f) {
+      var exists = !!f.exists;
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
+      html += '<span style="width:7px;height:7px;border-radius:50%;background:' + (exists ? '#22c55e' : 'var(--text3)') + ';flex-shrink:0"></span>';
+      html += '<div style="flex:1;min-width:0">';
+      html += '<div style="font-size:12px;color:var(--text)">' + escHtml(f.label || f.key || 'doc') + '</div>';
+      html += '<div style="font-size:10px;color:var(--text3);margin-top:3px">' + escHtml(f.key || '') + (exists ? (' · ' + escHtml(f.size_human || '') + ' · ' + escHtml(f.modified_ago || '')) : ' · not created yet') + '</div>';
+      html += '</div>';
       html += '</div>';
     });
     html += '</div>';
-    html += '<div style="margin-top:4px;font-size:10px;color:var(--text3)">' + data.exists_count + '/' + data.total + ' files exist</div>';
+
     el.innerHTML = html;
-  } catch(e) { el.innerHTML = '<span style="color:var(--text3)">Could not load files</span>'; }
+  } catch(e) {
+    el.innerHTML = '<span style="color:var(--text3)">Could not load artifacts</span>';
+  }
 }
 
 async function _projShowBrief(pid) {
@@ -35968,7 +36057,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.81"})
+            self.reply_json({"v": "0.30.82"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36130,7 +36219,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.81"
+                health["porter_version"] = "0.30.82"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37573,6 +37662,13 @@ class Handler(BaseHTTPRequestHandler):
             exists_count = sum(1 for f in chain if f["exists"])
             self.reply_json({"ok": True, "files": chain, "exists_count": exists_count, "total": len(chain)})
 
+        elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/artifacts"):
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path[len("/api/projects/"):-len("/artifacts")]
+            if not any(p.get("id") == pid for p in _config.get("projects", [])):
+                self.reply_json({"ok": False, "error": "project not found"}, 404); return
+            self.reply_json({"ok": True, **_project_artifact_listing(pid)})
+
         elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/brief"):
             if not self.auth_check(redirect=False): return
             _parts = parsed.path.split("/")
@@ -38027,7 +38123,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.81'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.82'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42985,7 +43081,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.81 ready (localhost only)")
+    print(f"\n  Porter v0.30.82 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
