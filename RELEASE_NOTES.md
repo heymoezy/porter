@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.31.5 (2026-03-11)
+
+- Rebuilt Pulse into a compact live routing dashboard that emphasizes recent task routing, backend lanes, queue depth, and active runs instead of oversized runtime/admin boxes.
+- Redesigned Projects to use a stronger Porter-led landing layout, matched the project detail tab rail to the same interaction language as Agents, and removed the visible project workflow-attachment UI from the active product flow.
+
 ## v0.31.4 (2026-03-11)
 
 - Porter chat now honors explicit runtime requests like `use Ollama` or `switch to Claude` instead of silently forcing Codex on the Porter lane.

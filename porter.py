@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.4 — Honor explicit chat lane switches in Porter chat"""
+"""Porter v0.31.5 — Rebuild Pulse and Projects around live routing"""
 
 
 import email
@@ -11012,6 +11012,44 @@ body.density-compact .file-name { padding: 6px 0; }
 .agent-detail-tabs { display:inline-flex; align-items:center; gap:6px; align-self:flex-start; border-bottom:none; flex-wrap:wrap; }
 .agent-detail-tabs .pd-tab { padding:8px 16px; border-radius:999px; border:1px solid transparent; }
 .agent-detail-content { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px; min-height:0; }
+.project-detail-tabs { display:inline-flex; align-items:center; gap:6px; align-self:flex-start; flex-wrap:wrap; margin-bottom:14px; }
+.project-tab-rail .pd-tab { padding:8px 15px; border-radius:999px; border:1px solid transparent; }
+.project-tab-rail .pd-tab.active { border-color:color-mix(in srgb,var(--accent) 24%, var(--border)); background:color-mix(in srgb,var(--accent) 8%, transparent); }
+.project-stage { display:grid; grid-template-columns:minmax(320px,1.05fr) minmax(280px,.95fr); gap:16px; align-items:start; }
+.project-stage-panel { padding:18px 20px; border:1px solid color-mix(in srgb,var(--accent) 16%, var(--border)); border-radius:22px; background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%,transparent),color-mix(in srgb,var(--bg) 98%,transparent)); box-shadow:0 20px 60px rgba(0,0,0,.14); }
+.project-roster { display:grid; gap:12px; }
+.project-row { display:grid; grid-template-columns:minmax(0,1.2fr) auto auto; gap:14px; align-items:center; padding:16px 18px; border:1px solid var(--border); border-radius:20px; background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 97%,transparent),color-mix(in srgb,var(--bg) 98%,transparent)); cursor:pointer; transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease; }
+.project-row:hover { transform:translateY(-1px); border-color:color-mix(in srgb,var(--accent) 26%, var(--border)); box-shadow:0 16px 40px rgba(0,0,0,.12); }
+.project-row.is-active { border-color:color-mix(in srgb,var(--accent) 48%, var(--border)); box-shadow:0 18px 46px rgba(0,0,0,.16); }
+.project-row-title { font-size:18px; font-weight:800; color:var(--text); line-height:1.15; }
+.project-row-copy { font-size:13px; line-height:1.6; color:var(--text2); margin-top:6px; max-width:56ch; }
+.project-row-meta { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+.project-row-stats { display:flex; gap:14px; flex-wrap:wrap; justify-content:flex-end; font-size:11px; color:var(--text3); }
+.pulse-grid { display:grid; gap:14px; }
+.pulse-summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; }
+.pulse-summary-card { padding:14px 16px; border:1px solid var(--border); border-radius:18px; background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 97%,transparent),color-mix(in srgb,var(--bg) 98%,transparent)); }
+.pulse-summary-kicker { font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--text3); }
+.pulse-summary-value { font-size:28px; font-weight:800; color:var(--text); margin-top:6px; line-height:1; }
+.pulse-summary-copy { font-size:11px; color:var(--text3); margin-top:6px; line-height:1.55; }
+.pulse-board { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(300px,.9fr); gap:14px; align-items:start; }
+.pulse-pane { padding:16px 18px; border:1px solid var(--border); border-radius:20px; background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 97%,transparent),color-mix(in srgb,var(--bg) 98%,transparent)); min-height:0; }
+.pulse-pane-title { font-size:15px; font-weight:800; color:var(--text); }
+.pulse-pane-copy { font-size:12px; color:var(--text3); line-height:1.6; margin-top:4px; }
+.pulse-routing-list, .pulse-lane-list, .pulse-runs-list { display:flex; flex-direction:column; gap:10px; }
+.pulse-routing-list { max-height:520px; overflow:auto; padding-right:2px; }
+.pulse-runs-list { max-height:480px; overflow:auto; padding-right:2px; }
+.pulse-route-card { padding:12px 14px; border:1px solid var(--border); border-radius:16px; background:var(--bg); }
+.pulse-route-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:6px; }
+.pulse-route-title { font-size:13px; font-weight:700; color:var(--text); line-height:1.4; }
+.pulse-route-copy { font-size:11px; color:var(--text3); line-height:1.55; margin-top:6px; }
+.pulse-lane-card { padding:12px 14px; border:1px solid var(--border); border-radius:16px; background:var(--bg); }
+.pulse-lane-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px; }
+.pulse-lane-stat { padding:10px 10px; border:1px solid var(--border); border-radius:12px; background:var(--surface); }
+.pulse-lane-stat-label { font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); }
+.pulse-lane-stat-value { font-size:18px; font-weight:800; color:var(--text); margin-top:6px; line-height:1; }
+@media (max-width: 1100px) {
+  .project-stage, .pulse-board { grid-template-columns:1fr; }
+}
 
 /* ── Persona Detail — slide-out right panel ──────────────── */
 .persona-detail { position:fixed; top:0; right:0; width:520px; height:100vh; z-index:900;
@@ -11445,7 +11483,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.4</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.5</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11893,21 +11931,25 @@ input[type="number"].settings-input { min-width: 60px; }
   <div id="projects-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Projects</span>
-      <button class="btn btn-primary" onclick="_projCreate()" style="font-size:12px">+ New Project</button>
+      <button class="btn btn-primary" onclick="_askPorterToCreate('project')" style="font-size:12px">Ask Porter To Create A Project</button>
     </div>
+    <div class="module-intro">Projects should feel like guided workspaces, not manual containers. Porter helps define the brief, assign the right workers, and keep the lane on track.</div>
     <div id="projects-list-view" style="padding:0">
-      <div id="proj-stats-bar" style="display:flex;gap:16px;padding:8px 0;margin-bottom:8px;font-size:11px;color:var(--text3)"></div>
-      <div id="proj-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
+      <div id="proj-stats-bar" style="display:flex;gap:12px;flex-wrap:wrap;padding:8px 0 12px;margin-bottom:6px;font-size:11px;color:var(--text3)"></div>
+      <div id="proj-grid" class="project-roster">
         <div class="loading-indicator">Loading projects...</div>
       </div>
     </div>
     <div id="project-detail-view" style="display:none">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <button class="btn btn-ghost" onclick="_projBack()" style="font-size:12px">&larr; Back</button>
         <span id="proj-detail-name" style="font-size:16px;font-weight:600;color:var(--text)"></span>
         <span id="proj-detail-status" style="font-size:10px;padding:2px 8px;border-radius:4px"></span>
+        </div>
+        <div id="proj-detail-actions" style="display:flex;gap:8px;flex-wrap:wrap"></div>
       </div>
-      <div id="proj-detail-tabs" style="display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px"></div>
+      <div id="proj-detail-tabs" class="agent-detail-tabs project-detail-tabs project-tab-rail"></div>
       <div id="proj-detail-content"></div>
     </div>
   </div>
@@ -11943,76 +11985,41 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="module-hdr">
       <span class="module-title">Pulse</span>
     </div>
-    <div class="module-intro">A live command surface for Porter. Pulse should show what is happening now, what needs attention, and where the system is under pressure.</div>
-    <div style="display:grid;grid-template-columns:minmax(420px,1.35fr) minmax(280px,.95fr);gap:14px;margin-bottom:14px">
-      <div id="pulse-ops-stage" class="pulse-hero" style="padding:18px 20px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
-          <div>
-            <div class="pulse-stage-title">Live Operations</div>
-            <div class="pulse-stage-copy">Recent incidents, operator signals, and the work that needs attention first.</div>
-          </div>
-          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadPulseOps(true)">Refresh</button>
-        </div>
-        <div id="pulse-ops-cards" class="pulse-mini-grid"></div>
-        <div id="pulse-ops-feed" style="display:flex;flex-direction:column;gap:8px"></div>
-      </div>
-      <div style="display:grid;grid-template-rows:auto auto;gap:14px">
-        <div id="runtime-health-stage" class="pulse-card">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span class="pulse-stage-title">Health</span>
-              <span id="health-status-badge" style="font-size:10px;padding:2px 6px;border-radius:999px;background:var(--bg2);color:var(--text3)">checking...</span>
-            </div>
-            <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadSelfCheck()">Refresh</button>
-          </div>
-          <div id="runtime-health-checks" style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px"></div>
-        </div>
-        <div id="runtime-intelligence-stage" class="pulse-card">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span class="pulse-stage-title">Runtimes</span>
-              <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Routing</span>
-            </div>
-            <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadIntelligence()">Refresh</button>
-          </div>
-          <div id="runtime-intelligence-content" style="font-size:12px;color:var(--text3)">Loading runtime signals...</div>
-        </div>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:14px">
-      <div id="runtime-gateway-stage" class="pulse-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
-          <div>
-            <div class="pulse-stage-title">Gateway Stream</div>
-            <div class="pulse-stage-copy">Only the recent runtime traffic that still matters operationally.</div>
-          </div>
-          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadGatewayActivity(true)">Refresh</button>
-        </div>
-        <div id="runtime-gateway-activity" style="display:flex;flex-direction:column;gap:8px"></div>
-      </div>
-      <div id="runtime-coordination-stage" class="pulse-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
-          <div>
-            <div class="pulse-stage-title">Bridge Pressure</div>
-            <div class="pulse-stage-copy">Claims, conflicts, and dispatch pressure moving through Porter Bridge right now.</div>
-          </div>
-          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadCoordinationPanel(true)">Refresh</button>
-        </div>
-        <div id="runtime-coordination-panel" style="display:flex;flex-direction:column;gap:10px"></div>
-      </div>
-    </div>
-    <div id="runtime-orch-stage" class="pulse-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+    <div class="module-intro">Pulse should explain what Porter is doing now: which work is moving, who owns it, which runtime lane it is using, and where attention is needed.</div>
+    <div class="pulse-grid">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
         <div>
-          <div class="pulse-stage-title">Active Runs</div>
-          <div class="pulse-stage-copy">Current orchestration runs and their latest state.</div>
+          <div class="pulse-pane-title">Live Routing</div>
+          <div class="pulse-pane-copy">Compact operational truth for the work currently flowing through Porter.</div>
         </div>
-        <div style="display:flex;gap:4px">
-          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_newOrchRun()">+ New Run</button>
-          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadOrchRuns()">Refresh</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="_newOrchRun()">New Run</button>
+          <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="_loadRuntimeOperations()">Refresh</button>
         </div>
       </div>
-      <div id="runtime-orch-runs" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div id="pulse-ops-cards" class="pulse-summary-grid"></div>
+      <div class="pulse-board">
+        <div class="pulse-pane">
+          <div class="pulse-pane-title">Task Routing</div>
+          <div class="pulse-pane-copy">Recent work broken down by project, worker, backend, and model so you can see what Porter actually routed.</div>
+          <div id="runtime-gateway-activity" class="pulse-routing-list" style="margin-top:12px"></div>
+        </div>
+        <div class="pulse-pane">
+          <div class="pulse-pane-title">Queue & Lanes</div>
+          <div class="pulse-pane-copy">Current backend lanes, queue depth, and recent wait pressure inside Porter Bridge.</div>
+          <div id="runtime-coordination-panel" class="pulse-lane-list" style="margin-top:12px"></div>
+        </div>
+      </div>
+      <div class="pulse-pane">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div>
+            <div class="pulse-pane-title">Active Runs</div>
+            <div class="pulse-pane-copy">Multi-step work that Porter is supervising right now.</div>
+          </div>
+          <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="_loadOrchRuns(true)">Refresh</button>
+        </div>
+        <div id="runtime-orch-runs" class="pulse-runs-list" style="margin-top:12px"></div>
+      </div>
     </div>
   </div>
 
@@ -12592,6 +12599,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.5', date:'2026-03-11', notes:["Pulse is now a compact live routing dashboard instead of a stack of oversized admin boxes, showing recent task routing, backend lanes, queue depth, and active runs in one coherent surface","Projects now uses the same tab-rail language as Agents, the project landing page drops the legacy card grid for a stronger Porter-led layout, and the user-facing project workflow attachment UI has been removed from the active product flow"] },
   { ver:'v0.31.4', date:'2026-03-11', notes:["Porter chat now honors explicit runtime requests like `use Ollama` or `switch to Claude` instead of silently forcing Codex on the Porter lane, so model-switch requests can route through the intended chat backend when that lane is available"] },
   { ver:'v0.31.3', date:'2026-03-11', notes:["Launchpad project activity is now filtered to recent, project-relevant work instead of leaking stale legacy dispatch noise, Pulse has a cleaner live-console visual treatment instead of stacked admin slabs, and Porter chat stops appending repetitive runtime boilerplate so his voice reads like the orchestrator instead of the underlying coding runtime"] },
   { ver:'v0.31.2', date:'2026-03-11', notes:["Launchpad now uses durable state and artifact language instead of memory-era starter copy, project scaffolding writes a canonical STATE.md alongside a compatibility MEMORY.md, and Launchpad seeds real structured directives and project notes so new users land in a meaningful first-run project instead of an empty shell"] },
@@ -15503,7 +15511,7 @@ function toggleCreateSkillForm() {
 }
 
 // ── Projects (v0.29.32 — real project containers) ─────────────────────
-var _projList = [], _projActive = null, _projTab = 'overview';
+var _projList = [], _projActive = null, _projTab = 'chat';
 var _projActivitySseId = null;
 var _projActivityPoller = null;
 var _projActivityRefreshTimer = null;
@@ -15531,10 +15539,11 @@ function _renderProjList() {
   var statsBar = document.getElementById('proj-stats-bar');
   if (!grid) return;
   if (!_projList.length) {
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px 0;color:var(--text3)">'
-      + '<div style="font-size:36px;opacity:.3;margin-bottom:12px">&#128193;</div>'
-      + '<div style="font-size:13px;margin-bottom:8px">No projects yet</div>'
-      + '<button class="btn btn-primary" onclick="_projCreate()" style="font-size:12px">Create your first project</button>'
+    grid.innerHTML = '<div class="project-stage">'
+      + '<div class="project-stage-panel"><div style="font-size:28px;font-weight:800;color:var(--text);line-height:1.05;margin-bottom:10px">Projects start with Porter.</div>'
+      + '<div style="font-size:14px;line-height:1.7;color:var(--text2);max-width:58ch">Use Porter to shape the brief, define success, and create the right worker mix before the roster gets messy.</div>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px"><button class="btn btn-primary" onclick="_askPorterToCreate(\'project\')" style="font-size:12px">Ask Porter To Create A Project</button></div></div>'
+      + '<div class="pulse-pane"><div class="pulse-pane-title">No Projects Yet</div><div class="pulse-pane-copy">Your first project becomes the lane Porter can actively supervise, assign workers into, and track over time.</div></div>'
       + '</div>';
     if (statsBar) statsBar.innerHTML = '';
     return;
@@ -15544,36 +15553,39 @@ function _renderProjList() {
   var totalAgents = 0;
   _projList.forEach(function(p) { totalAgents += (p.assigned_personas || []).length; });
   if (statsBar) {
-    statsBar.innerHTML = '<span>' + _projList.length + ' projects</span>'
-      + '<span>' + active + ' active</span>'
-      + '<span>' + completed + ' completed</span>'
-      + '<span>' + totalAgents + ' agent assignments</span>';
+    statsBar.innerHTML = '<span class="model-card-chip dim">' + _projList.length + ' projects</span>'
+      + '<span class="model-card-chip dim">' + active + ' active</span>'
+      + '<span class="model-card-chip dim">' + completed + ' completed</span>'
+      + '<span class="model-card-chip dim">' + totalAgents + ' worker assignments</span>';
   }
-  var html = '';
+  var html = '<div class="project-stage">';
+  html += '<div class="project-stage-panel">'
+    + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
+    + '<div><div style="font-size:28px;font-weight:800;color:var(--text);line-height:1.05">Projects stay clean when Porter owns the lane.</div>'
+    + '<div style="font-size:14px;line-height:1.7;color:var(--text2);margin-top:8px;max-width:60ch">Open a project to work with Porter directly, create the right workers, tighten the success bar, and keep assignments inside a real project context.</div></div>'
+    + '<button class="btn btn-primary" onclick="_askPorterToCreate(\'project\')" style="font-size:12px">Create With Porter</button>'
+    + '</div>'
+    + '<div class="project-roster">';
   _projList.forEach(function(p) {
     var isActive = p.id === _projActive;
-    var statusColor = p.completed_at ? '#22c55e' : '#3b82f6';
     var agentCount = (p.assigned_personas || []).length;
-    var typeLabel = p.type === 'autonomous' ? 'Autonomous' : 'Manual';
-    var typeBg = p.type === 'autonomous' ? 'color-mix(in srgb,#f59e0b 12%,transparent)' : 'color-mix(in srgb,#3b82f6 12%,transparent)';
-    var typeClr = p.type === 'autonomous' ? '#f59e0b' : '#3b82f6';
+    var done = !!p.completed_at;
+    var typeLabel = done ? 'Completed' : (p.type === 'autonomous' ? 'Autonomous' : 'Active');
     var dateStr = p.created_at ? _projFmtDate(p.created_at * 1000) : '';
-    html += '<div style="padding:14px 16px;border:1px solid ' + (isActive ? 'var(--accent)' : 'var(--border)') + ';border-radius:10px;background:' + (isActive ? 'color-mix(in srgb,var(--accent) 4%,var(--surface))' : 'var(--surface)') + ';cursor:pointer;transition:border-color .15s" onclick="_projOpen(\x27' + p.id + '\x27)">';
-    // Row 1: status dot + name + badges
-    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
-    html += '<span style="width:8px;height:8px;border-radius:50%;background:' + statusColor + ';flex-shrink:0"></span>';
-    html += '<span style="font-weight:600;font-size:13px;color:var(--text);flex:1;min-width:0;overflow-wrap:break-word">' + escHtml(p.name || 'Untitled') + '</span>';
-    html += '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:' + typeBg + ';color:' + typeClr + '">' + typeLabel + '</span>';
-    if (isActive) html += '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">active</span>';
+    html += '<div class="project-row' + (isActive ? ' is-active' : '') + '" onclick="_projOpen(\x27' + p.id + '\x27)">';
+    html += '<div><div class="project-row-title">' + escHtml(p.name || 'Untitled') + '</div>';
+    html += '<div class="project-row-copy">' + escHtml(p.description || 'Open this project with Porter to define the lane, assign the right workers, and keep the work moving.') + '</div></div>';
+    html += '<div class="project-row-meta">';
+    html += '<span class="model-card-chip ' + (done ? 'ok' : 'dim') + '">' + escHtml(typeLabel) + '</span>';
+    if (isActive) html += '<span class="model-card-chip ok">Current Focus</span>';
+    if (p.success_bar) html += '<span class="model-card-chip dim">Success Bar</span>';
     html += '</div>';
-    // Row 2: description (always show, even if empty)
-    html += '<div style="font-size:11px;color:var(--text3);margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:16px">' + escHtml(p.description || 'No description') + '</div>';
-    // Row 3: agent count + date
-    html += '<div style="display:flex;align-items:center;justify-content:space-between">';
-    html += '<span style="font-size:10px;color:var(--text3)">' + agentCount + ' agent' + (agentCount !== 1 ? 's' : '') + '</span>';
-    if (dateStr) html += '<span style="font-size:10px;color:var(--text3)">' + dateStr + '</span>';
-    html += '</div></div>';
+    html += '<div class="project-row-stats"><span>' + agentCount + ' worker' + (agentCount !== 1 ? 's' : '') + '</span>' + (dateStr ? '<span>' + dateStr + '</span>' : '') + '</div>';
+    html += '</div>';
   });
+  html += '</div></div>';
+  html += '<div class="pulse-pane"><div class="pulse-pane-title">How Porter Uses Projects</div><div class="pulse-pane-copy">Projects are the durable work lanes Porter can plan against. They hold the brief, workers, directives, state, and artifacts so conversations do not drift into unstructured chat.</div><div style="display:flex;flex-direction:column;gap:10px;margin-top:14px"><div class="pulse-route-card"><div class="pulse-route-title">1. Define the lane</div><div class="pulse-route-copy">Porter clarifies the objective, writes the success bar, and decides whether this should become a real project.</div></div><div class="pulse-route-card"><div class="pulse-route-title">2. Staff the work</div><div class="pulse-route-copy">Porter creates or assigns the right workers inside the project instead of leaving work detached from context.</div></div><div class="pulse-route-card"><div class="pulse-route-title">3. Keep it on track</div><div class="pulse-route-copy">Activity, state, and artifacts stay attached to the project so Porter can supervise progress over time.</div></div></div></div>';
+  html += '</div>';
   grid.innerHTML = html;
 }
 
@@ -15596,6 +15608,8 @@ async function _projCreate() {
 function _projBack() {
   document.getElementById('projects-list-view').style.display = '';
   document.getElementById('project-detail-view').style.display = 'none';
+  var actions = document.getElementById('proj-detail-actions');
+  if (actions) actions.innerHTML = '';
 }
 
 async function _projOpen(id) {
@@ -15613,6 +15627,11 @@ async function _projOpen(id) {
   }
   window._projCurrent = proj;
   _projTab = 'chat';
+  var actions = document.getElementById('proj-detail-actions');
+  if (actions) {
+    actions.innerHTML = '<button class="btn btn-ghost" style="font-size:12px" onclick="_askPorterToCreate(\'worker\')">Create Worker</button>'
+      + '<button class="btn btn-primary" style="font-size:12px" onclick="_askPorterToCreate(\'project\')">Refine With Porter</button>';
+  }
   _renderProjTabs();
   _renderProjTabContent();
 }
@@ -15631,9 +15650,7 @@ function _renderProjTabs() {
   ];
   tabs.innerHTML = items.map(function(t) {
     var active = _projTab === t.id;
-    return '<button onclick="_projSwitchTab(\x27' + t.id + '\x27)" style="font-size:12px;padding:7px 14px;border:none;border-radius:10px;cursor:pointer;font-weight:' + (active ? '700' : '600') + ';'
-      + (active ? 'background:var(--accent);color:#fff' : 'background:transparent;color:var(--text3)')
-      + '">' + t.label + '</button>';
+    return '<button class="pd-tab' + (active ? ' active' : '') + '" onclick="_projSwitchTab(\x27' + t.id + '\x27)">' + t.label + '</button>';
   }).join('');
 }
 
@@ -15808,11 +15825,11 @@ async function _projLoadActivity(pid) {
 }
 
 function _scheduleProjActivityRefresh(delayMs) {
-  if (_currentModule !== 'projects' || _projTab !== 'overview' || !window._projActivityCurrent) return;
+  if (_currentModule !== 'projects' || _projTab !== 'chat' || !window._projActivityCurrent) return;
   if (_projActivityRefreshTimer) return;
   _projActivityRefreshTimer = setTimeout(function() {
     _projActivityRefreshTimer = null;
-    if (_currentModule === 'projects' && _projTab === 'overview' && window._projActivityCurrent) {
+    if (_currentModule === 'projects' && _projTab === 'chat' && window._projActivityCurrent) {
       _projLoadActivity(window._projActivityCurrent);
     }
   }, Math.max(80, delayMs || 250));
@@ -15828,7 +15845,7 @@ function _connectProjActivityLive() {
   });
   if (!_projActivityPoller) {
     _projActivityPoller = setInterval(function() {
-      if (_currentModule === 'projects' && _projTab === 'overview' && window._projActivityCurrent) {
+      if (_currentModule === 'projects' && _projTab === 'chat' && window._projActivityCurrent) {
         _projLoadActivity(window._projActivityCurrent);
       }
     }, 30000);
@@ -16082,86 +16099,6 @@ async function _projDelete(pid) {
     } catch(e) { toast('Failed', 'err'); }
   }, {danger: true, okLabel: 'Delete'});
 }
-
-// v0.29.36 — Project workflow attachment
-async function _projLoadWorkflows(pid, wfIds) {
-  var el = document.getElementById('proj-wf-list');
-  if (!el) return;
-  try {
-    var data = await api('/api/workflows');
-    var allWfs = (data && data.workflows) || [];
-    var attached = allWfs.filter(function(wf) { return wfIds.indexOf(wf.id) >= 0; });
-    if (!attached.length) {
-      el.innerHTML = '<div style="padding:8px;color:var(--text3);font-size:12px">None of the attached workflow IDs match active workflows.</div>';
-      return;
-    }
-    var html = '';
-    attached.forEach(function(wf) {
-      var dotColor = wf.running ? '#3b82f6' : wf.status === 'active' ? '#22c55e' : '#9ca3af';
-      var statusLabel = wf.running ? 'Running' : (wf.status === 'active' ? 'Active' : 'Paused');
-      var lastRun = wf.last_run ? new Date(wf.last_run * 1000).toLocaleString() : 'Never';
-      html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);display:flex;align-items:center;gap:10px">';
-      html += '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0"></span>';
-      html += '<div style="flex:1;min-width:0">';
-      html += '<div style="font-size:12px;font-weight:500;color:var(--text)">' + escHtml(wf.name || wf.id) + '</div>';
-      html += '<div style="font-size:10px;color:var(--text3)">' + statusLabel + ' \u00b7 ' + (wf.interval || 'manual') + ' \u00b7 Last: ' + lastRun + '</div>';
-      html += '</div>';
-      html += '<button onclick="_projTriggerWf(\x27' + wf.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px" title="Trigger now">Run</button>';
-      html += '<button onclick="_projDetachWf(\x27' + pid + '\x27,\x27' + wf.id + '\x27)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:2px 4px" title="Detach">&times;</button>';
-      html += '</div>';
-    });
-    el.innerHTML = html;
-  } catch(e) { el.innerHTML = '<div style="color:var(--text3);font-size:12px">Could not load workflows</div>'; }
-}
-
-async function _projAttachWf(pid) {
-  var proj = _projList.find(function(p) { return p.id === pid; });
-  if (!proj) return;
-  var attached = proj.workflows || [];
-  try {
-    var data = await api('/api/workflows');
-    var allWfs = (data && data.workflows) || [];
-    var available = allWfs.filter(function(wf) { return attached.indexOf(wf.id) < 0; });
-    if (!available.length) { toast('All workflows already attached'); return; }
-    var wfItems = available.map(function(wf) { return {id: wf.id, label: wf.name || wf.id, sub: wf.status || 'unknown'}; });
-    _porterSelect('Attach Workflow', wfItems, async function(item) {
-      var sel = available.find(function(wf) { return wf.id === item.id; });
-      if (!sel) return;
-      attached.push(sel.id);
-      var r = await api('/api/projects', {action: 'update', project_id: pid, workflows: attached});
-      if (r && r.ok) {
-        toast('Workflow attached', 'ok');
-        await loadProjects();
-        var updated = _projList.find(function(p) { return p.id === pid; });
-        if (updated) { window._projCurrent = updated; _renderProjTabs(); _renderProjTabContent(); }
-      } else { toast(r && r.error || 'Failed', 'err'); }
-    });
-  } catch(e) { toast('Failed to load workflows', 'err'); }
-}
-
-async function _projDetachWf(pid, wfId) {
-  var proj = _projList.find(function(p) { return p.id === pid; });
-  if (!proj) return;
-  var attached = (proj.workflows || []).filter(function(id) { return id !== wfId; });
-  try {
-    var r = await api('/api/projects', {action: 'update', project_id: pid, workflows: attached});
-    if (r && r.ok) {
-      toast('Workflow detached', 'ok');
-      await loadProjects();
-      var updated = _projList.find(function(p) { return p.id === pid; });
-      if (updated) { window._projCurrent = updated; _renderProjTabs(); _renderProjTabContent(); }
-    } else { toast(r && r.error || 'Failed', 'err'); }
-  } catch(e) { toast('Failed', 'err'); }
-}
-
-async function _projTriggerWf(wfId) {
-  try {
-    var r = await api('/api/workflows/' + wfId + '/trigger', {});
-    if (r && r.ok) { toast('Workflow triggered', 'ok'); }
-    else { toast(r && r.error || 'Failed', 'err'); }
-  } catch(e) { toast('Failed', 'err'); }
-}
-
 
 // ── Capabilities / System module ──────────────────────────────────────────
 async function renderGwsPanel() {
@@ -16492,8 +16429,6 @@ async function _loadIntelligence() {
 
 async function _loadRuntimeOperations() {
   _loadPulseOps();
-  _loadSelfCheck();
-  _loadIntelligence();
   _connectGatewayActivitySse();
   _loadGatewayActivity();
   _loadOrchRuns();
@@ -16511,54 +16446,55 @@ var _pulseOpsPoller = null;
 
 async function _loadPulseOps(force) {
   var cards = document.getElementById('pulse-ops-cards');
-  var feed = document.getElementById('pulse-ops-feed');
-  if (!cards || !feed) return;
+  if (!cards) return;
   if (!force && !cards.innerHTML.trim()) {
-    cards.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg);font-size:12px;color:var(--text3)">Loading pulse...</div>';
-    feed.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg);font-size:12px;color:var(--text3)">Loading live ops feed...</div>';
+    cards.innerHTML = '<div class="pulse-summary-card"><div class="pulse-summary-kicker">Loading</div><div class="pulse-summary-value">...</div><div class="pulse-summary-copy">Gathering current routing state.</div></div>';
   }
   try {
-    var [metrics, events] = await Promise.all([
+    var [metrics, schedRes, runsRes, dispatchRes] = await Promise.all([
       api('/api/logs/metrics').catch(function() { return null; }),
-      api('/api/logs/query?limit=12').catch(function() { return null; })
+      api('/api/bridge/scheduler').catch(function() { return null; }),
+      api('/api/orchestration/runs').catch(function() { return null; }),
+      api('/api/admin/dispatch-log?limit=8&max_age_s=1800').catch(function() { return null; })
     ]);
     var m = metrics || {};
-    var evs = (events && events.events) || [];
+    var scheduler = (schedRes && schedRes.scheduler) || {};
+    var dispatches = (dispatchRes && dispatchRes.dispatches) || [];
+    var runs = (runsRes && runsRes.runs) || [];
+    var liveRuns = runs.filter(function(r) {
+      var s = String(r.status || '').toLowerCase();
+      return s === 'running' || s === 'planned' || s === 'stalled';
+    });
+    var waiting = 0;
+    var running = 0;
+    var hotBackend = '';
+    var hotLoad = -1;
+    Object.keys(scheduler).forEach(function(backend) {
+      var lane = scheduler[backend] || {};
+      var laneLoad = Number(lane.running || 0) + Number(lane.waiting || 0);
+      waiting += Number(lane.waiting || 0);
+      running += Number(lane.running || 0);
+      if (laneLoad > hotLoad) {
+        hotLoad = laneLoad;
+        hotBackend = backend;
+      }
+    });
+    var explicitRoutes = dispatches.filter(function(r) {
+      return !!(r.to || r.model || r.persona_name);
+    }).length;
     var metricCards = [
-      { label: 'Open Incidents', value: Number(m.open_incidents || 0), tone: Number(m.open_incidents || 0) ? '#ef4444' : 'var(--text)' },
-      { label: 'Errors (5m)', value: Number(m.errors_5m || 0), tone: Number(m.errors_5m || 0) ? '#ef4444' : 'var(--text)' },
-      { label: 'Timeouts (5m)', value: Number(m.timeouts_5m || 0), tone: Number(m.timeouts_5m || 0) ? '#f59e0b' : 'var(--text)' },
-      { label: 'Events / Min', value: Number(m.events_per_min || 0), tone: 'var(--text)' }
+      { label: 'Attention', value: Number(m.open_incidents || 0), tone: Number(m.open_incidents || 0) ? '#ef4444' : 'var(--text)', copy: Number(m.open_incidents || 0) ? 'Incidents currently need operator review.' : 'No open incidents right now.' },
+      { label: 'Live Runs', value: liveRuns.length, tone: liveRuns.length ? '#f59e0b' : 'var(--text)', copy: liveRuns.length ? 'Porter is actively supervising multi-step work.' : 'No multi-step runs are active.' },
+      { label: 'Queued Tasks', value: waiting, tone: waiting ? '#f59e0b' : 'var(--text)', copy: waiting ? 'Work is waiting for an open backend lane.' : 'Nothing is waiting in the bridge queue.' },
+      { label: 'Hottest Lane', value: hotBackend ? hotBackend : 'idle', tone: hotBackend ? 'var(--text)' : 'var(--text3)', copy: hotBackend ? ('Most current traffic is hitting ' + hotBackend + '.') : 'No backend lane is currently hot.' },
+      { label: 'Live Dispatches', value: running, tone: running ? '#22c55e' : 'var(--text)', copy: running ? 'Requests are executing across active runtime lanes.' : 'No dispatches are in flight right now.' },
+      { label: 'Recent Routes', value: explicitRoutes, tone: explicitRoutes ? 'var(--text)' : 'var(--text3)', copy: explicitRoutes ? 'Recent requests resolved into visible model/backend routes.' : 'No recent routes recorded in the current window.' }
     ];
     cards.innerHTML = metricCards.map(function(card) {
-      return '<div style="padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">' + escHtml(card.label) + '</div><div style="font-size:28px;font-weight:800;color:' + card.tone + ';margin-top:6px">' + escHtml(String(card.value)) + '</div></div>';
-    }).join('');
-    evs = evs.filter(function(e) {
-      var hay = [e.domain, e.event_type, e.message, e.detail, e.error].join(' ').toLowerCase();
-      return hay.indexOf('cortex') < 0 && hay.indexOf('memory extraction') < 0 && hay.indexOf('porter app') < 0;
-    });
-    if (!evs.length) {
-      feed.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg);font-size:12px;color:var(--text3)">No recent operator events in the current window.</div>';
-      return;
-    }
-    feed.innerHTML = evs.slice(0, 8).map(function(e) {
-      var sev = String(e.severity || 'info').toLowerCase();
-      var color = sev === 'critical' || sev === 'error' ? '#ef4444' : (sev === 'warn' || sev === 'warning' ? '#f59e0b' : '#22c55e');
-      var chips = [
-        e.domain ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(e.domain) + '</span>' : '',
-        e.event_type ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(e.event_type) + '</span>' : '',
-        e.backend ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(e.backend) + '</span>' : '',
-        e.trace_id ? '<span class="model-card-chip dim" style="font-size:10px">trace ' + escHtml(String(e.trace_id).slice(0, 8)) + '</span>' : ''
-      ].filter(Boolean).join('');
-      return '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--bg)">'
-        + '<div style="display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:6px"><div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:' + color + '"></span><span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(e.message || e.event_type || 'event') + '</span></div><span style="font-size:10px;color:var(--text3)">' + escHtml(_relativeTime(e.ts || 0)) + '</span></div>'
-        + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' + chips + '</div>'
-        + '<div style="font-size:11px;color:var(--text3)">' + escHtml((e.detail || e.error || '').substring(0, 220)) + '</div>'
-        + '</div>';
+      return '<div class="pulse-summary-card"><div class="pulse-summary-kicker">' + escHtml(card.label) + '</div><div class="pulse-summary-value" style="color:' + card.tone + '">' + escHtml(String(card.value)) + '</div><div class="pulse-summary-copy">' + escHtml(card.copy) + '</div></div>';
     }).join('');
   } catch (e) {
-    cards.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg);font-size:12px;color:#ef4444">Could not load live ops.</div>';
-    feed.innerHTML = '';
+    cards.innerHTML = '<div class="pulse-summary-card"><div class="pulse-summary-kicker">Unavailable</div><div class="pulse-summary-value" style="color:#ef4444">Pulse</div><div class="pulse-summary-copy">Could not load the live routing summary.</div></div>';
   }
   if (!_pulseOpsPoller) {
     _pulseOpsPoller = setInterval(function() {
@@ -16606,13 +16542,13 @@ async function _loadGatewayActivity(force) {
   var host = document.getElementById('runtime-gateway-activity');
   if (!host) return;
   if (!force && !host.innerHTML.trim()) {
-    host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">Loading gateway activity…</div>';
+    host.innerHTML = '<div class="pulse-route-card"><div class="pulse-route-title">Loading routing map...</div><div class="pulse-route-copy">Waiting for recent dispatch data.</div></div>';
   }
   try {
     var qs = force ? '?limit=18&max_age_s=600&_=' + Date.now() : '?limit=18&max_age_s=600';
     var res = await api('/api/admin/dispatch-log' + qs);
     if (!res || !res.ok) {
-      host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:#ef4444">Failed to load gateway activity.</div>';
+      host.innerHTML = '<div class="pulse-route-card"><div class="pulse-route-title" style="color:#ef4444">Routing map unavailable</div><div class="pulse-route-copy">Recent dispatch activity could not be loaded.</div></div>';
       return;
     }
     var rows = (res.dispatches || []).filter(function(r) {
@@ -16620,16 +16556,16 @@ async function _loadGatewayActivity(force) {
       return hay.indexOf('cortex') < 0 && hay.indexOf('memory extraction') < 0 && hay.indexOf('porter app') < 0;
     });
     if (!rows.length) {
-      host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">No recent gateway activity in the last 10 minutes.</div>';
+      host.innerHTML = '<div class="pulse-route-card"><div class="pulse-route-title">No recent task routing</div><div class="pulse-route-copy">Once Porter starts routing work, this view will show the project, worker, backend, and model chosen for each request.</div></div>';
       return;
     }
     host.innerHTML = rows.map(function(r) {
       var tone = r.status === 'complete' ? 'ok' : (r.status === 'failed' ? 'err' : 'warn');
       var chips = [
+        _gatewayActivityChip(r.project_name || 'No project', 'dim'),
+        _gatewayActivityChip(r.persona_name || 'Porter', 'dim'),
         _gatewayActivityChip(r.to || '', tone),
         _gatewayActivityChip(r.model || '', 'dim'),
-        _gatewayActivityChip(r.persona_name || '', 'dim'),
-        _gatewayActivityChip(r.project_name || '', 'dim'),
         _gatewayActivityChip(r.task_id ? ('task ' + r.task_id) : '', 'dim'),
         _gatewayActivityChip(r.duration_ms ? _formatDuration(r.duration_ms) : '', 'dim'),
         _gatewayActivityChip(_relativeTime(r.created_at), 'dim')
@@ -16637,18 +16573,18 @@ async function _loadGatewayActivity(force) {
       var detail = r.status === 'failed'
         ? (r.error || r.response_preview || 'Dispatch failed')
         : (r.response_preview || r.prompt || '');
-      return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">'
-        + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + chips + '</div>'
+      return '<div class="pulse-route-card">'
+        + '<div class="pulse-route-head">'
+        + '<div style="min-width:0"><div class="pulse-route-title">' + escHtml((r.prompt || r.response_preview || 'Untitled routed task').substring(0, 110) || 'Untitled routed task') + '</div>'
+        + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px">' + chips + '</div></div>'
         + '<span style="font-size:10px;color:' + (tone === 'ok' ? '#22c55e' : (tone === 'err' ? '#ef4444' : '#f59e0b')) + ';font-weight:600">' + escHtml((r.status || 'unknown').toUpperCase()) + '</span>'
         + '</div>'
-        + '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">' + escHtml((r.prompt || '').substring(0, 100) || '(no prompt recorded)') + '</div>'
-        + '<div style="font-size:11px;color:var(--text3)">' + escHtml((detail || '').substring(0, 220)) + '</div>'
+        + '<div class="pulse-route-copy">' + escHtml((detail || '').substring(0, 220) || 'No response summary recorded.') + '</div>'
         + '</div>';
     }).join('');
   } catch (e) {
     _reportModelsClientError('runtime-gateway-activity', e);
-    host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:#ef4444">Gateway activity load failed.</div>';
+    host.innerHTML = '<div class="pulse-route-card"><div class="pulse-route-title" style="color:#ef4444">Routing map failed</div><div class="pulse-route-copy">Recent dispatch activity could not be loaded.</div></div>';
   }
 }
 
@@ -16725,20 +16661,20 @@ async function _loadOrchRuns(force) {
   var host = document.getElementById('runtime-orch-runs');
   if (!host) return;
   if (!force && !host.innerHTML.trim()) {
-    host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">Loading orchestration runs…</div>';
+    host.innerHTML = '<div class="pulse-route-card"><div class="pulse-route-title">Loading active runs...</div><div class="pulse-route-copy">Waiting for Porter\'s current run state.</div></div>';
   }
   try {
     var suffix = force ? ('?_=' + Date.now()) : '';
     var data = await api('/api/orchestration/runs' + suffix);
     var runs = (data && data.runs) || [];
     if (!runs.length) {
-      host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">No orchestration runs yet. Create one to have Porter plan and route multi-step work.</div>';
+      host.innerHTML = '<div class="pulse-route-card"><div class="pulse-route-title">No active runs</div><div class="pulse-route-copy">Start a run when you want Porter to plan, route, and supervise multi-step work end to end.</div></div>';
       return;
     }
     host.innerHTML = runs.slice(0, 8).map(_renderOrchRunCard).join('');
   } catch (e) {
     _reportModelsClientError('runtime-orch-runs', e);
-    host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:#ef4444">Failed to load orchestration runs.</div>';
+    host.innerHTML = '<div class="pulse-route-card"><div class="pulse-route-title" style="color:#ef4444">Active runs unavailable</div><div class="pulse-route-copy">Current orchestration runs could not be loaded.</div></div>';
   }
 }
 
@@ -16860,91 +16796,40 @@ async function _loadCoordinationPanel(force) {
   var host = document.getElementById('runtime-coordination-panel');
   if (!host) return;
   if (!force && !host.innerHTML.trim()) {
-    host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text3)">Loading coordination bridge…</div>';
+    host.innerHTML = '<div class="pulse-lane-card"><div class="pulse-route-title">Loading backend lanes...</div><div class="pulse-route-copy">Waiting for current queue and lane state.</div></div>';
   }
   try {
-    var nonce = force ? '&_=' + Date.now() : '';
-    var ledgerReq = api('/api/coordination/ledger?limit=20' + nonce);
-    var recentReq = api('/api/coordination?limit=10' + nonce);
-    var pair = await Promise.all([ledgerReq, recentReq]);
-    var ledger = pair[0] || {};
-    var recentRuns = pair[1] || {};
-    var active = ledger.active_claims || [];
-    var conflicts = ledger.conflicts || [];
-    var recent = ledger.recent || [];
-    var runEvents = recentRuns.events || [];
-
-    var sections = [];
-    var activeHtml = active.length
-      ? active.slice(0, 6).map(function(r) {
-          var expiresIn = r.expires_at ? _relativeFutureTime(r.expires_at) : '';
-          return '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--border)">' 
-            + '<div style="min-width:0">'
-            + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px">'
-            + '<span class="model-card-chip warn" style="font-size:10px">' + escHtml(r.model || 'unknown') + '</span>'
-            + '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(r.scope || 'no scope') + '</span>'
-            + '</div>'
-            + '<div style="font-size:11px;color:var(--text2)">' + escHtml((r.message || 'No claim message').substring(0, 180)) + '</div>'
-            + '</div>'
-            + '<div style="font-size:10px;color:var(--text3);white-space:nowrap">' + escHtml(expiresIn ? ('expires ' + expiresIn) : '') + '</div>'
-            + '</div>';
-        }).join('')
-      : '<div style="font-size:12px;color:var(--text3)">No active claims. The bridge is idle or work is not claiming scopes.</div>';
-    sections.push(_coordinationPanelCard('Active Claims', activeHtml, active.length ? 'warn' : 'dim'));
-
-    var conflictHtml = conflicts.length
-      ? conflicts.slice(0, 4).map(function(c) {
-          var summary = c.type === 'version_collision'
-            ? ('Version ' + (c.version || 'unknown') + ' completed by ' + (c.models || 'multiple models'))
-            : ('Scope ' + (c.scope || 'unknown') + ' is claimed by ' + (c.models || 'multiple models'));
-          return '<div style="font-size:11px;color:var(--text2);padding:8px 0;border-top:1px solid var(--border)">' + escHtml(summary) + '</div>';
-        }).join('')
-      : '<div style="font-size:12px;color:var(--text3)">No coordination conflicts detected.</div>';
-    sections.push(_coordinationPanelCard('Conflicts', conflictHtml, conflicts.length ? 'err' : 'ok'));
-
-    var recentItems = [];
-    recent.slice(0, 6).forEach(function(r) {
-      recentItems.push({
-        label: _coordinationEntryLabel(r.entry_type),
-        model: r.model || '',
-        scope: r.scope || '',
-        message: r.message || r.context || '',
-        ts: r.ts || 0,
-        tone: _coordinationTone(r.entry_type)
-      });
-    });
-    runEvents.slice(0, 4).forEach(function(r) {
-      recentItems.push({
-        label: _coordinationEntryLabel(r.ok ? 'result' : 'block'),
-        model: r.backend || '',
-        scope: r.run_id || '',
-        message: r.ok ? (r.text || 'Run completed') : (r.error || 'Run failed'),
-        ts: r.ts || 0,
-        tone: r.ok ? 'ok' : 'err'
-      });
-    });
-    recentItems.sort(function(a, b) { return Number(b.ts || 0) - Number(a.ts || 0); });
-    var recentHtml = recentItems.length
-      ? recentItems.slice(0, 8).map(function(r) {
-          return '<div style="padding:8px 0;border-top:1px solid var(--border)">'
-            + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">'
-            + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
-            + '<span class="model-card-chip ' + escHtml(r.tone || 'dim') + '" style="font-size:10px">' + escHtml(r.label) + '</span>'
-            + (r.model ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(r.model) + '</span>' : '')
-            + (r.scope ? '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(r.scope) + '</span>' : '')
-            + '</div>'
-            + '<span style="font-size:10px;color:var(--text3)">' + escHtml(_relativeTime(r.ts)) + '</span>'
-            + '</div>'
-            + '<div style="font-size:11px;color:var(--text2)">' + escHtml((r.message || '').substring(0, 200) || '(no detail)') + '</div>'
-            + '</div>';
-        }).join('')
-      : '<div style="font-size:12px;color:var(--text3)">No recent coordination events recorded yet.</div>';
-    sections.push(_coordinationPanelCard('Recent Coordination', recentHtml, recentItems.length ? 'dim' : 'dim'));
-
-    host.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">' + sections.join('') + '</div>';
+    var nonce = force ? ('?_=' + Date.now()) : '';
+    var pair = await Promise.all([
+      api('/api/bridge/scheduler' + nonce),
+      api('/api/dispatch-scores').catch(function() { return null; })
+    ]);
+    var summary = (pair[0] && pair[0].scheduler) || {};
+    var scores = (pair[1] && pair[1].cache) || {};
+    var backends = Object.keys(summary);
+    if (!backends.length) {
+      host.innerHTML = '<div class="pulse-lane-card"><div class="pulse-route-title">No lane data</div><div class="pulse-route-copy">Backend queue and lane state will appear here once Porter starts dispatching through Bridge.</div></div>';
+      return;
+    }
+    host.innerHTML = backends.map(function(name) {
+      var lane = summary[name] || {};
+      var score = scores[name] || {};
+      var stateTone = Number(lane.waiting || 0) > 0 ? '#f59e0b' : (Number(lane.running || 0) > 0 ? '#22c55e' : 'var(--text3)');
+      return '<div class="pulse-lane-card">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><div class="pulse-route-title">' + escHtml(name) + '</div><span style="font-size:10px;color:' + stateTone + ';font-weight:700">' + escHtml(Number(lane.waiting || 0) > 0 ? 'QUEUED' : (Number(lane.running || 0) > 0 ? 'ACTIVE' : 'IDLE')) + '</span></div>'
+        + '<div class="pulse-lane-grid">'
+        + '<div class="pulse-lane-stat"><div class="pulse-lane-stat-label">Running</div><div class="pulse-lane-stat-value">' + escHtml(String(Number(lane.running || 0))) + '</div></div>'
+        + '<div class="pulse-lane-stat"><div class="pulse-lane-stat-label">Queued</div><div class="pulse-lane-stat-value">' + escHtml(String(Number(lane.waiting || 0))) + '</div></div>'
+        + '<div class="pulse-lane-stat"><div class="pulse-lane-stat-label">Limit</div><div class="pulse-lane-stat-value">' + escHtml(String(Number(lane.backend_limit || 0))) + '</div></div>'
+        + '</div>'
+        + '<div class="pulse-route-copy">Avg wait ' + escHtml(_formatDuration(Number(lane.avg_wait_ms || 0))) + ' · Max wait ' + escHtml(_formatDuration(Number(lane.max_wait_ms || 0))) + ' · ' + escHtml(String(Number(lane.admissions || 0))) + ' admissions'
+        + (score && typeof score.avg === 'number' ? (' · quality ' + escHtml(score.avg.toFixed(1))) : '')
+        + '</div>'
+        + '</div>';
+    }).join('');
   } catch (e) {
     _reportModelsClientError('runtime-coordination-panel', e);
-    host.innerHTML = '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:#ef4444">Coordination bridge load failed.</div>';
+    host.innerHTML = '<div class="pulse-lane-card"><div class="pulse-route-title" style="color:#ef4444">Lane data unavailable</div><div class="pulse-route-copy">Current queue and backend lane information could not be loaded.</div></div>';
   }
 }
 
@@ -29982,8 +29867,8 @@ document.addEventListener('keydown', function(e) {
   // Number keys 1-9: switch tabs
   var tabMap = {
     '1': 'agents', '2': 'projects', '3': 'models',
-    '4': 'system', '5': 'workflows', '6': 'capabilities',
-    '7': 'settings', '8': 'models', '9': 'system'
+    '4': 'system', '5': 'capabilities', '6': 'settings',
+    '7': 'agents', '8': 'models', '9': 'system'
   };
   if (tabMap[e.key]) {
     e.preventDefault();
@@ -36732,7 +36617,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.4"})
+            self.reply_json({"v": "0.31.5"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36894,7 +36779,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.4"
+                health["porter_version"] = "0.31.5"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38838,7 +38723,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.4'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.5'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43930,7 +43815,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.4 ready (localhost only)")
+    print(f"\n  Porter v0.31.5 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
