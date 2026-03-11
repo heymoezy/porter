@@ -1,5 +1,11 @@
 # Porter Release Notes
 
+## v0.30.71 (2026-03-11)
+
+- Completed the Models cleanup pass: the tab now uses runtime-first Porter language end to end instead of leaking old internal terms.
+- Provider and model discovery now follow the live provider registry instead of a hardcoded backend list.
+- Removed a dead Models card renderer path, and runtime/config diagnostics no longer expose local path assumptions in the UI.
+
 ## v0.30.70 (2026-03-11)
 
 - Final Models sweep: load-rail counts now use real gateway and discovered-model totals from the live payload instead of fake stage numbers.

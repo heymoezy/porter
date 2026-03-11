@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.70 — Final models sweep"""
+"""Porter v0.30.71 — Complete models cleanup"""
 
 
 import email
@@ -10347,7 +10347,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.70</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.71</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -10994,7 +10994,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
     <!-- Backends sub-tab -->
     <div id="models-backends-tab">
-      <div class="module-intro">AI backends available to Porter. Porter and his workers route through these runtimes.</div>
+      <div class="module-intro">AI runtimes available to Porter. As each gateway comes online, Porter discovers its models and current runtime state here.</div>
       <div id="models-load-status" class="models-load-status"></div>
       <div id="models-grid" class="models-grid">
         <div class="loading-indicator">Loading models...</div>
@@ -11692,6 +11692,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.71', date:'2026-03-11', notes:["Completed the Models cleanup pass: the tab now uses runtime-first product language, provider/model discovery is fully registry-driven, stale renderer paths were removed, and config/runtime diagnostics no longer expose hardcoded local path assumptions"] },
   { ver:'v0.30.70', date:'2026-03-11', notes:["Final Models sweep: load-rail counts now use real gateway and discovered-model totals from the payload, stale internal leftovers were stripped from the card renderer, and the tab stays aligned with Porter-first product language instead of internal schema terms"] },
   { ver:'v0.30.69', date:'2026-03-11', notes:["Removed stale persona wording from the Models intro so the page now speaks in Porter and worker language instead of leaking an internal data-model term"] },
   { ver:'v0.30.68', date:'2026-03-11', notes:["Fixed the Models load rail so it clears once cards are actually on screen, removed the misleading stage counter, and tightened the staged loading copy so it no longer implies fake gateway or model counts"] },
@@ -21082,9 +21083,9 @@ async function _openBackendConfig(backendId) {
     if (c.runtime_issues && c.runtime_issues.length) {
       diagHtml += '<div style="color:#f59e0b;margin-bottom:6px">' + escHtml(c.runtime_issues.join(' · ')) + '</div>';
     }
-    if (c.service_unit_paths && c.service_unit_paths.length > 1) {
+    if ((c.service_unit_count || 0) > 1) {
       diagHtml += '<div style="margin-bottom:6px;color:#f59e0b">Competing service units:</div>';
-      diagHtml += '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">' + escHtml(c.service_unit_paths.join(' · ')) + '</div>';
+      diagHtml += '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">' + escHtml(String(c.service_unit_count)) + ' runtime units appear to be competing for the same gateway.</div>';
     }
     if (c.repair_hint) {
       diagHtml += '<div style="margin-bottom:6px">' + escHtml(c.repair_hint) + '</div>';
@@ -21423,7 +21424,7 @@ async function loadModels() {
       }
     }
     if (!_modelsRenderedOnce) {
-      _renderModelsProgress('Bringing model gateways online', 'Porter will paint cards first, then fill them in as each backend reports ready.');
+      _renderModelsProgress('Bringing model gateways online', 'Porter will paint the runtime cards first, then fill them in as each backend reports ready.');
     } else {
       _renderModelsProgress('Refreshing model status', 'Cards stay visible while Porter refreshes them in the background.');
     }
@@ -21438,7 +21439,7 @@ async function loadModels() {
         _applyModelsSnapshot(boot, { preferStable: true });
         bootstrapApplied = true;
         var gatewayCount = _modelsGatewayCount(boot);
-        markProgress('Gateway structure ready', gatewayCount ? ('Porter found ' + gatewayCount + ' gateways and put them on screen.') : 'Porter found the available backends and put them on screen.');
+        markProgress('Gateway structure ready', gatewayCount ? ('Porter found ' + gatewayCount + ' gateways and put them on screen.') : 'Porter found the available gateways and put them on screen.');
       }
       markDone('bootstrap');
     }).catch(function(e) {
@@ -22552,7 +22553,6 @@ function _renderModelCards(data, act) {
       + '</div>'
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
       + _runtimeHtml
-      + _bridgeNoteHtml
       + _healthChipHtml
       + (p.available ? _selHtml : _installHtml)
       + updateFootHtml
@@ -29285,31 +29285,31 @@ BACKEND_RUNTIME_SPECS = {
         "kind": "gateway-cli",
         "doc_basis": "OpenClaw docs: gateway/agent split, JSON output, models subcommands",
         "catalog_source": "openclaw models list --json",
-        "test_mode": "agent-json",
+        "test_mode": "structured gateway run",
     },
     "claude": {
         "kind": "cli",
         "doc_basis": "Claude Code docs: --print, --model, --output-format json/stream-json",
         "catalog_source": "history + active selection",
-        "test_mode": "print-json",
+        "test_mode": "structured CLI run",
     },
     "gemini": {
         "kind": "cli",
         "doc_basis": "Gemini CLI docs: --prompt, --model, --output-format json/stream-json; OAuth updates latest models, API key is best for specific model control",
         "catalog_source": "history + active selection",
-        "test_mode": "prompt-json",
+        "test_mode": "structured CLI run",
     },
     "codex": {
         "kind": "cli",
         "doc_basis": "Codex CLI docs: exec --json, --model, --ephemeral",
-        "catalog_source": "~/.codex/models_cache.json",
-        "test_mode": "exec-json",
+        "catalog_source": "Codex runtime cache",
+        "test_mode": "structured CLI run",
     },
     "ollama": {
         "kind": "local-http",
         "doc_basis": "Ollama docs: local HTTP API, list/run/show/ps",
         "catalog_source": "ollama list / local API",
-        "test_mode": "http-generate",
+        "test_mode": "HTTP generate",
     },
 }
 
@@ -30080,14 +30080,14 @@ def _benchmark_adjusted_route(preferred: str, message: str = "") -> tuple:
 
 
 def _openclaw_gateway_settings() -> dict:
-    """Load OpenClaw gateway port/token. Config priority: porter_config > ~/.openclaw."""
+    """Load OpenClaw gateway port/token. Config priority: Porter config > discovered runtime config."""
     bc = _config.get("backend_config", {}).get("openclaw", {})
     port = int(bc.get("gateway_port", 0) or bc.get("port", 0) or 0) or 18789
     host = str(bc.get("host", "")).strip() or "127.0.0.1"
     token = str(bc.get("auth_token", "")).strip()
-    source = "porter override" if any(str(bc.get(k, "")).strip() for k in ("auth_token", "host")) or int(bc.get("gateway_port", 0) or bc.get("port", 0) or 0) else "~/.openclaw"
-    # Fall back to ~/.openclaw/openclaw.json if no token in porter config
-    if not token or source == "~/.openclaw":
+    source = "Porter config override" if any(str(bc.get(k, "")).strip() for k in ("auth_token", "host")) or int(bc.get("gateway_port", 0) or bc.get("port", 0) or 0) else "Discovered runtime config"
+    # Fall back to the discovered runtime config if no token is stored in Porter config.
+    if not token or source == "Discovered runtime config":
         try:
             oc_cfg = json.loads((OPENCLAW_STATE_DIR / "openclaw.json").read_text(encoding="utf-8"))
             gw = oc_cfg.get("gateway", {}) if isinstance(oc_cfg, dict) else {}
@@ -30543,7 +30543,7 @@ def _models_available_payload(lightweight: bool = False) -> dict:
     active_models = prefs.get("active_models", {})
     backends_out = {}
     import concurrent.futures as _avail_cf
-    _bk_list = ["openclaw", "claude", "gemini", "codex", "ollama"]
+    _bk_list = list(PROVIDER_REGISTRY.keys())
     def _fetch_bk_models(bk):
         choice = active_models.get(bk, "auto")
         cached_models = _backend_model_cache["data"].get(bk) or []
@@ -30565,7 +30565,7 @@ def _models_available_payload(lightweight: bool = False) -> dict:
             _, data = _fetch_bk_models(bk)
             backends_out[bk] = data
     else:
-        with _avail_cf.ThreadPoolExecutor(max_workers=5) as _avail_ex:
+        with _avail_cf.ThreadPoolExecutor(max_workers=max(1, min(len(_bk_list), 8))) as _avail_ex:
             for bk, data in _avail_ex.map(_fetch_bk_models, _bk_list):
                 backends_out[bk] = data
     return backends_out
@@ -35306,7 +35306,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.70"})
+            self.reply_json({"v": "0.30.71"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35468,7 +35468,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.70"
+                health["porter_version"] = "0.30.71"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -35633,16 +35633,17 @@ class Handler(BaseHTTPRequestHandler):
                 _cfg_payload["effective"] = {
                     "host": settings.get("host", "127.0.0.1"),
                     "port": settings.get("port", 18789),
-                    "source": settings.get("source", "~/.openclaw"),
+                    "source": settings.get("source", "Discovered runtime config"),
                 }
                 _cfg_payload["runtime_issues"] = diagnosis.get("doctor_summary") or []
                 _cfg_payload["service_unit_paths"] = diagnosis.get("service_unit_paths") or []
+                _cfg_payload["service_unit_count"] = len(diagnosis.get("service_unit_paths") or [])
                 _cfg_payload.update(_model_repair_hint("openclaw", " ".join(diagnosis.get("doctor_summary") or diagnosis.get("issues") or [])))
             elif _cfg_bk == "ollama":
                 _cfg_payload["effective"] = {
                     "host": bc.get("host", "127.0.0.1") or "127.0.0.1",
                     "port": bc.get("port", 11434) or 11434,
-                    "source": "porter override" if any(str(bc.get(k, "")).strip() for k in ("host", "port")) else "default",
+                    "source": "Porter config override" if any(str(bc.get(k, "")).strip() for k in ("host", "port")) else "Runtime default",
                 }
             self.reply_json({"ok": True, "backend": _cfg_bk, "config": _cfg_payload})
 
@@ -37364,7 +37365,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.70'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.71'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42289,7 +42290,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.70 ready (localhost only)")
+    print(f"\n  Porter v0.30.71 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
