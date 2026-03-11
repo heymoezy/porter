@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.31.11 (2026-03-11)
+
+- Restored `Logs` as a visible first-class surface and added a direct `Logs` action back into Pulse so runtime tracing is no longer buried.
+- Added an explicit chat lane selector to agent-detail chat, so switching between Auto, Codex, Claude, Gemini, OpenClaw, and Ollama now happens inside the chat toolbar itself.
+
 ## v0.31.5 (2026-03-11)
 
 - Rebuilt Pulse into a compact live routing dashboard that emphasizes recent task routing, backend lanes, queue depth, and active runs instead of oversized runtime/admin boxes.

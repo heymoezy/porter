@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.10 — Light/dark mode fix: replace hardcoded colors with CSS variables"""
+"""Porter v0.31.11 — Restore logs visibility and add in-chat lane control"""
 
 
 import email
@@ -11451,7 +11451,7 @@ input[type="number"].settings-input { min-width: 60px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
       <span class="mnav-label">Extensions</span>
     </button>
-    <button class="mnav-item" id="mnav-admin" style="display:none" onclick="switchModule('admin')">
+    <button class="mnav-item" id="mnav-admin" onclick="switchModule('admin')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       <span class="mnav-label">Logs</span>
     </button>
@@ -11486,7 +11486,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.10</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.11</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11988,6 +11988,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="module-hdr">
       <span class="module-title">Pulse</span>
       <div style="flex:1"></div>
+      <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="switchModule('admin')">Logs</button>
       <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_newOrchRun()">+ Run</button>
       <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadRuntimeOperations()">Refresh</button>
     </div>
@@ -12586,6 +12587,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.11', date:'2026-03-11', notes:["Logs are visible again as a first-class surface, with a direct Logs action back in Pulse so operational tracing is no longer buried","Agent-detail chat now includes an explicit lane selector in the chat toolbar, so switching between Auto, Codex, Claude, Gemini, OpenClaw, and Ollama happens inside the chat itself instead of relying only on natural-language prompts"] },
   { ver:'v0.31.10', date:'2026-03-11', notes:["Pulse layout: single-column stack (no more 2-column split), Backend Lanes rendered as compact table instead of 5 individual cards, Lanes shown first with Routing and Runs below"] },
   { ver:'v0.31.9', date:'2026-03-11', notes:["Broader chat model-switching triggers: 'switch model to', 'change to', 'change model to', 'try' now all work for natural language backend switching"] },
   { ver:'v0.31.8', date:'2026-03-11', notes:["Light/dark mode fix: replaced 15+ hardcoded colors with CSS variables, improved text contrast for WCAG AA, fixed scrollbar/model-picker/button/file-entry visibility in light mode"] },
@@ -16935,9 +16937,44 @@ window._pdChatState = window._pdChatState || {};
 
 function _pdChatGetState(pid) {
   if (!window._pdChatState[pid]) {
-    window._pdChatState[pid] = { messages: [], attachments: [], chatId: '', sessionSeq: 0, greetingSeed: Date.now() };
+    window._pdChatState[pid] = { messages: [], attachments: [], chatId: '', sessionSeq: 0, greetingSeed: Date.now(), modelOverride: '' };
   }
   return window._pdChatState[pid];
+}
+
+function _pdChatModelOptions() {
+  return [
+    { value: '', label: 'Auto' },
+    { value: 'codex-cli', label: 'Codex / GPT-5' },
+    { value: 'claude-cli', label: 'Claude' },
+    { value: 'gemini-cli-auto', label: 'Gemini' },
+    { value: 'openclaw-gateway', label: 'OpenClaw' },
+    { value: 'ollama-local', label: 'Ollama' }
+  ];
+}
+
+function _pdChatModelLabel(value) {
+  var match = _pdChatModelOptions().find(function(opt) { return opt.value === value; });
+  return match ? match.label : 'Auto';
+}
+
+function _pdBackendOverrideFromModel(value) {
+  if (!value) return '';
+  if (value === 'codex-cli') return 'codex';
+  if (value === 'claude-cli') return 'claude';
+  if (value === 'gemini-cli-auto') return 'gemini';
+  if (value === 'openclaw-gateway') return 'openclaw';
+  if (value === 'ollama-local' || value.indexOf('local-ollama-') === 0) return 'ollama';
+  return '';
+}
+
+function _pdChatSetModel(value) {
+  var p = window._selectedPersona;
+  if (!p) return;
+  var state = _pdChatGetState(p.id);
+  state.modelOverride = value || '';
+  var badge = document.getElementById('pd-chat-model-note');
+  if (badge) badge.textContent = state.modelOverride ? ('Lane: ' + _pdChatModelLabel(state.modelOverride)) : 'Lane: Auto';
 }
 
 function _pdChatEnsureId(persona, state) {
@@ -17628,8 +17665,9 @@ function _pendingDispatchCopy(persona) {
   return '...';
 }
 
-function _pendingDispatchMeta(persona) {
-  if (persona && persona.orchestrator_only) return 'codex';
+function _pendingDispatchMeta(persona, state) {
+  if (state && state.modelOverride) return _pdChatModelLabel(state.modelOverride);
+  if (persona && persona.orchestrator_only) return 'Auto';
   if (persona && persona.preferred_backend) return _runtimeLabel(persona.preferred_backend, '', '');
   return 'selecting runtime';
 }
@@ -17638,7 +17676,7 @@ async function _pdChatStreamPorter(persona, state, promptText, userText, idx) {
   return await new Promise(function(resolve) {
     var projectId = persona && persona.project_id ? persona.project_id : '';
     var chatId = _pdChatEnsureId(persona, state);
-    var url = '/api/chat/stream?model=auto'
+    var url = '/api/chat/stream?model=' + encodeURIComponent(state && state.modelOverride ? state.modelOverride : 'auto')
       + '&prompt=' + encodeURIComponent(promptText)
       + '&route=general'
       + '&chat_id=' + encodeURIComponent(chatId)
@@ -17654,7 +17692,7 @@ async function _pdChatStreamPorter(persona, state, promptText, userText, idx) {
         full += buffered;
         buffered = '';
       }
-      state.messages[idx] = { role: 'assistant', label: persona.name || 'Porter', content: full, meta: state.messages[idx] && state.messages[idx].meta ? state.messages[idx].meta : _pendingDispatchMeta(persona), streaming: !force };
+      state.messages[idx] = { role: 'assistant', label: persona.name || 'Porter', content: full, meta: state.messages[idx] && state.messages[idx].meta ? state.messages[idx].meta : _pendingDispatchMeta(persona, state), streaming: !force };
       _pdChatRender(persona.id);
       if (flushTimer) {
         clearTimeout(flushTimer);
@@ -17666,7 +17704,7 @@ async function _pdChatStreamPorter(persona, state, promptText, userText, idx) {
       try {
         var data = JSON.parse(e.data);
         if (data.error) {
-          state.messages[idx] = { role: 'error', label: persona.name || 'Porter', content: data.error, meta: data.runtime_label || _pendingDispatchMeta(persona) };
+          state.messages[idx] = { role: 'error', label: persona.name || 'Porter', content: data.error, meta: data.runtime_label || _pendingDispatchMeta(persona, state) };
           _pdChatRender(persona.id);
           evtSource.close();
           resolve();
@@ -17692,7 +17730,7 @@ async function _pdChatStreamPorter(persona, state, promptText, userText, idx) {
             role: 'assistant',
             label: persona.name || 'Porter',
             content: data.full_response || full || '(no response)',
-            meta: data.runtime_label || _runtimeLabel(data.backend_used, data.model_used, _pendingDispatchMeta(persona)),
+            meta: data.runtime_label || _runtimeLabel(data.backend_used, data.model_used, _pendingDispatchMeta(persona, state)),
             streaming: false
           };
           _pdChatRender(persona.id);
@@ -17704,7 +17742,7 @@ async function _pdChatStreamPorter(persona, state, promptText, userText, idx) {
     evtSource.onerror = function() {
       flushBuffered(true);
       if (!full) {
-        state.messages[idx] = { role: 'error', label: persona.name || 'Porter', content: 'Connection lost before Porter could respond.', meta: _pendingDispatchMeta(persona) };
+        state.messages[idx] = { role: 'error', label: persona.name || 'Porter', content: 'Connection lost before Porter could respond.', meta: _pendingDispatchMeta(persona, state) };
         _pdChatRender(persona.id);
       }
       evtSource.close();
@@ -17723,7 +17761,7 @@ async function _pdChatSend() {
   var promptBody = _pdChatComposePrompt(state, text);
   var promptAttachmentIds = (state.attachments || []).filter(function(f) { return !f.injected; }).map(function(f) { return f.id; });
   state.messages.push({ role: 'user', label: 'You', content: text });
-  state.messages.push({ role: 'pending', label: p.name || 'Agent', content: _pendingDispatchCopy(p), meta: _pendingDispatchMeta(p) });
+  state.messages.push({ role: 'pending', label: p.name || 'Agent', content: _pendingDispatchCopy(p), meta: _pendingDispatchMeta(p, state) });
   input.value = '';
   _pdChatRender(p.id);
   if (p.orchestrator_only && state.flow) {
@@ -17746,6 +17784,7 @@ async function _pdChatSend() {
   try {
     var payload = { prompt: promptBody, timeout: 120 };
     if (p.project_id) payload.project_id = p.project_id;
+    if (state.modelOverride) payload.backend_override = _pdBackendOverrideFromModel(state.modelOverride);
     var r = await api('/api/personas/' + p.id + '/dispatch', payload, 180000);
     if (!r || !r.ok) throw new Error((r && r.error) || 'Dispatch failed');
     await _pdChatPoll(r.run_id, p, state.messages.length - 1);
@@ -17765,20 +17804,20 @@ async function _pdChatPoll(runId, persona, idx) {
       var run = runResp.runs[0];
       if (run.status === 'complete') {
         var detail = await api('/api/bridge/run?id=' + runId, null, 30000);
-        var meta = _runtimeLabel((detail && detail.run && detail.run.backend) || run.backend, (detail && detail.run && detail.run.model) || run.model, _pendingDispatchMeta(persona));
+        var meta = _runtimeLabel((detail && detail.run && detail.run.backend) || run.backend, (detail && detail.run && detail.run.model) || run.model, _pendingDispatchMeta(persona, state));
         state.messages[idx] = { role: 'assistant', label: persona.name || 'Agent', content: (detail && detail.run && detail.run.response) || '(no response)', meta: meta };
         _pdChatRender(persona.id);
         return;
       }
       if (run.status === 'failed') {
         var failed = await api('/api/bridge/run?id=' + runId, null, 30000);
-        state.messages[idx] = { role: 'error', label: persona.name || 'Agent', content: (failed && failed.run && (failed.run.error || failed.run.response)) || 'Dispatch failed', meta: _runtimeLabel((failed && failed.run && failed.run.backend) || run.backend, (failed && failed.run && failed.run.model) || run.model, _pendingDispatchMeta(persona)) };
+        state.messages[idx] = { role: 'error', label: persona.name || 'Agent', content: (failed && failed.run && (failed.run.error || failed.run.response)) || 'Dispatch failed', meta: _runtimeLabel((failed && failed.run && failed.run.backend) || run.backend, (failed && failed.run && failed.run.model) || run.model, _pendingDispatchMeta(persona, state)) };
         _pdChatRender(persona.id);
         return;
       }
     } catch(e) {}
   }
-  state.messages[idx] = { role: 'error', label: persona.name || 'Agent', content: 'Dispatch timed out.', meta: _pendingDispatchMeta(persona) };
+  state.messages[idx] = { role: 'error', label: persona.name || 'Agent', content: 'Dispatch timed out.', meta: _pendingDispatchMeta(persona, state) };
   _pdChatRender(persona.id);
 }
 
@@ -20373,9 +20412,13 @@ async function renameChatSession(id, currentTitle) {
 
 async function deleteChatSession(id) {
   _porterConfirm('Delete Chat', 'This chat session will be permanently deleted.', async function() {
-    await api('/api/chat', { action: 'delete', chat_id: id });
-    if (id === _chatId) chatNewConversation();
-    loadChatSessions();
+    try {
+      var resp = await api('/api/chat', { action: 'delete', chat_id: id });
+      if (!(resp && resp.ok)) { toast((resp && resp.error) || 'Delete failed', 'err'); return; }
+      toast('Chat deleted', 'ok');
+      if (id === _chatId) chatNewConversation();
+      loadChatSessions();
+    } catch (e) { toast('Delete failed: ' + (e.message || e), 'err'); }
   }, {danger: true, okLabel: 'Delete'});
 }
 // ── Chat Context Injection ──
@@ -25045,12 +25088,20 @@ function switchPdTab(tab) {
       + '<button class="pd-chat-toolbtn" onclick="_pdOpenHistory()">History</button>'
       + '<button class="pd-chat-toolbtn" onclick="_pdClearChat()">Clear Chat</button>'
       + '<button class="pd-chat-toolbtn" onclick="_pdChooseFiles()">Upload Files</button>'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap">'
+      + '<span id="pd-chat-model-note" style="font-size:11px;color:var(--text3)">Lane: Auto</span>'
+      + '<select id="pd-chat-model-sel" onchange="_pdChatSetModel(this.value)" style="font-size:11px;padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:var(--bg);color:var(--text)">' + _pdChatModelOptions().map(function(opt) { return '<option value="' + escHtml(opt.value) + '">' + escHtml(opt.label) + '</option>'; }).join('') + '</select>'
+      + '</div>'
       + '</div>'
       + '<div id="pd-chat-drop-zone" class="pd-chat-drop-zone" style="display:none">Drop files into Porter chat</div>'
       + '<div class="pd-chat-composer">'
       + '<textarea id="pd-chat-input" class="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter to orchestrate work, create workers, or shape a project...' : 'Send a directive to this worker...') + '" rows="1" onkeydown="_pdChatKey(event)"></textarea>'
       + '<button class="pd-send-btn" onclick="_pdChatSend()"><span>' + (p.orchestrator_only ? 'Send To Porter' : 'Send To Worker') + '</span><span class="pd-send-icon">↗</span></button>'
       + '</div><input id="pd-chat-file-input" type="file" multiple style="display:none" onchange="_pdChatHandleFileInput(event)"></div></section>';
+    var chatState = _pdChatGetState(p.id);
+    var laneSel = document.getElementById('pd-chat-model-sel');
+    if (laneSel) laneSel.value = chatState.modelOverride || '';
+    _pdChatSetModel(chatState.modelOverride || '');
     _pdChatRender(p.id);
     setTimeout(_pdSyncComposerLayout, 0);
   } else if (tab === 'identity') {
@@ -36572,7 +36623,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.10"})
+            self.reply_json({"v": "0.31.11"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36734,7 +36785,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.10"
+                health["porter_version"] = "0.31.11"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38678,7 +38729,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.10'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.11'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43768,7 +43819,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.10 ready (localhost only)")
+    print(f"\n  Porter v0.31.11 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
