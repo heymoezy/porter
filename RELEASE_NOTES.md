@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.74 (2026-03-11)
+
+- Fixed the first-message Porter detail chat path. Porter no longer goes through the blocked worker persona-dispatch route and now streams directly through the main chat runtime.
+- Removed the extra dispatch-poll delay on Porter detail chat, so the first visible response starts as soon as the runtime streams tokens instead of waiting for 2-second polling intervals.
+
 ## v0.30.73 (2026-03-11)
 
 - Removed fake Porter profile items from the Agents detail page. Activity and Memory now use live state and honest empty states instead of preview placeholders.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.73 — Agents runtime and profile cleanup"""
+"""Porter v0.30.74 — Porter chat startup fix"""
 
 
 import email
@@ -10409,7 +10409,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.73</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.74</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11700,6 +11700,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.74', date:'2026-03-11', notes:["Fixed Porter detail chat startup: Porter no longer goes through the blocked worker persona-dispatch path and now streams directly through chat runtime, removing the fake waiting state and the extra 2-second polling penalty on first response"] },
   { ver:'v0.30.73', date:'2026-03-11', notes:["Agents and chat cleanup: fake Porter profile placeholders are gone, Porter's locked doctrine and orchestration skills are stronger, chat routes on raw user text with leaner injected context, resolved backend/model labels now surface instead of lingering on auto, and stale squad-era UI was stripped from the active Agents surface"] },
   { ver:'v0.30.72', date:'2026-03-11', notes:["Agents detail now adds an Org view, stronger task/activity oversight, explicit approval-gated Porter creation flows, and a broader orchestrator skill profile built around project lineage, handoffs, approvals, and roster curation"] },
   { ver:'v0.30.71', date:'2026-03-11', notes:["Completed the Models cleanup pass: the tab now uses runtime-first product language, provider/model discovery is fully registry-driven, stale renderer paths were removed, and config/runtime diagnostics no longer expose hardcoded local path assumptions"] },
@@ -16565,13 +16566,65 @@ function _runtimeLabel(backend, model, fallback) {
 }
 
 function _pendingDispatchCopy(persona) {
-  if (persona && persona.orchestrator_only) return 'Shaping delegation through Porter...';
+  if (persona && persona.orchestrator_only) return 'Porter is routing the request...';
   return 'Dispatching through Porter Bridge...';
 }
 
 function _pendingDispatchMeta(persona) {
   if (persona && persona.preferred_backend) return _runtimeLabel(persona.preferred_backend, '', '');
-  return 'resolving runtime';
+  return 'selecting runtime';
+}
+
+async function _pdChatStreamPorter(persona, state, userText, idx) {
+  return await new Promise(function(resolve) {
+    var projectId = persona && persona.project_id ? persona.project_id : '';
+    var chatId = 'pd-' + (persona && persona.id ? persona.id : 'porter');
+    var url = '/api/chat/stream?model=auto'
+      + '&prompt=' + encodeURIComponent(userText)
+      + '&route=general'
+      + '&chat_id=' + encodeURIComponent(chatId)
+      + '&project_id=' + encodeURIComponent(projectId)
+      + '&raw_text=' + encodeURIComponent(userText);
+    var full = '';
+    var evtSource = new EventSource(url);
+    evtSource.onmessage = function(e) {
+      try {
+        var data = JSON.parse(e.data);
+        if (data.error) {
+          state.messages[idx] = { role: 'error', label: persona.name || 'Porter', content: data.error, meta: data.runtime_label || _pendingDispatchMeta(persona) };
+          _pdChatRender(persona.id);
+          evtSource.close();
+          resolve();
+          return;
+        }
+        if (data.token) {
+          full += data.token;
+          state.messages[idx] = { role: 'assistant', label: persona.name || 'Porter', content: full, meta: data.runtime_label || _pendingDispatchMeta(persona) };
+          _pdChatRender(persona.id);
+          return;
+        }
+        if (data.done) {
+          state.messages[idx] = {
+            role: 'assistant',
+            label: persona.name || 'Porter',
+            content: data.full_response || full || '(no response)',
+            meta: data.runtime_label || _runtimeLabel(data.backend_used, data.model_used, _pendingDispatchMeta(persona))
+          };
+          _pdChatRender(persona.id);
+          evtSource.close();
+          resolve();
+        }
+      } catch (err) {}
+    };
+    evtSource.onerror = function() {
+      if (!full) {
+        state.messages[idx] = { role: 'error', label: persona.name || 'Porter', content: 'Connection lost before Porter could respond.', meta: _pendingDispatchMeta(persona) };
+        _pdChatRender(persona.id);
+      }
+      evtSource.close();
+      resolve();
+    };
+  });
 }
 
 async function _pdChatSend() {
@@ -16588,6 +16641,10 @@ async function _pdChatSend() {
   if (p.orchestrator_only && state.flow) {
     state.messages.pop();
     await _pdHandleCreationReply(p, state, text);
+    return;
+  }
+  if (p.orchestrator_only) {
+    await _pdChatStreamPorter(p, state, text, state.messages.length - 1);
     return;
   }
   try {
@@ -35381,7 +35438,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.73"})
+            self.reply_json({"v": "0.30.74"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35543,7 +35600,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.73"
+                health["porter_version"] = "0.30.74"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37440,7 +37497,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.73'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.74'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42364,7 +42421,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.73 ready (localhost only)")
+    print(f"\n  Porter v0.30.74 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
