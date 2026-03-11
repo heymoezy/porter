@@ -1,5 +1,12 @@
 # Porter Release Notes
 
+## v0.30.75 (2026-03-11)
+
+- Reworked chat for speed: streamed chat now renders tokens immediately instead of going through the old client-side reveal effect.
+- Persona/worker chat no longer waits on 2-second polling intervals or fake typing playback; it now checks bridge completion much more aggressively and renders the final response immediately.
+- Trimmed the default chat payload again by reducing carried history and capping inline text-file context more tightly.
+- Chat model selection now reads as `Bridge-selected at send time` while unresolved instead of implying hidden `auto` behavior.
+
 ## v0.30.74 (2026-03-11)
 
 - Fixed the first-message Porter detail chat path. Porter no longer goes through the blocked worker persona-dispatch route and now streams directly through the main chat runtime.

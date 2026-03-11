@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.74 — Porter chat startup fix"""
+"""Porter v0.30.75 — Chat speed overhaul"""
 
 
 import email
@@ -10409,7 +10409,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.74</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.75</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11700,6 +11700,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.75', date:'2026-03-11', notes:["Chat speed overhaul: removed artificial token reveal delays from streamed chat, cut persona chat polling from 2s to 250ms with no fake typing animation, trimmed default history/file payload size again, and made runtime selection/status labels clearer while the route is being resolved"] },
   { ver:'v0.30.74', date:'2026-03-11', notes:["Fixed Porter detail chat startup: Porter no longer goes through the blocked worker persona-dispatch path and now streams directly through chat runtime, removing the fake waiting state and the extra 2-second polling penalty on first response"] },
   { ver:'v0.30.73', date:'2026-03-11', notes:["Agents and chat cleanup: fake Porter profile placeholders are gone, Porter's locked doctrine and orchestration skills are stronger, chat routes on raw user text with leaner injected context, resolved backend/model labels now surface instead of lingering on auto, and stale squad-era UI was stripped from the active Agents surface"] },
   { ver:'v0.30.72', date:'2026-03-11', notes:["Agents detail now adds an Org view, stronger task/activity oversight, explicit approval-gated Porter creation flows, and a broader orchestrator skill profile built around project lineage, handoffs, approvals, and roster curation"] },
@@ -17968,19 +17969,9 @@ function _loadChatMessages() {
 
 let _chatStreaming = false;
 let _chatEventSource = null;
-let _chatStreamRevealBuffer = '';
-let _chatStreamRevealTimer = null;
-let _chatStreamPendingDone = false;
-let _chatStreamTargetIdx = -1;
 
 function _resetChatStreamReveal() {
-  _chatStreamRevealBuffer = '';
-  _chatStreamPendingDone = false;
-  _chatStreamTargetIdx = -1;
-  if (_chatStreamRevealTimer) {
-    clearTimeout(_chatStreamRevealTimer);
-    _chatStreamRevealTimer = null;
-  }
+  return;
 }
 
 function _finishChatStreamReveal(evtSource, assistantIdx, modelId) {
@@ -17995,32 +17986,15 @@ function _finishChatStreamReveal(evtSource, assistantIdx, modelId) {
 }
 
 function _drainChatStreamReveal(evtSource, assistantIdx, modelId) {
-  if (assistantIdx < 0 || !_chatMessages[assistantIdx]) {
-    _resetChatStreamReveal();
-    return;
-  }
-  if (!_chatStreamRevealBuffer.length) {
-    _chatStreamRevealTimer = null;
-    if (_chatStreamPendingDone) _finishChatStreamReveal(evtSource, assistantIdx, modelId);
-    return;
-  }
-  var take = _chatStreamRevealBuffer.length > 160 ? 18 : (_chatStreamRevealBuffer.length > 60 ? 10 : 4);
-  _chatMessages[assistantIdx].content += _chatStreamRevealBuffer.slice(0, take);
-  _chatStreamRevealBuffer = _chatStreamRevealBuffer.slice(take);
-  renderChatMessages(true);
-  _chatStreamRevealTimer = setTimeout(function() {
-    _drainChatStreamReveal(evtSource, assistantIdx, modelId);
-  }, 16);
+  _finishChatStreamReveal(evtSource, assistantIdx, modelId);
 }
 
 function _queueChatStreamReveal(token, evtSource, assistantIdx, modelId) {
   if (!token) return;
-  if (_chatStreamTargetIdx !== assistantIdx) {
-    _resetChatStreamReveal();
-    _chatStreamTargetIdx = assistantIdx;
-  }
-  _chatStreamRevealBuffer += token;
-  if (!_chatStreamRevealTimer) _drainChatStreamReveal(evtSource, assistantIdx, modelId);
+  if (assistantIdx < 0 || !_chatMessages[assistantIdx]) return;
+  _chatMessages[assistantIdx].content += token;
+  if (!_chatMessages[assistantIdx].model) _chatMessages[assistantIdx].model = modelId;
+  renderChatMessages(true);
 }
 
 function _chatModelChanged() {
@@ -19061,12 +19035,12 @@ function chatSend() {
 
   // Build a lean prompt with recent history + route context + attached files
   let fullPrompt = '';
-  // Multi-turn: include recent conversation history
+  // Multi-turn: include only the most recent context needed for continuity
   var histMsgs = _chatMessages.filter(function(m) { return m.role === 'user' || m.role === 'assistant'; });
   if (histMsgs.length > 0) {
-    var recent = histMsgs.slice(-6);
+    var recent = histMsgs.slice(-4);
     fullPrompt = 'Conversation history:\n' + recent.map(function(m) {
-      return (m.role === 'user' ? 'User: ' : 'Assistant: ') + m.content.slice(0, 900);
+      return (m.role === 'user' ? 'User: ' : 'Assistant: ') + m.content.slice(0, 500);
     }).join('\n\n') + '\n\nNew message:\n';
   }
   fullPrompt += text;
@@ -19079,7 +19053,7 @@ function chatSend() {
       if (f.isImage) {
         ctx += '\n--- File: ' + f.name + ' (image attached) ---\n[Image: ' + f.name + ', type: ' + (f.mimeType || 'image') + ']\n--- End ' + f.name + ' ---\n';
       } else {
-        ctx += '\n--- File: ' + f.name + ' ---\n' + f.content + '\n--- End ' + f.name + ' ---\n';
+        ctx += '\n--- File: ' + f.name + ' ---\n' + String(f.content || '').slice(0, 4000) + '\n--- End ' + f.name + ' ---\n';
       }
     });
     fullPrompt = 'Context files:\n' + ctx + '\n' + fullPrompt;
@@ -19101,10 +19075,9 @@ function chatSend() {
     '<div class="chat-thinking-dot"></div><div class="chat-thinking-dot"></div><div class="chat-thinking-dot"></div></div>';
   var msgEl = document.getElementById('chat-messages');
   if (msgEl) { msgEl.insertAdjacentHTML('beforeend', thinkHtml); msgEl.scrollTop = msgEl.scrollHeight; }
-  _chatMessages.push({ role: 'assistant', content: '', model: modelId, ts: Date.now() });
+  _chatMessages.push({ role: 'assistant', content: '', model: (modelId === 'auto' ? 'selecting runtime' : modelId), ts: Date.now() });
   _updateStopBtn(true);
   _resetChatStreamReveal();
-  _chatStreamTargetIdx = _chatMessages.length - 1;
 
   var _streamProject = (_chatProject && _chatProject.id && _chatProject.id !== '_personality') ? _chatProject.id : '';
   var _streamPersona = _chatAgent ? (_chatAgent.name || '') : '';
@@ -19137,12 +19110,7 @@ function chatSend() {
       }
       if (data.done) {
         var resolvedModel = data.runtime_label || _runtimeLabel(data.backend_used, data.model_used, modelId);
-        if (_chatStreamRevealBuffer.length || _chatStreamRevealTimer) {
-          _chatStreamPendingDone = true;
-          modelId = resolvedModel;
-        } else {
-          _finishChatStreamReveal(evtSource, assistantIdx, resolvedModel);
-        }
+        _finishChatStreamReveal(evtSource, assistantIdx, resolvedModel);
         return;
       }
       if (data.token) {
@@ -23005,7 +22973,7 @@ function _ctxToggle(event, type) {
   } else if (type === 'model') {
     var _ctxAvail = _modelAvailableData || {};
     var gateways = {openclaw:'OpenClaw Gateway',claude:'Claude CLI',gemini:'Gemini CLI',codex:'Codex CLI',ollama:'Ollama Local'};
-    html += '<div class="chat-ctx-opt' + (!_chatModel ? ' selected' : '') + '" onclick="_ctxPick(event,\'model\',\'\')">Auto (best available)</div>';
+    html += '<div class="chat-ctx-opt' + (!_chatModel ? ' selected' : '') + '" onclick="_ctxPick(event,\'model\',\'\')">Bridge-selected at send time</div>';
     html += '<div class="chat-ctx-divider"></div>';
     ['openclaw','claude','gemini','codex','ollama'].forEach(function(bk) {
       var bkData = _ctxAvail[bk] || {};
@@ -23125,20 +23093,10 @@ async function _dispatchToPersonaChat(persona, message) {
   }
 }
 
-async function _typePersonaResponse(waitIdx, fullText, persona, runtimeLabel) {
-  var words = fullText.split(/( +)/);
-  var revealed = '';
-  var chunkSize = 3; // words per tick
+function _finishPersonaResponse(waitIdx, fullText, persona, runtimeLabel) {
   _chatMessages[waitIdx] = {
-    role: 'assistant', content: '', model: runtimeLabel || _pendingDispatchMeta(persona), persona_name: persona.name
+    role: 'assistant', content: fullText, model: runtimeLabel || _pendingDispatchMeta(persona), persona_name: persona.name
   };
-  for (var wi = 0; wi < words.length; wi += chunkSize) {
-    revealed += words.slice(wi, wi + chunkSize).join('');
-    _chatMessages[waitIdx].content = revealed;
-    renderChatMessages(true);
-    await new Promise(function(r) { setTimeout(r, 30); });
-  }
-  _chatMessages[waitIdx].content = fullText;
   _chatStreaming = false;
   _updateStopBtn(false);
   renderChatMessages();
@@ -23150,8 +23108,8 @@ async function _typePersonaResponse(waitIdx, fullText, persona, runtimeLabel) {
 }
 
 async function _pollPersonaResponse(runId, persona, waitIdx) {
-  for (var i = 0; i < 60; i++) {
-    await new Promise(r => setTimeout(r, 2000));
+  for (var i = 0; i < 240; i++) {
+    await new Promise(r => setTimeout(r, 250));
     try {
       const r = await api('/api/bridge/runs?limit=1&run_id=' + runId, null, 30000);
       if (r.ok && r.runs && r.runs.length > 0) {
@@ -23160,8 +23118,7 @@ async function _pollPersonaResponse(runId, persona, waitIdx) {
           const detail = await api('/api/bridge/run?id=' + runId, null, 30000);
           var responseText = (detail && detail.run && detail.run.response) || '(no response)';
           var runtimeLabel = _runtimeLabel((detail && detail.run && detail.run.backend) || run.backend, (detail && detail.run && detail.run.model) || run.model, _pendingDispatchMeta(persona));
-          // Typing animation: reveal text progressively
-          await _typePersonaResponse(waitIdx, responseText, persona, runtimeLabel);
+          _finishPersonaResponse(waitIdx, responseText, persona, runtimeLabel);
           return;
         }
         if (run.status === 'failed') {
@@ -35438,7 +35395,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.74"})
+            self.reply_json({"v": "0.30.75"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -35600,7 +35557,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.74"
+                health["porter_version"] = "0.30.75"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -37497,7 +37454,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.74'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.75'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42421,7 +42378,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.74 ready (localhost only)")
+    print(f"\n  Porter v0.30.75 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
