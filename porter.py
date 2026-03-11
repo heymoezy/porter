@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.8 — Light/dark mode fix: replace hardcoded colors with CSS variables"""
+"""Porter v0.31.9 — Light/dark mode fix: replace hardcoded colors with CSS variables"""
 
 
 import email
@@ -8748,12 +8748,16 @@ def _requested_chat_model_id(message: str, current_model: str = "") -> str:
     trigger_prefixes = (
         "use ",
         "switch to ",
+        "switch model to ",
+        "change to ",
+        "change model to ",
         "talk to me via ",
         "chat via ",
         "chat with me via ",
         "let's use ",
         "route this through ",
         "run this through ",
+        "try ",
     )
     for needle, model_id in checks:
         if needle not in text:
@@ -11481,7 +11485,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.8</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.9</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12583,6 +12587,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.9', date:'2026-03-11', notes:["Broader chat model-switching triggers: 'switch model to', 'change to', 'change model to', 'try' now all work for natural language backend switching"] },
   { ver:'v0.31.8', date:'2026-03-11', notes:["Light/dark mode fix: replaced 15+ hardcoded colors with CSS variables, improved text contrast for WCAG AA, fixed scrollbar/model-picker/button/file-entry visibility in light mode"] },
   { ver:'v0.31.7', date:'2026-03-11', notes:["Pulse redesign: replaced 6 oversized metric cards with a compact status strip, tightened card radii and spacing, removed verbose section descriptions, moved Active Runs alongside Backend Lanes for a cleaner 2-column layout","Projects redesign: removed the half-screen hero panel and How Porter Uses Projects explainer, replaced with a clean flat list of projects, simplified the Chat detail tab to focus on activity instead of redundant project metadata"] },
   { ver:'v0.31.6', date:'2026-03-11', notes:["Chat model switching restored: removed hardcoded Codex override from Porter chat, all chats now use smart routing by default, say 'use claude' or 'switch to gemini' in any chat to change backends on the fly"] },
@@ -36555,7 +36560,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.8"})
+            self.reply_json({"v": "0.31.9"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36717,7 +36722,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.8"
+                health["porter_version"] = "0.31.9"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38661,7 +38666,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.8'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.9'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43751,7 +43756,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.8 ready (localhost only)")
+    print(f"\n  Porter v0.31.9 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
