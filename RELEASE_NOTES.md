@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.30.70 (2026-03-11)
+
+- Final Models sweep: load-rail counts now use real gateway and discovered-model totals from the live payload instead of fake stage numbers.
+- Removed stale internal leftovers from the Models card renderer and kept the tab aligned with Porter-first product language.
+
 ## v0.30.69 (2026-03-11)
 
 - Removed stale `persona` wording from the Models intro so the page now uses Porter and worker language consistently.
