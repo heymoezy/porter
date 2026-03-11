@@ -1,5 +1,11 @@
 # Porter Release Notes
 
+## v0.31.3 (2026-03-11)
+
+- Launchpad project activity is now filtered to recent, project-relevant work instead of leaking stale legacy dispatch noise.
+- Pulse has a cleaner live-console visual treatment instead of reading like stacked admin slabs.
+- Porter chat no longer appends repetitive runtime boilerplate to normal replies, so his voice reads like the orchestrator instead of the underlying coding runtime.
+
 ## v0.31.2 (2026-03-11)
 
 - Launchpad now uses durable state and artifact language instead of memory-era starter copy.

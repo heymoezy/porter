@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.2 — Move Launchpad onto durable state and artifact language"""
+"""Porter v0.31.3 — Clean Launchpad activity, strengthen Porter voice, and redesign Pulse"""
 
 
 import email
@@ -5623,38 +5623,59 @@ def _project_activity_feed(project_id: str, limit: int = 20) -> list:
         return []
     limit = max(1, min(int(limit or 20), 100))
     items = []
+    proj = _project_by_id(pid) or {}
+    now_ts = time.time()
+    cutoff = float(proj.get("created_at") or 0)
+    updated_at = float(proj.get("updated_at") or 0)
+    if updated_at > cutoff:
+        cutoff = updated_at
+    if str(proj.get("name") or "").strip().lower() == "launchpad":
+        cutoff = max(cutoff, now_ts - 2 * 3600)
     try:
         conn = _db_conn()
         trace_rows = conn.execute(
             """SELECT ts, agent_name, action, status, output_summary, task_id, trace_id
-               FROM trace_steps WHERE project_id=? ORDER BY ts DESC LIMIT ?""",
-            (pid, limit)
+               FROM trace_steps WHERE project_id=? AND ts>=? ORDER BY ts DESC LIMIT ?""",
+            (pid, cutoff, limit)
         ).fetchall()
         dispatch_rows = conn.execute(
             """SELECT created_at, persona_id, to_agent, status, response, error, task_id, run_id
-               FROM agent_messages WHERE project_id=? ORDER BY created_at DESC LIMIT ?""",
-            (pid, limit)
+               FROM agent_messages WHERE project_id=? AND created_at>=? ORDER BY created_at DESC LIMIT ?""",
+            (pid, cutoff, limit)
         ).fetchall()
         conn.close()
         for r in trace_rows:
+            summary = (r[4] or "")[:220]
+            if not summary or summary == "(no summary recorded)":
+                continue
             items.append({
                 "ts": r[0] or 0,
                 "source": "trace",
                 "agent_name": r[1] or "",
                 "action": r[2] or "",
                 "status": r[3] or "",
-                "summary": (r[4] or "")[:220],
+                "summary": summary,
                 "task_id": r[5] or "",
                 "ref_id": r[6] or "",
             })
         for r in dispatch_rows:
+            agent_name = str(r[1] or r[2] or "").strip()
+            if agent_name:
+                persona = _persona_by_id(agent_name)
+                if persona:
+                    if bool(persona.get("hidden")) or not bool(persona.get("public", 1)):
+                        continue
+                    agent_name = str(persona.get("name") or agent_name)
+            summary = ((r[5] or "") if (r[3] or "") == "failed" else (r[4] or ""))[:220]
+            if not summary or summary == "(no summary recorded)":
+                continue
             items.append({
                 "ts": r[0] or 0,
                 "source": "dispatch",
-                "agent_name": r[1] or "",
-                "action": r[2] or "",
+                "agent_name": agent_name,
+                "action": "reply" if (r[3] or "") == "complete" else (r[2] or "dispatch"),
                 "status": r[3] or "",
-                "summary": ((r[5] or "") if (r[3] or "") == "failed" else (r[4] or ""))[:220],
+                "summary": summary,
                 "task_id": r[6] or "",
                 "ref_id": r[7] or "",
             })
@@ -8694,10 +8715,12 @@ def _ensure_porter_persona() -> None:
 def _porter_chat_identity_prompt() -> str:
     return (
         "You are Porter, the platform's Master Orchestrator.\n"
-        "Voice: warm, friendly, confident, concise. Greet naturally. Never say 'Hi. What do you need?'\n"
-        "Porter orchestrates, improves prompts, assigns or creates workers, and owns the outcome. Workers execute.\n"
+        "Voice: warm, confident, capable, concise. Sound like a strong operator, not a debug console. Never say 'Hi. What do you need?'\n"
+        "Porter orchestrates, improves prompts, assigns or creates workers, switches runtime lanes when needed, and owns the outcome. Workers execute.\n"
         "Do not keep re-introducing yourself on ordinary turns. Only introduce yourself at the start of a fresh chat, or when the user asks who you are.\n"
-        "Keep replies lean and useful. Be explicit about the runtime/model in use.\n\n"
+        "Do not append runtime/model boilerplate to normal replies. The UI already shows the active lane. Mention the exact runtime or model only when the user asks, when a lane switch is material to the answer, or when something failed because a lane was unavailable.\n"
+        "If the user asks you to use another model or runtime, either do it or explain briefly why that lane is unavailable in this environment. Do not turn that into terminal instructions unless the user explicitly asks for commands.\n"
+        "Answer as Porter the product identity first, not as the underlying coding runtime.\n\n"
     )
 
 
@@ -8706,6 +8729,7 @@ def _general_chat_identity_prompt() -> str:
         "You are responding inside Porter.\n"
         "Porter is the platform's built-in Master Orchestrator.\n"
         "If the user asks about Porter, describe him as the orchestration authority that shapes work, assigns or creates workers, selects runtime lanes, and keeps outcomes accountable.\n"
+        "Do not volunteer backend/runtime boilerplate unless the user asks for it or it materially affects the answer.\n"
         "Be clear, concise, truthful, and structured only when it helps.\n\n"
     )
 
@@ -10712,6 +10736,60 @@ body.density-compact .file-name { padding: 6px 0; }
 .model-card-run-meta { color:var(--text3);white-space:nowrap; }
 /* ── Model Activity Slide-Out Panel ── */
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+@keyframes pulse-grid-drift { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 0 24px, 32px 0, 0 0; } }
+@keyframes pulse-scan-sweep { 0% { transform: translateX(-120%); opacity: 0; } 20% { opacity: .4; } 100% { transform: translateX(140%); opacity: 0; } }
+.pulse-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb,var(--accent) 18%,var(--border));
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb,var(--accent) 16%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb,var(--surface) 96%, transparent), color-mix(in srgb,var(--bg) 98%, transparent));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 24px 60px rgba(0,0,0,.16);
+}
+.pulse-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, color-mix(in srgb,var(--border) 55%, transparent) 1px, transparent 1px),
+    linear-gradient(to right, color-mix(in srgb,var(--border) 35%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, transparent, color-mix(in srgb,var(--accent) 18%, transparent), transparent);
+  background-size: 100% 24px, 32px 100%, 28% 100%;
+  animation: pulse-grid-drift 16s linear infinite, pulse-scan-sweep 6s ease-in-out infinite;
+  opacity: .5;
+  pointer-events: none;
+}
+.pulse-card {
+  position: relative;
+  overflow: hidden;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: linear-gradient(180deg,color-mix(in srgb,var(--surface) 92%,transparent),color-mix(in srgb,var(--bg) 96%,transparent));
+}
+.pulse-card::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb,var(--accent) 32%, transparent), transparent);
+}
+.pulse-stage-title { font-size: 13px; font-weight: 700; color: var(--text); }
+.pulse-stage-copy { font-size: 12px; color: var(--text3); margin-top: 4px; line-height: 1.55; }
+.pulse-mini-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:12px; }
+.pulse-metric {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb,var(--bg) 90%, transparent);
+  backdrop-filter: blur(10px);
+}
+.pulse-metric-label { font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); }
+.pulse-metric-value { font-size:30px; font-weight:800; margin-top:6px; }
 .cx-view-btn { background:transparent !important; color:var(--text3); border:1px solid transparent; }
 .cx-view-btn.active { background:var(--surface) !important; color:var(--text); border-color:var(--border); }
 .cx-view-btn:hover:not(.active) { color:var(--text2); }
@@ -11340,7 +11418,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.2</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.3</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11838,34 +11916,34 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="module-hdr">
       <span class="module-title">Pulse</span>
     </div>
-    <div class="module-intro">A live look at what Porter is doing right now. Health, recent events, bridge pressure, and runtime traffic belong here. Old history does not.</div>
+    <div class="module-intro">A live command surface for Porter. Pulse should show what is happening now, what needs attention, and where the system is under pressure.</div>
     <div style="display:grid;grid-template-columns:minmax(420px,1.35fr) minmax(280px,.95fr);gap:14px;margin-bottom:14px">
-      <div id="pulse-ops-stage" style="padding:16px 18px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 98%,transparent),color-mix(in srgb,var(--bg) 96%,transparent));border:1px solid var(--border);border-radius:16px">
+      <div id="pulse-ops-stage" class="pulse-hero" style="padding:18px 20px">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
           <div>
-            <div style="font-size:13px;font-weight:700;color:var(--text)">Now</div>
-            <div style="font-size:12px;color:var(--text3);margin-top:4px">Recent incidents, operator signals, and the things Porter needs attention on first.</div>
+            <div class="pulse-stage-title">Live Operations</div>
+            <div class="pulse-stage-copy">Recent incidents, operator signals, and the work that needs attention first.</div>
           </div>
           <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadPulseOps(true)">Refresh</button>
         </div>
-        <div id="pulse-ops-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px"></div>
+        <div id="pulse-ops-cards" class="pulse-mini-grid"></div>
         <div id="pulse-ops-feed" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
       <div style="display:grid;grid-template-rows:auto auto;gap:14px">
-        <div id="runtime-health-stage" style="padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:16px">
+        <div id="runtime-health-stage" class="pulse-card">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
             <div style="display:flex;align-items:center;gap:8px">
-              <span style="font-size:13px;font-weight:700;color:var(--text)">Health</span>
+              <span class="pulse-stage-title">Health</span>
               <span id="health-status-badge" style="font-size:10px;padding:2px 6px;border-radius:999px;background:var(--bg2);color:var(--text3)">checking...</span>
             </div>
             <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadSelfCheck()">Refresh</button>
           </div>
           <div id="runtime-health-checks" style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px"></div>
         </div>
-        <div id="runtime-intelligence-stage" style="padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:16px">
+        <div id="runtime-intelligence-stage" class="pulse-card">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
             <div style="display:flex;align-items:center;gap:8px">
-              <span style="font-size:13px;font-weight:700;color:var(--text)">Runtimes</span>
+              <span class="pulse-stage-title">Runtimes</span>
               <span style="font-size:10px;color:var(--text3);padding:2px 6px;border-radius:999px;background:var(--bg2)">Routing</span>
             </div>
             <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadIntelligence()">Refresh</button>
@@ -11875,32 +11953,32 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:14px">
-      <div id="runtime-gateway-stage" style="padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:16px">
+      <div id="runtime-gateway-stage" class="pulse-card">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
           <div>
-            <div style="font-size:13px;font-weight:700;color:var(--text)">Gateway Activity</div>
-            <div style="font-size:12px;color:var(--text3);margin-top:4px">Recent-only runtime traffic across the live gateways.</div>
+            <div class="pulse-stage-title">Gateway Stream</div>
+            <div class="pulse-stage-copy">Only the recent runtime traffic that still matters operationally.</div>
           </div>
           <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadGatewayActivity(true)">Refresh</button>
         </div>
         <div id="runtime-gateway-activity" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
-      <div id="runtime-coordination-stage" style="padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:16px">
+      <div id="runtime-coordination-stage" class="pulse-card">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
           <div>
-            <div style="font-size:13px;font-weight:700;color:var(--text)">Bridge Lane</div>
-            <div style="font-size:12px;color:var(--text3);margin-top:4px">Claims, conflicts, and dispatch pressure moving through Porter Bridge.</div>
+            <div class="pulse-stage-title">Bridge Pressure</div>
+            <div class="pulse-stage-copy">Claims, conflicts, and dispatch pressure moving through Porter Bridge right now.</div>
           </div>
           <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadCoordinationPanel(true)">Refresh</button>
         </div>
         <div id="runtime-coordination-panel" style="display:flex;flex-direction:column;gap:10px"></div>
       </div>
     </div>
-    <div id="runtime-orch-stage" style="padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:16px">
+    <div id="runtime-orch-stage" class="pulse-card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
         <div>
-          <div style="font-size:13px;font-weight:700;color:var(--text)">Active Runs</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:4px">Current orchestration runs and their latest state.</div>
+          <div class="pulse-stage-title">Active Runs</div>
+          <div class="pulse-stage-copy">Current orchestration runs and their latest state.</div>
         </div>
         <div style="display:flex;gap:4px">
           <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_newOrchRun()">+ New Run</button>
@@ -12499,6 +12577,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.3', date:'2026-03-11', notes:["Launchpad project activity is now filtered to recent, project-relevant work instead of leaking stale legacy dispatch noise, Pulse has a cleaner live-console visual treatment instead of stacked admin slabs, and Porter chat stops appending repetitive runtime boilerplate so his voice reads like the orchestrator instead of the underlying coding runtime"] },
   { ver:'v0.31.2', date:'2026-03-11', notes:["Launchpad now uses durable state and artifact language instead of memory-era starter copy, project scaffolding writes a canonical STATE.md alongside a compatibility MEMORY.md, and Launchpad seeds real structured directives and project notes so new users land in a meaningful first-run project instead of an empty shell"] },
   { ver:'v0.31.1', date:'2026-03-11', notes:["Pulse now loads directly from live ops, gateway activity, orchestration, and bridge pressure instead of depending on the legacy workflow surface, internal-only compatibility workflows are hidden from the normal registry API, and Agent/Project State tabs now support adding durable directives and notes directly so structured memory becomes editable rather than passive"] },
   { ver:'v0.31.0', date:'2026-03-11', notes:["Porter chat now buffers raw stream fragments into smoother visible updates instead of repainting every tiny chunk, Codex stream text is merged more cleanly so sentences stop collapsing together, and previously attached images stay referable through lightweight context hints without resending the full image bytes every turn"] },
@@ -36652,7 +36731,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.2"})
+            self.reply_json({"v": "0.31.3"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36814,7 +36893,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.2"
+                health["porter_version"] = "0.31.3"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38758,7 +38837,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.2'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.3'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43848,7 +43927,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.2 ready (localhost only)")
+    print(f"\n  Porter v0.31.3 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
