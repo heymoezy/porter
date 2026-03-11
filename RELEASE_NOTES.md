@@ -1,5 +1,9 @@
 # Porter Release Notes
 
+## v0.30.99 (2026-03-11)
+
+- Fixed the Codex chat resume command to match the installed CLI syntax by removing the unsupported `--ask-for-approval` flag from `codex exec`.
+
 ## v0.30.98 (2026-03-11)
 
 - Pulse and tour copy now stop leaking stale Runtime-era language.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.30.98 — Clean Pulse language and document chat caching direction"""
+"""Porter v0.30.99 — Fix Codex resume CLI arguments"""
 
 
 import email
@@ -11249,7 +11249,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.98</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.30.99</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12408,8 +12408,9 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.30.99', date:'2026-03-11', notes:["Fixed the Codex chat resume command to match the installed CLI syntax by removing the unsupported `--ask-for-approval` flag from `codex exec`"] },
   { ver:'v0.30.98', date:'2026-03-11', notes:["Pulse and tour copy now stop leaking stale Runtime-era language, the remaining internal memory-extraction workflow is described as compatibility-only instead of product truth, and the chat-latency prompt-caching notes are now checked into research so the next speed tranche has a documented direction"] },
-  { ver:'v0.30.97', date:'2026-03-11', notes:["Codex-backed chats now preserve and reuse Codex thread ids across turns instead of always starting fresh ephemeral sessions, chat metadata is merged instead of overwritten so resume state survives ordinary saves, and the Codex CLI path now runs with `--ask-for-approval never` to avoid extra approval-policy friction"] },
+  { ver:'v0.30.97', date:'2026-03-11', notes:["Codex-backed chats now preserve and reuse Codex thread ids across turns instead of always starting fresh ephemeral sessions, and chat metadata is merged instead of overwritten so resume state survives ordinary saves"] },
   { ver:'v0.30.96', date:'2026-03-11', notes:["Agent-detail chat history now supports deleting old sessions directly from the history overlay, Porter stops re-introducing himself on ordinary turns, and uploaded attachments are only injected into the model prompt once instead of being resent on every reply"] },
   { ver:'v0.30.95', date:'2026-03-11', notes:["Agent-detail chat image attachments now render in a smaller footprint so screenshot and image previews feel closer to compact chat attachments instead of oversized mini-cards"] },
   { ver:'v0.30.94', date:'2026-03-11', notes:["Porter detail chat now skips generic auto-routing and goes straight to Codex by default, trims carried conversation/file context more aggressively, exposes the selected runtime immediately when the stream opens, and logs first-token timing so chat latency can be tuned with real TTFT data"] },
@@ -36463,7 +36464,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.30.98"})
+            self.reply_json({"v": "0.30.99"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -36625,7 +36626,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.30.98"
+                health["porter_version"] = "0.30.99"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38569,7 +38570,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.98'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.30.99'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -38934,10 +38935,10 @@ class Handler(BaseHTTPRequestHandler):
                         _codex_thread_id = str((_chat_meta or {}).get("codex_thread_id") or "").strip()
                         _cdx_cmd = [cdx_bin, "exec"]
                         if _codex_thread_id:
-                            _cdx_cmd.extend(["resume", "--json", "--skip-git-repo-check", "--ask-for-approval", "never", "-m", codex_model, _codex_thread_id, prompt])
+                            _cdx_cmd.extend(["resume", "--json", "--skip-git-repo-check", "-m", codex_model, _codex_thread_id, prompt])
                             log.info("Codex chat resume: %s → %s", chat_id or "adhoc", _codex_thread_id[:12])
                         else:
-                            _cdx_cmd.extend(["--json", "--skip-git-repo-check", "--ask-for-approval", "never", "-m", codex_model, prompt])
+                            _cdx_cmd.extend(["--json", "--skip-git-repo-check", "-m", codex_model, prompt])
                         _codex_temp_images = []
                         _codex_thread_started = ""
                         for _img in _chat_images:
@@ -43603,7 +43604,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.30.98 ready (localhost only)")
+    print(f"\n  Porter v0.30.99 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
