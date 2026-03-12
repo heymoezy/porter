@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.27 — Unify chat model labels and clean project copy"""
+"""Porter v0.31.28 — Unify chat model labels and clean project copy"""
 
 
 import email
@@ -11796,7 +11796,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.27</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.28</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12883,6 +12883,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.28', date:'2026-03-12', notes:["Fix Porter dancing avatar in project chat: was missing appearance_style on inline persona object."] },
   { ver:'v0.31.27', date:'2026-03-12', notes:["Project chat actions: Porter can rename, set type, deadline, milestones, status from chat. Multimodal content: embed text, images, video, audio, documents, links in projects. Upgraded Deliverables tab."] },
   { ver:'v0.31.26', date:'2026-03-12', notes:["Projects-first workspace with card entrance animation. Improved avatar generator: body types (broad/slim), 6 hair styles, 8 skin tones, eyelashes."] },
   { ver:'v0.31.25', date:'2026-03-12', notes:["Smaller agent cards: portraits, names, roles all scaled down for a tighter grid."] },
@@ -16598,7 +16599,7 @@ function _projChatRender(pid) {
     var border = isUser ? 'color-mix(in srgb,var(--accent) 18%, transparent)' : isErr ? 'color-mix(in srgb,#ef4444 18%, transparent)' : 'color-mix(in srgb,var(--border) 72%, transparent)';
     if (isPending) {
       return '<div class="pd-chat-msg pending orchestrator" style="border:1px solid ' + border + '">'
-        + '<div class="pd-chat-avatar">' + _personaAvatarMarkup({ name: 'Porter', orchestrator_only: true }, 78) + '</div>'
+        + '<div class="pd-chat-avatar">' + _personaAvatarMarkup({ name: 'Porter', orchestrator_only: true, appearance_style: 'minecraft' }, 78) + '</div>'
         + '<div style="min-width:0;display:flex;flex-direction:column;gap:6px">'
         + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Porter</span>'
         + (m.meta ? '<span style="font-size:10px;color:var(--text3)">' + escHtml(m.meta) + '</span>' : '') + '</div>'
@@ -37972,7 +37973,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.27"})
+            self.reply_json({"v": "0.31.28"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -38134,7 +38135,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.27"
+                health["porter_version"] = "0.31.28"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40085,7 +40086,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.27'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.28'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -45428,7 +45429,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.27 ready (localhost only)")
+    print(f"\n  Porter v0.31.28 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
