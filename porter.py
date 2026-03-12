@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.33 — Artifacts file browser + deliverables as file system"""
+"""Porter v0.31.34 — Extensions → Connections + project Apps tab"""
 
 
 import email
@@ -549,6 +549,46 @@ def _db_init():
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_project_notes_project_status ON project_notes(project_id, status, created_at DESC)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS workspace_connections (
+            id TEXT PRIMARY KEY,
+            provider TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'api_key',
+            status TEXT NOT NULL DEFAULT 'disconnected',
+            display_name TEXT DEFAULT '',
+            scopes_json TEXT DEFAULT '[]',
+            tools_json TEXT DEFAULT '[]',
+            last_sync_at REAL DEFAULT 0,
+            last_error TEXT DEFAULT '',
+            installed_by TEXT DEFAULT '',
+            meta_json TEXT DEFAULT '{}',
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            updated_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS project_connections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id TEXT NOT NULL,
+            connection_id TEXT NOT NULL,
+            access_mode TEXT NOT NULL DEFAULT 'read',
+            enabled_tools_json TEXT DEFAULT '[]',
+            status TEXT NOT NULL DEFAULT 'active',
+            attached_by TEXT DEFAULT '',
+            attached_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            UNIQUE(project_id, connection_id)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS environment_tools (
+            tool_key TEXT PRIMARY KEY,
+            detected BOOLEAN DEFAULT 0,
+            version TEXT DEFAULT '',
+            source TEXT DEFAULT 'local',
+            health TEXT DEFAULT 'unknown',
+            last_checked_at REAL DEFAULT 0
+        )
+    """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS agent_notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -11822,7 +11862,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="mnav-group-label">Config</div>
     <button class="mnav-item" id="mnav-capabilities" onclick="switchModule('capabilities')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-      <span class="mnav-label">Extensions</span>
+      <span class="mnav-label">Connections</span>
     </button>
     <button class="mnav-item" id="mnav-admin" onclick="switchModule('admin')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -11859,7 +11899,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.33</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.34</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12332,10 +12372,10 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div id="capabilities-module" class="module-panel">
     <div class="module-hdr">
-      <span class="module-title">Extensions</span>
+      <span class="module-title">Connections</span>
       <button class="btn btn-ghost" onclick="loadCapabilities()">&#8635; Refresh</button>
     </div>
-    <div class="module-intro">Connected services and tools available to Porter and its agents.</div>
+    <div class="module-intro">Workspace connections to external services. Attach them to projects to grant access.</div>
 
     <!-- S8: Integrations section (from OpenClaw) -->
     <div id="gws-section" style="margin-bottom:16px;display:none">
@@ -12958,6 +12998,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.34', date:'2026-03-12', notes:["Extensions → Connections: renamed nav + module, new workspace_connections/project_connections/environment_tools DB tables","Project Apps tab: view and manage connected services per project","Phase 1 of Connections refactor (GPT-5.4 architecture recommendation)"] },
   { ver:'v0.31.33', date:'2026-03-12', notes:["Artifacts file browser: file-system style table view with type icons, inline preview, and download actions","Content and artifacts guided empty states with actionable prompts"] },
   { ver:'v0.31.32', date:'2026-03-12', notes:["Streaming typewriter: OpenClaw responses now stream word-by-word instead of dumping the full text at once"] },
   { ver:'v0.31.31', date:'2026-03-12', notes:["Guided project UX: DO THIS NEXT card on overview, smart suggestions based on project state","/ popup chat: floating overlay that stays on current context, no navigation","Editable project notes: edit and delete notes from the overview state section","Workers tab guided empty state with actionable prompts"] },
@@ -15102,6 +15143,8 @@ function switchModule(name) {
   }
   if (name === 'files') name = 'projects';
   if (name === 'cortex') name = 'projects';
+  if (name === 'extensions') name = 'capabilities';
+  if (name === 'connections') name = 'capabilities';
   if (name === 'skills') name = 'agents';
   _currentModule = name;
   document.querySelectorAll('.mnav-item').forEach(el =>
@@ -16370,6 +16413,7 @@ function _renderProjTabs() {
     {id:'chat', label:'Chat'},
     {id:'workers', label:'Workers' + (agentCount ? ' (' + agentCount + ')' : '')},
     {id:'deliverables', label:'Deliverables'},
+    {id:'apps', label:'Apps'},
     {id:'activity', label:'Activity'}
   ];
   tabs.innerHTML = items.map(function(t) {
@@ -16465,6 +16509,18 @@ async function _renderProjTabContent() {
     var projState = _projChatGetState(proj.id);
     _projChatSetModel(projState.modelOverride || '');
     _projChatRender(proj.id);
+    return;
+
+  } else if (_projTab === 'apps') {
+    html += '<div style="display:flex;flex-direction:column;gap:12px">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">';
+    html += '<span style="font-size:13px;font-weight:600;color:var(--text)">Connected Apps</span>';
+    html += '<button class="btn btn-ghost" style="font-size:11px" onclick="_projConnectApp(\x27' + proj.id + '\x27)">+ Connect App</button>';
+    html += '</div>';
+    html += '<div id="proj-apps-list" style="font-size:12px;color:var(--text3)"><div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div></div>';
+    html += '</div>';
+    content.innerHTML = html;
+    _projLoadApps(proj.id);
     return;
 
   } else if (_projTab === 'activity') {
@@ -17121,6 +17177,51 @@ async function _projLoadArtifacts(pid) {
   } catch(e) {
     el.innerHTML = '<span style="color:var(--text3)">Could not load artifacts</span>';
   }
+}
+
+async function _projLoadApps(pid) {
+  var el = document.getElementById('proj-apps-list');
+  if (!el) return;
+  try {
+    var d = await api('/api/projects/' + pid + '/connections');
+    if (!d || !d.ok) { el.innerHTML = '<span style="color:var(--text3)">Could not load</span>'; return; }
+    var conns = d.connections || [];
+    if (!conns.length) {
+      el.innerHTML = '<div class="proj-guide-empty"><div class="proj-guide-empty-title">No apps connected</div>'
+        + '<div class="proj-guide-empty-hint">Connect external services like Google Drive, Slack, GitHub, or Notion to this project. Porter can guide you through setup from chat.</div>'
+        + '<div class="proj-next-actions" style="justify-content:center"><button class="proj-next-btn" onclick="_projConnectApp(\x27' + pid + '\x27)">Connect an App</button>'
+        + '<button class="proj-next-btn" onclick="_projSwitchTab(\x27chat\x27)">Ask Porter</button></div></div>';
+      return;
+    }
+    var html = '<div class="file-browser">';
+    html += '<div class="file-browser-hdr"><span class="file-browser-hdr-title">Project Connections</span><span class="file-browser-hdr-count">' + conns.length + '</span></div>';
+    conns.forEach(function(c) {
+      var icon = c.provider === 'google' ? '\u{1F4E7}' : c.provider === 'slack' ? '\u{1F4AC}' : c.provider === 'github' ? '\u{1F4BB}' : '\u{1F517}';
+      html += '<div class="file-browser-row">';
+      html += '<div class="file-browser-icon link">' + icon + '</div>';
+      html += '<div class="file-browser-name">' + escHtml(c.display_name || c.provider || 'Connection') + '</div>';
+      html += '<div class="file-browser-type">' + escHtml(c.access_mode || 'read') + '</div>';
+      html += '<div class="file-browser-meta">' + escHtml(c.status || 'active') + '</div>';
+      html += '<div class="file-browser-actions"><button class="file-browser-action" onclick="_projDetachApp(\x27' + pid + '\x27,\x27' + c.connection_id + '\x27)" title="Detach">&times;</button></div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<span style="color:var(--text3)">Could not load apps</span>';
+  }
+}
+
+async function _projConnectApp(pid) {
+  toast('Connection management coming soon — ask Porter in chat to connect an app', 'info');
+}
+
+async function _projDetachApp(pid, connId) {
+  _porterConfirm('Detach App', 'Remove this app from the project?', async function() {
+    var r = await api('/api/projects/' + pid + '/connections', {action:'detach', connection_id:connId});
+    if (r && r.ok) { toast('App detached', 'ok'); _projLoadApps(pid); }
+    else { toast((r && r.error) || 'Failed', 'err'); }
+  }, {danger:true, okLabel:'Detach'});
 }
 
 function _projPreviewArtifact(url, kind, name, rowEl) {
@@ -38296,7 +38397,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.33"})
+            self.reply_json({"v": "0.31.34"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -38458,7 +38559,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.33"
+                health["porter_version"] = "0.31.34"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40409,7 +40510,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.33'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.34'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43545,6 +43646,38 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             mlog.emit("info", "state", "directive.create", f"Created {scope_type} directive", directive_id=new_id, scope_type=scope_type, scope_id=scope_id)
             self.reply_json({"ok": True, "id": new_id})
 
+        elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/connections"):
+            pid = parsed.path.split("/api/projects/")[1].split("/connections")[0]
+            if self.command == "GET":
+                with _db() as conn:
+                    rows = conn.execute(
+                        "SELECT pc.connection_id, pc.access_mode, pc.status, pc.enabled_tools_json, wc.provider, wc.display_name, wc.kind "
+                        "FROM project_connections pc JOIN workspace_connections wc ON pc.connection_id = wc.id "
+                        "WHERE pc.project_id=? AND pc.status='active'", (pid,)
+                    ).fetchall()
+                    conns = [dict(r) for r in rows]
+                return self._json({"ok": True, "connections": conns})
+            # POST: attach/detach
+            data = self.read_json_body()
+            action = data.get("action", "")
+            if action == "attach":
+                conn_id = data.get("connection_id", "")
+                mode = data.get("access_mode", "read")
+                if not conn_id:
+                    return self._json({"ok": False, "error": "connection_id required"})
+                with _db() as conn:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO project_connections (project_id, connection_id, access_mode, attached_by) VALUES (?,?,?,?)",
+                        (pid, conn_id, mode, _config.get("username", "admin"))
+                    )
+                return self._json({"ok": True})
+            elif action == "detach":
+                conn_id = data.get("connection_id", "")
+                with _db() as conn:
+                    conn.execute("DELETE FROM project_connections WHERE project_id=? AND connection_id=?", (pid, conn_id))
+                return self._json({"ok": True})
+            return self._json({"ok": False, "error": "Unknown action"})
+
         elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/state/notes/update"):
             pid = parsed.path.split("/api/projects/")[1].split("/state/notes/update")[0]
             note_id = body_data.get("note_id")
@@ -45785,7 +45918,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.33 ready (localhost only)")
+    print(f"\n  Porter v0.31.34 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
