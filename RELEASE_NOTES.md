@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.31.13 (2026-03-12)
+
+- Project chat now behaves like a real lane instead of a disposable summary panel: it supports new sessions, saved history, loading old sessions, and deleting them inline.
+- Continued the active-product cleanup so Logs remains the single live-ops surface while project work stays in a dedicated Porter-led chat lane.
+
 ## v0.31.12 (2026-03-11)
 
 - Folded the old Pulse surface back into `Logs`, so the live routing strip, backend lanes, recent task routing, and active runs now live on one operator page instead of splitting across two weak tabs.

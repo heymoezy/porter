@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.12 — Fold Pulse into Logs and strengthen Projects"""
+"""Porter v0.31.13 — Add project chat history and continue legacy cleanup"""
 
 
 import email
@@ -11487,7 +11487,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.12</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.13</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12624,6 +12624,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.13', date:'2026-03-12', notes:["Project chat now behaves like a real lane instead of a disposable panel: it supports new sessions, saved history, loading old sessions, and deleting them inline","Continued active-product cleanup: Logs remains the single live-ops surface, while the strengthened project lane keeps Porter project work out of weak admin-style summaries"] },
   { ver:'v0.31.12', date:'2026-03-11', notes:["Pulse is no longer a separate user-facing surface: Logs now carries the live routing strip, backend lanes, recent task routing, and active runs in one place","Projects now uses a stronger Porter-led landing layout and a dedicated project chat lane, with the tab rail reduced to Chat, Activity, Agents, Artifacts, and State","Launchpad activity now filters out stale legacy residue more aggressively, and Logs no longer remaps into the old Pulse module"] },
   { ver:'v0.31.11', date:'2026-03-11', notes:["Logs are visible again as a first-class surface, with a direct Logs action back in Pulse so operational tracing is no longer buried","Agent-detail chat now includes an explicit lane selector in the chat toolbar, so switching between Auto, Codex, Claude, Gemini, OpenClaw, and Ollama happens inside the chat itself instead of relying only on natural-language prompts"] },
   { ver:'v0.31.10', date:'2026-03-11', notes:["Pulse layout: single-column stack (no more 2-column split), Backend Lanes rendered as compact table instead of 5 individual cards, Lanes shown first with Routing and Runs below"] },
@@ -15700,6 +15701,8 @@ async function _renderProjTabContent() {
       + '<div style="margin-top:8px;padding-top:4px">'
       + '<div class="pd-chat-toolbar">'
       + '<button class="pd-chat-toolbtn" onclick="_projNewChat()">＋ New Chat</button>'
+      + '<button class="pd-chat-toolbtn" onclick="_projOpenHistory()">History</button>'
+      + '<button class="pd-chat-toolbtn" onclick="_projClearChat()">Clear Chat</button>'
       + '<button class="pd-chat-toolbtn" onclick="_projKickoff(\'worker\')">Create Worker</button>'
       + '<button class="pd-chat-toolbtn" onclick="_projKickoff(\'project\')">Refine Project</button>'
       + '<div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap">'
@@ -15895,6 +15898,117 @@ function _projNewChat() {
   state.chatId = '';
   state.greetingSeed = Date.now() + Math.floor(Math.random() * 1000);
   _projChatRender(project.id);
+}
+
+async function _projClearChat() {
+  var project = window._projCurrent;
+  if (!project) return;
+  var state = _projChatGetState(project.id);
+  var oldId = state.chatId;
+  state.messages = [];
+  state.chatId = '';
+  state.greetingSeed = Date.now() + Math.floor(Math.random() * 1000);
+  _projChatRender(project.id);
+  if (oldId) {
+    try {
+      await api('/api/chat', { action: 'delete', chat_id: oldId }, 30000);
+    } catch (_) {}
+  }
+}
+
+async function _projOpenHistory() {
+  var project = window._projCurrent;
+  if (!project) return;
+  try {
+    var resp = await api('/api/chat/sessions');
+    var sessions = ((resp && resp.sessions) || []).filter(function(s) {
+      return String(s.id || '').indexOf('proj-' + project.id + '-') === 0;
+    });
+    if (!sessions.length) {
+      toast('No saved chats for ' + (project.name || 'this project'));
+      return;
+    }
+    _projShowHistoryOverlay(project, sessions);
+  } catch (e) {
+    toast('Failed to load chat history', 'err');
+  }
+}
+
+function _projCloseHistoryOverlay() {
+  var overlay = document.getElementById('proj-history-overlay');
+  if (overlay) overlay.remove();
+}
+
+function _projShowHistoryOverlay(project, sessions) {
+  _projCloseHistoryOverlay();
+  var currentState = _projChatGetState(project.id);
+  var currentChatId = String((currentState && currentState.chatId) || '');
+  var rows = sessions.map(function(s) {
+    var sid = String(s.id || '');
+    var active = sid === currentChatId;
+    var title = escHtml(s.title || (project.name || 'Project') + ' chat');
+    var stamp = escHtml((s.updated || '').slice(0, 16).replace('T', ' ') || sid);
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:' + (active ? 'color-mix(in srgb,var(--accent) 8%, var(--surface))' : 'var(--surface)') + '">'
+      + '<button class="btn btn-ghost" style="flex:1;min-width:0;text-align:left;padding:0;background:none;border:none;color:var(--text);cursor:pointer" onclick="_projSelectHistorySession(\'' + escHtml(sid).replace(/'/g, "\\'") + '\')">'
+      + '<div style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + title + '</div>'
+      + '<div style="font-size:10px;color:var(--text3);margin-top:4px">' + stamp + (active ? ' · open now' : '') + '</div>'
+      + '</button>'
+      + '<button class="btn btn-ghost" style="font-size:11px;padding:6px 10px;color:#ef4444" onclick="_projDeleteHistorySession(\'' + escHtml(sid).replace(/'/g, "\\'") + '\')">Delete</button>'
+      + '</div>';
+  }).join('');
+  var overlay = document.createElement('div');
+  overlay.id = 'proj-history-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:10020;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.42)';
+  overlay.innerHTML = '<div style="width:min(560px,92vw);max-height:min(72vh,680px);display:flex;flex-direction:column;border:1px solid var(--border);border-radius:18px;background:var(--raised);box-shadow:0 24px 80px rgba(0,0,0,.35)">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;border-bottom:1px solid var(--border)"><div><div style="font-size:14px;font-weight:800;color:var(--text)">' + escHtml((project.name || 'Project') + ' Chat History') + '</div><div style="font-size:11px;color:var(--text3);margin-top:4px">Load or delete saved chats for this project lane.</div></div><button class="btn btn-ghost" style="font-size:12px;padding:6px 10px" onclick="_projCloseHistoryOverlay()">Close</button></div>'
+    + '<div style="padding:14px;display:flex;flex-direction:column;gap:10px;overflow:auto">' + rows + '</div>'
+    + '</div>';
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) _projCloseHistoryOverlay(); });
+  document.body.appendChild(overlay);
+}
+
+function _projSelectHistorySession(chatId) {
+  _projCloseHistoryOverlay();
+  _projLoadChatSession(chatId);
+}
+
+async function _projDeleteHistorySession(chatId) {
+  var project = window._projCurrent;
+  if (!project || !chatId) return;
+  _porterConfirm('Delete Chat', 'Delete this saved project chat permanently?', async function() {
+    var resp = await api('/api/chat', { action: 'delete', chat_id: chatId }, 30000);
+    if (!(resp && resp.ok)) {
+      toast((resp && resp.error) || 'Delete failed', 'err');
+      return;
+    }
+    var state = _projChatGetState(project.id);
+    if (String(state.chatId || '') === String(chatId)) _projNewChat();
+    _projCloseHistoryOverlay();
+    toast('Chat deleted', 'ok');
+    _projOpenHistory();
+  }, {danger: true, okLabel: 'Delete'});
+}
+
+async function _projLoadChatSession(chatId) {
+  var project = window._projCurrent;
+  if (!project || !chatId) return;
+  try {
+    var resp = await api('/api/chat', { action: 'load', chat_id: chatId }, 30000);
+    if (!(resp && resp.ok && resp.chat)) throw new Error((resp && resp.error) || 'Load failed');
+    var state = _projChatGetState(project.id);
+    state.chatId = chatId;
+    state.messages = ((resp.chat.messages || [])).map(function(m) {
+      return {
+        role: m.role === 'assistant' ? 'assistant' : m.role,
+        label: m.role === 'user' ? 'You' : 'Porter',
+        content: m.content || '',
+        meta: m.model_id || ''
+      };
+    });
+    _projChatRender(project.id);
+  } catch (e) {
+    toast(e.message || 'Failed to load chat', 'err');
+  }
 }
 
 function _projKickoff(kind) {
@@ -36884,7 +36998,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.12"})
+            self.reply_json({"v": "0.31.13"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37046,7 +37160,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.12"
+                health["porter_version"] = "0.31.13"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38990,7 +39104,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.12'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.13'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -44080,7 +44194,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.12 ready (localhost only)")
+    print(f"\n  Porter v0.31.13 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
