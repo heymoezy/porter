@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.21 — Unify chat model labels and clean project copy"""
+"""Porter v0.31.22 — Unify chat model labels and clean project copy"""
 
 
 import email
@@ -11205,14 +11205,15 @@ body.density-compact .file-name { padding: 6px 0; }
 .project-tab-rail .pd-tab.active { border-color:color-mix(in srgb,var(--accent) 24%, var(--border)); background:color-mix(in srgb,var(--accent) 8%, transparent); }
 .project-stage { display:grid; grid-template-columns:minmax(320px,1.05fr) minmax(280px,.95fr); gap:16px; align-items:start; }
 .project-stage-panel { padding:18px 20px; border:1px solid color-mix(in srgb,var(--accent) 16%, var(--border)); border-radius:22px; background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%,transparent),color-mix(in srgb,var(--bg) 98%,transparent)); box-shadow:0 20px 60px rgba(0,0,0,.14); }
-.project-roster { display:flex; flex-direction:column; gap:6px; }
-.project-row { display:flex; align-items:center; gap:12px; padding:10px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface); cursor:pointer; transition:border-color .15s ease; }
-.project-row:hover { border-color:color-mix(in srgb,var(--accent) 30%, var(--border)); }
-.project-row.is-active { border-color:color-mix(in srgb,var(--accent) 50%, var(--border)); background:color-mix(in srgb,var(--accent) 4%, var(--surface)); }
-.project-row-title { font-size:13px; font-weight:600; color:var(--text); line-height:1.3; }
-.project-row-copy { font-size:11px; line-height:1.4; color:var(--text3); margin-top:2px; max-width:56ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.project-row-meta { display:flex; gap:6px; flex-wrap:wrap; margin-left:auto; flex-shrink:0; }
-.project-row-stats { display:flex; gap:10px; flex-wrap:wrap; font-size:10px; color:var(--text3); flex-shrink:0; }
+.project-roster { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
+.project-card { border:1px solid var(--border); border-radius:10px; background:var(--surface); cursor:pointer; transition:border-color .15s ease,box-shadow .15s ease; overflow:hidden; display:flex; flex-direction:column; }
+.project-card:hover { border-color:color-mix(in srgb,var(--accent) 30%, var(--border)); box-shadow:0 4px 16px rgba(0,0,0,.1); }
+.project-card.is-active { border-color:color-mix(in srgb,var(--accent) 50%, var(--border)); }
+.project-card-cover { height:56px; position:relative; overflow:hidden; }
+.project-card-body { padding:10px 12px; flex:1; display:flex; flex-direction:column; gap:4px; }
+.project-card-title { font-size:13px; font-weight:600; color:var(--text); line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.project-card-desc { font-size:11px; line-height:1.4; color:var(--text3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.project-card-footer { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:auto; padding-top:6px; }
 .proj-type-badge { font-size:9px; padding:2px 6px; border-radius:4px; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
 .pulse-grid { display:grid; gap:14px; }
 .pulse-status-strip { display:flex; gap:16px; flex-wrap:wrap; padding:8px 0 4px; font-size:12px; color:var(--text2); }
@@ -11672,7 +11673,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.21</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.22</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12759,6 +12760,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.22', date:'2026-03-12', notes:["Visual project cards with pixel art covers, delete button in project header, timeline section (start date/deadline/plan), file upload to deliverables with inline previews for images/video/audio/PDF, YMC Capital notes cleaned up"] },
   { ver:'v0.31.21', date:'2026-03-12', notes:["Projects V2 Phase 5: 8 project types (website/app/presentation/research/content/design/ops/custom), project lifecycle (active/paused/completed/archived), milestones with progress tracking, external links (repo/live/docs/custom), linked projects (depends_on/feeds_into/related), worker recommendations per type, compact project cards with type+status badges, creation flow now asks project type"] },
   { ver:'v0.31.20', date:'2026-03-12', notes:["Launchpad renamed to First Mission throughout, Deliverables tab cleaned up: removed scaffold doc listing, simplified summary, focused on actual project outputs only"] },
   { ver:'v0.31.19', date:'2026-03-12', notes:["Projects V2 Phase 2: tabs reordered to Overview→Chat→Workers→Deliverables→Activity, Overview tab shows objectives + links + linked projects + state, Agents renamed to Workers, Artifacts renamed to Deliverables, compact card titles"] },
@@ -15696,6 +15698,58 @@ function _projFmtDate(ms) {
   return d.getDate() + '-' + months[d.getMonth()] + '-' + d.getFullYear();
 }
 
+// Pixel art cover generator — deterministic from project ID
+function _projPixelCover(id, type, w, h) {
+  w = w || 120; h = h || 56;
+  var c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.style.cssText = 'width:100%;height:100%;border-radius:8px 8px 0 0;display:block';
+  var ctx = c.getContext('2d');
+  var info = _projTypeInfo(type);
+  // Seed from project ID
+  var seed = 0;
+  for (var i = 0; i < id.length; i++) seed = ((seed << 5) - seed + id.charCodeAt(i)) | 0;
+  function rng() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return (seed >> 16) / 32768; }
+  // Parse base color
+  var bc = info.color || '#64748b';
+  var r = parseInt(bc.slice(1,3),16), g = parseInt(bc.slice(3,5),16), b = parseInt(bc.slice(5,7),16);
+  // Fill gradient bg
+  var grad = ctx.createLinearGradient(0, 0, w, h);
+  grad.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.15)');
+  grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0.06)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+  // Draw pixel blocks
+  var ps = 4;
+  var cols = Math.floor(w / ps);
+  var rows = Math.floor(h / ps);
+  for (var py = 0; py < rows; py++) {
+    for (var px = 0; px < cols; px++) {
+      if (rng() > 0.12) continue;
+      var alpha = 0.08 + rng() * 0.18;
+      var shade = Math.floor(rng() * 40) - 20;
+      ctx.fillStyle = 'rgba(' + Math.min(255,Math.max(0,r+shade)) + ',' + Math.min(255,Math.max(0,g+shade)) + ',' + Math.min(255,Math.max(0,b+shade)) + ',' + alpha.toFixed(2) + ')';
+      ctx.fillRect(px * ps, py * ps, ps, ps);
+    }
+  }
+  // Add a few brighter accent pixels
+  for (var k = 0; k < 6; k++) {
+    var ax = Math.floor(rng() * cols) * ps;
+    var ay = Math.floor(rng() * rows) * ps;
+    ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + (0.25 + rng() * 0.2).toFixed(2) + ')';
+    ctx.fillRect(ax, ay, ps * 2, ps * 2);
+  }
+  return c;
+}
+
+function _projFmtShortDate(ts) {
+  if (!ts) return '';
+  var d = new Date(typeof ts === 'number' && ts < 1e12 ? ts * 1000 : ts);
+  if (isNaN(d.getTime())) return '';
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+}
+
 var _PROJECT_TYPES = {
   website:      { label: 'Website',      color: '#3b82f6', workers: ['Frontend dev', 'Content writer', 'QA tester'] },
   app:          { label: 'App',          color: '#8b5cf6', workers: ['Backend dev', 'Frontend dev', 'QA tester', 'DevOps'] },
@@ -15761,21 +15815,26 @@ function _renderProjList() {
     var agentCount = (p.assigned_personas || []).length;
     var milestones = p.milestones || [];
     var msDone = milestones.filter(function(m) { return m.done; }).length;
-    html += '<div class="project-row' + (isActive ? ' is-active' : '') + '" onclick="_projOpen(\x27' + p.id + '\x27)">';
-    html += '<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px">';
-    html += '<div class="project-row-title">' + escHtml(p.name || 'Untitled') + '</div>';
+    html += '<div class="project-card' + (isActive ? ' is-active' : '') + '" data-pid="' + p.id + '" onclick="_projOpen(\x27' + p.id + '\x27)">';
+    html += '<div class="project-card-cover" data-cover-id="' + p.id + '" data-cover-type="' + (p.type || 'custom') + '"></div>';
+    html += '<div class="project-card-body">';
+    html += '<div class="project-card-title">' + escHtml(p.name || 'Untitled') + '</div>';
+    if (p.description || p.success_bar) html += '<div class="project-card-desc">' + escHtml(p.description || p.success_bar || '') + '</div>';
+    html += '<div class="project-card-footer">';
     html += _projTypeBadge(p.type) + _projStatusBadge(p);
     if (isActive) html += '<span class="proj-type-badge" style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">Active</span>';
-    html += '</div>';
-    html += '<div class="project-row-copy">' + escHtml(p.description || p.success_bar || '') + '</div></div>';
-    html += '<div class="project-row-stats">';
-    if (agentCount) html += '<span>' + agentCount + ' worker' + (agentCount !== 1 ? 's' : '') + '</span>';
-    if (milestones.length) html += '<span>' + msDone + '/' + milestones.length + ' milestones</span>';
-    html += '</div>';
-    html += '</div>';
+    if (agentCount) html += '<span style="font-size:10px;color:var(--text3)">' + agentCount + ' worker' + (agentCount !== 1 ? 's' : '') + '</span>';
+    if (milestones.length) html += '<span style="font-size:10px;color:var(--text3)">' + msDone + '/' + milestones.length + '</span>';
+    if (p.deadline) html += '<span style="font-size:10px;color:var(--text3)">Due ' + _projFmtShortDate(p.deadline) + '</span>';
+    html += '</div></div></div>';
   });
   html += '</div>';
   grid.innerHTML = html;
+  // Render pixel art covers
+  document.querySelectorAll('[data-cover-id]').forEach(function(el) {
+    var cvs = _projPixelCover(el.dataset.coverId, el.dataset.coverType);
+    el.appendChild(cvs);
+  });
 }
 
 function _projOpenActiveOrFirst() {
@@ -15886,6 +15945,50 @@ async function _projUnlinkProject(pid, targetId) {
   } catch(e) { toast('Failed', 'err'); }
 }
 
+async function _projEditDates(pid) {
+  var proj = _projList.find(function(p) { return p.id === pid; });
+  if (!proj) return;
+  _porterPrompt('Edit Timeline', [
+    {name: 'start_date', label: 'Start Date', placeholder: 'YYYY-MM-DD', value: proj.start_date || ''},
+    {name: 'deadline', label: 'Deadline', placeholder: 'YYYY-MM-DD', value: proj.deadline || ''},
+    {name: 'plan', label: 'Project Plan', type: 'textarea', placeholder: 'High-level plan or key phases...', value: proj.plan || ''}
+  ], async function(vals) {
+    try {
+      var r = await api('/api/projects', {action: 'update', project_id: pid, start_date: vals.start_date || '', deadline: vals.deadline || '', plan: vals.plan || ''});
+      if (r && r.ok) { toast('Timeline updated', 'ok'); await loadProjects(); if (window._projCurrent && window._projCurrent.id === pid) { window._projCurrent = _projList.find(function(p) { return p.id === pid; }); _renderProjTabContent(); } }
+      else { toast(r && r.error || 'Failed', 'err'); }
+    } catch(e) { toast('Failed', 'err'); }
+  }, {okLabel: 'Save'});
+}
+
+async function _projUploadFile(pid) {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.multiple = true;
+  input.onchange = async function() {
+    if (!input.files || !input.files.length) return;
+    for (var i = 0; i < input.files.length; i++) {
+      var file = input.files[i];
+      var fd = new FormData();
+      fd.append('file', file);
+      fd.append('root', 'documents');
+      fd.append('path', 'porter/workspace/projects/' + pid + '/artifacts');
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/upload', false);
+        xhr.send(fd);
+        if (xhr.status === 200) {
+          toast('Uploaded: ' + file.name, 'ok');
+        } else {
+          toast('Upload failed: ' + file.name, 'err');
+        }
+      } catch(e) { toast('Upload failed', 'err'); }
+    }
+    _projLoadArtifacts(pid);
+  };
+  input.click();
+}
+
 async function _projOpen(id) {
   var proj = _projList.find(function(p) { return p.id === id; });
   if (!proj) return;
@@ -15904,7 +16007,8 @@ async function _projOpen(id) {
   var actions = document.getElementById('proj-detail-actions');
   if (actions) {
     actions.innerHTML = '<button class="btn btn-ghost" style="font-size:12px" onclick="_projKickoff(\'worker\')">Create Worker</button>'
-      + '<button class="btn btn-primary" style="font-size:12px" onclick="_projKickoff(\'project\')">Refine Project</button>';
+      + '<button class="btn btn-primary" style="font-size:12px" onclick="_projKickoff(\'project\')">Refine Project</button>'
+      + '<button class="btn btn-ghost" style="font-size:12px;color:var(--text3)" onclick="_projDelete(\'' + proj.id + '\')">Delete</button>';
   }
   _renderProjTabs();
   _renderProjTabContent();
@@ -16050,6 +16154,10 @@ async function _renderProjTabContent() {
     }
 
   } else if (_projTab === 'deliverables') {
+    html += '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">';
+    html += '<button onclick="_projUploadFile(\x27' + proj.id + '\x27)" class="btn btn-primary" style="font-size:11px">Upload File</button>';
+    html += '<span style="font-size:11px;color:var(--text3)">Drop files into project artifacts folder</span>';
+    html += '</div>';
     html += '<div id="proj-artifacts-list" style="font-size:12px;color:var(--text3)">Loading...</div>';
     content.innerHTML = html;
     _projLoadArtifacts(proj.id);
@@ -16074,6 +16182,24 @@ async function _renderProjTabContent() {
       html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
       html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Success Criteria</div>';
       html += '<div style="font-size:12px;color:var(--text);line-height:1.5">' + escHtml(proj.success_bar) + '</div>';
+      html += '</div>';
+    }
+
+    // Dates & Plan
+    var hasDateInfo = proj.start_date || proj.deadline || proj.plan;
+    if (hasDateInfo || true) {
+      html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+      html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Timeline</div>';
+      html += '<button onclick="_projEditDates(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">Edit</button>';
+      html += '</div>';
+      html += '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px">';
+      html += '<div><span style="color:var(--text3)">Start:</span> <span style="color:var(--text)">' + (proj.start_date ? escHtml(_projFmtShortDate(proj.start_date)) : 'Not set') + '</span></div>';
+      html += '<div><span style="color:var(--text3)">Deadline:</span> <span style="color:' + (proj.deadline ? 'var(--text)' : 'var(--text3)') + '">' + (proj.deadline ? escHtml(_projFmtShortDate(proj.deadline)) : 'Not set') + '</span></div>';
+      html += '</div>';
+      if (proj.plan) {
+        html += '<div style="margin-top:8px;font-size:12px;color:var(--text2);line-height:1.5;white-space:pre-wrap;max-height:120px;overflow-y:auto">' + escHtml(proj.plan) + '</div>';
+      }
       html += '</div>';
     }
 
@@ -16597,14 +16723,27 @@ async function _projLoadArtifacts(pid) {
       html += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">';
       artifacts.forEach(function(a) {
         var kind = String(a.kind || 'file');
-        var glyph = kind === 'image' ? '▦' : kind === 'document' ? '▤' : kind === 'archive' ? '▣' : '■';
-        html += '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--surface)">';
-        html += '<div style="width:34px;height:34px;border-radius:10px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:13px;color:var(--text2);flex-shrink:0">' + glyph + '</div>';
+        var path = a.path || '';
+        var dlUrl = '/download?root=documents&path=' + encodeURIComponent(path.replace('/home/lobster/documents/', '')) + '&inline=1';
+        html += '<div style="border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden">';
+        // Inline preview for images, video, audio, PDF
+        if (kind === 'image') {
+          html += '<div style="max-height:200px;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center">';
+          html += '<img src="' + escHtml(dlUrl) + '" alt="' + escHtml(a.name || '') + '" style="max-width:100%;max-height:200px;object-fit:contain">';
+          html += '</div>';
+        } else if (kind === 'video') {
+          html += '<video controls preload="metadata" style="width:100%;max-height:200px;background:#000"><source src="' + escHtml(dlUrl) + '"></video>';
+        } else if (kind === 'audio') {
+          html += '<div style="padding:12px 14px;background:var(--bg)"><audio controls preload="metadata" style="width:100%"><source src="' + escHtml(dlUrl) + '"></audio></div>';
+        } else if (kind === 'pdf') {
+          html += '<div style="height:180px;background:var(--bg)"><iframe src="' + escHtml(dlUrl) + '" style="width:100%;height:100%;border:none"></iframe></div>';
+        }
+        // Info row
+        html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px">';
         html += '<div style="flex:1;min-width:0">';
-        html += '<div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(a.name || a.relative_path || 'artifact') + '</div>';
-        html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px"><span class="model-card-chip dim" style="font-size:10px">' + escHtml(kind) + '</span><span class="model-card-chip dim" style="font-size:10px">' + escHtml(a.size_human || '') + '</span><span class="model-card-chip dim" style="font-size:10px">' + escHtml(a.modified_ago || '') + '</span></div>';
-        html += '<div style="font-size:10px;color:var(--text3);margin-top:5px">' + escHtml(a.source || 'workspace') + (a.created_by ? (' · ' + escHtml(a.created_by)) : '') + '</div>';
-        html += '</div>';
+        html += '<a href="' + escHtml(dlUrl.replace('&inline=1','')) + '" style="font-size:12px;font-weight:600;color:var(--text);text-decoration:none" title="Download">' + escHtml(a.name || a.relative_path || 'artifact') + '</a>';
+        html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:3px"><span class="model-card-chip dim" style="font-size:10px">' + escHtml(kind) + '</span><span class="model-card-chip dim" style="font-size:10px">' + escHtml(a.size_human || '') + '</span><span class="model-card-chip dim" style="font-size:10px">' + escHtml(a.modified_ago || '') + '</span></div>';
+        html += '</div></div>';
         html += '</div>';
       });
       html += '</div>';
@@ -37571,7 +37710,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.21"})
+            self.reply_json({"v": "0.31.22"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37733,7 +37872,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.21"
+                health["porter_version"] = "0.31.22"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -39191,6 +39330,8 @@ class Handler(BaseHTTPRequestHandler):
                     "milestones": p.get("milestones", []),
                     "linked_projects": p.get("linked_projects", []),
                     "objectives": p.get("objectives", []),
+                    "deadline": p.get("deadline", ""),
+                    "plan": p.get("plan", ""),
                     "workspace_path": str(wp), "workspace_exists": wp.exists(),
                     "tokens_used": p.get("tokens_used", 0),
                     "time_spent_mins": p.get("time_spent_mins", 0),
@@ -39682,7 +39823,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.21'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.22'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43707,6 +43848,10 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     proj["start_date"] = str(data["start_date"]).strip()
                 if "end_date" in data:
                     proj["end_date"] = str(data["end_date"]).strip()
+                if "deadline" in data:
+                    proj["deadline"] = str(data["deadline"]).strip()
+                if "plan" in data:
+                    proj["plan"] = str(data["plan"]).strip()
                 if "completed_at" in data:
                     try: proj["completed_at"] = float(data["completed_at"])
                     except (ValueError, TypeError): pass
@@ -44934,7 +45079,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.21 ready (localhost only)")
+    print(f"\n  Porter v0.31.22 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
