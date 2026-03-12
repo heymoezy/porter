@@ -316,7 +316,7 @@ RUNTIME_DIR         = _DATA_DIR / "runtime"
 LOG_DIR             = RUNTIME_DIR / "logs"
 LOG_DB_PATH         = LOG_DIR / "log_index.db"
 AGENT_WORKSPACE_DIR = Path(os.environ.get("PORTER_AGENT_WORKSPACE",
-                           str(Path.home() / ".openclaw" / "workspace")))
+                           str(_DATA_DIR / "workspace")))
 OPENCLAW_STATE_DIR  = Path(os.environ.get("PORTER_OPENCLAW_STATE",
                            str(Path.home() / ".openclaw")))
 MEMORY_DIR          = _DATA_DIR / "memory"
@@ -3436,6 +3436,76 @@ def _seed_launchpad_state(project_id: str) -> None:
         log.debug("Launchpad state seed failed: %s", e)
 
 
+def _normalize_project_name(name: str) -> str:
+    raw = str(name or "").strip()
+    if not raw:
+        return ""
+    candidate = raw
+    for pat in (
+        r"^(?:let'?s|lets)\s+call\s+this\s+project\s+(.+)$",
+        r"^(?:call\s+this\s+project|name\s+the\s+project)\s+(.+)$",
+        r"^(?:project\s+name\s*[:\-]\s*)(.+)$",
+    ):
+        m = re.match(pat, raw, re.I)
+        if m:
+            candidate = str(m.group(1) or "").strip()
+            break
+    candidate = re.split(r"(?<=[.!?])\s+", candidate, 1)[0].strip()
+    candidate = re.split(r"\s+(?:first|next|we need|we should|what do you need|the draft|it'?s already)\b", candidate, 1, flags=re.I)[0].strip()
+    candidate = candidate.strip(" \t\r\n\"'`.,:;!?")
+    if not candidate:
+        candidate = raw.strip(" \t\r\n\"'`.,:;!?")
+    if len(candidate) > 80:
+        candidate = candidate[:80].rstrip(" \t\r\n\"'`.,:;!?")
+    return candidate
+
+
+def _migrate_project_workspace_root() -> bool:
+    legacy_root = Path.home() / ".openclaw" / "workspace" / "projects"
+    target_root = AGENT_WORKSPACE_DIR / "projects"
+    if AGENT_WORKSPACE_DIR == legacy_root.parent or not legacy_root.exists():
+        return False
+    changed = False
+    try:
+        target_root.mkdir(parents=True, exist_ok=True)
+        for item in legacy_root.iterdir():
+            if not item.is_dir():
+                continue
+            target = target_root / item.name
+            if target.exists():
+                continue
+            shutil.move(str(item), str(target))
+            changed = True
+    except Exception as e:
+        log.debug("Project workspace migration failed: %s", e)
+    return changed
+
+
+def _normalize_project_registry_names(cfg: dict) -> bool:
+    changed = False
+    for proj in cfg.get("projects", []) or []:
+        raw_name = str(proj.get("name") or "").strip()
+        norm_name = _normalize_project_name(raw_name)
+        if norm_name and norm_name != raw_name:
+            proj["name"] = norm_name
+            changed = True
+        if norm_name == "Launchpad" and float(proj.get("created_at") or 0) < 1735689600:
+            proj["created_at"] = time.time()
+            changed = True
+        pid = str(proj.get("id") or "").strip()
+        if pid and norm_name:
+            try:
+                sj = AGENT_WORKSPACE_DIR / "projects" / pid / "settings.json"
+                if sj.exists():
+                    sdata = json.loads(sj.read_text())
+                    if sdata.get("name") != norm_name:
+                        sdata["name"] = norm_name
+                        sj.write_text(json.dumps(sdata, indent=2))
+            except Exception as e:
+                log.debug("Project settings normalization failed: %s", e)
+    return changed
+
+
 def _migrate_legacy_porter_app_project(cfg: dict) -> bool:
     """Rename the legacy starter project to Launchpad and refresh its docs."""
     changed = False
@@ -6241,9 +6311,13 @@ def load_config() -> dict:
     if "active_project_id" not in cfg:
         cfg["active_project_id"] = None
         changed = True
+    if _migrate_project_workspace_root():
+        changed = True
     if _migrate_legacy_porter_app_project(cfg):
         changed = True
     if _ensure_launchpad_project(cfg):
+        changed = True
+    if _normalize_project_registry_names(cfg):
         changed = True
 
     # ── preferences (merge so new keys are always present) ──
@@ -8717,6 +8791,8 @@ def _porter_chat_identity_prompt() -> str:
         "You are Porter, the platform's Master Orchestrator.\n"
         "Voice: warm, confident, capable, concise. Sound like a strong operator, not a debug console. Never say 'Hi. What do you need?'\n"
         "Porter orchestrates, improves prompts, assigns or creates workers, switches runtime lanes when needed, and owns the outcome. Workers execute.\n"
+        "Porter is product-facing only. Stay inside the Porter product lane: projects, agents, models, artifacts, state, logs, and workflow guidance.\n"
+        "Do not claim to inspect the local filesystem, patch Porter itself, edit server config, or make code changes from this chat lane. If asked to change Porter the application, say clearly that this chat cannot self-modify the product.\n"
         "Do not keep re-introducing yourself on ordinary turns. Only introduce yourself at the start of a fresh chat, or when the user asks who you are.\n"
         "Do not append runtime/model boilerplate to normal replies. The UI already shows the active lane. Mention the exact runtime or model only when the user asks, when a lane switch is material to the answer, or when something failed because a lane was unavailable.\n"
         "If the user asks you to use another model or runtime, either do it or explain briefly why that lane is unavailable in this environment. Do not turn that into terminal instructions unless the user explicitly asks for commands.\n"
@@ -8729,6 +8805,7 @@ def _general_chat_identity_prompt() -> str:
         "You are responding inside Porter.\n"
         "Porter is the platform's built-in Master Orchestrator.\n"
         "If the user asks about Porter, describe him as the orchestration authority that shapes work, assigns or creates workers, selects runtime lanes, and keeps outcomes accountable.\n"
+        "Do not claim that Porter can patch the application, inspect arbitrary local files, or self-modify the product from inside the chat UI.\n"
         "Do not volunteer backend/runtime boilerplate unless the user asks for it or it materially affects the answer.\n"
         "Be clear, concise, truthful, and structured only when it helps.\n\n"
     )
@@ -9579,35 +9656,57 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-header-right { margin-left:auto; display:flex; align-items:center; gap:6px; }
 
 .mc-overview {
-  display:grid; grid-template-columns:minmax(220px,280px) 1fr; gap:10px;
+  display:grid; grid-template-columns:minmax(170px,220px) 1fr; gap:8px;
   margin-bottom:10px; flex-shrink:0;
 }
 .mc-heart-panel {
-  display:flex; align-items:center; gap:12px; padding:10px 12px;
+  display:flex; align-items:center; gap:8px; padding:8px 10px;
   background:linear-gradient(135deg, color-mix(in srgb,var(--accent) 10%, var(--bg)) 0%, var(--bg2) 100%);
   border:1px solid color-mix(in srgb,var(--accent) 24%, var(--border));
-  border-radius:12px;
+  border-radius:10px;
 }
 .mc-heart-icon {
-  width:10px; height:10px; background:#ff5b7d; position:relative; flex-shrink:0;
+  width:8px; height:8px; background:#ff5b7d; position:relative; flex-shrink:0;
   box-shadow:
-    10px 0 #ff5b7d,
-    -5px 5px #ff5b7d, 0 5px #ff5b7d, 5px 5px #ff5b7d, 10px 5px #ff5b7d, 15px 5px #ff5b7d,
-    -5px 10px #ff5b7d, 0 10px #ff5b7d, 5px 10px #ff5b7d, 10px 10px #ff5b7d, 15px 10px #ff5b7d,
-    0 15px #ff5b7d, 5px 15px #ff5b7d, 10px 15px #ff5b7d,
-    5px 20px #ff5b7d;
-  transform:scale(.72);
+    8px 0 #ff5b7d,
+    -4px 4px #ff5b7d, 0 4px #ff5b7d, 4px 4px #ff5b7d, 8px 4px #ff5b7d, 12px 4px #ff5b7d,
+    -4px 8px #ff5b7d, 0 8px #ff5b7d, 4px 8px #ff5b7d, 8px 8px #ff5b7d, 12px 8px #ff5b7d,
+    0 12px #ff5b7d, 4px 12px #ff5b7d, 8px 12px #ff5b7d,
+    4px 16px #ff5b7d;
+  transform:scale(.68);
   transform-origin:top left;
 }
 .mc-heart-copy { min-width:0; }
-.mc-heart-title { font-size:11px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:.55px; }
-.mc-heart-sub { font-size:11px; color:var(--text3); margin-top:3px; }
+.mc-heart-title { font-size:10px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:.55px; }
+.mc-heart-sub { font-size:10px; color:var(--text2); margin-top:2px; }
+.mc-heart-stats { display:flex; gap:4px; flex-wrap:wrap; margin-top:5px; }
+.mc-heart-pill {
+  font-size:8px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+  padding:2px 5px; border-radius:999px; background:color-mix(in srgb,var(--bg) 65%, transparent);
+  border:1px solid color-mix(in srgb,var(--border) 85%, transparent); color:var(--text3);
+}
+.mc-heart-pill.live { color:#10b981; border-color:color-mix(in srgb,#10b981 30%, var(--border)); }
+.mc-heart-pill.warn { color:#f59e0b; border-color:color-mix(in srgb,#f59e0b 30%, var(--border)); }
+.mc-heart-pill.err { color:#ef4444; border-color:color-mix(in srgb,#ef4444 34%, var(--border)); }
 .mc-heartbeat {
+  position:relative;
   display:grid; grid-template-columns:repeat(24, minmax(8px, 1fr)); gap:4px;
-  align-items:end; min-height:46px;
+  align-items:end; min-height:32px;
+  overflow:hidden;
+}
+.mc-heartbeat::after {
+  content:""; position:absolute; top:0; bottom:0; width:18%;
+  background:linear-gradient(90deg, transparent, color-mix(in srgb,var(--accent) 16%, transparent), transparent);
+  opacity:.45; transform:translateX(-120%);
+  animation:mcHeartbeatSweep 2.8s linear infinite;
+  pointer-events:none;
+}
+@keyframes mcHeartbeatSweep {
+  0% { transform:translateX(-120%); }
+  100% { transform:translateX(660%); }
 }
 .mc-beat {
-  height:10px; border-radius:3px 3px 1px 1px; background:var(--bg2);
+  height:8px; border-radius:3px 3px 1px 1px; background:var(--bg2);
   border:1px solid color-mix(in srgb,var(--border) 80%, transparent);
   transition:height .18s ease, background .18s ease, border-color .18s ease, transform .18s ease, opacity .18s ease;
   animation:mcBeatIdle 1.8s ease-in-out infinite;
@@ -9707,12 +9806,12 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .mc-drawer-backdrop.open { opacity:1; pointer-events:auto; }
 .mc-right-panel {
-  position:absolute; top:0; right:0; bottom:0; width:min(360px, calc(100% - 48px));
+  position:absolute; top:50%; left:50%; width:min(420px, calc(100% - 40px)); max-height:min(78vh, 760px);
   display:flex; flex-direction:column; min-height:0; background:var(--bg); border:1px solid var(--border);
-  border-radius:12px 0 0 12px; overflow:hidden; box-shadow:-12px 0 32px rgba(0,0,0,.24);
-  transform:translateX(104%); transition:transform .18s ease; z-index:20;
+  border-radius:14px; overflow:hidden; box-shadow:0 24px 64px rgba(0,0,0,.28);
+  transform:translate(-50%, -46%) scale(.96); transition:transform .18s ease, opacity .18s ease; z-index:20; opacity:0;
 }
-.mc-right-panel.open { transform:translateX(0); }
+.mc-right-panel.open { transform:translate(-50%, -50%) scale(1); opacity:1; }
 .mc-right-tabs { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; }
 .mc-right-tab { flex:1; padding:5px 0; font-size:10px; font-weight:600; text-align:center; cursor:pointer; background:var(--bg); color:var(--text3); border:none; transition:all .15s; }
 .mc-right-tab:hover { color:var(--text); }
@@ -9762,7 +9861,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   .mc-row { grid-template-columns:24px 72px minmax(0,1fr); }
   .mc-row-right { display:none; }
   .mc-heartbeat { grid-template-columns:repeat(16, minmax(8px, 1fr)); }
-  .mc-right-panel { width:100%; border-radius:12px; }
+  .mc-right-panel { width:calc(100% - 20px); max-height:min(82vh, 680px); }
 }
 
 
@@ -12177,8 +12276,9 @@ input[type="number"].settings-input { min-width: 60px; }
       <div class="mc-heart-panel">
         <div class="mc-heart-icon" aria-hidden="true"></div>
         <div class="mc-heart-copy">
-          <div class="mc-heart-title">Heartbeat</div>
-          <div id="mc-heart-sub" class="mc-heart-sub">Streaming live system activity</div>
+          <div class="mc-heart-title">Live Signal</div>
+          <div id="mc-heart-sub" class="mc-heart-sub">Watching live activity</div>
+          <div id="mc-heart-stats" class="mc-heart-stats"></div>
         </div>
       </div>
       <div>
@@ -21275,6 +21375,7 @@ function mcFormatDuration(ms) {
 function mcRenderHeartbeat(events) {
   var host = document.getElementById('mc-heartbeat');
   if (!host) return;
+  var statsHost = document.getElementById('mc-heart-stats');
   var recent = (events || []).slice(0, 24).reverse();
   while (recent.length < 24) recent.unshift(null);
   var html = '';
@@ -21282,6 +21383,7 @@ function mcRenderHeartbeat(events) {
   var issueCount = 0;
   var routingCount = 0;
   var runCount = 0;
+  var recentErrors = 0;
   for (var i = 0; i < recent.length; i++) {
     var e = recent[i];
     if (!e) {
@@ -21294,6 +21396,7 @@ function mcRenderHeartbeat(events) {
     if (kind.key === 'route') routingCount += 1;
     if (kind.key === 'run' || kind.key === 'task') runCount += 1;
     var sev = String(e.severity || '').toLowerCase();
+    if (sev === 'error' || sev === 'critical' || e.status === 'error') recentErrors += 1;
     var height = 10;
     if (kind.key === 'issue') height = 40;
     else if (kind.key === 'run') height = 30;
@@ -21307,8 +21410,19 @@ function mcRenderHeartbeat(events) {
   host.className = 'mc-heartbeat' + (liveCount ? ' mc-heartbeat-live' : '');
   var sub = document.getElementById('mc-heart-sub');
   if (sub) {
-    if (!liveCount) sub.textContent = 'Quiet right now';
-    else sub.textContent = liveCount + ' recent signals • ' + routingCount + ' routing • ' + runCount + ' run/task • ' + issueCount + ' issues';
+    if (!liveCount) sub.textContent = 'Quiet';
+    else if (recentErrors) sub.textContent = 'Attention needed';
+    else if (runCount || routingCount) sub.textContent = 'Flowing cleanly';
+    else sub.textContent = 'Stable';
+  }
+  if (statsHost) {
+    var chips = [];
+    chips.push('<span class="mc-heart-pill live">' + liveCount + ' live</span>');
+    if (routingCount) chips.push('<span class="mc-heart-pill">' + routingCount + ' route</span>');
+    if (runCount) chips.push('<span class="mc-heart-pill">' + runCount + ' run</span>');
+    if (recentErrors) chips.push('<span class="mc-heart-pill err">' + recentErrors + ' err</span>');
+    else chips.push('<span class="mc-heart-pill warn">' + issueCount + ' issue</span>');
+    statsHost.innerHTML = chips.join('');
   }
 }
 
