@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.34 — Extensions → Connections + project Apps tab"""
+"""Porter v0.31.35 — Agent Office: pixel-art virtual office for agents tab"""
 
 
 import email
@@ -11099,6 +11099,35 @@ body.density-compact .file-name { padding: 6px 0; }
 .file-browser-action { background:none; border:none; color:var(--text3); cursor:pointer; font-size:12px; padding:2px 4px; border-radius:4px; }
 .file-browser-action:hover { color:var(--text); background:var(--raised); }
 .file-browser-empty { padding:24px 16px; text-align:center; color:var(--text3); font-size:12px; }
+/* ── Agent Office ──────────────────────────────────────────── */
+.agent-office { position:relative; background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:24px 16px 16px; min-height:320px; overflow:hidden; }
+.agent-office-floor { position:absolute; inset:0; opacity:.12; pointer-events:none;
+  background-image: repeating-linear-gradient(0deg, var(--border) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(90deg, var(--border) 0 1px, transparent 1px 32px);
+  background-size: 32px 32px; }
+.agent-office-scene { position:relative; z-index:1; display:flex; flex-wrap:wrap; gap:0; justify-content:center; align-items:flex-end; }
+.office-desk { position:relative; width:140px; display:flex; flex-direction:column; align-items:center; padding:8px 4px 0; cursor:pointer; transition:transform .2s ease; }
+.office-desk:hover { transform:translateY(-4px); }
+.office-desk.corner-office { width:170px; }
+.office-desk-surface { width:100%; height:28px; background:linear-gradient(180deg, #5a4a3a, #4a3a2a); border-radius:4px 4px 0 0; position:relative; border:1px solid #3a2a1a; margin-top:4px; }
+.office-desk-surface::after { content:''; position:absolute; top:4px; left:50%; transform:translateX(-50%); width:36px; height:16px; border-radius:2px; background:linear-gradient(180deg, #6a8aaa, #5a7a9a); border:1px solid #4a6a8a; box-shadow:0 0 6px rgba(100,150,200,.3); }
+.corner-office .office-desk-surface { height:32px; background:linear-gradient(180deg, #6a5a4a, #5a4a3a); }
+.corner-office .office-desk-surface::after { width:44px; height:18px; }
+.office-desk-legs { width:calc(100% - 8px); height:20px; display:flex; justify-content:space-between; }
+.office-desk-legs::before, .office-desk-legs::after { content:''; width:4px; background:#4a3a2a; border-radius:0 0 2px 2px; }
+.office-agent { position:relative; display:flex; flex-direction:column; align-items:center; gap:2px; }
+.office-agent-avatar { position:relative; }
+.office-agent-name { font-size:9px; font-weight:600; color:var(--text); text-align:center; max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.office-agent-role { font-size:8px; color:var(--text3); text-align:center; max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.office-status { position:absolute; top:-4px; right:-6px; z-index:3; }
+.office-status-bubble { display:flex; align-items:center; justify-content:center; min-width:18px; height:18px; border-radius:10px; font-size:10px; padding:0 4px; border:1px solid var(--border); background:var(--surface); box-shadow:0 2px 6px rgba(0,0,0,.2); }
+.office-status-bubble.idle { background:var(--raised); }
+.office-status-bubble.busy { background:color-mix(in srgb, var(--accent) 20%, var(--surface)); animation:officePulse 1.5s ease infinite; }
+@keyframes officePulse { 0%,100% { box-shadow:0 2px 6px rgba(0,0,0,.2); } 50% { box-shadow:0 2px 12px color-mix(in srgb, var(--accent) 40%, transparent); } }
+.office-view-toggle { display:flex; gap:2px; background:var(--raised); border-radius:6px; padding:2px; border:1px solid var(--border); }
+.office-view-toggle button { background:none; border:none; color:var(--text3); font-size:10px; padding:4px 10px; border-radius:4px; cursor:pointer; font-weight:500; transition:all .15s; }
+.office-view-toggle button.active { background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.15); }
+.office-view-toggle button:hover:not(.active) { color:var(--text2); }
 .file-browser-preview { padding:12px; border-top:1px solid var(--border); background:var(--bg); }
 /* Legacy persona bar — replaced */
 .chat-persona-bar { display:none; }
@@ -11899,7 +11928,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.34</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.35</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12056,6 +12085,10 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="module-hdr">
       <span class="module-title">Agents</span>
       <div style="flex:1"></div>
+      <div class="office-view-toggle" id="agents-view-toggle">
+        <button class="active" onclick="_setAgentView('grid')">Grid</button>
+        <button onclick="_setAgentView('office')">Office</button>
+      </div>
     </div>
 
     <!-- Agent Grid -->
@@ -12064,6 +12097,14 @@ input[type="number"].settings-input { min-width: 60px; }
         <div id="persona-cards-row" class="persona-cards-row">
           <div class="loading-indicator">Loading personas...</div>
         </div>
+      </div>
+    </div>
+
+    <!-- Agent Office View -->
+    <div id="agents-office-view" style="display:none">
+      <div class="agent-office">
+        <div class="agent-office-floor"></div>
+        <div class="agent-office-scene" id="office-scene"></div>
       </div>
     </div>
 
@@ -12998,6 +13039,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.35', date:'2026-03-12', notes:["Agent Office: pixel-art virtual office visualization on the Agents tab","View toggle: switch between Grid and Office views","Each agent sits at a pixel desk with their Minecraft portrait and status bubble (idle/working)","Porter gets the corner office with a larger desk"] },
   { ver:'v0.31.34', date:'2026-03-12', notes:["Extensions → Connections: renamed nav + module, new workspace_connections/project_connections/environment_tools DB tables","Project Apps tab: view and manage connected services per project","Phase 1 of Connections refactor (GPT-5.4 architecture recommendation)"] },
   { ver:'v0.31.33', date:'2026-03-12', notes:["Artifacts file browser: file-system style table view with type icons, inline preview, and download actions","Content and artifacts guided empty states with actionable prompts"] },
   { ver:'v0.31.32', date:'2026-03-12', notes:["Streaming typewriter: OpenClaw responses now stream word-by-word instead of dumping the full text at once"] },
@@ -25659,6 +25701,7 @@ async function loadPersonas() {
         }
       } catch(x) {}
       renderPersonaOrg();
+      if (_agentViewMode === 'office') _renderOffice();
       // v0.29.26 — Loading timeout for agent grid
       withLoadTimeout('persona-cards-row', 'loadPersonas()', 8000);
       populateChatPersonaBar();
@@ -26381,6 +26424,62 @@ function renderPersonaOrg() {
       + '</div>';
   }
   row.innerHTML = '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">' + sorted.map(cardHtml).join('') + '</div>';
+}
+
+// ── Agent Office View ────────────────────────────────────────
+var _agentViewMode = 'grid';
+
+function _setAgentView(mode) {
+  _agentViewMode = mode;
+  var gridView = document.getElementById('agents-grid-view');
+  var officeView = document.getElementById('agents-office-view');
+  var toggle = document.getElementById('agents-view-toggle');
+  if (!gridView || !officeView) return;
+  gridView.style.display = mode === 'grid' ? '' : 'none';
+  officeView.style.display = mode === 'office' ? '' : 'none';
+  if (toggle) {
+    toggle.querySelectorAll('button').forEach(function(b) {
+      b.classList.toggle('active', (b.textContent.toLowerCase() === mode));
+    });
+  }
+  if (mode === 'office') _renderOffice();
+}
+
+function _renderOffice() {
+  var scene = document.getElementById('office-scene');
+  if (!scene || !_personas || !_personas.length) {
+    if (scene) scene.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:40px;text-align:center">No agents to show.</div>';
+    return;
+  }
+  var sorted = _personas.slice().sort(function(a, b) {
+    var aOrch = a.agent_group === 'Orchestrator' || a.orchestrator_only;
+    var bOrch = b.agent_group === 'Orchestrator' || b.orchestrator_only;
+    if (aOrch && !bOrch) return -1;
+    if (!aOrch && bOrch) return 1;
+    var oa = typeof a.sort_order === 'number' ? a.sort_order : 50;
+    var ob = typeof b.sort_order === 'number' ? b.sort_order : 50;
+    return oa - ob || (a.name || '').localeCompare(b.name || '');
+  });
+
+  var html = '';
+  sorted.forEach(function(p) {
+    var isOrch = p.agent_group === 'Orchestrator' || p.orchestrator_only;
+    var isBusy = String(p.status || '').toLowerCase() !== 'idle' && String(p.status || '').toLowerCase() !== '';
+    var statusIcon = isBusy ? '\u{1F4BB}' : '\u2615';
+    var statusClass = isBusy ? 'busy' : 'idle';
+    var avatarSize = isOrch ? 80 : 60;
+
+    html += '<div class="office-desk' + (isOrch ? ' corner-office' : '') + '" onclick="selectPersona(\x27' + p.id + '\x27)">';
+    html += '<div class="office-agent">';
+    html += '<div class="office-agent-avatar">' + _personaAvatarMarkup(p, avatarSize) + '<div class="office-status"><div class="office-status-bubble ' + statusClass + '">' + statusIcon + '</div></div></div>';
+    html += '<div class="office-agent-name">' + escHtml(p.name) + '</div>';
+    html += '<div class="office-agent-role">' + escHtml(p.role || (isOrch ? 'Orchestrator' : 'Worker')) + '</div>';
+    html += '</div>';
+    html += '<div class="office-desk-surface"></div>';
+    html += '<div class="office-desk-legs"></div>';
+    html += '</div>';
+  });
+  scene.innerHTML = html;
 }
 
 // ── Agent card drag-and-drop (v0.29.31 — pointer-based, not HTML5 DnD) ──
@@ -38397,7 +38496,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.34"})
+            self.reply_json({"v": "0.31.35"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -38559,7 +38658,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.34"
+                health["porter_version"] = "0.31.35"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40510,7 +40609,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.34'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.35'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -45918,7 +46017,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.34 ready (localhost only)")
+    print(f"\n  Porter v0.31.35 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
