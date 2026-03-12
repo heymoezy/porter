@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.17 — Unify chat model labels and clean project copy"""
+"""Porter v0.31.18 — Unify chat model labels and clean project copy"""
 
 
 import email
@@ -3253,13 +3253,6 @@ def scaffold_project_dir(project_id: str, project_name: str) -> "Path":
             "*Durable project state for directives, decisions, notes, and artifact context.*\n\n"
             "## Directives\n\n## Decisions\n\n## Notes\n\n## Artifact Context\n"
         )
-    mm = proj_dir / "MEMORY.md"
-    if not mm.exists():
-        mm.write_text(
-            f"# Project Memory: {project_name}\n\n"
-            "This file remains only for compatibility with older Porter paths.\n\n"
-            "Use `STATE.md` and the structured State view as the canonical source of durable project memory.\n"
-        )
     sj = proj_dir / "settings.json"
     if not sj.exists():
         sj.write_text(json.dumps({
@@ -3268,11 +3261,6 @@ def scaffold_project_dir(project_id: str, project_name: str) -> "Path":
             "memory_isolation": "project",
             "agents":           [],
         }, indent=2))
-
-    # 00_SHARED/ skeleton — governance docs for multi-agent collaboration
-    shared = proj_dir / "00_SHARED"
-    shared.mkdir(exist_ok=True)
-    _bootstrap_shared_docs(shared, project_name, now_iso)
 
     return proj_dir
 
@@ -3506,76 +3494,6 @@ def _normalize_project_registry_names(cfg: dict) -> bool:
     return changed
 
 
-def _normalize_project_name(name: str) -> str:
-    raw = str(name or "").strip()
-    if not raw:
-        return ""
-    candidate = raw
-    for pat in (
-        r"^(?:let'?s|lets)\s+call\s+this\s+project\s+(.+)$",
-        r"^(?:call\s+this\s+project|name\s+the\s+project)\s+(.+)$",
-        r"^(?:project\s+name\s*[:\-]\s*)(.+)$",
-    ):
-        m = re.match(pat, raw, re.I)
-        if m:
-            candidate = str(m.group(1) or "").strip()
-            break
-    candidate = re.split(r"(?<=[.!?])\s+", candidate, 1)[0].strip()
-    candidate = re.split(r"\s+(?:first|next|we need|we should|what do you need|the draft|it'?s already)\b", candidate, 1, flags=re.I)[0].strip()
-    candidate = candidate.strip(" \t\r\n\"'`.,:;!?")
-    if not candidate:
-        candidate = raw.strip(" \t\r\n\"'`.,:;!?")
-    if len(candidate) > 80:
-        candidate = candidate[:80].rstrip(" \t\r\n\"'`.,:;!?")
-    return candidate
-
-
-def _migrate_project_workspace_root() -> bool:
-    legacy_root = Path.home() / ".openclaw" / "workspace" / "projects"
-    target_root = AGENT_WORKSPACE_DIR / "projects"
-    if AGENT_WORKSPACE_DIR == legacy_root.parent or not legacy_root.exists():
-        return False
-    changed = False
-    try:
-        target_root.mkdir(parents=True, exist_ok=True)
-        for item in legacy_root.iterdir():
-            if not item.is_dir():
-                continue
-            target = target_root / item.name
-            if target.exists():
-                continue
-            shutil.move(str(item), str(target))
-            changed = True
-    except Exception as e:
-        log.debug("Project workspace migration failed: %s", e)
-    return changed
-
-
-def _normalize_project_registry_names(cfg: dict) -> bool:
-    changed = False
-    for proj in cfg.get("projects", []) or []:
-        raw_name = str(proj.get("name") or "").strip()
-        norm_name = _normalize_project_name(raw_name)
-        if norm_name and norm_name != raw_name:
-            proj["name"] = norm_name
-            changed = True
-        if norm_name == "Launchpad" and float(proj.get("created_at") or 0) < 1735689600:
-            proj["created_at"] = time.time()
-            changed = True
-        pid = str(proj.get("id") or "").strip()
-        if pid and norm_name:
-            try:
-                sj = AGENT_WORKSPACE_DIR / "projects" / pid / "settings.json"
-                if sj.exists():
-                    sdata = json.loads(sj.read_text())
-                    if sdata.get("name") != norm_name:
-                        sdata["name"] = norm_name
-                        sj.write_text(json.dumps(sdata, indent=2))
-            except Exception as e:
-                log.debug("Project settings normalization failed: %s", e)
-    return changed
-
-
 def _migrate_legacy_porter_app_project(cfg: dict) -> bool:
     """Rename the legacy starter project to Launchpad and refresh its docs."""
     changed = False
@@ -3662,17 +3580,8 @@ def _project_file_chain(project_id: str) -> list:
     wp = AGENT_WORKSPACE_DIR / "projects" / str(project_id)
     canonical = [
         ("PROJECT.md",                         "Project config"),
-        ("MEMORY.md",                          "Project memory"),
+        ("STATE.md",                           "Project state"),
         ("settings.json",                      "Settings"),
-        ("SPRINT_PLAN.md",                     "Sprint plan"),
-        ("tasks/checkpoint.md",                "Checkpoint"),
-        ("tasks/lessons.md",                   "Lessons learned"),
-        ("00_SHARED/PROJECT_BRIEF.md",         "Project brief"),
-        ("00_SHARED/SUCCESS_CRITERIA.md",      "Success criteria"),
-        ("00_SHARED/OPERATING_PROTOCOL.md",    "Operating protocol"),
-        ("00_SHARED/ARCHITECTURE_JOURNAL.md",  "Architecture journal"),
-        ("00_SHARED/DECISION_LOG.md",          "Decision log"),
-        ("00_SHARED/RISKS_AND_GUARDRAILS.md",  "Risks & guardrails"),
     ]
     chain = []
     for rel, label in canonical:
@@ -11762,7 +11671,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.17</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.18</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12214,18 +12123,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
 
     <div id="projects-list-view" style="padding:0">
-      <div class="project-stage" style="margin-bottom:16px">
-        <div class="project-stage-panel" style="grid-column:span 2">
-          <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Project Control</div>
-          <div style="font-size:32px;font-weight:900;color:var(--text);line-height:1.02;max-width:15ch">Porter keeps each project in one clean lane.</div>
-          <div style="font-size:14px;line-height:1.65;color:var(--text2);margin-top:10px;max-width:58ch">Use Porter to shape the objective, create the right workers, and keep artifacts and state attached to the project instead of scattered around the app.</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
-            <button class="btn btn-primary" onclick="_askPorterToCreate('project')" style="font-size:12px">Start With Porter</button>
-            <button class="btn btn-ghost" onclick="_projOpenActiveOrFirst()" style="font-size:12px">Open Active Project</button>
-          </div>
-          <div id="proj-stats-bar" style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--text3);margin-top:14px"></div>
-        </div>
-      </div>
+      <div id="proj-stats-bar" style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--text3);margin-bottom:12px;padding:0 4px"></div>
       <div id="proj-grid" class="project-roster">
         <div class="loading-indicator">Loading projects...</div>
       </div>
@@ -12860,6 +12758,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.18', date:'2026-03-12', notes:["Projects V2 Phase 1: removed governance template scaffolding (6 files), stopped creating MEMORY.md in new projects, deleted 3 duplicate functions, removed hero panel, removed YMC Capital hardcoded examples, cleaned project file chain to essentials only"] },
   { ver:'v0.31.17', date:'2026-03-12', notes:["Chat model selectors now use explicit Model language instead of lane language, so model switching reads consistently in Porter and project chats","Project copy is cleaner too: worker/project proposals and summaries talk about projects directly instead of leaking internal lane phrasing"] },
   { ver:'v0.31.16', date:'2026-03-12', notes:["Projects is cleaner and more Porter-first: the landing stage is tighter, project chat copy is less robotic, guided project naming now nudges toward clean names, and artifacts read like deliverables instead of raw filesystem listings","The hidden Pulse/runtime slab has been retired from the shipped UI, while Logs heartbeat labels are more legible and less admin-coded"] },
   { ver:'v0.31.15', date:'2026-03-12', notes:["Project creation is Porter-first again: guided project naming is normalized from natural language, new project lanes are made active immediately, and Porter-owned workspace roots no longer default into the OpenClaw workspace","Dark and light themes were rebalanced at the token layer so popups, menus, and overlays sit on clearer surfaces instead of collapsing into near-black panels in dark mode"] },
@@ -18046,7 +17945,7 @@ function _pdCreationPrompt(flow) {
     if (flow.stage === 2) return 'Should this worker be temporary or persistent?';
     return 'Approval required. Reply `Approve` to create this worker, or tell Porter what to change.';
   }
-  if (flow.stage === 0) return 'What should the new project be called? Keep it to the clean project name only, for example `YMC Capital`.';
+  if (flow.stage === 0) return 'What should the new project be called? Keep it to the clean project name only.';
   if (flow.stage === 1) return 'Describe the project objective in one or two sentences.';
   if (flow.stage === 2) return 'Define the success bar. What has to be true before Porter should consider this project well-formed?';
   if (flow.stage === 3) return 'Should this be a manual project or an autonomous project?';
@@ -18217,7 +18116,7 @@ async function _pdHandleCreationReply(p, state, text) {
     if (flow.stage === 0) {
       draft.name = _pdNormalizeProjectName(text);
       if (!draft.name) {
-        state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: 'Porter still needs a clean project name first. Keep it short, for example `YMC Capital`.', meta: 'guided creation' });
+        state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: 'Porter still needs a clean project name first. Keep it short and clear.', meta: 'guided creation' });
         _pdChatRender(p.id);
         return true;
       }
@@ -37422,7 +37321,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.17"})
+            self.reply_json({"v": "0.31.18"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37584,7 +37483,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.17"
+                health["porter_version"] = "0.31.18"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -39528,7 +39427,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.17'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.18'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -44618,7 +44517,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.17 ready (localhost only)")
+    print(f"\n  Porter v0.31.18 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
