@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.20 — Unify chat model labels and clean project copy"""
+"""Porter v0.31.21 — Unify chat model labels and clean project copy"""
 
 
 import email
@@ -11205,14 +11205,15 @@ body.density-compact .file-name { padding: 6px 0; }
 .project-tab-rail .pd-tab.active { border-color:color-mix(in srgb,var(--accent) 24%, var(--border)); background:color-mix(in srgb,var(--accent) 8%, transparent); }
 .project-stage { display:grid; grid-template-columns:minmax(320px,1.05fr) minmax(280px,.95fr); gap:16px; align-items:start; }
 .project-stage-panel { padding:18px 20px; border:1px solid color-mix(in srgb,var(--accent) 16%, var(--border)); border-radius:22px; background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%,transparent),color-mix(in srgb,var(--bg) 98%,transparent)); box-shadow:0 20px 60px rgba(0,0,0,.14); }
-.project-roster { display:grid; gap:12px; }
-.project-row { display:grid; grid-template-columns:minmax(0,1.2fr) auto auto; gap:14px; align-items:center; padding:16px 18px; border:1px solid var(--border); border-radius:20px; background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 97%,transparent),color-mix(in srgb,var(--bg) 98%,transparent)); cursor:pointer; transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease; }
-.project-row:hover { transform:translateY(-1px); border-color:color-mix(in srgb,var(--accent) 26%, var(--border)); box-shadow:0 16px 40px rgba(0,0,0,.12); }
-.project-row.is-active { border-color:color-mix(in srgb,var(--accent) 48%, var(--border)); box-shadow:0 18px 46px rgba(0,0,0,.16); }
-.project-row-title { font-size:18px; font-weight:800; color:var(--text); line-height:1.15; }
-.project-row-copy { font-size:13px; line-height:1.6; color:var(--text2); margin-top:6px; max-width:56ch; }
-.project-row-meta { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
-.project-row-stats { display:flex; gap:14px; flex-wrap:wrap; justify-content:flex-end; font-size:11px; color:var(--text3); }
+.project-roster { display:flex; flex-direction:column; gap:6px; }
+.project-row { display:flex; align-items:center; gap:12px; padding:10px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface); cursor:pointer; transition:border-color .15s ease; }
+.project-row:hover { border-color:color-mix(in srgb,var(--accent) 30%, var(--border)); }
+.project-row.is-active { border-color:color-mix(in srgb,var(--accent) 50%, var(--border)); background:color-mix(in srgb,var(--accent) 4%, var(--surface)); }
+.project-row-title { font-size:13px; font-weight:600; color:var(--text); line-height:1.3; }
+.project-row-copy { font-size:11px; line-height:1.4; color:var(--text3); margin-top:2px; max-width:56ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.project-row-meta { display:flex; gap:6px; flex-wrap:wrap; margin-left:auto; flex-shrink:0; }
+.project-row-stats { display:flex; gap:10px; flex-wrap:wrap; font-size:10px; color:var(--text3); flex-shrink:0; }
+.proj-type-badge { font-size:9px; padding:2px 6px; border-radius:4px; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
 .pulse-grid { display:grid; gap:14px; }
 .pulse-status-strip { display:flex; gap:16px; flex-wrap:wrap; padding:8px 0 4px; font-size:12px; color:var(--text2); }
 .pulse-status-strip .ps-item { display:inline-flex; align-items:center; gap:5px; }
@@ -11671,7 +11672,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.20</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.21</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12758,6 +12759,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.21', date:'2026-03-12', notes:["Projects V2 Phase 5: 8 project types (website/app/presentation/research/content/design/ops/custom), project lifecycle (active/paused/completed/archived), milestones with progress tracking, external links (repo/live/docs/custom), linked projects (depends_on/feeds_into/related), worker recommendations per type, compact project cards with type+status badges, creation flow now asks project type"] },
   { ver:'v0.31.20', date:'2026-03-12', notes:["Launchpad renamed to First Mission throughout, Deliverables tab cleaned up: removed scaffold doc listing, simplified summary, focused on actual project outputs only"] },
   { ver:'v0.31.19', date:'2026-03-12', notes:["Projects V2 Phase 2: tabs reordered to Overview→Chat→Workers→Deliverables→Activity, Overview tab shows objectives + links + linked projects + state, Agents renamed to Workers, Artifacts renamed to Deliverables, compact card titles"] },
   { ver:'v0.31.18', date:'2026-03-12', notes:["Projects V2 Phase 1: removed governance template scaffolding (6 files), stopped creating MEMORY.md in new projects, deleted 3 duplicate functions, removed hero panel, removed YMC Capital hardcoded examples, cleaned project file chain to essentials only"] },
@@ -15694,6 +15696,33 @@ function _projFmtDate(ms) {
   return d.getDate() + '-' + months[d.getMonth()] + '-' + d.getFullYear();
 }
 
+var _PROJECT_TYPES = {
+  website:      { label: 'Website',      color: '#3b82f6', workers: ['Frontend dev', 'Content writer', 'QA tester'] },
+  app:          { label: 'App',          color: '#8b5cf6', workers: ['Backend dev', 'Frontend dev', 'QA tester', 'DevOps'] },
+  presentation: { label: 'Presentation', color: '#f59e0b', workers: ['Writer', 'Designer', 'Fact-checker'] },
+  research:     { label: 'Research',     color: '#10b981', workers: ['Research analyst', 'Fact-checker'] },
+  content:      { label: 'Content',      color: '#ec4899', workers: ['Writer', 'Designer', 'SEO specialist'] },
+  design:       { label: 'Design',       color: '#f97316', workers: ['Designer', 'Brand strategist'] },
+  ops:          { label: 'Operations',   color: '#6b7280', workers: ['Ops worker', 'Monitor'] },
+  custom:       { label: 'Custom',       color: '#64748b', workers: [] }
+};
+
+function _projTypeInfo(type) {
+  return _PROJECT_TYPES[type] || _PROJECT_TYPES['custom'];
+}
+
+function _projTypeBadge(type) {
+  var info = _projTypeInfo(type);
+  return '<span class="proj-type-badge" style="background:color-mix(in srgb,' + info.color + ' 15%,transparent);color:' + info.color + '">' + info.label + '</span>';
+}
+
+function _projStatusBadge(proj) {
+  var s = proj.status || (proj.completed_at ? 'completed' : 'active');
+  var map = { active: ['Active','#3b82f6'], paused: ['Paused','#f59e0b'], completed: ['Completed','#22c55e'], archived: ['Archived','#6b7280'] };
+  var pair = map[s] || map['active'];
+  return '<span class="proj-type-badge" style="background:color-mix(in srgb,' + pair[1] + ' 15%,transparent);color:' + pair[1] + '">' + pair[0] + '</span>';
+}
+
 async function loadProjects() {
   try {
     var data = await api('/api/projects');
@@ -15730,17 +15759,19 @@ function _renderProjList() {
   _projList.forEach(function(p) {
     var isActive = p.id === _projActive;
     var agentCount = (p.assigned_personas || []).length;
-    var done = !!p.completed_at;
-    var typeLabel = done ? 'Completed' : (p.type === 'autonomous' ? 'Autonomous' : 'Guided');
-    var dateStr = p.created_at ? _projFmtDate(p.created_at * 1000) : '';
+    var milestones = p.milestones || [];
+    var msDone = milestones.filter(function(m) { return m.done; }).length;
     html += '<div class="project-row' + (isActive ? ' is-active' : '') + '" onclick="_projOpen(\x27' + p.id + '\x27)">';
-    html += '<div><div class="project-row-title">' + escHtml(p.name || 'Untitled') + '</div>';
-    html += '<div class="project-row-copy">' + escHtml(p.description || p.success_bar || 'No project brief yet.') + '</div></div>';
-    html += '<div class="project-row-meta">';
-    html += '<span class="model-card-chip ' + (done ? 'ok' : 'dim') + '">' + escHtml(typeLabel) + '</span>';
-    if (isActive) html += '<span class="model-card-chip ok">Current Lane</span>';
+    html += '<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px">';
+    html += '<div class="project-row-title">' + escHtml(p.name || 'Untitled') + '</div>';
+    html += _projTypeBadge(p.type) + _projStatusBadge(p);
+    if (isActive) html += '<span class="proj-type-badge" style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">Active</span>';
     html += '</div>';
-    html += '<div class="project-row-stats"><span>' + agentCount + ' worker' + (agentCount !== 1 ? 's' : '') + '</span>' + (dateStr ? '<span>' + dateStr + '</span>' : '') + (p.success_bar ? '<span>success bar set</span>' : '') + '</div>';
+    html += '<div class="project-row-copy">' + escHtml(p.description || p.success_bar || '') + '</div></div>';
+    html += '<div class="project-row-stats">';
+    if (agentCount) html += '<span>' + agentCount + ' worker' + (agentCount !== 1 ? 's' : '') + '</span>';
+    if (milestones.length) html += '<span>' + msDone + '/' + milestones.length + ' milestones</span>';
+    html += '</div>';
     html += '</div>';
   });
   html += '</div>';
@@ -15776,6 +15807,85 @@ function _projBack() {
   if (actions) actions.innerHTML = '';
 }
 
+async function _projAddMilestone(pid) {
+  _porterPrompt('Add Milestone', [
+    {name: 'name', label: 'Milestone', placeholder: 'e.g. MVP deployed'},
+    {name: 'due', label: 'Due date (optional)', placeholder: 'e.g. 2026-04-01'}
+  ], async function(vals) {
+    if (!vals.name) { toast('Name required', 'err'); return; }
+    try {
+      var r = await api('/api/projects', {action: 'add_milestone', project_id: pid, name: vals.name, due: vals.due || ''});
+      if (r && r.ok) { toast('Milestone added', 'ok'); await loadProjects(); if (window._projCurrent && window._projCurrent.id === pid) { window._projCurrent = _projList.find(function(p) { return p.id === pid; }); _renderProjTabContent(); } }
+      else { toast(r && r.error || 'Failed', 'err'); }
+    } catch(e) { toast('Failed', 'err'); }
+  }, {okLabel: 'Add'});
+}
+
+async function _projToggleMilestone(pid, idx) {
+  try {
+    var r = await api('/api/projects', {action: 'toggle_milestone', project_id: pid, index: idx});
+    if (r && r.ok) { await loadProjects(); if (window._projCurrent && window._projCurrent.id === pid) { window._projCurrent = _projList.find(function(p) { return p.id === pid; }); _renderProjTabContent(); } }
+  } catch(e) { toast('Failed', 'err'); }
+}
+
+async function _projRemoveMilestone(pid, idx) {
+  try {
+    var r = await api('/api/projects', {action: 'remove_milestone', project_id: pid, index: idx});
+    if (r && r.ok) { toast('Removed', 'ok'); await loadProjects(); if (window._projCurrent && window._projCurrent.id === pid) { window._projCurrent = _projList.find(function(p) { return p.id === pid; }); _renderProjTabContent(); } }
+  } catch(e) { toast('Failed', 'err'); }
+}
+
+async function _projAddLink(pid) {
+  _porterPrompt('Add Link', [
+    {name: 'kind', label: 'Type', type: 'select', options: [{value:'repo',label:'Repository'},{value:'live_url',label:'Live Site'},{value:'docs',label:'Docs'},{value:'custom',label:'Custom'}]},
+    {name: 'url', label: 'URL', placeholder: 'https://...'},
+    {name: 'label', label: 'Label (for custom)', placeholder: 'e.g. Figma'}
+  ], async function(vals) {
+    if (!vals.url) { toast('URL required', 'err'); return; }
+    try {
+      var r = await api('/api/projects', {action: 'add_link', project_id: pid, kind: vals.kind || 'custom', url: vals.url, label: vals.label || ''});
+      if (r && r.ok) { toast('Link added', 'ok'); await loadProjects(); if (window._projCurrent && window._projCurrent.id === pid) { window._projCurrent = _projList.find(function(p) { return p.id === pid; }); _renderProjTabContent(); } }
+      else { toast(r && r.error || 'Failed', 'err'); }
+    } catch(e) { toast('Failed', 'err'); }
+  }, {okLabel: 'Add'});
+}
+
+async function _projSetStatus(pid, status) {
+  try {
+    var r = await api('/api/projects', {action: 'set_status', project_id: pid, status: status});
+    if (r && r.ok) {
+      toast('Status: ' + status, 'ok');
+      await loadProjects();
+      if (window._projCurrent && window._projCurrent.id === pid) { window._projCurrent = _projList.find(function(p) { return p.id === pid; }); _renderProjTabContent(); _renderProjTabs(); }
+      var sb = document.getElementById('proj-detail-status');
+      if (sb) { var done = status === 'completed'; sb.textContent = status.charAt(0).toUpperCase() + status.slice(1); sb.style.background = done ? 'color-mix(in srgb,#22c55e 15%,transparent)' : 'color-mix(in srgb,#3b82f6 15%,transparent)'; sb.style.color = done ? '#22c55e' : '#3b82f6'; }
+    }
+  } catch(e) { toast('Failed', 'err'); }
+}
+
+async function _projLinkProject(pid) {
+  var others = _projList.filter(function(p) { return p.id !== pid; });
+  if (!others.length) { toast('No other projects to link', 'err'); return; }
+  _porterPrompt('Link Project', [
+    {name: 'target', label: 'Project', type: 'select', options: others.map(function(p) { return {value: p.id, label: p.name || p.id.slice(0,8)}; })},
+    {name: 'rel', label: 'Relationship', type: 'select', options: [{value:'related',label:'Related'},{value:'depends_on',label:'Depends on'},{value:'feeds_into',label:'Feeds into'}]}
+  ], async function(vals) {
+    if (!vals.target) { toast('Select a project', 'err'); return; }
+    try {
+      var r = await api('/api/projects', {action: 'link_project', project_id: pid, target_project_id: vals.target, relationship: vals.rel || 'related'});
+      if (r && r.ok) { toast('Linked', 'ok'); await loadProjects(); if (window._projCurrent && window._projCurrent.id === pid) { window._projCurrent = _projList.find(function(p) { return p.id === pid; }); _renderProjTabContent(); } }
+      else { toast(r && r.error || 'Failed', 'err'); }
+    } catch(e) { toast('Failed', 'err'); }
+  }, {okLabel: 'Link'});
+}
+
+async function _projUnlinkProject(pid, targetId) {
+  try {
+    var r = await api('/api/projects', {action: 'unlink_project', project_id: pid, target_project_id: targetId});
+    if (r && r.ok) { toast('Unlinked', 'ok'); await loadProjects(); if (window._projCurrent && window._projCurrent.id === pid) { window._projCurrent = _projList.find(function(p) { return p.id === pid; }); _renderProjTabContent(); } }
+  } catch(e) { toast('Failed', 'err'); }
+}
+
 async function _projOpen(id) {
   var proj = _projList.find(function(p) { return p.id === id; });
   if (!proj) return;
@@ -15790,7 +15900,7 @@ async function _projOpen(id) {
     sb.style.color = done ? '#22c55e' : '#3b82f6';
   }
   window._projCurrent = proj;
-  _projTab = 'chat';
+  _projTab = 'overview';
   var actions = document.getElementById('proj-detail-actions');
   if (actions) {
     actions.innerHTML = '<button class="btn btn-ghost" style="font-size:12px" onclick="_projKickoff(\'worker\')">Create Worker</button>'
@@ -15914,7 +16024,30 @@ async function _renderProjTabContent() {
       html += '</div>';
     }
     // Add agent
-    html += '<div style="margin-top:8px"><button onclick="_projAssignAgent(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:11px">+ Assign Agent</button></div>';
+    html += '<div style="margin-top:8px"><button onclick="_projAssignAgent(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:11px">+ Assign Worker</button>';
+    html += ' <button onclick="_projKickoff(\x27worker\x27)" class="btn btn-ghost" style="font-size:11px">+ Create New Worker</button></div>';
+
+    // Worker recommendations based on project type
+    var typeInfo = _projTypeInfo(proj.type);
+    if (typeInfo.workers && typeInfo.workers.length) {
+      var existingRoles = [];
+      (proj.assigned_personas || []).forEach(function(pid) {
+        var p = (_personas || []).find(function(x) { return x.id === pid; });
+        if (p && p.role) existingRoles.push(p.role.toLowerCase());
+      });
+      var recs = typeInfo.workers.filter(function(w) {
+        return !existingRoles.some(function(r) { return r.indexOf(w.toLowerCase()) !== -1 || w.toLowerCase().indexOf(r) !== -1; });
+      });
+      if (recs.length) {
+        html += '<div style="margin-top:16px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border));border-radius:10px;background:color-mix(in srgb,var(--accent) 4%,var(--surface))">';
+        html += '<div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Recommended for ' + escHtml(typeInfo.label) + ' Projects</div>';
+        html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+        recs.forEach(function(w) {
+          html += '<button onclick="_projKickoff(\x27worker\x27)" class="btn btn-ghost" style="font-size:11px;padding:4px 10px;border-color:color-mix(in srgb,var(--accent) 30%,var(--border))">' + escHtml(w) + '</button>';
+        });
+        html += '</div></div>';
+      }
+    }
 
   } else if (_projTab === 'deliverables') {
     html += '<div id="proj-artifacts-list" style="font-size:12px;color:var(--text3)">Loading...</div>';
@@ -15923,14 +16056,11 @@ async function _renderProjTabContent() {
     return;
 
   } else if (_projTab === 'overview') {
-    // Project overview: type, objectives, links, milestones, then state
-    var typeLabel = (proj.type === 'autonomous' ? 'Autonomous' : proj.completed_at ? 'Completed' : 'Active');
-    var typeBg = proj.completed_at ? 'var(--success)' : (proj.type === 'autonomous' ? 'var(--accent)' : 'var(--border)');
     html += '<div style="display:flex;flex-direction:column;gap:14px">';
 
-    // Quick info row
+    // Quick info row: type + status + workers
     html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
-    html += '<span style="font-size:10px;padding:3px 8px;border-radius:4px;background:' + typeBg + ';color:#fff;font-weight:600">' + typeLabel + '</span>';
+    html += _projTypeBadge(proj.type) + _projStatusBadge(proj);
     if (proj.assigned_personas && proj.assigned_personas.length) html += '<span style="font-size:11px;color:var(--text3)">' + proj.assigned_personas.length + ' worker' + (proj.assigned_personas.length > 1 ? 's' : '') + '</span>';
     html += '</div>';
 
@@ -15939,7 +16069,7 @@ async function _renderProjTabContent() {
       html += '<div style="font-size:13px;color:var(--text2);line-height:1.6;max-width:640px">' + escHtml(proj.description) + '</div>';
     }
 
-    // Success bar / objectives
+    // Success criteria
     if (proj.success_bar) {
       html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
       html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Success Criteria</div>';
@@ -15947,31 +16077,88 @@ async function _renderProjTabContent() {
       html += '</div>';
     }
 
-    // External links (repo, live URL) — if project has them
-    if (proj.links && (proj.links.repo || proj.links.live_url || proj.links.docs || (proj.links.custom && proj.links.custom.length))) {
-      html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
-      html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Links</div>';
-      html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
-      if (proj.links.repo) html += '<a href="' + escHtml(proj.links.repo) + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Repository</a>';
-      if (proj.links.live_url) html += '<a href="' + escHtml(proj.links.live_url) + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Live Site</a>';
-      if (proj.links.docs) html += '<a href="' + escHtml(proj.links.docs) + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Docs</a>';
-      (proj.links.custom || []).forEach(function(lk) { html += '<a href="' + escHtml(lk.url || '') + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">' + escHtml(lk.label || 'Link') + '</a>'; });
-      html += '</div></div>';
+    // Milestones
+    var milestones = proj.milestones || [];
+    html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+    html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Milestones</div>';
+    html += '<button onclick="_projAddMilestone(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Add</button>';
+    html += '</div>';
+    if (milestones.length) {
+      var msDone = milestones.filter(function(m) { return m.done; }).length;
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="flex:1;height:4px;border-radius:2px;background:var(--border)"><div style="height:100%;border-radius:2px;background:var(--accent);width:' + (milestones.length ? Math.round(msDone/milestones.length*100) : 0) + '%"></div></div><span style="font-size:10px;color:var(--text3)">' + msDone + '/' + milestones.length + '</span></div>';
+      milestones.forEach(function(m, i) {
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0">';
+        html += '<input type="checkbox" ' + (m.done ? 'checked' : '') + ' onchange="_projToggleMilestone(\x27' + proj.id + '\x27,' + i + ')" style="margin:0;cursor:pointer">';
+        html += '<span style="font-size:12px;color:' + (m.done ? 'var(--text3)' : 'var(--text)') + ';' + (m.done ? 'text-decoration:line-through;' : '') + 'flex:1">' + escHtml(m.name) + '</span>';
+        if (m.due) html += '<span style="font-size:10px;color:var(--text3)">' + escHtml(m.due) + '</span>';
+        html += '<button onclick="_projRemoveMilestone(\x27' + proj.id + '\x27,' + i + ')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:0 2px" title="Remove">&times;</button>';
+        html += '</div>';
+      });
+    } else {
+      html += '<div style="font-size:11px;color:var(--text3)">No milestones yet</div>';
     }
+    html += '</div>';
+
+    // External links
+    var links = proj.links || {};
+    var hasLinks = links.repo || links.live_url || links.docs || (links.custom && links.custom.length);
+    html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+    html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Links</div>';
+    html += '<button onclick="_projAddLink(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Add</button>';
+    html += '</div>';
+    if (hasLinks) {
+      html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+      if (links.repo) html += '<a href="' + escHtml(links.repo) + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Repository</a>';
+      if (links.live_url) html += '<a href="' + escHtml(links.live_url) + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Live Site</a>';
+      if (links.docs) html += '<a href="' + escHtml(links.docs) + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Docs</a>';
+      (links.custom || []).forEach(function(lk) { html += '<a href="' + escHtml(lk.url || '') + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">' + escHtml(lk.label || 'Link') + '</a>'; });
+      html += '</div>';
+    } else {
+      html += '<div style="font-size:11px;color:var(--text3)">No links added</div>';
+    }
+    html += '</div>';
 
     // Linked projects
-    if (proj.linked_projects && proj.linked_projects.length) {
-      html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
-      html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Linked Projects</div>';
+    var linkedProjs = proj.linked_projects || [];
+    html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+    html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Linked Projects</div>';
+    html += '<button onclick="_projLinkProject(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Link</button>';
+    html += '</div>';
+    if (linkedProjs.length) {
       html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
-      proj.linked_projects.forEach(function(lp) {
+      linkedProjs.forEach(function(lp) {
         var linked = _projList.find(function(p) { return p.id === lp.project_id; });
         var linkName = linked ? linked.name : lp.project_id.slice(0,8);
         var relLabel = lp.relationship === 'depends_on' ? 'depends on' : lp.relationship === 'feeds_into' ? 'feeds into' : 'related';
         html += '<button onclick="_projOpen(\x27' + escHtml(lp.project_id) + '\x27)" class="btn btn-ghost" style="font-size:11px;padding:4px 10px">' + escHtml(relLabel) + ': ' + escHtml(linkName) + '</button>';
+        html += '<button onclick="_projUnlinkProject(\x27' + proj.id + '\x27,\x27' + escHtml(lp.project_id) + '\x27)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:0" title="Unlink">&times;</button>';
       });
-      html += '</div></div>';
+      html += '</div>';
+    } else {
+      html += '<div style="font-size:11px;color:var(--text3)">No linked projects</div>';
     }
+    html += '</div>';
+
+    // Lifecycle actions
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:4px">';
+    var curStatus = proj.status || (proj.completed_at ? 'completed' : 'active');
+    if (curStatus === 'active') {
+      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27completed\x27)" class="btn btn-ghost" style="font-size:11px">Mark Complete</button>';
+      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27paused\x27)" class="btn btn-ghost" style="font-size:11px">Pause</button>';
+      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27archived\x27)" class="btn btn-ghost" style="font-size:11px;color:var(--text3)">Archive</button>';
+    } else if (curStatus === 'completed') {
+      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27active\x27)" class="btn btn-ghost" style="font-size:11px">Reopen</button>';
+      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27archived\x27)" class="btn btn-ghost" style="font-size:11px;color:var(--text3)">Archive</button>';
+    } else if (curStatus === 'paused') {
+      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27active\x27)" class="btn btn-ghost" style="font-size:11px">Resume</button>';
+      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27archived\x27)" class="btn btn-ghost" style="font-size:11px;color:var(--text3)">Archive</button>';
+    } else {
+      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27active\x27)" class="btn btn-ghost" style="font-size:11px">Reopen</button>';
+    }
+    html += '</div>';
 
     // State section (notes, directives) — loaded async
     html += '<div id="proj-state-view" style="font-size:12px;color:var(--text3)">Loading state...</div>';
@@ -15988,8 +16175,10 @@ async function _renderProjTabContent() {
     html += '<textarea id="proj-edit-desc" rows="3" style="width:100%;font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);resize:vertical">' + escHtml(proj.description || '') + '</textarea></div>';
     html += '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Type</label>';
     html += '<select id="proj-edit-type" style="font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)">';
-    html += '<option value="manual"' + (proj.type !== 'autonomous' ? ' selected' : '') + '>Manual</option>';
-    html += '<option value="autonomous"' + (proj.type === 'autonomous' ? ' selected' : '') + '>Autonomous</option>';
+    ['website','app','presentation','research','content','design','ops','custom'].forEach(function(t) {
+      var info = _PROJECT_TYPES[t] || {};
+      html += '<option value="' + t + '"' + (proj.type === t ? ' selected' : '') + '>' + (info.label || t) + '</option>';
+    });
     html += '</select></div>';
     html += '<div style="display:flex;gap:8px;margin-top:8px">';
     html += '<button onclick="_projSave(\x27' + proj.id + '\x27)" class="btn btn-primary" style="font-size:12px">Save</button>';
@@ -17892,7 +18081,8 @@ function _pdRecommendedWorkerSkills(role, brief) {
 }
 
 function _pdProjectModeLabel(mode) {
-  return mode === 'autonomous' ? 'Autonomous lane' : 'Manual lane';
+  var info = (typeof _PROJECT_TYPES !== 'undefined') ? _PROJECT_TYPES[mode] : null;
+  return info ? info.label : (mode || 'Custom');
 }
 
 function _pdNameFromRole(role) {
@@ -17989,9 +18179,9 @@ function _pdCreationPrompt(flow) {
     return 'Approval required. Reply `Approve` to create this worker, or tell Porter what to change.';
   }
   if (flow.stage === 0) return 'What should the new project be called? Keep it to the clean project name only.';
-  if (flow.stage === 1) return 'Describe the project objective in one or two sentences.';
-  if (flow.stage === 2) return 'Define the success bar. What has to be true before Porter should consider this project well-formed?';
-  if (flow.stage === 3) return 'Should this be a manual project or an autonomous project?';
+  if (flow.stage === 1) return 'What type of project is this?\n\nOptions: **website** · **app** · **presentation** · **research** · **content** · **design** · **ops** · **custom**';
+  if (flow.stage === 2) return 'Describe the project objective in one or two sentences.';
+  if (flow.stage === 3) return 'Define the success criteria. What has to be true for this project to be done?';
   return 'Approval required. Reply `Approve` to create this project, or tell Porter what to change.';
 }
 
@@ -18009,12 +18199,14 @@ function _pdCreationProposal(flow) {
       + 'Approval boundary: create one worker and attach it to the selected project only.\n\n'
       + 'Reply `Approve` to create this worker, or tell Porter what to change.';
   }
+  var typeInfo = _PROJECT_TYPES[draft.type] || _PROJECT_TYPES['custom'];
   return 'Proposed project:\n'
     + 'Name: ' + (draft.name || 'New Project') + '\n'
-    + 'Mode: ' + _pdProjectModeLabel(draft.type) + '\n'
+    + 'Type: ' + (typeInfo.label || 'Custom') + '\n'
     + 'Objective: ' + (draft.description || 'No description yet') + '\n'
-    + 'Success bar: ' + (draft.success_bar || 'No success bar defined yet') + '\n'
-    + 'Approval boundary: create one project with this scope and autonomy level.\n\n'
+    + 'Success criteria: ' + (draft.success_bar || 'Not defined yet') + '\n'
+    + (typeInfo.workers.length ? 'Recommended workers: ' + typeInfo.workers.join(', ') + '\n' : '')
+    + 'Approval boundary: create one project with this scope.\n\n'
     + 'Reply `Approve` to create this project, or tell Porter what to change.';
 }
 
@@ -18168,15 +18360,24 @@ async function _pdHandleCreationReply(p, state, text) {
       flow.stage = 1;
       state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
     } else if (flow.stage === 1) {
-      draft.description = text;
+      var typeMap = {website:1, app:1, presentation:1, research:1, content:1, design:1, ops:1, operations:1, custom:1, software:1};
+      var parsed = lower.replace(/[^a-z]/g, '');
+      if (parsed === 'operations') parsed = 'ops';
+      if (parsed === 'software') parsed = 'app';
+      if (!typeMap[parsed]) {
+        state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: 'Pick one: website, app, presentation, research, content, design, ops, or custom.', meta: 'guided creation' });
+        _pdChatRender(p.id);
+        return true;
+      }
+      draft.type = parsed;
       flow.stage = 2;
       state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
     } else if (flow.stage === 2) {
-      draft.success_bar = text.trim();
+      draft.description = text;
       flow.stage = 3;
       state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
     } else if (flow.stage === 3) {
-      draft.type = /auto|autonomous/i.test(lower) ? 'autonomous' : 'manual';
+      draft.success_bar = text.trim();
       flow.stage = 4;
       state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationProposal(flow), meta: 'proposal' });
     }
@@ -25136,6 +25337,12 @@ function _porterPrompt(title, fields, onOk, opts) {
       fieldsHtml += '<textarea class="settings-input _pp-field" data-name="' + f.name + '" placeholder="' + (f.placeholder || '') + '" style="width:100%;font-size:12px;padding:6px 10px;min-height:60px;resize:vertical;box-sizing:border-box">' + escHtml(f.value || '') + '</textarea>';
     } else if (f.type === 'color') {
       fieldsHtml += '<input class="settings-input _pp-field" data-name="' + f.name + '" type="color" value="' + (f.value || '#6366f1') + '" style="width:48px;height:32px;padding:2px;cursor:pointer">';
+    } else if (f.type === 'select' && f.options) {
+      fieldsHtml += '<select class="settings-input _pp-field" data-name="' + f.name + '" style="width:100%;font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);box-sizing:border-box">';
+      f.options.forEach(function(opt) {
+        fieldsHtml += '<option value="' + escHtml(opt.value || '') + '"' + (opt.value === f.value ? ' selected' : '') + '>' + escHtml(opt.label || opt.value || '') + '</option>';
+      });
+      fieldsHtml += '</select>';
     } else {
       fieldsHtml += '<input class="settings-input _pp-field" data-name="' + f.name + '" value="' + escHtml(f.value || '') + '" placeholder="' + (f.placeholder || '') + '" style="width:100%;font-size:12px;padding:6px 10px;box-sizing:border-box">';
     }
@@ -37364,7 +37571,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.20"})
+            self.reply_json({"v": "0.31.21"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37526,7 +37733,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.20"
+                health["porter_version"] = "0.31.21"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -38978,7 +39185,12 @@ class Handler(BaseHTTPRequestHandler):
             result = []
             for p in projects:
                 wp = AGENT_WORKSPACE_DIR / "projects" / str(p.get("id", ""))
-                result.append({**p, "type": p.get("type", "manual"),
+                result.append({**p, "type": p.get("type", "custom"),
+                    "status": p.get("status", "active"),
+                    "links": p.get("links", {}),
+                    "milestones": p.get("milestones", []),
+                    "linked_projects": p.get("linked_projects", []),
+                    "objectives": p.get("objectives", []),
                     "workspace_path": str(wp), "workspace_exists": wp.exists(),
                     "tokens_used": p.get("tokens_used", 0),
                     "time_spent_mins": p.get("time_spent_mins", 0),
@@ -39470,7 +39682,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.20'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.21'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43348,8 +43560,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 if not name:
                     self.reply_json({"ok": False, "error": "name required"}); return
                 pid  = str(uuid.uuid4())
-                ptype = str(data.get("type", "manual")).strip()
-                if ptype not in ("manual", "autonomous"): ptype = "manual"
+                ptype = str(data.get("type", "custom")).strip()
+                if ptype not in ("website", "app", "presentation", "research", "content", "design", "ops", "custom"): ptype = "custom"
                 proj = {
                     "id": pid,
                     "name": name,
@@ -43477,7 +43689,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                         _state_add_project_note(pid, "summary", proj["description"], source="human", created_by="operator")
                 if "type" in data:
                     t = str(data["type"]).strip()
-                    if t in ("manual", "autonomous"): proj["type"] = t
+                    if t in ("website", "app", "presentation", "research", "content", "design", "ops", "custom"): proj["type"] = t
                 if "success_bar" in data:
                     proj["success_bar"] = str(data.get("success_bar", "")).strip()
                     if proj["success_bar"]:
@@ -43520,6 +43732,168 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 mlog.emit("info", "project", "project.update", f"Updated project: {pid}", project_id=pid)
                 self.reply_json({"ok": True, "project": proj})
 
+            elif action == "set_status":
+                pid = str(data.get("project_id", "")).strip()
+                status = str(data.get("status", "")).strip()
+                if status not in ("active", "paused", "completed", "archived"):
+                    self.reply_json({"ok": False, "error": "Invalid status"}); return
+                proj = None
+                for p in _config.get("projects", []):
+                    if p.get("id") == pid:
+                        proj = p; break
+                if not proj:
+                    self.reply_json({"ok": False, "error": "project not found"}); return
+                proj["status"] = status
+                if status == "completed":
+                    proj["completed_at"] = time.time()
+                elif status == "active":
+                    proj.pop("completed_at", None)
+                proj["updated_at"] = time.time()
+                save_config(_config)
+                _state_add_project_note(pid, "decision", f"Project status changed to {status}.", source="system", created_by="porter")
+                _emit_event("project:updated", {"id": pid, "status": status})
+                mlog.emit("info", "project", "project.set_status", f"Status → {status} for {pid}", project_id=pid)
+                self.reply_json({"ok": True, "status": status})
+
+            elif action == "add_milestone":
+                pid = str(data.get("project_id", "")).strip()
+                name = str(data.get("name", "")).strip()
+                due = str(data.get("due", "")).strip()
+                if not name:
+                    self.reply_json({"ok": False, "error": "name required"}); return
+                proj = None
+                for p in _config.get("projects", []):
+                    if p.get("id") == pid:
+                        proj = p; break
+                if not proj:
+                    self.reply_json({"ok": False, "error": "project not found"}); return
+                ms = proj.setdefault("milestones", [])
+                ms.append({"name": name, "done": False, "due": due or None})
+                proj["updated_at"] = time.time()
+                save_config(_config)
+                self.reply_json({"ok": True, "milestones": ms})
+
+            elif action == "toggle_milestone":
+                pid = str(data.get("project_id", "")).strip()
+                idx = int(data.get("index", -1))
+                proj = None
+                for p in _config.get("projects", []):
+                    if p.get("id") == pid:
+                        proj = p; break
+                if not proj:
+                    self.reply_json({"ok": False, "error": "project not found"}); return
+                ms = proj.get("milestones", [])
+                if idx < 0 or idx >= len(ms):
+                    self.reply_json({"ok": False, "error": "invalid index"}); return
+                ms[idx]["done"] = not ms[idx].get("done", False)
+                proj["updated_at"] = time.time()
+                save_config(_config)
+                self.reply_json({"ok": True, "milestones": ms})
+
+            elif action == "remove_milestone":
+                pid = str(data.get("project_id", "")).strip()
+                idx = int(data.get("index", -1))
+                proj = None
+                for p in _config.get("projects", []):
+                    if p.get("id") == pid:
+                        proj = p; break
+                if not proj:
+                    self.reply_json({"ok": False, "error": "project not found"}); return
+                ms = proj.get("milestones", [])
+                if idx < 0 or idx >= len(ms):
+                    self.reply_json({"ok": False, "error": "invalid index"}); return
+                ms.pop(idx)
+                proj["updated_at"] = time.time()
+                save_config(_config)
+                self.reply_json({"ok": True, "milestones": ms})
+
+            elif action == "add_link":
+                pid = str(data.get("project_id", "")).strip()
+                kind = str(data.get("kind", "custom")).strip()
+                url = str(data.get("url", "")).strip()
+                label = str(data.get("label", "")).strip()
+                if not url:
+                    self.reply_json({"ok": False, "error": "url required"}); return
+                proj = None
+                for p in _config.get("projects", []):
+                    if p.get("id") == pid:
+                        proj = p; break
+                if not proj:
+                    self.reply_json({"ok": False, "error": "project not found"}); return
+                links = proj.setdefault("links", {})
+                if kind in ("repo", "live_url", "docs"):
+                    links[kind] = url
+                else:
+                    custom = links.setdefault("custom", [])
+                    custom.append({"label": label or "Link", "url": url})
+                proj["updated_at"] = time.time()
+                save_config(_config)
+                self.reply_json({"ok": True, "links": links})
+
+            elif action == "remove_link":
+                pid = str(data.get("project_id", "")).strip()
+                kind = str(data.get("kind", "")).strip()
+                idx = data.get("index")
+                proj = None
+                for p in _config.get("projects", []):
+                    if p.get("id") == pid:
+                        proj = p; break
+                if not proj:
+                    self.reply_json({"ok": False, "error": "project not found"}); return
+                links = proj.get("links", {})
+                if kind in ("repo", "live_url", "docs"):
+                    links.pop(kind, None)
+                elif kind == "custom" and idx is not None:
+                    custom = links.get("custom", [])
+                    try:
+                        custom.pop(int(idx))
+                    except (IndexError, ValueError):
+                        pass
+                proj["updated_at"] = time.time()
+                save_config(_config)
+                self.reply_json({"ok": True, "links": links})
+
+            elif action == "link_project":
+                pid = str(data.get("project_id", "")).strip()
+                target = str(data.get("target_project_id", "")).strip()
+                rel = str(data.get("relationship", "related")).strip()
+                if rel not in ("depends_on", "feeds_into", "related"):
+                    rel = "related"
+                if not pid or not target:
+                    self.reply_json({"ok": False, "error": "project_id and target_project_id required"}); return
+                if pid == target:
+                    self.reply_json({"ok": False, "error": "Cannot link a project to itself"}); return
+                proj = None
+                for p in _config.get("projects", []):
+                    if p.get("id") == pid:
+                        proj = p; break
+                if not proj:
+                    self.reply_json({"ok": False, "error": "project not found"}); return
+                if not any(p.get("id") == target for p in _config.get("projects", [])):
+                    self.reply_json({"ok": False, "error": "target project not found"}); return
+                linked = proj.setdefault("linked_projects", [])
+                if any(lp.get("project_id") == target for lp in linked):
+                    self.reply_json({"ok": False, "error": "already linked"}); return
+                linked.append({"project_id": target, "relationship": rel})
+                proj["updated_at"] = time.time()
+                save_config(_config)
+                _state_add_project_note(pid, "decision", f"Linked to project {target} ({rel}).", source="system", created_by="porter")
+                self.reply_json({"ok": True, "linked_projects": linked})
+
+            elif action == "unlink_project":
+                pid = str(data.get("project_id", "")).strip()
+                target = str(data.get("target_project_id", "")).strip()
+                proj = None
+                for p in _config.get("projects", []):
+                    if p.get("id") == pid:
+                        proj = p; break
+                if not proj:
+                    self.reply_json({"ok": False, "error": "project not found"}); return
+                linked = proj.get("linked_projects", [])
+                proj["linked_projects"] = [lp for lp in linked if lp.get("project_id") != target]
+                proj["updated_at"] = time.time()
+                save_config(_config)
+                self.reply_json({"ok": True, "linked_projects": proj["linked_projects"]})
 
             else:
                 self.reply_json({"ok": False, "error": f"Unknown action: {action}"})
@@ -44560,7 +44934,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.20 ready (localhost only)")
+    print(f"\n  Porter v0.31.21 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
