@@ -9609,7 +9609,9 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-beat {
   height:10px; border-radius:3px 3px 1px 1px; background:var(--bg2);
   border:1px solid color-mix(in srgb,var(--border) 80%, transparent);
-  transition:height .18s ease, background .18s ease, border-color .18s ease;
+  transition:height .18s ease, background .18s ease, border-color .18s ease, transform .18s ease, opacity .18s ease;
+  animation:mcBeatIdle 1.8s ease-in-out infinite;
+  animation-delay:calc(var(--beat-index, 0) * 45ms);
 }
 .mc-beat.info { background:color-mix(in srgb,#38bdf8 42%, var(--bg2)); }
 .mc-beat.route { background:color-mix(in srgb,#f59e0b 44%, var(--bg2)); }
@@ -9617,6 +9619,18 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-beat.task { background:color-mix(in srgb,#60a5fa 44%, var(--bg2)); }
 .mc-beat.chat { background:color-mix(in srgb,#8b5cf6 42%, var(--bg2)); }
 .mc-beat.issue { background:color-mix(in srgb,#ef4444 55%, var(--bg2)); }
+@keyframes mcBeatIdle {
+  0%,100% { opacity:.72; transform:translateY(0); }
+  50% { opacity:1; transform:translateY(-1px); }
+}
+.mc-heartbeat-live .mc-beat {
+  animation:mcBeatLive 1.05s ease-in-out infinite;
+}
+@keyframes mcBeatLive {
+  0%,100% { opacity:.84; transform:translateY(0) scaleY(1); }
+  35% { opacity:1; transform:translateY(-1px) scaleY(1.08); }
+  65% { opacity:.9; transform:translateY(0) scaleY(.96); }
+}
 .mc-now-strip { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
 .mc-card {
   background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:8px 10px;
@@ -9640,24 +9654,25 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-timeline { background:var(--bg); border:1px solid var(--border); border-radius:8px; overflow-y:auto; min-height:0; height:100%; }
 .mc-row {
   display:grid; grid-template-columns:30px 84px minmax(0,1fr) auto; align-items:center; gap:8px;
-  padding:6px 10px; font-size:11px; border-bottom:1px solid var(--border);
-  cursor:pointer; transition:background .1s, border-color .15s;
+  padding:4px 9px; font-size:11px; border-bottom:1px solid var(--border);
+  cursor:pointer; transition:background .1s, border-color .15s, transform .12s ease;
 }
-.mc-row:hover { background:var(--bg2); }
+.mc-row:hover { background:var(--bg2); transform:translateX(1px); }
 .mc-row.selected { background:color-mix(in srgb,var(--accent) 10%, transparent); border-left:2px solid var(--accent); padding-left:10px; }
-.mc-row-main { min-width:0; display:flex; align-items:center; gap:8px; }
-.mc-row-topline { display:flex; align-items:center; gap:8px; min-width:0; flex:1; }
+.mc-row-main { min-width:0; display:flex; align-items:center; gap:6px; }
+.mc-row-topline { display:flex; align-items:center; gap:6px; min-width:0; flex:1; }
 .mc-row-activity {
-  font-size:9px; font-weight:700; letter-spacing:.45px; text-transform:uppercase;
+  font-size:8px; font-weight:700; letter-spacing:.42px; text-transform:uppercase;
   color:var(--text2);
 }
 .mc-msg {
   color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  font-size:11px; font-weight:600; flex:1; min-width:0;
+  font-size:10px; font-weight:600; flex:1; min-width:0;
 }
 .mc-rail {
-  width:22px; min-height:22px; border-radius:7px; display:flex; align-items:center; justify-content:center;
-  background:var(--bg2); border:1px solid var(--border); font-size:11px; font-weight:700;
+  width:18px; min-height:18px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+  background:var(--bg2); border:1px solid var(--border); font-size:9px; font-weight:700;
+  box-shadow:0 0 0 0 transparent;
 }
 .mc-rail.route { color:#f59e0b; border-color:color-mix(in srgb,#f59e0b 45%, var(--border)); background:color-mix(in srgb,#f59e0b 16%, var(--bg2)); }
 .mc-rail.run { color:#22c55e; border-color:color-mix(in srgb,#22c55e 45%, var(--border)); background:color-mix(in srgb,#22c55e 15%, var(--bg2)); }
@@ -9666,19 +9681,25 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-rail.issue { color:#ef4444; border-color:color-mix(in srgb,#ef4444 45%, var(--border)); background:color-mix(in srgb,#ef4444 15%, var(--bg2)); }
 .mc-rail.file { color:#06b6d4; border-color:color-mix(in srgb,#06b6d4 45%, var(--border)); background:color-mix(in srgb,#06b6d4 14%, var(--bg2)); }
 .mc-rail.system { color:var(--text2); }
-.mc-ts { color:var(--text3); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:9px; }
-.mc-sev { padding:1px 5px; border-radius:3px; font-size:9px; font-weight:600; text-transform:uppercase; text-align:center; }
+.mc-row.fresh .mc-rail { animation:mcRailFlash 1.2s ease-out; }
+@keyframes mcRailFlash {
+  0% { box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 0%, transparent); }
+  35% { box-shadow:0 0 0 5px color-mix(in srgb,var(--accent) 18%, transparent); }
+  100% { box-shadow:0 0 0 0 transparent; }
+}
+.mc-ts { color:var(--text3); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:8px; }
+.mc-sev { padding:1px 4px; border-radius:3px; font-size:8px; font-weight:600; text-transform:uppercase; text-align:center; }
 .mc-sev.debug { background:var(--bg2); color:var(--text3); }
 .mc-sev.info { background:#3b82f620; color:#60a5fa; }
 .mc-sev.warn { background:#f59e0b20; color:#f59e0b; }
 .mc-sev.error { background:#ef444420; color:#ef4444; }
 .mc-sev.critical { background:#ef4444; color:#fff; }
 .mc-chips { display:flex; gap:3px; }
-.mc-chip { font-size:9px; padding:1px 4px; border-radius:3px; background:var(--bg2); color:var(--text3); cursor:pointer; white-space:nowrap; }
+.mc-chip { font-size:8px; padding:1px 4px; border-radius:3px; background:var(--bg2); color:var(--text3); cursor:pointer; white-space:nowrap; }
 .mc-chip:hover { color:var(--accent); }
-.mc-row-right { display:flex; align-items:center; gap:6px; justify-content:flex-end; min-width:72px; }
-.mc-dur { font-size:9px; color:var(--text3); text-align:right; font-family:monospace; }
-.mc-status-icon { font-size:12px; text-align:center; min-width:14px; }
+.mc-row-right { display:flex; align-items:center; gap:5px; justify-content:flex-end; min-width:60px; }
+.mc-dur { font-size:8px; color:var(--text3); text-align:right; font-family:monospace; }
+.mc-status-icon { font-size:10px; text-align:center; min-width:12px; }
 
 .mc-drawer-backdrop {
   position:absolute; inset:0; background:rgba(4,8,18,.34); opacity:0; pointer-events:none;
@@ -21154,6 +21175,7 @@ function mcRenderTimeline(events) {
     return;
   }
   var html = '';
+  var nowTs = Date.now() / 1000;
   for (var i = 0; i < events.length; i++) {
     var e = events[i];
     var ts = new Date(e.ts * 1000);
@@ -21172,7 +21194,8 @@ function mcRenderTimeline(events) {
     if (e.status === 'ok') statusIcon = '<span style="color:#10b981">&#10003;</span>';
     else if (e.status === 'error') statusIcon = '<span style="color:var(--err)">&#10007;</span>';
     else if (e.status === 'running') statusIcon = '<span style="color:#60a5fa">&#9679;</span>';
-    html += '<div class="mc-row' + sel + '" onclick="mcSelectEvent(\'' + escHtml(e.event_id) + '\')" data-eid="' + escHtml(e.event_id) + '">';
+    var fresh = (nowTs - (e.ts || 0)) < 8 ? ' fresh' : '';
+    html += '<div class="mc-row' + sel + fresh + '" onclick="mcSelectEvent(\'' + escHtml(e.event_id) + '\')" data-eid="' + escHtml(e.event_id) + '">';
     html += '<span class="mc-rail ' + kind.key + '">' + kind.glyph + '</span>';
     html += '<span class="mc-ts">' + tStr + '</span>';
     html += '<div class="mc-row-main"><div class="mc-row-topline"><span class="mc-sev ' + sev + '">' + sev + '</span><span class="mc-row-activity">' + kind.label + '</span><span class="mc-msg">' + escHtml(mcEventTitle(e)) + '</span><span class="mc-chips">' + chips + '</span></div></div>';
@@ -21262,7 +21285,7 @@ function mcRenderHeartbeat(events) {
   for (var i = 0; i < recent.length; i++) {
     var e = recent[i];
     if (!e) {
-      html += '<span class="mc-beat"></span>';
+      html += '<span class="mc-beat" style="--beat-index:' + i + '"></span>';
       continue;
     }
     liveCount += 1;
@@ -21278,9 +21301,10 @@ function mcRenderHeartbeat(events) {
     else if (kind.key === 'route') height = 22;
     else if (kind.key === 'chat') height = 18;
     else if (sev === 'warn') height += 6;
-    html += '<span class="mc-beat ' + kind.key + '" style="height:' + height + 'px" title="' + escHtml(mcEventTitle(e)) + '"></span>';
+    html += '<span class="mc-beat ' + kind.key + '" style="height:' + height + 'px;--beat-index:' + i + '" title="' + escHtml(mcEventTitle(e)) + '"></span>';
   }
   host.innerHTML = html;
+  host.className = 'mc-heartbeat' + (liveCount ? ' mc-heartbeat-live' : '');
   var sub = document.getElementById('mc-heart-sub');
   if (sub) {
     if (!liveCount) sub.textContent = 'Quiet right now';
