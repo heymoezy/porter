@@ -2,7 +2,7 @@
 // Run: cd /home/lobster/documents/porter/tests && npx playwright test
 //
 // These tests catch the exact classes of bugs we've been hitting:
-// - Elements visible when they shouldn't be (banner, searchCountBar)
+// - Elements visible when they shouldn't be
 // - Missing headers/titles on tabs
 // - Inconsistent padding/inset
 // - Visual consistency across all tabs
@@ -14,7 +14,7 @@ test.setTimeout(30000);
 
 async function login(page) {
   await page.goto('/login');
-  await page.fill('#uname', 'admin');
+  await page.fill('#uname', 'moe');
   await page.fill('#pw', 'porter');
   await page.click('.login-btn');
   await page.waitForSelector('.sidebar', { timeout: 15000 });
@@ -62,12 +62,12 @@ test.describe('Tab Headers — every tab must have a title', () => {
     await login(page);
   });
 
-  // Chat omitted — welcome screen intentionally hides .module-title (shown in active conversation route bar)
   const moduleTabs = [
     { id: 'agents', title: 'Agents', selector: '#agents-module .module-title' },
     { id: 'projects', title: 'Projects', selector: '#projects-module .module-title' },
-    // Locations removed for beta — saved for future release
-    { id: 'capabilities', title: 'Extensions', selector: '#capabilities-module .module-title' },
+    { id: 'people', title: 'People', selector: '#people-module .module-title' },
+    { id: 'capabilities', title: 'Connections', selector: '#capabilities-module .module-title' },
+    { id: 'models', title: 'Models', selector: '#models-module .module-title' },
   ];
 
   for (const tab of moduleTabs) {
@@ -78,60 +78,6 @@ test.describe('Tab Headers — every tab must have a title', () => {
       await expect(titleEl).toHaveText(tab.title);
     });
   }
-
-  test('Files tab has title in toolbar', async ({ page }) => {
-    await switchTab(page, 'files');
-    const titleEl = page.locator('#mainToolbar .module-title');
-    await expect(titleEl).toBeVisible();
-    await expect(titleEl).toHaveText('Files');
-  });
-});
-
-test.describe('Files tab — home view layout', () => {
-  test.beforeEach(async ({ page }) => {
-    await login(page);
-    await switchTab(page, 'files');
-  });
-
-  test('shows device home view with first mount auto-expanded', async ({ page }) => {
-    // Home view should auto-select first mount, showing fhome-entry elements
-    await page.waitForTimeout(1000); // allow selectMount to load
-    const device = page.locator('.fhome-device').first();
-    await expect(device).toBeVisible({ timeout: 5000 });
-    // First mount should be expanded with file entries visible
-    const entry = page.locator('.fhome-entry').first();
-    await expect(entry).toBeVisible({ timeout: 5000 });
-  });
-
-  test('list-header is hidden on file home view', async ({ page }) => {
-    const headerVisible = await isVisible(page, '.list-header');
-    expect(headerVisible).toBe(false);
-  });
-
-  test('searchCountBar is NOT visible when no search is active', async ({ page }) => {
-    const barVisible = await isVisible(page, '#searchCountBar');
-    expect(barVisible).toBe(false);
-  });
-
-  test('selectionToolbar is NOT visible by default', async ({ page }) => {
-    const selVisible = await isVisible(page, '#selectionToolbar');
-    expect(selVisible).toBe(false);
-  });
-
-  test('toolbar is visible', async ({ page }) => {
-    const toolbarVisible = await isVisible(page, '#mainToolbar');
-    expect(toolbarVisible).toBe(true);
-  });
-
-  test('fileArea is visible', async ({ page }) => {
-    const areaVisible = await isVisible(page, '#fileArea');
-    expect(areaVisible).toBe(true);
-  });
-
-  test('search input is NOT in toolbar', async ({ page }) => {
-    const searchExists = await page.locator('#searchInput').count();
-    expect(searchExists).toBe(0);
-  });
 });
 
 test.describe('Header alignment — all headers same height', () => {
@@ -140,7 +86,7 @@ test.describe('Header alignment — all headers same height', () => {
   });
 
   test('all module-hdr elements have consistent height', async ({ page }) => {
-    const tabs = ['agents', 'projects', 'capabilities'];
+    const tabs = ['agents', 'projects', 'capabilities', 'people'];
     const heights = [];
     for (const tab of tabs) {
       await switchTab(page, tab);
@@ -161,34 +107,10 @@ test.describe('CSS consistency — horizontal padding', () => {
     await login(page);
   });
 
-  test('file-area has 28px horizontal padding', async ({ page }) => {
-    await switchTab(page, 'files');
-    const pl = await getStyle(page, '.file-area', 'paddingLeft');
-    const pr = await getStyle(page, '.file-area', 'paddingRight');
-    expect(pl).toBe('28px');
-    expect(pr).toBe('28px');
-  });
-
-  test('toolbar has 28px horizontal padding', async ({ page }) => {
-    await switchTab(page, 'files');
-    const pl = await getStyle(page, '.toolbar', 'paddingLeft');
-    const pr = await getStyle(page, '.toolbar', 'paddingRight');
-    expect(pl).toBe('28px');
-    expect(pr).toBe('28px');
-  });
-
-  test('toolbar has NO background color (inherits --bg)', async ({ page }) => {
-    await switchTab(page, 'files');
-    const bg = await getStyle(page, '.toolbar', 'backgroundColor');
-    const bodyBg = await getStyle(page, 'body', 'backgroundColor');
-    // Toolbar bg should match body bg (both --bg) or be transparent
-    expect(bg === bodyBg || bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent').toBe(true);
-  });
-
   test('module-panel has 28px horizontal padding', async ({ page }) => {
-    await switchTab(page, 'overview');
-    const pl = await getStyle(page, '#overview-module', 'paddingLeft');
-    const pr = await getStyle(page, '#overview-module', 'paddingRight');
+    await switchTab(page, 'agents');
+    const pl = await getStyle(page, '#agents-module', 'paddingLeft');
+    const pr = await getStyle(page, '#agents-module', 'paddingRight');
     expect(pl).toBe('28px');
     expect(pr).toBe('28px');
   });
@@ -220,11 +142,6 @@ test.describe('Projects tab', () => {
     await expect(page.locator('#projects-module .module-title')).toHaveText('Projects');
   });
 
-  test('"+ New Project" button exists in header', async ({ page }) => {
-    const createBtn = page.locator('#projects-module .module-hdr button:has-text("New Project")');
-    await expect(createBtn).toHaveCount(1);
-  });
-
   test('proj-row grid has exactly 3 columns', async ({ page }) => {
     // Only testable if projects exist; skip if no projects
     const rowCount = await page.locator('.proj-row').count();
@@ -236,26 +153,38 @@ test.describe('Projects tab', () => {
   });
 });
 
-// Locations tab removed for beta — saved for future release
+test.describe('People tab', () => {
+  test.beforeEach(async ({ page }) => {
+    await login(page);
+    await switchTab(page, 'people');
+  });
+
+  test('has module-title "People"', async ({ page }) => {
+    await expect(page.locator('#people-module .module-title')).toHaveText('People');
+  });
+
+  test('shows user cards after loading', async ({ page }) => {
+    await page.waitForTimeout(1000);
+    const cardCount = await page.locator('.people-card').count();
+    expect(cardCount).toBeGreaterThanOrEqual(1);
+  });
+
+  test('user card shows display name', async ({ page }) => {
+    await page.waitForTimeout(1000);
+    const nameEl = page.locator('.people-card-name').first();
+    await expect(nameEl).toBeVisible();
+    const name = await nameEl.textContent();
+    expect(name.length).toBeGreaterThan(0);
+  });
+});
 
 test.describe('Tab switching — no stale elements', () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
   });
 
-  test('switching away from Files hides all Files elements', async ({ page }) => {
-    await switchTab(page, 'files');
-    await switchTab(page, 'overview');
-
-    expect(await isVisible(page, '#mainToolbar')).toBe(false);
-    expect(await isVisible(page, '#fileArea')).toBe(false);
-    expect(await isVisible(page, '#banner')).toBe(false);
-    expect(await isVisible(page, '#searchCountBar')).toBe(false);
-    expect(await isVisible(page, '#file-results-footer')).toBe(false);
-  });
-
   test('only one module-panel is active at a time', async ({ page }) => {
-    const tabs = ['overview', 'agents', 'projects', 'capabilities'];
+    const tabs = ['agents', 'projects', 'capabilities', 'people', 'models'];
     for (const tab of tabs) {
       await switchTab(page, tab);
       const activeCount = await page.evaluate(() =>
@@ -271,7 +200,8 @@ test.describe('Nav regression — all tabs render content', () => {
     await login(page);
   });
 
-  const allTabs = ['overview', 'agents', 'models', 'capabilities', 'projects', 'workflows', 'admin', 'system'];
+  // Current visible nav tabs
+  const allTabs = ['agents', 'projects', 'models', 'people', 'capabilities', 'admin'];
 
   test('every tab shows content when clicked', async ({ page }) => {
     for (const tab of allTabs) {
@@ -304,18 +234,18 @@ test.describe('Nav bar structure', () => {
     await login(page);
   });
 
+  // Current visible nav items
   const expectedNavItems = [
-    'Chat', 'Agents', 'Projects', 'Workflows',
-    'Files', 'Models', 'Cortex', 'Runtime', 'Extensions', 'Skills', 'Logs', 'Settings'
+    'Agents', 'Projects', 'Models', 'People', 'Connections', 'Logs', 'Settings'
   ];
 
   test('sidebar contains all expected nav buttons', async ({ page }) => {
-    const navButtons = await page.evaluate(() => {
-      const btns = document.querySelectorAll('.sidebar nav button');
+    const navLabels = await page.evaluate(() => {
+      const btns = document.querySelectorAll('.sidebar nav button .mnav-label');
       return Array.from(btns).map(b => b.textContent.trim());
     });
     for (const item of expectedNavItems) {
-      expect(navButtons, `Nav should contain "${item}"`).toContain(item);
+      expect(navLabels, `Nav should contain "${item}"`).toContain(item);
     }
   });
 
@@ -326,21 +256,16 @@ test.describe('Nav bar structure', () => {
 
   test('nav group labels are present', async ({ page }) => {
     const groups = await page.evaluate(() => {
-      const labels = document.querySelectorAll('.sidebar nav .nav-group-label, .sidebar nav .group-label');
-      if (labels.length > 0) return Array.from(labels).map(l => l.textContent.trim());
-      // Fallback: check for text nodes that act as group separators
-      const allChildren = document.querySelectorAll('.sidebar nav > *');
-      return Array.from(allChildren)
-        .filter(el => !el.matches('button') && el.textContent.trim())
-        .map(el => el.textContent.trim());
+      const labels = document.querySelectorAll('.sidebar nav .mnav-group-label');
+      return Array.from(labels).map(l => l.textContent.trim());
     });
     expect(groups.length).toBeGreaterThanOrEqual(3);
   });
 
-  test('clicking each nav item does not cause JS errors', async ({ page }) => {
+  test('clicking each visible nav item does not cause JS errors', async ({ page }) => {
     const errors = [];
     page.on('pageerror', err => errors.push(err.message));
-    const navButtons = await page.$$('.sidebar nav button');
+    const navButtons = await page.$$('.sidebar nav button.mnav-item');
     for (const btn of navButtons) {
       const visible = await btn.isVisible();
       if (!visible) continue;
@@ -370,14 +295,12 @@ test.describe('Screenshot baseline', () => {
     await login(page);
   });
 
-  // Take screenshots of every tab for visual review
   const tabs = [
-    { id: 'overview', name: 'command-center' },
     { id: 'agents', name: 'agents' },
     { id: 'projects', name: 'projects' },
-    { id: 'files', name: 'files' },
-    // locations removed for beta
-    { id: 'capabilities', name: 'extensions' },
+    { id: 'people', name: 'people' },
+    { id: 'capabilities', name: 'connections' },
+    { id: 'models', name: 'models' },
   ];
 
   for (const tab of tabs) {

@@ -4,13 +4,13 @@
 - **Framework:** Playwright (Node.js)
 - **Run:** `cd /home/lobster/documents/porter/tests && npx playwright test`
 - **Config:** `playwright.config.js` — headless Chromium, base URL `http://127.0.0.1:8877`
-- **Current count:** 38 tests
+- **Current count:** 35 tests
 
 ## Rules
-- All 38 tests must pass before any commit to porter.py
+- All 35 tests must pass before any commit to porter.py
 - Never modify tests to make them pass — fix the source code instead
 - Screenshots go in `tests/screenshots/` — do not commit unless intentionally updating baselines
-- Login creds for tests: `admin` / `porter`
+- Login creds for tests: `moe` / `porter`
 
 ## Test Structure
 - `ui-regression.spec.js` — single test file covering:
@@ -20,11 +20,11 @@
   - Header alignment (consistent heights)
   - CSS consistency (28px padding, no toolbar bg)
   - CSS variables (all --vars defined)
-  - Projects/Locations tab specifics
+  - Projects tab specifics
   - Tab switching (no stale elements, single active panel)
   - Nav regression (all tabs render, no JS errors)
   - Nav bar structure (buttons, groups, version badge)
-  - Screenshot baselines (6 tabs captured)
+  - Screenshot baselines (5 tabs captured)
 
 ## Adding Tests
 - Use `login(page)` helper for auth
