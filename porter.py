@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.30 — Fix project chat buttons + Porter-style model selector"""
+"""Porter v0.31.31 — Guided project UX, / popup chat, editable notes"""
 
 
 import email
@@ -10997,6 +10997,36 @@ body.density-compact .file-name { padding: 6px 0; }
 .chat-ctx-opt.selected { color:var(--accent); font-weight:600; }
 .chat-ctx-opt .ctx-opt-avatar { font-size:14px; }
 .chat-ctx-divider { height:1px; background:var(--border); margin:4px 0; }
+/* ── Porter Popup Chat Overlay ─────────────────────────────── */
+.porter-popup-chat { position:fixed; bottom:20px; right:20px; width:420px; max-width:calc(100vw - 40px); max-height:min(560px, calc(100vh - 60px)); z-index:8000; display:none; flex-direction:column; background:var(--surface); border:1px solid var(--border); border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.04); overflow:hidden; }
+.porter-popup-chat.open { display:flex; animation:popupSlideIn .22s ease-out; }
+@keyframes popupSlideIn { from { opacity:0; transform:translateY(16px) scale(.96); } to { opacity:1; transform:translateY(0) scale(1); } }
+.porter-popup-hdr { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); background:color-mix(in srgb, var(--accent) 4%, var(--surface)); flex-shrink:0; }
+.porter-popup-hdr-title { font-size:12px; font-weight:600; color:var(--text); flex:1; }
+.porter-popup-hdr-ctx { font-size:10px; color:var(--text3); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.porter-popup-close { background:none; border:none; color:var(--text3); cursor:pointer; font-size:16px; padding:2px 6px; border-radius:4px; }
+.porter-popup-close:hover { color:var(--text); background:var(--raised); }
+.porter-popup-thread { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:10px 12px; }
+.porter-popup-thread:empty::before { content:'Ask Porter anything. This chat stays on your current context.'; display:block; text-align:center; color:var(--text3); font-size:11px; padding:30px 12px; }
+.porter-popup-composer { display:flex; gap:6px; padding:8px 12px; border-top:1px solid var(--border); align-items:flex-end; }
+.porter-popup-input { flex:1; resize:none; border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12px; font-family:inherit; background:var(--bg); color:var(--text); outline:none; max-height:100px; min-height:36px; }
+.porter-popup-input:focus { border-color:var(--accent); }
+.porter-popup-send { background:var(--accent); color:#000; border:none; border-radius:8px; padding:8px 14px; font-size:11px; font-weight:600; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+.porter-popup-send:hover { filter:brightness(1.1); }
+.porter-popup-msg { padding:8px 10px; border-radius:10px; font-size:12px; line-height:1.5; white-space:pre-wrap; }
+.porter-popup-msg.user { background:color-mix(in srgb, var(--accent) 10%, var(--surface)); color:var(--text); border:1px solid color-mix(in srgb, var(--accent) 18%, transparent); align-self:flex-end; max-width:85%; }
+.porter-popup-msg.assistant { background:var(--bg); color:var(--text2); border:1px solid var(--border); max-width:90%; }
+.porter-popup-msg.pending { color:var(--text3); font-style:italic; }
+/* ── Guided UX — DO THIS NEXT card ────────────────────────── */
+.proj-next-card { padding:14px 16px; border:1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); border-radius:12px; background:color-mix(in srgb, var(--accent) 6%, var(--surface)); margin-bottom:4px; }
+.proj-next-label { font-size:9px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
+.proj-next-suggestion { font-size:12px; color:var(--text); line-height:1.5; margin-bottom:10px; }
+.proj-next-actions { display:flex; gap:6px; flex-wrap:wrap; }
+.proj-next-btn { font-size:11px; padding:5px 12px; border-radius:8px; border:1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); background:color-mix(in srgb, var(--accent) 10%, var(--bg)); color:var(--accent); cursor:pointer; font-weight:500; transition:all .15s; }
+.proj-next-btn:hover { background:var(--accent); color:#000; border-color:var(--accent); }
+.proj-guide-empty { padding:24px 16px; text-align:center; border:1px dashed var(--border); border-radius:12px; background:var(--surface); }
+.proj-guide-empty-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:6px; }
+.proj-guide-empty-hint { font-size:11px; color:var(--text3); margin-bottom:12px; line-height:1.5; }
 /* Legacy persona bar — replaced */
 .chat-persona-bar { display:none; }
 
@@ -11796,7 +11826,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.30</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.31</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12679,6 +12709,18 @@ input[type="number"].settings-input { min-width: 60px; }
 </div>
 
 <!-- toast container -->
+<div id="porter-popup-chat" class="porter-popup-chat">
+  <div class="porter-popup-hdr">
+    <span class="porter-popup-hdr-title">Porter</span>
+    <span class="porter-popup-hdr-ctx" id="popup-chat-ctx"></span>
+    <button class="porter-popup-close" onclick="_popupChatClose()" title="Close (Esc)">&times;</button>
+  </div>
+  <div class="porter-popup-thread" id="popup-chat-thread"></div>
+  <div class="porter-popup-composer">
+    <textarea class="porter-popup-input" id="popup-chat-input" rows="1" placeholder="Ask Porter..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_popupChatSend()}"></textarea>
+    <button class="porter-popup-send" onclick="_popupChatSend()">Send</button>
+  </div>
+</div>
 <div id="toasts"></div>
 
 <!-- dropdown (shared, moved via JS) -->
@@ -12883,6 +12925,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.31', date:'2026-03-12', notes:["Guided project UX: DO THIS NEXT card on overview, smart suggestions based on project state","/ popup chat: floating overlay that stays on current context, no navigation","Editable project notes: edit and delete notes from the overview state section","Workers tab guided empty state with actionable prompts"] },
   { ver:'v0.31.30', date:'2026-03-12', notes:["Fix: Create Worker/Refine Project buttons now work in project chat","Project chat model selector replaced with Porter-style custom dropdown"] },
   { ver:'v0.31.29', date:'2026-03-12', notes:["/ shortcut opens chat from anywhere: project chat if inside a project, main Porter chat otherwise."] },
   { ver:'v0.31.28', date:'2026-03-12', notes:["Fix Porter dancing avatar in project chat: was missing appearance_style on inline persona object."] },
@@ -16313,6 +16356,50 @@ function _projSwitchTab(t) {
   _renderProjTabContent();
 }
 
+function _projNextCard(proj) {
+  var suggestions = [];
+  // Analyze project state and generate prioritized suggestions
+  if (!proj.description) {
+    suggestions.push({ text:'Add a description so Porter and workers know what this project is about.', btn:'Add Description', action:"_projSwitchTab('settings')" });
+  }
+  if (!(proj.milestones && proj.milestones.length)) {
+    suggestions.push({ text:'Break this project into milestones to track progress.', btn:'Add Milestone', action:"_projAddMilestone('" + proj.id + "')" });
+  }
+  if (!(proj.assigned_personas && proj.assigned_personas.length)) {
+    suggestions.push({ text:'Assign a worker to start making progress on this project.', btn:'Assign Worker', action:"_projAssignAgent('" + proj.id + "')", btn2:'Create Worker', action2:"_projKickoff('worker')" });
+  }
+  if (!proj.success_bar) {
+    suggestions.push({ text:'Define what success looks like so Porter can measure progress.', btn:'Set Success Bar', action:"_projSwitchTab('settings')" });
+  }
+  var links = proj.links || {};
+  if (!links.repo && !links.live_url && !links.docs) {
+    suggestions.push({ text:'Link a repo, live URL, or docs for quick access.', btn:'Add Link', action:"_projAddLink('" + proj.id + "')" });
+  }
+  // Check milestones progress
+  var ms = proj.milestones || [];
+  if (ms.length) {
+    var done = ms.filter(function(m) { return m.done; }).length;
+    var pct = Math.round(done / ms.length * 100);
+    if (pct === 100) {
+      suggestions.push({ text:'All milestones complete! Consider marking this project as done.', btn:'Complete Project', action:"_projSetStatus('" + proj.id + "','completed')" });
+    } else {
+      var next = ms.find(function(m) { return !m.done; });
+      if (next) suggestions.push({ text:'Next milestone: ' + (next.name || 'Untitled') + ' (' + pct + '% done)', btn:'Open Chat', action:"_projSwitchTab('chat')" });
+    }
+  }
+  if (!suggestions.length) return '';
+  var s = suggestions[0];
+  var h = '<div class="proj-next-card"><div class="proj-next-label">Do This Next</div>';
+  h += '<div class="proj-next-suggestion">' + escHtml(s.text) + '</div>';
+  h += '<div class="proj-next-actions">';
+  h += '<button class="proj-next-btn" onclick="' + s.action + '">' + escHtml(s.btn) + '</button>';
+  if (s.btn2) h += '<button class="proj-next-btn" onclick="' + s.action2 + '">' + escHtml(s.btn2) + '</button>';
+  // Show remaining count if more than 1 suggestion
+  if (suggestions.length > 1) h += '<span style="font-size:10px;color:var(--text3);margin-left:8px">+' + (suggestions.length - 1) + ' more suggestion' + (suggestions.length > 2 ? 's' : '') + '</span>';
+  h += '</div></div>';
+  return h;
+}
+
 async function _renderProjTabContent() {
   var content = document.getElementById('proj-detail-content');
   if (!content || !window._projCurrent) return;
@@ -16352,7 +16439,7 @@ async function _renderProjTabContent() {
     html += '<div style="display:flex;gap:8px"><span class="model-card-chip dim" style="font-size:10px">' + (proj.assigned_personas || []).length + ' workers</span>';
     html += '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(proj.type === 'autonomous' ? 'Autonomous' : 'Guided') + '</span></div>';
     html += '</div>';
-    html += '<div id="proj-activity-list" style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text3)">Loading...</div>';
+    html += '<div id="proj-activity-list" style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text3)"><div class="loading-indicator"><span class="loading-spinner"></span> Loading activity...</div></div>';
     html += '</div>';
     content.innerHTML = html;
     _projLoadActivity(proj.id);
@@ -16371,7 +16458,7 @@ async function _renderProjTabContent() {
     });
     html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Assigned Agents (' + assigned.length + ')</div>';
     if (!assigned.length) {
-      html += '<div style="padding:16px;text-align:center;color:var(--text3);font-size:12px">No agents assigned</div>';
+      html += '<div class="proj-guide-empty"><div class="proj-guide-empty-title">No workers assigned yet</div><div class="proj-guide-empty-hint">Workers handle the actual tasks. Assign existing agents or ask Porter to create the right specialist for this project.</div><div class="proj-next-actions" style="justify-content:center"><button class="proj-next-btn" onclick="_projAssignAgent(\x27' + proj.id + '\x27)">Assign Worker</button><button class="proj-next-btn" onclick="_projKickoff(\x27worker\x27)">Ask Porter to Create One</button></div></div>';
     } else {
       html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">';
       sortedAssigned.forEach(function(pid) {
@@ -16439,6 +16526,9 @@ async function _renderProjTabContent() {
 
   } else if (_projTab === 'overview') {
     html += '<div style="display:flex;flex-direction:column;gap:10px">';
+
+    // ── DO THIS NEXT — smart suggestion card ──
+    html += _projNextCard(proj);
 
     // Header row: type + status + dates inline
     html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
@@ -17116,7 +17206,7 @@ async function _projLoadState(pid) {
     if (activeNotes.length) {
       html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Project Notes</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">';
       activeNotes.forEach(function(n) {
-        html += '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="model-card-chip dim" style="font-size:10px">' + escHtml(n.note_kind || 'note') + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(_relativeTime(n.created_at || 0)) + '</span></div><div style="font-size:12px;line-height:1.6;color:var(--text)">' + escHtml(n.body || '') + '</div></div>';
+        html += '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="model-card-chip dim" style="font-size:10px">' + escHtml(n.note_kind || 'note') + '</span><div style="margin-left:auto;display:flex;gap:4px;align-items:center"><span style="font-size:10px;color:var(--text3)">' + escHtml(_relativeTime(n.created_at || 0)) + '</span><button onclick="_projEditNote(' + n.id + ',\x27' + escHtml(pid) + '\x27)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:2px 4px" title="Edit">✎</button><button onclick="_projDeleteNote(' + n.id + ',\x27' + escHtml(pid) + '\x27)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:2px 4px" title="Delete">&times;</button></div></div><div style="font-size:12px;line-height:1.6;color:var(--text)">' + escHtml(n.body || '') + '</div></div>';
       });
       html += '</div></section>';
     }
@@ -19070,6 +19160,37 @@ async function _statePromptProjectNote(projectId) {
       toast((res && res.error) || 'Failed to save note', 'err');
     }
   }, {okLabel: 'Save'});
+}
+
+async function _projEditNote(noteId, projectId) {
+  // Fetch current note body to pre-fill
+  try {
+    var payload = await api('/api/projects/' + enc(projectId) + '/state');
+    var notes = (payload && payload.notes) || [];
+    var note = notes.find(function(n) { return n.id === noteId; });
+    if (!note) { toast('Note not found', 'err'); return; }
+    var newBody = await porterPrompt('Edit Note', 'Update this note:', note.body || '', 'Note text...');
+    if (newBody === null || !newBody.trim()) return;
+    var res = await api('/api/projects/' + enc(projectId) + '/state/notes/update', { note_id: noteId, body: newBody.trim() });
+    if (res && res.ok) {
+      toast('Note updated', 'ok');
+      _projLoadState(projectId);
+    } else {
+      toast((res && res.error) || 'Update failed', 'err');
+    }
+  } catch(e) { toast('Failed to edit note', 'err'); }
+}
+
+async function _projDeleteNote(noteId, projectId) {
+  _porterConfirm('Delete Note', 'Remove this note permanently?', async function() {
+    var res = await api('/api/projects/' + enc(projectId) + '/state/notes/delete', { note_id: noteId });
+    if (res && res.ok) {
+      toast('Note deleted', 'ok');
+      _projLoadState(projectId);
+    } else {
+      toast((res && res.error) || 'Delete failed', 'err');
+    }
+  }, {danger: true, okLabel: 'Delete'});
 }
 
 async function _statePromptAgentNote(agentId) {
@@ -31215,6 +31336,114 @@ function toast(msg, type='') {
   setTimeout(() => el.remove(), 3100);
 }
 
+// ── Popup Chat (/ shortcut) ─────────────────────────────────
+var _popupChatMessages = [];
+var _popupChatStreaming = false;
+
+function _popupChatOpen() {
+  var el = document.getElementById('porter-popup-chat');
+  if (!el) return;
+  // Build context label from current location
+  var ctx = '';
+  if (window._projCurrent && _currentModule === 'projects') {
+    ctx = window._projCurrent.name || 'Project';
+    if (_projTab) ctx += ' / ' + _projTab.charAt(0).toUpperCase() + _projTab.slice(1);
+  } else if (_currentModule) {
+    ctx = _currentModule.charAt(0).toUpperCase() + _currentModule.slice(1);
+  }
+  var ctxEl = document.getElementById('popup-chat-ctx');
+  if (ctxEl) ctxEl.textContent = ctx;
+  el.classList.add('open');
+  setTimeout(function() { var inp = document.getElementById('popup-chat-input'); if (inp) inp.focus(); }, 60);
+}
+
+function _popupChatClose() {
+  var el = document.getElementById('porter-popup-chat');
+  if (el) el.classList.remove('open');
+}
+
+function _popupChatRender() {
+  var thread = document.getElementById('popup-chat-thread');
+  if (!thread) return;
+  thread.innerHTML = _popupChatMessages.map(function(m) {
+    if (m.role === 'pending') return '<div class="porter-popup-msg pending">Porter is thinking...</div>';
+    var cls = m.role === 'user' ? 'user' : 'assistant';
+    return '<div class="porter-popup-msg ' + cls + '">' + escHtml(m.content || '') + '</div>';
+  }).join('');
+  thread.scrollTop = thread.scrollHeight;
+}
+
+async function _popupChatSend() {
+  if (_popupChatStreaming) return;
+  var input = document.getElementById('popup-chat-input');
+  if (!input) return;
+  var text = input.value.trim();
+  if (!text) return;
+
+  // Build context-aware prompt
+  var ctxParts = [];
+  if (window._projCurrent && _currentModule === 'projects') {
+    ctxParts.push('Context: User is viewing project "' + (window._projCurrent.name || '') + '" on the ' + (_projTab || 'overview') + ' tab.');
+    if (window._projCurrent.description) ctxParts.push('Project description: ' + window._projCurrent.description);
+  } else {
+    ctxParts.push('Context: User is on the ' + (_currentModule || 'main') + ' tab in Porter.');
+  }
+  var fullPrompt = ctxParts.join('\n') + '\n\nUser: ' + text;
+
+  _popupChatMessages.push({ role: 'user', content: text });
+  _popupChatMessages.push({ role: 'pending', content: '' });
+  input.value = '';
+  _popupChatRender();
+  _popupChatStreaming = true;
+
+  try {
+    var url = '/api/chat/stream?model=auto&prompt=' + encodeURIComponent(fullPrompt) + '&route=general';
+    var es = new EventSource(url);
+    var idx = _popupChatMessages.length - 1;
+    var fullText = '';
+
+    es.onmessage = function(ev) {
+      try {
+        var data = JSON.parse(ev.data);
+        if (data.token) {
+          fullText += data.token;
+          _popupChatMessages[idx] = { role: 'assistant', content: fullText };
+          _popupChatRender();
+        }
+        if (data.done) {
+          if (data.full_text) {
+            _popupChatMessages[idx] = { role: 'assistant', content: data.full_text };
+          } else if (!fullText && data.response) {
+            _popupChatMessages[idx] = { role: 'assistant', content: data.response };
+          }
+          _popupChatRender();
+          es.close();
+          _popupChatStreaming = false;
+        }
+        if (data.error) {
+          _popupChatMessages[idx] = { role: 'assistant', content: 'Error: ' + data.error };
+          _popupChatRender();
+          es.close();
+          _popupChatStreaming = false;
+        }
+      } catch(e) {}
+    };
+    es.onerror = function() {
+      if (_popupChatMessages[idx] && _popupChatMessages[idx].role === 'pending') {
+        _popupChatMessages[idx] = { role: 'assistant', content: fullText || 'Connection lost.' };
+        _popupChatRender();
+      }
+      es.close();
+      _popupChatStreaming = false;
+    };
+  } catch(e) {
+    var lastIdx = _popupChatMessages.length - 1;
+    _popupChatMessages[lastIdx] = { role: 'assistant', content: 'Failed to connect.' };
+    _popupChatRender();
+    _popupChatStreaming = false;
+  }
+}
+
 // ── api helpers ──
 // v0.29.25 — Setup wizard removed (obsolete). Stub for backward compat.
 async function maybeShowWizard() { /* wizard deleted v0.29.25 */ }
@@ -31239,6 +31468,8 @@ document.addEventListener('keydown', function(e) {
 
   // Escape: close overlays
   if (e.key === 'Escape') {
+    var popup = document.getElementById('porter-popup-chat');
+    if (popup && popup.classList.contains('open')) { _popupChatClose(); return; }
     var kb = document.getElementById('kbOverlay');
     if (kb && kb.classList.contains('open')) { kb.classList.remove('open'); return; }
     // Close file viewer
@@ -31250,17 +31481,10 @@ document.addEventListener('keydown', function(e) {
   // Don't intercept when typing in inputs
   if (isInput) return;
 
-  // / — open chat (project chat if in project detail, otherwise Porter chat)
+  // / — open popup chat overlay (stays on current context)
   if (e.key === '/') {
     e.preventDefault();
-    var projDetail = document.getElementById('project-detail-view');
-    if (projDetail && projDetail.style.display !== 'none' && window._projCurrent) {
-      _projSwitchTab('chat');
-      setTimeout(function() { var ci = document.getElementById('proj-chat-input'); if (ci) ci.focus(); }, 80);
-    } else {
-      switchModule('agents');
-      setTimeout(function() { selectPersona('porter-core'); var ci = document.getElementById('pd-chat-input'); if (ci) ci.focus(); }, 100);
-    }
+    _popupChatOpen();
     return;
   }
 
@@ -38025,7 +38249,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.30"})
+            self.reply_json({"v": "0.31.31"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -38187,7 +38411,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.30"
+                health["porter_version"] = "0.31.31"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40138,7 +40362,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.30'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.31'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43260,6 +43484,25 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             mlog.emit("info", "state", "directive.create", f"Created {scope_type} directive", directive_id=new_id, scope_type=scope_type, scope_id=scope_id)
             self.reply_json({"ok": True, "id": new_id})
 
+        elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/state/notes/update"):
+            pid = parsed.path.split("/api/projects/")[1].split("/state/notes/update")[0]
+            note_id = body_data.get("note_id")
+            new_body = body_data.get("body", "").strip()
+            if not note_id or not new_body:
+                return self._json({"ok": False, "error": "note_id and body required"})
+            with _db() as conn:
+                conn.execute("UPDATE project_notes SET body=?, updated_at=strftime('%s','now') WHERE id=? AND project_id=?", (new_body, note_id, pid))
+            return self._json({"ok": True})
+
+        elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/state/notes/delete"):
+            pid = parsed.path.split("/api/projects/")[1].split("/state/notes/delete")[0]
+            note_id = body_data.get("note_id")
+            if not note_id:
+                return self._json({"ok": False, "error": "note_id required"})
+            with _db() as conn:
+                conn.execute("DELETE FROM project_notes WHERE id=? AND project_id=?", (note_id, pid))
+            return self._json({"ok": True})
+
         elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/state/notes"):
             if not self.auth_check(redirect=False): return
             pid = parsed.path[len("/api/projects/"):-len("/state/notes")]
@@ -45481,7 +45724,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.30 ready (localhost only)")
+    print(f"\n  Porter v0.31.31 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
