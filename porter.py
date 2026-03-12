@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.35 — Agent Office: pixel-art virtual office for agents tab"""
+"""Porter v0.31.36 — Agent detail fixes + nav scroll + project coaching"""
 
 
 import email
@@ -11423,7 +11423,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .persona-card-xp-label { font-size:9px; color:var(--text3); margin-top:2px; }
 
 /* v0.29.1 — Full-page Agent Detail View */
-.agent-detail-view { display:flex; flex-direction:column; gap:10px; min-height:0; }
+.agent-detail-view { display:flex; flex-direction:column; gap:10px; min-height:0; height:calc(100vh - 80px); max-height:calc(100vh - 80px); overflow:hidden; }
 .agent-detail-topbar { display:flex; align-items:center; justify-content:flex-end; gap:8px; position:relative; z-index:4; }
 .agent-identity-shell {
   background:
@@ -11452,7 +11452,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .agent-badge { font-size:10px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:var(--bg); color:var(--text2); }
 .agent-detail-tabs { display:inline-flex; align-items:center; gap:6px; align-self:flex-start; border-bottom:none; flex-wrap:wrap; }
 .agent-detail-tabs .pd-tab { padding:8px 16px; border-radius:999px; border:1px solid transparent; }
-.agent-detail-content { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px; min-height:0; }
+.agent-detail-content { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px; min-height:0; flex:1; display:flex; flex-direction:column; overflow:hidden; }
 .project-detail-tabs { display:inline-flex; align-items:center; gap:6px; align-self:flex-start; flex-wrap:wrap; margin-bottom:14px; }
 .project-tab-rail .pd-tab { padding:8px 15px; border-radius:999px; border:1px solid transparent; }
 .project-tab-rail .pd-tab.active { border-color:color-mix(in srgb,var(--accent) 24%, var(--border)); background:color-mix(in srgb,var(--accent) 8%, transparent); }
@@ -11928,7 +11928,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.35</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.36</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -13039,6 +13039,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.36', date:'2026-03-12', notes:["Fix: agent detail chat no longer offscreen — flex-based layout","Fix: office/grid toggle hidden in agent detail view","Fix: nav tabs scroll to top on switch","Agent detail model picker now uses Porter-style dropdown","Enhanced project coaching — context-aware suggestions on every tab"] },
   { ver:'v0.31.35', date:'2026-03-12', notes:["Agent Office: pixel-art virtual office visualization on the Agents tab","View toggle: switch between Grid and Office views","Each agent sits at a pixel desk with their Minecraft portrait and status bubble (idle/working)","Porter gets the corner office with a larger desk"] },
   { ver:'v0.31.34', date:'2026-03-12', notes:["Extensions → Connections: renamed nav + module, new workspace_connections/project_connections/environment_tools DB tables","Project Apps tab: view and manage connected services per project","Phase 1 of Connections refactor (GPT-5.4 architecture recommendation)"] },
   { ver:'v0.31.33', date:'2026-03-12', notes:["Artifacts file browser: file-system style table view with type icons, inline preview, and download actions","Content and artifacts guided empty states with actionable prompts"] },
@@ -15191,8 +15192,12 @@ function switchModule(name) {
   _currentModule = name;
   document.querySelectorAll('.mnav-item').forEach(el =>
     el.classList.toggle('active', el.id === 'mnav-' + name));
-  document.querySelectorAll('.module-panel').forEach(el =>
-    el.classList.toggle('active', el.id === name + '-module' || (name === 'settings' && el.id === 'settingsPanel')));
+  document.querySelectorAll('.module-panel').forEach(el => {
+    var isActive = el.id === name + '-module' || (name === 'settings' && el.id === 'settingsPanel');
+    el.classList.toggle('active', isActive);
+    if (isActive) el.scrollTop = 0;
+  });
+  window.scrollTo(0, 0);
   const isFiles = name === 'files';
   if (isFiles) closeSettings();
   document.body.classList.toggle('files-active', isFiles);
@@ -16477,37 +16482,72 @@ function _projSwitchTab(t) {
   _renderProjTabContent();
 }
 
-function _projNextCard(proj) {
+function _projNextCard(proj, tab) {
+  tab = tab || _projTab || 'overview';
   var suggestions = [];
-  // Analyze project state and generate prioritized suggestions
-  if (!proj.description) {
-    suggestions.push({ text:'Add a description so Porter and workers know what this project is about.', btn:'Add Description', action:"_projSwitchTab('settings')" });
-  }
-  if (!(proj.milestones && proj.milestones.length)) {
-    suggestions.push({ text:'Break this project into milestones to track progress.', btn:'Add Milestone', action:"_projAddMilestone('" + proj.id + "')" });
-  }
-  if (!(proj.assigned_personas && proj.assigned_personas.length)) {
-    suggestions.push({ text:'Assign a worker to start making progress on this project.', btn:'Assign Worker', action:"_projAssignAgent('" + proj.id + "')", btn2:'Create Worker', action2:"_projKickoff('worker')" });
-  }
-  if (!proj.success_bar) {
-    suggestions.push({ text:'Define what success looks like so Porter can measure progress.', btn:'Set Success Bar', action:"_projSwitchTab('settings')" });
-  }
-  var links = proj.links || {};
-  if (!links.repo && !links.live_url && !links.docs) {
-    suggestions.push({ text:'Link a repo, live URL, or docs for quick access.', btn:'Add Link', action:"_projAddLink('" + proj.id + "')" });
-  }
-  // Check milestones progress
+  var pid = proj.id;
   var ms = proj.milestones || [];
-  if (ms.length) {
+  var workers = proj.assigned_personas || [];
+  var links = proj.links || {};
+  var hasDesc = !!proj.description;
+  var hasMs = ms.length > 0;
+  var hasWorkers = workers.length > 0;
+  var hasSuccess = !!proj.success_bar;
+  var hasLinks = !!(links.repo || links.live_url || links.docs);
+
+  // ── Universal suggestions (always relevant) ──
+  if (!hasDesc) suggestions.push({ text:'Add a project description so Porter and workers understand the goal.', btn:'Add Description', action:"_projSwitchTab('settings')", priority:1 });
+  if (!hasSuccess) suggestions.push({ text:'Define what "done" looks like — set success criteria.', btn:'Set Success Bar', action:"_projSwitchTab('settings')", priority:2 });
+
+  // ── Tab-specific suggestions ──
+  if (tab === 'overview' || tab === 'chat') {
+    if (!hasMs) suggestions.push({ text:'Break this into milestones to track progress.', btn:'Add Milestone', action:"_projAddMilestone('" + pid + "')", priority:3 });
+    if (!hasWorkers) suggestions.push({ text:'No workers assigned yet — assign one to start making progress.', btn:'Assign Worker', action:"_projAssignAgent('" + pid + "')", btn2:'Create Worker', action2:"_projKickoff('worker')", priority:3 });
+    if (!hasLinks) suggestions.push({ text:'Link a repo, live URL, or docs for quick access.', btn:'Add Link', action:"_projAddLink('" + pid + "')", priority:5 });
+  }
+
+  if (tab === 'chat') {
+    if (hasWorkers && hasMs) {
+      var nextMs = ms.find(function(m) { return !m.done; });
+      if (nextMs) suggestions.push({ text:'Try asking Porter: "What should we work on next for ' + (nextMs.name || 'the next milestone') + '?"', btn:'Focus Chat', action:"_projChatPrefill('What should we work on next for " + (nextMs.name || 'the next milestone') + "?')", priority:4 });
+    }
+    if (!hasWorkers) suggestions.push({ text:'Ask Porter to create a specialist worker for this project.', btn:'Ask Porter', action:"_projChatPrefill('Create a worker for this project')", priority:3 });
+  }
+
+  if (tab === 'workers') {
+    if (!hasWorkers) suggestions.push({ text:'Every project needs workers. Assign an existing agent or let Porter create one.', btn:'Assign Worker', action:"_projAssignAgent('" + pid + "')", btn2:'Create Worker', action2:"_projKickoff('worker')", priority:1 });
+    if (hasWorkers && workers.length === 1) suggestions.push({ text:'Consider adding more specialists — a reviewer, a researcher, or a QA agent.', btn:'Create Worker', action:"_projKickoff('worker')", priority:4 });
+    if (hasWorkers && !hasMs) suggestions.push({ text:'Workers need milestones to know what to work on.', btn:'Add Milestone', action:"_projAddMilestone('" + pid + "')", priority:3 });
+  }
+
+  if (tab === 'deliverables') {
+    suggestions.push({ text:'Add project files, links, or notes to build up the knowledge base.', btn:'Add Text', action:"_projAddContent('" + pid + "','text')", btn2:'Add Link', action2:"_projAddContent('" + pid + "','link')", priority:4 });
+    if (!hasMs) suggestions.push({ text:'Set milestones so deliverables can be organized by phase.', btn:'Add Milestone', action:"_projAddMilestone('" + pid + "')", priority:5 });
+  }
+
+  if (tab === 'apps') {
+    suggestions.push({ text:'Connect external tools like GitHub, Slack, or Google Drive to this project.', btn:'Connect App', action:"_projConnectApp('" + pid + "')", btn2:'Ask Porter', action2:"_projSwitchTab('chat')", priority:3 });
+  }
+
+  if (tab === 'activity') {
+    if (!hasWorkers) suggestions.push({ text:'No workers means no activity. Assign a worker to get things moving.', btn:'Go to Workers', action:"_projSwitchTab('workers')", priority:2 });
+    if (hasWorkers) suggestions.push({ text:'Check worker progress or ask Porter for a status update.', btn:'Open Chat', action:"_projSwitchTab('chat')", priority:5 });
+  }
+
+  // ── Milestone-based suggestions ──
+  if (hasMs) {
     var done = ms.filter(function(m) { return m.done; }).length;
     var pct = Math.round(done / ms.length * 100);
     if (pct === 100) {
-      suggestions.push({ text:'All milestones complete! Consider marking this project as done.', btn:'Complete Project', action:"_projSetStatus('" + proj.id + "','completed')" });
-    } else {
-      var next = ms.find(function(m) { return !m.done; });
-      if (next) suggestions.push({ text:'Next milestone: ' + (next.name || 'Untitled') + ' (' + pct + '% done)', btn:'Open Chat', action:"_projSwitchTab('chat')" });
+      suggestions.unshift({ text:'All milestones complete! Time to mark this project as done.', btn:'Complete Project', action:"_projSetStatus('" + pid + "','completed')", priority:0 });
+    } else if (pct >= 75) {
+      suggestions.push({ text:'Almost there — ' + pct + '% of milestones done. Push to the finish line.', btn:'Open Chat', action:"_projSwitchTab('chat')", priority:2 });
     }
   }
+
+  // Sort by priority
+  suggestions.sort(function(a, b) { return (a.priority || 10) - (b.priority || 10); });
+
   if (!suggestions.length) return '';
   var s = suggestions[0];
   var h = '<div class="proj-next-card"><div class="proj-next-label">Do This Next</div>';
@@ -16515,10 +16555,58 @@ function _projNextCard(proj) {
   h += '<div class="proj-next-actions">';
   h += '<button class="proj-next-btn" onclick="' + s.action + '">' + escHtml(s.btn) + '</button>';
   if (s.btn2) h += '<button class="proj-next-btn" onclick="' + s.action2 + '">' + escHtml(s.btn2) + '</button>';
-  // Show remaining count if more than 1 suggestion
-  if (suggestions.length > 1) h += '<span style="font-size:10px;color:var(--text3);margin-left:8px">+' + (suggestions.length - 1) + ' more suggestion' + (suggestions.length > 2 ? 's' : '') + '</span>';
+  if (suggestions.length > 1) {
+    h += '<button class="proj-next-btn" style="background:none;border:1px solid var(--border);color:var(--text3)" onclick="_projShowAllSuggestions()">' + (suggestions.length - 1) + ' more</button>';
+  }
   h += '</div></div>';
   return h;
+}
+
+function _projChatPrefill(text) {
+  _projSwitchTab('chat');
+  setTimeout(function() {
+    var input = document.getElementById('proj-chat-input');
+    if (input) { input.value = text; input.focus(); }
+  }, 100);
+}
+
+function _projShowAllSuggestions() {
+  var proj = window._projCurrent;
+  if (!proj) return;
+  var tab = _projTab || 'overview';
+  var card = document.querySelector('.proj-next-card');
+  if (!card) return;
+  // Re-run the logic and show all
+  var el = card;
+  var suggestions = _projAllSuggestions(proj, tab);
+  if (!suggestions.length) return;
+  var h = '<div class="proj-next-label">Suggestions (' + suggestions.length + ')</div>';
+  suggestions.forEach(function(s, i) {
+    h += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;' + (i > 0 ? 'border-top:1px solid var(--border);' : '') + '">';
+    h += '<div style="flex:1;font-size:11px;color:var(--text2)">' + escHtml(s.text) + '</div>';
+    h += '<button class="proj-next-btn" style="flex-shrink:0" onclick="' + s.action + '">' + escHtml(s.btn) + '</button>';
+    h += '</div>';
+  });
+  el.innerHTML = h;
+}
+
+function _projAllSuggestions(proj, tab) {
+  // Lightweight re-run of suggestion logic (shares logic with _projNextCard)
+  var suggestions = [];
+  var pid = proj.id;
+  var ms = proj.milestones || [];
+  var workers = proj.assigned_personas || [];
+  var links = proj.links || {};
+  if (!proj.description) suggestions.push({ text:'Add a project description.', btn:'Add', action:"_projSwitchTab('settings')" });
+  if (!proj.success_bar) suggestions.push({ text:'Define success criteria.', btn:'Set', action:"_projSwitchTab('settings')" });
+  if (!ms.length) suggestions.push({ text:'Break into milestones.', btn:'Add', action:"_projAddMilestone('" + pid + "')" });
+  if (!workers.length) suggestions.push({ text:'Assign a worker.', btn:'Assign', action:"_projAssignAgent('" + pid + "')" });
+  if (!(links.repo || links.live_url || links.docs)) suggestions.push({ text:'Link repo, URL, or docs.', btn:'Add', action:"_projAddLink('" + pid + "')" });
+  if (ms.length) {
+    var done = ms.filter(function(m) { return m.done; }).length;
+    if (done === ms.length) suggestions.push({ text:'All milestones done — mark complete.', btn:'Complete', action:"_projSetStatus('" + pid + "','completed')" });
+  }
+  return suggestions;
 }
 
 async function _renderProjTabContent() {
@@ -16528,7 +16616,8 @@ async function _renderProjTabContent() {
   var html = '';
 
   if (_projTab === 'chat') {
-    html += '<section id="proj-chat-shell" class="pd-chat-shell" style="display:flex;flex-direction:column;height:min(calc(100vh - 330px), 68vh);max-height:calc(100vh - 330px);min-height:420px;padding:4px 2px 2px;background:transparent;box-sizing:border-box">'
+    html += _projNextCard(proj, 'chat');
+    html += '<section id="proj-chat-shell" class="pd-chat-shell" style="display:flex;flex-direction:column;flex:1;min-height:360px;padding:4px 2px 2px;background:transparent;box-sizing:border-box">'
       + '<div id="proj-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 14px"></div>'
       + '<div style="margin-top:8px;padding-top:4px">'
       + '<div class="pd-chat-toolbar">'
@@ -16554,6 +16643,7 @@ async function _renderProjTabContent() {
     return;
 
   } else if (_projTab === 'apps') {
+    html += _projNextCard(proj, 'apps');
     html += '<div style="display:flex;flex-direction:column;gap:12px">';
     html += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">';
     html += '<span style="font-size:13px;font-weight:600;color:var(--text)">Connected Apps</span>';
@@ -16566,6 +16656,7 @@ async function _renderProjTabContent() {
     return;
 
   } else if (_projTab === 'activity') {
+    html += _projNextCard(proj, 'activity');
     html += '<div style="display:flex;flex-direction:column;gap:10px">';
     html += '<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap">';
     html += '<span style="font-size:13px;font-weight:600;color:var(--text)">Recent Activity</span>';
@@ -16579,6 +16670,7 @@ async function _renderProjTabContent() {
     return;
 
   } else if (_projTab === 'workers') {
+    html += _projNextCard(proj, 'workers');
     var assigned = proj.assigned_personas || [];
     // Sort by agent hierarchy (sort_order from Agents tab)
     var sortedAssigned = assigned.slice().sort(function(a, b) {
@@ -16641,6 +16733,7 @@ async function _renderProjTabContent() {
     }
 
   } else if (_projTab === 'deliverables') {
+    html += _projNextCard(proj, 'deliverables');
     html += '<div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap">';
     html += '<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Add Content</span>';
     html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27text\x27)" class="btn btn-ghost" style="font-size:11px">+ Text</button>';
@@ -16662,7 +16755,7 @@ async function _renderProjTabContent() {
     html += '<div style="display:flex;flex-direction:column;gap:10px">';
 
     // ── DO THIS NEXT — smart suggestion card ──
-    html += _projNextCard(proj);
+    html += _projNextCard(proj, 'overview');
 
     // Header row: type + status + dates inline
     html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
@@ -18396,6 +18489,39 @@ function _pdChatSetModel(value) {
   state.modelOverride = value || '';
   var badge = document.getElementById('pd-chat-model-note');
   if (badge) badge.textContent = state.modelOverride ? ('Model: ' + _pdChatModelLabel(state.modelOverride)) : 'Model: Auto';
+}
+
+function _pdChatModelToggle(event) {
+  event.stopPropagation();
+  document.querySelectorAll('.chat-ctx-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
+  var dd = document.getElementById('pd-chat-model-dd');
+  if (!dd) return;
+  var p = window._selectedPersona;
+  var state = p ? _pdChatGetState(p.id) : {};
+  var cur = state.modelOverride || '';
+  var opts = _pdChatModelOptions();
+  var html = '';
+  opts.forEach(function(opt, i) {
+    var sel = (cur === opt.value) ? ' selected' : '';
+    html += '<div class="chat-ctx-opt' + sel + '" onclick="event.stopPropagation();_pdChatModelPick(\x27' + opt.value + '\x27)">'
+      + escHtml(opt.label) + '</div>';
+    if (i === 0) html += '<div class="chat-ctx-divider"></div>';
+  });
+  dd.innerHTML = html;
+  var rect = event.currentTarget.getBoundingClientRect();
+  var spaceBelow = window.innerHeight - rect.bottom;
+  if (spaceBelow < 220) {
+    dd.style.top = ''; dd.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+  } else {
+    dd.style.bottom = ''; dd.style.top = (rect.bottom + 4) + 'px';
+  }
+  dd.style.left = Math.max(4, rect.left) + 'px';
+  dd.classList.add('open');
+}
+
+function _pdChatModelPick(value) {
+  _pdChatSetModel(value);
+  document.querySelectorAll('.chat-ctx-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
 }
 
 function _pdChatEnsureId(persona, state) {
@@ -26681,8 +26807,12 @@ async function selectPersona(id) {
   renderPersonaOrg();
   // v0.29.1 — Show full-page detail, hide grid
   var grid = document.getElementById('agents-grid-view');
+  var office = document.getElementById('agents-office-view');
+  var toggle = document.getElementById('agents-view-toggle');
   var detail = document.getElementById('agent-detail-view');
   if (grid) grid.style.display = 'none';
+  if (office) office.style.display = 'none';
+  if (toggle) toggle.style.display = 'none';
   if (detail) detail.style.display = 'flex';
   // Close other panels
   var re = document.getElementById('rules-editor'); if (re) re.style.display = 'none';
@@ -26768,11 +26898,21 @@ function closePersonaDetail() {
   if (window._pdLiveSseId) { _sseUnsubscribe(window._pdLiveSseId); window._pdLiveSseId = null; }
   _selectedPersonaId = null;
   window._selectedPersona = null;
-  // v0.29.1 — Show grid, hide detail
+  // v0.29.1 — Show grid/office based on mode, hide detail
   var grid = document.getElementById('agents-grid-view');
+  var office = document.getElementById('agents-office-view');
+  var toggle = document.getElementById('agents-view-toggle');
   var detail = document.getElementById('agent-detail-view');
-  if (grid) grid.style.display = '';
   if (detail) detail.style.display = 'none';
+  if (toggle) toggle.style.display = '';
+  if (_agentViewMode === 'office') {
+    if (grid) grid.style.display = 'none';
+    if (office) office.style.display = '';
+    _renderOffice();
+  } else {
+    if (grid) grid.style.display = '';
+    if (office) office.style.display = 'none';
+  }
   renderPersonaOrg();
 }
 
@@ -26786,7 +26926,7 @@ function switchPdTab(tab) {
   if (!p) return;
   if (tab === 'overview') {
     if (!p) { content.innerHTML = '<div class="loading-indicator">Select an agent</div>'; return; }
-    content.innerHTML = '<section id="pd-chat-shell" class="pd-chat-shell" style="display:flex;flex-direction:column;height:min(calc(100vh - 330px), 68vh);max-height:calc(100vh - 330px);min-height:420px;padding:4px 2px 2px;background:transparent;box-sizing:border-box" ondragover="_pdChatDragOver(event)" ondrop="_pdChatDrop(event)" ondragleave="_pdChatDragLeave(event)" ondragenter="_pdChatDragEnter(event)">'
+    content.innerHTML = '<section id="pd-chat-shell" class="pd-chat-shell" style="display:flex;flex-direction:column;flex:1;min-height:0;padding:4px 2px 2px;background:transparent;box-sizing:border-box" ondragover="_pdChatDragOver(event)" ondrop="_pdChatDrop(event)" ondragleave="_pdChatDragLeave(event)" ondragenter="_pdChatDragEnter(event)">'
       + '<div id="pd-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 14px"></div>'
       + '<div style="margin-top:8px;padding-top:4px">'
       + '<div class="pd-chat-toolbar">'
@@ -26795,8 +26935,9 @@ function switchPdTab(tab) {
       + '<button class="pd-chat-toolbtn" onclick="_pdClearChat()">Clear Chat</button>'
       + '<button class="pd-chat-toolbtn" onclick="_pdChooseFiles()">Upload Files</button>'
       + '<div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap">'
-      + '<span id="pd-chat-model-note" style="font-size:11px;color:var(--text3)">Model: Auto</span>'
-      + '<select id="pd-chat-model-sel" onchange="_pdChatSetModel(this.value)" style="font-size:11px;padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:var(--bg);color:var(--text)">' + _pdChatModelOptions().map(function(opt) { return '<option value="' + escHtml(opt.value) + '">' + escHtml(opt.label) + '</option>'; }).join('') + '</select>'
+      + '<div id="pd-chat-model-picker" class="chat-ctx-sel" onclick="_pdChatModelToggle(event)" style="margin-left:auto;font-size:11px;padding:4px 10px">'
+      + '<span class="ctx-label" id="pd-chat-model-note">Model: Auto</span><span class="ctx-arrow">\u25be</span>'
+      + '<div class="chat-ctx-dropdown" id="pd-chat-model-dd"></div></div>'
       + '</div>'
       + '</div>'
       + '<div id="pd-chat-drop-zone" class="pd-chat-drop-zone" style="display:none">Drop files into Porter chat</div>'
@@ -26805,8 +26946,6 @@ function switchPdTab(tab) {
       + '<button class="pd-send-btn" onclick="_pdChatSend()"><span>' + (p.orchestrator_only ? 'Send To Porter' : 'Send To Worker') + '</span><span class="pd-send-icon">↗</span></button>'
       + '</div><input id="pd-chat-file-input" type="file" multiple style="display:none" onchange="_pdChatHandleFileInput(event)"></div></section>';
     var chatState = _pdChatGetState(p.id);
-    var laneSel = document.getElementById('pd-chat-model-sel');
-    if (laneSel) laneSel.value = chatState.modelOverride || '';
     _pdChatSetModel(chatState.modelOverride || '');
     _pdChatRender(p.id);
     setTimeout(_pdSyncComposerLayout, 0);
@@ -38496,7 +38635,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.35"})
+            self.reply_json({"v": "0.31.36"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -38658,7 +38797,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.35"
+                health["porter_version"] = "0.31.36"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40609,7 +40748,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.35'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.36'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -46017,7 +46156,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.35 ready (localhost only)")
+    print(f"\n  Porter v0.31.36 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
