@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.28 — Unify chat model labels and clean project copy"""
+"""Porter v0.31.29 — Unify chat model labels and clean project copy"""
 
 
 import email
@@ -11796,7 +11796,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.28</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.29</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12883,6 +12883,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.29', date:'2026-03-12', notes:["/ shortcut opens chat from anywhere: project chat if inside a project, main Porter chat otherwise."] },
   { ver:'v0.31.28', date:'2026-03-12', notes:["Fix Porter dancing avatar in project chat: was missing appearance_style on inline persona object."] },
   { ver:'v0.31.27', date:'2026-03-12', notes:["Project chat actions: Porter can rename, set type, deadline, milestones, status from chat. Multimodal content: embed text, images, video, audio, documents, links in projects. Upgraded Deliverables tab."] },
   { ver:'v0.31.26', date:'2026-03-12', notes:["Projects-first workspace with card entrance animation. Improved avatar generator: body types (broad/slim), 6 hair styles, 8 skin tones, eyelashes."] },
@@ -31212,6 +31213,20 @@ document.addEventListener('keydown', function(e) {
   // Don't intercept when typing in inputs
   if (isInput) return;
 
+  // / — open chat (project chat if in project detail, otherwise Porter chat)
+  if (e.key === '/') {
+    e.preventDefault();
+    var projDetail = document.getElementById('project-detail-view');
+    if (projDetail && projDetail.style.display !== 'none' && window._projCurrent) {
+      _projSwitchTab('chat');
+      setTimeout(function() { var ci = document.getElementById('proj-chat-input'); if (ci) ci.focus(); }, 80);
+    } else {
+      switchModule('agents');
+      setTimeout(function() { selectPersona('porter-core'); var ci = document.getElementById('pd-chat-input'); if (ci) ci.focus(); }, 100);
+    }
+    return;
+  }
+
   // ? — show shortcut help
   if (e.key === '?') {
     e.preventDefault();
@@ -37973,7 +37988,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.28"})
+            self.reply_json({"v": "0.31.29"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -38135,7 +38150,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.28"
+                health["porter_version"] = "0.31.29"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40086,7 +40101,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.28'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.29'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -45429,7 +45444,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.28 ready (localhost only)")
+    print(f"\n  Porter v0.31.29 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
