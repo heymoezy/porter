@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.26 — Unify chat model labels and clean project copy"""
+"""Porter v0.31.27 — Unify chat model labels and clean project copy"""
 
 
 import email
@@ -592,6 +592,8 @@ def _db_init():
         "ALTER TABLE personas ADD COLUMN appearance_spec TEXT DEFAULT '{}'",
         "ALTER TABLE personas ADD COLUMN skin_asset_path TEXT DEFAULT ''",
         "ALTER TABLE personas ADD COLUMN portrait_asset_path TEXT DEFAULT ''",
+        "CREATE TABLE IF NOT EXISTS project_content (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, content_type TEXT NOT NULL DEFAULT 'text', title TEXT DEFAULT '', body TEXT DEFAULT '', url TEXT DEFAULT '', file_path TEXT DEFAULT '', mime_type TEXT DEFAULT '', file_size INTEGER DEFAULT 0, sort_order INTEGER DEFAULT 0, created_at REAL DEFAULT 0)",
+        "CREATE INDEX IF NOT EXISTS idx_project_content_project ON project_content(project_id, sort_order, created_at DESC)",
     ]:
         try:
             conn.execute(_sql)
@@ -8616,7 +8618,10 @@ def _ensure_porter_persona() -> None:
     _appearance = {
         "style": "minecraft",
         "seed": "porter-core",
-        "palette": "navy-amber",
+        "palette": {"skin": "#f1c27d", "hair": "#1e293b", "shirt": "#1e3a5f", "accent": "#f59e0b", "eyes": "#0f172a"},
+        "body_type": "broad",
+        "hair_style": "crop",
+        "accessory": "",
         "outfit": "operator-jacket",
         "role_marker": "command-badge",
         "vibe": "calm-strategic",
@@ -8799,6 +8804,111 @@ def _general_chat_identity_prompt() -> str:
         "Do not volunteer backend/runtime boilerplate unless the user asks for it or it materially affects the answer.\n"
         "Be clear, concise, truthful, and structured only when it helps.\n\n"
     )
+
+
+def _project_chat_action_prompt(project_id: str) -> str:
+    """Build project context + action instructions for chat."""
+    proj = None
+    for p in _config.get("projects", []):
+        if p.get("id") == project_id:
+            proj = p
+            break
+    if not proj:
+        return ""
+    agents = ", ".join(a for a in (proj.get("assigned_personas") or []))
+    milestones = proj.get("milestones") or []
+    ms_str = ", ".join(m.get("title", "") for m in milestones[:5]) if milestones else "none"
+    ctx = (
+        f"\n--- Project Context ---\n"
+        f"Project: {proj.get('name', 'Untitled')} (id: {project_id})\n"
+        f"Type: {proj.get('type', 'custom')} | Status: {proj.get('status', 'active')}\n"
+        f"Description: {proj.get('description', 'none')}\n"
+        f"Success criteria: {proj.get('success_bar', 'none')}\n"
+        f"Deadline: {proj.get('deadline', 'not set')}\n"
+        f"Workers: {agents or 'none assigned'}\n"
+        f"Milestones: {ms_str}\n\n"
+        "You CAN execute project actions. When the user asks you to change something about this project, "
+        "DO IT by including an action block in your response. Format:\n"
+        '<porter-action>{"action":"ACTION_NAME", ...params}</porter-action>\n\n'
+        "Available actions:\n"
+        '- rename: {"action":"rename","name":"New Name"}\n'
+        '- update_description: {"action":"update_description","description":"..."}\n'
+        '- set_type: {"action":"set_type","type":"website|app|presentation|research|content|design|ops|custom"}\n'
+        '- set_deadline: {"action":"set_deadline","deadline":"YYYY-MM-DD"}\n'
+        '- add_milestone: {"action":"add_milestone","title":"..."}\n'
+        '- set_status: {"action":"set_status","status":"active|paused|completed|archived"}\n'
+        '- add_note: {"action":"add_note","text":"..."}\n\n'
+        "Always include the action block when the user requests a change. Confirm what you did after the action block.\n"
+        "--- End Project Context ---\n\n"
+    )
+    return ctx
+
+
+def _execute_chat_actions(project_id: str, response_text: str) -> list:
+    """Parse and execute <porter-action> blocks from model response."""
+    import json as _json
+    results = []
+    pattern = re.compile(r'<porter-action>(.*?)</porter-action>', re.DOTALL)
+    for match in pattern.finditer(response_text):
+        raw = match.group(1).strip()
+        try:
+            data = _json.loads(raw)
+        except Exception:
+            results.append({"ok": False, "error": f"Invalid JSON: {raw[:100]}"})
+            continue
+        action = str(data.get("action", "")).strip()
+        proj = None
+        for p in _config.get("projects", []):
+            if p.get("id") == project_id:
+                proj = p
+                break
+        if not proj:
+            results.append({"ok": False, "error": "Project not found"})
+            continue
+        try:
+            if action == "rename" and data.get("name"):
+                proj["name"] = _normalize_project_name(str(data["name"]).strip())
+                save_config(_config)
+                results.append({"ok": True, "action": "rename", "name": proj["name"]})
+            elif action == "update_description" and "description" in data:
+                proj["description"] = str(data["description"]).strip()
+                save_config(_config)
+                results.append({"ok": True, "action": "update_description"})
+            elif action == "set_type" and data.get("type"):
+                t = str(data["type"]).strip()
+                valid = ("website", "app", "presentation", "research", "content", "design", "ops", "custom")
+                if t in valid:
+                    proj["type"] = t
+                    save_config(_config)
+                    results.append({"ok": True, "action": "set_type", "type": t})
+                else:
+                    results.append({"ok": False, "error": f"Invalid type: {t}"})
+            elif action == "set_deadline" and data.get("deadline"):
+                proj["deadline"] = str(data["deadline"]).strip()
+                save_config(_config)
+                results.append({"ok": True, "action": "set_deadline", "deadline": proj["deadline"]})
+            elif action == "add_milestone" and data.get("title"):
+                proj.setdefault("milestones", []).append({"title": str(data["title"]).strip(), "done": False})
+                save_config(_config)
+                results.append({"ok": True, "action": "add_milestone", "title": data["title"]})
+            elif action == "set_status" and data.get("status"):
+                s = str(data["status"]).strip()
+                if s in ("active", "paused", "completed", "archived"):
+                    proj["status"] = s
+                    if s == "completed":
+                        proj["completed_at"] = __import__("time").time()
+                    save_config(_config)
+                    results.append({"ok": True, "action": "set_status", "status": s})
+                else:
+                    results.append({"ok": False, "error": f"Invalid status: {s}"})
+            elif action == "add_note" and data.get("text"):
+                _state_add_project_note(project_id, "note", str(data["text"]).strip(), source="porter", created_by="porter")
+                results.append({"ok": True, "action": "add_note"})
+            else:
+                results.append({"ok": False, "error": f"Unknown action: {action}"})
+        except Exception as e:
+            results.append({"ok": False, "error": str(e)})
+    return results
 
 
 def _requested_chat_model_id(message: str, current_model: str = "") -> str:
@@ -11686,7 +11796,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.26</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.27</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12773,6 +12883,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.27', date:'2026-03-12', notes:["Project chat actions: Porter can rename, set type, deadline, milestones, status from chat. Multimodal content: embed text, images, video, audio, documents, links in projects. Upgraded Deliverables tab."] },
   { ver:'v0.31.26', date:'2026-03-12', notes:["Projects-first workspace with card entrance animation. Improved avatar generator: body types (broad/slim), 6 hair styles, 8 skin tones, eyelashes."] },
   { ver:'v0.31.25', date:'2026-03-12', notes:["Smaller agent cards: portraits, names, roles all scaled down for a tighter grid."] },
   { ver:'v0.31.24', date:'2026-03-12', notes:["Fix project cards grid: cards now display side by side instead of stacking vertically."] },
@@ -16031,6 +16142,118 @@ async function _projUploadFile(pid) {
   input.click();
 }
 
+async function _projUploadMedia(pid, ctype) {
+  var accept = '';
+  if (ctype === 'image') accept = 'image/*';
+  else if (ctype === 'video') accept = 'video/*';
+  else if (ctype === 'audio') accept = 'audio/*';
+  else if (ctype === 'document') accept = '.pdf,.doc,.docx,.txt,.md,.csv,.xlsx';
+  var input = document.createElement('input');
+  input.type = 'file';
+  if (accept) input.accept = accept;
+  input.onchange = async function() {
+    if (!input.files || !input.files.length) return;
+    var file = input.files[0];
+    var fd = new FormData();
+    fd.append('file', file);
+    fd.append('root', 'documents');
+    fd.append('path', 'porter/workspace/projects/' + pid + '/artifacts');
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', '/upload', false);
+      xhr.send(fd);
+      if (xhr.status === 200) {
+        var dlUrl = '/download?root=documents&path=' + encodeURIComponent('porter/workspace/projects/' + pid + '/artifacts/' + file.name) + '&inline=1';
+        var r = await api('/api/projects', {action:'add_content', project_id:pid, content_type:ctype, title:file.name, url:dlUrl, file_path:file.name, mime_type:file.type, file_size:file.size});
+        if (r && r.ok) { toast('Added ' + ctype, 'ok'); _projLoadContent(pid); _projLoadArtifacts(pid); }
+        else toast('Save failed', 'err');
+      } else { toast('Upload failed', 'err'); }
+    } catch(e) { toast('Upload failed', 'err'); }
+  };
+  input.click();
+}
+
+async function _projAddContent(pid, ctype) {
+  if (ctype === 'text') {
+    var title = await porterPrompt('Add Text', 'Title (optional):');
+    if (title === null) return;
+    var body = await porterPrompt('Add Text', 'Content:', '', 'textarea');
+    if (body === null || !body.trim()) return;
+    var r = await api('/api/projects', {action:'add_content', project_id:pid, content_type:'text', title:title.trim(), body:body.trim()});
+    if (r && r.ok) { toast('Text added', 'ok'); _projLoadContent(pid); }
+  } else if (ctype === 'link') {
+    var url = await porterPrompt('Add Link', 'URL:');
+    if (!url || !url.trim()) return;
+    var title = await porterPrompt('Add Link', 'Title (optional):');
+    var r = await api('/api/projects', {action:'add_content', project_id:pid, content_type:'link', title:(title||'').trim(), url:url.trim()});
+    if (r && r.ok) { toast('Link added', 'ok'); _projLoadContent(pid); }
+  }
+}
+
+async function _projRemoveContent(pid, cid) {
+  var r = await api('/api/projects', {action:'remove_content', content_id:cid});
+  if (r && r.ok) { toast('Removed', 'ok'); _projLoadContent(pid); }
+}
+
+async function _projReloadList() {
+  try {
+    var d = await api('/api/projects');
+    if (d && d.projects) { _projList = d.projects; _renderProjList(); }
+    if (window._projCurrent) {
+      var updated = (d.projects || []).find(function(p) { return p.id === window._projCurrent.id; });
+      if (updated) {
+        window._projCurrent = updated;
+        var nameEl = document.getElementById('proj-detail-name');
+        if (nameEl) nameEl.textContent = updated.name || 'Untitled';
+      }
+    }
+  } catch(e) {}
+}
+
+async function _projLoadContent(pid) {
+  var el = document.getElementById('proj-content-list');
+  if (!el) return;
+  var d = await api('/api/projects', {action:'get_content', project_id:pid});
+  if (!d || !d.ok) { el.innerHTML = ''; return; }
+  var items = d.content || [];
+  if (!items.length) { el.innerHTML = '<div style="color:var(--text3);padding:12px;text-align:center;font-size:11px">No content yet. Use the buttons above to add text, links, images, video, audio, or documents.</div>'; return; }
+  var html = '<div style="display:flex;flex-direction:column;gap:10px">';
+  items.forEach(function(c) {
+    html += '<div style="border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden;position:relative">';
+    html += '<button onclick="event.stopPropagation();_projRemoveContent(\x27' + pid + '\x27,\x27' + c.id + '\x27)" style="position:absolute;top:6px;right:8px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;z-index:2" title="Remove">&times;</button>';
+    if (c.content_type === 'text') {
+      if (c.title) html += '<div style="padding:10px 12px 0;font-size:12px;font-weight:600;color:var(--text)">' + escHtml(c.title) + '</div>';
+      html += '<div style="padding:10px 12px;font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.5">' + escHtml(c.body || '') + '</div>';
+    } else if (c.content_type === 'image') {
+      var imgUrl = c.url || c.file_path;
+      html += '<div style="background:var(--bg);display:flex;align-items:center;justify-content:center;max-height:300px;overflow:hidden">';
+      html += '<img src="' + escHtml(imgUrl) + '" alt="' + escHtml(c.title || '') + '" style="max-width:100%;max-height:300px;object-fit:contain;display:block">';
+      html += '</div>';
+      if (c.title) html += '<div style="padding:8px 12px;font-size:11px;color:var(--text3)">' + escHtml(c.title) + '</div>';
+    } else if (c.content_type === 'video') {
+      html += '<video controls preload="metadata" style="width:100%;max-height:300px;background:#000"><source src="' + escHtml(c.url || c.file_path || '') + '"></video>';
+      if (c.title) html += '<div style="padding:8px 12px;font-size:11px;color:var(--text3)">' + escHtml(c.title) + '</div>';
+    } else if (c.content_type === 'audio') {
+      html += '<div style="padding:12px"><audio controls preload="metadata" style="width:100%"><source src="' + escHtml(c.url || c.file_path || '') + '"></audio></div>';
+      if (c.title) html += '<div style="padding:0 12px 8px;font-size:11px;color:var(--text3)">' + escHtml(c.title) + '</div>';
+    } else if (c.content_type === 'document') {
+      var docUrl = c.url || c.file_path || '';
+      if (docUrl.match(/\.pdf/i)) {
+        html += '<div style="height:200px;background:var(--bg)"><iframe src="' + escHtml(docUrl) + '" style="width:100%;height:100%;border:none"></iframe></div>';
+      }
+      html += '<div style="padding:10px 12px;font-size:12px"><a href="' + escHtml(docUrl) + '" target="_blank" style="color:var(--accent);text-decoration:none">' + escHtml(c.title || c.file_path || 'Document') + '</a></div>';
+    } else if (c.content_type === 'link') {
+      html += '<div style="padding:10px 12px"><a href="' + escHtml(c.url || '') + '" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-size:12px">' + escHtml(c.title || c.url || 'Link') + '</a>';
+      if (c.title && c.url) html += '<div style="font-size:10px;color:var(--text3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(c.url) + '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+
 async function _projOpen(id) {
   var proj = _projList.find(function(p) { return p.id === id; });
   if (!proj) return;
@@ -16196,12 +16419,19 @@ async function _renderProjTabContent() {
     }
 
   } else if (_projTab === 'deliverables') {
-    html += '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">';
-    html += '<button onclick="_projUploadFile(\x27' + proj.id + '\x27)" class="btn btn-primary" style="font-size:11px">Upload File</button>';
-    html += '<span style="font-size:11px;color:var(--text3)">Drop files into project artifacts folder</span>';
+    html += '<div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap">';
+    html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27text\x27)" class="btn btn-ghost" style="font-size:11px">+ Text</button>';
+    html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27link\x27)" class="btn btn-ghost" style="font-size:11px">+ Link</button>';
+    html += '<button onclick="_projUploadFile(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:11px">+ Upload</button>';
+    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27image\x27)" class="btn btn-ghost" style="font-size:11px">+ Image</button>';
+    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27video\x27)" class="btn btn-ghost" style="font-size:11px">+ Video</button>';
+    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27audio\x27)" class="btn btn-ghost" style="font-size:11px">+ Audio</button>';
+    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27document\x27)" class="btn btn-ghost" style="font-size:11px">+ Document</button>';
     html += '</div>';
-    html += '<div id="proj-artifacts-list" style="font-size:12px;color:var(--text3)">Loading...</div>';
+    html += '<div id="proj-content-list" style="font-size:12px;color:var(--text3)">Loading...</div>';
+    html += '<div id="proj-artifacts-list" style="font-size:12px;color:var(--text3);margin-top:14px"></div>';
     content.innerHTML = html;
+    _projLoadContent(proj.id);
     _projLoadArtifacts(proj.id);
     return;
 
@@ -16590,6 +16820,7 @@ async function _projChatSend() {
           if (!flushTimer) flushTimer = setTimeout(function() { flushBuffered(false); }, 45);
           return;
         }
+        if (data.actions_executed) { _projReloadList(); }
         if (data.done) {
           if (data.runtime_label && state.messages[idx]) state.messages[idx].meta = data.runtime_label;
           flushBuffered(true);
@@ -37741,7 +37972,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.26"})
+            self.reply_json({"v": "0.31.27"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37903,7 +38134,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.26"
+                health["porter_version"] = "0.31.27"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -39854,7 +40085,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.26'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.27'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -39947,8 +40178,11 @@ class Handler(BaseHTTPRequestHandler):
 
             # Porter context: tell models they're operating within Porter
             _persona_name_param = persona_name
+            _stream_project_id = qs.get("project_id", [""])[0].strip()
             if str(_persona_name_param or "").strip().lower() == "porter":
                 prompt = _porter_chat_identity_prompt() + prompt
+                if _stream_project_id:
+                    prompt = _project_chat_action_prompt(_stream_project_id) + prompt
             elif not _persona_name_param:
                 # General chat (no persona) — inject Porter awareness
                 _porter_ctx = _general_chat_identity_prompt()
@@ -40314,6 +40548,18 @@ class Handler(BaseHTTPRequestHandler):
                 _chat_dur = int((__import__("time").time() - _chat_stream_start) * 1000)
                 mlog.emit("info", "chat", "chat.stream.complete", f"Chat done: {model_id} ({_chat_dur}ms)",
                           model=model_id, duration_ms=_chat_dur, response_chars=len(full_response), ttft_ms=_chat_first_token_ms)
+
+                # Execute project chat actions from model response
+                _action_project = qs.get("project_id", [""])[0].strip()
+                if _action_project and full_response and '<porter-action>' in full_response:
+                    _action_results = _execute_chat_actions(_action_project, full_response)
+                    if _action_results:
+                        try:
+                            self.wfile.write(f"data: {json.dumps({'actions_executed': _action_results})}\n\n".encode())
+                            self.wfile.flush()
+                            log.info("Chat actions executed: %s", _action_results)
+                        except Exception:
+                            pass
 
                 # Auto-save to chat history if chat_id provided
                 if chat_id and full_response:
@@ -44083,6 +44329,66 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 save_config(_config)
                 self.reply_json({"ok": True, "linked_projects": proj["linked_projects"]})
 
+            elif action == "add_content":
+                pid = str(data.get("project_id", "")).strip()
+                if not pid or not any(p.get("id") == pid for p in _config.get("projects", [])):
+                    self.reply_json({"ok": False, "error": "project not found"}, 404); return
+                ctype = str(data.get("content_type", "text")).strip()
+                if ctype not in ("text", "image", "video", "audio", "document", "link"):
+                    self.reply_json({"ok": False, "error": "invalid content_type"}, 400); return
+                cid = str(uuid.uuid4())
+                title = str(data.get("title", "")).strip()
+                body = str(data.get("body", "")).strip()
+                url = str(data.get("url", "")).strip()
+                file_path = str(data.get("file_path", "")).strip()
+                mime = str(data.get("mime_type", "")).strip()
+                fsize = int(data.get("file_size", 0) or 0)
+                now = time.time()
+                conn = _db_conn()
+                conn.execute(
+                    "INSERT INTO project_content (id, project_id, content_type, title, body, url, file_path, mime_type, file_size, sort_order, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (cid, pid, ctype, title, body, url, file_path, mime, fsize, int(now), now)
+                )
+                conn.commit(); conn.close()
+                self.reply_json({"ok": True, "content_id": cid})
+
+            elif action == "remove_content":
+                cid = str(data.get("content_id", "")).strip()
+                if not cid:
+                    self.reply_json({"ok": False, "error": "content_id required"}, 400); return
+                conn = _db_conn()
+                conn.execute("DELETE FROM project_content WHERE id=?", (cid,))
+                conn.commit(); conn.close()
+                self.reply_json({"ok": True})
+
+            elif action == "update_content":
+                cid = str(data.get("content_id", "")).strip()
+                if not cid:
+                    self.reply_json({"ok": False, "error": "content_id required"}, 400); return
+                sets, vals = [], []
+                for f in ("title", "body", "url"):
+                    if f in data:
+                        sets.append(f"{f}=?"); vals.append(str(data[f]))
+                if not sets:
+                    self.reply_json({"ok": False, "error": "nothing to update"}, 400); return
+                vals.append(cid)
+                conn = _db_conn()
+                conn.execute(f"UPDATE project_content SET {', '.join(sets)} WHERE id=?", vals)
+                conn.commit(); conn.close()
+                self.reply_json({"ok": True})
+
+            elif action == "get_content":
+                pid = str(data.get("project_id", "")).strip()
+                if not pid:
+                    self.reply_json({"ok": False, "error": "project_id required"}, 400); return
+                conn = _db_conn()
+                rows = conn.execute("SELECT id, project_id, content_type, title, body, url, file_path, mime_type, file_size, sort_order, created_at FROM project_content WHERE project_id=? ORDER BY sort_order, created_at", (pid,)).fetchall()
+                conn.close()
+                items = []
+                for r in rows:
+                    items.append({"id": r[0], "project_id": r[1], "content_type": r[2], "title": r[3], "body": r[4], "url": r[5], "file_path": r[6], "mime_type": r[7], "file_size": r[8], "sort_order": r[9], "created_at": r[10]})
+                self.reply_json({"ok": True, "content": items})
+
             else:
                 self.reply_json({"ok": False, "error": f"Unknown action: {action}"})
 
@@ -45122,7 +45428,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.26 ready (localhost only)")
+    print(f"\n  Porter v0.31.27 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
