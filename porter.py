@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.22 — Unify chat model labels and clean project copy"""
+"""Porter v0.31.23 — Unify chat model labels and clean project copy"""
 
 
 import email
@@ -11673,7 +11673,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.22</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.23</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12760,6 +12760,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.23', date:'2026-03-12', notes:["Compact overview: empty sections hidden, description/criteria inline, actions in one row. Drag-and-drop project card reordering. Reorder API action."] },
   { ver:'v0.31.22', date:'2026-03-12', notes:["Visual project cards with pixel art covers, delete button in project header, timeline section (start date/deadline/plan), file upload to deliverables with inline previews for images/video/audio/PDF, YMC Capital notes cleaned up"] },
   { ver:'v0.31.21', date:'2026-03-12', notes:["Projects V2 Phase 5: 8 project types (website/app/presentation/research/content/design/ops/custom), project lifecycle (active/paused/completed/archived), milestones with progress tracking, external links (repo/live/docs/custom), linked projects (depends_on/feeds_into/related), worker recommendations per type, compact project cards with type+status badges, creation flow now asks project type"] },
   { ver:'v0.31.20', date:'2026-03-12', notes:["Launchpad renamed to First Mission throughout, Deliverables tab cleaned up: removed scaffold doc listing, simplified summary, focused on actual project outputs only"] },
@@ -15835,6 +15836,23 @@ function _renderProjList() {
     var cvs = _projPixelCover(el.dataset.coverId, el.dataset.coverType);
     el.appendChild(cvs);
   });
+  // Drag-and-drop reorder
+  document.querySelectorAll('.project-card').forEach(function(card) {
+    card.draggable = true;
+    card.addEventListener('dragstart', function(e) {
+      e.dataTransfer.setData('text/plain', card.dataset.pid);
+      card.style.opacity = '0.4';
+    });
+    card.addEventListener('dragend', function() { card.style.opacity = '1'; });
+    card.addEventListener('dragover', function(e) { e.preventDefault(); card.style.borderColor = 'var(--accent)'; });
+    card.addEventListener('dragleave', function() { card.style.borderColor = ''; });
+    card.addEventListener('drop', function(e) {
+      e.preventDefault(); card.style.borderColor = '';
+      var fromId = e.dataTransfer.getData('text/plain');
+      var toId = card.dataset.pid;
+      if (fromId && toId && fromId !== toId) _projReorder(fromId, toId);
+    });
+  });
 }
 
 function _projOpenActiveOrFirst() {
@@ -15943,6 +15961,13 @@ async function _projUnlinkProject(pid, targetId) {
     var r = await api('/api/projects', {action: 'unlink_project', project_id: pid, target_project_id: targetId});
     if (r && r.ok) { toast('Unlinked', 'ok'); await loadProjects(); if (window._projCurrent && window._projCurrent.id === pid) { window._projCurrent = _projList.find(function(p) { return p.id === pid; }); _renderProjTabContent(); } }
   } catch(e) { toast('Failed', 'err'); }
+}
+
+async function _projReorder(fromId, toId) {
+  try {
+    var r = await api('/api/projects', {action: 'reorder', from_id: fromId, to_id: toId});
+    if (r && r.ok) { await loadProjects(); }
+  } catch(e) {}
 }
 
 async function _projEditDates(pid) {
@@ -16164,125 +16189,68 @@ async function _renderProjTabContent() {
     return;
 
   } else if (_projTab === 'overview') {
-    html += '<div style="display:flex;flex-direction:column;gap:14px">';
+    html += '<div style="display:flex;flex-direction:column;gap:10px">';
 
-    // Quick info row: type + status + workers
+    // Header row: type + status + dates inline
     html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
     html += _projTypeBadge(proj.type) + _projStatusBadge(proj);
-    if (proj.assigned_personas && proj.assigned_personas.length) html += '<span style="font-size:11px;color:var(--text3)">' + proj.assigned_personas.length + ' worker' + (proj.assigned_personas.length > 1 ? 's' : '') + '</span>';
+    if (proj.assigned_personas && proj.assigned_personas.length) html += '<span style="font-size:10px;color:var(--text3)">' + proj.assigned_personas.length + ' worker' + (proj.assigned_personas.length > 1 ? 's' : '') + '</span>';
+    if (proj.deadline) html += '<span style="font-size:10px;color:var(--text3)">Due ' + escHtml(_projFmtShortDate(proj.deadline)) + '</span>';
     html += '</div>';
 
-    // Description
-    if (proj.description) {
-      html += '<div style="font-size:13px;color:var(--text2);line-height:1.6;max-width:640px">' + escHtml(proj.description) + '</div>';
-    }
+    // Description — plain text, no box
+    if (proj.description) html += '<div style="font-size:12px;color:var(--text2);line-height:1.5">' + escHtml(proj.description) + '</div>';
 
-    // Success criteria
-    if (proj.success_bar) {
-      html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
-      html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Success Criteria</div>';
-      html += '<div style="font-size:12px;color:var(--text);line-height:1.5">' + escHtml(proj.success_bar) + '</div>';
-      html += '</div>';
-    }
+    // Success criteria — inline, no box
+    if (proj.success_bar) html += '<div style="font-size:11px;color:var(--text3);line-height:1.5"><span style="font-weight:600;color:var(--text2)">Success:</span> ' + escHtml(proj.success_bar) + '</div>';
 
-    // Dates & Plan
-    var hasDateInfo = proj.start_date || proj.deadline || proj.plan;
-    if (hasDateInfo || true) {
-      html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
-      html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
-      html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Timeline</div>';
-      html += '<button onclick="_projEditDates(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">Edit</button>';
-      html += '</div>';
-      html += '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px">';
-      html += '<div><span style="color:var(--text3)">Start:</span> <span style="color:var(--text)">' + (proj.start_date ? escHtml(_projFmtShortDate(proj.start_date)) : 'Not set') + '</span></div>';
-      html += '<div><span style="color:var(--text3)">Deadline:</span> <span style="color:' + (proj.deadline ? 'var(--text)' : 'var(--text3)') + '">' + (proj.deadline ? escHtml(_projFmtShortDate(proj.deadline)) : 'Not set') + '</span></div>';
-      html += '</div>';
-      if (proj.plan) {
-        html += '<div style="margin-top:8px;font-size:12px;color:var(--text2);line-height:1.5;white-space:pre-wrap;max-height:120px;overflow-y:auto">' + escHtml(proj.plan) + '</div>';
-      }
-      html += '</div>';
-    }
-
-    // Milestones
+    // Milestones — only if any exist
     var milestones = proj.milestones || [];
-    html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
-    html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Milestones</div>';
-    html += '<button onclick="_projAddMilestone(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Add</button>';
-    html += '</div>';
     if (milestones.length) {
       var msDone = milestones.filter(function(m) { return m.done; }).length;
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="flex:1;height:4px;border-radius:2px;background:var(--border)"><div style="height:100%;border-radius:2px;background:var(--accent);width:' + (milestones.length ? Math.round(msDone/milestones.length*100) : 0) + '%"></div></div><span style="font-size:10px;color:var(--text3)">' + msDone + '/' + milestones.length + '</span></div>';
+      html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">';
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px">Milestones</span><div style="flex:1;height:3px;border-radius:2px;background:var(--border)"><div style="height:100%;border-radius:2px;background:var(--accent);width:' + Math.round(msDone/milestones.length*100) + '%"></div></div><span style="font-size:10px;color:var(--text3)">' + msDone + '/' + milestones.length + '</span></div>';
       milestones.forEach(function(m, i) {
-        html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0">';
-        html += '<input type="checkbox" ' + (m.done ? 'checked' : '') + ' onchange="_projToggleMilestone(\x27' + proj.id + '\x27,' + i + ')" style="margin:0;cursor:pointer">';
-        html += '<span style="font-size:12px;color:' + (m.done ? 'var(--text3)' : 'var(--text)') + ';' + (m.done ? 'text-decoration:line-through;' : '') + 'flex:1">' + escHtml(m.name) + '</span>';
-        if (m.due) html += '<span style="font-size:10px;color:var(--text3)">' + escHtml(m.due) + '</span>';
-        html += '<button onclick="_projRemoveMilestone(\x27' + proj.id + '\x27,' + i + ')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:0 2px" title="Remove">&times;</button>';
-        html += '</div>';
+        html += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0"><input type="checkbox" ' + (m.done ? 'checked' : '') + ' onchange="_projToggleMilestone(\x27' + proj.id + '\x27,' + i + ')" style="margin:0;cursor:pointer"><span style="font-size:11px;color:' + (m.done ? 'var(--text3)' : 'var(--text)') + ';' + (m.done ? 'text-decoration:line-through;' : '') + '">' + escHtml(m.name) + '</span></div>';
       });
-    } else {
-      html += '<div style="font-size:11px;color:var(--text3)">No milestones yet</div>';
+      html += '</div>';
     }
-    html += '</div>';
 
-    // External links
+    // Links — only if any exist
     var links = proj.links || {};
     var hasLinks = links.repo || links.live_url || links.docs || (links.custom && links.custom.length);
-    html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
-    html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Links</div>';
-    html += '<button onclick="_projAddLink(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Add</button>';
-    html += '</div>';
     if (hasLinks) {
-      html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
-      if (links.repo) html += '<a href="' + escHtml(links.repo) + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Repository</a>';
-      if (links.live_url) html += '<a href="' + escHtml(links.live_url) + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Live Site</a>';
-      if (links.docs) html += '<a href="' + escHtml(links.docs) + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Docs</a>';
-      (links.custom || []).forEach(function(lk) { html += '<a href="' + escHtml(lk.url || '') + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">' + escHtml(lk.label || 'Link') + '</a>'; });
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+      if (links.repo) html += '<a href="' + escHtml(links.repo) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Repo</a>';
+      if (links.live_url) html += '<a href="' + escHtml(links.live_url) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Live</a>';
+      if (links.docs) html += '<a href="' + escHtml(links.docs) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Docs</a>';
+      (links.custom || []).forEach(function(lk) { html += '<a href="' + escHtml(lk.url || '') + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">' + escHtml(lk.label || 'Link') + '</a>'; });
       html += '</div>';
-    } else {
-      html += '<div style="font-size:11px;color:var(--text3)">No links added</div>';
     }
-    html += '</div>';
 
-    // Linked projects
+    // Linked projects — only if any exist
     var linkedProjs = proj.linked_projects || [];
-    html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
-    html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">Linked Projects</div>';
-    html += '<button onclick="_projLinkProject(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Link</button>';
-    html += '</div>';
     if (linkedProjs.length) {
-      html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span style="font-size:10px;color:var(--text3)">Linked:</span>';
       linkedProjs.forEach(function(lp) {
         var linked = _projList.find(function(p) { return p.id === lp.project_id; });
         var linkName = linked ? linked.name : lp.project_id.slice(0,8);
-        var relLabel = lp.relationship === 'depends_on' ? 'depends on' : lp.relationship === 'feeds_into' ? 'feeds into' : 'related';
-        html += '<button onclick="_projOpen(\x27' + escHtml(lp.project_id) + '\x27)" class="btn btn-ghost" style="font-size:11px;padding:4px 10px">' + escHtml(relLabel) + ': ' + escHtml(linkName) + '</button>';
-        html += '<button onclick="_projUnlinkProject(\x27' + proj.id + '\x27,\x27' + escHtml(lp.project_id) + '\x27)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:0" title="Unlink">&times;</button>';
+        html += '<button onclick="_projOpen(\x27' + escHtml(lp.project_id) + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">' + escHtml(linkName) + '</button>';
       });
       html += '</div>';
-    } else {
-      html += '<div style="font-size:11px;color:var(--text3)">No linked projects</div>';
     }
-    html += '</div>';
 
-    // Lifecycle actions
-    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:4px">';
+    // Quick actions row — all "add" buttons in one line
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;font-size:10px">';
+    html += '<button onclick="_projAddMilestone(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Milestone</button>';
+    html += '<button onclick="_projAddLink(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Link</button>';
+    html += '<button onclick="_projLinkProject(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Linked Project</button>';
+    html += '<button onclick="_projEditDates(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">Timeline</button>';
     var curStatus = proj.status || (proj.completed_at ? 'completed' : 'active');
     if (curStatus === 'active') {
-      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27completed\x27)" class="btn btn-ghost" style="font-size:11px">Mark Complete</button>';
-      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27paused\x27)" class="btn btn-ghost" style="font-size:11px">Pause</button>';
-      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27archived\x27)" class="btn btn-ghost" style="font-size:11px;color:var(--text3)">Archive</button>';
-    } else if (curStatus === 'completed') {
-      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27active\x27)" class="btn btn-ghost" style="font-size:11px">Reopen</button>';
-      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27archived\x27)" class="btn btn-ghost" style="font-size:11px;color:var(--text3)">Archive</button>';
-    } else if (curStatus === 'paused') {
-      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27active\x27)" class="btn btn-ghost" style="font-size:11px">Resume</button>';
-      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27archived\x27)" class="btn btn-ghost" style="font-size:11px;color:var(--text3)">Archive</button>';
-    } else {
-      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27active\x27)" class="btn btn-ghost" style="font-size:11px">Reopen</button>';
+      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27completed\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px;margin-left:auto">Complete</button>';
+    } else if (curStatus !== 'active') {
+      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27active\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px;margin-left:auto">Reopen</button>';
     }
     html += '</div>';
 
@@ -37710,7 +37678,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.22"})
+            self.reply_json({"v": "0.31.23"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37872,7 +37840,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.22"
+                health["porter_version"] = "0.31.23"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -39823,7 +39791,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.22'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.23'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43877,6 +43845,18 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 mlog.emit("info", "project", "project.update", f"Updated project: {pid}", project_id=pid)
                 self.reply_json({"ok": True, "project": proj})
 
+            elif action == "reorder":
+                from_id = str(data.get("from_id", "")).strip()
+                to_id = str(data.get("to_id", "")).strip()
+                projects = _config.get("projects", [])
+                from_idx = next((i for i, p in enumerate(projects) if p.get("id") == from_id), None)
+                to_idx = next((i for i, p in enumerate(projects) if p.get("id") == to_id), None)
+                if from_idx is not None and to_idx is not None:
+                    item = projects.pop(from_idx)
+                    projects.insert(to_idx, item)
+                    save_config(_config)
+                self.reply_json({"ok": True})
+
             elif action == "set_status":
                 pid = str(data.get("project_id", "")).strip()
                 status = str(data.get("status", "")).strip()
@@ -45079,7 +45059,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.22 ready (localhost only)")
+    print(f"\n  Porter v0.31.23 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
