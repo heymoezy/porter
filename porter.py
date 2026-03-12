@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.24 — Unify chat model labels and clean project copy"""
+"""Porter v0.31.25 — Unify chat model labels and clean project copy"""
 
 
 import email
@@ -11077,14 +11077,14 @@ body.density-compact .file-name { padding: 6px 0; }
 /* Agent stage redesign */
 .persona-cards-row { display:flex; gap:18px; flex-wrap:wrap; padding:12px 0 6px; align-items:flex-end; }
 .persona-card {
-  width:176px;
-  min-height:270px;
+  width:120px;
+  min-height:180px;
   display:flex;
   flex-direction:column;
   align-items:center;
   justify-content:flex-end;
-  gap:4px;
-  padding:0 8px 8px;
+  gap:3px;
+  padding:0 6px 6px;
   background:transparent;
   border:none;
   border-radius:0;
@@ -11093,18 +11093,18 @@ body.density-compact .file-name { padding: 6px 0; }
   transition:transform .18s ease, filter .18s ease;
 }
 .persona-card.orchestrator {
-  width:176px;
-  min-height:278px;
+  width:130px;
+  min-height:190px;
 }
 .persona-card:hover { transform:translateY(-5px); filter:brightness(1.05); }
 .persona-card.selected { transform:translateY(-8px) scale(1.02); }
 .persona-card::before {
   content:"";
   position:absolute;
-  left:20px;
-  right:20px;
-  bottom:34px;
-  height:28px;
+  left:14px;
+  right:14px;
+  bottom:26px;
+  height:20px;
   border-radius:999px;
   background:radial-gradient(circle, color-mix(in srgb,var(--accent) 28%, transparent) 0%, transparent 72%);
   opacity:.18;
@@ -11116,32 +11116,32 @@ body.density-compact .file-name { padding: 6px 0; }
   opacity:.55;
 }
 .persona-card-avatar {
-  width:146px;
-  height:194px;
+  width:96px;
+  height:128px;
   display:flex;
   align-items:flex-end;
   justify-content:center;
   overflow:visible;
 }
-.persona-card.orchestrator .persona-card-avatar { width:142px; height:186px; }
+.persona-card.orchestrator .persona-card-avatar { width:104px; height:136px; }
 .persona-card-name {
-  font-size:16px;
-  font-weight:800;
+  font-size:12px;
+  font-weight:700;
   color:var(--text);
   text-align:center;
-  line-height:1.05;
+  line-height:1.1;
   word-wrap:break-word;
   overflow-wrap:break-word;
 }
-.persona-card.orchestrator .persona-card-name { font-size:16px; margin-top:0; }
+.persona-card.orchestrator .persona-card-name { font-size:13px; margin-top:0; }
 .persona-card-role {
-  font-size:12px;
+  font-size:10px;
   color:var(--text3);
   text-align:center;
-  line-height:1.25;
-  max-width:150px;
+  line-height:1.2;
+  max-width:110px;
 }
-.persona-card.orchestrator .persona-card-role { font-size:10px; max-width:142px; }
+.persona-card.orchestrator .persona-card-role { font-size:9px; max-width:120px; }
 .persona-card-status, .persona-card-dot { display:none; }
 @keyframes pixel-walk {
   0%,100% { transform:translateY(0) rotate(0deg); }
@@ -11673,7 +11673,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.24</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.25</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12760,6 +12760,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.25', date:'2026-03-12', notes:["Smaller agent cards: portraits, names, roles all scaled down for a tighter grid."] },
   { ver:'v0.31.24', date:'2026-03-12', notes:["Fix project cards grid: cards now display side by side instead of stacking vertically."] },
   { ver:'v0.31.23', date:'2026-03-12', notes:["Compact overview: empty sections hidden, description/criteria inline, actions in one row. Drag-and-drop project card reordering. Reorder API action."] },
   { ver:'v0.31.22', date:'2026-03-12', notes:["Visual project cards with pixel art covers, delete button in project header, timeline section (start date/deadline/plan), file upload to deliverables with inline previews for images/video/audio/PDF, YMC Capital notes cleaned up"] },
@@ -25819,7 +25820,7 @@ function renderPersonaOrg() {
     var isOrch = p.agent_group === 'Orchestrator' || p.orchestrator_only;
     var isBusy = String(p.status || '').toLowerCase() && String(p.status || '').toLowerCase() !== 'idle';
     return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + (isBusy ? ' is-busy' : '') + '" data-persona-id="' + p.id + '" onclick="selectPersona(\'' + p.id + '\')">'
-      + '<div class="persona-card-avatar" style="display:flex;align-items:center;justify-content:center;overflow:hidden">' + _personaAvatarMarkup(p, isOrch ? 170 : 128) + '</div>'
+      + '<div class="persona-card-avatar" style="display:flex;align-items:center;justify-content:center;overflow:hidden">' + _personaAvatarMarkup(p, isOrch ? 120 : 88) + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
       + '<div class="persona-card-role">' + escHtml(p.role || (isOrch ? 'Master Orchestrator' : 'Worker')) + '</div>'
       + '</div>';
@@ -37678,7 +37679,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.24"})
+            self.reply_json({"v": "0.31.25"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37840,7 +37841,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.24"
+                health["porter_version"] = "0.31.25"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -39791,7 +39792,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.24'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.25'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -45059,7 +45060,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.24 ready (localhost only)")
+    print(f"\n  Porter v0.31.25 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
