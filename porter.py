@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.15 — Rebalance theme surfaces and fix project naming"""
+"""Porter v0.31.16 — Clean project lanes and retire hidden Pulse UI"""
 
 
 import email
@@ -11761,7 +11761,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.15</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.16</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12214,22 +12214,15 @@ input[type="number"].settings-input { min-width: 60px; }
 
     <div id="projects-list-view" style="padding:0">
       <div class="project-stage" style="margin-bottom:16px">
-        <div class="project-stage-panel">
+        <div class="project-stage-panel" style="grid-column:span 2">
           <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Project Control</div>
-          <div style="font-size:32px;font-weight:900;color:var(--text);line-height:1.02;max-width:14ch">Porter runs projects as guided lanes.</div>
-          <div style="font-size:14px;line-height:1.65;color:var(--text2);margin-top:10px;max-width:58ch">Each project should carry one clear objective, durable state, the right artifacts, and the right workers. Porter should help keep the lane disciplined.</div>
+          <div style="font-size:32px;font-weight:900;color:var(--text);line-height:1.02;max-width:15ch">Porter keeps each project in one clean lane.</div>
+          <div style="font-size:14px;line-height:1.65;color:var(--text2);margin-top:10px;max-width:58ch">Use Porter to shape the objective, create the right workers, and keep artifacts and state attached to the project instead of scattered around the app.</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
             <button class="btn btn-primary" onclick="_askPorterToCreate('project')" style="font-size:12px">Start With Porter</button>
             <button class="btn btn-ghost" onclick="_projOpenActiveOrFirst()" style="font-size:12px">Open Active Project</button>
           </div>
-        </div>
-        <div class="project-stage-panel">
-          <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Operating Model</div>
-          <div id="proj-stats-bar" style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--text3)"></div>
-          <div style="display:grid;gap:10px;margin-top:12px">
-            <div style="padding:12px 14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:12px;font-weight:700;color:var(--text)">Projects own state and artifacts</div><div style="font-size:12px;line-height:1.55;color:var(--text3);margin-top:4px">Files, screenshots, briefs, and outputs should live inside the project lane instead of floating around as generic filesystem clutter.</div></div>
-            <div style="padding:12px 14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:12px;font-weight:700;color:var(--text)">Porter should guide setup</div><div style="font-size:12px;line-height:1.55;color:var(--text3);margin-top:4px">Creation, worker assignment, and refinement should happen through Porter so the structure stays clean and reviewable.</div></div>
-          </div>
+          <div id="proj-stats-bar" style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--text3);margin-top:14px"></div>
         </div>
       </div>
       <div id="proj-grid" class="project-roster">
@@ -12276,35 +12269,6 @@ input[type="number"].settings-input { min-width: 60px; }
 
   </div>
 
-  <!-- Workflows panel — automations only -->
-  <div id="system-module" class="module-panel">
-    <div class="module-hdr">
-      <span class="module-title">Pulse</span>
-      <div style="flex:1"></div>
-      <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="switchModule('admin')">Logs</button>
-      <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_newOrchRun()">+ Run</button>
-      <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="_loadRuntimeOperations()">Refresh</button>
-    </div>
-    <div id="pulse-status-strip" class="pulse-status-strip"></div>
-    <div class="pulse-grid">
-      <div class="pulse-board">
-        <div class="pulse-pane">
-          <div class="pulse-pane-title">Backend Lanes</div>
-          <div id="runtime-coordination-panel" style="margin-top:8px"></div>
-        </div>
-        <div class="pulse-pane">
-          <div class="pulse-pane-title">Recent Routing</div>
-          <div id="runtime-gateway-activity" class="pulse-routing-list" style="margin-top:8px"></div>
-        </div>
-        <div class="pulse-pane">
-          <div class="pulse-pane-title">Active Runs</div>
-          <div id="runtime-orch-runs" class="pulse-runs-list" style="margin-top:8px"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Memory tab v4 — Porter memory control center -->
   <div id="models-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Models</span>
@@ -12895,6 +12859,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.16', date:'2026-03-12', notes:["Projects is cleaner and more Porter-first: the landing stage is tighter, project chat copy is less robotic, guided project naming now nudges toward clean names, and artifacts read like deliverables instead of raw filesystem listings","The hidden Pulse/runtime slab has been retired from the shipped UI, while Logs heartbeat labels are more legible and less admin-coded"] },
   { ver:'v0.31.15', date:'2026-03-12', notes:["Project creation is Porter-first again: guided project naming is normalized from natural language, new project lanes are made active immediately, and Porter-owned workspace roots no longer default into the OpenClaw workspace","Dark and light themes were rebalanced at the token layer so popups, menus, and overlays sit on clearer surfaces instead of collapsing into near-black panels in dark mode"] },
   { ver:'v0.31.14', date:'2026-03-12', notes:["Logs is now a single live activity stream instead of a pile of separate routing, recent task, and active run boxes: routing/task/run signal is folded directly into richer streaming log rows","Added a compact pixel heartbeat strip and condensed live status panel so the operator surface feels alive without wasting screen space"] },
   { ver:'v0.31.13', date:'2026-03-12', notes:["Project chat now behaves like a real lane instead of a disposable panel: it supports new sessions, saved history, loading old sessions, and deleting them inline","Continued active-product cleanup: Logs remains the single live-ops surface, while the strengthened project lane keeps Porter project work out of weak admin-style summaries"] },
@@ -16106,7 +16071,7 @@ function _projChatSetModel(value) {
 }
 
 function _projChatComposePrompt(project, state, userText) {
-  var parts = ['Project lane: ' + (project.name || 'Untitled')];
+  var parts = ['Project: ' + (project.name || 'Untitled')];
   if (project.description) parts.push('Project brief: ' + project.description);
   if (project.success_bar) parts.push('Success bar: ' + project.success_bar);
   var hist = (state.messages || []).filter(function(m) { return m.role === 'user' || m.role === 'assistant'; }).slice(-2);
@@ -16121,10 +16086,10 @@ function _projChatComposePrompt(project, state, userText) {
 
 function _projGreetingCopy(project, state) {
   var greetings = [
-    "Hi, I'm Porter. Let's shape " + (project.name || 'this project') + ". What needs to happen next?",
-    "Porter here. Give me the next move for " + (project.name || 'this project') + " and I'll keep the lane clean.",
-    "Let's run " + (project.name || 'this project') + " properly. What should Porter tighten, assign, or create?",
-    "I'm on " + (project.name || 'this project') + ". What should I organize first?"
+    "Hi, I'm Porter. Let's move " + (project.name || 'this project') + " forward. What should happen next?",
+    "I'm on " + (project.name || 'this project') + ". I can tighten the plan, create the right worker, or organize the next step.",
+    "Let's run " + (project.name || 'this project') + " cleanly. What should Porter shape first?",
+    "Porter here. Tell me the next move for " + (project.name || 'this project') + " and I'll keep the lane organized."
   ];
   var seed = Number(state && state.greetingSeed ? state.greetingSeed : Date.now());
   return greetings[Math.abs(seed) % greetings.length];
@@ -16292,8 +16257,8 @@ function _projKickoff(kind) {
   _renderProjTabContent();
   var state = _projChatGetState(project.id);
   var message = kind === 'worker'
-    ? 'Porter is ready to shape a worker for ' + (project.name || 'this project') + '. Tell him what the worker should own and he should keep the assignment inside this project lane.'
-    : 'Porter is ready to refine ' + (project.name || 'this project') + '. Tell him what should change, tighten, or become explicit in the project lane.';
+    ? 'Tell Porter what this worker should own inside ' + (project.name || 'this project') + '. He will keep the assignment tied to this project and wait for approval before creating anything.'
+    : 'Tell Porter what should change in ' + (project.name || 'this project') + '. He will tighten the scope, success bar, or structure without making a mess of the lane.';
   state.messages.push({ role: 'assistant', label: 'Porter', content: message, meta: 'project lane' });
   _projChatRender(project.id);
   var input = document.getElementById('proj-chat-input');
@@ -16473,36 +16438,38 @@ async function _projLoadArtifacts(pid) {
     var docs = data.project_docs || [];
     var html = '';
 
-    html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);margin-bottom:12px">';
+    html += '<div style="padding:14px 16px;border:1px solid var(--border);border-radius:16px;background:var(--surface);margin-bottom:14px">';
     html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">';
     html += '<div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Artifacts</div>';
-    html += '<div style="font-size:13px;color:var(--text2);margin-top:4px">Project uploads and generated outputs live inside this project. Raw filesystem browsing is no longer the public Porter surface.</div></div>';
-    html += '<div style="font-size:11px;color:var(--text3)">Directory: <code style="font-size:10px">' + escHtml(data.artifacts_dir || '') + '</code></div>';
+    html += '<div style="font-size:13px;color:var(--text2);margin-top:4px">Uploads, screenshots, briefs, and generated deliverables should live here as project artifacts.</div></div>';
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap"><span class="model-card-chip dim" style="font-size:10px">' + artifacts.length + ' tracked</span><span class="model-card-chip dim" style="font-size:10px">' + docs.length + ' core docs</span></div>';
     html += '</div></div>';
 
     html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Project Artifacts (' + artifacts.length + ')</div>';
     if (!artifacts.length) {
-      html += '<div style="padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text3);text-align:center;margin-bottom:14px">No artifacts yet.<br><span style="font-size:11px">When Porter or a worker starts saving deliverables, they should land in this project artifact lane.</span></div>';
+      html += '<div style="padding:20px;border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text3);text-align:center;margin-bottom:14px">No artifacts yet.<br><span style="font-size:11px">When Porter or a worker produces something worth keeping, it should appear here.</span></div>';
     } else {
       html += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">';
       artifacts.forEach(function(a) {
-        html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
-        html += '<span class="model-card-chip dim" style="font-size:10px;min-width:52px;text-align:center">' + escHtml(a.kind || 'file') + '</span>';
+        var kind = String(a.kind || 'file');
+        var glyph = kind === 'image' ? '▦' : kind === 'document' ? '▤' : kind === 'archive' ? '▣' : '■';
+        html += '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--surface)">';
+        html += '<div style="width:34px;height:34px;border-radius:10px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:13px;color:var(--text2);flex-shrink:0">' + glyph + '</div>';
         html += '<div style="flex:1;min-width:0">';
         html += '<div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(a.name || a.relative_path || 'artifact') + '</div>';
-        html += '<div style="font-size:10px;color:var(--text3);margin-top:3px">' + escHtml(a.relative_path || '') + ' · ' + escHtml(a.size_human || '') + ' · ' + escHtml(a.modified_ago || '') + '</div>';
-        html += '<div style="font-size:10px;color:var(--text3);margin-top:3px">' + escHtml(a.source || 'workspace') + (a.created_by ? (' · ' + escHtml(a.created_by)) : '') + '</div>';
+        html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px"><span class="model-card-chip dim" style="font-size:10px">' + escHtml(kind) + '</span><span class="model-card-chip dim" style="font-size:10px">' + escHtml(a.size_human || '') + '</span><span class="model-card-chip dim" style="font-size:10px">' + escHtml(a.modified_ago || '') + '</span></div>';
+        html += '<div style="font-size:10px;color:var(--text3);margin-top:5px">' + escHtml(a.source || 'workspace') + (a.created_by ? (' · ' + escHtml(a.created_by)) : '') + '</div>';
         html += '</div>';
         html += '</div>';
       });
       html += '</div>';
     }
 
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Project Docs</div>';
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Core Project Docs</div>';
     html += '<div style="display:flex;flex-direction:column;gap:6px">';
     docs.forEach(function(f) {
       var exists = !!f.exists;
-      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--surface)">';
       html += '<span style="width:7px;height:7px;border-radius:50%;background:' + (exists ? '#22c55e' : 'var(--text3)') + ';flex-shrink:0"></span>';
       html += '<div style="flex:1;min-width:0">';
       html += '<div style="font-size:12px;color:var(--text)">' + escHtml(f.label || f.key || 'doc') + '</div>';
@@ -18077,7 +18044,7 @@ function _pdCreationPrompt(flow) {
     if (flow.stage === 2) return 'Should this worker be temporary or persistent?';
     return 'Approval required. Reply `Approve` to create this worker, or tell Porter what to change.';
   }
-  if (flow.stage === 0) return 'What should the new project be called?';
+  if (flow.stage === 0) return 'What should the new project be called? Keep it to the clean project name only, for example `YMC Capital`.';
   if (flow.stage === 1) return 'Describe the project objective in one or two sentences.';
   if (flow.stage === 2) return 'Define the success bar. What has to be true before Porter should consider this project well-formed?';
   if (flow.stage === 3) return 'Should this be a manual project or an autonomous project?';
@@ -18132,7 +18099,7 @@ async function _pdChatStartCreation(kind) {
   state.messages.push({
     role: 'assistant',
     label: p.name || 'Porter',
-    content: 'Porter will guide this ' + _pdCreationTypeLabel(kind) + ' creation carefully, keep the structure clean, and wait for approval before changing anything.\n\n' + _pdCreationPrompt(state.flow),
+    content: 'We’ll shape this ' + _pdCreationTypeLabel(kind) + ' together. Porter will keep the structure clean and wait for approval before creating anything.\n\n' + _pdCreationPrompt(state.flow),
     meta: 'guided creation'
   });
   _pdChatRender(p.id);
@@ -21531,10 +21498,10 @@ function mcRenderHeartbeat(events) {
   }
   if (statsHost) {
     var chips = [];
-    chips.push('<span class="mc-heart-pill live">' + liveCount + ' live</span>');
-    chips.push('<span class="mc-heart-pill">' + routingCount + ' route</span>');
-    chips.push('<span class="mc-heart-pill">' + runCount + ' run</span>');
-    chips.push('<span class="mc-heart-pill ' + (recentErrors ? 'err' : 'warn') + '">' + (recentErrors || issueCount) + ' ' + (recentErrors ? 'err' : 'issue') + '</span>');
+    chips.push('<span class="mc-heart-pill live">' + liveCount + ' signals</span>');
+    chips.push('<span class="mc-heart-pill">' + routingCount + ' routing</span>');
+    chips.push('<span class="mc-heart-pill">' + runCount + ' run/task</span>');
+    chips.push('<span class="mc-heart-pill ' + (recentErrors ? 'err' : 'warn') + '">' + (recentErrors || issueCount) + ' attention</span>');
     statsHost.innerHTML = chips.join('');
   }
 }
@@ -37453,7 +37420,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.15"})
+            self.reply_json({"v": "0.31.16"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37615,7 +37582,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.15"
+                health["porter_version"] = "0.31.16"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -39559,7 +39526,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.15'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.16'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -44649,7 +44616,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.15 ready (localhost only)")
+    print(f"\n  Porter v0.31.16 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

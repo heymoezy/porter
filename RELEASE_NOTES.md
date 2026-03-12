@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.31.16 (2026-03-12)
+
+- Projects is cleaner and more Porter-first: the landing stage is tighter, project chat copy is less robotic, guided project naming now nudges toward clean names, and artifacts read like deliverables instead of raw filesystem listings.
+- The hidden Pulse/runtime slab has been retired from the shipped UI, while Logs heartbeat labels are more legible and less admin-coded.
+
 ## v0.31.15 (2026-03-12)
 
 - Project creation is Porter-first again: guided project naming is normalized from natural language, new project lanes are made active immediately, and Porter-owned workspace roots no longer default into the OpenClaw workspace.
