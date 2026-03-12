@@ -43747,7 +43747,9 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
 
         elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/connections"):
             pid = parsed.path.split("/api/projects/")[1].split("/connections")[0]
-            if self.command == "GET":
+            data = self.read_json_body()
+            action = data.get("action", "list") if data else "list"
+            if action == "list" or not action:
                 with _db() as conn:
                     rows = conn.execute(
                         "SELECT pc.connection_id, pc.access_mode, pc.status, pc.enabled_tools_json, wc.provider, wc.display_name, wc.kind "
@@ -43755,27 +43757,25 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                         "WHERE pc.project_id=? AND pc.status='active'", (pid,)
                     ).fetchall()
                     conns = [dict(r) for r in rows]
-                return self._json({"ok": True, "connections": conns})
-            # POST: attach/detach
-            data = self.read_json_body()
-            action = data.get("action", "")
-            if action == "attach":
+                self.reply_json({"ok": True, "connections": conns})
+            elif action == "attach":
                 conn_id = data.get("connection_id", "")
                 mode = data.get("access_mode", "read")
                 if not conn_id:
-                    return self._json({"ok": False, "error": "connection_id required"})
+                    self.reply_json({"ok": False, "error": "connection_id required"}); return
                 with _db() as conn:
                     conn.execute(
                         "INSERT OR REPLACE INTO project_connections (project_id, connection_id, access_mode, attached_by) VALUES (?,?,?,?)",
                         (pid, conn_id, mode, _config.get("username", "admin"))
                     )
-                return self._json({"ok": True})
+                self.reply_json({"ok": True})
             elif action == "detach":
                 conn_id = data.get("connection_id", "")
                 with _db() as conn:
                     conn.execute("DELETE FROM project_connections WHERE project_id=? AND connection_id=?", (pid, conn_id))
-                return self._json({"ok": True})
-            return self._json({"ok": False, "error": "Unknown action"})
+                self.reply_json({"ok": True})
+            else:
+                self.reply_json({"ok": False, "error": "Unknown action"})
 
         elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/state/notes/update"):
             pid = parsed.path.split("/api/projects/")[1].split("/state/notes/update")[0]
