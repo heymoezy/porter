@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.31.15 (2026-03-12)
+
+- Project creation is Porter-first again: guided project naming is normalized from natural language, new project lanes are made active immediately, and Porter-owned workspace roots no longer default into the OpenClaw workspace.
+- Dark and light themes were rebalanced at the token layer so popups, menus, and overlays sit on clearer surfaces instead of collapsing into near-black panels in dark mode.
+
 ## v0.31.14 (2026-03-12)
 
 - Rebuilt `Logs` into a single live activity stream, folding routing, task, and run signal into the streaming event rows instead of wasting space on separate dashboard boxes.

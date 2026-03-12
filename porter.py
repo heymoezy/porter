@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.14 — Redesign logs as a live activity stream"""
+"""Porter v0.31.15 — Rebalance theme surfaces and fix project naming"""
 
 
 import email
@@ -3434,6 +3434,76 @@ def _seed_launchpad_state(project_id: str) -> None:
                 _state_add_project_note(pid, note_kind, body, source="system", created_by="porter")
     except Exception as e:
         log.debug("Launchpad state seed failed: %s", e)
+
+
+def _normalize_project_name(name: str) -> str:
+    raw = str(name or "").strip()
+    if not raw:
+        return ""
+    candidate = raw
+    for pat in (
+        r"^(?:let'?s|lets)\s+call\s+this\s+project\s+(.+)$",
+        r"^(?:call\s+this\s+project|name\s+the\s+project)\s+(.+)$",
+        r"^(?:project\s+name\s*[:\-]\s*)(.+)$",
+    ):
+        m = re.match(pat, raw, re.I)
+        if m:
+            candidate = str(m.group(1) or "").strip()
+            break
+    candidate = re.split(r"(?<=[.!?])\s+", candidate, 1)[0].strip()
+    candidate = re.split(r"\s+(?:first|next|we need|we should|what do you need|the draft|it'?s already)\b", candidate, 1, flags=re.I)[0].strip()
+    candidate = candidate.strip(" \t\r\n\"'`.,:;!?")
+    if not candidate:
+        candidate = raw.strip(" \t\r\n\"'`.,:;!?")
+    if len(candidate) > 80:
+        candidate = candidate[:80].rstrip(" \t\r\n\"'`.,:;!?")
+    return candidate
+
+
+def _migrate_project_workspace_root() -> bool:
+    legacy_root = Path.home() / ".openclaw" / "workspace" / "projects"
+    target_root = AGENT_WORKSPACE_DIR / "projects"
+    if AGENT_WORKSPACE_DIR == legacy_root.parent or not legacy_root.exists():
+        return False
+    changed = False
+    try:
+        target_root.mkdir(parents=True, exist_ok=True)
+        for item in legacy_root.iterdir():
+            if not item.is_dir():
+                continue
+            target = target_root / item.name
+            if target.exists():
+                continue
+            shutil.move(str(item), str(target))
+            changed = True
+    except Exception as e:
+        log.debug("Project workspace migration failed: %s", e)
+    return changed
+
+
+def _normalize_project_registry_names(cfg: dict) -> bool:
+    changed = False
+    for proj in cfg.get("projects", []) or []:
+        raw_name = str(proj.get("name") or "").strip()
+        norm_name = _normalize_project_name(raw_name)
+        if norm_name and norm_name != raw_name:
+            proj["name"] = norm_name
+            changed = True
+        if norm_name == "Launchpad" and float(proj.get("created_at") or 0) < 1735689600:
+            proj["created_at"] = time.time()
+            changed = True
+        pid = str(proj.get("id") or "").strip()
+        if pid and norm_name:
+            try:
+                sj = AGENT_WORKSPACE_DIR / "projects" / pid / "settings.json"
+                if sj.exists():
+                    sdata = json.loads(sj.read_text())
+                    if sdata.get("name") != norm_name:
+                        sdata["name"] = norm_name
+                        sj.write_text(json.dumps(sdata, indent=2))
+            except Exception as e:
+                log.debug("Project settings normalization failed: %s", e)
+    return changed
 
 
 def _normalize_project_name(name: str) -> str:
@@ -8990,15 +9060,15 @@ LOGIN_PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0F0F0F">
+<meta name="theme-color" content="#171d28">
 <title>Porter — Sign in</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23F7931A'/><rect x='9' y='8' width='4' height='16' rx='1.5' fill='white'/><rect x='9' y='8' width='10' height='4' rx='1.5' fill='white'/><rect x='9' y='15' width='10' height='4' rx='1.5' fill='white'/><rect x='19' y='8' width='4' height='11' rx='1.5' fill='white'/></svg>">
 <style>
 :root {
-  --bg: #0F0F0F; --surface: #1C1C1C; --raised: #282828;
-  --border: #3A3A3A; --border2: #454545;
+  --bg: #171d28; --surface: #222a38; --raised: #2b3444;
+  --border: #3d4758; --border2: #4a566a;
   --accent: #f7931a; --accent-d: #d97706;
-  --text: #F0F0F0; --text2: #E0E0E0; --text3: #C0C0C0;
+  --text: #F6F8FB; --text2: #D7DDE7; --text3: #A5B0C2;
   --danger: #dc2626; --radius: 8px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -9011,7 +9081,7 @@ body {
 .login-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 14px; padding: 40px; width: 360px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  box-shadow: 0 20px 60px rgba(0,0,0,.24);
 }
 .login-logo {
   display: flex; align-items: center; gap: 12px; margin-bottom: 32px;
@@ -9139,23 +9209,23 @@ window._mermaidReady = Promise.resolve(mermaid.initialize({
 </script>
 <style>
 :root {
-  --bg:       #0F0F0F;
-  --surface:  #1C1C1C;
-  --raised:   #282828;
-  --border:   #3A3A3A;
-  --border2:  #454545;
+  --bg:       #171d28;
+  --surface:  #222a38;
+  --raised:   #2b3444;
+  --border:   #3d4758;
+  --border2:  #4a566a;
   --accent:   #f7931a;
   --accent-d: #d97706;
-  --text:     #F0F0F0;
-  --text2:    #E0E0E0;
-  --text3:    #C0C0C0;
+  --text:     #F6F8FB;
+  --text2:    #D7DDE7;
+  --text3:    #A5B0C2;
   --danger:   #dc2626;
   --success:  #16a34a;
-  --bg1:      #171717;
-  --bg2:      #202020;
-  --bg3:      #262626;
-  --panel:    #181818;
-  --surface2: #222222;
+  --bg1:      #1b2230;
+  --bg2:      #242d3c;
+  --bg3:      #313b4c;
+  --panel:    #1d2533;
+  --surface2: #2a3343;
   --radius:   8px;
   --sidebar:  220px;
   --preview:  460px;
@@ -10317,8 +10387,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .kb-overlay.open { display:flex; }
 .kb-dialog {
-  background:var(--raised); border:1px solid var(--border); border-radius:12px;
-  padding:24px 32px; max-width:420px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,.4);
+  background:var(--surface2); border:1px solid var(--border2); border-radius:14px;
+  padding:24px 32px; max-width:420px; width:90%; box-shadow:0 18px 48px rgba(0,0,0,.24);
 }
 .kb-title { font-size:16px; font-weight:700; margin-bottom:16px; color:var(--text); }
 .kb-row { display:flex; align-items:center; gap:12px; padding:6px 0; font-size:13px; }
@@ -10375,8 +10445,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   pointer-events:none; transition:.3s;
 }
 .tour-tooltip {
-  position:absolute; z-index:10000; background:var(--raised,#1e1e2e); border:1px solid var(--border,#333);
-  border-radius:10px; padding:16px 18px; max-width:300px; box-shadow:0 8px 24px rgba(0,0,0,.4);
+  position:absolute; z-index:10000; background:var(--surface2,#2a3343); border:1px solid var(--border2,#4a566a);
+  border-radius:12px; padding:16px 18px; max-width:300px; box-shadow:0 18px 44px rgba(0,0,0,.24);
   pointer-events:all;
 }
 .tour-tooltip-title { font-size:14px; font-weight:700; color:var(--text,#fff); margin-bottom:6px; }
@@ -10429,19 +10499,19 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mp-trigger:hover { color:#fff; }
 .mp-menu {
   display:none; position:absolute; bottom:calc(100% + 6px); right:0;
-  background:#1a1a1a; border:1px solid rgba(255,255,255,.12);
+  background:var(--surface2); border:1px solid var(--border2);
   border-radius:10px; padding:6px 0; min-width:220px;
-  box-shadow:0 8px 32px rgba(0,0,0,.5); z-index:1000;
+  box-shadow:0 18px 44px rgba(0,0,0,.24); z-index:1000;
 }
 .model-picker.open .mp-menu { display:block; }
 .mp-opt {
-  padding:8px 16px; font-size:13px; color:rgba(255,255,255,.7);
+  padding:8px 16px; font-size:13px; color:var(--text2);
   cursor:pointer; transition:background .1s; white-space:nowrap;
 }
 .mp-opt:first-child { border-radius:6px 6px 0 0; }
 .mp-opt:last-child { border-radius:0 0 6px 6px; }
-.mp-opt:hover { background:rgba(255,255,255,.06); color:#fff; }
-.mp-opt.selected { color:#fff; }
+.mp-opt:hover { background:color-mix(in srgb,var(--accent) 10%, var(--raised)); color:var(--text); }
+.mp-opt.selected { color:var(--text); }
 .chat-sidebar { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
 .chat-sidebar-item {
   display:flex; align-items:center; gap:8px; padding:7px 10px;
@@ -10480,9 +10550,9 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .row-menu-btn:hover { background: var(--raised); color: var(--text); }
 
 .dropdown {
-  position: fixed; background: var(--raised);
-  border: 1px solid var(--border2); border-radius: var(--radius);
-  box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  position: fixed; background: var(--surface2);
+  border: 1px solid var(--border2); border-radius: 12px;
+  box-shadow: 0 18px 44px rgba(0,0,0,.24);
   min-width: 170px; z-index: 100; overflow: hidden;
 }
 .dropdown-item {
@@ -10490,7 +10560,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   padding: 9px 14px; font-size: 13px; cursor: pointer;
   transition: .1s; color: var(--text);
 }
-.dropdown-item:hover { background: #222; }
+.dropdown-item:hover { background: color-mix(in srgb,var(--accent) 10%, var(--raised)); }
 .dropdown-item.danger { color: var(--danger); }
 .dropdown-item.danger:hover { background: rgba(220,38,38,.1); }
 .dropdown-item svg { opacity: .7; flex-shrink: 0; }
@@ -10541,10 +10611,10 @@ progress.ubar::-webkit-progress-value { background: var(--accent); }
   align-items: center; z-index: 300; pointer-events: none;
 }
 .toast {
-  background: var(--raised); border: 1px solid var(--border2);
+  background: var(--surface2); border: 1px solid var(--border2);
   border-radius: 100px; padding: 8px 18px;
   font-size: 13px; color: var(--text);
-  box-shadow: 0 4px 20px rgba(0,0,0,.5);
+  box-shadow: 0 12px 30px rgba(0,0,0,.22);
   animation: slideup .2s ease;
 }
 .toast.ok { border-color: #1a3a1a; color: #4ade80; }
@@ -10558,9 +10628,9 @@ progress.ubar::-webkit-progress-value { background: var(--accent); }
   z-index: 200; backdrop-filter: blur(2px);
 }
 .modal {
-  background: var(--raised); border: 1px solid var(--border2);
-  border-radius: 12px; padding: 28px; width: 380px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 14px; padding: 28px; width: 380px;
+  box-shadow: 0 22px 56px rgba(0,0,0,.24);
 }
 .modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
 .modal p { font-size: 13px; color: var(--text2); margin-bottom: 20px; line-height: 1.5; overflow-wrap: anywhere; word-break: normal; }
@@ -10623,9 +10693,9 @@ progress.ubar::-webkit-progress-value { background: var(--accent); }
 
 /* folder picker */
 .fp-modal {
-  background: var(--raised); border: 1px solid var(--border2);
-  border-radius: 12px; padding: 0; width: 380px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.6); overflow: hidden;
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 14px; padding: 0; width: 380px;
+  box-shadow: 0 22px 56px rgba(0,0,0,.24); overflow: hidden;
 }
 .fp-modal-header {
   padding: 20px 20px 16px;
@@ -10654,9 +10724,9 @@ progress.ubar::-webkit-progress-value { background: var(--accent); }
 
 /* shortcuts overlay */
 .shortcuts-modal {
-  background: var(--raised); border: 1px solid var(--border2);
-  border-radius: 12px; padding: 24px; width: 380px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 14px; padding: 24px; width: 380px;
+  box-shadow: 0 22px 56px rgba(0,0,0,.24);
 }
 .shortcuts-modal h3 { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
 .shortcuts-grid {
@@ -10673,19 +10743,19 @@ kbd {
 
 /* light theme */
 :root.light {
-  --bg:      #F4F4F4;
+  --bg:      #F6F3ED;
   --surface: #FFFFFF;
-  --raised:  #EBEBEB;
-  --border:  #DEDEDE;
-  --border2: #CECECE;
-  --text:    #1A1A1A;
-  --text2:   #555555;
-  --text3:   #999999;
-  --bg1:     #F0F0F0;
-  --bg2:     #E8E8E8;
-  --bg3:     #E0E0E0;
-  --panel:   #F2F2F2;
-  --surface2:#F8F8F8;
+  --raised:  #F0EBE3;
+  --border:  #D8D0C4;
+  --border2: #C8BEAF;
+  --text:    #1C1D21;
+  --text2:   #555C68;
+  --text3:   #7E8796;
+  --bg1:     #F2EEE7;
+  --bg2:     #ECE5DA;
+  --bg3:     #E3DACD;
+  --panel:   #F8F4EE;
+  --surface2:#FBF8F3;
 }
 :root.light ::-webkit-scrollbar-thumb { background: #ccc; }
 
@@ -11691,7 +11761,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.14</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.15</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12825,6 +12895,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.15', date:'2026-03-12', notes:["Project creation is Porter-first again: guided project naming is normalized from natural language, new project lanes are made active immediately, and Porter-owned workspace roots no longer default into the OpenClaw workspace","Dark and light themes were rebalanced at the token layer so popups, menus, and overlays sit on clearer surfaces instead of collapsing into near-black panels in dark mode"] },
   { ver:'v0.31.14', date:'2026-03-12', notes:["Logs is now a single live activity stream instead of a pile of separate routing, recent task, and active run boxes: routing/task/run signal is folded directly into richer streaming log rows","Added a compact pixel heartbeat strip and condensed live status panel so the operator surface feels alive without wasting screen space"] },
   { ver:'v0.31.13', date:'2026-03-12', notes:["Project chat now behaves like a real lane instead of a disposable panel: it supports new sessions, saved history, loading old sessions, and deleting them inline","Continued active-product cleanup: Logs remains the single live-ops surface, while the strengthened project lane keeps Porter project work out of weak admin-style summaries"] },
   { ver:'v0.31.12', date:'2026-03-11', notes:["Pulse is no longer a separate user-facing surface: Logs now carries the live routing strip, backend lanes, recent task routing, and active runs in one place","Projects now uses a stronger Porter-led landing layout and a dedicated project chat lane, with the tab rail reduced to Chat, Activity, Agents, Artifacts, and State","Launchpad activity now filters out stale legacy residue more aggressively, and Logs no longer remaps into the old Pulse module"] },
@@ -17961,6 +18032,39 @@ function _pdCreationExamples(kind, ctx) {
   return examples.slice(0, 3);
 }
 
+function _pdNormalizeProjectName(text) {
+  var raw = String(text || '').trim();
+  if (!raw) return '';
+  var candidate = raw;
+  var patterns = [
+    /^(?:let'?s|lets)\s+call\s+this\s+project\s+(.+)$/i,
+    /^(?:call\s+this\s+project|name\s+the\s+project)\s+(.+)$/i,
+    /^(?:project\s+name\s*[:\-]\s*)(.+)$/i
+  ];
+  for (var i = 0; i < patterns.length; i++) {
+    var m = raw.match(patterns[i]);
+    if (m && m[1]) {
+      candidate = m[1].trim();
+      break;
+    }
+  }
+  candidate = candidate.split(/(?<=[.!?])\s+/)[0].trim();
+  candidate = candidate.split(/\s+(?:first|next|we need|we should|what do you need|the draft|it'?s already)\b/i)[0].trim();
+  candidate = candidate.replace(/^[\s"'`]+|[\s"'`.,:;!?]+$/g, '');
+  if (!candidate) candidate = raw.replace(/^[\s"'`]+|[\s"'`.,:;!?]+$/g, '');
+  if (candidate.length > 80) candidate = candidate.slice(0, 80).trim();
+  return candidate;
+}
+
+function _pdProjectNameRemainder(text, normalizedName) {
+  var raw = String(text || '').trim();
+  var name = String(normalizedName || '').trim();
+  if (!raw || !name) return '';
+  var idx = raw.toLowerCase().indexOf(name.toLowerCase());
+  if (idx < 0) return '';
+  return raw.slice(idx + name.length).replace(/^[\s"'`.,:;!?-]+/, '').trim();
+}
+
 function _pdCreationPrompt(flow) {
   var ctx = flow.context || { projects: [] };
   var projectNames = (ctx.projects || []).map(function(p) { return p.name; });
@@ -18080,6 +18184,9 @@ async function _pdCreationExecute(p, flow) {
     success_bar: draft.success_bar || ''
   });
   if (!(projectRes && projectRes.ok && projectRes.project)) throw new Error((projectRes && projectRes.error) || 'Project creation failed');
+  await api('/api/projects', { action: 'set_active', project_id: projectRes.project.id }).catch(function() { return null; });
+  if (typeof loadProjects === 'function') await loadProjects();
+  if (typeof _projOpen === 'function') await _projOpen(projectRes.project.id);
   return 'Project created: ' + (projectRes.project.name || draft.name || 'New Project') + '. Porter opened a new ' + _pdProjectModeLabel(draft.type) + ' with the defined success bar.';
 }
 
@@ -18139,7 +18246,14 @@ async function _pdHandleCreationReply(p, state, text) {
     }
   } else {
     if (flow.stage === 0) {
-      draft.name = text.trim();
+      draft.name = _pdNormalizeProjectName(text);
+      if (!draft.name) {
+        state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: 'Porter still needs a clean project name first. Keep it short, for example `YMC Capital`.', meta: 'guided creation' });
+        _pdChatRender(p.id);
+        return true;
+      }
+      var remainder = _pdProjectNameRemainder(text, draft.name);
+      if (remainder && !draft.description) draft.description = remainder;
       flow.stage = 1;
       state.messages.push({ role: 'assistant', label: p.name || 'Porter', content: _pdCreationPrompt(flow), meta: 'guided creation' });
     } else if (flow.stage === 1) {
@@ -37339,7 +37453,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.14"})
+            self.reply_json({"v": "0.31.15"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37501,7 +37615,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.14"
+                health["porter_version"] = "0.31.15"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -39445,7 +39559,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.14'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.15'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -43319,7 +43433,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             action = str(data.get("action", "")).strip()
 
             if action == "create":
-                name = str(data.get("name", "")).strip()
+                name = _normalize_project_name(str(data.get("name", "")).strip())
                 if not name:
                     self.reply_json({"ok": False, "error": "name required"}); return
                 pid  = str(uuid.uuid4())
@@ -43445,7 +43559,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 if not proj:
                     self.reply_json({"ok": False, "error": "project not found"}); return
                 if "name" in data and str(data["name"]).strip():
-                    proj["name"] = str(data["name"]).strip()
+                    proj["name"] = _normalize_project_name(str(data["name"]).strip())
                 if "description" in data:
                     proj["description"] = str(data.get("description", "")).strip()
                     if proj["description"]:
@@ -44535,7 +44649,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.14 ready (localhost only)")
+    print(f"\n  Porter v0.31.15 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
