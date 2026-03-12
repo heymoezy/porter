@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.25 — Unify chat model labels and clean project copy"""
+"""Porter v0.31.26 — Unify chat model labels and clean project copy"""
 
 
 import email
@@ -8534,6 +8534,10 @@ def _appearance_palette_for_persona(name: str = "", role: str = "", temporary: b
         {"skin": "#e0ac69", "hair": "#6b4f3a", "shirt": "#2f855a", "accent": "#f6e05e", "eyes": "#111827"},
         {"skin": "#c68642", "hair": "#1f2937", "shirt": "#7c3aed", "accent": "#f97316", "eyes": "#0f172a"},
         {"skin": "#8d5524", "hair": "#f8fafc", "shirt": "#b45309", "accent": "#22c55e", "eyes": "#111827"},
+        {"skin": "#ffdbac", "hair": "#4a2500", "shirt": "#1e6f5c", "accent": "#29bb89", "eyes": "#2d2d2d"},
+        {"skin": "#c49a6c", "hair": "#0d0d0d", "shirt": "#364f6b", "accent": "#52b2cf", "eyes": "#111111"},
+        {"skin": "#f5cba7", "hair": "#8b4513", "shirt": "#7b2d26", "accent": "#d4a05a", "eyes": "#1c1c1c"},
+        {"skin": "#6f4e37", "hair": "#2c1810", "shirt": "#4a6741", "accent": "#a8d08d", "eyes": "#0a0a0a"},
     ]
     raw = f"{name}|{role}|{int(temporary)}"
     idx = sum(ord(ch) for ch in raw) % len(seeds)
@@ -8562,6 +8566,11 @@ def _appearance_palette_for_persona(name: str = "", role: str = "", temporary: b
 def _default_appearance_spec(name: str = "", role: str = "", temporary: bool = False) -> dict:
     palette = _appearance_palette_for_persona(name, role, temporary)
     role_l = str(role or "").lower()
+    seed_val = sum(ord(ch) for ch in f"{name}|{role}")
+    body_type = "slim" if seed_val % 2 == 0 else "broad"
+    hair_broad = ["crop", "buzz", "spiky"]
+    hair_slim = ["long", "bob", "ponytail", "crop"]
+    hair_style = (hair_slim if body_type == "slim" else hair_broad)[seed_val % (4 if body_type == "slim" else 3)]
     accessory = "visor"
     archetype = "operator"
     role_marker = "command-badge"
@@ -8590,6 +8599,8 @@ def _default_appearance_spec(name: str = "", role: str = "", temporary: bool = F
         "renderer": "porter-pixel-v1",
         "style": "minecraft",
         "palette": palette,
+        "body_type": body_type,
+        "hair_style": hair_style,
         "archetype": archetype,
         "outfit": "operator-jacket" if not temporary else "task-contractor",
         "accessory": accessory,
@@ -11208,6 +11219,8 @@ body.density-compact .file-name { padding: 6px 0; }
 .project-roster { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
 .project-card { border:1px solid var(--border); border-radius:10px; background:var(--surface); cursor:pointer; transition:border-color .15s ease,box-shadow .15s ease; overflow:hidden; display:flex; flex-direction:column; }
 .project-card:hover { border-color:color-mix(in srgb,var(--accent) 30%, var(--border)); box-shadow:0 4px 16px rgba(0,0,0,.1); }
+@keyframes cardDealIn { 0% { opacity:0; transform:translateY(18px) scale(0.95); } 100% { opacity:1; transform:translateY(0) scale(1); } }
+.project-roster > .project-card { animation:cardDealIn .32s ease both; }
 .project-card.is-active { border-color:color-mix(in srgb,var(--accent) 50%, var(--border)); }
 .project-card-cover { height:56px; position:relative; overflow:hidden; }
 .project-card-body { padding:10px 12px; flex:1; display:flex; flex-direction:column; gap:4px; }
@@ -11673,7 +11686,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.25</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.26</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -11826,7 +11839,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <div id="treg-list"><div class="loading-indicator" style="justify-content:center;padding:32px 0">Loading tasks</div></div>
   </div>
 
-  <div id="agents-module" class="module-panel active">
+  <div id="agents-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Agents</span>
       <div style="flex:1"></div>
@@ -12118,7 +12131,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <!-- capabilities / system panel -->
   <!-- projects / model registry / tasks dashboard -->
-  <div id="projects-module" class="module-panel">
+  <div id="projects-module" class="module-panel active">
     <div class="module-hdr">
       <span class="module-title">Projects</span>
       <button class="btn btn-primary" onclick="_askPorterToCreate('project')" style="font-size:12px">Create Project With Porter</button>
@@ -12760,6 +12773,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.26', date:'2026-03-12', notes:["Projects-first workspace with card entrance animation. Improved avatar generator: body types (broad/slim), 6 hair styles, 8 skin tones, eyelashes."] },
   { ver:'v0.31.25', date:'2026-03-12', notes:["Smaller agent cards: portraits, names, roles all scaled down for a tighter grid."] },
   { ver:'v0.31.24', date:'2026-03-12', notes:["Fix project cards grid: cards now display side by side instead of stacking vertically."] },
   { ver:'v0.31.23', date:'2026-03-12', notes:["Compact overview: empty sections hidden, description/criteria inline, actions in one row. Drag-and-drop project card reordering. Reorder API action."] },
@@ -14835,7 +14849,7 @@ function renderConfigSummary(d) {
 }
 
 // ── module system ──
-let _currentModule = 'agents';
+let _currentModule = 'projects';
 let _overviewRefreshTimer = null;
 window._lastAgents = [];
 function _isCoordinationEventType(type) {
@@ -15832,6 +15846,8 @@ function _renderProjList() {
     html += '</div></div></div>';
   });
   grid.innerHTML = html;
+  // Stagger entrance
+  grid.querySelectorAll('.project-card').forEach(function(c, i) { c.style.animationDelay = (i * 55) + 'ms'; });
   // Render pixel art covers
   document.querySelectorAll('[data-cover-id]').forEach(function(el) {
     var cvs = _projPixelCover(el.dataset.coverId, el.dataset.coverType);
@@ -26939,7 +26955,11 @@ function _fallbackAppearancePalette(p) {
     { skin:'#f1c27d', hair:'#2f4858', shirt:'#2b6cb0', accent:'#f6ad55', eyes:'#1a202c' },
     { skin:'#e0ac69', hair:'#6b4f3a', shirt:'#2f855a', accent:'#f6e05e', eyes:'#111827' },
     { skin:'#c68642', hair:'#1f2937', shirt:'#7c3aed', accent:'#f97316', eyes:'#0f172a' },
-    { skin:'#8d5524', hair:'#f8fafc', shirt:'#b45309', accent:'#22c55e', eyes:'#111827' }
+    { skin:'#8d5524', hair:'#f8fafc', shirt:'#b45309', accent:'#22c55e', eyes:'#111827' },
+    { skin:'#ffdbac', hair:'#4a2500', shirt:'#1e6f5c', accent:'#29bb89', eyes:'#2d2d2d' },
+    { skin:'#c49a6c', hair:'#0d0d0d', shirt:'#364f6b', accent:'#52b2cf', eyes:'#111111' },
+    { skin:'#f5cba7', hair:'#8b4513', shirt:'#7b2d26', accent:'#d4a05a', eyes:'#1c1c1c' },
+    { skin:'#6f4e37', hair:'#2c1810', shirt:'#4a6741', accent:'#a8d08d', eyes:'#0a0a0a' }
   ];
   var idx = _hashSeed((p && p.name) + '|' + (p && p.role)) % seeds.length;
   return seeds[idx];
@@ -26959,37 +26979,79 @@ function _minecraftPortraitSvg(p, size) {
   var spec = _personaAppearanceSpec(p);
   var pal = spec.palette || _fallbackAppearancePalette(p);
   var accessory = String(spec.accessory || '');
+  var bodyType = String(spec.body_type || 'broad');
+  var hairStyle = String(spec.hair_style || 'crop');
   var temporary = !!(p && p.is_temporary);
   var isOrchestrator = !!(p && p.orchestrator_only);
   var s = Number(size || 72);
   var accent = isOrchestrator ? '#f59e0b' : (temporary ? '#f59e0b' : (pal.accent || '#f6ad55'));
-  var accessorySvg = '';
-  if (accessory === 'visor') accessorySvg = '<rect x="20" y="30" width="40" height="8" fill="' + accent + '" opacity="0.9"/>';
-  else if (accessory === 'headset') accessorySvg = '<rect x="14" y="26" width="6" height="24" rx="2" fill="' + accent + '"/><rect x="60" y="26" width="6" height="24" rx="2" fill="' + accent + '"/>';
-  else if (accessory === 'helmet') accessorySvg = '<rect x="16" y="14" width="48" height="16" rx="4" fill="' + accent + '"/>';
-  else if (accessory === 'headband') accessorySvg = '<rect x="16" y="24" width="48" height="8" fill="' + accent + '"/>';
-  else if (accessory === 'monocle') accessorySvg = '<rect x="46" y="34" width="12" height="12" rx="6" fill="none" stroke="' + accent + '" stroke-width="4"/>';
-  if (isOrchestrator) accessorySvg += '<rect x="24" y="8" width="32" height="8" fill="' + accent + '"/><rect x="30" y="4" width="20" height="6" fill="#fff3c4"/>';
-  var svg = ''
-    + '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120" width="' + Math.round(s * 0.72) + '" height="' + s + '" shape-rendering="crispEdges">'
-    + '<rect x="18" y="12" width="44" height="14" fill="' + (pal.hair || '#2f4858') + '"/>'
-    + '<rect x="16" y="20" width="48" height="32" fill="' + (pal.skin || '#f1c27d') + '"/>'
-    + '<rect x="24" y="34" width="6" height="6" fill="' + (pal.eyes || '#111827') + '"/>'
-    + '<rect x="50" y="34" width="6" height="6" fill="' + (pal.eyes || '#111827') + '"/>'
-    + '<rect x="30" y="44" width="20" height="4" fill="#7c2d12" opacity="0.65"/>'
-    + accessorySvg
-    + '<rect x="8" y="56" width="12" height="34" fill="' + (pal.shirt || '#2b6cb0') + '"/>'
-    + '<rect x="60" y="56" width="12" height="34" fill="' + (pal.shirt || '#2b6cb0') + '"/>'
-    + '<rect x="20" y="56" width="40" height="34" fill="' + (pal.shirt || '#2b6cb0') + '"/>'
-    + '<rect x="20" y="56" width="8" height="34" fill="' + accent + '" opacity="0.85"/>'
-    + '<rect x="52" y="56" width="8" height="34" fill="' + accent + '" opacity="0.85"/>'
-    + '<rect x="34" y="56" width="12" height="34" fill="#111827" opacity="0.35"/>'
-    + '<rect x="24" y="90" width="12" height="22" fill="#334155"/>'
+  var hc = pal.hair || '#2f4858';
+  var sc = pal.skin || '#f1c27d';
+  var ec = pal.eyes || '#111827';
+  var tc = pal.shirt || '#2b6cb0';
+  var slim = bodyType === 'slim';
+  // ── accessories ──
+  var accSvg = '';
+  if (accessory === 'visor') accSvg = '<rect x="20" y="30" width="40" height="8" fill="' + accent + '" opacity="0.9"/>';
+  else if (accessory === 'headset') accSvg = '<rect x="14" y="26" width="6" height="24" rx="2" fill="' + accent + '"/><rect x="60" y="26" width="6" height="24" rx="2" fill="' + accent + '"/>';
+  else if (accessory === 'helmet') accSvg = '<rect x="16" y="14" width="48" height="16" rx="4" fill="' + accent + '"/>';
+  else if (accessory === 'headband') accSvg = '<rect x="16" y="24" width="48" height="8" fill="' + accent + '"/>';
+  else if (accessory === 'monocle') accSvg = '<rect x="46" y="34" width="12" height="12" rx="6" fill="none" stroke="' + accent + '" stroke-width="4"/>';
+  if (isOrchestrator) accSvg += '<rect x="24" y="8" width="32" height="8" fill="' + accent + '"/><rect x="30" y="4" width="20" height="6" fill="#fff3c4"/>';
+  // ── hair ──
+  var hair = '<rect x="18" y="12" width="44" height="14" fill="' + hc + '"/>';
+  if (hairStyle === 'long') {
+    hair += '<rect x="10" y="20" width="10" height="38" rx="2" fill="' + hc + '"/>';
+    hair += '<rect x="60" y="20" width="10" height="38" rx="2" fill="' + hc + '"/>';
+  } else if (hairStyle === 'bob') {
+    hair += '<rect x="12" y="20" width="8" height="24" rx="2" fill="' + hc + '"/>';
+    hair += '<rect x="60" y="20" width="8" height="24" rx="2" fill="' + hc + '"/>';
+  } else if (hairStyle === 'ponytail') {
+    hair += '<rect x="30" y="6" width="20" height="10" rx="3" fill="' + hc + '"/>';
+    hair += '<rect x="37" y="0" width="6" height="10" fill="' + hc + '"/>';
+  } else if (hairStyle === 'spiky') {
+    hair += '<rect x="22" y="4" width="8" height="12" fill="' + hc + '"/>';
+    hair += '<rect x="36" y="2" width="8" height="14" fill="' + hc + '"/>';
+    hair += '<rect x="50" y="4" width="8" height="12" fill="' + hc + '"/>';
+  } else if (hairStyle === 'buzz') {
+    hair = '<rect x="18" y="14" width="44" height="10" fill="' + hc + '"/>';
+  }
+  // ── face ──
+  var face = '<rect x="16" y="20" width="48" height="32" fill="' + sc + '"/>'
+    + '<rect x="24" y="34" width="6" height="6" fill="' + ec + '"/>'
+    + '<rect x="50" y="34" width="6" height="6" fill="' + ec + '"/>';
+  if (slim) {
+    face += '<rect x="22" y="32" width="3" height="2" fill="' + ec + '"/>';
+    face += '<rect x="55" y="32" width="3" height="2" fill="' + ec + '"/>';
+    face += '<rect x="32" y="44" width="16" height="3" fill="#7c2d12" opacity="0.55"/>';
+  } else {
+    face += '<rect x="30" y="44" width="20" height="4" fill="#7c2d12" opacity="0.65"/>';
+  }
+  // ── body ──
+  var body;
+  if (slim) {
+    body = '<rect x="12" y="56" width="8" height="32" fill="' + tc + '"/>'
+      + '<rect x="60" y="56" width="8" height="32" fill="' + tc + '"/>'
+      + '<rect x="20" y="56" width="40" height="34" fill="' + tc + '"/>'
+      + '<rect x="20" y="56" width="6" height="34" fill="' + accent + '" opacity="0.85"/>'
+      + '<rect x="54" y="56" width="6" height="34" fill="' + accent + '" opacity="0.85"/>'
+      + '<rect x="34" y="56" width="12" height="34" fill="#111827" opacity="0.25"/>';
+  } else {
+    body = '<rect x="8" y="56" width="12" height="34" fill="' + tc + '"/>'
+      + '<rect x="60" y="56" width="12" height="34" fill="' + tc + '"/>'
+      + '<rect x="20" y="56" width="40" height="34" fill="' + tc + '"/>'
+      + '<rect x="20" y="56" width="8" height="34" fill="' + accent + '" opacity="0.85"/>'
+      + '<rect x="52" y="56" width="8" height="34" fill="' + accent + '" opacity="0.85"/>'
+      + '<rect x="34" y="56" width="12" height="34" fill="#111827" opacity="0.35"/>';
+  }
+  // ── legs + boots ──
+  var legs = '<rect x="24" y="90" width="12" height="22" fill="#334155"/>'
     + '<rect x="44" y="90" width="12" height="22" fill="#334155"/>'
     + '<rect x="22" y="112" width="16" height="6" fill="#0f172a"/>'
-    + '<rect x="42" y="112" width="16" height="6" fill="#0f172a"/>'
-    + (temporary ? '<rect x="18" y="52" width="44" height="6" fill="#f59e0b"/>' : '')
-    + '</svg>';
+    + '<rect x="42" y="112" width="16" height="6" fill="#0f172a"/>';
+  var tmp = temporary ? '<rect x="18" y="52" width="44" height="6" fill="#f59e0b"/>' : '';
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120" width="' + Math.round(s * 0.72) + '" height="' + s + '" shape-rendering="crispEdges">'
+    + hair + face + accSvg + body + legs + tmp + '</svg>';
   return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 }
 
@@ -29665,7 +29727,7 @@ function _scheduleOverviewRefresh(delayMs) {
 }
 
 async function init() {
-  switchModule('agents');
+  switchModule('projects');
   loadSettings();
   populateChangelog();
   var [meData, nodeData] = await Promise.all([loadMe(), api('/api/nodes')]);
@@ -37679,7 +37741,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.25"})
+            self.reply_json({"v": "0.31.26"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37841,7 +37903,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.25"
+                health["porter_version"] = "0.31.26"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -39792,7 +39854,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.25'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.26'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -45060,7 +45122,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.25 ready (localhost only)")
+    print(f"\n  Porter v0.31.26 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
