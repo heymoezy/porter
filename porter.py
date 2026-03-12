@@ -9636,8 +9636,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-mode-btn { padding:3px 10px; font-size:10px; cursor:pointer; background:var(--bg); color:var(--text2); border:none; transition:all .15s; }
 .mc-mode-btn.active { background:var(--accent); color:#fff; }
 
-.mc-body { display:grid; grid-template-columns:minmax(0,1fr) 268px; gap:10px; flex:1; min-height:0; }
-.mc-timeline { background:var(--bg); border:1px solid var(--border); border-radius:8px; overflow-y:auto; min-height:0; }
+.mc-body { position:relative; display:block; flex:1; min-height:0; }
+.mc-timeline { background:var(--bg); border:1px solid var(--border); border-radius:8px; overflow-y:auto; min-height:0; height:100%; }
 .mc-row {
   display:grid; grid-template-columns:30px 84px minmax(0,1fr) auto; align-items:center; gap:8px;
   padding:6px 10px; font-size:11px; border-bottom:1px solid var(--border);
@@ -9680,12 +9680,29 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-dur { font-size:9px; color:var(--text3); text-align:right; font-family:monospace; }
 .mc-status-icon { font-size:12px; text-align:center; min-width:14px; }
 
-.mc-right-panel { display:flex; flex-direction:column; min-height:0; background:var(--bg); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.mc-drawer-backdrop {
+  position:absolute; inset:0; background:rgba(4,8,18,.34); opacity:0; pointer-events:none;
+  transition:opacity .16s ease; border-radius:10px; z-index:19;
+}
+.mc-drawer-backdrop.open { opacity:1; pointer-events:auto; }
+.mc-right-panel {
+  position:absolute; top:0; right:0; bottom:0; width:min(360px, calc(100% - 48px));
+  display:flex; flex-direction:column; min-height:0; background:var(--bg); border:1px solid var(--border);
+  border-radius:12px 0 0 12px; overflow:hidden; box-shadow:-12px 0 32px rgba(0,0,0,.24);
+  transform:translateX(104%); transition:transform .18s ease; z-index:20;
+}
+.mc-right-panel.open { transform:translateX(0); }
 .mc-right-tabs { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; }
 .mc-right-tab { flex:1; padding:5px 0; font-size:10px; font-weight:600; text-align:center; cursor:pointer; background:var(--bg); color:var(--text3); border:none; transition:all .15s; }
 .mc-right-tab:hover { color:var(--text); }
 .mc-right-tab.active { color:var(--accent); border-bottom:2px solid var(--accent); background:var(--bg); }
 .mc-right-content { flex:1; overflow-y:auto; padding:10px; min-height:0; }
+.mc-drawer-close {
+  position:absolute; top:8px; right:8px; width:24px; height:24px; border-radius:7px;
+  border:1px solid var(--border); background:var(--bg2); color:var(--text3); cursor:pointer;
+  display:flex; align-items:center; justify-content:center; font-size:14px; z-index:1;
+}
+.mc-drawer-close:hover { color:var(--text); border-color:var(--accent); }
 
 .mc-detail-empty { color:var(--text3); font-size:11px; font-style:italic; text-align:center; padding-top:20px; }
 .mc-detail-title { font-size:12px; font-weight:600; color:var(--text); margin-bottom:8px; }
@@ -9721,11 +9738,10 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 @media(max-width:768px) {
   .mc-overview { grid-template-columns:1fr; }
   .mc-now-strip { grid-template-columns:repeat(3,1fr); }
-  .mc-body { grid-template-columns:1fr; }
-  .mc-right-panel { max-height:300px; }
   .mc-row { grid-template-columns:24px 72px minmax(0,1fr); }
   .mc-row-right { display:none; }
   .mc-heartbeat { grid-template-columns:repeat(16, minmax(8px, 1fr)); }
+  .mc-right-panel { width:100%; border-radius:12px; }
 }
 
 
@@ -12172,7 +12188,9 @@ input[type="number"].settings-input { min-width: 60px; }
       <div class="mc-timeline" id="mc-timeline">
         <div class="mc-empty" id="mc-empty">Loading events...</div>
       </div>
-      <div class="mc-right-panel">
+      <div id="mc-drawer-backdrop" class="mc-drawer-backdrop" onclick="mcCloseDrawer()"></div>
+      <div id="mc-right-panel" class="mc-right-panel">
+        <button class="mc-drawer-close" onclick="mcCloseDrawer()" aria-label="Close">×</button>
         <div class="mc-right-tabs">
           <button class="mc-right-tab active" id="mc-tab-detail" onclick="mcSwitchTab('detail')">Detail</button>
           <button class="mc-right-tab" id="mc-tab-incidents" onclick="mcSwitchTab('incidents')">Incidents</button>
@@ -21178,6 +21196,20 @@ function mcOnSSE(data) {
   mcRenderTimeline(_mcEvents);
 }
 
+function mcOpenDrawer() {
+  var panel = document.getElementById('mc-right-panel');
+  var backdrop = document.getElementById('mc-drawer-backdrop');
+  if (panel) panel.classList.add('open');
+  if (backdrop) backdrop.classList.add('open');
+}
+
+function mcCloseDrawer() {
+  var panel = document.getElementById('mc-right-panel');
+  var backdrop = document.getElementById('mc-drawer-backdrop');
+  if (panel) panel.classList.remove('open');
+  if (backdrop) backdrop.classList.remove('open');
+}
+
 function mcEventKind(e) {
   var domain = String(e.domain || '').toLowerCase();
   var eventType = String(e.event_type || '').toLowerCase();
@@ -21274,6 +21306,7 @@ function mcRefreshActivityCards(events) {
 async function mcSelectEvent(eventId) {
   _mcSelectedId = eventId;
   mcSwitchTab('detail');
+  mcOpenDrawer();
   mcRenderTimeline(_mcEvents);
   var detail = document.getElementById('mc-right-content');
   if (!detail) return;
@@ -21429,7 +21462,12 @@ function mcClearFilters() {
   mcLoadEvents();
   var detail = document.getElementById('mc-right-content');
   if (detail) detail.innerHTML = '<div class="mc-detail-empty">Select an event to view details</div>';
-  mcSwitchTab('detail');
+  _mcRightTab = 'detail';
+  ['detail','incidents','report'].forEach(function(t) {
+    var btn = document.getElementById('mc-tab-' + t);
+    if (btn) btn.className = 'mc-right-tab' + (t === 'detail' ? ' active' : '');
+  });
+  mcCloseDrawer();
 }
 
 function mcExport() {
@@ -21471,7 +21509,9 @@ function mcSwitchTab(tab) {
     var btn = document.getElementById('mc-tab-' + t);
     if (btn) btn.className = 'mc-right-tab' + (t === tab ? ' active' : '');
   });
+  mcOpenDrawer();
   if (tab === 'incidents') mcShowIncidents();
+  else if (tab === 'report') mcShowReportForm();
 }
 
 function mcShowReportForm() {
