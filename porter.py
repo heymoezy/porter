@@ -27374,6 +27374,10 @@ function closeConfigPanel() {
 // Global Escape key — close any open panel or modal (innermost first)
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
+  var logDrawer = document.getElementById('mc-right-panel');
+  if (logDrawer && logDrawer.classList.contains('open') && typeof mcCloseDrawer === 'function') {
+    mcCloseDrawer(); e.stopPropagation(); return;
+  }
   // Wizard modal (highest z-index)
   var wiz = document.getElementById('persona-wizard');
   if (wiz && wiz.style.display !== 'none') { closePersonaWizard(); e.stopPropagation(); return; }
