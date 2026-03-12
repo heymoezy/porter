@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.32 — Streaming typewriter for blocking backends + user display name"""
+"""Porter v0.31.33 — Artifacts file browser + deliverables as file system"""
 
 
 import email
@@ -11035,6 +11035,31 @@ body.density-compact .file-name { padding: 6px 0; }
 .proj-guide-empty { padding:24px 16px; text-align:center; border:1px dashed var(--border); border-radius:12px; background:var(--surface); }
 .proj-guide-empty-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:6px; }
 .proj-guide-empty-hint { font-size:11px; color:var(--text3); margin-bottom:12px; line-height:1.5; }
+/* ── File Browser (Deliverables/Artifacts) ─────────────────── */
+.file-browser { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--surface); }
+.file-browser-hdr { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--border); background:var(--bg); }
+.file-browser-hdr-title { font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; }
+.file-browser-hdr-count { font-size:10px; color:var(--text3); margin-left:auto; }
+.file-browser-row { display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid color-mix(in srgb, var(--border) 50%, transparent); cursor:pointer; transition:background .1s; }
+.file-browser-row:last-child { border-bottom:none; }
+.file-browser-row:hover { background:color-mix(in srgb, var(--accent) 4%, var(--surface)); }
+.file-browser-icon { width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:6px; font-size:14px; background:var(--raised); flex-shrink:0; }
+.file-browser-icon.img { background:color-mix(in srgb, #a78bfa 12%, var(--raised)); }
+.file-browser-icon.vid { background:color-mix(in srgb, #f97316 12%, var(--raised)); }
+.file-browser-icon.aud { background:color-mix(in srgb, #22c55e 12%, var(--raised)); }
+.file-browser-icon.doc { background:color-mix(in srgb, #3b82f6 12%, var(--raised)); }
+.file-browser-icon.txt { background:color-mix(in srgb, #eab308 12%, var(--raised)); }
+.file-browser-icon.link { background:color-mix(in srgb, var(--accent) 12%, var(--raised)); }
+.file-browser-icon.file { background:var(--raised); }
+.file-browser-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:500; color:var(--text); }
+.file-browser-meta { font-size:10px; color:var(--text3); white-space:nowrap; }
+.file-browser-type { font-size:10px; color:var(--text3); min-width:50px; }
+.file-browser-actions { display:flex; gap:4px; opacity:0; transition:opacity .15s; }
+.file-browser-row:hover .file-browser-actions { opacity:1; }
+.file-browser-action { background:none; border:none; color:var(--text3); cursor:pointer; font-size:12px; padding:2px 4px; border-radius:4px; }
+.file-browser-action:hover { color:var(--text); background:var(--raised); }
+.file-browser-empty { padding:24px 16px; text-align:center; color:var(--text3); font-size:12px; }
+.file-browser-preview { padding:12px; border-top:1px solid var(--border); background:var(--bg); }
 /* Legacy persona bar — replaced */
 .chat-persona-bar { display:none; }
 
@@ -11834,7 +11859,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.32</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.33</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12933,6 +12958,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.33', date:'2026-03-12', notes:["Artifacts file browser: file-system style table view with type icons, inline preview, and download actions","Content and artifacts guided empty states with actionable prompts"] },
   { ver:'v0.31.32', date:'2026-03-12', notes:["Streaming typewriter: OpenClaw responses now stream word-by-word instead of dumping the full text at once"] },
   { ver:'v0.31.31', date:'2026-03-12', notes:["Guided project UX: DO THIS NEXT card on overview, smart suggestions based on project state","/ popup chat: floating overlay that stays on current context, no navigation","Editable project notes: edit and delete notes from the overview state section","Workers tab guided empty state with actionable prompts"] },
   { ver:'v0.31.30', date:'2026-03-12', notes:["Fix: Create Worker/Refine Project buttons now work in project chat","Project chat model selector replaced with Porter-style custom dropdown"] },
@@ -16271,7 +16297,7 @@ async function _projLoadContent(pid) {
   var d = await api('/api/projects', {action:'get_content', project_id:pid});
   if (!d || !d.ok) { el.innerHTML = ''; return; }
   var items = d.content || [];
-  if (!items.length) { el.innerHTML = '<div style="color:var(--text3);padding:12px;text-align:center;font-size:11px">No content yet. Use the buttons above to add text, links, images, video, audio, or documents.</div>'; return; }
+  if (!items.length) { el.innerHTML = '<div class="proj-guide-empty"><div class="proj-guide-empty-title">No content yet</div><div class="proj-guide-empty-hint">Add text notes, links, images, videos, audio, or documents to build up this project\x27s knowledge base.</div></div>'; return; }
   var html = '<div style="display:flex;flex-direction:column;gap:10px">';
   items.forEach(function(c) {
     html += '<div style="border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden;position:relative">';
@@ -16517,7 +16543,8 @@ async function _renderProjTabContent() {
     }
 
   } else if (_projTab === 'deliverables') {
-    html += '<div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap">';
+    html += '<div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap">';
+    html += '<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Add Content</span>';
     html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27text\x27)" class="btn btn-ghost" style="font-size:11px">+ Text</button>';
     html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27link\x27)" class="btn btn-ghost" style="font-size:11px">+ Link</button>';
     html += '<button onclick="_projUploadFile(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:11px">+ Upload</button>';
@@ -17060,55 +17087,66 @@ async function _projLoadArtifacts(pid) {
       return;
     }
     var artifacts = data.artifacts || [];
-    var docs = data.project_docs || [];
-    var html = '';
-
-    html += '<div style="padding:14px 16px;border:1px solid var(--border);border-radius:16px;background:var(--surface);margin-bottom:14px">';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">';
-    html += '<div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Artifacts</div>';
-    html += '<div style="font-size:13px;color:var(--text2);margin-top:4px">Files, exports, and outputs produced by this project.</div></div>';
-    html += '<div style="display:flex;gap:8px;flex-wrap:wrap"><span class="model-card-chip dim" style="font-size:10px">' + artifacts.length + ' deliverable' + (artifacts.length !== 1 ? 's' : '') + '</span></div>';
-    html += '</div></div>';
-
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Deliverables (' + artifacts.length + ')</div>';
     if (!artifacts.length) {
-      html += '<div style="padding:20px;border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text3);text-align:center;margin-bottom:14px">No artifacts yet.<br><span style="font-size:11px">When Porter or a worker produces something worth keeping, it should appear here.</span></div>';
-    } else {
-      html += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">';
-      artifacts.forEach(function(a) {
-        var kind = String(a.kind || 'file');
-        var path = a.path || '';
-        var dlUrl = '/download?root=documents&path=' + encodeURIComponent(path.replace('/home/lobster/documents/', '')) + '&inline=1';
-        html += '<div style="border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden">';
-        // Inline preview for images, video, audio, PDF
-        if (kind === 'image') {
-          html += '<div style="max-height:200px;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center">';
-          html += '<img src="' + escHtml(dlUrl) + '" alt="' + escHtml(a.name || '') + '" style="max-width:100%;max-height:200px;object-fit:contain">';
-          html += '</div>';
-        } else if (kind === 'video') {
-          html += '<video controls preload="metadata" style="width:100%;max-height:200px;background:#000"><source src="' + escHtml(dlUrl) + '"></video>';
-        } else if (kind === 'audio') {
-          html += '<div style="padding:12px 14px;background:var(--bg)"><audio controls preload="metadata" style="width:100%"><source src="' + escHtml(dlUrl) + '"></audio></div>';
-        } else if (kind === 'pdf') {
-          html += '<div style="height:180px;background:var(--bg)"><iframe src="' + escHtml(dlUrl) + '" style="width:100%;height:100%;border:none"></iframe></div>';
-        }
-        // Info row
-        html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px">';
-        html += '<div style="flex:1;min-width:0">';
-        html += '<a href="' + escHtml(dlUrl.replace('&inline=1','')) + '" style="font-size:12px;font-weight:600;color:var(--text);text-decoration:none" title="Download">' + escHtml(a.name || a.relative_path || 'artifact') + '</a>';
-        html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:3px"><span class="model-card-chip dim" style="font-size:10px">' + escHtml(kind) + '</span><span class="model-card-chip dim" style="font-size:10px">' + escHtml(a.size_human || '') + '</span><span class="model-card-chip dim" style="font-size:10px">' + escHtml(a.modified_ago || '') + '</span></div>';
-        html += '</div></div>';
-        html += '</div>';
-      });
-      html += '</div>';
+      el.innerHTML = '<div class="proj-guide-empty"><div class="proj-guide-empty-title">No artifacts yet</div><div class="proj-guide-empty-hint">When Porter or a worker produces files, exports, or outputs, they appear here as a browsable file system.</div></div>';
+      return;
     }
-
-
-
+    var html = '<div class="file-browser">';
+    html += '<div class="file-browser-hdr"><span class="file-browser-hdr-title">Project Files</span><span class="file-browser-hdr-count">' + artifacts.length + ' item' + (artifacts.length !== 1 ? 's' : '') + '</span></div>';
+    artifacts.forEach(function(a) {
+      var kind = String(a.kind || 'file');
+      var path = a.path || '';
+      var dlUrl = '/download?root=documents&path=' + encodeURIComponent(path.replace('/home/lobster/documents/', '')) + '&inline=1';
+      var iconClass = 'file';
+      var icon = '\u{1F4C4}';
+      if (kind === 'image') { iconClass = 'img'; icon = '\u{1F5BC}'; }
+      else if (kind === 'video') { iconClass = 'vid'; icon = '\u{1F3AC}'; }
+      else if (kind === 'audio') { iconClass = 'aud'; icon = '\u{1F3B5}'; }
+      else if (kind === 'pdf') { iconClass = 'doc'; icon = '\u{1F4D1}'; }
+      else if (kind === 'code') { iconClass = 'txt'; icon = '\u{1F4BB}'; }
+      html += '<div class="file-browser-row" onclick="_projPreviewArtifact(\x27' + escHtml(dlUrl) + '\x27,\x27' + escHtml(kind) + '\x27,\x27' + escHtml(a.name || '') + '\x27,this)">';
+      html += '<div class="file-browser-icon ' + iconClass + '">' + icon + '</div>';
+      html += '<div class="file-browser-name">' + escHtml(a.name || a.relative_path || 'artifact') + '</div>';
+      html += '<div class="file-browser-type">' + escHtml(kind) + '</div>';
+      html += '<div class="file-browser-meta">' + escHtml(a.size_human || '') + '</div>';
+      html += '<div class="file-browser-meta">' + escHtml(a.modified_ago || '') + '</div>';
+      html += '<div class="file-browser-actions">';
+      html += '<a href="' + escHtml(dlUrl.replace('&inline=1','')) + '" class="file-browser-action" title="Download" onclick="event.stopPropagation()">\u2B07</a>';
+      html += '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    html += '<div id="proj-artifact-preview" class="file-browser-preview" style="display:none"></div>';
     el.innerHTML = html;
   } catch(e) {
     el.innerHTML = '<span style="color:var(--text3)">Could not load artifacts</span>';
   }
+}
+
+function _projPreviewArtifact(url, kind, name, rowEl) {
+  var pv = document.getElementById('proj-artifact-preview');
+  if (!pv) return;
+  // Toggle off if clicking same item
+  if (pv.style.display !== 'none' && pv.dataset.url === url) {
+    pv.style.display = 'none';
+    pv.innerHTML = '';
+    return;
+  }
+  pv.dataset.url = url;
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:11px;font-weight:600;color:var(--text)">' + escHtml(name) + '</span><button onclick="document.getElementById(\x27proj-artifact-preview\x27).style.display=\x27none\x27" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px">&times;</button></div>';
+  if (kind === 'image') {
+    html += '<img src="' + escHtml(url) + '" style="max-width:100%;max-height:400px;border-radius:6px;object-fit:contain">';
+  } else if (kind === 'video') {
+    html += '<video controls preload="auto" style="width:100%;max-height:400px;border-radius:6px;background:#000"><source src="' + escHtml(url) + '"></video>';
+  } else if (kind === 'audio') {
+    html += '<audio controls preload="auto" style="width:100%"><source src="' + escHtml(url) + '"></audio>';
+  } else if (kind === 'pdf') {
+    html += '<iframe src="' + escHtml(url) + '" style="width:100%;height:400px;border:none;border-radius:6px"></iframe>';
+  } else {
+    html += '<div style="font-size:11px;color:var(--text3)">No preview available. <a href="' + escHtml(url.replace('&inline=1','')) + '" style="color:var(--accent)">Download</a></div>';
+  }
+  pv.innerHTML = html;
+  pv.style.display = '';
 }
 
 async function _projShowBrief(pid) {
@@ -38258,7 +38296,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.32"})
+            self.reply_json({"v": "0.31.33"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -38420,7 +38458,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.32"
+                health["porter_version"] = "0.31.33"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40371,7 +40409,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.32'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.33'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -45747,7 +45785,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.32 ready (localhost only)")
+    print(f"\n  Porter v0.31.33 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
