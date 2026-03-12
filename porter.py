@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.16 — Clean project lanes and retire hidden Pulse UI"""
+"""Porter v0.31.17 — Unify chat model labels and clean project copy"""
 
 
 import email
@@ -11761,7 +11761,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.16</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.17</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12859,6 +12859,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.17', date:'2026-03-12', notes:["Chat model selectors now use explicit Model language instead of lane language, so model switching reads consistently in Porter and project chats","Project copy is cleaner too: worker/project proposals and summaries talk about projects directly instead of leaking internal lane phrasing"] },
   { ver:'v0.31.16', date:'2026-03-12', notes:["Projects is cleaner and more Porter-first: the landing stage is tighter, project chat copy is less robotic, guided project naming now nudges toward clean names, and artifacts read like deliverables instead of raw filesystem listings","The hidden Pulse/runtime slab has been retired from the shipped UI, while Logs heartbeat labels are more legible and less admin-coded"] },
   { ver:'v0.31.15', date:'2026-03-12', notes:["Project creation is Porter-first again: guided project naming is normalized from natural language, new project lanes are made active immediately, and Porter-owned workspace roots no longer default into the OpenClaw workspace","Dark and light themes were rebalanced at the token layer so popups, menus, and overlays sit on clearer surfaces instead of collapsing into near-black panels in dark mode"] },
   { ver:'v0.31.14', date:'2026-03-12', notes:["Logs is now a single live activity stream instead of a pile of separate routing, recent task, and active run boxes: routing/task/run signal is folded directly into richer streaming log rows","Added a compact pixel heartbeat strip and condensed live status panel so the operator surface feels alive without wasting screen space"] },
@@ -15818,7 +15819,7 @@ function _renderProjList() {
   var totalAgents = 0;
   _projList.forEach(function(p) { totalAgents += (p.assigned_personas || []).length; });
   if (statsBar) {
-    statsBar.innerHTML = '<span class="model-card-chip dim">' + _projList.length + ' project lane' + (_projList.length !== 1 ? 's' : '') + '</span>'
+    statsBar.innerHTML = '<span class="model-card-chip dim">' + _projList.length + ' project' + (_projList.length !== 1 ? 's' : '') + '</span>'
       + '<span class="model-card-chip dim">' + active + ' active</span>'
       + '<span class="model-card-chip dim">' + completed + ' closed</span>'
       + '<span class="model-card-chip dim">' + totalAgents + ' worker assignment' + (totalAgents !== 1 ? 's' : '') + '</span>';
@@ -15944,7 +15945,7 @@ async function _renderProjTabContent() {
       + '<button class="pd-chat-toolbtn" onclick="_projKickoff(\'worker\')">Create Worker</button>'
       + '<button class="pd-chat-toolbtn" onclick="_projKickoff(\'project\')">Refine Project</button>'
       + '<div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap">'
-      + '<span id="proj-chat-model-note" style="font-size:11px;color:var(--text3)">Lane: Auto</span>'
+      + '<span id="proj-chat-model-note" style="font-size:11px;color:var(--text3)">Model: Auto</span>'
       + '<select id="proj-chat-model-sel" onchange="_projChatSetModel(this.value)" style="font-size:11px;padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:var(--bg);color:var(--text)">' + _pdChatModelOptions().map(function(opt) { return '<option value="' + escHtml(opt.value) + '">' + escHtml(opt.label) + '</option>'; }).join('') + '</select>'
       + '</div>'
       + '</div>'
@@ -16067,7 +16068,7 @@ function _projChatSetModel(value) {
   var state = _projChatGetState(proj.id);
   state.modelOverride = value || '';
   var badge = document.getElementById('proj-chat-model-note');
-  if (badge) badge.textContent = state.modelOverride ? ('Lane: ' + _pdChatModelLabel(state.modelOverride)) : 'Lane: Auto';
+  if (badge) badge.textContent = state.modelOverride ? ('Model: ' + _pdChatModelLabel(state.modelOverride)) : 'Model: Auto';
 }
 
 function _projChatComposePrompt(project, state, userText) {
@@ -17588,7 +17589,7 @@ function _pdChatSetModel(value) {
   var state = _pdChatGetState(p.id);
   state.modelOverride = value || '';
   var badge = document.getElementById('pd-chat-model-note');
-  if (badge) badge.textContent = state.modelOverride ? ('Lane: ' + _pdChatModelLabel(state.modelOverride)) : 'Lane: Auto';
+  if (badge) badge.textContent = state.modelOverride ? ('Model: ' + _pdChatModelLabel(state.modelOverride)) : 'Model: Auto';
 }
 
 function _pdChatEnsureId(persona, state) {
@@ -18058,11 +18059,11 @@ function _pdCreationProposal(flow) {
     return 'Proposed worker:\n'
       + 'Name: ' + (draft.name || 'Specialist') + '\n'
       + 'Role: ' + (draft.role || 'Specialist Worker') + '\n'
-      + 'Project lane: ' + (draft.project_name || 'None yet') + '\n'
+      + 'Project: ' + (draft.project_name || 'None yet') + '\n'
       + 'Lifecycle: ' + (draft.is_temporary ? 'Temporary' : 'Persistent') + '\n'
       + 'Mission: ' + (draft.brief || 'Focused execution lane') + '\n\n'
       + 'Porter loadout: ' + skills.join(', ') + '\n'
-      + 'Approval boundary: create one worker and attach it to the selected project lane only.\n\n'
+      + 'Approval boundary: create one worker and attach it to the selected project only.\n\n'
       + 'Reply `Approve` to create this worker, or tell Porter what to change.';
   }
   return 'Proposed project:\n'
@@ -18070,7 +18071,7 @@ function _pdCreationProposal(flow) {
     + 'Mode: ' + _pdProjectModeLabel(draft.type) + '\n'
     + 'Objective: ' + (draft.description || 'No description yet') + '\n'
     + 'Success bar: ' + (draft.success_bar || 'No success bar defined yet') + '\n'
-    + 'Approval boundary: create one project lane with this scope and autonomy level.\n\n'
+    + 'Approval boundary: create one project with this scope and autonomy level.\n\n'
     + 'Reply `Approve` to create this project, or tell Porter what to change.';
 }
 
@@ -18141,7 +18142,7 @@ async function _pdCreationExecute(p, flow) {
     if (draft.project_id) {
       await api('/api/projects', { action: 'assign_agent', project_id: draft.project_id, persona_id: created.persona.id }).catch(function() { return null; });
     }
-    return 'Worker created: ' + (created.persona.name || payload.name) + '. Porter attached the worker to ' + (draft.project_name || 'no project lane') + ' and kept the rest of the roster unchanged.';
+    return 'Worker created: ' + (created.persona.name || payload.name) + '. Porter attached the worker to ' + (draft.project_name || 'no project') + ' and kept the rest of the roster unchanged.';
   }
   var projectRes = await api('/api/projects', {
     action: 'create',
@@ -25882,7 +25883,7 @@ function switchPdTab(tab) {
       + '<button class="pd-chat-toolbtn" onclick="_pdClearChat()">Clear Chat</button>'
       + '<button class="pd-chat-toolbtn" onclick="_pdChooseFiles()">Upload Files</button>'
       + '<div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap">'
-      + '<span id="pd-chat-model-note" style="font-size:11px;color:var(--text3)">Lane: Auto</span>'
+      + '<span id="pd-chat-model-note" style="font-size:11px;color:var(--text3)">Model: Auto</span>'
       + '<select id="pd-chat-model-sel" onchange="_pdChatSetModel(this.value)" style="font-size:11px;padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:var(--bg);color:var(--text)">' + _pdChatModelOptions().map(function(opt) { return '<option value="' + escHtml(opt.value) + '">' + escHtml(opt.label) + '</option>'; }).join('') + '</select>'
       + '</div>'
       + '</div>'
@@ -37420,7 +37421,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.16"})
+            self.reply_json({"v": "0.31.17"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37582,7 +37583,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.16"
+                health["porter_version"] = "0.31.17"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -39526,7 +39527,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.16'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.17'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -44616,7 +44617,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.16 ready (localhost only)")
+    print(f"\n  Porter v0.31.17 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

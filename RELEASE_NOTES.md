@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.31.17 (2026-03-12)
+
+- Chat model selectors now use explicit `Model` language instead of `Lane`, so model switching reads consistently in Porter and project chats.
+- Project worker/project proposals and creation summaries now talk about projects directly instead of leaking internal lane phrasing.
+
 ## v0.31.16 (2026-03-12)
 
 - Projects is cleaner and more Porter-first: the landing stage is tighter, project chat copy is less robotic, guided project naming now nudges toward clean names, and artifacts read like deliverables instead of raw filesystem listings.
