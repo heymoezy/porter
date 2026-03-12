@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.31 — Guided project UX, / popup chat, editable notes"""
+"""Porter v0.31.32 — Streaming typewriter for blocking backends + user display name"""
 
 
 import email
@@ -636,6 +636,14 @@ def _db_init():
             username, cfg.get("display_name", "Admin"), cfg.get("full_name", ""),
             cfg.get("email", ""), cfg.get("password_hash", ""), cfg.get("salt", ""), "admin"
         ))
+        conn.commit()
+
+    # Sync display_name/full_name from config → users table (every startup)
+    _cfg_dn = _config.get("display_name", "")
+    _cfg_fn = _config.get("full_name", "")
+    _cfg_un = _config.get("username", "admin")
+    if _cfg_dn:
+        conn.execute("UPDATE users SET display_name=?, full_name=? WHERE username=?", (_cfg_dn, _cfg_fn, _cfg_un))
         conn.commit()
 
     # Auto-migrate config agents → personas table (one-time)
@@ -11826,7 +11834,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.31</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.32</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12925,6 +12933,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.32', date:'2026-03-12', notes:["Streaming typewriter: OpenClaw responses now stream word-by-word instead of dumping the full text at once"] },
   { ver:'v0.31.31', date:'2026-03-12', notes:["Guided project UX: DO THIS NEXT card on overview, smart suggestions based on project state","/ popup chat: floating overlay that stays on current context, no navigation","Editable project notes: edit and delete notes from the overview state section","Workers tab guided empty state with actionable prompts"] },
   { ver:'v0.31.30', date:'2026-03-12', notes:["Fix: Create Worker/Refine Project buttons now work in project chat","Project chat model selector replaced with Porter-style custom dropdown"] },
   { ver:'v0.31.29', date:'2026-03-12', notes:["/ shortcut opens chat from anywhere: project chat if inside a project, main Porter chat otherwise."] },
@@ -38249,7 +38258,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.31"})
+            self.reply_json({"v": "0.31.32"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -38411,7 +38420,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.31"
+                health["porter_version"] = "0.31.32"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40362,7 +40371,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.31'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.32'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -40562,14 +40571,28 @@ class Handler(BaseHTTPRequestHandler):
                             log.debug("Stream parse: %s", e)
 
                 elif model_id == "openclaw-gateway":
-                    # OpenClaw buffers all output until done — use blocking dispatch
+                    # OpenClaw is blocking — simulate streaming with word chunks
                     oc_result = dispatch_agent(prompt, "openclaw", timeout=120)
                     if oc_result.get("ok"):
                         full_response = oc_result.get("text", "")
                         if full_response:
                             _note_first_token()
-                        self.wfile.write(f"data: {json.dumps({'token': full_response})}\n\n".encode())
-                        self.wfile.flush()
+                            # Chunk into words for typewriter effect
+                            import time as _tw_time
+                            _words = full_response.split(' ')
+                            _chunk = ''
+                            for _wi, _w in enumerate(_words):
+                                _chunk += (' ' if _wi > 0 else '') + _w
+                                # Flush every ~3-5 words for natural feel
+                                if len(_chunk) > 25 or _wi == len(_words) - 1:
+                                    self.wfile.write(f"data: {json.dumps({'token': _chunk})}\n\n".encode())
+                                    self.wfile.flush()
+                                    _stream_chunk(_stream_run_id, _stream_backend, _chunk)
+                                    _chunk = ''
+                                    _tw_time.sleep(0.015)
+                        else:
+                            self.wfile.write(f"data: {json.dumps({'token': ''})}\n\n".encode())
+                            self.wfile.flush()
                     else:
                         self.wfile.write(f"data: {json.dumps({'error': oc_result.get('error', 'OpenClaw error')})}\n\n".encode())
                         self.wfile.flush()
@@ -45724,7 +45747,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.31 ready (localhost only)")
+    print(f"\n  Porter v0.31.32 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
