@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.36 — Agent detail fixes + nav scroll + project coaching"""
+"""Porter v0.31.37 — People module (CRM) + username migration"""
 
 
 import email
@@ -685,6 +685,18 @@ def _db_init():
     if _cfg_dn:
         conn.execute("UPDATE users SET display_name=?, full_name=? WHERE username=?", (_cfg_dn, _cfg_fn, _cfg_un))
         conn.commit()
+
+    # v0.31.37 — Migrate username from 'admin' to display_name-based slug
+    if _cfg_un == "admin" and _cfg_dn and _cfg_dn.lower() != "admin":
+        _new_un = _cfg_dn.lower().strip().replace(" ", "_")
+        _existing = conn.execute("SELECT username FROM users WHERE username=?", (_new_un,)).fetchone()
+        if not _existing:
+            conn.execute("INSERT INTO users (username, display_name, full_name, email, password_hash, salt, role, created_at) SELECT ?, display_name, full_name, email, password_hash, salt, role, created_at FROM users WHERE username='admin'", (_new_un,))
+            conn.execute("DELETE FROM users WHERE username='admin'")
+            conn.commit()
+            _config["username"] = _new_un
+            _save_config(_config)
+            print(f"  [porter] Migrated username: admin → {_new_un}")
 
     # Auto-migrate config agents → personas table (one-time)
     _persona_count = conn.execute("SELECT count(*) FROM personas").fetchone()[0]
@@ -11128,6 +11140,27 @@ body.density-compact .file-name { padding: 6px 0; }
 .office-view-toggle button { background:none; border:none; color:var(--text3); font-size:10px; padding:4px 10px; border-radius:4px; cursor:pointer; font-weight:500; transition:all .15s; }
 .office-view-toggle button.active { background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.15); }
 .office-view-toggle button:hover:not(.active) { color:var(--text2); }
+/* ── People Module ────────────────────────────────────────── */
+.people-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:12px; margin-top:12px; }
+.people-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; gap:12px; align-items:flex-start; transition:border-color .15s, transform .15s; cursor:default; }
+.people-card:hover { border-color:color-mix(in srgb, var(--accent) 30%, var(--border)); transform:translateY(-1px); }
+.people-card-avatar { width:44px; height:44px; border-radius:50%; background:var(--raised); display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700; color:var(--text); flex-shrink:0; overflow:hidden; }
+.people-card-avatar img { width:100%; height:100%; object-fit:cover; }
+.people-card-meta { flex:1; min-width:0; }
+.people-card-name { font-size:13px; font-weight:600; color:var(--text); }
+.people-card-role { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.3px; margin-top:2px; }
+.people-card-email { font-size:11px; color:var(--text3); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.people-card-joined { font-size:10px; color:var(--text3); margin-top:6px; opacity:.7; }
+.people-card-actions { display:flex; gap:4px; flex-shrink:0; }
+.people-card-actions button { background:none; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-size:10px; color:var(--text3); cursor:pointer; transition:all .15s; }
+.people-card-actions button:hover { border-color:var(--accent); color:var(--text); }
+.people-card-actions button.danger:hover { border-color:#ef4444; color:#ef4444; }
+.people-card.is-you { border-color:color-mix(in srgb, var(--accent) 25%, var(--border)); }
+.people-card.is-you .people-card-name::after { content:'(you)'; font-size:10px; font-weight:400; color:var(--accent); margin-left:6px; }
+.people-empty { text-align:center; padding:40px 20px; color:var(--text3); font-size:12px; }
+.people-stats { display:flex; gap:16px; margin-bottom:12px; flex-wrap:wrap; }
+.people-stat { font-size:20px; font-weight:700; color:var(--text); line-height:1; }
+.people-stat-label { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.3px; margin-top:4px; }
 .file-browser-preview { padding:12px; border-top:1px solid var(--border); background:var(--bg); }
 /* Legacy persona bar — replaced */
 .chat-persona-bar { display:none; }
@@ -11889,6 +11922,10 @@ input[type="number"].settings-input { min-width: 60px; }
       <span class="mnav-label">Logs</span>
     </button>
     <div class="mnav-group-label">Config</div>
+    <button class="mnav-item" id="mnav-people" onclick="switchModule('people')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span class="mnav-label">People</span>
+    </button>
     <button class="mnav-item" id="mnav-capabilities" onclick="switchModule('capabilities')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
       <span class="mnav-label">Connections</span>
@@ -11928,7 +11965,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.36</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.37</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12456,7 +12493,21 @@ input[type="number"].settings-input { min-width: 60px; }
 
   </div>
 
-  <div id="admin-module" class="module-panel">
+  <div id="people-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">People</span>
+      <div style="flex:1"></div>
+      <button class="btn btn-ghost" onclick="loadPeople()">&#8635; Refresh</button>
+      <button class="btn btn-ghost" onclick="_peopleAddUser()">+ Add User</button>
+    </div>
+    <div class="module-intro">Team members and collaborators with access to this Porter instance.</div>
+    <div class="people-stats" id="people-stats"></div>
+    <div class="people-grid" id="people-grid">
+      <div class="loading-indicator"><span class="loading-spinner"></span> Loading people...</div>
+    </div>
+  </div>
+
+    <div id="admin-module" class="module-panel">
     <div class="mc-header">
       <span class="mc-title">Logs</span>
       <span id="mc-badge" class="mc-live-badge live"><span class="mc-dot"></span>LIVE</span>
@@ -13039,6 +13090,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.37', date:'2026-03-12', notes:["People module: full CRM with user cards, stats, role management, add/remove users","Username migration: auto-renames 'admin' to display-name slug on startup","Backend: create user action in /api/admin/users"] },
   { ver:'v0.31.36', date:'2026-03-12', notes:["Fix: agent detail chat no longer offscreen — flex-based layout","Fix: office/grid toggle hidden in agent detail view","Fix: nav tabs scroll to top on switch","Agent detail model picker now uses Porter-style dropdown","Enhanced project coaching — context-aware suggestions on every tab"] },
   { ver:'v0.31.35', date:'2026-03-12', notes:["Agent Office: pixel-art virtual office visualization on the Agents tab","View toggle: switch between Grid and Office views","Each agent sits at a pixel desk with their Minecraft portrait and status bubble (idle/working)","Porter gets the corner office with a larger desk"] },
   { ver:'v0.31.34', date:'2026-03-12', notes:["Extensions → Connections: renamed nav + module, new workspace_connections/project_connections/environment_tools DB tables","Project Apps tab: view and manage connected services per project","Phase 1 of Connections refactor (GPT-5.4 architecture recommendation)"] },
@@ -15264,7 +15316,7 @@ function switchModule(name) {
       }, 60000);
     }, tasks: function() { /* tasks merged into projects */ }, agents: function() { loadAgents(); }, projects: function() { loadProjects(); }, admin: loadAdmin,
     files: loadLocations, policies: loadPolicy,
-    models: loadModels, tools: loadTools, audit: loadAudit, capabilities: loadCapabilities, system: loadAdmin, admin: loadAdmin, settings: syncSettingsUI,
+    models: loadModels, tools: loadTools, audit: loadAudit, people: loadPeople, capabilities: loadCapabilities, system: loadAdmin, admin: loadAdmin, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -17621,6 +17673,94 @@ async function renderGwsPanel() {
     h += '</div>';
     panel.innerHTML = h;
   }).catch(function() { section.style.display = 'none'; });
+}
+
+// ── People Module ─────────────────────────────────────────
+async function loadPeople() {
+  var grid = document.getElementById('people-grid');
+  var stats = document.getElementById('people-stats');
+  if (!grid) return;
+  grid.innerHTML = '<div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div>';
+  try {
+    var d = await api('/api/admin/users', {action:'list'});
+    if (!d || !d.ok) { grid.innerHTML = '<div class="people-empty">Could not load users</div>'; return; }
+    var users = d.users || [];
+    var cfg = window.currentUser || {};
+    var myUsername = cfg.username || '';
+
+    // Stats
+    if (stats) {
+      var admins = users.filter(function(u) { return u.role === 'admin'; }).length;
+      var operators = users.filter(function(u) { return u.role === 'operator'; }).length;
+      stats.innerHTML = '<div><div class="people-stat">' + users.length + '</div><div class="people-stat-label">Total Users</div></div>'
+        + '<div><div class="people-stat">' + admins + '</div><div class="people-stat-label">Admins</div></div>'
+        + '<div><div class="people-stat">' + operators + '</div><div class="people-stat-label">Operators</div></div>';
+    }
+
+    if (!users.length) {
+      grid.innerHTML = '<div class="people-empty">No users yet. Add someone to get started.</div>';
+      return;
+    }
+
+    var html = '';
+    users.forEach(function(u) {
+      var isYou = u.username === myUsername;
+      var initials = avatarInitials(u.display_name || u.username);
+      var joined = u.created_at ? new Date(u.created_at * 1000).toLocaleDateString('en-US', {year:'numeric', month:'short', day:'numeric'}) : '';
+
+      html += '<div class="people-card' + (isYou ? ' is-you' : '') + '">';
+      html += '<div class="people-card-avatar">' + escHtml(initials) + '</div>';
+      html += '<div class="people-card-meta">';
+      html += '<div class="people-card-name">' + escHtml(u.display_name || u.username) + '</div>';
+      html += '<div class="people-card-role">' + escHtml(u.role || 'operator') + '</div>';
+      if (u.email) html += '<div class="people-card-email">' + escHtml(u.email) + '</div>';
+      if (joined) html += '<div class="people-card-joined">Joined ' + escHtml(joined) + '</div>';
+      html += '</div>';
+      html += '<div class="people-card-actions">';
+      html += '<button onclick="_peopleEditRole(\x27' + escHtml(u.username) + '\x27,\x27' + escHtml(u.role || 'operator') + '\x27)">Role</button>';
+      if (!isYou) html += '<button class="danger" onclick="_peopleDelete(\x27' + escHtml(u.username) + '\x27)">Remove</button>';
+      html += '</div></div>';
+    });
+    grid.innerHTML = html;
+  } catch(e) {
+    grid.innerHTML = '<div class="people-empty">Error loading users</div>';
+  }
+}
+
+function _peopleAddUser() {
+  porterPrompt('Add User', 'Username (lowercase, no spaces):', '', async function(username) {
+    if (!username) return;
+    username = username.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    if (!username) { toast('Invalid username', 'err'); return; }
+    porterPrompt('Display Name', 'How should Porter address them?', username, async function(displayName) {
+      if (!displayName) return;
+      porterPrompt('Role', 'admin or operator:', 'operator', async function(role) {
+        role = (role || 'operator').toLowerCase();
+        if (role !== 'admin' && role !== 'operator') role = 'operator';
+        var r = await api('/api/admin/users', {action:'create', username:username, display_name:displayName, role:role});
+        if (r && r.ok) { toast('User ' + username + ' created', 'ok'); loadPeople(); }
+        else { toast((r && r.error) || 'Failed to create user', 'err'); }
+      });
+    });
+  });
+}
+
+function _peopleEditRole(username, currentRole) {
+  var roles = ['operator', 'admin'];
+  var newRole = currentRole === 'admin' ? 'operator' : 'admin';
+  _porterConfirm('Change Role', 'Change ' + username + ' from ' + currentRole + ' to ' + newRole + '?', async function() {
+    var r = await api('/api/admin/users', {action:'update_role', username:username, role:newRole});
+    if (r && r.ok) { toast('Role updated', 'ok'); loadPeople(); }
+    else { toast((r && r.error) || 'Failed', 'err'); }
+  }, {okLabel:'Change Role'});
+}
+
+function _peopleDelete(username) {
+  _porterConfirm('Remove User', 'Remove ' + username + ' from this Porter instance? This cannot be undone.', async function() {
+    var r = await api('/api/admin/users', {action:'delete', username:username});
+    if (r && r.ok) { toast('User removed', 'ok'); loadPeople(); }
+    else { toast((r && r.error) || 'Failed', 'err'); }
+  }, {danger:true, okLabel:'Remove'});
 }
 
 async function loadCapabilities() {
@@ -38635,7 +38775,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.36"})
+            self.reply_json({"v": "0.31.37"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -38797,7 +38937,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.36"
+                health["porter_version"] = "0.31.37"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40748,7 +40888,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.36'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.37'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -44180,7 +44320,32 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             data = self.read_json_body()
             action = data.get("action", "")
 
-            if action == "list":
+            if action == "create":
+                new_un = data.get("username", "").strip().lower()
+                new_dn = data.get("display_name", new_un)
+                new_role = data.get("role", "operator")
+                if not new_un:
+                    self.reply_json({"ok": False, "error": "Username required"})
+                    return
+                try:
+                    conn = _db_conn()
+                    existing = conn.execute("SELECT username FROM users WHERE username=?", (new_un,)).fetchone()
+                    if existing:
+                        conn.close()
+                        self.reply_json({"ok": False, "error": "Username already exists"})
+                        return
+                    _salt = secrets.token_hex(16)
+                    _phash = _hash_password("porter", _salt)
+                    conn.execute("INSERT INTO users (username, display_name, full_name, email, password_hash, salt, role) VALUES (?,?,?,?,?,?,?)",
+                                 (new_un, new_dn, "", "", _phash, _salt, new_role))
+                    conn.commit()
+                    conn.close()
+                    self.reply_json({"ok": True, "username": new_un})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
+                return
+
+            elif action == "list":
                 try:
                     conn = _db_conn()
                     rows = conn.execute("SELECT username, display_name, full_name, email, role, created_at FROM users").fetchall()
@@ -46156,7 +46321,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.36 ready (localhost only)")
+    print(f"\n  Porter v0.31.37 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
