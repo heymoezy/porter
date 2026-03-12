@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.23 — Unify chat model labels and clean project copy"""
+"""Porter v0.31.24 — Unify chat model labels and clean project copy"""
 
 
 import email
@@ -11673,7 +11673,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.23</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.24</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12760,6 +12760,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.24', date:'2026-03-12', notes:["Fix project cards grid: cards now display side by side instead of stacking vertically."] },
   { ver:'v0.31.23', date:'2026-03-12', notes:["Compact overview: empty sections hidden, description/criteria inline, actions in one row. Drag-and-drop project card reordering. Reorder API action."] },
   { ver:'v0.31.22', date:'2026-03-12', notes:["Visual project cards with pixel art covers, delete button in project header, timeline section (start date/deadline/plan), file upload to deliverables with inline previews for images/video/audio/PDF, YMC Capital notes cleaned up"] },
   { ver:'v0.31.21', date:'2026-03-12', notes:["Projects V2 Phase 5: 8 project types (website/app/presentation/research/content/design/ops/custom), project lifecycle (active/paused/completed/archived), milestones with progress tracking, external links (repo/live/docs/custom), linked projects (depends_on/feeds_into/related), worker recommendations per type, compact project cards with type+status badges, creation flow now asks project type"] },
@@ -15810,7 +15811,7 @@ function _renderProjList() {
       + '<span class="model-card-chip dim">' + completed + ' closed</span>'
       + '<span class="model-card-chip dim">' + totalAgents + ' worker assignment' + (totalAgents !== 1 ? 's' : '') + '</span>';
   }
-  var html = '<div class="project-roster">';
+  var html = '';
   _projList.forEach(function(p) {
     var isActive = p.id === _projActive;
     var agentCount = (p.assigned_personas || []).length;
@@ -15829,7 +15830,6 @@ function _renderProjList() {
     if (p.deadline) html += '<span style="font-size:10px;color:var(--text3)">Due ' + _projFmtShortDate(p.deadline) + '</span>';
     html += '</div></div></div>';
   });
-  html += '</div>';
   grid.innerHTML = html;
   // Render pixel art covers
   document.querySelectorAll('[data-cover-id]').forEach(function(el) {
@@ -37678,7 +37678,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.23"})
+            self.reply_json({"v": "0.31.24"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37840,7 +37840,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.23"
+                health["porter_version"] = "0.31.24"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -39791,7 +39791,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.23'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.24'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -45059,7 +45059,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.23 ready (localhost only)")
+    print(f"\n  Porter v0.31.24 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
