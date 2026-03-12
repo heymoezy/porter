@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.18 — Unify chat model labels and clean project copy"""
+"""Porter v0.31.19 — Unify chat model labels and clean project copy"""
 
 
 import email
@@ -11671,7 +11671,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.18</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.19</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12758,6 +12758,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.19', date:'2026-03-12', notes:["Projects V2 Phase 2: tabs reordered to Overview→Chat→Workers→Deliverables→Activity, Overview tab shows objectives + links + linked projects + state, Agents renamed to Workers, Artifacts renamed to Deliverables, compact card titles"] },
   { ver:'v0.31.18', date:'2026-03-12', notes:["Projects V2 Phase 1: removed governance template scaffolding (6 files), stopped creating MEMORY.md in new projects, deleted 3 duplicate functions, removed hero panel, removed YMC Capital hardcoded examples, cleaned project file chain to essentials only"] },
   { ver:'v0.31.17', date:'2026-03-12', notes:["Chat model selectors now use explicit Model language instead of lane language, so model switching reads consistently in Porter and project chats","Project copy is cleaner too: worker/project proposals and summaries talk about projects directly instead of leaking internal lane phrasing"] },
   { ver:'v0.31.16', date:'2026-03-12', notes:["Projects is cleaner and more Porter-first: the landing stage is tighter, project chat copy is less robotic, guided project naming now nudges toward clean names, and artifacts read like deliverables instead of raw filesystem listings","The hidden Pulse/runtime slab has been retired from the shipped UI, while Logs heartbeat labels are more legible and less admin-coded"] },
@@ -15681,7 +15682,7 @@ function toggleCreateSkillForm() {
 }
 
 // ── Projects (v0.29.32 — real project containers) ─────────────────────
-var _projList = [], _projActive = null, _projTab = 'chat';
+var _projList = [], _projActive = null, _projTab = 'overview';
 var _projActivitySseId = null;
 var _projActivityPoller = null;
 var _projActivityRefreshTimer = null;
@@ -15804,11 +15805,11 @@ function _renderProjTabs() {
   var proj = window._projCurrent || {};
   var agentCount = (proj.assigned_personas || []).length;
   var items = [
+    {id:'overview', label:'Overview'},
     {id:'chat', label:'Chat'},
-    {id:'activity', label:'Activity'},
-    {id:'agents', label:'Agents' + (agentCount ? ' (' + agentCount + ')' : '')},
-    {id:'artifacts', label:'Artifacts'},
-    {id:'state', label:'State'}
+    {id:'workers', label:'Workers' + (agentCount ? ' (' + agentCount + ')' : '')},
+    {id:'deliverables', label:'Deliverables'},
+    {id:'activity', label:'Activity'}
   ];
   tabs.innerHTML = items.map(function(t) {
     var active = _projTab === t.id;
@@ -15817,8 +15818,9 @@ function _renderProjTabs() {
 }
 
 function _projSwitchTab(t) {
-  if (t === 'memory') t = 'state';
-  if (t === 'overview' || t === 'workflows') t = 'chat';
+  if (t === 'memory' || t === 'state') t = 'overview';
+  if (t === 'agents') t = 'workers';
+  if (t === 'artifacts') t = 'deliverables';
   _projTab = t;
   if (t !== 'chat' && _projActivityRefreshTimer) {
     clearTimeout(_projActivityRefreshTimer);
@@ -15874,7 +15876,7 @@ async function _renderProjTabContent() {
     _projLoadActivity(proj.id);
     return;
 
-  } else if (_projTab === 'agents') {
+  } else if (_projTab === 'workers') {
     var assigned = proj.assigned_personas || [];
     // Sort by agent hierarchy (sort_order from Agents tab)
     var sortedAssigned = assigned.slice().sort(function(a, b) {
@@ -15913,14 +15915,66 @@ async function _renderProjTabContent() {
     // Add agent
     html += '<div style="margin-top:8px"><button onclick="_projAssignAgent(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:11px">+ Assign Agent</button></div>';
 
-  } else if (_projTab === 'artifacts') {
+  } else if (_projTab === 'deliverables') {
     html += '<div id="proj-artifacts-list" style="font-size:12px;color:var(--text3)">Loading...</div>';
     content.innerHTML = html;
     _projLoadArtifacts(proj.id);
     return;
 
-  } else if (_projTab === 'state') {
-    html += '<div id="proj-state-view" style="font-size:12px;color:var(--text3)">Loading...</div>';
+  } else if (_projTab === 'overview') {
+    // Project overview: type, objectives, links, milestones, then state
+    var typeLabel = (proj.type === 'autonomous' ? 'Autonomous' : proj.completed_at ? 'Completed' : 'Active');
+    var typeBg = proj.completed_at ? 'var(--success)' : (proj.type === 'autonomous' ? 'var(--accent)' : 'var(--border)');
+    html += '<div style="display:flex;flex-direction:column;gap:14px">';
+
+    // Quick info row
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
+    html += '<span style="font-size:10px;padding:3px 8px;border-radius:4px;background:' + typeBg + ';color:#fff;font-weight:600">' + typeLabel + '</span>';
+    if (proj.assigned_personas && proj.assigned_personas.length) html += '<span style="font-size:11px;color:var(--text3)">' + proj.assigned_personas.length + ' worker' + (proj.assigned_personas.length > 1 ? 's' : '') + '</span>';
+    html += '</div>';
+
+    // Description
+    if (proj.description) {
+      html += '<div style="font-size:13px;color:var(--text2);line-height:1.6;max-width:640px">' + escHtml(proj.description) + '</div>';
+    }
+
+    // Success bar / objectives
+    if (proj.success_bar) {
+      html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
+      html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Success Criteria</div>';
+      html += '<div style="font-size:12px;color:var(--text);line-height:1.5">' + escHtml(proj.success_bar) + '</div>';
+      html += '</div>';
+    }
+
+    // External links (repo, live URL) — if project has them
+    if (proj.links && (proj.links.repo || proj.links.live_url || proj.links.docs || (proj.links.custom && proj.links.custom.length))) {
+      html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
+      html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Links</div>';
+      html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+      if (proj.links.repo) html += '<a href="' + escHtml(proj.links.repo) + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Repository</a>';
+      if (proj.links.live_url) html += '<a href="' + escHtml(proj.links.live_url) + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Live Site</a>';
+      if (proj.links.docs) html += '<a href="' + escHtml(proj.links.docs) + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Docs</a>';
+      (proj.links.custom || []).forEach(function(lk) { html += '<a href="' + escHtml(lk.url || '') + '" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">' + escHtml(lk.label || 'Link') + '</a>'; });
+      html += '</div></div>';
+    }
+
+    // Linked projects
+    if (proj.linked_projects && proj.linked_projects.length) {
+      html += '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">';
+      html += '<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Linked Projects</div>';
+      html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+      proj.linked_projects.forEach(function(lp) {
+        var linked = _projList.find(function(p) { return p.id === lp.project_id; });
+        var linkName = linked ? linked.name : lp.project_id.slice(0,8);
+        var relLabel = lp.relationship === 'depends_on' ? 'depends on' : lp.relationship === 'feeds_into' ? 'feeds into' : 'related';
+        html += '<button onclick="_projOpen(\x27' + escHtml(lp.project_id) + '\x27)" class="btn btn-ghost" style="font-size:11px;padding:4px 10px">' + escHtml(relLabel) + ': ' + escHtml(linkName) + '</button>';
+      });
+      html += '</div></div>';
+    }
+
+    // State section (notes, directives) — loaded async
+    html += '<div id="proj-state-view" style="font-size:12px;color:var(--text3)">Loading state...</div>';
+    html += '</div>';
     content.innerHTML = html;
     _projLoadState(proj.id);
     return;
@@ -16153,7 +16207,7 @@ async function _projLoadChatSession(chatId) {
 function _projKickoff(kind) {
   var project = window._projCurrent;
   if (!project) return;
-  _projTab = 'chat';
+  _projTab = 'overview';
   _renderProjTabs();
   _renderProjTabContent();
   var state = _projChatGetState(project.id);
@@ -37321,7 +37375,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.18"})
+            self.reply_json({"v": "0.31.19"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37483,7 +37537,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.18"
+                health["porter_version"] = "0.31.19"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -39427,7 +39481,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.18'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.19'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -44517,7 +44571,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.18 ready (localhost only)")
+    print(f"\n  Porter v0.31.19 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
