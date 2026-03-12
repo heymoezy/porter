@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.19 — Unify chat model labels and clean project copy"""
+"""Porter v0.31.20 — Unify chat model labels and clean project copy"""
 
 
 import email
@@ -3309,18 +3309,18 @@ def _bootstrap_shared_docs(shared_dir: "Path", project_name: str, created: str):
 
 
 def _seed_launchpad_workspace(project_id: str, created: str | None = None) -> None:
-    """Rewrite the legacy starter project into the Launchpad template."""
+    """Rewrite the legacy starter project into the First Mission template."""
     from datetime import datetime, timezone
     created = created or datetime.now(timezone.utc).isoformat()
     proj_dir = AGENT_WORKSPACE_DIR / "projects" / project_id
     proj_dir.mkdir(parents=True, exist_ok=True)
     (proj_dir / "artifacts").mkdir(exist_ok=True)
     (proj_dir / "PROJECT.md").write_text(
-        "# Project: Launchpad\n\n"
+        "# Project: First Mission\n\n"
         f"ID: {project_id}\n"
         f"Created: {created}\n\n"
         "## Overview\n"
-        "Launchpad is the guided starter project for learning how Porter runs work.\n\n"
+        "First Mission is the guided starter project for learning how Porter runs work.\n\n"
         "## Goals\n"
         "- create or approve one worker\n"
         "- define one real objective\n"
@@ -3330,30 +3330,30 @@ def _seed_launchpad_workspace(project_id: str, created: str | None = None) -> No
         "Use Porter here to learn the product without polluting your real work.\n"
     )
     (proj_dir / "STATE.md").write_text(
-        "# Project State: Launchpad\n\n"
+        "# Project State: First Mission\n\n"
         "*Durable project state for learning how Porter manages workers, directives, and artifacts.*\n\n"
         "## Directives\n"
         "- Keep the experience lightweight and guided.\n\n"
         "## Decisions\n"
-        "- Use Launchpad to learn Porter without polluting real work.\n\n"
+        "- Use First Mission to learn Porter without polluting real work.\n\n"
         "## Notes\n"
         "- This is the starter project every new user should understand first.\n"
     )
     (proj_dir / "MEMORY.md").write_text(
-        "# Launchpad Memory\n\n"
+        "# First Mission Memory\n\n"
         "This file remains only for compatibility with older Porter paths.\n\n"
-        "Launchpad's canonical durable context now lives in `STATE.md` and in the structured State tab.\n"
+        "First Mission's canonical durable context now lives in `STATE.md` and in the structured State tab.\n"
     )
     (proj_dir / "settings.json").write_text(json.dumps({
         "project_id": project_id,
-        "name": "Launchpad",
+        "name": "First Mission",
         "memory_isolation": "project",
         "agents": [],
     }, indent=2))
     shared = proj_dir / "00_SHARED"
     shared.mkdir(exist_ok=True)
     (shared / "PROJECT_BRIEF.md").write_text(
-        "# Launchpad — Project Brief\n\n"
+        "# First Mission — Project Brief\n\n"
         f"Created: {created}\n\n"
         "## Problem\n"
         "New users need to understand Porter through use, not through legacy internal project clutter.\n\n"
@@ -3372,7 +3372,7 @@ def _seed_launchpad_workspace(project_id: str, created: str | None = None) -> No
         "The user understands how Porter orchestrates projects, workers, state, and artifacts.\n"
     )
     (shared / "SUCCESS_CRITERIA.md").write_text(
-        "# Launchpad — Success Criteria\n\n"
+        "# First Mission — Success Criteria\n\n"
         "## Product Outcomes\n"
         "- user approves a worker\n"
         "- user sees persistent state update\n"
@@ -3380,10 +3380,10 @@ def _seed_launchpad_workspace(project_id: str, created: str | None = None) -> No
         "## Early KPIs\n"
         "- first worker created\n"
         "- first directive recorded\n"
-        "- first real project created from Launchpad\n"
+        "- first real project created from First Mission\n"
     )
     (shared / "OPERATING_PROTOCOL.md").write_text(
-        "# Launchpad — Operating Protocol\n\n"
+        "# First Mission — Operating Protocol\n\n"
         "## Agent Assignment\n"
         "- Porter remains the orchestrator\n"
         "- workers are created only when needed\n\n"
@@ -3397,7 +3397,7 @@ def _seed_launchpad_workspace(project_id: str, created: str | None = None) -> No
 
 
 def _seed_launchpad_state(project_id: str) -> None:
-    """Ensure Launchpad starts with durable structured state, not just files."""
+    """Ensure First Mission starts with durable structured state, not just files."""
     pid = str(project_id or "").strip()
     if not pid:
         return
@@ -3405,23 +3405,23 @@ def _seed_launchpad_state(project_id: str) -> None:
         directives = _state_list_directives("project", pid)
         notes = _state_get_project_notes(pid, limit=20)
         wanted_directives = [
-            "Use Launchpad to learn Porter through one clean worker, one real objective, and one project artifact.",
-            "Keep Launchpad lightweight; graduate meaningful work into a real project instead of turning this into a dumping ground.",
+            "Use First Mission to learn Porter through one clean worker, one real objective, and one project artifact.",
+            "Keep First Mission lightweight; graduate meaningful work into a real project instead of turning this into a dumping ground.",
         ]
         existing_text = {str(d.get("text") or "").strip() for d in directives}
         for text in wanted_directives:
             if text not in existing_text:
                 _state_add_directive("project", pid, text, source="system", confidence=1.0)
         wanted_notes = {
-            "starter": "Launchpad is the first-run training lane. It exists to teach Porter’s project, worker, state, and artifact model quickly.",
-            "outcome": "A successful Launchpad session ends with one approved worker, one durable directive, and a transition into a real project.",
+            "starter": "First Mission is the first-run training lane. It exists to teach Porter’s project, worker, state, and artifact model quickly.",
+            "outcome": "A successful First Mission session ends with one approved worker, one durable directive, and a transition into a real project.",
         }
         existing_notes = {(str(n.get("note_kind") or "").strip(), str(n.get("body") or "").strip()) for n in notes}
         for note_kind, body in wanted_notes.items():
             if (note_kind, body) not in existing_notes:
                 _state_add_project_note(pid, note_kind, body, source="system", created_by="porter")
     except Exception as e:
-        log.debug("Launchpad state seed failed: %s", e)
+        log.debug("First Mission state seed failed: %s", e)
 
 
 def _normalize_project_name(name: str) -> str:
@@ -3477,7 +3477,7 @@ def _normalize_project_registry_names(cfg: dict) -> bool:
         if norm_name and norm_name != raw_name:
             proj["name"] = norm_name
             changed = True
-        if norm_name == "Launchpad" and float(proj.get("created_at") or 0) < 1735689600:
+        if norm_name == "First Mission" and float(proj.get("created_at") or 0) < 1735689600:
             proj["created_at"] = time.time()
             changed = True
         pid = str(proj.get("id") or "").strip()
@@ -3495,12 +3495,12 @@ def _normalize_project_registry_names(cfg: dict) -> bool:
 
 
 def _migrate_legacy_porter_app_project(cfg: dict) -> bool:
-    """Rename the legacy starter project to Launchpad and refresh its docs."""
+    """Rename the legacy starter project to First Mission and refresh its docs."""
     changed = False
     for proj in cfg.get("projects", []) or []:
         if str(proj.get("name") or "").strip() != "Porter App":
             continue
-        proj["name"] = "Launchpad"
+        proj["name"] = "First Mission"
         proj["description"] = (
             "Guided starter project for learning how Porter manages workers, "
             "projects, state, and artifacts."
@@ -3515,20 +3515,20 @@ def _migrate_legacy_porter_app_project(cfg: dict) -> bool:
             _seed_launchpad_workspace(str(proj.get("id") or "").strip())
             _seed_launchpad_state(str(proj.get("id") or "").strip())
         except Exception as e:
-            log.debug("Launchpad workspace migration failed: %s", e)
+            log.debug("First Mission workspace migration failed: %s", e)
         changed = True
     return changed
 
 
 def _ensure_launchpad_project(cfg: dict) -> bool:
-    """Seed the first-run Launchpad project when no projects exist yet."""
+    """Seed the first-run First Mission project when no projects exist yet."""
     projects = cfg.get("projects", []) or []
     if projects:
         return False
     pid = str(uuid.uuid4())
     project = {
         "id": pid,
-        "name": "Launchpad",
+        "name": "First Mission",
         "type": "manual",
         "description": (
             "Guided starter project for learning how Porter manages workers, "
@@ -3546,7 +3546,7 @@ def _ensure_launchpad_project(cfg: dict) -> bool:
         _seed_launchpad_workspace(pid)
         _seed_launchpad_state(pid)
     except Exception as e:
-        log.debug("Launchpad seed failed: %s", e)
+        log.debug("First Mission seed failed: %s", e)
     return True
 
 
@@ -5678,7 +5678,7 @@ def _project_activity_feed(project_id: str, limit: int = 20) -> list:
     updated_at = float(proj.get("updated_at") or 0)
     if updated_at > cutoff:
         cutoff = updated_at
-    if str(proj.get("name") or "").strip().lower() == "launchpad":
+    if str(proj.get("name") or "").strip().lower() == "first mission":
         cutoff = max(cutoff, now_ts - 30 * 60)
     try:
         conn = _db_conn()
@@ -11671,7 +11671,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.19</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.20</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12758,6 +12758,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.20', date:'2026-03-12', notes:["Launchpad renamed to First Mission throughout, Deliverables tab cleaned up: removed scaffold doc listing, simplified summary, focused on actual project outputs only"] },
   { ver:'v0.31.19', date:'2026-03-12', notes:["Projects V2 Phase 2: tabs reordered to Overview→Chat→Workers→Deliverables→Activity, Overview tab shows objectives + links + linked projects + state, Agents renamed to Workers, Artifacts renamed to Deliverables, compact card titles"] },
   { ver:'v0.31.18', date:'2026-03-12', notes:["Projects V2 Phase 1: removed governance template scaffolding (6 files), stopped creating MEMORY.md in new projects, deleted 3 duplicate functions, removed hero panel, removed YMC Capital hardcoded examples, cleaned project file chain to essentials only"] },
   { ver:'v0.31.17', date:'2026-03-12', notes:["Chat model selectors now use explicit Model language instead of lane language, so model switching reads consistently in Porter and project chats","Project copy is cleaner too: worker/project proposals and summaries talk about projects directly instead of leaking internal lane phrasing"] },
@@ -16396,11 +16397,11 @@ async function _projLoadArtifacts(pid) {
     html += '<div style="padding:14px 16px;border:1px solid var(--border);border-radius:16px;background:var(--surface);margin-bottom:14px">';
     html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">';
     html += '<div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Artifacts</div>';
-    html += '<div style="font-size:13px;color:var(--text2);margin-top:4px">Uploads, screenshots, briefs, and generated deliverables should live here as project artifacts.</div></div>';
-    html += '<div style="display:flex;gap:8px;flex-wrap:wrap"><span class="model-card-chip dim" style="font-size:10px">' + artifacts.length + ' tracked</span><span class="model-card-chip dim" style="font-size:10px">' + docs.length + ' core docs</span></div>';
+    html += '<div style="font-size:13px;color:var(--text2);margin-top:4px">Files, exports, and outputs produced by this project.</div></div>';
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap"><span class="model-card-chip dim" style="font-size:10px">' + artifacts.length + ' deliverable' + (artifacts.length !== 1 ? 's' : '') + '</span></div>';
     html += '</div></div>';
 
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Project Artifacts (' + artifacts.length + ')</div>';
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Deliverables (' + artifacts.length + ')</div>';
     if (!artifacts.length) {
       html += '<div style="padding:20px;border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text3);text-align:center;margin-bottom:14px">No artifacts yet.<br><span style="font-size:11px">When Porter or a worker produces something worth keeping, it should appear here.</span></div>';
     } else {
@@ -16420,19 +16421,7 @@ async function _projLoadArtifacts(pid) {
       html += '</div>';
     }
 
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Core Project Docs</div>';
-    html += '<div style="display:flex;flex-direction:column;gap:6px">';
-    docs.forEach(function(f) {
-      var exists = !!f.exists;
-      html += '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--surface)">';
-      html += '<span style="width:7px;height:7px;border-radius:50%;background:' + (exists ? '#22c55e' : 'var(--text3)') + ';flex-shrink:0"></span>';
-      html += '<div style="flex:1;min-width:0">';
-      html += '<div style="font-size:12px;color:var(--text)">' + escHtml(f.label || f.key || 'doc') + '</div>';
-      html += '<div style="font-size:10px;color:var(--text3);margin-top:3px">' + escHtml(f.key || '') + (exists ? (' · ' + escHtml(f.size_human || '') + ' · ' + escHtml(f.modified_ago || '')) : ' · not created yet') + '</div>';
-      html += '</div>';
-      html += '</div>';
-    });
-    html += '</div>';
+
 
     el.innerHTML = html;
   } catch(e) {
@@ -37375,7 +37364,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.19"})
+            self.reply_json({"v": "0.31.20"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37537,7 +37526,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.19"
+                health["porter_version"] = "0.31.20"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -39481,7 +39470,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.19'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.20'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -44523,11 +44512,11 @@ if __name__ == "__main__":
     _ensure_porter_persona()
     try:
         for _proj in (_config.get("projects", []) or []):
-            if str(_proj.get("name") or "").strip() == "Launchpad":
+            if str(_proj.get("name") or "").strip() == "First Mission":
                 _seed_launchpad_state(str(_proj.get("id") or "").strip())
                 break
     except Exception as e:
-        log.debug("Launchpad state bootstrap skipped: %s", e)
+        log.debug("First Mission state bootstrap skipped: %s", e)
     mlog.start()  # Start Mission Control log system
     _db_migrate_chats()  # Migrate JSON chats to SQLite
     _treg_load()  # populate task registry from SQLite (needs _db_init first)
@@ -44571,7 +44560,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.19 ready (localhost only)")
+    print(f"\n  Porter v0.31.20 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
