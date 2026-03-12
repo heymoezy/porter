@@ -1,5 +1,10 @@
 # Porter Release Notes
 
+## v0.31.14 (2026-03-12)
+
+- Rebuilt `Logs` into a single live activity stream, folding routing, task, and run signal into the streaming event rows instead of wasting space on separate dashboard boxes.
+- Added a compact pixel heartbeat and condensed live status strip so the operator surface feels more alive and visual without reading like a stale admin panel.
+
 ## v0.31.13 (2026-03-12)
 
 - Project chat now behaves like a real lane instead of a disposable summary panel: it supports new sessions, saved history, loading old sessions, and deleting them inline.

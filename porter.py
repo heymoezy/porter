@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.13 — Add project chat history and continue legacy cleanup"""
+"""Porter v0.31.14 — Redesign logs as a live activity stream"""
 
 
 import email
@@ -9564,7 +9564,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .deleg-time { color:var(--text3); font-size:11px; margin-left:auto; white-space:nowrap; }
 .deleg-dur { color:var(--text3); font-size:11px; }
 
-/* ── Mission Control v2 ────────────────────────────────────────── */
+/* ── Mission Control v3 ────────────────────────────────────────── */
 #admin-module.module-panel.active { overflow:hidden; display:flex; flex-direction:column; }
 .mc-header { display:flex; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap; flex-shrink:0; }
 .mc-title { font-size:16px; font-weight:700; color:var(--text); }
@@ -9578,10 +9578,52 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-rate { font-size:11px; color:var(--text3); }
 .mc-header-right { margin-left:auto; display:flex; align-items:center; gap:6px; }
 
-.mc-cards { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-bottom:10px; flex-shrink:0; }
-.mc-card { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:6px 10px; cursor:pointer; transition:border-color .15s; }
-.mc-card:hover { border-color:var(--accent); }
-.mc-card-val { font-size:16px; font-weight:700; color:var(--text); line-height:1.2; }
+.mc-overview {
+  display:grid; grid-template-columns:minmax(220px,280px) 1fr; gap:10px;
+  margin-bottom:10px; flex-shrink:0;
+}
+.mc-heart-panel {
+  display:flex; align-items:center; gap:12px; padding:10px 12px;
+  background:linear-gradient(135deg, color-mix(in srgb,var(--accent) 10%, var(--bg)) 0%, var(--bg2) 100%);
+  border:1px solid color-mix(in srgb,var(--accent) 24%, var(--border));
+  border-radius:12px;
+}
+.mc-heart-icon {
+  width:10px; height:10px; background:#ff5b7d; position:relative; flex-shrink:0;
+  box-shadow:
+    10px 0 #ff5b7d,
+    -5px 5px #ff5b7d, 0 5px #ff5b7d, 5px 5px #ff5b7d, 10px 5px #ff5b7d, 15px 5px #ff5b7d,
+    -5px 10px #ff5b7d, 0 10px #ff5b7d, 5px 10px #ff5b7d, 10px 10px #ff5b7d, 15px 10px #ff5b7d,
+    0 15px #ff5b7d, 5px 15px #ff5b7d, 10px 15px #ff5b7d,
+    5px 20px #ff5b7d;
+  transform:scale(.72);
+  transform-origin:top left;
+}
+.mc-heart-copy { min-width:0; }
+.mc-heart-title { font-size:11px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:.55px; }
+.mc-heart-sub { font-size:11px; color:var(--text3); margin-top:3px; }
+.mc-heartbeat {
+  display:grid; grid-template-columns:repeat(24, minmax(8px, 1fr)); gap:4px;
+  align-items:end; min-height:46px;
+}
+.mc-beat {
+  height:10px; border-radius:3px 3px 1px 1px; background:var(--bg2);
+  border:1px solid color-mix(in srgb,var(--border) 80%, transparent);
+  transition:height .18s ease, background .18s ease, border-color .18s ease;
+}
+.mc-beat.info { background:color-mix(in srgb,#38bdf8 42%, var(--bg2)); }
+.mc-beat.route { background:color-mix(in srgb,#f59e0b 44%, var(--bg2)); }
+.mc-beat.run { background:color-mix(in srgb,#22c55e 42%, var(--bg2)); }
+.mc-beat.task { background:color-mix(in srgb,#60a5fa 44%, var(--bg2)); }
+.mc-beat.chat { background:color-mix(in srgb,#8b5cf6 42%, var(--bg2)); }
+.mc-beat.issue { background:color-mix(in srgb,#ef4444 55%, var(--bg2)); }
+.mc-now-strip { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
+.mc-card {
+  background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:8px 10px;
+  cursor:pointer; transition:border-color .15s, transform .15s;
+}
+.mc-card:hover { border-color:var(--accent); transform:translateY(-1px); }
+.mc-card-val { font-size:15px; font-weight:700; color:var(--text); line-height:1.2; }
 .mc-card-val.danger { color:var(--err); }
 .mc-card-label { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; margin-top:2px; }
 
@@ -9594,11 +9636,37 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-mode-btn { padding:3px 10px; font-size:10px; cursor:pointer; background:var(--bg); color:var(--text2); border:none; transition:all .15s; }
 .mc-mode-btn.active { background:var(--accent); color:#fff; }
 
-.mc-body { display:grid; grid-template-columns:1fr 340px; gap:10px; flex:1; min-height:0; }
+.mc-body { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:10px; flex:1; min-height:0; }
 .mc-timeline { background:var(--bg); border:1px solid var(--border); border-radius:8px; overflow-y:auto; min-height:0; }
-.mc-row { display:grid; grid-template-columns:110px 52px 64px 1fr auto 56px 28px; align-items:center; gap:6px; padding:4px 10px; font-size:11px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .1s; }
+.mc-row {
+  display:grid; grid-template-columns:36px 108px minmax(0,1fr) auto; align-items:start; gap:10px;
+  padding:10px 12px; font-size:11px; border-bottom:1px solid var(--border);
+  cursor:pointer; transition:background .1s, border-color .15s;
+}
 .mc-row:hover { background:var(--bg2); }
-.mc-row.selected { background:var(--accent)10; border-left:2px solid var(--accent); }
+.mc-row.selected { background:color-mix(in srgb,var(--accent) 10%, transparent); border-left:2px solid var(--accent); padding-left:10px; }
+.mc-row-main { min-width:0; display:flex; flex-direction:column; gap:5px; }
+.mc-row-topline { display:flex; align-items:center; gap:8px; min-width:0; }
+.mc-row-activity {
+  font-size:10px; font-weight:700; letter-spacing:.45px; text-transform:uppercase;
+  color:var(--text2);
+}
+.mc-msg {
+  color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-size:12px; font-weight:600; flex:1; min-width:0;
+}
+.mc-row-meta { display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0; }
+.mc-rail {
+  width:26px; min-height:26px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+  background:var(--bg2); border:1px solid var(--border); font-size:12px; font-weight:700;
+}
+.mc-rail.route { color:#f59e0b; border-color:color-mix(in srgb,#f59e0b 45%, var(--border)); background:color-mix(in srgb,#f59e0b 16%, var(--bg2)); }
+.mc-rail.run { color:#22c55e; border-color:color-mix(in srgb,#22c55e 45%, var(--border)); background:color-mix(in srgb,#22c55e 15%, var(--bg2)); }
+.mc-rail.task { color:#60a5fa; border-color:color-mix(in srgb,#60a5fa 45%, var(--border)); background:color-mix(in srgb,#60a5fa 15%, var(--bg2)); }
+.mc-rail.chat { color:#8b5cf6; border-color:color-mix(in srgb,#8b5cf6 45%, var(--border)); background:color-mix(in srgb,#8b5cf6 14%, var(--bg2)); }
+.mc-rail.issue { color:#ef4444; border-color:color-mix(in srgb,#ef4444 45%, var(--border)); background:color-mix(in srgb,#ef4444 15%, var(--bg2)); }
+.mc-rail.file { color:#06b6d4; border-color:color-mix(in srgb,#06b6d4 45%, var(--border)); background:color-mix(in srgb,#06b6d4 14%, var(--bg2)); }
+.mc-rail.system { color:var(--text2); }
 .mc-ts { color:var(--text3); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:10px; }
 .mc-sev { padding:1px 6px; border-radius:3px; font-size:10px; font-weight:600; text-transform:uppercase; text-align:center; }
 .mc-sev.debug { background:var(--bg2); color:var(--text3); }
@@ -9606,13 +9674,12 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-sev.warn { background:#f59e0b20; color:#f59e0b; }
 .mc-sev.error { background:#ef444420; color:#ef4444; }
 .mc-sev.critical { background:#ef4444; color:#fff; }
-.mc-domain { font-size:10px; color:var(--text2); background:var(--bg2); padding:1px 5px; border-radius:3px; text-align:center; }
-.mc-msg { color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .mc-chips { display:flex; gap:3px; }
 .mc-chip { font-size:10px; padding:1px 4px; border-radius:3px; background:var(--bg2); color:var(--text3); cursor:pointer; white-space:nowrap; }
 .mc-chip:hover { color:var(--accent); }
+.mc-row-right { display:flex; align-items:flex-start; gap:8px; justify-content:flex-end; min-width:88px; }
 .mc-dur { font-size:10px; color:var(--text3); text-align:right; font-family:monospace; }
-.mc-status-icon { font-size:12px; text-align:center; }
+.mc-status-icon { font-size:12px; text-align:center; min-width:14px; }
 
 .mc-right-panel { display:flex; flex-direction:column; min-height:0; background:var(--bg); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
 .mc-right-tabs { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; }
@@ -9653,11 +9720,13 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-empty { text-align:center; padding:40px 20px; color:var(--text3); font-size:12px; }
 
 @media(max-width:768px) {
-  .mc-cards { grid-template-columns:repeat(3,1fr); }
+  .mc-overview { grid-template-columns:1fr; }
+  .mc-now-strip { grid-template-columns:repeat(3,1fr); }
   .mc-body { grid-template-columns:1fr; }
   .mc-right-panel { max-height:300px; }
-  .mc-row { grid-template-columns:80px 40px 1fr 28px; }
-  .mc-row .mc-domain, .mc-row .mc-chips, .mc-row .mc-dur { display:none; }
+  .mc-row { grid-template-columns:30px 82px minmax(0,1fr); }
+  .mc-row-right { display:none; }
+  .mc-heartbeat { grid-template-columns:repeat(16, minmax(8px, 1fr)); }
 }
 
 
@@ -11487,7 +11556,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.13</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.14</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12068,30 +12137,24 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
     </div>
 
-    <div id="pulse-status-strip-admin" class="pulse-status-strip" style="padding-top:2px;padding-bottom:10px"></div>
-    <div class="pulse-grid" style="margin-bottom:14px">
-      <div class="pulse-board">
-        <div class="pulse-pane">
-          <div class="pulse-pane-title">Lane Routing</div>
-          <div id="runtime-coordination-panel-admin" style="margin-top:8px"></div>
-        </div>
-        <div class="pulse-pane">
-          <div class="pulse-pane-title">Recent Tasks</div>
-          <div id="runtime-gateway-activity-admin" class="pulse-routing-list" style="margin-top:8px"></div>
-        </div>
-        <div class="pulse-pane">
-          <div class="pulse-pane-title">Active Runs</div>
-          <div id="runtime-orch-runs-admin" class="pulse-runs-list" style="margin-top:8px"></div>
+    <div class="mc-overview">
+      <div class="mc-heart-panel">
+        <div class="mc-heart-icon" aria-hidden="true"></div>
+        <div class="mc-heart-copy">
+          <div class="mc-heart-title">Heartbeat</div>
+          <div id="mc-heart-sub" class="mc-heart-sub">Streaming live system activity</div>
         </div>
       </div>
-    </div>
-
-    <div class="mc-cards">
-      <div class="mc-card" onclick="mcPreset('incidents')"><div id="mc-card-incidents" class="mc-card-val">0</div><div class="mc-card-label">Incidents</div></div>
-      <div class="mc-card" onclick="mcPreset('errors')"><div id="mc-card-errors" class="mc-card-val">0</div><div class="mc-card-label">Errors (5m)</div></div>
-      <div class="mc-card" onclick="mcPreset('timeouts')"><div id="mc-card-timeouts" class="mc-card-val">0</div><div class="mc-card-label">Timeouts</div></div>
-      <div class="mc-card" onclick="mcPreset('bridge')"><div id="mc-card-bridge" class="mc-card-val">0</div><div class="mc-card-label">Bridge Fails</div></div>
-      <div class="mc-card" onclick="mcPreset('all')"><div id="mc-card-total" class="mc-card-val">0</div><div class="mc-card-label">Total Events</div></div>
+      <div>
+        <div id="mc-heartbeat" class="mc-heartbeat"></div>
+        <div class="mc-now-strip" style="margin-top:8px">
+          <div class="mc-card" onclick="mcPreset('incidents')"><div id="mc-card-incidents" class="mc-card-val">0</div><div class="mc-card-label">Incidents</div></div>
+          <div class="mc-card" onclick="mcPreset('errors')"><div id="mc-card-errors" class="mc-card-val">0</div><div class="mc-card-label">Errors (5m)</div></div>
+          <div class="mc-card" onclick="mcPreset('routing')"><div id="mc-card-routing" class="mc-card-val">0</div><div class="mc-card-label">Routing Events</div></div>
+          <div class="mc-card" onclick="mcPreset('schedule')"><div id="mc-card-runs" class="mc-card-val">0</div><div class="mc-card-label">Run Events</div></div>
+          <div class="mc-card" onclick="mcPreset('all')"><div id="mc-card-total" class="mc-card-val">0</div><div class="mc-card-label">Total Events</div></div>
+        </div>
+      </div>
     </div>
 
     <div class="mc-filters">
@@ -12624,6 +12687,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.14', date:'2026-03-12', notes:["Logs is now a single live activity stream instead of a pile of separate routing, recent task, and active run boxes: routing/task/run signal is folded directly into richer streaming log rows","Added a compact pixel heartbeat strip and condensed live status panel so the operator surface feels alive without wasting screen space"] },
   { ver:'v0.31.13', date:'2026-03-12', notes:["Project chat now behaves like a real lane instead of a disposable panel: it supports new sessions, saved history, loading old sessions, and deleting them inline","Continued active-product cleanup: Logs remains the single live-ops surface, while the strengthened project lane keeps Porter project work out of weak admin-style summaries"] },
   { ver:'v0.31.12', date:'2026-03-11', notes:["Pulse is no longer a separate user-facing surface: Logs now carries the live routing strip, backend lanes, recent task routing, and active runs in one place","Projects now uses a stronger Porter-led landing layout and a dedicated project chat lane, with the tab rail reduced to Chat, Activity, Agents, Artifacts, and State","Launchpad activity now filters out stale legacy residue more aggressively, and Logs no longer remaps into the old Pulse module"] },
   { ver:'v0.31.11', date:'2026-03-11', notes:["Logs are visible again as a first-class surface, with a direct Logs action back in Pulse so operational tracing is no longer buried","Agent-detail chat now includes an explicit lane selector in the chat toolbar, so switching between Auto, Codex, Claude, Gemini, OpenClaw, and Ollama happens inside the chat itself instead of relying only on natural-language prompts"] },
@@ -21036,7 +21100,6 @@ async function loadDelegationLog() {
 
 async function loadAdmin() {
   mcInit();
-  _loadRuntimeOperations();
 }
 
 async function mcInit() {
@@ -21069,6 +21132,8 @@ function mcRenderTimeline(events) {
   if (!el) return;
   if (!events || events.length === 0) {
     el.innerHTML = '<div class="mc-empty">No events matching filters</div>';
+    mcRenderHeartbeat([]);
+    mcRefreshActivityCards([]);
     return;
   }
   var html = '';
@@ -21078,24 +21143,31 @@ function mcRenderTimeline(events) {
     var tStr = ts.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'}) + '.' + String(ts.getMilliseconds()).padStart(3,'0');
     var sev = e.severity || 'info';
     var sel = (_mcSelectedId === e.event_id) ? ' selected' : '';
+    var kind = mcEventKind(e);
     var chips = '';
+    if (e.backend) chips += '<span class="mc-chip" title="Backend">' + escHtml(e.backend) + '</span>';
+    if (e.domain) chips += '<span class="mc-chip" title="Domain">' + escHtml(e.domain) + '</span>';
     if (e.trace_id) chips += '<span class="mc-chip" onclick="event.stopPropagation();mcFilterTrace(\'' + escHtml(e.trace_id) + '\')" title="Trace">T:' + escHtml(e.trace_id.substring(0,8)) + '</span>';
     if (e.run_id) chips += '<span class="mc-chip" title="Run">R:' + escHtml(e.run_id.substring(0,8)) + '</span>';
-    var dur = e.duration_ms ? (e.duration_ms + 'ms') : '';
+    if (e.status) chips += '<span class="mc-chip" title="Status">' + escHtml(e.status) + '</span>';
+    var dur = e.duration_ms ? mcFormatDuration(e.duration_ms) : '';
     var statusIcon = '';
     if (e.status === 'ok') statusIcon = '<span style="color:#10b981">&#10003;</span>';
     else if (e.status === 'error') statusIcon = '<span style="color:var(--err)">&#10007;</span>';
+    else if (e.status === 'running') statusIcon = '<span style="color:#60a5fa">&#9679;</span>';
     html += '<div class="mc-row' + sel + '" onclick="mcSelectEvent(\'' + escHtml(e.event_id) + '\')" data-eid="' + escHtml(e.event_id) + '">';
+    html += '<span class="mc-rail ' + kind.key + '">' + kind.glyph + '</span>';
     html += '<span class="mc-ts">' + tStr + '</span>';
-    html += '<span class="mc-sev ' + sev + '">' + sev + '</span>';
-    html += '<span class="mc-domain">' + escHtml(e.domain || '') + '</span>';
-    html += '<span class="mc-msg">' + escHtml(e.message || '') + '</span>';
-    html += '<span class="mc-chips">' + chips + '</span>';
-    html += '<span class="mc-dur">' + dur + '</span>';
-    html += '<span class="mc-status-icon">' + statusIcon + '</span>';
+    html += '<div class="mc-row-main">';
+    html += '<div class="mc-row-topline"><span class="mc-sev ' + sev + '">' + sev + '</span><span class="mc-row-activity">' + kind.label + '</span><span class="mc-msg">' + escHtml(mcEventTitle(e)) + '</span></div>';
+    html += '<div class="mc-row-meta"><span class="mc-chips">' + chips + '</span></div>';
+    html += '</div>';
+    html += '<div class="mc-row-right"><span class="mc-dur">' + dur + '</span><span class="mc-status-icon">' + statusIcon + '</span></div>';
     html += '</div>';
   }
   el.innerHTML = html;
+  mcRenderHeartbeat(events);
+  mcRefreshActivityCards(events);
 }
 
 function mcOnSSE(data) {
@@ -21108,6 +21180,99 @@ function mcOnSSE(data) {
   _mcEvents.unshift(e);
   if (_mcEvents.length > 500) _mcEvents.pop();
   mcRenderTimeline(_mcEvents);
+}
+
+function mcEventKind(e) {
+  var domain = String(e.domain || '').toLowerCase();
+  var eventType = String(e.event_type || '').toLowerCase();
+  var severity = String(e.severity || '').toLowerCase();
+  if (severity === 'error' || severity === 'critical' || e.status === 'error' || eventType.indexOf('fail') >= 0) {
+    return {key:'issue', label:'Issue', glyph:'!'};
+  }
+  if (domain === 'routing' || domain === 'bridge' || eventType.indexOf('bridge.') === 0 || eventType.indexOf('route') >= 0) {
+    return {key:'route', label:'Routing', glyph:'R'};
+  }
+  if (domain === 'schedule' || eventType.indexOf('orch.run') === 0 || eventType.indexOf('run_') >= 0 || e.run_id) {
+    return {key:'run', label:'Run', glyph:'>'};
+  }
+  if (eventType.indexOf('orch.step') === 0 || eventType.indexOf('task') >= 0 || domain === 'agent') {
+    return {key:'task', label:'Task', glyph:'T'};
+  }
+  if (domain === 'chat' || eventType.indexOf('chat.') === 0) {
+    return {key:'chat', label:'Chat', glyph:'C'};
+  }
+  if (domain === 'file' || domain === 'artifact') {
+    return {key:'file', label:'Artifact', glyph:'F'};
+  }
+  return {key:'system', label:'System', glyph:'S'};
+}
+
+function mcEventTitle(e) {
+  var msg = String(e.message || '').trim();
+  if (msg) return msg;
+  var kind = mcEventKind(e);
+  var ev = String(e.event_type || kind.label || 'event').replace(/[._]+/g, ' ');
+  return ev.charAt(0).toUpperCase() + ev.slice(1);
+}
+
+function mcFormatDuration(ms) {
+  if (!ms || !isFinite(ms)) return '';
+  if (ms >= 1000) return (ms / 1000).toFixed(ms >= 10000 ? 0 : 1) + 's';
+  return Math.round(ms) + 'ms';
+}
+
+function mcRenderHeartbeat(events) {
+  var host = document.getElementById('mc-heartbeat');
+  if (!host) return;
+  var recent = (events || []).slice(0, 24).reverse();
+  while (recent.length < 24) recent.unshift(null);
+  var html = '';
+  var liveCount = 0;
+  var issueCount = 0;
+  var routingCount = 0;
+  var runCount = 0;
+  for (var i = 0; i < recent.length; i++) {
+    var e = recent[i];
+    if (!e) {
+      html += '<span class="mc-beat"></span>';
+      continue;
+    }
+    liveCount += 1;
+    var kind = mcEventKind(e);
+    if (kind.key === 'issue') issueCount += 1;
+    if (kind.key === 'route') routingCount += 1;
+    if (kind.key === 'run' || kind.key === 'task') runCount += 1;
+    var sev = String(e.severity || '').toLowerCase();
+    var height = 10;
+    if (kind.key === 'issue') height = 40;
+    else if (kind.key === 'run') height = 30;
+    else if (kind.key === 'task') height = 26;
+    else if (kind.key === 'route') height = 22;
+    else if (kind.key === 'chat') height = 18;
+    else if (sev === 'warn') height += 6;
+    html += '<span class="mc-beat ' + kind.key + '" style="height:' + height + 'px" title="' + escHtml(mcEventTitle(e)) + '"></span>';
+  }
+  host.innerHTML = html;
+  var sub = document.getElementById('mc-heart-sub');
+  if (sub) {
+    if (!liveCount) sub.textContent = 'Quiet right now';
+    else sub.textContent = liveCount + ' recent signals • ' + routingCount + ' routing • ' + runCount + ' run/task • ' + issueCount + ' issues';
+  }
+}
+
+function mcRefreshActivityCards(events) {
+  var recent = (events || []).slice(0, 120);
+  var routing = 0;
+  var runs = 0;
+  for (var i = 0; i < recent.length; i++) {
+    var kind = mcEventKind(recent[i]).key;
+    if (kind === 'route') routing += 1;
+    if (kind === 'run' || kind === 'task') runs += 1;
+  }
+  var el = document.getElementById('mc-card-routing');
+  if (el) el.textContent = routing;
+  el = document.getElementById('mc-card-runs');
+  if (el) el.textContent = runs;
 }
 
 async function mcSelectEvent(eventId) {
@@ -21289,14 +21454,13 @@ async function mcUpdateCards() {
   var el;
   el = document.getElementById('mc-card-incidents'); if(el) { el.textContent = data.open_incidents || 0; el.className = 'mc-card-val' + ((data.open_incidents > 0) ? ' danger' : ''); }
   el = document.getElementById('mc-card-errors'); if(el) { el.textContent = data.errors_5m || 0; el.className = 'mc-card-val' + ((data.errors_5m > 0) ? ' danger' : ''); }
-  el = document.getElementById('mc-card-timeouts'); if(el) el.textContent = data.timeouts_5m || 0;
-  el = document.getElementById('mc-card-bridge'); if(el) el.textContent = data.bridge_fails_5m || 0;
   el = document.getElementById('mc-card-total'); if(el) el.textContent = data.total_events || 0;
   el = document.getElementById('mc-rate'); if(el) el.textContent = (data.events_per_min || 0) + ' events/min';
   el = document.getElementById('mc-err-rate'); if(el) el.textContent = (data.errors_5m || 0) + ' errors (5m)';
   el = document.getElementById('mc-disk'); if(el) el.textContent = 'Disk: ' + (data.disk_mb || 0) + ' MB';
   el = document.getElementById('mc-dropped'); if(el) el.textContent = 'Dropped: ' + (data.dropped || 0);
   el = document.getElementById('mc-total-bottom'); if(el) el.textContent = 'Total: ' + (data.total_events || 0);
+  mcRefreshActivityCards(_mcEvents || []);
 }
 
 function mcFilterTrace(traceId) {
@@ -36998,7 +37162,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.13"})
+            self.reply_json({"v": "0.31.14"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -37160,7 +37324,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.13"
+                health["porter_version"] = "0.31.14"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -39104,7 +39268,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.13'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.14'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -44194,7 +44358,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.13 ready (localhost only)")
+    print(f"\n  Porter v0.31.14 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
