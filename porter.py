@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.29 — Unify chat model labels and clean project copy"""
+"""Porter v0.31.30 — Fix project chat buttons + Porter-style model selector"""
 
 
 import email
@@ -11796,7 +11796,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.29</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.30</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12883,6 +12883,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.30', date:'2026-03-12', notes:["Fix: Create Worker/Refine Project buttons now work in project chat","Project chat model selector replaced with Porter-style custom dropdown"] },
   { ver:'v0.31.29', date:'2026-03-12', notes:["/ shortcut opens chat from anywhere: project chat if inside a project, main Porter chat otherwise."] },
   { ver:'v0.31.28', date:'2026-03-12', notes:["Fix Porter dancing avatar in project chat: was missing appearance_style on inline persona object."] },
   { ver:'v0.31.27', date:'2026-03-12', notes:["Project chat actions: Porter can rename, set type, deadline, milestones, status from chat. Multimodal content: embed text, images, video, audio, documents, links in projects. Upgraded Deliverables tab."] },
@@ -16329,8 +16330,9 @@ async function _renderProjTabContent() {
       + '<button class="pd-chat-toolbtn" onclick="_projKickoff(\'worker\')">Create Worker</button>'
       + '<button class="pd-chat-toolbtn" onclick="_projKickoff(\'project\')">Refine Project</button>'
       + '<div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap">'
-      + '<span id="proj-chat-model-note" style="font-size:11px;color:var(--text3)">Model: Auto</span>'
-      + '<select id="proj-chat-model-sel" onchange="_projChatSetModel(this.value)" style="font-size:11px;padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:var(--bg);color:var(--text)">' + _pdChatModelOptions().map(function(opt) { return '<option value="' + escHtml(opt.value) + '">' + escHtml(opt.label) + '</option>'; }).join('') + '</select>'
+      + '<div id="proj-chat-model-picker" class="chat-ctx-sel" onclick="_projChatModelToggle(event)" style="margin-left:auto;font-size:11px;padding:4px 10px">'
+      + '<span class="ctx-label" id="proj-chat-model-label">Model: Auto</span><span class="ctx-arrow">▾</span>'
+      + '<div class="chat-ctx-dropdown" id="proj-chat-model-dd"></div></div>'
       + '</div>'
       + '</div>'
       + '<div class="pd-chat-composer">'
@@ -16339,8 +16341,6 @@ async function _renderProjTabContent() {
       + '</div></div></section>';
     content.innerHTML = html;
     var projState = _projChatGetState(proj.id);
-    var projLane = document.getElementById('proj-chat-model-sel');
-    if (projLane) projLane.value = projState.modelOverride || '';
     _projChatSetModel(projState.modelOverride || '');
     _projChatRender(proj.id);
     return;
@@ -16554,8 +16554,45 @@ function _projChatSetModel(value) {
   if (!proj) return;
   var state = _projChatGetState(proj.id);
   state.modelOverride = value || '';
-  var badge = document.getElementById('proj-chat-model-note');
-  if (badge) badge.textContent = state.modelOverride ? ('Model: ' + _pdChatModelLabel(state.modelOverride)) : 'Model: Auto';
+  var label = document.getElementById('proj-chat-model-label');
+  var picker = document.getElementById('proj-chat-model-picker');
+  if (label) label.textContent = state.modelOverride ? ('Model: ' + _pdChatModelLabel(state.modelOverride)) : 'Model: Auto';
+  if (picker) {
+    if (state.modelOverride) { picker.classList.add('active'); } else { picker.classList.remove('active'); }
+  }
+}
+
+function _projChatModelToggle(event) {
+  event.stopPropagation();
+  document.querySelectorAll('.chat-ctx-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
+  var dd = document.getElementById('proj-chat-model-dd');
+  if (!dd) return;
+  var proj = window._projCurrent;
+  var state = proj ? _projChatGetState(proj.id) : {};
+  var cur = state.modelOverride || '';
+  var opts = _pdChatModelOptions();
+  var html = '';
+  opts.forEach(function(opt, i) {
+    var sel = (cur === opt.value) ? ' selected' : '';
+    html += '<div class="chat-ctx-opt' + sel + '" onclick="event.stopPropagation();_projChatModelPick(\x27' + opt.value + '\x27)">'
+      + escHtml(opt.label) + '</div>';
+    if (i === 0) html += '<div class="chat-ctx-divider"></div>';
+  });
+  dd.innerHTML = html;
+  var rect = event.currentTarget.getBoundingClientRect();
+  var spaceBelow = window.innerHeight - rect.bottom;
+  if (spaceBelow < 220) {
+    dd.style.top = ''; dd.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+  } else {
+    dd.style.bottom = ''; dd.style.top = (rect.bottom + 4) + 'px';
+  }
+  dd.style.left = Math.max(4, rect.left) + 'px';
+  dd.classList.add('open');
+}
+
+function _projChatModelPick(value) {
+  _projChatSetModel(value);
+  document.querySelectorAll('.chat-ctx-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
 }
 
 function _projChatComposePrompt(project, state, userText) {
@@ -16740,7 +16777,7 @@ async function _projLoadChatSession(chatId) {
 function _projKickoff(kind) {
   var project = window._projCurrent;
   if (!project) return;
-  _projTab = 'overview';
+  _projTab = 'chat';
   _renderProjTabs();
   _renderProjTabContent();
   var state = _projChatGetState(project.id);
@@ -37988,7 +38025,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.29"})
+            self.reply_json({"v": "0.31.30"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -38150,7 +38187,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.29"
+                health["porter_version"] = "0.31.30"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40101,7 +40138,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.29'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.30'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -45444,7 +45481,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.29 ready (localhost only)")
+    print(f"\n  Porter v0.31.30 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
