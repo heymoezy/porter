@@ -9679,7 +9679,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .mc-heart-copy { min-width:0; }
 .mc-heart-title { font-size:10px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:.55px; }
 .mc-heart-sub { font-size:10px; color:var(--text2); margin-top:2px; }
-.mc-heart-stats { display:flex; gap:4px; flex-wrap:wrap; margin-top:5px; }
+.mc-heart-stats { display:flex; gap:4px; flex-wrap:wrap; margin-top:5px; min-height:22px; }
 .mc-heart-pill {
   font-size:8px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
   padding:2px 5px; border-radius:999px; background:color-mix(in srgb,var(--bg) 65%, transparent);
@@ -21418,10 +21418,9 @@ function mcRenderHeartbeat(events) {
   if (statsHost) {
     var chips = [];
     chips.push('<span class="mc-heart-pill live">' + liveCount + ' live</span>');
-    if (routingCount) chips.push('<span class="mc-heart-pill">' + routingCount + ' route</span>');
-    if (runCount) chips.push('<span class="mc-heart-pill">' + runCount + ' run</span>');
-    if (recentErrors) chips.push('<span class="mc-heart-pill err">' + recentErrors + ' err</span>');
-    else chips.push('<span class="mc-heart-pill warn">' + issueCount + ' issue</span>');
+    chips.push('<span class="mc-heart-pill">' + routingCount + ' route</span>');
+    chips.push('<span class="mc-heart-pill">' + runCount + ' run</span>');
+    chips.push('<span class="mc-heart-pill ' + (recentErrors ? 'err' : 'warn') + '">' + (recentErrors || issueCount) + ' ' + (recentErrors ? 'err' : 'issue') + '</span>');
     statsHost.innerHTML = chips.join('');
   }
 }
