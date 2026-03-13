@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.38 — Chat context fix + slash hint + AI project descriptions"""
+"""Porter v0.31.39 — Connections tab redesign"""
 
 
 import email
@@ -686,7 +686,7 @@ def _db_init():
         conn.execute("UPDATE users SET display_name=?, full_name=? WHERE username=?", (_cfg_dn, _cfg_fn, _cfg_un))
         conn.commit()
 
-    # v0.31.38 — Migrate username from 'admin' to display_name-based slug
+    # v0.31.39 — Migrate username from 'admin' to display_name-based slug
     if _cfg_un == "admin" and _cfg_dn and _cfg_dn.lower() != "admin":
         _new_un = _cfg_dn.lower().strip().replace(" ", "_")
         _existing = conn.execute("SELECT username FROM users WHERE username=?", (_new_un,)).fetchone()
@@ -9441,8 +9441,8 @@ body.sidebar-collapsed { --sidebar: 52px; }
 body.sidebar-collapsed .logo-text,
 body.sidebar-collapsed .logo-mark,
 body.sidebar-collapsed .mnav-label,
+body.sidebar-collapsed .mnav-group-label,
 body.sidebar-collapsed .loc-name,
-
 body.sidebar-collapsed .sidebar-footer,
 body.sidebar-collapsed .user-name,
 body.sidebar-collapsed .user-sub { display: none; }
@@ -11057,6 +11057,19 @@ body.density-compact .file-name { padding: 6px 0; }
 .chat-ctx-opt.selected { color:var(--accent); font-weight:600; }
 .chat-ctx-opt .ctx-opt-avatar { font-size:14px; }
 .chat-ctx-divider { height:1px; background:var(--border); margin:4px 0; }
+.cap-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; }
+.cap-card { padding:12px 14px; border:1px solid var(--border); border-radius:8px; background:var(--surface); transition:border-color .15s; }
+.cap-card:hover { border-color:var(--accent); }
+.cap-card-hdr { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.cap-card-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.cap-card-dot.ok { background:#22c55e; }
+.cap-card-dot.off { background:var(--text3); opacity:.5; }
+.cap-card-name { font-weight:600; font-size:13px; color:var(--text); }
+.cap-card-ver { font-size:11px; color:var(--text3); margin-left:auto; white-space:nowrap; }
+.cap-card-feat { font-size:11px; color:var(--text3); line-height:1.4; }
+.cap-card-link { font-size:11px; margin-top:4px; }
+.cap-card-link a { color:var(--accent); text-decoration:none; }
+.cap-card-link a:hover { text-decoration:underline; }
 /* ── Slash Hint ─────────────────────────────────── */
 .slash-hint { position:fixed; bottom:18px; right:18px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:5px 12px; font-size:11px; color:var(--text3); opacity:0.55; z-index:90; cursor:pointer; transition:opacity 0.2s; display:flex; align-items:center; gap:6px; }
 .slash-hint:hover { opacity:1; }
@@ -11970,7 +11983,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.38</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.39</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12456,27 +12469,12 @@ input[type="number"].settings-input { min-width: 60px; }
   <div id="capabilities-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Connections</span>
-      <button class="btn btn-ghost" onclick="loadCapabilities()">&#8635; Refresh</button>
+      <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+        <span id="cap-summary" style="font-size:11px;color:var(--text3)"></span>
+        <button class="btn btn-ghost" onclick="loadCapabilities()">&#8635; Scan</button>
+      </div>
     </div>
-    <div class="module-intro">Workspace connections to external services. Attach them to projects to grant access.</div>
-
-    <!-- S8: Integrations section (from OpenClaw) -->
-    <div id="gws-section" style="margin-bottom:16px;display:none">
-    <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px;padding:0 4px">Google Workspace</div>
-    <div id="gws-panel" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px"></div>
-  </div>
-  <div id="integrations-section" style="margin-bottom:16px">
-      <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px;padding:0 4px">Integrations</div>
-      <div id="integrations-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"></div>
-    </div>
-
-
-    <!-- Tools section (existing capabilities) -->
-    <div style="margin-bottom:16px">
-      <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px;padding:0 4px">Tools</div>
-      <div id="capabilities-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"></div>
-    </div>
-
+    <div id="capabilities-list" class="cap-grid"></div>
   </div>
 
   <div id="models-module" class="module-panel">
@@ -13096,7 +13094,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.31.38', date:'2026-03-12', notes:["People module: full CRM with user cards, stats, role management, add/remove users","Username migration: auto-renames 'admin' to display-name slug on startup","Backend: create user action in /api/admin/users"] },
+  { ver:'v0.31.39', date:'2026-03-12', notes:["People module: full CRM with user cards, stats, role management, add/remove users","Username migration: auto-renames 'admin' to display-name slug on startup","Backend: create user action in /api/admin/users"] },
   { ver:'v0.31.36', date:'2026-03-12', notes:["Fix: agent detail chat no longer offscreen — flex-based layout","Fix: office/grid toggle hidden in agent detail view","Fix: nav tabs scroll to top on switch","Agent detail model picker now uses Porter-style dropdown","Enhanced project coaching — context-aware suggestions on every tab"] },
   { ver:'v0.31.35', date:'2026-03-12', notes:["Agent Office: pixel-art virtual office visualization on the Agents tab","View toggle: switch between Grid and Office views","Each agent sits at a pixel desk with their Minecraft portrait and status bubble (idle/working)","Porter gets the corner office with a larger desk"] },
   { ver:'v0.31.34', date:'2026-03-12', notes:["Extensions → Connections: renamed nav + module, new workspace_connections/project_connections/environment_tools DB tables","Project Apps tab: view and manage connected services per project","Phase 1 of Connections refactor (GPT-5.4 architecture recommendation)"] },
@@ -17636,52 +17634,7 @@ async function _projDelete(pid) {
 }
 
 // ── Capabilities / System module ──────────────────────────────────────────
-async function renderGwsPanel() {
-  var section = document.getElementById('gws-section');
-  var panel = document.getElementById('gws-panel');
-  if (!section || !panel) return;
-  api('/api/gws/status').then(function(s) {
-    if (!s || !s.installed) { section.style.display = 'none'; return; }
-    section.style.display = 'block';
-    var h = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
-    h += '<div style="font-size:15px;font-weight:600;color:var(--text1)">Google Workspace</div>';
-    h += '<div style="font-size:11px;color:var(--text3)">' + (s.version || '') + '</div></div>';
-    // Auth status
-    if (s.authenticated) {
-      h += '<div style="font-size:12px;color:var(--green);margin-bottom:8px">\u2705 Authenticated</div>';
-    } else {
-      h += '<div style="font-size:12px;color:var(--red);margin-bottom:8px">\u274c Not authenticated</div>';
-      h += '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Run: <code>gws auth setup && gws auth login</code></div>';
-    }
-    // Accounts
-    if (s.accounts && s.accounts.length) {
-      h += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Account: <strong>' + (s.accounts[0].email || s.accounts[0].account || 'configured') + '</strong></div>';
-    }
-    // Services grid
-    var svcs = s.granted_services && s.granted_services.length ? s.granted_services : ['drive','gmail','calendar','sheets','docs','chat','tasks','forms','slides','meet','keep','admin','people','vault'];
-    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">Services</div>';
-    h += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">';
-    var svcIcons = {drive:'\ud83d\udcc1',gmail:'\ud83d\udce7',calendar:'\ud83d\udcc5',sheets:'\ud83d\udcca',docs:'\ud83d\udcdd',chat:'\ud83d\udcac',tasks:'\u2705',forms:'\ud83d\udccb',slides:'\ud83c\udfa8',meet:'\ud83c\udfa5',keep:'\ud83d\udccc',admin:'\u2699\ufe0f',people:'\ud83d\udc65',vault:'\ud83d\udd12'};
-    svcs.forEach(function(svc) {
-      var icon = svcIcons[svc] || '\u2022';
-      h += '<span style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;color:var(--text2)">' + icon + ' ' + svc + '</span>';
-    });
-    h += '</div>';
-    // Quick actions
-    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);margin:8px 0 6px;text-transform:uppercase;letter-spacing:0.5px">Quick Actions</div>';
-    h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
-    var actions = [
-      {label:'\ud83d\udce7 Unread', cmd:'/workspace gmail unread'},
-      {label:'\ud83d\udcc1 Files', cmd:'/workspace drive list'},
-      {label:'\ud83d\udcc5 Today', cmd:'/workspace calendar today'},
-    ];
-    actions.forEach(function(a) {
-      h += '<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="document.getElementById(\'chat-input\').value=\'' + a.cmd + '\';document.getElementById(\'chat-input\').focus()">' + a.label + '</button>';
-    });
-    h += '</div>';
-    panel.innerHTML = h;
-  }).catch(function() { section.style.display = 'none'; });
-}
+// renderGwsPanel removed v0.31.39
 
 // ── People Module ─────────────────────────────────────────
 async function loadPeople() {
@@ -17735,22 +17688,19 @@ async function loadPeople() {
   }
 }
 
-function _peopleAddUser() {
-  porterPrompt('Add User', 'Username (lowercase, no spaces):', '', async function(username) {
-    if (!username) return;
-    username = username.toLowerCase().replace(/[^a-z0-9_]/g, '');
-    if (!username) { toast('Invalid username', 'err'); return; }
-    porterPrompt('Display Name', 'How should Porter address them?', username, async function(displayName) {
-      if (!displayName) return;
-      porterPrompt('Role', 'admin or operator:', 'operator', async function(role) {
-        role = (role || 'operator').toLowerCase();
-        if (role !== 'admin' && role !== 'operator') role = 'operator';
-        var r = await api('/api/admin/users', {action:'create', username:username, display_name:displayName, role:role});
-        if (r && r.ok) { toast('User ' + username + ' created', 'ok'); loadPeople(); }
-        else { toast((r && r.error) || 'Failed to create user', 'err'); }
-      });
-    });
-  });
+async function _peopleAddUser() {
+  var username = await porterPrompt('Add User', 'Username (lowercase, no spaces):', '');
+  if (!username) return;
+  username = username.toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (!username) { toast('Invalid username', 'err'); return; }
+  var displayName = await porterPrompt('Display Name', 'How should Porter address them?', username);
+  if (!displayName) return;
+  var role = await porterPrompt('Role', 'admin or operator:', 'operator');
+  role = (role || 'operator').toLowerCase();
+  if (role !== 'admin' && role !== 'operator') role = 'operator';
+  var r = await api('/api/admin/users', {action:'create', username:username, display_name:displayName, role:role});
+  if (r && r.ok) { toast('User ' + username + ' created', 'ok'); loadPeople(); }
+  else { toast((r && r.error) || 'Failed to create user', 'err'); }
 }
 
 function _peopleEditRole(username, currentRole) {
@@ -17772,39 +17722,20 @@ function _peopleDelete(username) {
 }
 
 async function loadCapabilities() {
-  var toolsEl = document.getElementById('capabilities-list');
-  var intEl = document.getElementById('integrations-list');
-  // Show skeleton placeholders immediately
-  if (toolsEl) toolsEl.innerHTML = _capSkeletons(6);
-  if (intEl) intEl.innerHTML = _capSkeletons(3);
-
-  // Fire both requests independently — render each as it arrives
-  fetch('/api/integrations', {credentials:'same-origin'})
-    .then(function(r) { return r.ok ? r.json() : null; })
-    .then(function(d) { if (d) renderIntegrations(d); })
-    .catch(function() { if (intEl) intEl.innerHTML = '<div style="font-size:12px;color:var(--text3)">Could not load integrations</div>'; });
-
-  // Capabilities: first show cached (fast), then force refresh
+  var el = document.getElementById('capabilities-list');
+  if (el) el.innerHTML = _capSkeletons(8);
+  // Load cached first, then force-refresh
   fetch('/api/capabilities', {credentials:'same-origin'})
     .then(function(r) { return r.ok ? r.json() : null; })
     .then(function(d) {
-      if (d && d.capabilities) {
-        window._lastCapabilities = d.capabilities;
-        renderCapabilities(d.capabilities);
-        renderGwsPanel();
-      }
-      // Now force-refresh in background (updates versions, detects new tools)
+      if (d && d.capabilities) { window._lastCapabilities = d.capabilities; renderCapabilities(d.capabilities); }
       return fetch('/api/capabilities?force=1', {credentials:'same-origin'});
     })
     .then(function(r) { return r && r.ok ? r.json() : null; })
     .then(function(d) {
-      if (d && d.capabilities) {
-        window._lastCapabilities = d.capabilities;
-        renderCapabilities(d.capabilities);
-        renderGwsPanel();
-      }
+      if (d && d.capabilities) { window._lastCapabilities = d.capabilities; renderCapabilities(d.capabilities); }
     })
-    .catch(function(e) { if (toolsEl) toolsEl.innerHTML = '<div style="color:var(--err);font-size:13px">Could not load: ' + escHtml(e.message) + '</div>'; });
+    .catch(function(e) { if (el) el.innerHTML = '<div style="color:var(--danger);font-size:13px">Could not load: ' + escHtml(e.message) + '</div>'; });
 }
 
 function _capSkeletons(n) {
@@ -17819,114 +17750,49 @@ function _capSkeletons(n) {
 }
 
 
-// S8: Render integration cards — OpenClaw skills, sessions, auth, hooks
-function renderIntegrations(data) {
-  const intEl = document.getElementById('integrations-list');
+// v0.31.39 — Integrations section removed (redundant with Models tab)
 
-
-  if (!data.openclaw_available) {
-    if (intEl) intEl.innerHTML = '<div style="grid-column:1/-1;padding:10px 12px;font-size:12px;color:var(--text3);border:1px solid var(--border);border-radius:6px;background:var(--surface2)">'
-      + '<span style="font-weight:500;color:var(--text2)">OpenClaw not detected</span>'
-      + '<div style="margin-top:4px">Install OpenClaw to enable agent orchestration, skill access, and external service integrations.</div>'
-      + '<div style="margin-top:6px"><a href="https://github.com/openclaw/openclaw" target="_blank" style="color:var(--accent);font-size:12px">Install OpenClaw \u2192</a></div>'
-      + '</div>';
-    return;
-  }
-
-  let cards = '';
-
-  // Gateway status
-  if (data.gateway) {
-    cards += _intCard('OpenClaw Gateway', 'Port ' + data.gateway.port, true,
-      'Agent orchestration hub' + (data.gateway.auth_token_set ? ' \u2022 Auth enabled' : ''));
-  }
-
-  // Auth profiles
-  (data.auth_profiles || []).forEach(function(p) {
-    const label = p.provider || p.id;
-    const status = p.expired ? 'expired' : 'active';
-    let detail = p.type || 'auth';
-    if (p.expires_at) {
-      const now = Date.now();
-      if (p.expires_at > now) {
-        const days = Math.ceil((p.expires_at - now) / 86400000);
-        detail += ' \u2022 expires in ' + days + 'd';
-      } else {
-        detail += ' \u2022 expired';
-      }
-    }
-    cards += _intCard(label, status, !p.expired, detail);
-  });
-
-  // Model providers
-  (data.model_providers || []).forEach(function(p) {
-    const models = (p.models || []).join(', ');
-    cards += _intCard(p.id, p.api + ' API', true, models || 'No models configured');
-  });
-
-  // Hooks
-  (data.hooks || []).forEach(function(h) {
-    cards += _intCard(h.name + ' hook', h.account || 'configured', true,
-      h.label ? 'Label: ' + h.label : 'Webhook integration');
-  });
-
-  // Sessions
-  const sessionCount = (data.sessions || []).length;
-  if (sessionCount) {
-    const activeCount = data.sessions.filter(function(s) { return s.updated_at > Date.now() - 86400000; }).length;
-    cards += _intCard('Sessions', activeCount + ' active / ' + sessionCount + ' total', true, 'OpenClaw agent sessions');
-  }
-
-  if (intEl) intEl.innerHTML = cards || '<div style="font-size:12px;color:var(--text3)">No integrations detected.</div>';
-
-  // Skills will be part of a future Workflows feature
-}
-
-function _intCard(title, badge, ok, detail) {
-  const dot = ok
-    ? '<span class="status-dot" style="background:#22c55e"></span>'
-    : '<span class="status-dot" style="background:var(--err)"></span>';
-  return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">'
-    + '<div style="display:flex;align-items:center;gap:8px">'
-    + dot
-    + '<span style="font-weight:500;font-size:13px">' + escHtml(title) + '</span>'
-    + '<span style="font-size:11px;color:var(--text3);margin-left:auto">' + escHtml(badge) + '</span>'
-    + '</div>'
-    + '<div style="font-size:12px;color:var(--text3);margin-top:4px">' + escHtml(detail) + '</div>'
-    + '</div>';
-}
+// _intCard removed v0.31.39
 
 function renderCapabilities(caps) {
-  const el = document.getElementById('capabilities-list');
+  var el = document.getElementById('capabilities-list');
   if (!el) return;
+  // Summary badge
+  var okCount = caps.filter(function(c) { return c.ok; }).length;
+  var sumEl = document.getElementById('cap-summary');
+  if (sumEl) sumEl.textContent = okCount + '/' + caps.length + ' available';
   if (!caps.length) {
-    el.innerHTML = '<div class="empty-state" style="padding:40px 20px"><div style="font-size:28px;opacity:.4">\U0001f50c</div><p>No capabilities detected</p><p style="font-size:12px;color:var(--text3);margin-top:-4px">Porter auto-detects installed tools and integrations</p></div>';
+    el.innerHTML = '<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--text3);font-size:13px">No tools detected. Porter auto-scans for installed tools.</div>';
     return;
   }
-  el.innerHTML = caps.map(c => {
-    const ok = c.ok;
-    const dot = ok
-      ? '<span class="status-dot" style="background:#22c55e"></span>'
-      : '<span class="status-dot" style="background:var(--text3)"></span>';
-    const rawVer = ok && c.version ? c.version : '';
-    const dispVer = rawVer && /^\d/.test(rawVer.trim()) ? 'v' + rawVer.trim() : rawVer.trim();
-    const ver = dispVer ? '<span style="color:var(--text3);font-size:11px;margin-left:6px">' + escHtml(dispVer) + '</span>' : '';
-    const feats = (c.features||[]).join(', ');
-    const siteUrl = c.install || '';
-    const siteLabel = siteUrl.replace('https://','').replace('http://','');
-    const site = siteUrl ? '<div style="margin-top:4px;font-size:11px"><a href="' + escHtml(siteUrl) + '" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">' + escHtml(siteLabel) + '</a></div>' : '';
-    const installHint = !ok && siteUrl ? '<div style="margin-top:2px;font-size:11px;color:var(--text3)">Not installed</div>' : '';
-    // Live scan badge
-    const checkedAt = c.checked_at ? new Date(c.checked_at * 1000) : null;
-    const scanBadge = checkedAt ? '<span style="font-size:10px;color:var(--text3);float:right" title="Last checked: ' + checkedAt.toLocaleTimeString() + '">live</span>' : '';
-    const statusBadge = ok ? '<span style="font-size:10px;color:#22c55e;margin-left:4px">\u2713</span>' : '';
-    return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">'
-      + '<div style="display:flex;align-items:center;gap:8px">'
-      + dot
-      + '<span style="font-weight:500;font-size:13px">' + escHtml(c.label) + '</span>' + ver + statusBadge + scanBadge
+  // Sort: installed first, then alphabetical
+  var sorted = caps.slice().sort(function(a, b) {
+    if (a.ok && !b.ok) return -1;
+    if (!a.ok && b.ok) return 1;
+    return (a.label || '').localeCompare(b.label || '');
+  });
+  el.innerHTML = sorted.map(function(c) {
+    var ok = c.ok;
+    var rawVer = ok && c.version ? c.version : '';
+    // Clean up version string — take first line, trim path noise
+    var cleanVer = rawVer.split('\n')[0].trim();
+    if (cleanVer.length > 40) cleanVer = cleanVer.slice(0, 40);
+    var feats = (c.features || []).join(' \u00b7 ');
+    var siteUrl = c.install || '';
+    var siteLabel = siteUrl.replace('https://','').replace('http://','').replace(/\/$/,'');
+    var link = '';
+    if (siteUrl) {
+      link = '<div class="cap-card-link"><a href="' + escHtml(siteUrl) + '" target="_blank">' + escHtml(siteLabel) + '</a></div>';
+    }
+    var installHint = !ok ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;font-style:italic">Not installed</div>' : '';
+    return '<div class="cap-card">'
+      + '<div class="cap-card-hdr">'
+      + '<div class="cap-card-dot ' + (ok ? 'ok' : 'off') + '"></div>'
+      + '<span class="cap-card-name">' + escHtml(c.label) + '</span>'
+      + (cleanVer ? '<span class="cap-card-ver">' + escHtml(cleanVer) + '</span>' : '')
       + '</div>'
-      + '<div style="font-size:12px;color:var(--text3);margin-top:4px">' + escHtml(feats) + '</div>'
-      + site + installHint
+      + (feats ? '<div class="cap-card-feat">' + escHtml(feats) + '</div>' : '')
+      + installHint + link
       + '</div>';
   }).join('');
 }
@@ -21987,7 +21853,7 @@ function chatSend() {
     }).join('\n\n') + '\n\nNew message:\n';
   }
   fullPrompt += text;
-  // v0.31.38 — Always inject current location context so chat knows where user is
+  // v0.31.39 — Always inject current location context so chat knows where user is
   var _moduleCtxLabel = _currentModule || 'main';
   if (window._projCurrent && _currentModule === 'projects') {
     _moduleCtxLabel = 'project "' + (window._projCurrent.name || '') + '"';
@@ -23606,7 +23472,7 @@ function renderInfraCards(providers, agents) {
 
 // ── Orchestration flow rendering ──────────────────────────────────────────
 
-const MODEL_OPTIMIZED = {
+var MODEL_OPTIMIZED = {
   'gpt-5':            'Most capable reasoning, coding, and tool use',
   'gpt-5-thinking':   'Deep reasoning and complex analysis',
   'o3':               'Advanced reasoning, math, and science',
@@ -23726,9 +23592,9 @@ function _buildFlowSVG(count, direction, label) {
   return '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" style="display:block">' + paths + labelSvg + '</svg>';
 }
 
-let _orchHubPollTimer = null;
-let _orchHubSseId = null;
-let _orchHubRefreshTimer = null;
+var _orchHubPollTimer = null;
+var _orchHubSseId = null;
+var _orchHubRefreshTimer = null;
 let _orchHubAgentCount = 0;
 let _orchHubModelCount = 0;
 async function _refreshOrchHubActivity(agentCount, modelCount) {
@@ -38818,7 +38684,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.38"})
+            self.reply_json({"v": "0.31.39"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -38980,7 +38846,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.38"
+                health["porter_version"] = "0.31.39"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40931,7 +40797,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.38'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.39'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -44072,29 +43938,40 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             data = self.read_json_body()
             action = data.get("action", "list") if data else "list"
             if action == "list" or not action:
-                with _db() as conn:
-                    rows = conn.execute(
+                _pconn = _db_conn()
+                try:
+                    rows = _pconn.execute(
                         "SELECT pc.connection_id, pc.access_mode, pc.status, pc.enabled_tools_json, wc.provider, wc.display_name, wc.kind "
                         "FROM project_connections pc JOIN workspace_connections wc ON pc.connection_id = wc.id "
                         "WHERE pc.project_id=? AND pc.status='active'", (pid,)
                     ).fetchall()
                     conns = [dict(r) for r in rows]
+                finally:
+                    _pconn.close()
                 self.reply_json({"ok": True, "connections": conns})
             elif action == "attach":
                 conn_id = data.get("connection_id", "")
                 mode = data.get("access_mode", "read")
                 if not conn_id:
                     self.reply_json({"ok": False, "error": "connection_id required"}); return
-                with _db() as conn:
-                    conn.execute(
+                _pconn = _db_conn()
+                try:
+                    _pconn.execute(
                         "INSERT OR REPLACE INTO project_connections (project_id, connection_id, access_mode, attached_by) VALUES (?,?,?,?)",
                         (pid, conn_id, mode, _config.get("username", "admin"))
                     )
+                    _pconn.commit()
+                finally:
+                    _pconn.close()
                 self.reply_json({"ok": True})
             elif action == "detach":
                 conn_id = data.get("connection_id", "")
-                with _db() as conn:
-                    conn.execute("DELETE FROM project_connections WHERE project_id=? AND connection_id=?", (pid, conn_id))
+                _pconn = _db_conn()
+                try:
+                    _pconn.execute("DELETE FROM project_connections WHERE project_id=? AND connection_id=?", (pid, conn_id))
+                    _pconn.commit()
+                finally:
+                    _pconn.close()
                 self.reply_json({"ok": True})
             else:
                 self.reply_json({"ok": False, "error": "Unknown action"})
@@ -44105,8 +43982,12 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             new_body = body_data.get("body", "").strip()
             if not note_id or not new_body:
                 return self._json({"ok": False, "error": "note_id and body required"})
-            with _db() as conn:
-                conn.execute("UPDATE project_notes SET body=?, updated_at=strftime('%s','now') WHERE id=? AND project_id=?", (new_body, note_id, pid))
+            _pconn = _db_conn()
+            try:
+                _pconn.execute("UPDATE project_notes SET body=?, updated_at=strftime('%s','now') WHERE id=? AND project_id=?", (new_body, note_id, pid))
+                _pconn.commit()
+            finally:
+                _pconn.close()
             return self._json({"ok": True})
 
         elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/state/notes/delete"):
@@ -44114,8 +43995,12 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             note_id = body_data.get("note_id")
             if not note_id:
                 return self._json({"ok": False, "error": "note_id required"})
-            with _db() as conn:
-                conn.execute("DELETE FROM project_notes WHERE id=? AND project_id=?", (note_id, pid))
+            _pconn = _db_conn()
+            try:
+                _pconn.execute("DELETE FROM project_notes WHERE id=? AND project_id=?", (note_id, pid))
+                _pconn.commit()
+            finally:
+                _pconn.close()
             return self._json({"ok": True})
 
         elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/state/notes"):
@@ -44921,7 +44806,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 if ptype not in ("website", "app", "presentation", "research", "content", "design", "ops", "custom"): ptype = "custom"
                 _raw_desc = str(data.get("description", "")).strip()
                 _raw_sbar = str(data.get("success_bar", "")).strip()
-                # v0.31.38 — AI-rewrite descriptions for professional copy
+                # v0.31.39 — AI-rewrite descriptions for professional copy
                 if _raw_desc:
                     try: _raw_desc = _ai_rewrite_field(_raw_desc, "description", name)
                     except Exception: pass
@@ -46384,7 +46269,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.38 ready (localhost only)")
+    print(f"\n  Porter v0.31.39 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
