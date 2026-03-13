@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.39 — Connections tab redesign"""
+"""Porter v0.31.40 — Multi-user login + faster chat routing"""
 
 
 import email
@@ -11983,7 +11983,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.39</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.40</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -32006,7 +32006,7 @@ def _get_rules():
 
 # ── Provider Probes — health checks with TTL cache ────────────────────────
 _probe_cache = {}  # {provider: (timestamp, result_bool)}
-_PROBE_TTL = 15  # seconds
+_PROBE_TTL = 60  # seconds — increased from 15 to reduce routing latency
 
 def _probe_openclaw():
     """Check if OpenClaw CLI is available (and optionally gateway)."""
@@ -33388,6 +33388,9 @@ def _benchmark_adjusted_route(preferred: str, message: str = "") -> tuple:
         return (preferred, None) if _probe_provider(preferred) and not _backend_is_circuit_open(preferred) else _resolve_with_fallback(preferred, message)
     pref_success = int(pref_stats.get("success_rate") or 0)
     pref_p50 = int(pref_stats.get("p50_ms") or 0)
+    # v0.31.40 — Fast path: if preferred is healthy and not saturated, skip alternatives
+    if _probe_provider(preferred) and not _backend_is_circuit_open(preferred) and not pref_pressure.get("saturated"):
+        return (preferred, None)
     prefs = _config.get("preferences", {})
     chain = prefs.get("fallback_chain", _DEFAULT_FALLBACK_CHAIN)
     best = preferred
@@ -38264,7 +38267,28 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/me":
             if not self.auth_check(redirect=False):
                 return
+            _me_session = get_session(self.get_session_token())
+            _me_username = _me_session.get("username", "") if _me_session else ""
             cfg = _config
+            # v0.31.40 — Return data for the logged-in user, not always the admin
+            if _me_username and _me_username != cfg.get("username", ""):
+                # Non-admin user: read from users table
+                try:
+                    _uconn = _db_conn()
+                    _urow = _uconn.execute("SELECT username, display_name, full_name, email, role FROM users WHERE username=?", (_me_username,)).fetchone()
+                    _uconn.close()
+                    if _urow:
+                        self.reply_json({
+                            "username":     _urow["username"],
+                            "full_name":    _urow["full_name"] or "",
+                            "display_name": _urow["display_name"] or _urow["username"],
+                            "email":        _urow["email"] or "",
+                            "role":         _urow["role"] or "operator",
+                            "has_avatar":   False,
+                        })
+                        return
+                except Exception as _ue:
+                    log.debug("User lookup for /api/me failed: %s", _ue)
             has_avatar = any(
                 (AVATAR_DIR / f"porter_avatar.{ext}").exists()
                 for ext in AVATAR_EXTS
@@ -38684,7 +38708,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.39"})
+            self.reply_json({"v": "0.31.40"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -38846,7 +38870,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.39"
+                health["porter_version"] = "0.31.40"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40797,7 +40821,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.39'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.40'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -41462,18 +41486,36 @@ class Handler(BaseHTTPRequestHandler):
                 salt = cfg.get("salt", "")
                 stored_hash = cfg.get("password_hash", "")
 
-                # Check scrypt hash first, then legacy SHA-256 for migration
+                # v0.31.40 — Multi-user login: check config admin first, then users table
+                auth_ok = False
+
+                # 1) Check config admin user
                 scrypt_hash = _hash_password(password, salt)
                 legacy_hash = _hash_password_legacy(password, salt)
                 password_ok = (scrypt_hash == stored_hash) or (legacy_hash == stored_hash)
 
                 if username == cfg.get("username") and password_ok:
+                    auth_ok = True
                     # Auto-migrate from SHA-256 to scrypt on successful login
                     if legacy_hash == stored_hash and scrypt_hash != stored_hash:
                         cfg["password_hash"] = scrypt_hash
                         _save_config(cfg)
                         log.info("Password hash migrated from SHA-256 to scrypt for %s", username)
 
+                # 2) If not config admin, check users table
+                if not auth_ok:
+                    try:
+                        _uconn = _db_conn()
+                        _urow = _uconn.execute("SELECT password_hash, salt FROM users WHERE username=?", (username,)).fetchone()
+                        _uconn.close()
+                        if _urow:
+                            _u_hash = _hash_password(password, _urow["salt"])
+                            if _u_hash == _urow["password_hash"]:
+                                auth_ok = True
+                    except Exception as _ue:
+                        log.debug("Users table login check failed: %s", _ue)
+
+                if auth_ok:
                     # Clear rate limit on success
                     _login_attempts.pop(client_ip, None)
 
@@ -46269,7 +46311,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.39 ready (localhost only)")
+    print(f"\n  Porter v0.31.40 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
