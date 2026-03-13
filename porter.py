@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.37 — People module (CRM) + username migration"""
+"""Porter v0.31.38 — Chat context fix + slash hint + AI project descriptions"""
 
 
 import email
@@ -686,7 +686,7 @@ def _db_init():
         conn.execute("UPDATE users SET display_name=?, full_name=? WHERE username=?", (_cfg_dn, _cfg_fn, _cfg_un))
         conn.commit()
 
-    # v0.31.37 — Migrate username from 'admin' to display_name-based slug
+    # v0.31.38 — Migrate username from 'admin' to display_name-based slug
     if _cfg_un == "admin" and _cfg_dn and _cfg_dn.lower() != "admin":
         _new_un = _cfg_dn.lower().strip().replace(" ", "_")
         _existing = conn.execute("SELECT username FROM users WHERE username=?", (_new_un,)).fetchone()
@@ -11057,6 +11057,11 @@ body.density-compact .file-name { padding: 6px 0; }
 .chat-ctx-opt.selected { color:var(--accent); font-weight:600; }
 .chat-ctx-opt .ctx-opt-avatar { font-size:14px; }
 .chat-ctx-divider { height:1px; background:var(--border); margin:4px 0; }
+/* ── Slash Hint ─────────────────────────────────── */
+.slash-hint { position:fixed; bottom:18px; right:18px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:5px 12px; font-size:11px; color:var(--text3); opacity:0.55; z-index:90; cursor:pointer; transition:opacity 0.2s; display:flex; align-items:center; gap:6px; }
+.slash-hint:hover { opacity:1; }
+.slash-hint kbd { background:var(--raised); border:1px solid var(--border2); border-radius:3px; padding:1px 5px; font-family:inherit; font-size:11px; }
+.porter-popup-chat.open ~ .slash-hint { display:none; }
 /* ── Porter Popup Chat Overlay ─────────────────────────────── */
 .porter-popup-chat { position:fixed; bottom:20px; right:20px; width:420px; max-width:calc(100vw - 40px); max-height:min(560px, calc(100vh - 60px)); z-index:8000; display:none; flex-direction:column; background:var(--surface); border:1px solid var(--border); border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.04); overflow:hidden; }
 .porter-popup-chat.open { display:flex; animation:popupSlideIn .22s ease-out; }
@@ -11965,7 +11970,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.37</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.38</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12874,6 +12879,7 @@ input[type="number"].settings-input { min-width: 60px; }
 </div>
 
 <!-- toast container -->
+<div class="slash-hint" onclick="_popupChatOpen()" title="Quick chat with Porter"><kbd>/</kbd> Ask Porter</div>
 <div id="porter-popup-chat" class="porter-popup-chat">
   <div class="porter-popup-hdr">
     <span class="porter-popup-hdr-title">Porter</span>
@@ -13090,7 +13096,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.31.37', date:'2026-03-12', notes:["People module: full CRM with user cards, stats, role management, add/remove users","Username migration: auto-renames 'admin' to display-name slug on startup","Backend: create user action in /api/admin/users"] },
+  { ver:'v0.31.38', date:'2026-03-12', notes:["People module: full CRM with user cards, stats, role management, add/remove users","Username migration: auto-renames 'admin' to display-name slug on startup","Backend: create user action in /api/admin/users"] },
   { ver:'v0.31.36', date:'2026-03-12', notes:["Fix: agent detail chat no longer offscreen — flex-based layout","Fix: office/grid toggle hidden in agent detail view","Fix: nav tabs scroll to top on switch","Agent detail model picker now uses Porter-style dropdown","Enhanced project coaching — context-aware suggestions on every tab"] },
   { ver:'v0.31.35', date:'2026-03-12', notes:["Agent Office: pixel-art virtual office visualization on the Agents tab","View toggle: switch between Grid and Office views","Each agent sits at a pixel desk with their Minecraft portrait and status bubble (idle/working)","Porter gets the corner office with a larger desk"] },
   { ver:'v0.31.34', date:'2026-03-12', notes:["Extensions → Connections: renamed nav + module, new workspace_connections/project_connections/environment_tools DB tables","Project Apps tab: view and manage connected services per project","Phase 1 of Connections refactor (GPT-5.4 architecture recommendation)"] },
@@ -17245,7 +17251,9 @@ async function _projChatSend() {
         }
       } catch (err) {}
     };
-    evtSource.onerror = function() {
+    var _gcDone = false;
+evtSource.onerror = function() {
+  if (_gcDone) { evtSource.close(); if (_chatEventSource === evtSource) _chatEventSource = null; return; }
       flushBuffered(true);
       if (!full) {
         state.messages[idx] = { role: 'error', label: 'Porter', content: 'Connection lost before Porter could respond.', meta: state.modelOverride ? _pdChatModelLabel(state.modelOverride) : 'Auto' };
@@ -21979,6 +21987,13 @@ function chatSend() {
     }).join('\n\n') + '\n\nNew message:\n';
   }
   fullPrompt += text;
+  // v0.31.38 — Always inject current location context so chat knows where user is
+  var _moduleCtxLabel = _currentModule || 'main';
+  if (window._projCurrent && _currentModule === 'projects') {
+    _moduleCtxLabel = 'project "' + (window._projCurrent.name || '') + '"';
+    if (typeof _projTab !== 'undefined' && _projTab) _moduleCtxLabel += ' (' + _projTab + ' tab)';
+  }
+  fullPrompt = 'User is currently on the ' + _moduleCtxLabel + ' screen.\n' + fullPrompt;
   if (_chatRouteContext) {
     fullPrompt = _chatRouteContext + '\n\n' + fullPrompt;
   }
@@ -22045,7 +22060,8 @@ function chatSend() {
       }
       if (data.done) {
         var resolvedModel = data.runtime_label || _runtimeLabel(data.backend_used, data.model_used, modelId);
-        _finishChatStreamReveal(evtSource, assistantIdx, resolvedModel);
+        _gcDone = true;
+      _finishChatStreamReveal(evtSource, assistantIdx, resolvedModel);
         return;
       }
       if (data.token) {
@@ -31927,6 +31943,7 @@ async function _popupChatSend() {
     var es = new EventSource(url);
     var idx = _popupChatMessages.length - 1;
     var fullText = '';
+    var _esDone = false;
 
     es.onmessage = function(ev) {
       try {
@@ -31937,6 +31954,7 @@ async function _popupChatSend() {
           _popupChatRender();
         }
         if (data.done) {
+          _esDone = true;
           if (data.full_text) {
             _popupChatMessages[idx] = { role: 'assistant', content: data.full_text };
           } else if (!fullText && data.response) {
@@ -31947,6 +31965,7 @@ async function _popupChatSend() {
           _popupChatStreaming = false;
         }
         if (data.error) {
+          _esDone = true;
           _popupChatMessages[idx] = { role: 'assistant', content: 'Error: ' + data.error };
           _popupChatRender();
           es.close();
@@ -31955,8 +31974,9 @@ async function _popupChatSend() {
       } catch(e) {}
     };
     es.onerror = function() {
+      if (_esDone) { es.close(); return; }
       if (_popupChatMessages[idx] && _popupChatMessages[idx].role === 'pending') {
-        _popupChatMessages[idx] = { role: 'assistant', content: fullText || 'Connection lost.' };
+        _popupChatMessages[idx] = { role: 'assistant', content: fullText || 'Connection lost. Try again.' };
         _popupChatRender();
       }
       es.close();
@@ -36256,6 +36276,29 @@ def _agent_eval_loop():
             _ael.sleep(3600)
 
 
+def _ai_rewrite_field(text, field_type="description", project_name=""):
+    """Rewrite user-provided text into professional project copy. Non-blocking fallback to original."""
+    if not text or len(text.strip()) < 15:
+        return text.strip()
+    prompt = (
+        f"Rewrite this project {field_type} to be clear, concise, and professional. "
+        f"Keep the same meaning and all facts. Return ONLY the rewritten text — no preamble, no quotes, no markdown.\n\n"
+        f"Project: {project_name}\n"
+        f"Original {field_type}: {text}"
+    )
+    try:
+        result = dispatch_agent(prompt, "openclaw", timeout=15)
+        if result.get("ok") and result.get("response", "").strip():
+            rewritten = result["response"].strip()
+            # Basic sanity: should not be drastically longer or contain meta-text
+            if len(rewritten) < len(text) * 3 and not rewritten.lower().startswith("here"):
+                log.debug("AI rewrite (%s): %r -> %r", field_type, text[:60], rewritten[:60])
+                return rewritten
+    except Exception as e:
+        log.debug("AI rewrite failed for %s: %s", field_type, e)
+    return text.strip()
+
+
 def dispatch_agent(message, backend, model=None, timeout=120, run_id=None, chain_id=None, step_num=0):
     """Route a message to the specified backend and return normalized response."""
     import time as _dt
@@ -38775,7 +38818,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.37"})
+            self.reply_json({"v": "0.31.38"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -38937,7 +38980,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.37"
+                health["porter_version"] = "0.31.38"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40888,7 +40931,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.37'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.38'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -44876,12 +44919,21 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 pid  = str(uuid.uuid4())
                 ptype = str(data.get("type", "custom")).strip()
                 if ptype not in ("website", "app", "presentation", "research", "content", "design", "ops", "custom"): ptype = "custom"
+                _raw_desc = str(data.get("description", "")).strip()
+                _raw_sbar = str(data.get("success_bar", "")).strip()
+                # v0.31.38 — AI-rewrite descriptions for professional copy
+                if _raw_desc:
+                    try: _raw_desc = _ai_rewrite_field(_raw_desc, "description", name)
+                    except Exception: pass
+                if _raw_sbar:
+                    try: _raw_sbar = _ai_rewrite_field(_raw_sbar, "success criteria", name)
+                    except Exception: pass
                 proj = {
                     "id": pid,
                     "name": name,
                     "type": ptype,
-                    "description": str(data.get("description", "")).strip(),
-                    "success_bar": str(data.get("success_bar", "")).strip(),
+                    "description": _raw_desc,
+                    "success_bar": _raw_sbar,
                     "created_at": time.time(),
                 }
                 _config.setdefault("projects", []).append(proj)
@@ -44998,14 +45050,22 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 if "name" in data and str(data["name"]).strip():
                     proj["name"] = _normalize_project_name(str(data["name"]).strip())
                 if "description" in data:
-                    proj["description"] = str(data.get("description", "")).strip()
+                    _ud = str(data.get("description", "")).strip()
+                    if _ud and _ud != proj.get("description", ""):
+                        try: _ud = _ai_rewrite_field(_ud, "description", proj.get("name", ""))
+                        except Exception: pass
+                    proj["description"] = _ud
                     if proj["description"]:
                         _state_add_project_note(pid, "summary", proj["description"], source="human", created_by="operator")
                 if "type" in data:
                     t = str(data["type"]).strip()
                     if t in ("website", "app", "presentation", "research", "content", "design", "ops", "custom"): proj["type"] = t
                 if "success_bar" in data:
-                    proj["success_bar"] = str(data.get("success_bar", "")).strip()
+                    _us = str(data.get("success_bar", "")).strip()
+                    if _us and _us != proj.get("success_bar", ""):
+                        try: _us = _ai_rewrite_field(_us, "success criteria", proj.get("name", ""))
+                        except Exception: pass
+                    proj["success_bar"] = _us
                     if proj["success_bar"]:
                         _state_add_project_note(pid, "success_bar", proj["success_bar"], source="human", created_by="operator")
                 if "memory_isolation" in data:
@@ -46324,7 +46384,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.37 ready (localhost only)")
+    print(f"\n  Porter v0.31.38 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
