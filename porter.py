@@ -9817,7 +9817,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 
 .mc-overview {
   display:grid; grid-template-columns:minmax(170px,220px) 1fr; gap:8px;
-  margin-bottom:10px; flex-shrink:0;
+  margin-bottom:10px; flex-shrink:0; min-height:120px; max-height:120px; overflow:hidden;
 }
 .mc-heart-panel {
   display:flex; align-items:center; gap:8px; padding:8px 10px;
@@ -17370,7 +17370,7 @@ async function _projLoadApps(pid) {
   var el = document.getElementById('proj-apps-list');
   if (!el) return;
   try {
-    var d = await api('/api/projects/' + pid + '/connections');
+    var d = await api('/api/projects/' + pid + '/connections', {action:'list'});
     if (!d || !d.ok) { el.innerHTML = '<span style="color:var(--text3)">Could not load</span>'; return; }
     var conns = d.connections || [];
     if (!conns.length) {
