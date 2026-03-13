@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.40 — Multi-user login + faster chat routing"""
+"""Porter v0.31.41 — Deliverables drag-drop + Project People tab"""
 
 
 import email
@@ -634,6 +634,8 @@ def _db_init():
         "ALTER TABLE personas ADD COLUMN portrait_asset_path TEXT DEFAULT ''",
         "CREATE TABLE IF NOT EXISTS project_content (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, content_type TEXT NOT NULL DEFAULT 'text', title TEXT DEFAULT '', body TEXT DEFAULT '', url TEXT DEFAULT '', file_path TEXT DEFAULT '', mime_type TEXT DEFAULT '', file_size INTEGER DEFAULT 0, sort_order INTEGER DEFAULT 0, created_at REAL DEFAULT 0)",
         "CREATE INDEX IF NOT EXISTS idx_project_content_project ON project_content(project_id, sort_order, created_at DESC)",
+        "CREATE TABLE IF NOT EXISTS project_collaborators (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, username TEXT NOT NULL, role TEXT DEFAULT 'member', added_by TEXT DEFAULT '', added_at REAL DEFAULT 0, UNIQUE(project_id, username))",
+        "CREATE INDEX IF NOT EXISTS idx_proj_collab_project ON project_collaborators(project_id)",
     ]:
         try:
             conn.execute(_sql)
@@ -11070,6 +11072,18 @@ body.density-compact .file-name { padding: 6px 0; }
 .cap-card-link { font-size:11px; margin-top:4px; }
 .cap-card-link a { color:var(--accent); text-decoration:none; }
 .cap-card-link a:hover { text-decoration:underline; }
+.proj-drop-zone { border:2px dashed var(--border); border-radius:10px; padding:24px; text-align:center; color:var(--text3); font-size:12px; margin-bottom:12px; transition:all .2s; cursor:pointer; }
+.proj-drop-zone:hover { border-color:var(--accent); color:var(--text2); }
+.proj-drop-zone.drag-over { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent); color:var(--text); }
+.proj-collab-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; }
+.proj-collab-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; display:flex; gap:10px; align-items:center; transition:border-color .15s; }
+.proj-collab-card:hover { border-color:color-mix(in srgb, var(--accent) 30%, var(--border)); }
+.proj-collab-avatar { width:36px; height:36px; border-radius:50%; background:var(--raised); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; color:var(--text); flex-shrink:0; }
+.proj-collab-meta { flex:1; min-width:0; }
+.proj-collab-name { font-size:13px; font-weight:600; color:var(--text); }
+.proj-collab-role { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.3px; margin-top:1px; }
+.proj-collab-actions button { background:none; border:1px solid var(--border); border-radius:6px; padding:3px 7px; font-size:10px; color:var(--text3); cursor:pointer; }
+.proj-collab-actions button:hover { border-color:var(--accent); color:var(--text); }
 /* ── Slash Hint ─────────────────────────────────── */
 .slash-hint { position:fixed; bottom:18px; right:18px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:5px 12px; font-size:11px; color:var(--text3); opacity:0.55; z-index:90; cursor:pointer; transition:opacity 0.2s; display:flex; align-items:center; gap:6px; }
 .slash-hint:hover { opacity:1; }
@@ -11983,7 +11997,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.40</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.41</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -16369,6 +16383,128 @@ async function _projUploadFile(pid) {
   input.click();
 }
 
+// v0.31.41 — Project People / Collaborators
+async function _projLoadCollaborators(pid) {
+  var el = document.getElementById('proj-people-list');
+  if (!el) return;
+  try {
+    var r = await fetch('/api/projects', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify({action:'list_collaborators', project_id: pid})});
+    var d = await r.json();
+    if (!d.ok) { el.innerHTML = '<div style="color:var(--text3);font-size:12px">Could not load</div>'; return; }
+    var collabs = d.collaborators || [];
+    // Update count on proj object for tab badge
+    if (window._projCurrent && window._projCurrent.id === pid) {
+      window._projCurrent._collaborator_count = collabs.length;
+      _renderProjTabs();
+    }
+    if (!collabs.length) {
+      el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3);font-size:12px">No collaborators yet. Add people to this project.</div>';
+      return;
+    }
+    el.innerHTML = collabs.map(function(c) {
+      var initials = (c.display_name || c.username || '?').split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);
+      var name = c.display_name || c.username;
+      return '<div class="proj-collab-card">'
+        + '<div class="proj-collab-avatar">' + escHtml(initials) + '</div>'
+        + '<div class="proj-collab-meta">'
+        + '<div class="proj-collab-name">' + escHtml(name) + '</div>'
+        + '<div class="proj-collab-role">' + escHtml(c.role || 'member') + '</div>'
+        + '</div>'
+        + '<div class="proj-collab-actions">'
+        + '<button onclick="_projChangeCollabRole(\x27' + pid + '\x27,\x27' + escHtml(c.username) + '\x27)" title="Change role">Role</button>'
+        + '<button onclick="_projRemoveCollaborator(\x27' + pid + '\x27,\x27' + escHtml(c.username) + '\x27)" title="Remove">\u00d7</button>'
+        + '</div></div>';
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:12px">Error loading collaborators</div>';
+  }
+}
+
+async function _projAddCollaborator(pid) {
+  var username = await porterPrompt('Add Collaborator', 'Username to add:', '');
+  if (!username) return;
+  username = username.toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (!username) { toast('Invalid username', 'err'); return; }
+  var role = await porterPrompt('Collaborator Role', 'Role (owner, editor, viewer, member):', 'member');
+  if (!role) return;
+  try {
+    var r = await fetch('/api/projects', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify({action:'add_collaborator', project_id: pid, username: username, role: role})});
+    var d = await r.json();
+    if (d.ok) { toast('Added ' + username, 'ok'); _projLoadCollaborators(pid); }
+    else { toast(d.error || 'Failed', 'err'); }
+  } catch(e) { toast('Failed to add collaborator', 'err'); }
+}
+
+async function _projRemoveCollaborator(pid, username) {
+  if (!confirm('Remove ' + username + ' from this project?')) return;
+  try {
+    var r = await fetch('/api/projects', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify({action:'remove_collaborator', project_id: pid, username: username})});
+    var d = await r.json();
+    if (d.ok) { toast('Removed ' + username, 'ok'); _projLoadCollaborators(pid); }
+    else { toast(d.error || 'Failed', 'err'); }
+  } catch(e) { toast('Failed', 'err'); }
+}
+
+async function _projChangeCollabRole(pid, username) {
+  var role = await porterPrompt('Change Role', 'New role for ' + username + ' (owner, editor, viewer, member):', 'member');
+  if (!role) return;
+  try {
+    var r = await fetch('/api/projects', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify({action:'update_collaborator', project_id: pid, username: username, role: role})});
+    var d = await r.json();
+    if (d.ok) { toast('Updated role', 'ok'); _projLoadCollaborators(pid); }
+    else { toast(d.error || 'Failed', 'err'); }
+  } catch(e) { toast('Failed', 'err'); }
+}
+
+var _projDelivDragCtr = 0;
+function _projDelivDragOver(e) { e.preventDefault(); e.stopPropagation(); }
+function _projDelivDragEnter(e) {
+  e.preventDefault(); e.stopPropagation();
+  _projDelivDragCtr++;
+  var el = document.getElementById('proj-deliv-drop');
+  if (el) el.classList.add('drag-over');
+}
+function _projDelivDragLeave(e) {
+  e.preventDefault(); e.stopPropagation();
+  _projDelivDragCtr--;
+  if (_projDelivDragCtr <= 0) {
+    _projDelivDragCtr = 0;
+    var el = document.getElementById('proj-deliv-drop');
+    if (el) el.classList.remove('drag-over');
+  }
+}
+function _projDelivDrop(e, pid) {
+  e.preventDefault(); e.stopPropagation();
+  _projDelivDragCtr = 0;
+  var el = document.getElementById('proj-deliv-drop');
+  if (el) el.classList.remove('drag-over');
+  var files = e.dataTransfer.files;
+  if (!files || !files.length) return;
+  var uploaded = 0;
+  var total = files.length;
+  for (var i = 0; i < files.length; i++) {
+    (function(file) {
+      var fd = new FormData();
+      fd.append('file', file);
+      fd.append('root', 'documents');
+      fd.append('path', 'porter/workspace/projects/' + pid + '/artifacts');
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', '/upload', true);
+      xhr.onload = function() {
+        uploaded++;
+        if (xhr.status === 200) {
+          toast('Uploaded: ' + file.name, 'ok');
+        } else {
+          toast('Upload failed: ' + file.name, 'err');
+        }
+        if (uploaded === total) _projLoadArtifacts(pid);
+      };
+      xhr.onerror = function() { uploaded++; toast('Upload failed: ' + file.name, 'err'); if (uploaded === total) _projLoadArtifacts(pid); };
+      xhr.send(fd);
+    })(files[i]);
+  }
+}
+
 async function _projUploadMedia(pid, ctype) {
   var accept = '';
   if (ctype === 'image') accept = 'image/*';
@@ -16511,11 +16647,13 @@ function _renderProjTabs() {
   if (!tabs) return;
   var proj = window._projCurrent || {};
   var agentCount = (proj.assigned_personas || []).length;
+  var collabCount = (proj._collaborator_count || 0);
   var items = [
     {id:'overview', label:'Overview'},
     {id:'chat', label:'Chat'},
     {id:'workers', label:'Workers' + (agentCount ? ' (' + agentCount + ')' : '')},
     {id:'deliverables', label:'Deliverables'},
+    {id:'people', label:'People' + (collabCount ? ' (' + collabCount + ')' : '')},
     {id:'apps', label:'Apps'},
     {id:'activity', label:'Activity'}
   ];
@@ -16790,21 +16928,33 @@ async function _renderProjTabContent() {
 
   } else if (_projTab === 'deliverables') {
     html += _projNextCard(proj, 'deliverables');
-    html += '<div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap">';
-    html += '<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Add Content</span>';
+    // v0.31.41 — Drag-and-drop zone
+    html += '<div id="proj-deliv-drop" class="proj-drop-zone" onclick="_projUploadFile(\x27' + proj.id + '\x27)" ondragover="_projDelivDragOver(event)" ondragenter="_projDelivDragEnter(event)" ondragleave="_projDelivDragLeave(event)" ondrop="_projDelivDrop(event,\x27' + proj.id + '\x27)">Drop files here or click to upload</div>';
+    html += '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">';
     html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27text\x27)" class="btn btn-ghost" style="font-size:11px">+ Text</button>';
     html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27link\x27)" class="btn btn-ghost" style="font-size:11px">+ Link</button>';
-    html += '<button onclick="_projUploadFile(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:11px">+ Upload</button>';
     html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27image\x27)" class="btn btn-ghost" style="font-size:11px">+ Image</button>';
     html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27video\x27)" class="btn btn-ghost" style="font-size:11px">+ Video</button>';
     html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27audio\x27)" class="btn btn-ghost" style="font-size:11px">+ Audio</button>';
-    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27document\x27)" class="btn btn-ghost" style="font-size:11px">+ Document</button>';
+    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27document\x27)" class="btn btn-ghost" style="font-size:11px">+ Doc</button>';
     html += '</div>';
     html += '<div id="proj-content-list" style="font-size:12px;color:var(--text3)">Loading...</div>';
     html += '<div id="proj-artifacts-list" style="font-size:12px;color:var(--text3);margin-top:14px"></div>';
     content.innerHTML = html;
     _projLoadContent(proj.id);
     _projLoadArtifacts(proj.id);
+    return;
+
+  } else if (_projTab === 'people') {
+    // v0.31.41 — Project People / Collaborators CRM
+    html += _projNextCard(proj, 'people');
+    html += '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">';
+    html += '<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Collaborators</span>';
+    html += '<button onclick="_projAddCollaborator(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:11px;margin-left:auto">+ Add Person</button>';
+    html += '</div>';
+    html += '<div id="proj-people-list" class="proj-collab-grid"><div style="font-size:12px;color:var(--text3)">Loading...</div></div>';
+    content.innerHTML = html;
+    _projLoadCollaborators(proj.id);
     return;
 
   } else if (_projTab === 'overview') {
@@ -33388,7 +33538,7 @@ def _benchmark_adjusted_route(preferred: str, message: str = "") -> tuple:
         return (preferred, None) if _probe_provider(preferred) and not _backend_is_circuit_open(preferred) else _resolve_with_fallback(preferred, message)
     pref_success = int(pref_stats.get("success_rate") or 0)
     pref_p50 = int(pref_stats.get("p50_ms") or 0)
-    # v0.31.40 — Fast path: if preferred is healthy and not saturated, skip alternatives
+    # v0.31.41 — Fast path: if preferred is healthy and not saturated, skip alternatives
     if _probe_provider(preferred) and not _backend_is_circuit_open(preferred) and not pref_pressure.get("saturated"):
         return (preferred, None)
     prefs = _config.get("preferences", {})
@@ -38270,7 +38420,7 @@ class Handler(BaseHTTPRequestHandler):
             _me_session = get_session(self.get_session_token())
             _me_username = _me_session.get("username", "") if _me_session else ""
             cfg = _config
-            # v0.31.40 — Return data for the logged-in user, not always the admin
+            # v0.31.41 — Return data for the logged-in user, not always the admin
             if _me_username and _me_username != cfg.get("username", ""):
                 # Non-admin user: read from users table
                 try:
@@ -38708,7 +38858,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.40"})
+            self.reply_json({"v": "0.31.41"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -38870,7 +39020,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.40"
+                health["porter_version"] = "0.31.41"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40821,7 +40971,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.40'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.41'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -41486,7 +41636,7 @@ class Handler(BaseHTTPRequestHandler):
                 salt = cfg.get("salt", "")
                 stored_hash = cfg.get("password_hash", "")
 
-                # v0.31.40 — Multi-user login: check config admin first, then users table
+                # v0.31.41 — Multi-user login: check config admin first, then users table
                 auth_ok = False
 
                 # 1) Check config admin user
@@ -45272,6 +45422,67 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     items.append({"id": r[0], "project_id": r[1], "content_type": r[2], "title": r[3], "body": r[4], "url": r[5], "file_path": r[6], "mime_type": r[7], "file_size": r[8], "sort_order": r[9], "created_at": r[10]})
                 self.reply_json({"ok": True, "content": items})
 
+            elif action == "add_collaborator":
+                pid = str(data.get("project_id", "")).strip()
+                uname = str(data.get("username", "")).strip().lower()
+                crole = str(data.get("role", "member")).strip()
+                if not pid or not uname:
+                    self.reply_json({"ok": False, "error": "project_id and username required"}, 400); return
+                if crole not in ("owner", "editor", "viewer", "member"):
+                    crole = "member"
+                cid = f"pc-{pid[:8]}-{uname}"
+                conn = _db_conn()
+                try:
+                    conn.execute("INSERT OR REPLACE INTO project_collaborators (id, project_id, username, role, added_by, added_at) VALUES (?,?,?,?,?,?)",
+                                 (cid, pid, uname, crole, session.get("username", ""), time.time()))
+                    conn.commit()
+                finally:
+                    conn.close()
+                self.reply_json({"ok": True})
+
+            elif action == "remove_collaborator":
+                pid = str(data.get("project_id", "")).strip()
+                uname = str(data.get("username", "")).strip().lower()
+                if not pid or not uname:
+                    self.reply_json({"ok": False, "error": "project_id and username required"}, 400); return
+                conn = _db_conn()
+                try:
+                    conn.execute("DELETE FROM project_collaborators WHERE project_id=? AND username=?", (pid, uname))
+                    conn.commit()
+                finally:
+                    conn.close()
+                self.reply_json({"ok": True})
+
+            elif action == "update_collaborator":
+                pid = str(data.get("project_id", "")).strip()
+                uname = str(data.get("username", "")).strip().lower()
+                crole = str(data.get("role", "member")).strip()
+                if not pid or not uname:
+                    self.reply_json({"ok": False, "error": "project_id and username required"}, 400); return
+                if crole not in ("owner", "editor", "viewer", "member"):
+                    crole = "member"
+                conn = _db_conn()
+                try:
+                    conn.execute("UPDATE project_collaborators SET role=? WHERE project_id=? AND username=?", (crole, pid, uname))
+                    conn.commit()
+                finally:
+                    conn.close()
+                self.reply_json({"ok": True})
+
+            elif action == "list_collaborators":
+                pid = str(data.get("project_id", "")).strip()
+                if not pid:
+                    self.reply_json({"ok": False, "error": "project_id required"}, 400); return
+                conn = _db_conn()
+                try:
+                    rows = conn.execute("SELECT pc.username, pc.role, pc.added_at, COALESCE(u.display_name, pc.username) as display_name, u.email FROM project_collaborators pc LEFT JOIN users u ON pc.username = u.username WHERE pc.project_id=? ORDER BY pc.added_at", (pid,)).fetchall()
+                finally:
+                    conn.close()
+                collabs = []
+                for r in rows:
+                    collabs.append({"username": r[0], "role": r[1], "added_at": r[2], "display_name": r[3], "email": r[4] or ""})
+                self.reply_json({"ok": True, "collaborators": collabs})
+
             else:
                 self.reply_json({"ok": False, "error": f"Unknown action: {action}"})
 
@@ -46311,7 +46522,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.40 ready (localhost only)")
+    print(f"\n  Porter v0.31.41 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
