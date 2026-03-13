@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.41 — Deliverables drag-drop + Project People tab"""
+"""Porter v0.31.42 — Chat action tags hidden + create_worker action"""
 
 
 import email
@@ -8899,7 +8899,8 @@ def _project_chat_action_prompt(project_id: str) -> str:
         '- set_deadline: {"action":"set_deadline","deadline":"YYYY-MM-DD"}\n'
         '- add_milestone: {"action":"add_milestone","title":"..."}\n'
         '- set_status: {"action":"set_status","status":"active|paused|completed|archived"}\n'
-        '- add_note: {"action":"add_note","text":"..."}\n\n'
+        '- add_note: {"action":"add_note","text":"..."}\n'
+        '- create_worker: {"action":"create_worker","name":"Worker Name","role":"Brief role description"}\n\n'
         "Always include the action block when the user requests a change. Confirm what you did after the action block.\n"
         "--- End Project Context ---\n\n"
     )
@@ -8966,6 +8967,28 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
             elif action == "add_note" and data.get("text"):
                 _state_add_project_note(project_id, "note", str(data["text"]).strip(), source="porter", created_by="porter")
                 results.append({"ok": True, "action": "add_note"})
+            elif action == "create_worker" and data.get("name"):
+                # v0.31.42 — Create worker from project chat
+                _wname = str(data["name"]).strip()
+                _wrole = str(data.get("role", "")).strip()
+                _wresult = _persona_create({
+                    "name": _wname,
+                    "role": _wrole,
+                    "preferred_backend": "openclaw",
+                    "appearance_style": "minecraft",
+                    "managed_by_porter": True,
+                })
+                if _wresult and _wresult.get("id"):
+                    # Auto-assign to this project
+                    proj.setdefault("assigned_personas", [])
+                    if _wresult["id"] not in proj["assigned_personas"]:
+                        proj["assigned_personas"].append(_wresult["id"])
+                        save_config(_config)
+                    log.info("Chat action: created worker '%s' (id=%s) for project %s", _wname, _wresult["id"], project_id)
+                    results.append({"ok": True, "action": "create_worker", "name": _wname, "id": _wresult["id"]})
+                else:
+                    log.warning("Chat action: create_worker failed for '%s' in project %s", _wname, project_id)
+                    results.append({"ok": False, "error": "Failed to create worker"})
             else:
                 results.append({"ok": False, "error": f"Unknown action: {action}"})
         except Exception as e:
@@ -11997,7 +12020,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.41</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.42</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -16383,7 +16406,7 @@ async function _projUploadFile(pid) {
   input.click();
 }
 
-// v0.31.41 — Project People / Collaborators
+// v0.31.42 — Project People / Collaborators
 async function _projLoadCollaborators(pid) {
   var el = document.getElementById('proj-people-list');
   if (!el) return;
@@ -16928,7 +16951,7 @@ async function _renderProjTabContent() {
 
   } else if (_projTab === 'deliverables') {
     html += _projNextCard(proj, 'deliverables');
-    // v0.31.41 — Drag-and-drop zone
+    // v0.31.42 — Drag-and-drop zone
     html += '<div id="proj-deliv-drop" class="proj-drop-zone" onclick="_projUploadFile(\x27' + proj.id + '\x27)" ondragover="_projDelivDragOver(event)" ondragenter="_projDelivDragEnter(event)" ondragleave="_projDelivDragLeave(event)" ondrop="_projDelivDrop(event,\x27' + proj.id + '\x27)">Drop files here or click to upload</div>';
     html += '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">';
     html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27text\x27)" class="btn btn-ghost" style="font-size:11px">+ Text</button>';
@@ -16946,7 +16969,7 @@ async function _renderProjTabContent() {
     return;
 
   } else if (_projTab === 'people') {
-    // v0.31.41 — Project People / Collaborators CRM
+    // v0.31.42 — Project People / Collaborators CRM
     html += _projNextCard(proj, 'people');
     html += '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">';
     html += '<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Collaborators</span>';
@@ -17143,6 +17166,11 @@ function _projGreetingCopy(project, state) {
   return greetings[Math.abs(seed) % greetings.length];
 }
 
+function _stripActionTags(s) {
+  // v0.31.42 — Remove <porter-action>...</porter-action> blocks from displayed text
+  return (s || '').replace(/<porter-action>[\s\S]*?<\/porter-action>/g, '').trim();
+}
+
 function _projChatRender(pid) {
   var panel = document.getElementById('proj-chat-thread');
   var project = window._projCurrent;
@@ -17170,7 +17198,7 @@ function _projChatRender(pid) {
     return '<div class="pd-chat-msg" style="border:1px solid ' + border + ';background:' + bg + '">'
       + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">' + escHtml(m.label || (isUser ? 'You' : 'Porter')) + '</span>'
       + (m.meta ? '<span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(m.meta) + '</span>' : '') + '</div>'
-      + '<div style="font-size:13px;line-height:1.6;color:' + (isErr ? '#ef4444' : 'var(--text2)') + ';white-space:pre-wrap">' + escHtml(m.content || '') + '</div>'
+      + '<div style="font-size:13px;line-height:1.6;color:' + (isErr ? '#ef4444' : 'var(--text2)') + ';white-space:pre-wrap">' + escHtml(_stripActionTags(m.content)) + '</div>'
       + '</div>';
   }).join('');
   panel.scrollTop = panel.scrollHeight;
@@ -31926,7 +31954,7 @@ function _popupChatRender() {
   thread.innerHTML = _popupChatMessages.map(function(m) {
     if (m.role === 'pending') return '<div class="porter-popup-msg pending">Porter is thinking...</div>';
     var cls = m.role === 'user' ? 'user' : 'assistant';
-    return '<div class="porter-popup-msg ' + cls + '">' + escHtml(m.content || '') + '</div>';
+    return '<div class="porter-popup-msg ' + cls + '">' + escHtml(_stripActionTags(m.content)) + '</div>';
   }).join('');
   thread.scrollTop = thread.scrollHeight;
 }
@@ -33538,7 +33566,7 @@ def _benchmark_adjusted_route(preferred: str, message: str = "") -> tuple:
         return (preferred, None) if _probe_provider(preferred) and not _backend_is_circuit_open(preferred) else _resolve_with_fallback(preferred, message)
     pref_success = int(pref_stats.get("success_rate") or 0)
     pref_p50 = int(pref_stats.get("p50_ms") or 0)
-    # v0.31.41 — Fast path: if preferred is healthy and not saturated, skip alternatives
+    # v0.31.42 — Fast path: if preferred is healthy and not saturated, skip alternatives
     if _probe_provider(preferred) and not _backend_is_circuit_open(preferred) and not pref_pressure.get("saturated"):
         return (preferred, None)
     prefs = _config.get("preferences", {})
@@ -38420,7 +38448,7 @@ class Handler(BaseHTTPRequestHandler):
             _me_session = get_session(self.get_session_token())
             _me_username = _me_session.get("username", "") if _me_session else ""
             cfg = _config
-            # v0.31.41 — Return data for the logged-in user, not always the admin
+            # v0.31.42 — Return data for the logged-in user, not always the admin
             if _me_username and _me_username != cfg.get("username", ""):
                 # Non-admin user: read from users table
                 try:
@@ -38858,7 +38886,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.41"})
+            self.reply_json({"v": "0.31.42"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39020,7 +39048,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.41"
+                health["porter_version"] = "0.31.42"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40971,7 +40999,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.41'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.42'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -41636,7 +41664,7 @@ class Handler(BaseHTTPRequestHandler):
                 salt = cfg.get("salt", "")
                 stored_hash = cfg.get("password_hash", "")
 
-                # v0.31.41 — Multi-user login: check config admin first, then users table
+                # v0.31.42 — Multi-user login: check config admin first, then users table
                 auth_ok = False
 
                 # 1) Check config admin user
@@ -45438,6 +45466,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     conn.commit()
                 finally:
                     conn.close()
+                log.info("Collaborator added: %s -> project %s (role=%s, by=%s)", uname, pid, crole, session.get("username", ""))
                 self.reply_json({"ok": True})
 
             elif action == "remove_collaborator":
@@ -45451,6 +45480,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     conn.commit()
                 finally:
                     conn.close()
+                log.info("Collaborator removed: %s from project %s (by=%s)", uname, pid, session.get("username", ""))
                 self.reply_json({"ok": True})
 
             elif action == "update_collaborator":
@@ -45467,6 +45497,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     conn.commit()
                 finally:
                     conn.close()
+                log.info("Collaborator role updated: %s in project %s -> %s", uname, pid, crole)
                 self.reply_json({"ok": True})
 
             elif action == "list_collaborators":
@@ -46522,7 +46553,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.41 ready (localhost only)")
+    print(f"\n  Porter v0.31.42 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
