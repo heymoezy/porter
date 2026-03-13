@@ -44316,9 +44316,12 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": "Unknown action"}, 400)
 
         elif parsed.path == "/api/admin/users":
-            if not self.auth_check_cap("user_manage"): return
+            if not self.auth_check(): return
             data = self.read_json_body()
             action = data.get("action", "")
+            # Mutations require user_manage capability; list is open to all authenticated users
+            if action and action != "list":
+                if not self.auth_check_cap("user_manage"): return
 
             if action == "create":
                 new_un = data.get("username", "").strip().lower()
