@@ -17196,6 +17196,12 @@ async function _renderProjTabContent() {
   } else if (_projTab === 'workers') {
     html += _projNextCard(proj, 'workers');
     var assigned = proj.assigned_personas || [];
+    // v0.31.44 — Ensure personas are loaded before rendering workers
+    if (assigned.length && (!_personas || !_personas.length)) {
+      content.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:12px">Loading workers...</div>';
+      loadPersonas().then(function() { _renderProjTabContent(); });
+      return;
+    }
     // Sort by agent hierarchy (sort_order from Agents tab)
     var sortedAssigned = assigned.slice().sort(function(a, b) {
       var pa = (_personas || []).find(function(x) { return x.id === a; });
@@ -17205,7 +17211,7 @@ async function _renderProjTabContent() {
       if (oa !== ob) return oa - ob;
       return ((pa && pa.name) || '').localeCompare((pb && pb.name) || '');
     });
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Assigned Agents (' + assigned.length + ')</div>';
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Assigned Workers (' + assigned.length + ')</div>';
     if (!assigned.length) {
       html += '<div class="proj-guide-empty"><div class="proj-guide-empty-title">No workers assigned yet</div><div class="proj-guide-empty-hint">Workers handle the actual tasks. Assign existing agents or ask Porter to create the right specialist for this project.</div><div class="proj-next-actions" style="justify-content:center"><button class="proj-next-btn" onclick="_projAssignAgent(\x27' + proj.id + '\x27)">Assign Worker</button><button class="proj-next-btn" onclick="_projKickoff(\x27worker\x27)">Ask Porter to Create One</button></div></div>';
     } else {
@@ -17213,11 +17219,10 @@ async function _renderProjTabContent() {
       sortedAssigned.forEach(function(pid) {
         var p = (_personas || []).find(function(x) { return x.id === pid; });
         var name = p ? p.name : pid.slice(0,8);
-        var avatar = p ? (p.avatar || '\u{1f916}') : '\u{1f916}';
         var role = p ? (p.role || '') : '';
-        var backend = p ? (p.preferred_backend || 'Bridge-selected at run time') : '';
+        var backend = p ? (p.preferred_backend || '') : '';
         html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);font-size:12px;min-width:200px;cursor:pointer" onclick="switchModule(\x27agents\x27);selectPersona(\x27' + pid + '\x27)">';
-        html += '<span style="font-size:22px">' + avatar + '</span>';
+        html += '<div style="width:36px;height:36px;flex-shrink:0">' + (p ? _personaAvatarMarkup(p, 36) : '<span style="font-size:22px">\u{1f916}</span>') + '</div>';
         html += '<div style="flex:1;min-width:0">';
         html += '<div style="font-weight:600;color:var(--text)">' + escHtml(name) + '</div>';
         if (role) html += '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + escHtml(role) + '</div>';
