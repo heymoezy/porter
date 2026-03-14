@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.47 — UX fixes (tab aliases, action toasts, dynamic USER.md)"""
+"""Porter v0.31.48 — Smart routing + remediation complete"""
 
 
 import email
@@ -9093,7 +9093,9 @@ def _project_chat_action_prompt(project_id: str) -> str:
 
 
 def _execute_chat_actions(project_id: str, response_text: str) -> list:
-    """Parse and execute <porter-action> blocks from model response. v0.31.44 — 20+ actions."""
+    """Parse and execute <porter-action> blocks from model response. v0.31.48 — 20+ actions.
+    Note: Action bus is project-scoped only. Global/popup/worker chat cannot execute actions (future feature).
+    """
     import json as _json
     results = []
     pattern = re.compile(r'<porter-action>(.*?)</porter-action>', re.DOTALL)
@@ -9205,10 +9207,12 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
             elif action == "create_worker" and data.get("name"):
                 _wname = str(data["name"]).strip()
                 _wrole = str(data.get("role", "")).strip()
+                # v0.31.48 — Use project route hint instead of hardcoded backend (F6)
+                _cw_backend = _project_route_hint(project_id=project_id) or _smart_route("", project_id=project_id)[0] or "openclaw"
                 _wresult = _persona_create({
                     "name": _wname,
                     "role": _wrole,
-                    "preferred_backend": "openclaw",
+                    "preferred_backend": _cw_backend,
                     "appearance_style": "minecraft",
                     "managed_by_porter": True,
                 })
@@ -12409,7 +12413,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.47</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.48</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -13520,6 +13524,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.48', date:'2026-03-14', notes:["Smart routing: create_worker chat action uses project route hint instead of hardcoded backend","GPT-5.4 audit remediation complete: 10 findings across 4 releases (v0.31.45-48)"] },
   { ver:'v0.31.47', date:'2026-03-14', notes:["Fix: kickoff 'settings' tab navigation now correctly routes to overview","Chat actions now show toast notifications on success/failure","Worker USER.md now uses operator display name and timezone from config"] },
   { ver:'v0.31.46', date:'2026-03-14', notes:["Per-session active project isolation — users no longer cross-contaminate active project state","Fix milestone field name: chat actions now use 'name' matching REST API and UI","Startup backfill migrates existing milestones from title→name"] },
   { ver:'v0.31.45', date:'2026-03-14', notes:["Security: project access control — mutations now check ownership and collaborator roles","Fix: note update/delete endpoints now require authentication","New helper: _check_project_access enforces role hierarchy (owner > editor > member > viewer)"] },
@@ -39317,7 +39322,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.47"})
+            self.reply_json({"v": "0.31.48"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39479,7 +39484,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.47"
+                health["porter_version"] = "0.31.48"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -41452,7 +41457,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.47'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.48'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -47078,7 +47083,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.47 ready (localhost only)")
+    print(f"\n  Porter v0.31.48 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
