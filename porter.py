@@ -41635,13 +41635,29 @@ class Handler(BaseHTTPRequestHandler):
                             if _gem_active and _gem_active != "auto":
                                 _gem_cmd.extend(["-m", _gem_active])
                         _skip_prefixes = ("YOLO mode", "Loaded cached", "Loaded saved", "[WARN]", "[ERROR]", "Warning:", "Error:")
-                        _proc = _sp.Popen(_gem_cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True, env=_agent_env(), cwd=str(Path.home()))
+                        # v0.31.44 — Filter noise patterns from Gemini CLI
+                        _noise_patterns = ("Attempt ", "GaxiosError", "at Gaxios", "at async ", "at process.", "at OAuth2Client",
+                                           "config:", "response:", "  url:", "  method:", "  headers:", "  body:", "  signal:",
+                                           "  retry:", "  validateStatus:", "  errorRedactor:", "  duplex:", "  params:",
+                                           "  responseType:", "  size:", "  data:", "  code:", "  status:", "  error:",
+                                           "[Symbol(", "    at ", "  cause:", "'message':", "'code':", "'status':",
+                                           "  hostname:", "  port:", "  pathname:", "  search:", "  searchParams:",
+                                           "  hash:", "  origin:", "  protocol:", "  username:", "  password:",
+                                           "  href:", "  host:", "'@type':", "'reason':", "'domain':", "'metadata':",
+                                           "Retrying with backoff")
+                        _proc = _sp.Popen(_gem_cmd, stdout=_sp.PIPE, stderr=_sp.PIPE, text=True, env=_agent_env(), cwd=str(Path.home()))
+                        _gem_stderr_buf = []
                         try:
                             for _line in iter(_proc.stdout.readline, ''):
-                                if any(_line.strip().startswith(s) for s in _skip_prefixes):
+                                _stripped = _line.strip()
+                                if not _stripped:
                                     continue
-                                if _line:
-                                    _note_first_token()
+                                if any(_stripped.startswith(s) for s in _skip_prefixes):
+                                    continue
+                                if any(s in _stripped for s in _noise_patterns):
+                                    log.debug("Gemini noise filtered: %s", _stripped[:120])
+                                    continue
+                                _note_first_token()
                                 full_response += _line
                                 self.wfile.write(f"data: {json.dumps({'token': _line})}\n\n".encode())
                                 self.wfile.flush()
@@ -41650,10 +41666,19 @@ class Handler(BaseHTTPRequestHandler):
                             log.error("Gemini stream read error: %s", _gem_err)
                         finally:
                             try:
+                                _gem_stderr_raw = _proc.stderr.read() if _proc.stderr else ""
+                                if _gem_stderr_raw:
+                                    log.debug("Gemini stderr: %s", _gem_stderr_raw[:500])
                                 _proc.wait(timeout=10)
                             except _sp.TimeoutExpired:
                                 _proc.kill()
                                 log.warning("Gemini process killed after timeout")
+                            # If no response was produced, send a clean error
+                            if not full_response.strip():
+                                _gem_err_msg = "Gemini is temporarily unavailable. Try again or switch models."
+                                full_response = _gem_err_msg
+                                self.wfile.write(f"data: {json.dumps({'token': _gem_err_msg})}\n\n".encode())
+                                self.wfile.flush()
 
                 elif model_id == "claude-cli":
                     # Claude Code — stream JSON events live
