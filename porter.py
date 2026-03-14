@@ -12808,8 +12808,8 @@ body.density-compact .file-name { padding: 6px 0; }
   transition:transform .18s ease, filter .18s ease;
 }
 .persona-card.orchestrator {
-  width:130px;
-  min-height:190px;
+  width:110px;
+  min-height:180px;
 }
 .persona-card:hover { transform:translateY(-5px); filter:brightness(1.05); }
 .persona-card.selected { transform:translateY(-8px) scale(1.02); }
@@ -12838,7 +12838,7 @@ body.density-compact .file-name { padding: 6px 0; }
   justify-content:center;
   overflow:visible;
 }
-.persona-card.orchestrator .persona-card-avatar { width:104px; height:136px; }
+.persona-card.orchestrator .persona-card-avatar { width:96px; height:128px; }
 .persona-card-name {
   font-size:12px;
   font-weight:700;
@@ -12848,7 +12848,7 @@ body.density-compact .file-name { padding: 6px 0; }
   word-wrap:break-word;
   overflow-wrap:break-word;
 }
-.persona-card.orchestrator .persona-card-name { font-size:13px; margin-top:0; }
+.persona-card.orchestrator .persona-card-name { font-size:12px; margin-top:0; }
 .persona-card-role {
   font-size:10px;
   color:var(--text3);
@@ -13600,6 +13600,12 @@ input[type="number"].settings-input { min-width: 60px; }
 
     <!-- v0.29.1 — Full-page Agent Detail View -->
     <div id="agent-detail-view" class="agent-detail-view" style="display:none">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span id="pd-detail-title" style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Agent</span>
+        <div style="flex:1"></div>
+        <button class="btn btn-ghost btn-sm" id="pd-sp-btn" onclick="_showSystemPrompt(_selectedPersonaId)" style="font-size:11px">System Prompt</button>
+        <button class="btn btn-ghost btn-sm" id="pd-delete-btn" style="font-size:11px;color:#ef4444" onclick="deletePersona()">Delete</button>
+      </div>
       <div class="agent-identity-shell">
         <div class="agent-identity-card">
           <div class="agent-identity-avatar" id="pd-avatar2" onclick="_editCardField('avatar')" style="cursor:pointer" title="Click to edit">&#x1f916;</div>
@@ -13611,10 +13617,6 @@ input[type="number"].settings-input { min-width: 60px; }
               <span class="agent-badge" id="pd-backend-badge2" style="font-size:9px">Bridge-selected</span>
             </div>
             <div class="agent-identity-role" id="pd-role2" onclick="_editCardField('role')" style="cursor:pointer" title="Click to edit"></div>
-          </div>
-          <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
-            <button class="btn btn-ghost btn-sm" id="pd-sp-btn" onclick="_showSystemPrompt(_selectedPersonaId)" style="font-size:11px">System Prompt</button>
-            <button class="btn btn-ghost btn-sm" id="pd-delete-btn" style="font-size:11px;color:#ef4444" onclick="deletePersona()">Delete</button>
           </div>
         </div>
       </div>
@@ -29360,10 +29362,7 @@ function switchPdTab(tab) {
     _pdChatRender(p.id);
     setTimeout(_pdSyncComposerLayout, 0);
   } else if (tab === 'identity') {
-    if (p.is_locked) {
-      content.innerHTML = '<div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2)">Porter is a locked system persona. Core identity files are managed by the platform and are not editable from the product UI.</div>';
-      return;
-    }
+    var _isLocked = !!p.is_locked;
     // Dynamic files from API response
     var _filesRaw = (p.files || []).map(function(f) {
       var key = f.filename.replace(/\.md$/,'').replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
@@ -29387,10 +29386,10 @@ function switchPdTab(tab) {
 
     var fileEditors = _files.map(function(f, i) {
       return '<div id="pd-file-' + f.key + '" class="pd-file-panel" style="display:' + (i===0?'block':'none') + '">'
-        + '<textarea id="pd-editor-' + f.key + '" class="persona-editor" style="min-height:440px;font-family:monospace;font-size:12px;width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:12px;resize:vertical">' + escHtml(f.content) + '</textarea>'
+        + '<textarea id="pd-editor-' + f.key + '" class="persona-editor" style="min-height:440px;font-family:monospace;font-size:12px;width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:12px;resize:vertical"' + (_isLocked ? ' readonly' : '') + '>' + escHtml(f.content) + '</textarea>'
         + '<div style="margin-top:6px;display:flex;gap:6px;align-items:center">'
-        + '<button class="btn btn-primary" onclick="savePersonaFile(\'' + f.file + '\',\'' + f.key + '\')" style="font-size:11px">Save ' + f.label + '</button>'
-        + '<span style="font-size:10px;color:var(--text3)">' + f.size + ' bytes</span>'
+        + (_isLocked ? '' : '<button class="btn btn-primary" onclick="savePersonaFile(\'' + f.file + '\',\'' + f.key + '\')" style="font-size:11px">Save ' + f.label + '</button>')
+        + '<span style="font-size:10px;color:var(--text3)">' + f.size + ' bytes' + (_isLocked ? ' (read-only)' : '') + '</span>'
         + '</div></div>';
     }).join('');
 
@@ -41115,7 +41114,7 @@ class Handler(BaseHTTPRequestHandler):
             persona["soul_text"] = _persona_get_soul(pid)
             pdir = PERSONAS_DIR / pid
             persona["files"] = []
-            if pdir.exists() and not _persona_is_locked(persona):
+            if pdir.exists():
                 for fpath in sorted(pdir.glob("*.md")):
                     persona["files"].append({
                         "filename": fpath.name,
