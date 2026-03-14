@@ -200,8 +200,8 @@ test.describe('Nav regression — all tabs render content', () => {
     await login(page);
   });
 
-  // Current visible nav tabs (for operator role — admin/logs hidden)
-  const allTabs = ['agents', 'projects', 'models', 'people', 'capabilities'];
+  // Current visible nav tabs (for operator role — admin hidden, logs visible)
+  const allTabs = ['agents', 'projects', 'models', 'people', 'capabilities', 'admin'];
 
   test('every tab shows content when clicked', async ({ page }) => {
     for (const tab of allTabs) {
@@ -234,9 +234,9 @@ test.describe('Nav bar structure', () => {
     await login(page);
   });
 
-  // Current visible nav items (for operator role — Logs hidden)
+  // Current visible nav items (for operator role — Logs visible)
   const expectedNavItems = [
-    'Agents', 'Projects', 'Models', 'People', 'Tools', 'Settings'
+    'Agents', 'Projects', 'Models', 'People', 'Tools', 'Logs', 'Settings'
   ];
 
   test('sidebar contains all expected nav buttons', async ({ page }) => {
