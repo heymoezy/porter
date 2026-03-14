@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.43 — Per-user project isolation + new user onboarding"""
+"""Porter v0.31.44 — Full chat actions (20+ project ops from chat)"""
 
 
 import email
@@ -6392,7 +6392,7 @@ def load_config() -> dict:
         changed = True
     if _ensure_launchpad_project(cfg):
         changed = True
-    # v0.31.43 — Backfill owner on existing projects
+    # v0.31.44 — Backfill owner on existing projects
     _admin_uname = cfg.get("username", "admin")
     for _bp in cfg.get("projects", []):
         if "owner" not in _bp:
@@ -8915,38 +8915,105 @@ def _project_chat_action_prompt(project_id: str) -> str:
             break
     if not proj:
         return ""
-    agents = ", ".join(a for a in (proj.get("assigned_personas") or []))
+    # Worker names
+    worker_ids = proj.get("assigned_personas") or []
+    worker_names = []
+    if worker_ids:
+        try:
+            _wconn = _db_conn()
+            for _wid in worker_ids[:10]:
+                _wr = _wconn.execute("SELECT name FROM personas WHERE id=?", (_wid,)).fetchone()
+                if _wr:
+                    worker_names.append(f"{_wr[0]} ({_wid[:8]})")
+            _wconn.close()
+        except Exception:
+            worker_names = list(worker_ids)
+    # Milestones with status
     milestones = proj.get("milestones") or []
-    ms_str = ", ".join(m.get("title", "") for m in milestones[:5]) if milestones else "none"
+    ms_parts = []
+    for m in milestones[:8]:
+        done = "done" if m.get("done") else "pending"
+        ms_parts.append(f"{m.get('title', '?')} [{done}]")
+    ms_str = ", ".join(ms_parts) if ms_parts else "none"
+    # Links
+    links = proj.get("links") or {}
+    link_parts = []
+    for kind, vals in links.items():
+        if isinstance(vals, list):
+            for v in vals:
+                link_parts.append(f"{kind}: {v.get('url', '') if isinstance(v, dict) else v}")
+        elif isinstance(vals, str) and vals:
+            link_parts.append(f"{kind}: {vals}")
+    links_str = ", ".join(link_parts[:6]) if link_parts else "none"
+    # Collaborators
+    collab_str = "none"
+    try:
+        _cc = _db_conn()
+        _cr = _cc.execute("SELECT username, role FROM project_collaborators WHERE project_id=?", (project_id,)).fetchall()
+        _cc.close()
+        if _cr:
+            collab_str = ", ".join(f"{r[0]} ({r[1]})" for r in _cr)
+    except Exception:
+        pass
     ctx = (
         f"\n--- Project Context ---\n"
         f"Project: {proj.get('name', 'Untitled')} (id: {project_id})\n"
         f"Type: {proj.get('type', 'custom')} | Status: {proj.get('status', 'active')}\n"
         f"Description: {proj.get('description', 'none')}\n"
         f"Success criteria: {proj.get('success_bar', 'none')}\n"
-        f"Deadline: {proj.get('deadline', 'not set')}\n"
-        f"Workers: {agents or 'none assigned'}\n"
-        f"Milestones: {ms_str}\n\n"
-        "You CAN execute project actions. When the user asks you to change something about this project, "
-        "DO IT by including an action block in your response. Format:\n"
+        f"Start: {proj.get('start_date', 'not set')} | Deadline: {proj.get('deadline', 'not set')}\n"
+        f"Plan: {proj.get('plan', 'none')[:200]}\n"
+        f"Workers: {', '.join(worker_names) or 'none assigned'}\n"
+        f"Milestones: {ms_str}\n"
+        f"Links: {links_str}\n"
+        f"People: {collab_str}\n\n"
+        "You CAN execute project actions. When the user asks you to change something, "
+        "DO IT immediately by including action block(s) in your response. You can include MULTIPLE action blocks. Format:\n"
         '<porter-action>{"action":"ACTION_NAME", ...params}</porter-action>\n\n'
         "Available actions:\n"
-        '- rename: {"action":"rename","name":"New Name"}\n'
-        '- update_description: {"action":"update_description","description":"..."}\n'
-        '- set_type: {"action":"set_type","type":"website|app|presentation|research|content|design|ops|custom"}\n'
-        '- set_deadline: {"action":"set_deadline","deadline":"YYYY-MM-DD"}\n'
-        '- add_milestone: {"action":"add_milestone","title":"..."}\n'
-        '- set_status: {"action":"set_status","status":"active|paused|completed|archived"}\n'
-        '- add_note: {"action":"add_note","text":"..."}\n'
-        '- create_worker: {"action":"create_worker","name":"Worker Name","role":"Brief role description"}\n\n'
-        "Always include the action block when the user requests a change. Confirm what you did after the action block.\n"
+        "PROJECT SETTINGS:\n"
+        '  rename: {"action":"rename","name":"..."}\n'
+        '  update_description: {"action":"update_description","description":"..."}\n'
+        '  set_success_bar: {"action":"set_success_bar","text":"..."}\n'
+        '  set_type: {"action":"set_type","type":"website|app|presentation|research|content|design|ops|custom"}\n'
+        '  set_status: {"action":"set_status","status":"active|paused|completed|archived"}\n'
+        '  set_deadline: {"action":"set_deadline","deadline":"YYYY-MM-DD"}\n'
+        '  set_start_date: {"action":"set_start_date","date":"YYYY-MM-DD"}\n'
+        '  set_plan: {"action":"set_plan","plan":"..."}\n'
+        "MILESTONES:\n"
+        '  add_milestone: {"action":"add_milestone","title":"...","due":"YYYY-MM-DD"}  (due is optional)\n'
+        '  toggle_milestone: {"action":"toggle_milestone","title":"exact milestone title"}\n'
+        '  remove_milestone: {"action":"remove_milestone","title":"exact milestone title"}\n'
+        "WORKERS:\n"
+        '  create_worker: {"action":"create_worker","name":"...","role":"..."}\n'
+        '  assign_worker: {"action":"assign_worker","worker_name":"exact name or ID prefix"}\n'
+        '  unassign_worker: {"action":"unassign_worker","worker_name":"exact name or ID prefix"}\n'
+        "LINKS:\n"
+        '  add_link: {"action":"add_link","kind":"repo|live_url|docs|custom","url":"...","label":"..."}\n'
+        '  remove_link: {"action":"remove_link","kind":"repo|live_url|docs|custom","url":"..."}\n'
+        "CONTENT/DELIVERABLES:\n"
+        '  add_content: {"action":"add_content","type":"text|link","title":"...","body":"...","url":"..."}\n'
+        '  remove_content: {"action":"remove_content","title":"exact title to remove"}\n'
+        "PEOPLE:\n"
+        '  add_collaborator: {"action":"add_collaborator","username":"...","role":"owner|editor|viewer|member"}\n'
+        '  remove_collaborator: {"action":"remove_collaborator","username":"..."}\n'
+        "NOTES:\n"
+        '  add_note: {"action":"add_note","text":"..."}\n'
+        "DANGER:\n"
+        '  delete_project: {"action":"delete_project"}  (ask for confirmation first!)\n\n'
+        "Rules:\n"
+        "- Always include action blocks when the user requests a change. Confirm what you did after.\n"
+        "- You can include multiple action blocks in one response.\n"
+        "- For toggle/remove milestones, match by title (case-insensitive).\n"
+        "- For assign_worker, match by name or ID prefix against existing workers in the system.\n"
+        "- For delete_project, always ask the user to confirm before including the action block.\n"
         "--- End Project Context ---\n\n"
     )
     return ctx
 
 
 def _execute_chat_actions(project_id: str, response_text: str) -> list:
-    """Parse and execute <porter-action> blocks from model response."""
+    """Parse and execute <porter-action> blocks from model response. v0.31.44 — 20+ actions."""
     import json as _json
     results = []
     pattern = re.compile(r'<porter-action>(.*?)</porter-action>', re.DOTALL)
@@ -8967,14 +9034,23 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
             results.append({"ok": False, "error": "Project not found"})
             continue
         try:
+            # ── Project settings ──
             if action == "rename" and data.get("name"):
                 proj["name"] = _normalize_project_name(str(data["name"]).strip())
                 save_config(_config)
                 results.append({"ok": True, "action": "rename", "name": proj["name"]})
+
             elif action == "update_description" and "description" in data:
                 proj["description"] = str(data["description"]).strip()
                 save_config(_config)
                 results.append({"ok": True, "action": "update_description"})
+
+            elif action == "set_success_bar" and data.get("text"):
+                proj["success_bar"] = str(data["text"]).strip()
+                save_config(_config)
+                _state_add_project_note(project_id, "success_bar", proj["success_bar"], source="porter", created_by="porter")
+                results.append({"ok": True, "action": "set_success_bar"})
+
             elif action == "set_type" and data.get("type"):
                 t = str(data["type"]).strip()
                 valid = ("website", "app", "presentation", "research", "content", "design", "ops", "custom")
@@ -8984,29 +9060,67 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
                     results.append({"ok": True, "action": "set_type", "type": t})
                 else:
                     results.append({"ok": False, "error": f"Invalid type: {t}"})
+
             elif action == "set_deadline" and data.get("deadline"):
                 proj["deadline"] = str(data["deadline"]).strip()
                 save_config(_config)
                 results.append({"ok": True, "action": "set_deadline", "deadline": proj["deadline"]})
-            elif action == "add_milestone" and data.get("title"):
-                proj.setdefault("milestones", []).append({"title": str(data["title"]).strip(), "done": False})
+
+            elif action == "set_start_date" and data.get("date"):
+                proj["start_date"] = str(data["date"]).strip()
                 save_config(_config)
-                results.append({"ok": True, "action": "add_milestone", "title": data["title"]})
+                results.append({"ok": True, "action": "set_start_date", "date": proj["start_date"]})
+
+            elif action == "set_plan" and data.get("plan"):
+                proj["plan"] = str(data["plan"]).strip()
+                save_config(_config)
+                results.append({"ok": True, "action": "set_plan"})
+
             elif action == "set_status" and data.get("status"):
                 s = str(data["status"]).strip()
                 if s in ("active", "paused", "completed", "archived"):
                     proj["status"] = s
                     if s == "completed":
-                        proj["completed_at"] = __import__("time").time()
+                        proj["completed_at"] = time.time()
                     save_config(_config)
                     results.append({"ok": True, "action": "set_status", "status": s})
                 else:
                     results.append({"ok": False, "error": f"Invalid status: {s}"})
-            elif action == "add_note" and data.get("text"):
-                _state_add_project_note(project_id, "note", str(data["text"]).strip(), source="porter", created_by="porter")
-                results.append({"ok": True, "action": "add_note"})
+
+            # ── Milestones ──
+            elif action == "add_milestone" and data.get("title"):
+                ms = {"title": str(data["title"]).strip(), "done": False}
+                if data.get("due"):
+                    ms["due"] = str(data["due"]).strip()
+                proj.setdefault("milestones", []).append(ms)
+                save_config(_config)
+                results.append({"ok": True, "action": "add_milestone", "title": ms["title"]})
+
+            elif action == "toggle_milestone" and data.get("title"):
+                _mt = str(data["title"]).strip().lower()
+                _found = False
+                for ms in proj.get("milestones", []):
+                    if ms.get("title", "").strip().lower() == _mt:
+                        ms["done"] = not ms.get("done", False)
+                        save_config(_config)
+                        results.append({"ok": True, "action": "toggle_milestone", "title": ms["title"], "done": ms["done"]})
+                        _found = True
+                        break
+                if not _found:
+                    results.append({"ok": False, "error": f"Milestone not found: {data['title']}"})
+
+            elif action == "remove_milestone" and data.get("title"):
+                _mt = str(data["title"]).strip().lower()
+                _before = len(proj.get("milestones", []))
+                proj["milestones"] = [ms for ms in proj.get("milestones", []) if ms.get("title", "").strip().lower() != _mt]
+                if len(proj["milestones"]) < _before:
+                    save_config(_config)
+                    results.append({"ok": True, "action": "remove_milestone", "title": data["title"]})
+                else:
+                    results.append({"ok": False, "error": f"Milestone not found: {data['title']}"})
+
+            # ── Workers ──
             elif action == "create_worker" and data.get("name"):
-                # v0.31.43 — Create worker from project chat
                 _wname = str(data["name"]).strip()
                 _wrole = str(data.get("role", "")).strip()
                 _wresult = _persona_create({
@@ -9017,7 +9131,6 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
                     "managed_by_porter": True,
                 })
                 if _wresult and _wresult.get("id"):
-                    # Auto-assign to this project
                     proj.setdefault("assigned_personas", [])
                     if _wresult["id"] not in proj["assigned_personas"]:
                         proj["assigned_personas"].append(_wresult["id"])
@@ -9027,9 +9140,165 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
                 else:
                     log.warning("Chat action: create_worker failed for '%s' in project %s", _wname, project_id)
                     results.append({"ok": False, "error": "Failed to create worker"})
+
+            elif action == "assign_worker" and data.get("worker_name"):
+                _wq = str(data["worker_name"]).strip().lower()
+                _wid = None
+                try:
+                    _wconn = _db_conn()
+                    # Match by name (case-insensitive) or ID prefix
+                    _wr = _wconn.execute("SELECT id, name FROM personas WHERE LOWER(name)=? OR id LIKE ?", (_wq, _wq + "%")).fetchone()
+                    _wconn.close()
+                    if _wr:
+                        _wid = _wr[0]
+                except Exception:
+                    pass
+                if _wid:
+                    proj.setdefault("assigned_personas", [])
+                    if _wid not in proj["assigned_personas"]:
+                        proj["assigned_personas"].append(_wid)
+                        save_config(_config)
+                        _state_add_project_note(project_id, "assignment", f"Worker assigned: {_wr[1]}", source="porter", created_by="porter")
+                        log.info("Chat action: assigned worker %s to project %s", _wid, project_id)
+                    results.append({"ok": True, "action": "assign_worker", "worker": _wr[1], "id": _wid})
+                else:
+                    results.append({"ok": False, "error": f"Worker not found: {data['worker_name']}"})
+
+            elif action == "unassign_worker" and data.get("worker_name"):
+                _wq = str(data["worker_name"]).strip().lower()
+                _wid = None
+                _wname_found = ""
+                try:
+                    _wconn = _db_conn()
+                    _wr = _wconn.execute("SELECT id, name FROM personas WHERE LOWER(name)=? OR id LIKE ?", (_wq, _wq + "%")).fetchone()
+                    _wconn.close()
+                    if _wr:
+                        _wid = _wr[0]
+                        _wname_found = _wr[1]
+                except Exception:
+                    pass
+                if _wid and _wid in (proj.get("assigned_personas") or []):
+                    proj["assigned_personas"].remove(_wid)
+                    save_config(_config)
+                    log.info("Chat action: unassigned worker %s from project %s", _wid, project_id)
+                    results.append({"ok": True, "action": "unassign_worker", "worker": _wname_found})
+                else:
+                    results.append({"ok": False, "error": f"Worker not assigned: {data['worker_name']}"})
+
+            # ── Links ──
+            elif action == "add_link" and data.get("url"):
+                _kind = str(data.get("kind", "custom")).strip()
+                _url = str(data["url"]).strip()
+                _label = str(data.get("label", "")).strip()
+                proj.setdefault("links", {})
+                if _kind not in proj["links"]:
+                    proj["links"][_kind] = []
+                if not isinstance(proj["links"][_kind], list):
+                    proj["links"][_kind] = [proj["links"][_kind]] if proj["links"][_kind] else []
+                proj["links"][_kind].append({"url": _url, "label": _label or _url})
+                save_config(_config)
+                results.append({"ok": True, "action": "add_link", "kind": _kind, "url": _url})
+
+            elif action == "remove_link" and data.get("url"):
+                _kind = str(data.get("kind", "")).strip()
+                _url = str(data["url"]).strip().lower()
+                _removed = False
+                for lk, lv in (proj.get("links") or {}).items():
+                    if _kind and lk != _kind:
+                        continue
+                    if isinstance(lv, list):
+                        before = len(lv)
+                        proj["links"][lk] = [l for l in lv if (l.get("url", "") if isinstance(l, dict) else l).lower() != _url]
+                        if len(proj["links"][lk]) < before:
+                            _removed = True
+                if _removed:
+                    save_config(_config)
+                    results.append({"ok": True, "action": "remove_link"})
+                else:
+                    results.append({"ok": False, "error": "Link not found"})
+
+            # ── Content / Deliverables ──
+            elif action == "add_content":
+                _ctype = str(data.get("type", "text")).strip()
+                _ctitle = str(data.get("title", "")).strip()
+                _cbody = str(data.get("body", "")).strip()
+                _curl = str(data.get("url", "")).strip()
+                if not _ctitle and not _cbody and not _curl:
+                    results.append({"ok": False, "error": "title, body, or url required"})
+                else:
+                    _cid = str(__import__("uuid").uuid4())
+                    conn = _db_conn()
+                    try:
+                        conn.execute(
+                            "INSERT INTO project_content (id, project_id, content_type, title, body, url, created_at) VALUES (?,?,?,?,?,?,?)",
+                            (_cid, project_id, _ctype, _ctitle, _cbody, _curl, time.time())
+                        )
+                        conn.commit()
+                    finally:
+                        conn.close()
+                    log.info("Chat action: added content '%s' to project %s", _ctitle or _curl, project_id)
+                    results.append({"ok": True, "action": "add_content", "id": _cid, "title": _ctitle})
+
+            elif action == "remove_content" and data.get("title"):
+                _ct = str(data["title"]).strip().lower()
+                conn = _db_conn()
+                try:
+                    _row = conn.execute("SELECT id FROM project_content WHERE project_id=? AND LOWER(title)=?", (project_id, _ct)).fetchone()
+                    if _row:
+                        conn.execute("DELETE FROM project_content WHERE id=?", (_row[0],))
+                        conn.commit()
+                        results.append({"ok": True, "action": "remove_content", "title": data["title"]})
+                    else:
+                        results.append({"ok": False, "error": f"Content not found: {data['title']}"})
+                finally:
+                    conn.close()
+
+            # ── People / Collaborators ──
+            elif action == "add_collaborator" and data.get("username"):
+                _cu = str(data["username"]).strip().lower()
+                _cr = str(data.get("role", "member")).strip()
+                if _cr not in ("owner", "editor", "viewer", "member"):
+                    _cr = "member"
+                _cid = f"pc-{project_id[:8]}-{_cu}"
+                conn = _db_conn()
+                try:
+                    conn.execute("INSERT OR REPLACE INTO project_collaborators (id, project_id, username, role, added_by, added_at) VALUES (?,?,?,?,?,?)",
+                                 (_cid, project_id, _cu, _cr, "porter", time.time()))
+                    conn.commit()
+                finally:
+                    conn.close()
+                log.info("Chat action: added collaborator %s to project %s (role=%s)", _cu, project_id, _cr)
+                results.append({"ok": True, "action": "add_collaborator", "username": _cu, "role": _cr})
+
+            elif action == "remove_collaborator" and data.get("username"):
+                _cu = str(data["username"]).strip().lower()
+                conn = _db_conn()
+                try:
+                    conn.execute("DELETE FROM project_collaborators WHERE project_id=? AND username=?", (project_id, _cu))
+                    conn.commit()
+                finally:
+                    conn.close()
+                log.info("Chat action: removed collaborator %s from project %s", _cu, project_id)
+                results.append({"ok": True, "action": "remove_collaborator", "username": _cu})
+
+            # ── Notes ──
+            elif action == "add_note" and data.get("text"):
+                _state_add_project_note(project_id, "note", str(data["text"]).strip(), source="porter", created_by="porter")
+                results.append({"ok": True, "action": "add_note"})
+
+            # ── Delete project (dangerous) ──
+            elif action == "delete_project":
+                _config["projects"] = [p for p in _config.get("projects", []) if p["id"] != project_id]
+                if _config.get("active_project_id") == project_id:
+                    _config["active_project_id"] = None
+                save_config(_config)
+                log.info("Chat action: deleted project %s", project_id)
+                results.append({"ok": True, "action": "delete_project"})
+
             else:
                 results.append({"ok": False, "error": f"Unknown action: {action}"})
         except Exception as e:
+            log.warning("Chat action error (%s): %s", action, e)
             results.append({"ok": False, "error": str(e)})
     return results
 
@@ -12058,7 +12327,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.43</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.44</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -16444,7 +16713,7 @@ async function _projUploadFile(pid) {
   input.click();
 }
 
-// v0.31.43 — Project People / Collaborators
+// v0.31.44 — Project People / Collaborators
 async function _projLoadCollaborators(pid) {
   var el = document.getElementById('proj-people-list');
   if (!el) return;
@@ -16989,7 +17258,7 @@ async function _renderProjTabContent() {
 
   } else if (_projTab === 'deliverables') {
     html += _projNextCard(proj, 'deliverables');
-    // v0.31.43 — Drag-and-drop zone
+    // v0.31.44 — Drag-and-drop zone
     html += '<div id="proj-deliv-drop" class="proj-drop-zone" onclick="_projUploadFile(\x27' + proj.id + '\x27)" ondragover="_projDelivDragOver(event)" ondragenter="_projDelivDragEnter(event)" ondragleave="_projDelivDragLeave(event)" ondrop="_projDelivDrop(event,\x27' + proj.id + '\x27)">Drop files here or click to upload</div>';
     html += '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">';
     html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27text\x27)" class="btn btn-ghost" style="font-size:11px">+ Text</button>';
@@ -17007,7 +17276,7 @@ async function _renderProjTabContent() {
     return;
 
   } else if (_projTab === 'people') {
-    // v0.31.43 — Project People / Collaborators CRM
+    // v0.31.44 — Project People / Collaborators CRM
     html += _projNextCard(proj, 'people');
     html += '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">';
     html += '<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Collaborators</span>';
@@ -17205,7 +17474,7 @@ function _projGreetingCopy(project, state) {
 }
 
 function _stripActionTags(s) {
-  // v0.31.43 — Remove <porter-action>...</porter-action> blocks from displayed text
+  // v0.31.44 — Remove <porter-action>...</porter-action> blocks from displayed text
   return (s || '').replace(/<porter-action>[\s\S]*?<\/porter-action>/g, '').trim();
 }
 
@@ -17448,7 +17717,19 @@ async function _projChatSend() {
           if (!flushTimer) flushTimer = setTimeout(function() { flushBuffered(false); }, 45);
           return;
         }
-        if (data.actions_executed) { _projReloadList(); }
+        if (data.actions_executed) {
+        _projReloadList();
+        // v0.31.44 — Refresh current project detail after chat actions
+        if (window._projCurrent) {
+          setTimeout(function() {
+            loadProjects().then(function() {
+              var pid = window._projCurrent.id;
+              var updated = _projList.find(function(p) { return p.id === pid; });
+              if (updated) { window._projCurrent = updated; _renderProjTabs(); }
+            });
+          }, 300);
+        }
+      }
         if (data.done) {
           if (data.runtime_label && state.messages[idx]) state.messages[idx].meta = data.runtime_label;
           flushBuffered(true);
@@ -32075,7 +32356,7 @@ async function _popupChatSend() {
 // ── api helpers ──
 // v0.29.25 — Setup wizard removed (obsolete). Stub for backward compat.
 async function maybeShowWizard() {
-  // v0.31.43 — Welcome new users on first login
+  // v0.31.44 — Welcome new users on first login
   var params = new URLSearchParams(window.location.search);
   if (params.get('welcome') === '1') {
     window.history.replaceState({}, '', '/');
@@ -33612,7 +33893,7 @@ def _benchmark_adjusted_route(preferred: str, message: str = "") -> tuple:
         return (preferred, None) if _probe_provider(preferred) and not _backend_is_circuit_open(preferred) else _resolve_with_fallback(preferred, message)
     pref_success = int(pref_stats.get("success_rate") or 0)
     pref_p50 = int(pref_stats.get("p50_ms") or 0)
-    # v0.31.43 — Fast path: if preferred is healthy and not saturated, skip alternatives
+    # v0.31.44 — Fast path: if preferred is healthy and not saturated, skip alternatives
     if _probe_provider(preferred) and not _backend_is_circuit_open(preferred) and not pref_pressure.get("saturated"):
         return (preferred, None)
     prefs = _config.get("preferences", {})
@@ -38494,7 +38775,7 @@ class Handler(BaseHTTPRequestHandler):
             _me_session = get_session(self.get_session_token())
             _me_username = _me_session.get("username", "") if _me_session else ""
             cfg = _config
-            # v0.31.43 — Return data for the logged-in user, not always the admin
+            # v0.31.44 — Return data for the logged-in user, not always the admin
             if _me_username and _me_username != cfg.get("username", ""):
                 # Non-admin user: read from users table
                 try:
@@ -38932,7 +39213,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.43"})
+            self.reply_json({"v": "0.31.44"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39094,7 +39375,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.43"
+                health["porter_version"] = "0.31.44"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40542,7 +40823,7 @@ class Handler(BaseHTTPRequestHandler):
         # ── D1: project registry ─────────────────────────────────────────────
         elif parsed.path == "/api/projects":
             if not self.auth_check(redirect=False): return
-            # v0.31.43 — Per-user project isolation
+            # v0.31.44 — Per-user project isolation
             _proj_session = get_session(self.get_session_token())
             _proj_user = _proj_session.get("username", "") if _proj_session else ""
             _proj_role = _proj_session.get("role", "operator") if _proj_session else "operator"
@@ -41064,7 +41345,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.43'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.44'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -41729,7 +42010,7 @@ class Handler(BaseHTTPRequestHandler):
                 salt = cfg.get("salt", "")
                 stored_hash = cfg.get("password_hash", "")
 
-                # v0.31.43 — Multi-user login: check config admin first, then users table
+                # v0.31.44 — Multi-user login: check config admin first, then users table
                 auth_ok = False
 
                 # 1) Check config admin user
@@ -41762,7 +42043,7 @@ class Handler(BaseHTTPRequestHandler):
                     # Clear rate limit on success
                     _login_attempts.pop(client_ip, None)
 
-                    # v0.31.43 — Onboard new user on first login
+                    # v0.31.44 — Onboard new user on first login
                     _is_new_user = False
                     _is_admin_login = (username == _config.get("username", "admin"))
                     if not _is_admin_login:
@@ -45115,7 +45396,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 if _raw_sbar:
                     try: _raw_sbar = _ai_rewrite_field(_raw_sbar, "success criteria", name)
                     except Exception: pass
-                # v0.31.43 — Track project owner
+                # v0.31.44 — Track project owner
                 _create_session = get_session(self.get_session_token())
                 _create_owner = _create_session.get("username", "") if _create_session else _config.get("username", "admin")
                 proj = {
@@ -46639,7 +46920,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.43 ready (localhost only)")
+    print(f"\n  Porter v0.31.44 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
