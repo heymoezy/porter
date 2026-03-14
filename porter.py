@@ -6766,6 +6766,1031 @@ AGENT_TEMPLATES: dict[str, dict] = {
 }
 
 
+PROJECT_TEMPLATES: dict[str, dict] = {
+    "saas_app": {
+        "name": "SaaS Application",
+        "type": "app",
+        "desc": "Build a software-as-a-service product from concept to launch",
+        "workers": [
+            "backend_dev",
+            "frontend_dev",
+            "ui_designer",
+            "qa_engineer",
+            "devops_engineer"
+        ],
+        "phases": [
+            {
+                "name": "Discovery",
+                "tasks": [
+                    "Define user personas",
+                    "Map core user flows",
+                    "Competitive analysis",
+                    "Technical feasibility assessment"
+                ]
+            },
+            {
+                "name": "Design",
+                "tasks": [
+                    "Wireframe key screens",
+                    "Design system setup",
+                    "UI mockups for core flows",
+                    "Design review with stakeholders"
+                ]
+            },
+            {
+                "name": "Build",
+                "tasks": [
+                    "Backend API scaffolding",
+                    "Database schema design",
+                    "Frontend component library",
+                    "Authentication system",
+                    "Core feature implementation",
+                    "API integration"
+                ]
+            },
+            {
+                "name": "Quality",
+                "tasks": [
+                    "Unit test coverage",
+                    "Integration tests",
+                    "Security audit",
+                    "Performance testing",
+                    "UAT with beta users"
+                ]
+            },
+            {
+                "name": "Launch",
+                "tasks": [
+                    "CI/CD pipeline setup",
+                    "Staging deployment",
+                    "Production deployment",
+                    "Monitoring setup",
+                    "Launch comms"
+                ]
+            }
+        ]
+    },
+    "marketing_site": {
+        "name": "Marketing Website",
+        "type": "website",
+        "desc": "Design and build a conversion-optimized marketing website",
+        "workers": [
+            "frontend_dev",
+            "ui_designer",
+            "copywriter",
+            "seo_specialist"
+        ],
+        "phases": [
+            {
+                "name": "Strategy",
+                "tasks": [
+                    "Define target audience",
+                    "Keyword research",
+                    "Content strategy",
+                    "Sitemap and IA"
+                ]
+            },
+            {
+                "name": "Design",
+                "tasks": [
+                    "Mood board and brand alignment",
+                    "Homepage design",
+                    "Key landing pages",
+                    "Mobile responsive layouts"
+                ]
+            },
+            {
+                "name": "Build",
+                "tasks": [
+                    "HTML/CSS implementation",
+                    "CMS setup",
+                    "Form integrations",
+                    "Analytics setup",
+                    "SEO technical optimization"
+                ]
+            },
+            {
+                "name": "Launch",
+                "tasks": [
+                    "Content population",
+                    "Cross-browser testing",
+                    "Performance optimization",
+                    "DNS and hosting",
+                    "Launch"
+                ]
+            }
+        ]
+    },
+    "mobile_app": {
+        "name": "Mobile App",
+        "type": "app",
+        "desc": "Build a native or cross-platform mobile application",
+        "workers": [
+            "mobile_dev",
+            "ui_designer",
+            "backend_dev",
+            "qa_engineer"
+        ],
+        "phases": [
+            {
+                "name": "Discovery",
+                "tasks": [
+                    "Platform requirements (iOS/Android/both)",
+                    "Feature prioritization",
+                    "API requirements",
+                    "App store guidelines review"
+                ]
+            },
+            {
+                "name": "Design",
+                "tasks": [
+                    "App flow diagrams",
+                    "Screen designs per platform",
+                    "Design system for mobile",
+                    "Prototype for user testing"
+                ]
+            },
+            {
+                "name": "Build",
+                "tasks": [
+                    "Project scaffold",
+                    "Navigation framework",
+                    "Core screens",
+                    "API integration",
+                    "Push notifications",
+                    "Offline support"
+                ]
+            },
+            {
+                "name": "Quality",
+                "tasks": [
+                    "Device testing matrix",
+                    "Performance profiling",
+                    "Accessibility check",
+                    "Beta distribution"
+                ]
+            },
+            {
+                "name": "Launch",
+                "tasks": [
+                    "App store assets",
+                    "Store listing optimization",
+                    "Submission and review",
+                    "Launch marketing"
+                ]
+            }
+        ]
+    },
+    "investor_deck": {
+        "name": "Investor Pitch Deck",
+        "type": "presentation",
+        "desc": "Create a compelling pitch deck for fundraising",
+        "workers": [
+            "pitch_coach",
+            "graphic_designer",
+            "financial_analyst",
+            "content_writer"
+        ],
+        "phases": [
+            {
+                "name": "Narrative",
+                "tasks": [
+                    "Problem statement",
+                    "Solution overview",
+                    "Market sizing (TAM/SAM/SOM)",
+                    "Business model",
+                    "Competitive landscape",
+                    "Team slide"
+                ]
+            },
+            {
+                "name": "Financials",
+                "tasks": [
+                    "Revenue projections",
+                    "Unit economics",
+                    "Funding ask and use of proceeds",
+                    "Key assumptions"
+                ]
+            },
+            {
+                "name": "Design",
+                "tasks": [
+                    "Deck template design",
+                    "Data visualization",
+                    "Slide polish and flow",
+                    "Appendix materials"
+                ]
+            },
+            {
+                "name": "Rehearsal",
+                "tasks": [
+                    "Pitch script",
+                    "Q&A preparation",
+                    "Timing practice",
+                    "Feedback incorporation"
+                ]
+            }
+        ]
+    },
+    "research_paper": {
+        "name": "Research Report",
+        "type": "research",
+        "desc": "Conduct structured research and produce a comprehensive report",
+        "workers": [
+            "research_analyst",
+            "data_analyst",
+            "fact_checker",
+            "editor"
+        ],
+        "phases": [
+            {
+                "name": "Scope",
+                "tasks": [
+                    "Define research questions",
+                    "Identify data sources",
+                    "Methodology selection",
+                    "Timeline and milestones"
+                ]
+            },
+            {
+                "name": "Collection",
+                "tasks": [
+                    "Primary data gathering",
+                    "Secondary source review",
+                    "Expert interviews",
+                    "Data validation"
+                ]
+            },
+            {
+                "name": "Analysis",
+                "tasks": [
+                    "Data cleaning",
+                    "Statistical analysis",
+                    "Pattern identification",
+                    "Hypothesis testing"
+                ]
+            },
+            {
+                "name": "Report",
+                "tasks": [
+                    "Executive summary",
+                    "Findings write-up",
+                    "Visualizations",
+                    "Recommendations",
+                    "Peer review"
+                ]
+            }
+        ]
+    },
+    "brand_launch": {
+        "name": "Brand Launch",
+        "type": "design",
+        "desc": "Create a complete brand identity from scratch",
+        "workers": [
+            "brand_strategist",
+            "graphic_designer",
+            "copywriter",
+            "ui_designer"
+        ],
+        "phases": [
+            {
+                "name": "Strategy",
+                "tasks": [
+                    "Brand positioning",
+                    "Target audience definition",
+                    "Competitive differentiation",
+                    "Brand values and voice"
+                ]
+            },
+            {
+                "name": "Identity",
+                "tasks": [
+                    "Logo design",
+                    "Color palette",
+                    "Typography selection",
+                    "Brand guidelines document"
+                ]
+            },
+            {
+                "name": "Assets",
+                "tasks": [
+                    "Business cards and stationery",
+                    "Social media templates",
+                    "Email templates",
+                    "Presentation template"
+                ]
+            },
+            {
+                "name": "Launch",
+                "tasks": [
+                    "Website brand integration",
+                    "Social media launch",
+                    "Internal brand rollout",
+                    "Brand guardian training"
+                ]
+            }
+        ]
+    },
+    "content_campaign": {
+        "name": "Content Campaign",
+        "type": "content",
+        "desc": "Plan and execute a multi-channel content marketing campaign",
+        "workers": [
+            "content_writer",
+            "seo_specialist",
+            "graphic_designer",
+            "editor"
+        ],
+        "phases": [
+            {
+                "name": "Strategy",
+                "tasks": [
+                    "Campaign goals and KPIs",
+                    "Audience segmentation",
+                    "Content calendar",
+                    "Channel strategy"
+                ]
+            },
+            {
+                "name": "Creation",
+                "tasks": [
+                    "Blog posts",
+                    "Social media content",
+                    "Email sequences",
+                    "Landing pages",
+                    "Visual assets"
+                ]
+            },
+            {
+                "name": "Distribution",
+                "tasks": [
+                    "Publishing schedule",
+                    "Social promotion",
+                    "Email sends",
+                    "Paid amplification"
+                ]
+            },
+            {
+                "name": "Measurement",
+                "tasks": [
+                    "Traffic analysis",
+                    "Engagement metrics",
+                    "Conversion tracking",
+                    "Campaign retrospective"
+                ]
+            }
+        ]
+    },
+    "api_product": {
+        "name": "API Product",
+        "type": "app",
+        "desc": "Build a developer-facing API product with documentation",
+        "workers": [
+            "backend_dev",
+            "api_developer",
+            "technical_writer",
+            "security_engineer"
+        ],
+        "phases": [
+            {
+                "name": "Design",
+                "tasks": [
+                    "API contract design (OpenAPI)",
+                    "Authentication strategy",
+                    "Rate limiting design",
+                    "Error handling standards"
+                ]
+            },
+            {
+                "name": "Build",
+                "tasks": [
+                    "Core endpoints",
+                    "Database layer",
+                    "Auth middleware",
+                    "Validation layer",
+                    "SDK scaffolding"
+                ]
+            },
+            {
+                "name": "Documentation",
+                "tasks": [
+                    "API reference",
+                    "Getting started guide",
+                    "Code examples",
+                    "Changelog",
+                    "Migration guides"
+                ]
+            },
+            {
+                "name": "Launch",
+                "tasks": [
+                    "Developer portal",
+                    "API key management",
+                    "Usage monitoring",
+                    "Support process"
+                ]
+            }
+        ]
+    },
+    "data_pipeline": {
+        "name": "Data Pipeline",
+        "type": "ops",
+        "desc": "Build a production data pipeline for analytics or ML",
+        "workers": [
+            "data_engineer",
+            "backend_dev",
+            "qa_automation",
+            "devops_engineer"
+        ],
+        "phases": [
+            {
+                "name": "Design",
+                "tasks": [
+                    "Source inventory",
+                    "Schema design",
+                    "Pipeline architecture",
+                    "SLA requirements"
+                ]
+            },
+            {
+                "name": "Build",
+                "tasks": [
+                    "Ingestion layer",
+                    "Transformation logic",
+                    "Data quality checks",
+                    "Output sinks",
+                    "Orchestration setup"
+                ]
+            },
+            {
+                "name": "Quality",
+                "tasks": [
+                    "Data validation tests",
+                    "Performance benchmarks",
+                    "Failure recovery testing",
+                    "Monitoring and alerting"
+                ]
+            },
+            {
+                "name": "Operations",
+                "tasks": [
+                    "Runbook creation",
+                    "On-call setup",
+                    "Capacity planning",
+                    "Documentation"
+                ]
+            }
+        ]
+    },
+    "ml_project": {
+        "name": "ML Model",
+        "type": "research",
+        "desc": "Train and deploy a machine learning model",
+        "workers": [
+            "ml_engineer",
+            "data_engineer",
+            "data_analyst",
+            "ai_ethics"
+        ],
+        "phases": [
+            {
+                "name": "Problem",
+                "tasks": [
+                    "Problem formulation",
+                    "Success metrics definition",
+                    "Data requirements",
+                    "Baseline identification"
+                ]
+            },
+            {
+                "name": "Data",
+                "tasks": [
+                    "Data collection",
+                    "Feature engineering",
+                    "Train/test split",
+                    "Data quality assessment"
+                ]
+            },
+            {
+                "name": "Modeling",
+                "tasks": [
+                    "Model selection",
+                    "Training",
+                    "Hyperparameter tuning",
+                    "Evaluation",
+                    "Bias assessment"
+                ]
+            },
+            {
+                "name": "Deployment",
+                "tasks": [
+                    "Inference pipeline",
+                    "A/B test setup",
+                    "Monitoring",
+                    "Model card documentation"
+                ]
+            }
+        ]
+    },
+    "product_launch": {
+        "name": "Product Launch",
+        "type": "ops",
+        "desc": "Coordinate a cross-functional product launch",
+        "workers": [
+            "project_manager",
+            "content_writer",
+            "graphic_designer",
+            "operations_manager"
+        ],
+        "phases": [
+            {
+                "name": "Planning",
+                "tasks": [
+                    "Launch date and milestones",
+                    "Stakeholder alignment",
+                    "Risk assessment",
+                    "Resource allocation"
+                ]
+            },
+            {
+                "name": "Preparation",
+                "tasks": [
+                    "Launch messaging",
+                    "Marketing assets",
+                    "Support team training",
+                    "Documentation updates"
+                ]
+            },
+            {
+                "name": "Execution",
+                "tasks": [
+                    "Staged rollout",
+                    "Social announcements",
+                    "Email campaigns",
+                    "Press outreach"
+                ]
+            },
+            {
+                "name": "Post-launch",
+                "tasks": [
+                    "Metrics review",
+                    "Customer feedback",
+                    "Bug triage",
+                    "Retrospective"
+                ]
+            }
+        ]
+    },
+    "security_audit": {
+        "name": "Security Audit",
+        "type": "ops",
+        "desc": "Conduct a comprehensive security assessment",
+        "workers": [
+            "security_engineer",
+            "threat_modeler",
+            "qa_automation",
+            "privacy_officer"
+        ],
+        "phases": [
+            {
+                "name": "Scope",
+                "tasks": [
+                    "Asset inventory",
+                    "Threat model",
+                    "Compliance requirements",
+                    "Audit plan"
+                ]
+            },
+            {
+                "name": "Assessment",
+                "tasks": [
+                    "Code review",
+                    "Dependency scan",
+                    "Infrastructure review",
+                    "Penetration testing",
+                    "Access control audit"
+                ]
+            },
+            {
+                "name": "Report",
+                "tasks": [
+                    "Findings documentation",
+                    "Risk scoring",
+                    "Remediation recommendations",
+                    "Executive summary"
+                ]
+            },
+            {
+                "name": "Remediation",
+                "tasks": [
+                    "Priority fixes",
+                    "Verification testing",
+                    "Policy updates",
+                    "Training recommendations"
+                ]
+            }
+        ]
+    },
+    "podcast_show": {
+        "name": "Podcast Show",
+        "type": "content",
+        "desc": "Launch and produce a podcast series",
+        "workers": [
+            "podcast_producer",
+            "content_writer",
+            "graphic_designer",
+            "editor"
+        ],
+        "phases": [
+            {
+                "name": "Concept",
+                "tasks": [
+                    "Show concept and format",
+                    "Target audience",
+                    "Episode cadence",
+                    "Guest pipeline"
+                ]
+            },
+            {
+                "name": "Setup",
+                "tasks": [
+                    "Audio equipment and hosting",
+                    "Cover art and branding",
+                    "Intro/outro music",
+                    "RSS and distribution"
+                ]
+            },
+            {
+                "name": "Production",
+                "tasks": [
+                    "Episode planning",
+                    "Guest prep",
+                    "Recording",
+                    "Editing and mastering"
+                ]
+            },
+            {
+                "name": "Growth",
+                "tasks": [
+                    "Show notes and transcripts",
+                    "Social promotion",
+                    "Cross-promotion",
+                    "Analytics review"
+                ]
+            }
+        ]
+    },
+    "ecommerce_store": {
+        "name": "E-commerce Store",
+        "type": "website",
+        "desc": "Build an online store with product management and payments",
+        "workers": [
+            "frontend_dev",
+            "backend_dev",
+            "ui_designer",
+            "copywriter"
+        ],
+        "phases": [
+            {
+                "name": "Planning",
+                "tasks": [
+                    "Product catalog structure",
+                    "Payment provider selection",
+                    "Shipping strategy",
+                    "Tax compliance"
+                ]
+            },
+            {
+                "name": "Design",
+                "tasks": [
+                    "Store theme design",
+                    "Product page templates",
+                    "Checkout flow",
+                    "Mobile optimization"
+                ]
+            },
+            {
+                "name": "Build",
+                "tasks": [
+                    "Product management system",
+                    "Cart and checkout",
+                    "Payment integration",
+                    "Inventory tracking",
+                    "Order management"
+                ]
+            },
+            {
+                "name": "Launch",
+                "tasks": [
+                    "Product photography",
+                    "SEO optimization",
+                    "Analytics setup",
+                    "Fulfillment testing",
+                    "Go-live"
+                ]
+            }
+        ]
+    },
+    "design_system": {
+        "name": "Design System",
+        "type": "design",
+        "desc": "Build a component library and design language",
+        "workers": [
+            "design_systems",
+            "ui_designer",
+            "frontend_dev",
+            "technical_writer"
+        ],
+        "phases": [
+            {
+                "name": "Audit",
+                "tasks": [
+                    "Existing component inventory",
+                    "Inconsistency identification",
+                    "Usage analytics",
+                    "Stakeholder interviews"
+                ]
+            },
+            {
+                "name": "Foundation",
+                "tasks": [
+                    "Design tokens (color, spacing, type)",
+                    "Grid system",
+                    "Naming conventions",
+                    "Contribution guidelines"
+                ]
+            },
+            {
+                "name": "Components",
+                "tasks": [
+                    "Core components (button, input, card)",
+                    "Composite components",
+                    "Layout components",
+                    "Documentation for each"
+                ]
+            },
+            {
+                "name": "Adoption",
+                "tasks": [
+                    "Migration guide",
+                    "Developer documentation",
+                    "Design file library",
+                    "Governance process"
+                ]
+            }
+        ]
+    },
+    "video_series": {
+        "name": "Video Series",
+        "type": "content",
+        "desc": "Produce a series of professional video content",
+        "workers": [
+            "video_editor",
+            "content_writer",
+            "graphic_designer",
+            "motion_designer"
+        ],
+        "phases": [
+            {
+                "name": "Planning",
+                "tasks": [
+                    "Series concept and audience",
+                    "Episode outlines",
+                    "Production schedule",
+                    "Resource requirements"
+                ]
+            },
+            {
+                "name": "Pre-production",
+                "tasks": [
+                    "Scripts",
+                    "Storyboards",
+                    "Asset preparation",
+                    "Talent coordination"
+                ]
+            },
+            {
+                "name": "Production",
+                "tasks": [
+                    "Recording",
+                    "B-roll capture",
+                    "Audio recording"
+                ]
+            },
+            {
+                "name": "Post-production",
+                "tasks": [
+                    "Editing",
+                    "Motion graphics",
+                    "Sound design",
+                    "Color grading",
+                    "Thumbnails and titles"
+                ]
+            }
+        ]
+    },
+    "compliance_program": {
+        "name": "Compliance Program",
+        "type": "ops",
+        "desc": "Build or improve a regulatory compliance program",
+        "workers": [
+            "regulatory_analyst",
+            "privacy_officer",
+            "technical_writer",
+            "operations_manager"
+        ],
+        "phases": [
+            {
+                "name": "Assessment",
+                "tasks": [
+                    "Regulatory landscape mapping",
+                    "Current state gap analysis",
+                    "Risk prioritization",
+                    "Stakeholder alignment"
+                ]
+            },
+            {
+                "name": "Framework",
+                "tasks": [
+                    "Policy drafting",
+                    "Control design",
+                    "Training curriculum",
+                    "Audit procedures"
+                ]
+            },
+            {
+                "name": "Implementation",
+                "tasks": [
+                    "Policy rollout",
+                    "Training delivery",
+                    "Control deployment",
+                    "Evidence collection setup"
+                ]
+            },
+            {
+                "name": "Monitoring",
+                "tasks": [
+                    "Compliance dashboards",
+                    "Periodic reviews",
+                    "Incident response procedures",
+                    "Continuous improvement"
+                ]
+            }
+        ]
+    },
+    "ux_redesign": {
+        "name": "UX Redesign",
+        "type": "design",
+        "desc": "Redesign an existing product's user experience",
+        "workers": [
+            "product_designer",
+            "user_researcher",
+            "ui_designer",
+            "frontend_dev"
+        ],
+        "phases": [
+            {
+                "name": "Research",
+                "tasks": [
+                    "User interviews",
+                    "Analytics review",
+                    "Usability testing (current)",
+                    "Competitor analysis",
+                    "Journey mapping"
+                ]
+            },
+            {
+                "name": "Define",
+                "tasks": [
+                    "Problem statement",
+                    "Design principles",
+                    "Success metrics",
+                    "Scope boundaries"
+                ]
+            },
+            {
+                "name": "Design",
+                "tasks": [
+                    "Information architecture",
+                    "Wireframes",
+                    "High-fidelity mockups",
+                    "Prototype",
+                    "Usability testing (new)"
+                ]
+            },
+            {
+                "name": "Implement",
+                "tasks": [
+                    "Design handoff",
+                    "Frontend implementation",
+                    "QA review",
+                    "A/B testing",
+                    "Rollout"
+                ]
+            }
+        ]
+    },
+    "fund_setup": {
+        "name": "Investment Fund Setup",
+        "type": "custom",
+        "desc": "Set up an investment fund with legal structure and operations",
+        "workers": [
+            "financial_analyst",
+            "investor_relations",
+            "regulatory_analyst",
+            "operations_manager"
+        ],
+        "phases": [
+            {
+                "name": "Structure",
+                "tasks": [
+                    "Fund structure selection",
+                    "Jurisdiction analysis",
+                    "Fee model design",
+                    "Governance framework"
+                ]
+            },
+            {
+                "name": "Legal",
+                "tasks": [
+                    "PPM/Offering docs",
+                    "LP agreements",
+                    "Compliance framework",
+                    "Regulatory filings"
+                ]
+            },
+            {
+                "name": "Operations",
+                "tasks": [
+                    "Fund admin setup",
+                    "Bank accounts and custody",
+                    "Investor portal",
+                    "Reporting templates"
+                ]
+            },
+            {
+                "name": "Launch",
+                "tasks": [
+                    "Investor outreach",
+                    "Capital commitments",
+                    "First close",
+                    "Ongoing reporting cadence"
+                ]
+            }
+        ]
+    },
+    "onboarding_program": {
+        "name": "Employee Onboarding",
+        "type": "ops",
+        "desc": "Design a structured onboarding program for new hires",
+        "workers": [
+            "hr_specialist",
+            "education_designer",
+            "content_writer",
+            "operations_manager"
+        ],
+        "phases": [
+            {
+                "name": "Design",
+                "tasks": [
+                    "Onboarding journey map",
+                    "Role-specific tracks",
+                    "Mentor program design",
+                    "Success metrics"
+                ]
+            },
+            {
+                "name": "Content",
+                "tasks": [
+                    "Welcome materials",
+                    "Training modules",
+                    "Tool access guides",
+                    "Culture documentation"
+                ]
+            },
+            {
+                "name": "Systems",
+                "tasks": [
+                    "Onboarding checklist automation",
+                    "Tool provisioning workflow",
+                    "Feedback collection",
+                    "Progress tracking"
+                ]
+            },
+            {
+                "name": "Pilot",
+                "tasks": [
+                    "Test with next cohort",
+                    "Gather feedback",
+                    "Iterate",
+                    "Full rollout"
+                ]
+            }
+        ]
+    }
+}
+
+
 # ── config helpers ────────────────────────────────────────────────────────
 
 def _hash_password(password: str, salt: str) -> str:
@@ -13944,7 +14969,7 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
     </div>
     <div id="fm-breadcrumbs" style="display:flex;align-items:center;gap:2px;padding:0 0 8px;font-size:12px;flex-wrap:wrap"></div>
-    <div id="allfiles-list" style="display:flex;flex-direction:column;border:1px solid var(--border);border-radius:8px;background:var(--surface);min-height:200px">
+    <div id="allfiles-list" style="display:flex;flex-direction:column;border:1px solid var(--border);border-radius:8px;background:var(--surface);min-height:200px;transition:border-color .15s" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'" ondragleave="this.style.borderColor='var(--border)'" ondrop="event.preventDefault();this.style.borderColor='var(--border)';_fmUploadFiles(event.dataTransfer.files)">
       <div class="loading-indicator" style="padding:24px">Loading files...</div>
     </div>
   </div>
@@ -17776,13 +18801,16 @@ function _projOpenActiveOrFirst() {
 
 async function _projCreate() {
   _porterPrompt('New Project', [
+    {name: 'template', label: 'Template (optional)', type: 'select', options: [{value:'',label:'Blank project'},{value:'saas_app',label:'SaaS Application'},{value:'marketing_site',label:'Marketing Website'},{value:'mobile_app',label:'Mobile App'},{value:'investor_deck',label:'Investor Pitch Deck'},{value:'research_paper',label:'Research Report'},{value:'brand_launch',label:'Brand Launch'},{value:'content_campaign',label:'Content Campaign'},{value:'api_product',label:'API Product'},{value:'data_pipeline',label:'Data Pipeline'},{value:'ml_project',label:'ML Model'},{value:'product_launch',label:'Product Launch'},{value:'security_audit',label:'Security Audit'},{value:'ecommerce_store',label:'E-commerce Store'},{value:'design_system',label:'Design System'},{value:'ux_redesign',label:'UX Redesign'},{value:'fund_setup',label:'Investment Fund Setup'},{value:'compliance_program',label:'Compliance Program'},{value:'onboarding_program',label:'Employee Onboarding'},{value:'podcast_show',label:'Podcast Show'},{value:'video_series',label:'Video Series'}], defaultValue: ''},
     {name: 'name', label: 'Project Name', placeholder: 'My Project'},
-    {name: 'type', label: 'Type', type: 'select', options: [{value:'website',label:'Website'},{value:'app',label:'App'},{value:'presentation',label:'Presentation'},{value:'research',label:'Research'},{value:'content',label:'Content'},{value:'design',label:'Design'},{value:'ops',label:'Operations'},{value:'custom',label:'Custom'}], defaultValue: 'custom'},
     {name: 'description', label: 'Description', type: 'textarea', placeholder: 'What is this project about?'}
   ], async function(vals) {
     if (!vals.name) { toast('Name required', 'err'); return; }
     try {
-      var r = await api('/api/projects', {action: 'create', name: vals.name, type: vals.type || 'custom', description: vals.description || ''});
+      var _pt = vals.template || '';
+      var _ptype = vals.type || 'custom';
+      if (_pt && !_ptype) _ptype = 'custom';
+      var r = await api('/api/projects', {action: 'create', name: vals.name, type: _ptype, description: vals.description || '', template: _pt});
       if (r && r.ok) {
         toast('Project created', 'ok');
         loadProjects();
@@ -40788,7 +41816,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_html(LANDING_PAGE)
             return
 
-        if parsed.path == "/api/templates":
+        if parsed.path == "/api/project-templates":
+            if not self.auth_check(redirect=False): return
+            templates = []
+            for tid, t in PROJECT_TEMPLATES.items():
+                templates.append({"id": tid, "name": t["name"], "type": t.get("type","custom"), "description": t.get("desc",""), "workers": t.get("workers",[]), "phases": t.get("phases",[])})
+            self.reply_json({"templates": templates, "count": len(templates)})
+
+        elif parsed.path == "/api/templates":
             if not self.auth_check(redirect=False): return
             cat = qs.get("category", [None])[0]
             templates = []
