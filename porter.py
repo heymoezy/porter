@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.42 — Chat action tags hidden + create_worker action"""
+"""Porter v0.31.43 — Per-user project isolation + new user onboarding"""
 
 
 import email
@@ -635,6 +635,7 @@ def _db_init():
         "CREATE TABLE IF NOT EXISTS project_content (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, content_type TEXT NOT NULL DEFAULT 'text', title TEXT DEFAULT '', body TEXT DEFAULT '', url TEXT DEFAULT '', file_path TEXT DEFAULT '', mime_type TEXT DEFAULT '', file_size INTEGER DEFAULT 0, sort_order INTEGER DEFAULT 0, created_at REAL DEFAULT 0)",
         "CREATE INDEX IF NOT EXISTS idx_project_content_project ON project_content(project_id, sort_order, created_at DESC)",
         "CREATE TABLE IF NOT EXISTS project_collaborators (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, username TEXT NOT NULL, role TEXT DEFAULT 'member', added_by TEXT DEFAULT '', added_at REAL DEFAULT 0, UNIQUE(project_id, username))",
+        "ALTER TABLE users ADD COLUMN onboarded INTEGER DEFAULT 0",
         "CREATE INDEX IF NOT EXISTS idx_proj_collab_project ON project_collaborators(project_id)",
     ]:
         try:
@@ -3594,6 +3595,7 @@ def _ensure_launchpad_project(cfg: dict) -> bool:
         "id": pid,
         "name": "First Mission",
         "type": "manual",
+        "owner": cfg.get("username", "admin"),
         "description": (
             "Guided starter project for learning how Porter manages workers, "
             "projects, state, and artifacts."
@@ -3612,6 +3614,36 @@ def _ensure_launchpad_project(cfg: dict) -> bool:
     except Exception as e:
         log.debug("First Mission seed failed: %s", e)
     return True
+
+
+def _create_user_first_mission(username: str) -> dict:
+    """Create a personal First Mission project for a new user."""
+    pid = str(uuid.uuid4())
+    project = {
+        "id": pid,
+        "name": "First Mission",
+        "type": "manual",
+        "owner": username,
+        "description": (
+            "Guided starter project for learning how Porter manages workers, "
+            "projects, state, and artifacts."
+        ),
+        "success_bar": (
+            "Create one worker, review one artifact, and launch one real project."
+        ),
+        "created_at": time.time(),
+        "assigned_personas": [],
+    }
+    _config.setdefault("projects", []).append(project)
+    save_config(_config)
+    try:
+        scaffold_project_dir(pid, "First Mission")
+        _seed_launchpad_workspace(pid)
+        _seed_launchpad_state(pid)
+    except Exception as e:
+        log.debug("First Mission seed for user %s failed: %s", username, e)
+    log.info("Created personal First Mission for user: %s (project_id=%s)", username, pid)
+    return project
 
 
 def resolve_project_memory(project_id: "str | None", agent_id: "str | None",
@@ -6360,6 +6392,12 @@ def load_config() -> dict:
         changed = True
     if _ensure_launchpad_project(cfg):
         changed = True
+    # v0.31.43 — Backfill owner on existing projects
+    _admin_uname = cfg.get("username", "admin")
+    for _bp in cfg.get("projects", []):
+        if "owner" not in _bp:
+            _bp["owner"] = _admin_uname
+            changed = True
     if _normalize_project_registry_names(cfg):
         changed = True
 
@@ -8968,7 +9006,7 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
                 _state_add_project_note(project_id, "note", str(data["text"]).strip(), source="porter", created_by="porter")
                 results.append({"ok": True, "action": "add_note"})
             elif action == "create_worker" and data.get("name"):
-                # v0.31.42 — Create worker from project chat
+                # v0.31.43 — Create worker from project chat
                 _wname = str(data["name"]).strip()
                 _wrole = str(data.get("role", "")).strip()
                 _wresult = _persona_create({
@@ -9285,7 +9323,7 @@ async function doLogin() {
       console.warn('[login] non-JSON response', { reqId, status: res.status, contentType, bodyPreview: raw.slice(0, 240) });
     }
     if (data && data.ok) {
-      window.location.href = '/';
+      window.location.href = data.first_login ? '/?welcome=1' : '/';
     } else {
       errEl.textContent = (data && data.error) || `Login failed (${res.status})`;
       errEl.style.display = 'block';
@@ -12020,7 +12058,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.42</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.43</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -16406,7 +16444,7 @@ async function _projUploadFile(pid) {
   input.click();
 }
 
-// v0.31.42 — Project People / Collaborators
+// v0.31.43 — Project People / Collaborators
 async function _projLoadCollaborators(pid) {
   var el = document.getElementById('proj-people-list');
   if (!el) return;
@@ -16951,7 +16989,7 @@ async function _renderProjTabContent() {
 
   } else if (_projTab === 'deliverables') {
     html += _projNextCard(proj, 'deliverables');
-    // v0.31.42 — Drag-and-drop zone
+    // v0.31.43 — Drag-and-drop zone
     html += '<div id="proj-deliv-drop" class="proj-drop-zone" onclick="_projUploadFile(\x27' + proj.id + '\x27)" ondragover="_projDelivDragOver(event)" ondragenter="_projDelivDragEnter(event)" ondragleave="_projDelivDragLeave(event)" ondrop="_projDelivDrop(event,\x27' + proj.id + '\x27)">Drop files here or click to upload</div>';
     html += '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">';
     html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27text\x27)" class="btn btn-ghost" style="font-size:11px">+ Text</button>';
@@ -16969,7 +17007,7 @@ async function _renderProjTabContent() {
     return;
 
   } else if (_projTab === 'people') {
-    // v0.31.42 — Project People / Collaborators CRM
+    // v0.31.43 — Project People / Collaborators CRM
     html += _projNextCard(proj, 'people');
     html += '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">';
     html += '<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Collaborators</span>';
@@ -17167,7 +17205,7 @@ function _projGreetingCopy(project, state) {
 }
 
 function _stripActionTags(s) {
-  // v0.31.42 — Remove <porter-action>...</porter-action> blocks from displayed text
+  // v0.31.43 — Remove <porter-action>...</porter-action> blocks from displayed text
   return (s || '').replace(/<porter-action>[\s\S]*?<\/porter-action>/g, '').trim();
 }
 
@@ -32036,7 +32074,15 @@ async function _popupChatSend() {
 
 // ── api helpers ──
 // v0.29.25 — Setup wizard removed (obsolete). Stub for backward compat.
-async function maybeShowWizard() { /* wizard deleted v0.29.25 */ }
+async function maybeShowWizard() {
+  // v0.31.43 — Welcome new users on first login
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('welcome') === '1') {
+    window.history.replaceState({}, '', '/');
+    toast('Welcome to Porter! Your First Mission project is ready.', 'ok', 5000);
+    switchModule('projects');
+  }
+}
 
 
 // ── Global keyboard shortcuts ────────────────────────────────────────────
@@ -33566,7 +33612,7 @@ def _benchmark_adjusted_route(preferred: str, message: str = "") -> tuple:
         return (preferred, None) if _probe_provider(preferred) and not _backend_is_circuit_open(preferred) else _resolve_with_fallback(preferred, message)
     pref_success = int(pref_stats.get("success_rate") or 0)
     pref_p50 = int(pref_stats.get("p50_ms") or 0)
-    # v0.31.42 — Fast path: if preferred is healthy and not saturated, skip alternatives
+    # v0.31.43 — Fast path: if preferred is healthy and not saturated, skip alternatives
     if _probe_provider(preferred) and not _backend_is_circuit_open(preferred) and not pref_pressure.get("saturated"):
         return (preferred, None)
     prefs = _config.get("preferences", {})
@@ -38448,7 +38494,7 @@ class Handler(BaseHTTPRequestHandler):
             _me_session = get_session(self.get_session_token())
             _me_username = _me_session.get("username", "") if _me_session else ""
             cfg = _config
-            # v0.31.42 — Return data for the logged-in user, not always the admin
+            # v0.31.43 — Return data for the logged-in user, not always the admin
             if _me_username and _me_username != cfg.get("username", ""):
                 # Non-admin user: read from users table
                 try:
@@ -38886,7 +38932,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.42"})
+            self.reply_json({"v": "0.31.43"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39048,7 +39094,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.42"
+                health["porter_version"] = "0.31.43"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40496,7 +40542,26 @@ class Handler(BaseHTTPRequestHandler):
         # ── D1: project registry ─────────────────────────────────────────────
         elif parsed.path == "/api/projects":
             if not self.auth_check(redirect=False): return
-            projects = _config.get("projects", [])
+            # v0.31.43 — Per-user project isolation
+            _proj_session = get_session(self.get_session_token())
+            _proj_user = _proj_session.get("username", "") if _proj_session else ""
+            _proj_role = _proj_session.get("role", "operator") if _proj_session else "operator"
+            _admin_user = _config.get("username", "admin")
+            _is_admin = (_proj_user == _admin_user) or (_proj_role == "admin")
+            all_projects = _config.get("projects", [])
+            if _is_admin:
+                projects = all_projects
+            else:
+                # Non-admin: see only owned projects + projects they collaborate on
+                _collab_pids = set()
+                try:
+                    _pc = _db_conn()
+                    _pc_rows = _pc.execute("SELECT project_id FROM project_collaborators WHERE username=?", (_proj_user,)).fetchall()
+                    _pc.close()
+                    _collab_pids = {r[0] for r in _pc_rows}
+                except Exception:
+                    pass
+                projects = [p for p in all_projects if p.get("owner") == _proj_user or p.get("id") in _collab_pids]
             result = []
             for p in projects:
                 wp = AGENT_WORKSPACE_DIR / "projects" / str(p.get("id", ""))
@@ -40999,7 +41064,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.42'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.43'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -41664,7 +41729,7 @@ class Handler(BaseHTTPRequestHandler):
                 salt = cfg.get("salt", "")
                 stored_hash = cfg.get("password_hash", "")
 
-                # v0.31.42 — Multi-user login: check config admin first, then users table
+                # v0.31.43 — Multi-user login: check config admin first, then users table
                 auth_ok = False
 
                 # 1) Check config admin user
@@ -41697,6 +41762,23 @@ class Handler(BaseHTTPRequestHandler):
                     # Clear rate limit on success
                     _login_attempts.pop(client_ip, None)
 
+                    # v0.31.43 — Onboard new user on first login
+                    _is_new_user = False
+                    _is_admin_login = (username == _config.get("username", "admin"))
+                    if not _is_admin_login:
+                        try:
+                            _ob_conn = _db_conn()
+                            _ob_row = _ob_conn.execute("SELECT onboarded FROM users WHERE username=?", (username,)).fetchone()
+                            if _ob_row and not _ob_row[0]:
+                                _is_new_user = True
+                                _create_user_first_mission(username)
+                                _ob_conn.execute("UPDATE users SET onboarded=1 WHERE username=?", (username,))
+                                _ob_conn.commit()
+                                log.info("New user onboarded: %s — created First Mission", username)
+                            _ob_conn.close()
+                        except Exception as _ob_e:
+                            log.debug("Onboarding check failed for %s: %s", username, _ob_e)
+
                     user_agent = self.headers.get("User-Agent", "")
                     token = create_session(username, ip=client_ip, ua=user_agent)
                     self.send_response(200)
@@ -41707,7 +41789,7 @@ class Handler(BaseHTTPRequestHandler):
                         f"porter_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={ttl}" + ("; Secure" if self.headers.get("X-Forwarded-Proto") == "https" else "")
                     )
                     self.send_header("Cache-Control", "no-store")
-                    body = json.dumps({"ok": True}).encode()
+                    body = json.dumps({"ok": True, "first_login": _is_new_user}).encode()
                     self.send_header("Content-Length", str(len(body)))
                     self.end_headers()
                     self.wfile.write(body)
@@ -45033,10 +45115,14 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 if _raw_sbar:
                     try: _raw_sbar = _ai_rewrite_field(_raw_sbar, "success criteria", name)
                     except Exception: pass
+                # v0.31.43 — Track project owner
+                _create_session = get_session(self.get_session_token())
+                _create_owner = _create_session.get("username", "") if _create_session else _config.get("username", "admin")
                 proj = {
                     "id": pid,
                     "name": name,
                     "type": ptype,
+                    "owner": _create_owner,
                     "description": _raw_desc,
                     "success_bar": _raw_sbar,
                     "created_at": time.time(),
@@ -46553,7 +46639,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.42 ready (localhost only)")
+    print(f"\n  Porter v0.31.43 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
