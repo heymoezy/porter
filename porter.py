@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.49 — UX cleanup (global chat history, button audit)"""
+"""Porter v0.31.50 — Role system + 4 accounts + admin split phase 1"""
 
 
 import email
@@ -702,17 +702,29 @@ def _db_init():
         conn.execute("UPDATE users SET display_name=?, full_name=? WHERE username=?", (_cfg_dn, _cfg_fn, _cfg_un))
         conn.commit()
 
-    # v0.31.39 — Migrate username from 'admin' to display_name-based slug
-    if _cfg_un == "admin" and _cfg_dn and _cfg_dn.lower() != "admin":
-        _new_un = _cfg_dn.lower().strip().replace(" ", "_")
-        _existing = conn.execute("SELECT username FROM users WHERE username=?", (_new_un,)).fetchone()
+    # v0.31.50 — Seed default accounts with proper role separation
+    import secrets as _s
+    _seed_accounts = [
+        ("system", "System", "platform_admin"),
+        ("admin",  "Admin",  "admin"),
+        ("moe",    "Moe",    "operator"),
+        ("jacob",  "Jacob",  "operator"),
+    ]
+    for _su, _sdn, _sr in _seed_accounts:
+        _existing = conn.execute("SELECT username, role FROM users WHERE username=?", (_su,)).fetchone()
         if not _existing:
-            conn.execute("INSERT INTO users (username, display_name, full_name, email, password_hash, salt, role, created_at) SELECT ?, display_name, full_name, email, password_hash, salt, role, created_at FROM users WHERE username='admin'", (_new_un,))
-            conn.execute("DELETE FROM users WHERE username='admin'")
+            _ssalt = _s.token_hex(16)
+            _shash = _hash_password("porter", _ssalt)
+            conn.execute(
+                "INSERT INTO users (username, display_name, full_name, email, password_hash, salt, role) VALUES (?,?,?,?,?,?,?)",
+                (_su, _sdn, "", "", _shash, _ssalt, _sr)
+            )
             conn.commit()
-            _config["username"] = _new_un
-            _save_config(_config)
-            print(f"  [porter] Migrated username: admin → {_new_un}")
+            log.info("Seeded account: %s (role=%s)", _su, _sr)
+        elif _existing["role"] != _sr:
+            conn.execute("UPDATE users SET role=? WHERE username=?", (_sr, _su))
+            conn.commit()
+            log.info("Corrected role for %s: %s -> %s", _su, _existing["role"], _sr)
 
     # Auto-migrate config agents → personas table (one-time)
     _persona_count = conn.execute("SELECT count(*) FROM personas").fetchone()[0]
@@ -6309,6 +6321,7 @@ ROLE_CAPS: dict[str, set] = {
     "viewer":   {"read", "chat_read", "task_read"},
     "operator": {"read", "write", "chat_read", "chat_write", "task_read", "task_write", "file_read", "file_write", "orch_read", "orch_write", "checkpoint", "finalize"},
     "admin":    {"read", "write", "chat_read", "chat_write", "task_read", "task_write", "file_read", "file_write", "orch_read", "orch_write", "checkpoint", "finalize", "admin", "user_manage"},
+    "platform_admin": {"read", "write", "chat_read", "chat_write", "task_read", "task_write", "file_read", "file_write", "orch_read", "orch_write", "checkpoint", "finalize", "admin", "user_manage", "platform"},
 }
 
 # ── config helpers ────────────────────────────────────────────────────────
@@ -6880,7 +6893,7 @@ def _check_project_access(session, project_id, required_role="member"):
     username = session.get("username", "")
     user_role = session.get("role", "")
     # Admin users bypass all checks
-    if user_role == "admin":
+    if user_role in ("admin", "platform_admin"):
         return True
     # Check project ownership
     proj = None
@@ -12417,7 +12430,11 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.49</div>
+  <button class="mnav-item" onclick="doLogout()" style="margin-bottom:6px" title="Sign out">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    <span class="mnav-label">Sign Out</span>
+  </button>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.50</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -13053,10 +13070,7 @@ input[type="number"].settings-input { min-width: 60px; }
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           Release Notes
         </button>
-        <button class="btn btn-ghost" onclick="doLogout()" style="width:100%;justify-content:flex-start;gap:8px;font-size:13px">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          Sign out
-        </button>
+        <!-- Sign out moved to main nav rail (v0.31.50) -->
       </div>
     </div>
 
@@ -13528,6 +13542,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.50', date:'2026-03-14', notes:["Role system: platform_admin, admin (workspace), operator, viewer","4 default accounts: system (platform), admin (workspace), moe, jacob","Sign Out moved from Settings to main nav rail","Nav visibility: Logs tab now admin-only","Stopped legacy admin→slug username migration"] },
   { ver:'v0.31.49', date:'2026-03-14', notes:["Global / popup chat now persists to Porter chat history","Global chat textarea auto-grows with message","Porter State page now shows all projects (was 0 for orchestrators)","'Create Project With Porter' → 'Start A New Project'","Removed redundant Create Worker/Refine Project buttons from chat toolbar","Workers tab: add buttons hidden when empty state already shows CTAs"] },
   { ver:'v0.31.48', date:'2026-03-14', notes:["Smart routing: create_worker chat action uses project route hint instead of hardcoded backend","GPT-5.4 audit remediation complete: 10 findings across 4 releases (v0.31.45-48)"] },
   { ver:'v0.31.47', date:'2026-03-14', notes:["Fix: kickoff 'settings' tab navigation now correctly routes to overview","Chat actions now show toast notifications on success/failure","Worker USER.md now uses operator display name and timezone from config"] },
@@ -30528,6 +30543,11 @@ async function loadMe() {
   document.getElementById('sa-full-name').value = data.full_name || '';
   document.getElementById('sa-name').value = data.display_name || '';
   document.getElementById('sa-email').value = data.email || '';
+  // v0.31.50 — Role-based nav visibility
+  var role = data.role || 'operator';
+  var isAdmin = (role === 'admin' || role === 'platform_admin');
+  var adminNav = document.getElementById('mnav-admin');
+  if (adminNav) adminNav.style.display = isAdmin ? '' : 'none';
 }
 
 async function saveAccount() {
@@ -39327,7 +39347,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.49"})
+            self.reply_json({"v": "0.31.50"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39489,7 +39509,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.49"
+                health["porter_version"] = "0.31.50"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -41462,7 +41482,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.49'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.50'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -47088,7 +47108,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.49 ready (localhost only)")
+    print(f"\n  Porter v0.31.50 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
