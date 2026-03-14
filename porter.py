@@ -11390,15 +11390,15 @@ body.density-compact .file-name { padding: 6px 0; }
 .chat-ctx-opt .ctx-opt-avatar { font-size:14px; }
 .chat-ctx-divider { height:1px; background:var(--border); margin:4px 0; }
 .cap-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; }
-.cap-card { padding:12px 14px; border:1px solid var(--border); border-radius:8px; background:var(--surface); transition:border-color .15s; }
+.cap-card { padding:12px 14px; border:1px solid var(--border); border-radius:8px; background:var(--surface); transition:border-color .15s; overflow:hidden; min-width:0; }
 .cap-card:hover { border-color:var(--accent); }
 .cap-card-hdr { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
 .cap-card-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
 .cap-card-dot.ok { background:#22c55e; }
 .cap-card-dot.off { background:var(--text3); opacity:.5; }
-.cap-card-name { font-weight:600; font-size:13px; color:var(--text); }
+.cap-card-name { font-weight:600; font-size:13px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 .cap-card-ver { font-size:11px; color:var(--text3); margin-left:auto; white-space:nowrap; }
-.cap-card-feat { font-size:11px; color:var(--text3); line-height:1.4; }
+.cap-card-feat { font-size:11px; color:var(--text3); line-height:1.4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .cap-card-link { font-size:11px; margin-top:4px; }
 .cap-card-link a { color:var(--accent); text-decoration:none; }
 .cap-card-link a:hover { text-decoration:underline; }
@@ -12290,7 +12290,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </button>
     <button class="mnav-item" id="mnav-capabilities" onclick="switchModule('capabilities')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-      <span class="mnav-label">Connections</span>
+      <span class="mnav-label">Tools</span>
     </button>
     <button class="mnav-item" id="mnav-admin" onclick="switchModule('admin')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -12812,7 +12812,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div id="capabilities-module" class="module-panel">
     <div class="module-hdr">
-      <span class="module-title">Connections</span>
+      <span class="module-title">Tools</span>
       <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
         <span id="cap-summary" style="font-size:11px;color:var(--text3)"></span>
         <button class="btn btn-ghost" onclick="loadCapabilities()">&#8635; Scan</button>
@@ -18271,9 +18271,12 @@ function renderCapabilities(caps) {
   el.innerHTML = sorted.map(function(c) {
     var ok = c.ok;
     var rawVer = ok && c.version ? c.version : '';
-    // Clean up version string — take first line, trim path noise
+    // Clean up version string — extract version number only
     var cleanVer = rawVer.split('\n')[0].trim();
-    if (cleanVer.length > 40) cleanVer = cleanVer.slice(0, 40);
+    // Extract semver-like pattern (e.g. "vite/8.0.0 linux-x64..." → "8.0.0")
+    var verMatch = cleanVer.match(/(\d+\.\d+[\.\d]*)/);
+    if (verMatch) cleanVer = verMatch[1];
+    if (cleanVer.length > 20) cleanVer = cleanVer.slice(0, 20);
     var feats = (c.features || []).join(' \u00b7 ');
     var siteUrl = c.install || '';
     var siteLabel = siteUrl.replace('https://','').replace('http://','').replace(/\/$/,'');
