@@ -13595,24 +13595,22 @@ input[type="number"].settings-input { min-width: 60px; }
 
     <!-- v0.29.1 — Full-page Agent Detail View -->
     <div id="agent-detail-view" class="agent-detail-view" style="display:none">
-      <div class="agent-detail-topbar">
-        <button class="btn btn-ghost btn-sm" id="pd-sp-btn" onclick="_showSystemPrompt(_selectedPersonaId)" style="font-size:11px">System Prompt</button>
-        <div style="flex:1"></div>
-        <button class="btn btn-ghost btn-sm" id="pd-delete-btn" style="font-size:11px;color:#ef4444" onclick="deletePersona()">Delete</button>
-        <!-- Back button removed v0.31.80 — nav click handles it -->
-      </div>
       <div class="agent-identity-shell">
         <div class="agent-identity-card">
           <div class="agent-identity-avatar" id="pd-avatar2" onclick="_editCardField('avatar')" style="cursor:pointer" title="Click to edit">&#x1f916;</div>
           <div class="agent-identity-meta">
             <div class="agent-identity-name" id="pd-name2" onclick="_editCardField('name')" style="cursor:pointer" title="Click to edit"></div>
             <div class="agent-identity-role" id="pd-role2" onclick="_editCardField('role')" style="cursor:pointer" title="Click to edit"></div>
-            <div class="agent-identity-badges">
-              <span class="agent-badge" id="pd-group-badge2">&mdash;</span>
-              <span class="agent-badge" id="pd-status-badge2">idle</span>
-              <span class="agent-badge" id="pd-backend-badge2">Bridge-selected</span>
-            </div>
           </div>
+          <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+            <button class="btn btn-ghost btn-sm" id="pd-sp-btn" onclick="_showSystemPrompt(_selectedPersonaId)" style="font-size:11px">System Prompt</button>
+            <button class="btn btn-ghost btn-sm" id="pd-delete-btn" style="font-size:11px;color:#ef4444" onclick="deletePersona()">Delete</button>
+          </div>
+        </div>
+        <div class="agent-identity-badges" style="margin-top:4px;margin-left:46px">
+          <span class="agent-badge" id="pd-group-badge2">&mdash;</span>
+          <span class="agent-badge" id="pd-status-badge2">idle</span>
+          <span class="agent-badge" id="pd-backend-badge2">Bridge-selected</span>
         </div>
       </div>
       <div class="agent-detail-tabs">
@@ -28955,7 +28953,7 @@ async function selectPersona(id) {
     var spBtn = document.getElementById('pd-sp-btn');
     var tabActions = document.getElementById('pd-tab-actions');
     if (av) {
-      av.innerHTML = _personaAvatarMarkup(p, isOrchestrator ? 210 : 154);
+      av.innerHTML = _personaAvatarMarkup(p, 36);
       av.style.cursor = isLocked ? 'default' : 'pointer';
     }
     if (nm) nm.textContent = p.name || 'Unnamed';
