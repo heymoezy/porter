@@ -201,7 +201,7 @@ test.describe('Nav regression — all tabs render content', () => {
   });
 
   // Current visible nav tabs (for operator role — admin hidden, logs visible)
-  const allTabs = ['agents', 'projects', 'models', 'people', 'capabilities', 'admin'];
+  const allTabs = ['agents', 'projects', 'models', 'people', 'capabilities', 'logs'];
 
   test('every tab shows content when clicked', async ({ page }) => {
     for (const tab of allTabs) {
