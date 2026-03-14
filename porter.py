@@ -10432,7 +10432,7 @@ body {
 <body>
 <div class="login-card">
   <div class="login-logo">
-    <canvas id="login-avatar" width="40" height="40" style="border-radius:8px;image-rendering:pixelated"></canvas>
+    <svg width="40" height="40" viewBox="0 0 34 34" fill="none"><rect width="34" height="34" rx="8" fill="#F7931A"/><rect x="10" y="9" width="4" height="16" rx="1.5" fill="white"/><rect x="10" y="9" width="10" height="4" rx="1.5" fill="white"/><rect x="10" y="16" width="10" height="4" rx="1.5" fill="white"/><rect x="20" y="9" width="4" height="11" rx="1.5" fill="white"/></svg>
     <div>
       <div class="login-logo-name">Porter</div>
     </div>
@@ -10459,26 +10459,7 @@ document.getElementById('pw').addEventListener('keydown', e => {
 document.getElementById('uname').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('pw').focus();
 });
-// Porter pixel avatar
-(function(){
-  var c=document.getElementById('login-avatar');
-  if(!c)return;
-  var ctx=c.getContext('2d');
-  c.width=8;c.height=8;
-  c.style.width='40px';c.style.height='40px';
-  var p=[
-    '..1111..',
-    '.1AABB1.',
-    '.1AABB1.',
-    '..1331..',
-    '.133331.',
-    '1.1331.1',
-    '..1..1..',
-    '.11..11.'
-  ];
-  var colors={'1':'#3b82f6','A':'#60a5fa','B':'#93c5fd','3':'#f59e0b','.':'#171d28'};
-  for(var y=0;y<8;y++)for(var x=0;x<8;x++){ctx.fillStyle=colors[p[y][x]]||'#171d28';ctx.fillRect(x,y,1,1);}
-})();
+// Login logo is inline SVG (matches main app)
 async function doLogin() {
   const username = document.getElementById('uname').value.trim();
   const password = document.getElementById('pw').value;
@@ -12900,10 +12881,9 @@ body.density-compact .file-name { padding: 6px 0; }
   display:flex;
   align-items:center;
   justify-content:center;
-  background:var(--accent);
-  border-radius:50%;
-  font-size:16px;
-  overflow:hidden;
+  background:transparent;
+  border:none;
+  overflow:visible;
   flex-shrink:0;
 }
 .agent-identity-name { font-size:15px; font-weight:700; color:var(--text); line-height:1; }
@@ -13603,18 +13583,18 @@ input[type="number"].settings-input { min-width: 60px; }
         <div class="agent-identity-card">
           <div class="agent-identity-avatar" id="pd-avatar2" onclick="_editCardField('avatar')" style="cursor:pointer" title="Click to edit">&#x1f916;</div>
           <div class="agent-identity-meta">
-            <div class="agent-identity-name" id="pd-name2" onclick="_editCardField('name')" style="cursor:pointer" title="Click to edit"></div>
+            <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+              <div class="agent-identity-name" id="pd-name2" onclick="_editCardField('name')" style="cursor:pointer" title="Click to edit"></div>
+              <span class="agent-badge" id="pd-group-badge2" style="font-size:9px">&mdash;</span>
+              <span class="agent-badge" id="pd-status-badge2" style="font-size:9px">idle</span>
+              <span class="agent-badge" id="pd-backend-badge2" style="font-size:9px">Bridge-selected</span>
+            </div>
             <div class="agent-identity-role" id="pd-role2" onclick="_editCardField('role')" style="cursor:pointer" title="Click to edit"></div>
           </div>
           <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
             <button class="btn btn-ghost btn-sm" id="pd-sp-btn" onclick="_showSystemPrompt(_selectedPersonaId)" style="font-size:11px">System Prompt</button>
             <button class="btn btn-ghost btn-sm" id="pd-delete-btn" style="font-size:11px;color:#ef4444" onclick="deletePersona()">Delete</button>
           </div>
-        </div>
-        <div class="agent-identity-badges" style="margin-top:4px;margin-left:46px">
-          <span class="agent-badge" id="pd-group-badge2">&mdash;</span>
-          <span class="agent-badge" id="pd-status-badge2">idle</span>
-          <span class="agent-badge" id="pd-backend-badge2">Bridge-selected</span>
         </div>
       </div>
       <div class="agent-detail-tabs">
