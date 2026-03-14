@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.58 — Agent template library (100 archetypes)"""
+"""Porter v0.31.59 — Project Plan tab (workflow, schedule, autonomy, quality gates)"""
 
 
 import email
@@ -9153,6 +9153,21 @@ def _project_chat_action_prompt(project_id: str) -> str:
         elif isinstance(vals, str) and vals:
             link_parts.append(f"{kind}: {vals}")
     links_str = ", ".join(link_parts[:6]) if link_parts else "none"
+    # Phases context
+    _phases = proj.get("phases") or []
+    _ph_parts = []
+    for _ph in _phases[:8]:
+        _ph_parts.append(f"{_ph.get('name','?')} [{_ph.get('status','pending')}]")
+    phases_str = ", ".join(_ph_parts) if _ph_parts else "none"
+    # Schedule context
+    _sched = proj.get("schedule") or {}
+    sched_str = f"cadence={_sched.get('cadence','none')}, next_review={_sched.get('next_review','not set')}, checkpoints={len(_sched.get('checkpoints',[]))}"
+    # Autonomy context
+    autonomy_str = (proj.get("autonomy") or {}).get("mode", "not set")
+    # Quality gates context
+    _qg = proj.get("quality_gates") or []
+    qg_done = sum(1 for g in _qg if g.get("done"))
+    qg_str = f"{qg_done}/{len(_qg)} done"
     # Collaborators
     collab_str = "none"
     try:
@@ -9171,6 +9186,10 @@ def _project_chat_action_prompt(project_id: str) -> str:
         f"Success criteria: {proj.get('success_bar', 'none')}\n"
         f"Start: {proj.get('start_date', 'not set')} | Deadline: {proj.get('deadline', 'not set')}\n"
         f"Plan: {proj.get('plan', 'none')[:200]}\n"
+        f"Phases: {phases_str}\n"
+        f"Schedule: {sched_str}\n"
+        f"Autonomy: {autonomy_str}\n"
+        f"Quality gates: {qg_str}\n"
         f"Workers: {', '.join(worker_names) or 'none assigned'}\n"
         f"Milestones: {ms_str}\n"
         f"Links: {links_str}\n"
@@ -9207,6 +9226,22 @@ def _project_chat_action_prompt(project_id: str) -> str:
         '  remove_collaborator: {"action":"remove_collaborator","username":"..."}\n'
         "NOTES:\n"
         '  add_note: {"action":"add_note","text":"..."}\n'
+        "PHASES:\n"
+        '  add_phase: {"action":"add_phase","name":"...","order":0,"done_when":"..."}  (order/done_when optional)\n'
+        '  update_phase: {"action":"update_phase","name":"exact phase name","status":"pending|active|done","owner":"worker name"}  (status/owner optional)\n'
+        '  remove_phase: {"action":"remove_phase","name":"exact phase name"}\n'
+        "SCHEDULE:\n"
+        '  set_cadence: {"action":"set_cadence","cadence":"none|daily|weekly|biweekly|monthly"}\n'
+        '  set_next_review: {"action":"set_next_review","date":"YYYY-MM-DD"}\n'
+        '  add_checkpoint: {"action":"add_checkpoint","date":"YYYY-MM-DD","label":"..."}\n'
+        '  toggle_checkpoint: {"action":"toggle_checkpoint","label":"exact label"}\n'
+        '  remove_checkpoint: {"action":"remove_checkpoint","label":"exact label"}\n'
+        "AUTONOMY:\n"
+        '  set_autonomy: {"action":"set_autonomy","mode":"manual|guided|autonomous","can_create_workers":true,"can_reassign":true,"can_update_state":true}  (toggles optional)\n'
+        "QUALITY GATES:\n"
+        '  add_quality_gate: {"action":"add_quality_gate","item":"..."}\n'
+        '  toggle_quality_gate: {"action":"toggle_quality_gate","item":"exact item text"}\n'
+        '  remove_quality_gate: {"action":"remove_quality_gate","item":"exact item text"}\n'
         "DANGER:\n"
         '  delete_project: {"action":"delete_project"}  (ask for confirmation first!)\n\n'
         "Rules:\n"
@@ -9499,6 +9534,136 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
             elif action == "add_note" and data.get("text"):
                 _state_add_project_note(project_id, "note", str(data["text"]).strip(), source="porter", created_by="porter")
                 results.append({"ok": True, "action": "add_note"})
+
+            # ── Phases ──
+            elif action == "add_phase" and data.get("name"):
+                _ph_name = str(data["name"]).strip()
+                _ph = {"name": _ph_name, "status": "pending", "owner": str(data.get("owner", "")).strip(), "done_when": str(data.get("done_when", "")).strip(), "order": int(data.get("order", len(proj.get("phases", []))))}
+                proj.setdefault("phases", []).append(_ph)
+                save_config(_config)
+                results.append({"ok": True, "action": "add_phase", "name": _ph_name})
+
+            elif action == "update_phase" and data.get("name"):
+                _ph_name = str(data["name"]).strip().lower()
+                _found = False
+                for ph in proj.get("phases", []):
+                    if ph.get("name", "").strip().lower() == _ph_name:
+                        if data.get("status") and data["status"] in ("pending", "active", "done"):
+                            ph["status"] = data["status"]
+                        if "owner" in data:
+                            ph["owner"] = str(data["owner"]).strip()
+                        if "done_when" in data:
+                            ph["done_when"] = str(data["done_when"]).strip()
+                        save_config(_config)
+                        results.append({"ok": True, "action": "update_phase", "name": ph["name"]})
+                        _found = True
+                        break
+                if not _found:
+                    results.append({"ok": False, "error": f"Phase not found: {data['name']}"})
+
+            elif action == "remove_phase" and data.get("name"):
+                _ph_name = str(data["name"]).strip().lower()
+                _before = len(proj.get("phases", []))
+                proj["phases"] = [ph for ph in proj.get("phases", []) if ph.get("name", "").strip().lower() != _ph_name]
+                if len(proj.get("phases", [])) < _before:
+                    save_config(_config)
+                    results.append({"ok": True, "action": "remove_phase", "name": data["name"]})
+                else:
+                    results.append({"ok": False, "error": f"Phase not found: {data['name']}"})
+
+            # ── Schedule ──
+            elif action == "set_cadence" and data.get("cadence"):
+                _cad = str(data["cadence"]).strip()
+                if _cad in ("none", "daily", "weekly", "biweekly", "monthly"):
+                    proj.setdefault("schedule", {})["cadence"] = _cad
+                    save_config(_config)
+                    results.append({"ok": True, "action": "set_cadence", "cadence": _cad})
+                else:
+                    results.append({"ok": False, "error": f"Invalid cadence: {_cad}"})
+
+            elif action == "set_next_review" and data.get("date"):
+                proj.setdefault("schedule", {})["next_review"] = str(data["date"]).strip()
+                save_config(_config)
+                results.append({"ok": True, "action": "set_next_review", "date": data["date"]})
+
+            elif action == "add_checkpoint" and data.get("label"):
+                _cp = {"date": str(data.get("date", "")).strip(), "label": str(data["label"]).strip(), "done": False}
+                proj.setdefault("schedule", {}).setdefault("checkpoints", []).append(_cp)
+                save_config(_config)
+                results.append({"ok": True, "action": "add_checkpoint", "label": _cp["label"]})
+
+            elif action == "toggle_checkpoint" and data.get("label"):
+                _cl = str(data["label"]).strip().lower()
+                _found = False
+                for cp in proj.get("schedule", {}).get("checkpoints", []):
+                    if cp.get("label", "").strip().lower() == _cl:
+                        cp["done"] = not cp.get("done", False)
+                        save_config(_config)
+                        results.append({"ok": True, "action": "toggle_checkpoint", "label": cp["label"], "done": cp["done"]})
+                        _found = True
+                        break
+                if not _found:
+                    results.append({"ok": False, "error": f"Checkpoint not found: {data['label']}"})
+
+            elif action == "remove_checkpoint" and data.get("label"):
+                _cl = str(data["label"]).strip().lower()
+                _sched = proj.get("schedule", {})
+                _before = len(_sched.get("checkpoints", []))
+                _sched["checkpoints"] = [cp for cp in _sched.get("checkpoints", []) if cp.get("label", "").strip().lower() != _cl]
+                if len(_sched.get("checkpoints", [])) < _before:
+                    save_config(_config)
+                    results.append({"ok": True, "action": "remove_checkpoint", "label": data["label"]})
+                else:
+                    results.append({"ok": False, "error": f"Checkpoint not found: {data['label']}"})
+
+            # ── Autonomy ──
+            elif action == "set_autonomy" and data.get("mode"):
+                _am = str(data["mode"]).strip()
+                if _am in ("manual", "guided", "autonomous"):
+                    _auto = proj.setdefault("autonomy", {})
+                    _auto["mode"] = _am
+                    if "can_create_workers" in data:
+                        _auto["can_create_workers"] = bool(data["can_create_workers"])
+                    if "can_reassign" in data:
+                        _auto["can_reassign"] = bool(data["can_reassign"])
+                    if "can_update_state" in data:
+                        _auto["can_update_state"] = bool(data["can_update_state"])
+                    if "needs_approval" in data and isinstance(data["needs_approval"], list):
+                        _auto["needs_approval"] = [str(x).strip() for x in data["needs_approval"]]
+                    save_config(_config)
+                    results.append({"ok": True, "action": "set_autonomy", "mode": _am})
+                else:
+                    results.append({"ok": False, "error": f"Invalid autonomy mode: {_am}"})
+
+            # ── Quality Gates ──
+            elif action == "add_quality_gate" and data.get("item"):
+                _gi = {"item": str(data["item"]).strip(), "done": False}
+                proj.setdefault("quality_gates", []).append(_gi)
+                save_config(_config)
+                results.append({"ok": True, "action": "add_quality_gate", "item": _gi["item"]})
+
+            elif action == "toggle_quality_gate" and data.get("item"):
+                _gt = str(data["item"]).strip().lower()
+                _found = False
+                for g in proj.get("quality_gates", []):
+                    if g.get("item", "").strip().lower() == _gt:
+                        g["done"] = not g.get("done", False)
+                        save_config(_config)
+                        results.append({"ok": True, "action": "toggle_quality_gate", "item": g["item"], "done": g["done"]})
+                        _found = True
+                        break
+                if not _found:
+                    results.append({"ok": False, "error": f"Quality gate not found: {data['item']}"})
+
+            elif action == "remove_quality_gate" and data.get("item"):
+                _gt = str(data["item"]).strip().lower()
+                _before = len(proj.get("quality_gates", []))
+                proj["quality_gates"] = [g for g in proj.get("quality_gates", []) if g.get("item", "").strip().lower() != _gt]
+                if len(proj.get("quality_gates", [])) < _before:
+                    save_config(_config)
+                    results.append({"ok": True, "action": "remove_quality_gate", "item": data["item"]})
+                else:
+                    results.append({"ok": False, "error": f"Quality gate not found: {data['item']}"})
 
             # ── Delete project (dangerous) ──
             elif action == "delete_project":
@@ -11688,6 +11853,29 @@ body.density-compact .file-name { padding: 6px 0; }
 .proj-guide-empty { padding:24px 16px; text-align:center; border:1px dashed var(--border); border-radius:12px; background:var(--surface); }
 .proj-guide-empty-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:6px; }
 .proj-guide-empty-hint { font-size:11px; color:var(--text3); margin-bottom:12px; line-height:1.5; }
+/* ── Plan Tab Sections ──────────────────────────────────────── */
+.plan-section { border:1px solid var(--border); border-radius:10px; background:var(--surface); padding:14px 16px; }
+.plan-section-hdr { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.plan-section-title { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--text3); }
+.plan-phase { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid color-mix(in srgb, var(--border) 50%, transparent); }
+.plan-phase:last-child { border-bottom:none; }
+.plan-phase-name { font-size:12px; color:var(--text); font-weight:500; flex:1; }
+.plan-phase-owner { font-size:10px; color:var(--text3); }
+.plan-phase-status { font-size:9px; padding:2px 8px; border-radius:4px; font-weight:600; }
+.plan-phase-status.pending { background:color-mix(in srgb, var(--text3) 15%, transparent); color:var(--text3); }
+.plan-phase-status.active { background:color-mix(in srgb, #3b82f6 18%, transparent); color:#60a5fa; }
+.plan-phase-status.done { background:color-mix(in srgb, #22c55e 18%, transparent); color:#4ade80; }
+.plan-checkpoint { display:flex; align-items:center; gap:8px; padding:4px 0; }
+.plan-checkpoint-date { font-size:10px; color:var(--text3); min-width:72px; font-family:'SF Mono',Menlo,monospace; }
+.plan-gate { display:flex; align-items:center; gap:6px; padding:3px 0; }
+.plan-autonomy-mode { display:flex; gap:6px; }
+.plan-autonomy-btn { font-size:11px; padding:5px 14px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text3); cursor:pointer; transition:all .15s; }
+.plan-autonomy-btn.active { background:color-mix(in srgb, var(--accent) 15%, var(--surface)); color:var(--accent); border-color:var(--accent); font-weight:600; }
+.plan-autonomy-btn:hover { border-color:var(--text3); }
+.plan-toggle { position:relative; width:34px; height:18px; border-radius:9px; background:var(--border); cursor:pointer; transition:background .15s; display:inline-block; vertical-align:middle; }
+.plan-toggle.on { background:var(--accent); }
+.plan-toggle::after { content:''; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:left .15s; }
+.plan-toggle.on::after { left:18px; }
 /* ── File Browser (Deliverables/Artifacts) ─────────────────── */
 .file-browser { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--surface); }
 .file-browser-hdr { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--border); background:var(--bg); }
@@ -12574,7 +12762,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
     <span class="mnav-label">Sign Out</span>
   </button>
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.58</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.59</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -13682,6 +13870,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.59', date:'2026-03-14', notes:["Project Plan tab: 4-section governance (Workflow, Schedule, Autonomy, Success)","10 new chat actions: phases, cadence, checkpoints, autonomy, quality gates","Plan tab context injected into project chat for intelligent planning","DO THIS NEXT coaching for Plan tab"] },
   { ver:'v0.31.58', date:'2026-03-14', notes:["Agent template library: 100 fully spec'd worker archetypes across 10 categories","GET /api/templates endpoint with category filtering","Project type worker recommendations updated to use template names"] },
   { ver:'v0.31.57', date:'2026-03-14', notes:["Login: Porter pixel avatar, removed 'Orchestrator' subtitle","Login: forgot password and create account links","Sidebar: 'Orchestrator' renamed to 'AI Workspace'","Logs: system noise filtered for non-admin users"] },
   { ver:'v0.31.56', date:'2026-03-14', notes:["Fix: state page project count now matches user's actual projects","Logs tab restored for all users (was admin-only)","Startup cleanup removes all other users' First Mission projects"] },
@@ -17239,6 +17428,7 @@ function _renderProjTabs() {
   var items = [
     {id:'overview', label:'Overview'},
     {id:'chat', label:'Chat'},
+    {id:'plan', label:'Plan'},
     {id:'workers', label:'Workers' + (agentCount ? ' (' + agentCount + ')' : '')},
     {id:'deliverables', label:'Deliverables'},
     {id:'people', label:'People' + (collabCount ? ' (' + collabCount + ')' : '')},
@@ -17255,6 +17445,7 @@ function _projSwitchTab(t) {
   if (t === 'memory' || t === 'state' || t === 'settings') t = 'overview';
   if (t === 'agents') t = 'workers';
   if (t === 'artifacts') t = 'deliverables';
+  if (t === 'workflow' || t === 'schedule') t = 'plan';
   _projTab = t;
   if (t !== 'chat' && _projActivityRefreshTimer) {
     clearTimeout(_projActivityRefreshTimer);
@@ -17307,6 +17498,17 @@ function _projNextCard(proj, tab) {
     if (!hasMs) suggestions.push({ text:'Set milestones so deliverables can be organized by phase.', btn:'Add Milestone', action:"_projAddMilestone('" + pid + "')", priority:5 });
   }
 
+  if (tab === 'plan') {
+    var phases = proj.phases || [];
+    var sched = proj.schedule || {};
+    var auton = proj.autonomy || {};
+    var gates = proj.quality_gates || [];
+    if (!phases.length) suggestions.push({ text:'Define your project phases to structure the work.', btn:'Add Phase', action:"_projChatPrefill('Add a Discovery phase to this project')", priority:1 });
+    if (!sched.cadence || sched.cadence === 'none') suggestions.push({ text:'Set a review cadence so progress gets checked regularly.', btn:'Set Cadence', action:"_projChatPrefill('Set a weekly review cadence for this project')", priority:2 });
+    if (!auton.mode) suggestions.push({ text:'Choose how much Porter should do on its own.', btn:'Set Autonomy', action:"_projChatPrefill('Set this project to guided autonomy mode')", priority:3 });
+    if (!gates.length) suggestions.push({ text:'Add quality gates \u2014 launch criteria that must pass before done.', btn:'Add Gate', action:"_projChatPrefill('Add quality gates: all tests pass, stakeholder sign-off')", priority:4 });
+  }
+
   if (tab === 'apps') {
     suggestions.push({ text:'Connect external tools like GitHub, Slack, or Google Drive to this project.', btn:'Connect App', action:"_projConnectApp('" + pid + "')", btn2:'Ask Porter', action2:"_projSwitchTab('chat')", priority:3 });
   }
@@ -17350,6 +17552,44 @@ function _projChatPrefill(text) {
     var input = document.getElementById('proj-chat-input');
     if (input) { input.value = text; input.focus(); }
   }, 100);
+}
+
+// ── Plan tab interaction helpers ──
+async function _projSetAutonomy(pid, mode) {
+  var proj = window._projCurrent;
+  if (!proj) return;
+  proj.autonomy = proj.autonomy || {};
+  proj.autonomy.mode = mode;
+  await fetch('/api/projects', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({action:'update_plan_field', project_id:pid, field:'autonomy', value:proj.autonomy}) });
+  _renderProjTabContent();
+}
+async function _projToggleAutonomyFlag(pid, key) {
+  var proj = window._projCurrent;
+  if (!proj) return;
+  proj.autonomy = proj.autonomy || {};
+  proj.autonomy[key] = !(proj.autonomy[key] !== false);
+  await fetch('/api/projects', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({action:'update_plan_field', project_id:pid, field:'autonomy', value:proj.autonomy}) });
+  _renderProjTabContent();
+}
+async function _projToggleCheckpoint(pid, label) {
+  var proj = window._projCurrent;
+  if (!proj) return;
+  var sched = proj.schedule || {};
+  var cps = sched.checkpoints || [];
+  cps.forEach(function(cp) { if (cp.label === label) cp.done = !cp.done; });
+  proj.schedule = sched;
+  proj.schedule.checkpoints = cps;
+  await fetch('/api/projects', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({action:'update_plan_field', project_id:pid, field:'schedule', value:proj.schedule}) });
+  _renderProjTabContent();
+}
+async function _projToggleGate(pid, idx) {
+  var proj = window._projCurrent;
+  if (!proj) return;
+  var gates = proj.quality_gates || [];
+  if (gates[idx]) gates[idx].done = !gates[idx].done;
+  proj.quality_gates = gates;
+  await fetch('/api/projects', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({action:'update_plan_field', project_id:pid, field:'quality_gates', value:proj.quality_gates}) });
+  _renderProjTabContent();
 }
 
 function _projShowAllSuggestions() {
@@ -17420,6 +17660,133 @@ async function _renderProjTabContent() {
     var projState = _projChatGetState(proj.id);
     _projChatSetModel(projState.modelOverride || '');
     _projChatRender(proj.id);
+    return;
+
+  } else if (_projTab === 'plan') {
+    html += _projNextCard(proj, 'plan');
+    html += '<div style="display:flex;flex-direction:column;gap:12px">';
+
+    // ── Section 1: Workflow ──
+    html += '<div class="plan-section">';
+    html += '<div class="plan-section-hdr"><span class="plan-section-title">Workflow</span></div>';
+    if (proj.plan) html += '<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:8px;white-space:pre-wrap">' + escHtml(proj.plan) + '</div>';
+    var phases = proj.phases || [];
+    if (phases.length) {
+      phases.sort(function(a,b){ return (a.order||0)-(b.order||0); });
+      phases.forEach(function(ph) {
+        var st = ph.status || 'pending';
+        html += '<div class="plan-phase">';
+        html += '<span class="plan-phase-status ' + st + '">' + st + '</span>';
+        html += '<span class="plan-phase-name">' + escHtml(ph.name || '?') + '</span>';
+        if (ph.owner) html += '<span class="plan-phase-owner">' + escHtml(ph.owner) + '</span>';
+        if (ph.done_when) html += '<span style="font-size:10px;color:var(--text3);font-style:italic">' + escHtml(ph.done_when) + '</span>';
+        html += '</div>';
+      });
+    } else {
+      html += '<div style="font-size:11px;color:var(--text3);padding:6px 0">No phases defined yet.</div>';
+    }
+    var milestones = proj.milestones || [];
+    if (milestones.length) {
+      var msDone = milestones.filter(function(m){ return m.done; }).length;
+      html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">';
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px">Milestones</span><div style="flex:1;height:3px;border-radius:2px;background:var(--border)"><div style="height:100%;border-radius:2px;background:var(--accent);width:' + Math.round(msDone/milestones.length*100) + '%"></div></div><span style="font-size:10px;color:var(--text3)">' + msDone + '/' + milestones.length + '</span></div>';
+      milestones.forEach(function(m, i) {
+        html += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0"><input type="checkbox" ' + (m.done ? 'checked' : '') + ' onchange="_projToggleMilestone(\x27' + proj.id + '\x27,' + i + ')" style="margin:0;cursor:pointer"><span style="font-size:11px;color:' + (m.done ? 'var(--text3)' : 'var(--text)') + ';' + (m.done ? 'text-decoration:line-through;' : '') + '">' + escHtml(m.name) + '</span></div>';
+      });
+      html += '</div>';
+    }
+    html += '<div style="display:flex;gap:6px;margin-top:8px">';
+    html += '<button onclick="_projChatPrefill(\'Add a new phase to this project\')" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Phase</button>';
+    html += '<button onclick="_projAddMilestone(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Milestone</button>';
+    html += '</div>';
+    html += '</div>';
+
+    // ── Section 2: Schedule ──
+    html += '<div class="plan-section">';
+    html += '<div class="plan-section-hdr"><span class="plan-section-title">Schedule</span></div>';
+    var sched = proj.schedule || {};
+    html += '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;margin-bottom:8px">';
+    if (proj.start_date) html += '<span style="color:var(--text3)">Start: <span style="color:var(--text)">' + escHtml(proj.start_date) + '</span></span>';
+    if (proj.deadline) html += '<span style="color:var(--text3)">Deadline: <span style="color:var(--accent);font-weight:600">' + escHtml(proj.deadline) + '</span></span>';
+    html += '<span style="color:var(--text3)">Cadence: <span style="color:var(--text)">' + escHtml(sched.cadence || 'none') + '</span></span>';
+    if (sched.next_review) html += '<span style="color:var(--text3)">Next review: <span style="color:var(--text)">' + escHtml(sched.next_review) + '</span></span>';
+    html += '</div>';
+    var cps = (sched.checkpoints || []);
+    if (cps.length) {
+      cps.forEach(function(cp) {
+        html += '<div class="plan-checkpoint">';
+        html += '<input type="checkbox" ' + (cp.done ? 'checked' : '') + ' onchange="_projToggleCheckpoint(\x27' + proj.id + '\x27,\x27' + escHtml(cp.label||'') + '\x27)" style="margin:0;cursor:pointer">';
+        html += '<span class="plan-checkpoint-date">' + escHtml(cp.date || '') + '</span>';
+        html += '<span style="font-size:11px;color:' + (cp.done ? 'var(--text3)' : 'var(--text)') + ';' + (cp.done ? 'text-decoration:line-through;' : '') + '">' + escHtml(cp.label || '') + '</span>';
+        html += '</div>';
+      });
+    } else {
+      html += '<div style="font-size:11px;color:var(--text3);padding:4px 0">No checkpoints set.</div>';
+    }
+    html += '<div style="display:flex;gap:6px;margin-top:8px">';
+    html += '<button onclick="_projChatPrefill(\'Set a weekly review cadence\')" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">Set Cadence</button>';
+    html += '<button onclick="_projChatPrefill(\'Add a checkpoint for next week\')" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Checkpoint</button>';
+    html += '<button onclick="_projEditDates(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">Edit Dates</button>';
+    html += '</div>';
+    html += '</div>';
+
+    // ── Section 3: Autonomy ──
+    html += '<div class="plan-section">';
+    html += '<div class="plan-section-hdr"><span class="plan-section-title">Autonomy</span></div>';
+    var auton = proj.autonomy || {};
+    var aMode = auton.mode || 'manual';
+    html += '<div class="plan-autonomy-mode" style="margin-bottom:10px">';
+    ['manual','guided','autonomous'].forEach(function(m) {
+      html += '<button class="plan-autonomy-btn' + (aMode === m ? ' active' : '') + '" onclick="_projSetAutonomy(\x27' + proj.id + '\x27,\x27' + m + '\x27)">' + m.charAt(0).toUpperCase() + m.slice(1) + '</button>';
+    });
+    html += '</div>';
+    html += '<div style="font-size:11px;color:var(--text3);margin-bottom:10px">';
+    if (aMode === 'manual') html += 'Porter suggests, you approve everything.';
+    else if (aMode === 'guided') html += 'Porter can act within approved boundaries.';
+    else html += 'Porter runs the project, you review.';
+    html += '</div>';
+    var toggles = [
+      {key:'can_create_workers', label:'Create workers'},
+      {key:'can_reassign', label:'Reassign workers'},
+      {key:'can_update_state', label:'Update project state'}
+    ];
+    toggles.forEach(function(tg) {
+      var on = auton[tg.key] !== false;
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:3px 0">';
+      html += '<span class="plan-toggle' + (on ? ' on' : '') + '" onclick="_projToggleAutonomyFlag(\x27' + proj.id + '\x27,\x27' + tg.key + '\x27)"></span>';
+      html += '<span style="font-size:11px;color:var(--text)">' + tg.label + '</span>';
+      html += '</div>';
+    });
+    var needsApproval = auton.needs_approval || [];
+    if (needsApproval.length) {
+      html += '<div style="margin-top:8px;font-size:10px;color:var(--text3)">Needs approval: ' + needsApproval.map(function(a){ return escHtml(a); }).join(', ') + '</div>';
+    }
+    html += '</div>';
+
+    // ── Section 4: Success ──
+    html += '<div class="plan-section">';
+    html += '<div class="plan-section-hdr"><span class="plan-section-title">Success</span></div>';
+    if (proj.success_bar) html += '<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:8px">' + escHtml(proj.success_bar) + '</div>';
+    var gates = proj.quality_gates || [];
+    if (gates.length) {
+      var gDone = gates.filter(function(g){ return g.done; }).length;
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;color:var(--text3)">Quality gates</span><span style="font-size:10px;color:var(--text3)">' + gDone + '/' + gates.length + '</span></div>';
+      gates.forEach(function(g, i) {
+        html += '<div class="plan-gate">';
+        html += '<input type="checkbox" ' + (g.done ? 'checked' : '') + ' onchange="_projToggleGate(\x27' + proj.id + '\x27,' + i + ')" style="margin:0;cursor:pointer">';
+        html += '<span style="font-size:11px;color:' + (g.done ? 'var(--text3)' : 'var(--text)') + ';' + (g.done ? 'text-decoration:line-through;' : '') + '">' + escHtml(g.item || '') + '</span>';
+        html += '</div>';
+      });
+    } else {
+      html += '<div style="font-size:11px;color:var(--text3);padding:4px 0">No quality gates defined.</div>';
+    }
+    html += '<div style="display:flex;gap:6px;margin-top:8px">';
+    html += '<button onclick="_projChatPrefill(\'Add a quality gate: all tests pass\')" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Quality Gate</button>';
+    html += '</div>';
+    html += '</div>';
+
+    html += '</div>';
+    content.innerHTML = html;
     return;
 
   } else if (_projTab === 'apps') {
@@ -38865,7 +39232,7 @@ def _stream_chunk(run_id, backend, token):
     _emit_event("bridge:chunk", {"run_id": run_id, "backend": backend, "text": token})
 
 
-ADMIN_PAGE = '<!DOCTYPE html>\n<html lang="en"><head>\n<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n<title>Porter Admin Console</title>\n<style>\n*{margin:0;padding:0;box-sizing:border-box}\n:root{--bg:#0b0f14;--surface:#141a24;--raised:#1c2433;--border:#283040;--text:#e8ecf2;--text2:#a0aab8;--text3:#6b7688;--accent:#3b82f6;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--purple:#a855f7}\nbody{font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}\n.admin-nav{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}\n.admin-nav-brand{padding:16px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}\n.admin-nav-brand svg{color:var(--accent)}\n.admin-nav-brand-text{font-size:14px;font-weight:700;letter-spacing:.3px}\n.admin-nav-brand-sub{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px}\n.admin-nav-section{padding:12px 0 4px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;padding-left:18px}\n.admin-nav-item{display:flex;align-items:center;gap:10px;padding:9px 18px;font-size:13px;color:var(--text2);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .15s;border-left:2px solid transparent}\n.admin-nav-item:hover{background:var(--raised);color:var(--text)}\n.admin-nav-item.active{background:var(--raised);color:var(--text);font-weight:600;border-left-color:var(--accent)}\n.admin-nav-footer{margin-top:auto;padding:14px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}\n.admin-nav-footer a{color:var(--text3);font-size:11px;text-decoration:none;display:flex;align-items:center;gap:6px}\n.admin-nav-footer a:hover{color:var(--text)}\n.admin-main{flex:1;overflow-y:auto;padding:28px 36px}\n.admin-title{font-size:20px;font-weight:700;margin-bottom:4px}\n.admin-subtitle{font-size:12px;color:var(--text3);margin-bottom:24px}\n.admin-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:14px}\n.admin-card-title{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px}\n.admin-stat{font-size:32px;font-weight:800;line-height:1.1}\n.admin-stat-sub{font-size:11px;color:var(--text3);margin-top:4px}\n.admin-stat.green{color:var(--green)}.admin-stat.red{color:var(--red)}.admin-stat.blue{color:var(--accent)}.admin-stat.purple{color:var(--purple)}.admin-stat.yellow{color:var(--yellow)}\n.admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:20px}\n.admin-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}\n.admin-table{width:100%;border-collapse:collapse;font-size:12px}\n.admin-table th{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.4px}\n.admin-table td{padding:8px 12px;border-bottom:1px solid var(--border)}\n.admin-table tr:hover td{background:var(--raised)}\n.admin-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}\n.admin-badge.green{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}\n.admin-badge.blue{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n.admin-badge.yellow{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}\n.admin-badge.red{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}\n.admin-badge.purple{background:color-mix(in srgb,var(--purple) 15%,transparent);color:var(--purple)}\n.admin-btn{padding:7px 16px;border-radius:6px;border:1px solid var(--border);background:var(--raised);color:var(--text);font-size:12px;cursor:pointer;transition:all .15s}\n.admin-btn:hover{background:var(--surface);border-color:var(--text3)}\n.admin-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}\n.admin-btn.primary:hover{opacity:.9}\n.admin-btn.danger{border-color:var(--red);color:var(--red)}\n.admin-btn.danger:hover{background:color-mix(in srgb,var(--red) 10%,transparent)}\n.admin-btn.sm{padding:4px 10px;font-size:11px}\n.admin-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:16px}\n.admin-toolbar .spacer{flex:1}\n.admin-log-line{font-family:\'SF Mono\',Menlo,Monaco,monospace;font-size:11px;padding:3px 0;color:var(--text2);white-space:pre-wrap;word-break:break-all;line-height:1.5}\n.admin-log-line:hover{background:var(--raised)}\n.admin-kv{display:grid;grid-template-columns:160px 1fr;gap:0;font-size:12px}\n.admin-kv dt{padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border)}\n.admin-kv dd{padding:6px 10px;border-bottom:1px solid var(--border);word-break:break-all}\n.admin-empty{text-align:center;padding:40px;color:var(--text3);font-size:13px}\n.admin-modal-bg{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:center;justify-content:center}\n.admin-modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;min-width:360px;max-width:480px}\n.admin-modal h3{font-size:15px;margin-bottom:16px}\n.admin-modal label{display:block;font-size:11px;color:var(--text2);margin-bottom:4px;margin-top:12px}\n.admin-modal .admin-input,.admin-modal .admin-select{width:100%;margin-bottom:4px}\n.admin-modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}\n.admin-input{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n.admin-input:focus{border-color:var(--accent)}\n.admin-select{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}\n.pulse{animation:pulse 2s ease-in-out infinite}\n</style>\n</head><body>\n<div class="admin-nav">\n  <div class="admin-nav-brand">\n    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>\n    <div>\n      <div class="admin-nav-brand-text">Porter Admin</div>\n      <div class="admin-nav-brand-sub">SaaS Control</div>\n    </div>\n  </div>\n  <div class="admin-nav-section">Monitor</div>\n  <button class="admin-nav-item active" onclick="_at(\'overview\',this)">Overview</button>\n  <button class="admin-nav-item" onclick="_at(\'health\',this)">Health</button>\n  <div class="admin-nav-section">Manage</div>\n  <button class="admin-nav-item" onclick="_at(\'users\',this)">Users</button>\n  <button class="admin-nav-item" onclick="_at(\'sessions\',this)">Sessions</button>\n  <button class="admin-nav-item" onclick="_at(\'projects\',this)">Projects</button>\n  <div class="admin-nav-section">System</div>\n  <button class="admin-nav-item" onclick="_at(\'config\',this)">Config</button>\n  <button class="admin-nav-item" onclick="_at(\'logs\',this)">Logs</button>\n  <div class="admin-nav-footer">\n    <a href="/">&#8592; Porter Workspace</a>\n    <span style="font-size:10px;color:var(--text3)">v0.31.58</span>\n  </div>\n</div>\n<div class="admin-main" id="admin-content"><div class="admin-title">Loading...</div></div>\n<div id="admin-modal-root"></div>\n<script>\nvar _adminCurrentTab=\'overview\';\nasync function _api(u,b){var o=b?{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},credentials:\'same-origin\',body:JSON.stringify(b)}:{credentials:\'same-origin\'};try{var r=await fetch(u,o);if(!r.ok&&r.status===403)return{error:\'forbidden\'};return r.json();}catch(e){return{error:e.message};}}\nfunction _at(t,el){_adminCurrentTab=t;document.querySelectorAll(\'.admin-nav-item\').forEach(function(b){b.classList.remove(\'active\')});if(el)el.classList.add(\'active\');var fn={overview:_loadOverview,users:_loadUsers,sessions:_loadSessions,health:_loadHealth,projects:_loadProjects,config:_loadConfig,logs:_loadLogs};if(fn[t])fn[t]();}\nfunction _escH(s){var d=document.createElement(\'div\');d.textContent=s;return d.innerHTML;}\nfunction _fmtUp(s){var d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return(d?d+\'d \':\'\')+ h+\'h \'+m+\'m\';}\nfunction _fmtDate(ts){if(!ts)return\'-\';var d=new Date(typeof ts===\'number\'?ts*1000:ts);return d.toLocaleDateString(\'en-GB\',{day:\'2-digit\',month:\'short\',year:\'numeric\'})+\' \'+d.toLocaleTimeString(\'en-GB\',{hour:\'2-digit\',minute:\'2-digit\'});}\nfunction _fmtAgo(ts){if(!ts)return\'-\';var now=Date.now()/1000,diff=now-ts;if(diff<60)return\'just now\';if(diff<3600)return Math.floor(diff/60)+\'m ago\';if(diff<86400)return Math.floor(diff/3600)+\'h ago\';return Math.floor(diff/86400)+\'d ago\';}\nfunction _roleBadge(r){var c=r===\'platform_admin\'?\'purple\':r===\'admin\'?\'yellow\':r===\'operator\'?\'blue\':\'green\';return\'<span class="admin-badge \'+c+\'">\'+_escH(r)+\'</span>\';}\nfunction _modal(h){document.getElementById(\'admin-modal-root\').innerHTML=h;}\nfunction _closeModal(){document.getElementById(\'admin-modal-root\').innerHTML=\'\';}\n\nasync function _loadOverview(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div><div class="pulse" style="color:var(--text3)">Loading dashboard...</div>\';\n  try{\n    var [health,users,projects]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/users\',{action:\'list\'}),_api(\'/api/projects\')]);\n    var h=health||{},userList=(users&&users.users)||[],projList=(projects&&projects.projects)||[];\n    var activeProjects=projList.filter(function(p){return p.status===\'active\'}).length;\n    var adminCount=userList.filter(function(u){return u.role===\'admin\'||u.role===\'platform_admin\'}).length;\n    var opCount=userList.filter(function(u){return u.role===\'operator\'}).length;\n    var html=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div>\';\n    html+=\'<div class="admin-grid">\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System Status</div><div class="admin-stat green">Online</div><div class="admin-stat-sub">PID \'+(h.porter_pid||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Version</div><div class="admin-stat blue" style="font-size:22px">v\'+(h.porter_version||\'?\')+\'</div><div class="admin-stat-sub">Python \'+(h.python_version||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Uptime</div><div class="admin-stat" style="font-size:20px;color:var(--text)">\'+_fmtUp(h.uptime_seconds||0)+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div><div class="admin-stat blue">\'+userList.length+\'</div><div class="admin-stat-sub">\'+adminCount+\' admin, \'+opCount+\' operators</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Projects</div><div class="admin-stat purple">\'+projList.length+\'</div><div class="admin-stat-sub">\'+activeProjects+\' active</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-grid-3">\';\n    var cpuC=(h.cpu_percent||0)>80?\'red\':(h.cpu_percent||0)>50?\'yellow\':\'green\';\n    var memC=(h.memory_percent||0)>80?\'red\':(h.memory_percent||0)>50?\'yellow\':\'green\';\n    var diskC=(h.disk_percent||0)>90?\'red\':(h.disk_percent||0)>70?\'yellow\':\'green\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">CPU</div><div class="admin-stat \'+cpuC+\'">\'+(h.cpu_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Memory</div><div class="admin-stat \'+memC+\'">\'+(h.memory_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Disk</div><div class="admin-stat \'+diskC+\'">\'+(h.disk_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Services</div>\';\n    var svcs=h.services||[];\n    if(svcs.length){\n      html+=\'<table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>URL</th></tr>\';\n      svcs.forEach(function(s){var b=s.status===\'ok\'?\'green\':\'red\';html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+b+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table>\';\n    }else{html+=\'<div class="admin-empty">No services detected</div>\';}\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div>\';\n    html+=\'<table class="admin-table"><tr><th>User</th><th>Role</th><th>Created</th></tr>\';\n    userList.slice(0,10).forEach(function(u){html+=\'<tr><td style="font-weight:600">\'+_escH(u.display_name||u.username)+\' <span style="color:var(--text3);font-weight:400">@\'+_escH(u.username)+\'</span></td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td></tr>\';});\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Overview</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadUsers(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">User Management</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/users\',{action:\'list\'});\n    var users=(data&&data.users)||[];\n    var html=\'<div class="admin-title">User Management</div><div class="admin-subtitle">\'+users.length+\' registered users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn primary" onclick="_showCreateUser()">+ Create User</button><div class="spacer"></div><button class="admin-btn" onclick="_loadUsers()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Display Name</th><th>Role</th><th>Email</th><th>Created</th><th style="width:140px">Actions</th></tr>\';\n    users.forEach(function(u){\n      html+=\'<tr><td style="font-weight:600">\'+_escH(u.username)+\'</td><td>\'+_escH(u.display_name||\'\')+\'</td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_escH(u.email||\'-\')+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td>\';\n      html+=\'<td><div style="display:flex;gap:4px"><button class="admin-btn sm" onclick="_showEditRole(\\\'\'+_escH(u.username)+\'\\\',\\\'\'+_escH(u.role)+\'\\\')">Role</button>\';\n      if(u.username!==\'system\')html+=\'<button class="admin-btn sm danger" onclick="_deleteUser(\\\'\'+_escH(u.username)+\'\\\')">Delete</button>\';\n      html+=\'</div></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Users</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nfunction _showCreateUser(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Create User</h3><label>Username</label><input class="admin-input" id="_cu_user" placeholder="lowercase, no spaces"><label>Display Name</label><input class="admin-input" id="_cu_name" placeholder="Full display name"><label>Role</label><select class="admin-select" id="_cu_role"><option value="operator">Operator</option><option value="admin">Admin</option><option value="viewer">Viewer</option><option value="platform_admin">Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doCreateUser()">Create</button></div></div></div>\');\n  document.getElementById(\'_cu_user\').focus();\n}\nasync function _doCreateUser(){\n  var u=document.getElementById(\'_cu_user\').value.trim(),n=document.getElementById(\'_cu_name\').value.trim()||u,r=document.getElementById(\'_cu_role\').value;\n  if(!u)return;\n  var res=await _api(\'/api/admin/users\',{action:\'create\',username:u,display_name:n,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nfunction _showEditRole(username,currentRole){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Change Role &#8212; \'+_escH(username)+\'</h3><label>New Role</label><select class="admin-select" id="_er_role"><option value="operator"\'+(currentRole===\'operator\'?\' selected\':\'\')+\'>Operator</option><option value="admin"\'+(currentRole===\'admin\'?\' selected\':\'\')+\'>Admin</option><option value="viewer"\'+(currentRole===\'viewer\'?\' selected\':\'\')+\'>Viewer</option><option value="platform_admin"\'+(currentRole===\'platform_admin\'?\' selected\':\'\')+\'>Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doEditRole(\\\'\'+_escH(username)+\'\\\')">Save</button></div></div></div>\');\n}\nasync function _doEditRole(username){\n  var r=document.getElementById(\'_er_role\').value;\n  var res=await _api(\'/api/admin/users\',{action:\'update_role\',username:username,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _deleteUser(username){if(!confirm(\'Delete user \'+username+\'? This cannot be undone.\'))return;var res=await _api(\'/api/admin/users\',{action:\'delete\',username:username});if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n\nasync function _loadSessions(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Active Sessions</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/sessions\');\n    var sessions=(data&&data.sessions)||[];\n    var html=\'<div class="admin-title">Active Sessions</div><div class="admin-subtitle">\'+sessions.length+\' active sessions</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadSessions()">Refresh</button></div>\';\n    if(!sessions.length){html+=\'<div class="admin-empty">No active sessions</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Role</th><th>IP</th><th>User Agent</th><th>Created</th><th>Last Active</th><th>Actions</th></tr>\';\n    sessions.forEach(function(s){\n      var ua=(s.user_agent||\'\').substring(0,40);\n      html+=\'<tr><td style="font-weight:600">\'+_escH(s.username||\'?\')+\'</td><td>\'+_roleBadge(s.role||\'operator\')+\'</td><td style="font-family:monospace;font-size:11px">\'+_escH(s.ip||\'-\')+\'</td><td style="font-size:10px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis">\'+_escH(ua)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.created_at)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.last_active)+\'</td><td><button class="admin-btn sm danger" onclick="_revokeSession(\\\'\'+_escH(s.token_prefix||\'\')+\'\\\')">Revoke</button></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Sessions</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _revokeSession(tp){if(!confirm(\'Revoke this session?\'))return;await _api(\'/api/admin/sessions\',{action:\'revoke\',token_prefix:tp});_loadSessions();}\n\nasync function _loadProjects(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">All Projects</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/projects\');\n    var projects=(data&&data.projects)||[];\n    var html=\'<div class="admin-title">All Projects</div><div class="admin-subtitle">\'+projects.length+\' total projects across all users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadProjects()">Refresh</button></div>\';\n    if(!projects.length){html+=\'<div class="admin-empty">No projects</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>Project</th><th>Owner</th><th>Type</th><th>Status</th><th>Created</th></tr>\';\n    projects.forEach(function(p){\n      var sb=p.status===\'active\'?\'green\':p.status===\'completed\'?\'blue\':\'yellow\';\n      html+=\'<tr><td style="font-weight:600">\'+_escH(p.name||\'Untitled\')+\'</td><td>\'+_escH(p.owner||\'-\')+\'</td><td style="color:var(--text3)">\'+_escH(p.type||\'custom\')+\'</td><td><span class="admin-badge \'+sb+\'">\'+_escH(p.status||\'active\')+\'</span></td><td style="color:var(--text3)">\'+_fmtDate(p.created_at)+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Projects</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadHealth(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Health</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var h=await _api(\'/api/admin/health\');\n    var html=\'<div class="admin-title">System Health</div><div class="admin-subtitle">Detailed system diagnostics</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadHealth()">Refresh</button></div>\';\n    html+=\'<div class="admin-grid">\';\n    var metrics=[\n      {k:\'cpu_percent\',l:\'CPU Usage\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'memory_percent\',l:\'Memory\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'disk_percent\',l:\'Disk\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:70,crit:90},\n      {k:\'uptime_seconds\',l:\'Uptime\',fmt:_fmtUp},\n      {k:\'porter_pid\',l:\'Process ID\',fmt:function(v){return v}},\n      {k:\'porter_size_kb\',l:\'Binary Size\',fmt:function(v){return(v/1024).toFixed(1)+\' MB\'}},\n      {k:\'porter_lines\',l:\'Lines of Code\',fmt:function(v){return v.toLocaleString()}},\n      {k:\'python_version\',l:\'Python\',fmt:function(v){return v}},\n      {k:\'porter_version\',l:\'Porter Version\',fmt:function(v){return\'v\'+v}}\n    ];\n    metrics.forEach(function(m){\n      if(h[m.k]===undefined)return;var v=h[m.k];\n      var color=\'var(--text)\';\n      if(m.crit&&v>=m.crit)color=\'var(--red)\';else if(m.warn&&v>=m.warn)color=\'var(--yellow)\';else if(m.crit)color=\'var(--green)\';\n      html+=\'<div class="admin-card"><div class="admin-card-title">\'+m.l+\'</div><div style="font-size:20px;font-weight:700;color:\'+color+\'">\'+m.fmt(v)+\'</div></div>\';\n    });\n    html+=\'</div>\';\n    if(h.services&&h.services.length){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Service Probes</div><table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>Endpoint</th></tr>\';\n      h.services.forEach(function(s){html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+(s.status===\'ok\'?\'green\':\'red\')+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Health</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadConfig(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Configuration</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var [health,hyg]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/hygiene\')]);\n    var html=\'<div class="admin-title">System Configuration</div><div class="admin-subtitle">Read-only view of current system settings</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadConfig()">Refresh</button></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System</div><dl class="admin-kv">\';\n    var sk=[[\'Porter Version\',\'v\'+(health.porter_version||\'?\')],[\'Python\',health.python_version||\'?\'],[\'PID\',health.porter_pid||\'?\'],[\'Binary Size\',(health.porter_size_kb||0).toFixed(0)+\' KB\'],[\'Lines\',health.porter_lines||\'?\']];\n    sk.forEach(function(kv){html+=\'<dt>\'+kv[0]+\'</dt><dd>\'+_escH(String(kv[1]))+\'</dd>\';});\n    html+=\'</dl></div>\';\n    if(hyg&&!hyg.error){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Hygiene System</div><dl class="admin-kv">\';\n      Object.keys(hyg).filter(function(k){return typeof hyg[k]!==\'object\'}).forEach(function(k){html+=\'<dt>\'+_escH(k)+\'</dt><dd>\'+_escH(String(hyg[k]))+\'</dd>\';});\n      html+=\'</dl></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Config</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadLogs(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Logs</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/logs\');\n    var lines=(data&&data.lines)||[];\n    var html=\'<div class="admin-title">System Logs</div><div class="admin-subtitle">\'+lines.length+\' log lines</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadLogs()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="max-height:calc(100vh - 180px);overflow-y:auto;font-family:monospace;padding:12px">\';\n    lines.slice(-300).forEach(function(l){html+=\'<div class="admin-log-line">\'+_escH(l)+\'</div>\';});\n    html+=\'</div>\';\n    el.innerHTML=html;\n    var lb=el.querySelector(\'.admin-card\');if(lb)lb.scrollTop=lb.scrollHeight;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Logs</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\n_loadOverview();\n</script>\n</body></html>'
+ADMIN_PAGE = '<!DOCTYPE html>\n<html lang="en"><head>\n<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n<title>Porter Admin Console</title>\n<style>\n*{margin:0;padding:0;box-sizing:border-box}\n:root{--bg:#0b0f14;--surface:#141a24;--raised:#1c2433;--border:#283040;--text:#e8ecf2;--text2:#a0aab8;--text3:#6b7688;--accent:#3b82f6;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--purple:#a855f7}\nbody{font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}\n.admin-nav{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}\n.admin-nav-brand{padding:16px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}\n.admin-nav-brand svg{color:var(--accent)}\n.admin-nav-brand-text{font-size:14px;font-weight:700;letter-spacing:.3px}\n.admin-nav-brand-sub{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px}\n.admin-nav-section{padding:12px 0 4px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;padding-left:18px}\n.admin-nav-item{display:flex;align-items:center;gap:10px;padding:9px 18px;font-size:13px;color:var(--text2);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .15s;border-left:2px solid transparent}\n.admin-nav-item:hover{background:var(--raised);color:var(--text)}\n.admin-nav-item.active{background:var(--raised);color:var(--text);font-weight:600;border-left-color:var(--accent)}\n.admin-nav-footer{margin-top:auto;padding:14px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}\n.admin-nav-footer a{color:var(--text3);font-size:11px;text-decoration:none;display:flex;align-items:center;gap:6px}\n.admin-nav-footer a:hover{color:var(--text)}\n.admin-main{flex:1;overflow-y:auto;padding:28px 36px}\n.admin-title{font-size:20px;font-weight:700;margin-bottom:4px}\n.admin-subtitle{font-size:12px;color:var(--text3);margin-bottom:24px}\n.admin-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:14px}\n.admin-card-title{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px}\n.admin-stat{font-size:32px;font-weight:800;line-height:1.1}\n.admin-stat-sub{font-size:11px;color:var(--text3);margin-top:4px}\n.admin-stat.green{color:var(--green)}.admin-stat.red{color:var(--red)}.admin-stat.blue{color:var(--accent)}.admin-stat.purple{color:var(--purple)}.admin-stat.yellow{color:var(--yellow)}\n.admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:20px}\n.admin-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}\n.admin-table{width:100%;border-collapse:collapse;font-size:12px}\n.admin-table th{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.4px}\n.admin-table td{padding:8px 12px;border-bottom:1px solid var(--border)}\n.admin-table tr:hover td{background:var(--raised)}\n.admin-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}\n.admin-badge.green{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}\n.admin-badge.blue{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n.admin-badge.yellow{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}\n.admin-badge.red{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}\n.admin-badge.purple{background:color-mix(in srgb,var(--purple) 15%,transparent);color:var(--purple)}\n.admin-btn{padding:7px 16px;border-radius:6px;border:1px solid var(--border);background:var(--raised);color:var(--text);font-size:12px;cursor:pointer;transition:all .15s}\n.admin-btn:hover{background:var(--surface);border-color:var(--text3)}\n.admin-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}\n.admin-btn.primary:hover{opacity:.9}\n.admin-btn.danger{border-color:var(--red);color:var(--red)}\n.admin-btn.danger:hover{background:color-mix(in srgb,var(--red) 10%,transparent)}\n.admin-btn.sm{padding:4px 10px;font-size:11px}\n.admin-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:16px}\n.admin-toolbar .spacer{flex:1}\n.admin-log-line{font-family:\'SF Mono\',Menlo,Monaco,monospace;font-size:11px;padding:3px 0;color:var(--text2);white-space:pre-wrap;word-break:break-all;line-height:1.5}\n.admin-log-line:hover{background:var(--raised)}\n.admin-kv{display:grid;grid-template-columns:160px 1fr;gap:0;font-size:12px}\n.admin-kv dt{padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border)}\n.admin-kv dd{padding:6px 10px;border-bottom:1px solid var(--border);word-break:break-all}\n.admin-empty{text-align:center;padding:40px;color:var(--text3);font-size:13px}\n.admin-modal-bg{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:center;justify-content:center}\n.admin-modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;min-width:360px;max-width:480px}\n.admin-modal h3{font-size:15px;margin-bottom:16px}\n.admin-modal label{display:block;font-size:11px;color:var(--text2);margin-bottom:4px;margin-top:12px}\n.admin-modal .admin-input,.admin-modal .admin-select{width:100%;margin-bottom:4px}\n.admin-modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}\n.admin-input{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n.admin-input:focus{border-color:var(--accent)}\n.admin-select{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}\n.pulse{animation:pulse 2s ease-in-out infinite}\n</style>\n</head><body>\n<div class="admin-nav">\n  <div class="admin-nav-brand">\n    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>\n    <div>\n      <div class="admin-nav-brand-text">Porter Admin</div>\n      <div class="admin-nav-brand-sub">SaaS Control</div>\n    </div>\n  </div>\n  <div class="admin-nav-section">Monitor</div>\n  <button class="admin-nav-item active" onclick="_at(\'overview\',this)">Overview</button>\n  <button class="admin-nav-item" onclick="_at(\'health\',this)">Health</button>\n  <div class="admin-nav-section">Manage</div>\n  <button class="admin-nav-item" onclick="_at(\'users\',this)">Users</button>\n  <button class="admin-nav-item" onclick="_at(\'sessions\',this)">Sessions</button>\n  <button class="admin-nav-item" onclick="_at(\'projects\',this)">Projects</button>\n  <div class="admin-nav-section">System</div>\n  <button class="admin-nav-item" onclick="_at(\'config\',this)">Config</button>\n  <button class="admin-nav-item" onclick="_at(\'logs\',this)">Logs</button>\n  <div class="admin-nav-footer">\n    <a href="/">&#8592; Porter Workspace</a>\n    <span style="font-size:10px;color:var(--text3)">v0.31.59</span>\n  </div>\n</div>\n<div class="admin-main" id="admin-content"><div class="admin-title">Loading...</div></div>\n<div id="admin-modal-root"></div>\n<script>\nvar _adminCurrentTab=\'overview\';\nasync function _api(u,b){var o=b?{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},credentials:\'same-origin\',body:JSON.stringify(b)}:{credentials:\'same-origin\'};try{var r=await fetch(u,o);if(!r.ok&&r.status===403)return{error:\'forbidden\'};return r.json();}catch(e){return{error:e.message};}}\nfunction _at(t,el){_adminCurrentTab=t;document.querySelectorAll(\'.admin-nav-item\').forEach(function(b){b.classList.remove(\'active\')});if(el)el.classList.add(\'active\');var fn={overview:_loadOverview,users:_loadUsers,sessions:_loadSessions,health:_loadHealth,projects:_loadProjects,config:_loadConfig,logs:_loadLogs};if(fn[t])fn[t]();}\nfunction _escH(s){var d=document.createElement(\'div\');d.textContent=s;return d.innerHTML;}\nfunction _fmtUp(s){var d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return(d?d+\'d \':\'\')+ h+\'h \'+m+\'m\';}\nfunction _fmtDate(ts){if(!ts)return\'-\';var d=new Date(typeof ts===\'number\'?ts*1000:ts);return d.toLocaleDateString(\'en-GB\',{day:\'2-digit\',month:\'short\',year:\'numeric\'})+\' \'+d.toLocaleTimeString(\'en-GB\',{hour:\'2-digit\',minute:\'2-digit\'});}\nfunction _fmtAgo(ts){if(!ts)return\'-\';var now=Date.now()/1000,diff=now-ts;if(diff<60)return\'just now\';if(diff<3600)return Math.floor(diff/60)+\'m ago\';if(diff<86400)return Math.floor(diff/3600)+\'h ago\';return Math.floor(diff/86400)+\'d ago\';}\nfunction _roleBadge(r){var c=r===\'platform_admin\'?\'purple\':r===\'admin\'?\'yellow\':r===\'operator\'?\'blue\':\'green\';return\'<span class="admin-badge \'+c+\'">\'+_escH(r)+\'</span>\';}\nfunction _modal(h){document.getElementById(\'admin-modal-root\').innerHTML=h;}\nfunction _closeModal(){document.getElementById(\'admin-modal-root\').innerHTML=\'\';}\n\nasync function _loadOverview(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div><div class="pulse" style="color:var(--text3)">Loading dashboard...</div>\';\n  try{\n    var [health,users,projects]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/users\',{action:\'list\'}),_api(\'/api/projects\')]);\n    var h=health||{},userList=(users&&users.users)||[],projList=(projects&&projects.projects)||[];\n    var activeProjects=projList.filter(function(p){return p.status===\'active\'}).length;\n    var adminCount=userList.filter(function(u){return u.role===\'admin\'||u.role===\'platform_admin\'}).length;\n    var opCount=userList.filter(function(u){return u.role===\'operator\'}).length;\n    var html=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div>\';\n    html+=\'<div class="admin-grid">\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System Status</div><div class="admin-stat green">Online</div><div class="admin-stat-sub">PID \'+(h.porter_pid||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Version</div><div class="admin-stat blue" style="font-size:22px">v\'+(h.porter_version||\'?\')+\'</div><div class="admin-stat-sub">Python \'+(h.python_version||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Uptime</div><div class="admin-stat" style="font-size:20px;color:var(--text)">\'+_fmtUp(h.uptime_seconds||0)+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div><div class="admin-stat blue">\'+userList.length+\'</div><div class="admin-stat-sub">\'+adminCount+\' admin, \'+opCount+\' operators</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Projects</div><div class="admin-stat purple">\'+projList.length+\'</div><div class="admin-stat-sub">\'+activeProjects+\' active</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-grid-3">\';\n    var cpuC=(h.cpu_percent||0)>80?\'red\':(h.cpu_percent||0)>50?\'yellow\':\'green\';\n    var memC=(h.memory_percent||0)>80?\'red\':(h.memory_percent||0)>50?\'yellow\':\'green\';\n    var diskC=(h.disk_percent||0)>90?\'red\':(h.disk_percent||0)>70?\'yellow\':\'green\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">CPU</div><div class="admin-stat \'+cpuC+\'">\'+(h.cpu_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Memory</div><div class="admin-stat \'+memC+\'">\'+(h.memory_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Disk</div><div class="admin-stat \'+diskC+\'">\'+(h.disk_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Services</div>\';\n    var svcs=h.services||[];\n    if(svcs.length){\n      html+=\'<table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>URL</th></tr>\';\n      svcs.forEach(function(s){var b=s.status===\'ok\'?\'green\':\'red\';html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+b+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table>\';\n    }else{html+=\'<div class="admin-empty">No services detected</div>\';}\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div>\';\n    html+=\'<table class="admin-table"><tr><th>User</th><th>Role</th><th>Created</th></tr>\';\n    userList.slice(0,10).forEach(function(u){html+=\'<tr><td style="font-weight:600">\'+_escH(u.display_name||u.username)+\' <span style="color:var(--text3);font-weight:400">@\'+_escH(u.username)+\'</span></td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td></tr>\';});\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Overview</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadUsers(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">User Management</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/users\',{action:\'list\'});\n    var users=(data&&data.users)||[];\n    var html=\'<div class="admin-title">User Management</div><div class="admin-subtitle">\'+users.length+\' registered users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn primary" onclick="_showCreateUser()">+ Create User</button><div class="spacer"></div><button class="admin-btn" onclick="_loadUsers()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Display Name</th><th>Role</th><th>Email</th><th>Created</th><th style="width:140px">Actions</th></tr>\';\n    users.forEach(function(u){\n      html+=\'<tr><td style="font-weight:600">\'+_escH(u.username)+\'</td><td>\'+_escH(u.display_name||\'\')+\'</td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_escH(u.email||\'-\')+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td>\';\n      html+=\'<td><div style="display:flex;gap:4px"><button class="admin-btn sm" onclick="_showEditRole(\\\'\'+_escH(u.username)+\'\\\',\\\'\'+_escH(u.role)+\'\\\')">Role</button>\';\n      if(u.username!==\'system\')html+=\'<button class="admin-btn sm danger" onclick="_deleteUser(\\\'\'+_escH(u.username)+\'\\\')">Delete</button>\';\n      html+=\'</div></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Users</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nfunction _showCreateUser(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Create User</h3><label>Username</label><input class="admin-input" id="_cu_user" placeholder="lowercase, no spaces"><label>Display Name</label><input class="admin-input" id="_cu_name" placeholder="Full display name"><label>Role</label><select class="admin-select" id="_cu_role"><option value="operator">Operator</option><option value="admin">Admin</option><option value="viewer">Viewer</option><option value="platform_admin">Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doCreateUser()">Create</button></div></div></div>\');\n  document.getElementById(\'_cu_user\').focus();\n}\nasync function _doCreateUser(){\n  var u=document.getElementById(\'_cu_user\').value.trim(),n=document.getElementById(\'_cu_name\').value.trim()||u,r=document.getElementById(\'_cu_role\').value;\n  if(!u)return;\n  var res=await _api(\'/api/admin/users\',{action:\'create\',username:u,display_name:n,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nfunction _showEditRole(username,currentRole){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Change Role &#8212; \'+_escH(username)+\'</h3><label>New Role</label><select class="admin-select" id="_er_role"><option value="operator"\'+(currentRole===\'operator\'?\' selected\':\'\')+\'>Operator</option><option value="admin"\'+(currentRole===\'admin\'?\' selected\':\'\')+\'>Admin</option><option value="viewer"\'+(currentRole===\'viewer\'?\' selected\':\'\')+\'>Viewer</option><option value="platform_admin"\'+(currentRole===\'platform_admin\'?\' selected\':\'\')+\'>Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doEditRole(\\\'\'+_escH(username)+\'\\\')">Save</button></div></div></div>\');\n}\nasync function _doEditRole(username){\n  var r=document.getElementById(\'_er_role\').value;\n  var res=await _api(\'/api/admin/users\',{action:\'update_role\',username:username,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _deleteUser(username){if(!confirm(\'Delete user \'+username+\'? This cannot be undone.\'))return;var res=await _api(\'/api/admin/users\',{action:\'delete\',username:username});if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n\nasync function _loadSessions(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Active Sessions</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/sessions\');\n    var sessions=(data&&data.sessions)||[];\n    var html=\'<div class="admin-title">Active Sessions</div><div class="admin-subtitle">\'+sessions.length+\' active sessions</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadSessions()">Refresh</button></div>\';\n    if(!sessions.length){html+=\'<div class="admin-empty">No active sessions</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Role</th><th>IP</th><th>User Agent</th><th>Created</th><th>Last Active</th><th>Actions</th></tr>\';\n    sessions.forEach(function(s){\n      var ua=(s.user_agent||\'\').substring(0,40);\n      html+=\'<tr><td style="font-weight:600">\'+_escH(s.username||\'?\')+\'</td><td>\'+_roleBadge(s.role||\'operator\')+\'</td><td style="font-family:monospace;font-size:11px">\'+_escH(s.ip||\'-\')+\'</td><td style="font-size:10px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis">\'+_escH(ua)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.created_at)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.last_active)+\'</td><td><button class="admin-btn sm danger" onclick="_revokeSession(\\\'\'+_escH(s.token_prefix||\'\')+\'\\\')">Revoke</button></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Sessions</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _revokeSession(tp){if(!confirm(\'Revoke this session?\'))return;await _api(\'/api/admin/sessions\',{action:\'revoke\',token_prefix:tp});_loadSessions();}\n\nasync function _loadProjects(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">All Projects</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/projects\');\n    var projects=(data&&data.projects)||[];\n    var html=\'<div class="admin-title">All Projects</div><div class="admin-subtitle">\'+projects.length+\' total projects across all users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadProjects()">Refresh</button></div>\';\n    if(!projects.length){html+=\'<div class="admin-empty">No projects</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>Project</th><th>Owner</th><th>Type</th><th>Status</th><th>Created</th></tr>\';\n    projects.forEach(function(p){\n      var sb=p.status===\'active\'?\'green\':p.status===\'completed\'?\'blue\':\'yellow\';\n      html+=\'<tr><td style="font-weight:600">\'+_escH(p.name||\'Untitled\')+\'</td><td>\'+_escH(p.owner||\'-\')+\'</td><td style="color:var(--text3)">\'+_escH(p.type||\'custom\')+\'</td><td><span class="admin-badge \'+sb+\'">\'+_escH(p.status||\'active\')+\'</span></td><td style="color:var(--text3)">\'+_fmtDate(p.created_at)+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Projects</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadHealth(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Health</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var h=await _api(\'/api/admin/health\');\n    var html=\'<div class="admin-title">System Health</div><div class="admin-subtitle">Detailed system diagnostics</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadHealth()">Refresh</button></div>\';\n    html+=\'<div class="admin-grid">\';\n    var metrics=[\n      {k:\'cpu_percent\',l:\'CPU Usage\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'memory_percent\',l:\'Memory\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'disk_percent\',l:\'Disk\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:70,crit:90},\n      {k:\'uptime_seconds\',l:\'Uptime\',fmt:_fmtUp},\n      {k:\'porter_pid\',l:\'Process ID\',fmt:function(v){return v}},\n      {k:\'porter_size_kb\',l:\'Binary Size\',fmt:function(v){return(v/1024).toFixed(1)+\' MB\'}},\n      {k:\'porter_lines\',l:\'Lines of Code\',fmt:function(v){return v.toLocaleString()}},\n      {k:\'python_version\',l:\'Python\',fmt:function(v){return v}},\n      {k:\'porter_version\',l:\'Porter Version\',fmt:function(v){return\'v\'+v}}\n    ];\n    metrics.forEach(function(m){\n      if(h[m.k]===undefined)return;var v=h[m.k];\n      var color=\'var(--text)\';\n      if(m.crit&&v>=m.crit)color=\'var(--red)\';else if(m.warn&&v>=m.warn)color=\'var(--yellow)\';else if(m.crit)color=\'var(--green)\';\n      html+=\'<div class="admin-card"><div class="admin-card-title">\'+m.l+\'</div><div style="font-size:20px;font-weight:700;color:\'+color+\'">\'+m.fmt(v)+\'</div></div>\';\n    });\n    html+=\'</div>\';\n    if(h.services&&h.services.length){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Service Probes</div><table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>Endpoint</th></tr>\';\n      h.services.forEach(function(s){html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+(s.status===\'ok\'?\'green\':\'red\')+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Health</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadConfig(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Configuration</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var [health,hyg]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/hygiene\')]);\n    var html=\'<div class="admin-title">System Configuration</div><div class="admin-subtitle">Read-only view of current system settings</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadConfig()">Refresh</button></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System</div><dl class="admin-kv">\';\n    var sk=[[\'Porter Version\',\'v\'+(health.porter_version||\'?\')],[\'Python\',health.python_version||\'?\'],[\'PID\',health.porter_pid||\'?\'],[\'Binary Size\',(health.porter_size_kb||0).toFixed(0)+\' KB\'],[\'Lines\',health.porter_lines||\'?\']];\n    sk.forEach(function(kv){html+=\'<dt>\'+kv[0]+\'</dt><dd>\'+_escH(String(kv[1]))+\'</dd>\';});\n    html+=\'</dl></div>\';\n    if(hyg&&!hyg.error){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Hygiene System</div><dl class="admin-kv">\';\n      Object.keys(hyg).filter(function(k){return typeof hyg[k]!==\'object\'}).forEach(function(k){html+=\'<dt>\'+_escH(k)+\'</dt><dd>\'+_escH(String(hyg[k]))+\'</dd>\';});\n      html+=\'</dl></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Config</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadLogs(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Logs</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/logs\');\n    var lines=(data&&data.lines)||[];\n    var html=\'<div class="admin-title">System Logs</div><div class="admin-subtitle">\'+lines.length+\' log lines</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadLogs()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="max-height:calc(100vh - 180px);overflow-y:auto;font-family:monospace;padding:12px">\';\n    lines.slice(-300).forEach(function(l){html+=\'<div class="admin-log-line">\'+_escH(l)+\'</div>\';});\n    html+=\'</div>\';\n    el.innerHTML=html;\n    var lb=el.querySelector(\'.admin-card\');if(lb)lb.scrollTop=lb.scrollHeight;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Logs</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\n_loadOverview();\n</script>\n</body></html>'
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -39547,7 +39914,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.58"})
+            self.reply_json({"v": "0.31.59"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39709,7 +40076,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.58"
+                health["porter_version"] = "0.31.59"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -41716,7 +42083,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.58'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.59'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -45819,7 +46186,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             _EDITOR_ACTIONS = {"set_status", "update", "assign_agent", "unassign_agent",
                               "add_milestone", "toggle_milestone", "remove_milestone",
                               "add_link", "remove_link", "link_project", "unlink_project",
-                              "add_content", "remove_content", "update_content"}
+                              "add_content", "remove_content", "update_content", "update_plan_field"}
             _pid_for_access = str(data.get("project_id", "")).strip()
             if action in _OWNER_ACTIONS:
                 if not _check_project_access(session, _pid_for_access, "owner"):
@@ -46140,6 +46507,24 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 proj["updated_at"] = time.time()
                 save_config(_config)
                 self.reply_json({"ok": True, "links": links})
+
+            elif action == "update_plan_field":
+                pid = str(data.get("project_id", "")).strip()
+                field = str(data.get("field", "")).strip()
+                value = data.get("value")
+                _allowed_fields = ("phases", "schedule", "autonomy", "quality_gates")
+                if not pid or field not in _allowed_fields:
+                    self.reply_json({"ok": False, "error": "Invalid field"}); return
+                proj = None
+                for p in _config.get("projects", []):
+                    if p.get("id") == pid:
+                        proj = p; break
+                if not proj:
+                    self.reply_json({"ok": False, "error": "project not found"}); return
+                proj[field] = value
+                proj["updated_at"] = time.time()
+                save_config(_config)
+                self.reply_json({"ok": True, "field": field})
 
             elif action == "remove_link":
                 pid = str(data.get("project_id", "")).strip()
@@ -47369,7 +47754,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.58 ready (localhost only)")
+    print(f"\n  Porter v0.31.59 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
