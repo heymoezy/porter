@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.44 — Full chat actions (20+ project ops from chat)"""
+"""Porter v0.31.45 — Security hardening (project access control)"""
 
 
 import email
@@ -6851,6 +6851,45 @@ def get_session(token: str, ip: str = None, ua: str = None) -> dict | None:
         log.debug("Session DB read failed: %s", e)
         return None
 
+def _check_project_access(session, project_id, required_role="member"):
+    """Check if session user can access a project at the required role level.
+    Role hierarchy: owner > editor > member > viewer.
+    Admin users and project owners always pass.
+    """
+    _ROLE_LEVELS = {"owner": 4, "editor": 3, "member": 2, "viewer": 1}
+    required_level = _ROLE_LEVELS.get(required_role, 2)
+    if not session or not project_id:
+        return False
+    username = session.get("username", "")
+    user_role = session.get("role", "")
+    # Admin users bypass all checks
+    if user_role == "admin":
+        return True
+    # Check project ownership
+    proj = None
+    for p in _config.get("projects", []):
+        if p.get("id") == project_id:
+            proj = p; break
+    if not proj:
+        return False
+    if proj.get("owner", "") == username:
+        return True
+    # Check collaborator role
+    try:
+        conn = _db_conn()
+        row = conn.execute(
+            "SELECT role FROM project_collaborators WHERE project_id=? AND username=?",
+            (project_id, username)
+        ).fetchone()
+        conn.close()
+        if row:
+            collab_level = _ROLE_LEVELS.get(row[0] or "member", 2)
+            return collab_level >= required_level
+    except Exception:
+        pass
+    return False
+
+
 def delete_session(token: str) -> None:
     _sessions.pop(token, None)
     try:
@@ -12327,7 +12366,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.44</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.45</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -13438,6 +13477,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.45', date:'2026-03-14', notes:["Security: project access control — mutations now check ownership and collaborator roles","Fix: note update/delete endpoints now require authentication","New helper: _check_project_access enforces role hierarchy (owner > editor > member > viewer)"] },
   { ver:'v0.31.39', date:'2026-03-12', notes:["People module: full CRM with user cards, stats, role management, add/remove users","Username migration: auto-renames 'admin' to display-name slug on startup","Backend: create user action in /api/admin/users"] },
   { ver:'v0.31.36', date:'2026-03-12', notes:["Fix: agent detail chat no longer offscreen — flex-based layout","Fix: office/grid toggle hidden in agent detail view","Fix: nav tabs scroll to top on switch","Agent detail model picker now uses Porter-style dropdown","Enhanced project coaching — context-aware suggestions on every tab"] },
   { ver:'v0.31.35', date:'2026-03-12', notes:["Agent Office: pixel-art virtual office visualization on the Agents tab","View toggle: switch between Grid and Office views","Each agent sits at a pixel desk with their Minecraft portrait and status bubble (idle/working)","Porter gets the corner office with a larger desk"] },
@@ -39221,7 +39261,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.44"})
+            self.reply_json({"v": "0.31.45"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39383,7 +39423,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.44"
+                health["porter_version"] = "0.31.45"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -41353,7 +41393,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.44'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.45'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -44593,31 +44633,41 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": "Unknown action"})
 
         elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/state/notes/update"):
+            if not self.auth_check(redirect=False): return
             pid = parsed.path.split("/api/projects/")[1].split("/state/notes/update")[0]
-            note_id = body_data.get("note_id")
-            new_body = body_data.get("body", "").strip()
+            _ns = get_session(self.get_session_token())
+            if not _check_project_access(_ns, pid, "editor"):
+                self.reply_json({"ok": False, "error": "access denied"}, 403); return
+            _note_data = self.read_json_body() or {}
+            note_id = _note_data.get("note_id")
+            new_body = _note_data.get("body", "").strip()
             if not note_id or not new_body:
-                return self._json({"ok": False, "error": "note_id and body required"})
+                self.reply_json({"ok": False, "error": "note_id and body required"}); return
             _pconn = _db_conn()
             try:
                 _pconn.execute("UPDATE project_notes SET body=?, updated_at=strftime('%s','now') WHERE id=? AND project_id=?", (new_body, note_id, pid))
                 _pconn.commit()
             finally:
                 _pconn.close()
-            return self._json({"ok": True})
+            self.reply_json({"ok": True})
 
         elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/state/notes/delete"):
+            if not self.auth_check(redirect=False): return
             pid = parsed.path.split("/api/projects/")[1].split("/state/notes/delete")[0]
-            note_id = body_data.get("note_id")
+            _ns = get_session(self.get_session_token())
+            if not _check_project_access(_ns, pid, "editor"):
+                self.reply_json({"ok": False, "error": "access denied"}, 403); return
+            _note_data = self.read_json_body() or {}
+            note_id = _note_data.get("note_id")
             if not note_id:
-                return self._json({"ok": False, "error": "note_id required"})
+                self.reply_json({"ok": False, "error": "note_id required"}); return
             _pconn = _db_conn()
             try:
                 _pconn.execute("DELETE FROM project_notes WHERE id=? AND project_id=?", (note_id, pid))
                 _pconn.commit()
             finally:
                 _pconn.close()
-            return self._json({"ok": True})
+            self.reply_json({"ok": True})
 
         elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/state/notes"):
             if not self.auth_check(redirect=False): return
@@ -45412,6 +45462,21 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             if not self.auth_check(redirect=False): return
             data   = self.read_json_body()
             action = str(data.get("action", "")).strip()
+
+            # v0.31.45 — Project access control
+            session = get_session(self.get_session_token())
+            _OWNER_ACTIONS = {"delete", "add_collaborator", "remove_collaborator", "update_collaborator"}
+            _EDITOR_ACTIONS = {"set_status", "update", "assign_agent", "unassign_agent",
+                              "add_milestone", "toggle_milestone", "remove_milestone",
+                              "add_link", "remove_link", "link_project", "unlink_project",
+                              "add_content", "remove_content", "update_content"}
+            _pid_for_access = str(data.get("project_id", "")).strip()
+            if action in _OWNER_ACTIONS:
+                if not _check_project_access(session, _pid_for_access, "owner"):
+                    self.reply_json({"ok": False, "error": "access denied"}, 403); return
+            elif action in _EDITOR_ACTIONS:
+                if not _check_project_access(session, _pid_for_access, "editor"):
+                    self.reply_json({"ok": False, "error": "access denied"}, 403); return
 
             if action == "create":
                 name = _normalize_project_name(str(data.get("name", "")).strip())
@@ -46953,7 +47018,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.44 ready (localhost only)")
+    print(f"\n  Porter v0.31.45 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
