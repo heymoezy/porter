@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.53 — People tab accessible to all users"""
+"""Porter v0.31.54 — Fix project isolation + First Mission cleanup"""
 
 
 import email
@@ -710,6 +710,17 @@ def _db_init():
         ("moe",    "Moe",    "operator"),
         ("jacob",  "Jacob",  "operator"),
     ]
+    # v0.31.54 — Remove orphan First Mission projects for admin/system accounts
+    _fm_before = len(_config.get("projects", []))
+    _config["projects"] = [
+        p for p in _config.get("projects", [])
+        if not (p.get("name") == "First Mission" and p.get("owner") in ("admin", "system"))
+    ]
+    _fm_removed = _fm_before - len(_config.get("projects", []))
+    if _fm_removed:
+        save_config(_config)
+        log.info("Removed %d orphan First Mission project(s) for admin/system", _fm_removed)
+
     for _su, _sdn, _sr in _seed_accounts:
         _existing = conn.execute("SELECT username, role FROM users WHERE username=?", (_su,)).fetchone()
         if not _existing:
@@ -12438,7 +12449,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
     <span class="mnav-label">Sign Out</span>
   </button>
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.53</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.54</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -13546,6 +13557,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.54', date:'2026-03-14', notes:["Fix: project list now uses role-based filtering (was using legacy config username)","Fix: First Mission only created for operator/viewer roles, not admin/system","Startup cleanup removes orphan First Mission projects from admin/system accounts"] },
   { ver:'v0.31.53', date:'2026-03-14', notes:["People tab: user list accessible to all authenticated users","Admin actions (add/edit/delete users) hidden for non-admin roles"] },
   { ver:'v0.31.52', date:'2026-03-14', notes:["API protection: all /api/admin/* endpoints now require admin role","Operators get 403 Forbidden on admin endpoints (was 200 OK)","Admin split complete: role system, nav visibility, admin shell, API protection"] },
   { ver:'v0.31.51', date:'2026-03-14', notes:["Porter Admin: separate shell at /admin/ for platform_admin users","Admin shell: Overview, Users, Health, Logs tabs with dedicated UI","Platform admin nav link appears for system-level users only","Admin shell is fully isolated from normal Porter app"] },
@@ -38772,7 +38784,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   <button class="admin-nav-item" onclick="_adminTab('logs')">Logs</button>
   <div class="admin-nav-footer">
     <a href="/">&larr; Back to Porter</a><br>
-    <span style="font-size:10px;color:var(--text3)">v0.31.53</span>
+    <span style="font-size:10px;color:var(--text3)">v0.31.54</span>
   </div>
 </div>
 <div class="admin-main" id="admin-content">
@@ -39557,7 +39569,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.53"})
+            self.reply_json({"v": "0.31.54"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39719,7 +39731,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.53"
+                health["porter_version"] = "0.31.54"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -41167,12 +41179,11 @@ class Handler(BaseHTTPRequestHandler):
         # ── D1: project registry ─────────────────────────────────────────────
         elif parsed.path == "/api/projects":
             if not self.auth_check(redirect=False): return
-            # v0.31.44 — Per-user project isolation
+            # v0.31.54 — Role-based project isolation (replaces config username check)
             _proj_session = get_session(self.get_session_token())
             _proj_user = _proj_session.get("username", "") if _proj_session else ""
             _proj_role = _proj_session.get("role", "operator") if _proj_session else "operator"
-            _admin_user = _config.get("username", "admin")
-            _is_admin = (_proj_user == _admin_user) or (_proj_role == "admin")
+            _is_admin = _proj_role in ("admin", "platform_admin")
             all_projects = _config.get("projects", [])
             if _is_admin:
                 projects = all_projects
@@ -41692,7 +41703,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.53'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.54'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -42421,13 +42432,16 @@ class Handler(BaseHTTPRequestHandler):
                     if not _is_admin_login:
                         try:
                             _ob_conn = _db_conn()
-                            _ob_row = _ob_conn.execute("SELECT onboarded FROM users WHERE username=?", (username,)).fetchone()
+                            _ob_row = _ob_conn.execute("SELECT onboarded, role FROM users WHERE username=?", (username,)).fetchone()
                             if _ob_row and not _ob_row[0]:
-                                _is_new_user = True
-                                _create_user_first_mission(username)
+                                _ob_role = _ob_row[1] if len(_ob_row) > 1 else "operator"
+                                # Only create First Mission for operator/viewer roles
+                                if _ob_role not in ("admin", "platform_admin"):
+                                    _is_new_user = True
+                                    _create_user_first_mission(username)
+                                    log.info("New user onboarded: %s — created First Mission", username)
                                 _ob_conn.execute("UPDATE users SET onboarded=1 WHERE username=?", (username,))
                                 _ob_conn.commit()
-                                log.info("New user onboarded: %s — created First Mission", username)
                             _ob_conn.close()
                         except Exception as _ob_e:
                             log.debug("Onboarding check failed for %s: %s", username, _ob_e)
@@ -47321,7 +47335,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.53 ready (localhost only)")
+    print(f"\n  Porter v0.31.54 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
