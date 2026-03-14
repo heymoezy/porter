@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.45 — Security hardening (project access control)"""
+"""Porter v0.31.46 — Data integrity (per-session projects + milestone fix)"""
 
 
 import email
@@ -353,6 +353,19 @@ def _db_init():
         conn.execute("ALTER TABLE sessions ADD COLUMN user_agent TEXT")
     if "last_seen_at" not in cols:
         conn.execute("ALTER TABLE sessions ADD COLUMN last_seen_at REAL DEFAULT 0")
+    if "active_project_id" not in cols:
+        conn.execute("ALTER TABLE sessions ADD COLUMN active_project_id TEXT DEFAULT ''")
+
+    # v0.31.46 — Backfill: migrate milestone "title" → "name"
+    _ms_migrated = 0
+    for _p in _config.get("projects", []):
+        for _ms in _p.get("milestones", []):
+            if "title" in _ms and "name" not in _ms:
+                _ms["name"] = _ms.pop("title")
+                _ms_migrated += 1
+    if _ms_migrated:
+        save_config(_config)
+        log.info("Backfill: migrated %d milestone(s) from title→name", _ms_migrated)
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS tasks (
@@ -6890,6 +6903,34 @@ def _check_project_access(session, project_id, required_role="member"):
     return False
 
 
+def _get_session_active_project(token):
+    """Get the active_project_id for a specific session (per-user isolation)."""
+    try:
+        conn = _db_conn()
+        row = conn.execute("SELECT active_project_id FROM sessions WHERE token=?", (token,)).fetchone()
+        conn.close()
+        if row and row[0]:
+            return str(row[0]).strip()
+    except Exception:
+        pass
+    # Fallback to global config for agent/API requests
+    return str(_config.get("active_project_id") or "").strip()
+
+
+def _set_session_active_project(token, project_id):
+    """Set the active_project_id for a specific session."""
+    try:
+        conn = _db_conn()
+        conn.execute("UPDATE sessions SET active_project_id=? WHERE token=?", (project_id or "", token))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+    # Also update global config as fallback
+    _config["active_project_id"] = project_id or None
+    save_config(_config)
+
+
 def delete_session(token: str) -> None:
     _sessions.pop(token, None)
     try:
@@ -9020,9 +9061,9 @@ def _project_chat_action_prompt(project_id: str) -> str:
         '  set_start_date: {"action":"set_start_date","date":"YYYY-MM-DD"}\n'
         '  set_plan: {"action":"set_plan","plan":"..."}\n'
         "MILESTONES:\n"
-        '  add_milestone: {"action":"add_milestone","title":"...","due":"YYYY-MM-DD"}  (due is optional)\n'
-        '  toggle_milestone: {"action":"toggle_milestone","title":"exact milestone title"}\n'
-        '  remove_milestone: {"action":"remove_milestone","title":"exact milestone title"}\n'
+        '  add_milestone: {"action":"add_milestone","name":"...","due":"YYYY-MM-DD"}  (due is optional)\n'
+        '  toggle_milestone: {"action":"toggle_milestone","name":"exact milestone name"}\n'
+        '  remove_milestone: {"action":"remove_milestone","name":"exact milestone name"}\n'
         "WORKERS:\n"
         '  create_worker: {"action":"create_worker","name":"...","role":"..."}\n'
         '  assign_worker: {"action":"assign_worker","worker_name":"exact name or ID prefix"}\n'
@@ -9127,36 +9168,38 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
                     results.append({"ok": False, "error": f"Invalid status: {s}"})
 
             # ── Milestones ──
-            elif action == "add_milestone" and data.get("title"):
-                ms = {"title": str(data["title"]).strip(), "done": False}
+            elif action == "add_milestone" and (data.get("title") or data.get("name")):
+                _ms_name = str(data.get("name") or data.get("title", "")).strip()
+                ms = {"name": _ms_name, "done": False}
                 if data.get("due"):
                     ms["due"] = str(data["due"]).strip()
                 proj.setdefault("milestones", []).append(ms)
                 save_config(_config)
-                results.append({"ok": True, "action": "add_milestone", "title": ms["title"]})
+                results.append({"ok": True, "action": "add_milestone", "name": _ms_name})
 
-            elif action == "toggle_milestone" and data.get("title"):
-                _mt = str(data["title"]).strip().lower()
+            elif action == "toggle_milestone" and (data.get("title") or data.get("name")):
+                _mt = str(data.get("name") or data.get("title", "")).strip().lower()
                 _found = False
                 for ms in proj.get("milestones", []):
-                    if ms.get("title", "").strip().lower() == _mt:
+                    _ms_label = (ms.get("name") or ms.get("title", "")).strip().lower()
+                    if _ms_label == _mt:
                         ms["done"] = not ms.get("done", False)
                         save_config(_config)
-                        results.append({"ok": True, "action": "toggle_milestone", "title": ms["title"], "done": ms["done"]})
+                        results.append({"ok": True, "action": "toggle_milestone", "name": ms.get("name") or ms.get("title", ""), "done": ms["done"]})
                         _found = True
                         break
                 if not _found:
-                    results.append({"ok": False, "error": f"Milestone not found: {data['title']}"})
+                    results.append({"ok": False, "error": f"Milestone not found: {data.get('name') or data.get('title')}"})
 
-            elif action == "remove_milestone" and data.get("title"):
-                _mt = str(data["title"]).strip().lower()
+            elif action == "remove_milestone" and (data.get("title") or data.get("name")):
+                _mt = str(data.get("name") or data.get("title", "")).strip().lower()
                 _before = len(proj.get("milestones", []))
-                proj["milestones"] = [ms for ms in proj.get("milestones", []) if ms.get("title", "").strip().lower() != _mt]
+                proj["milestones"] = [ms for ms in proj.get("milestones", []) if (ms.get("name") or ms.get("title", "")).strip().lower() != _mt]
                 if len(proj["milestones"]) < _before:
                     save_config(_config)
-                    results.append({"ok": True, "action": "remove_milestone", "title": data["title"]})
+                    results.append({"ok": True, "action": "remove_milestone", "name": data.get("name") or data.get("title")})
                 else:
-                    results.append({"ok": False, "error": f"Milestone not found: {data['title']}"})
+                    results.append({"ok": False, "error": f"Milestone not found: {data.get('name') or data.get('title')}"})
 
             # ── Workers ──
             elif action == "create_worker" and data.get("name"):
@@ -12366,7 +12409,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.45</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.46</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -13477,6 +13520,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.46', date:'2026-03-14', notes:["Per-session active project isolation — users no longer cross-contaminate active project state","Fix milestone field name: chat actions now use 'name' matching REST API and UI","Startup backfill migrates existing milestones from title→name"] },
   { ver:'v0.31.45', date:'2026-03-14', notes:["Security: project access control — mutations now check ownership and collaborator roles","Fix: note update/delete endpoints now require authentication","New helper: _check_project_access enforces role hierarchy (owner > editor > member > viewer)"] },
   { ver:'v0.31.39', date:'2026-03-12', notes:["People module: full CRM with user cards, stats, role management, add/remove users","Username migration: auto-renames 'admin' to display-name slug on startup","Backend: create user action in /api/admin/users"] },
   { ver:'v0.31.36', date:'2026-03-12', notes:["Fix: agent detail chat no longer offscreen — flex-based layout","Fix: office/grid toggle hidden in agent detail view","Fix: nav tabs scroll to top on switch","Agent detail model picker now uses Porter-style dropdown","Enhanced project coaching — context-aware suggestions on every tab"] },
@@ -39261,7 +39305,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.45"})
+            self.reply_json({"v": "0.31.46"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39423,7 +39467,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.45"
+                health["porter_version"] = "0.31.46"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40910,9 +40954,12 @@ class Handler(BaseHTTPRequestHandler):
                     "end_date": p.get("end_date", ""),
                     "assigned_personas": p.get("assigned_personas", []),
                 })
+            # v0.31.46 — Per-session active project
+            _ga_tok = self.get_session_token()
+            _ga_active = _get_session_active_project(_ga_tok) if _ga_tok else str(_config.get("active_project_id") or "")
             self.reply_json({
                 "projects":         result,
-                "active_project_id": _config.get("active_project_id"),
+                "active_project_id": _ga_active or None,
             })
 
         # ── S7: project file chain ────────────────────────────────────────────
@@ -41393,7 +41440,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.45'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.46'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -45524,10 +45571,11 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 pid = str(data.get("project_id", "") or "").strip()
                 if pid and not any(p["id"] == pid for p in _config.get("projects", [])):
                     self.reply_json({"ok": False, "error": "project_id not found"}); return
-                _config["active_project_id"] = pid or None
-                save_config(_config)
+                # v0.31.46 — Per-session active project (F2)
+                _sa_tok = self.get_session_token()
+                _set_session_active_project(_sa_tok, pid)
                 mlog.emit("info", "project", "project.set_active", f"Set active project: {pid or 'none'}", project_id=pid or "")
-                self.reply_json({"ok": True, "active_project_id": _config["active_project_id"]})
+                self.reply_json({"ok": True, "active_project_id": pid or None})
 
             elif action == "delete":
                 pid    = str(data.get("project_id", "")).strip()
@@ -47018,7 +47066,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.45 ready (localhost only)")
+    print(f"\n  Porter v0.31.46 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
