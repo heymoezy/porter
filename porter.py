@@ -40379,8 +40379,9 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 _sc = _db_conn()
                 _srows = _sc.execute(
-                    "SELECT token, username, role, ip, user_agent, created_at, last_active "
-                    "FROM sessions WHERE expires_at > ? ORDER BY last_active DESC",
+                    "SELECT s.token, s.username, COALESCE(u.role,'operator'), s.ip_address, s.user_agent, s.created_at, s.last_seen_at "
+                    "FROM sessions s LEFT JOIN users u ON s.username=u.username "
+                    "WHERE s.expires > ? ORDER BY s.last_seen_at DESC",
                     (time.time(),)
                 ).fetchall()
                 _sc.close()
