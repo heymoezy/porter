@@ -25531,14 +25531,7 @@ async function _showTemplateDetail(id) {
   // SOUL.md preview
   html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px">';
   html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">SOUL.md Preview</div>';
-  var soul = '# ' + data.name + '\n\n';
-  if (data.mission) soul += '**Mission:** ' + data.mission + '\n';
-  if (data.desc) soul += '**Role:** ' + data.desc + '\n\n';
-  if (data.soul && data.soul.length) soul += '## Personality\n' + data.soul.map(function(s){return '- '+s}).join('\n') + '\n\n';
-  if (data.authority) soul += '## Authority\n' + (Array.isArray(data.authority)?data.authority:[''+data.authority]).map(function(a){return '- '+a}).join('\n') + '\n\n';
-  if (data.inputs) soul += '## Inputs\n' + (Array.isArray(data.inputs)?data.inputs:[''+data.inputs]).map(function(i){return '- '+i}).join('\n') + '\n\n';
-  if (data.outputs) soul += '## Outputs\n' + (Array.isArray(data.outputs)?data.outputs:[''+data.outputs]).map(function(o){return '- '+o}).join('\n') + '\n\n';
-  if (data.tags) soul += '## Skills\n' + data.tags.map(function(t){return '- '+t}).join('\n') + '\n';
+  var soul = _buildRichSoul(data.name, data);
   html += '<pre style="margin:0;font-size:11px;color:var(--text2);white-space:pre-wrap;font-family:monospace;max-height:200px;overflow-y:auto">' + escHtml(soul) + '</pre>';
   html += '</div>';
   grid.innerHTML = html;
@@ -25551,33 +25544,59 @@ function _backToTemplates() {
   if (countEl) countEl.textContent = (window._allTemplates || []).length + ' templates';
 }
 
+function _buildRichSoul(name, data) {
+  var s = '# ' + name + '\n\n';
+  s += name + ' is a ' + (data.desc || data.cat || 'worker') + '. ';
+  if (data.mission) s += data.mission + '\n\n';
+  if (data.soul && data.soul.length) {
+    s += '## Personality\n\nCore traits that define how ' + name + ' approaches work:\n\n';
+    data.soul.forEach(function(t) { s += '- ' + t + '\n'; });
+    s += '\n';
+  }
+  if (data.authority && data.authority.length) {
+    var auth = Array.isArray(data.authority) ? data.authority : [data.authority];
+    s += '## Authority\n\n' + name + ' owns decisions in the following areas. Anything outside this scope should be escalated.\n\n';
+    auth.forEach(function(a) { s += '- ' + a + '\n'; });
+    s += '\n';
+  }
+  if (data.inputs && data.inputs.length) {
+    var inp = Array.isArray(data.inputs) ? data.inputs : [data.inputs];
+    s += '## Inputs\n\nTo do good work, ' + name + ' needs:\n\n';
+    inp.forEach(function(i) { s += '- ' + i + '\n'; });
+    s += '\n';
+  }
+  if (data.outputs && data.outputs.length) {
+    var out = Array.isArray(data.outputs) ? data.outputs : [data.outputs];
+    s += '## Outputs\n\n' + name + ' delivers:\n\n';
+    out.forEach(function(o) { s += '- ' + o + '\n'; });
+    s += '\n';
+  }
+  if (data.tags && data.tags.length) {
+    s += '## Skills\n\n';
+    data.tags.forEach(function(t) { s += '- ' + t + '\n'; });
+    s += '\n';
+  }
+  if (data.communication_style) s += '## Communication Style\n\n' + data.communication_style + '\n\n';
+  s += '## Working Relationships\n\n';
+  s += '- Reports progress to Porter (the orchestrator)\n';
+  s += '- Coordinates with other workers assigned to the same project\n';
+  s += '- Escalates blockers and scope questions to the operator\n\n';
+  s += '## Quality Standard\n\n';
+  s += '- Every deliverable should be complete enough to use without follow-up questions\n';
+  s += '- Flag assumptions explicitly rather than guessing silently\n';
+  s += '- Prefer working solutions over theoretical perfection\n';
+  return s;
+}
+
 async function _createFromTemplate() {
   var data = window._currentTemplateData;
   if (!data) return;
   var workerName = await porterPrompt('Create Worker from Template', 'Name your ' + data.name + ':', data.name);
   if (!workerName) return;
-  var soulParts = [];
-  soulParts.push('# ' + workerName);
-  soulParts.push('');
-  if (data.mission) soulParts.push('**Mission:** ' + data.mission);
-  if (data.desc) soulParts.push('**Role:** ' + data.desc);
-  soulParts.push('');
-  if (data.soul && data.soul.length) soulParts.push('## Personality\n' + data.soul.map(function(s){return '- ' + s}).join('\n'));
-  soulParts.push('');
-  if (data.authority) soulParts.push('## Authority\n' + (Array.isArray(data.authority)?data.authority:[data.authority]).map(function(a){return '- '+a}).join('\n'));
-  soulParts.push('');
-  if (data.inputs) soulParts.push('## Inputs\n' + (Array.isArray(data.inputs)?data.inputs:[data.inputs]).map(function(i){return '- '+i}).join('\n'));
-  soulParts.push('');
-  if (data.outputs) soulParts.push('## Outputs\n' + (Array.isArray(data.outputs)?data.outputs:[data.outputs]).map(function(o){return '- '+o}).join('\n'));
-  soulParts.push('');
-  if (data.tags) soulParts.push('## Skills\n' + data.tags.map(function(t){return '- '+t}).join('\n'));
-  soulParts.push('');
-  if (data.communication_style) soulParts.push('## Communication Style\n' + data.communication_style);
-  if (data.archetype) soulParts.push('\n## Archetype\n' + data.archetype);
   var result = await api('/api/personas', {
     name: workerName,
     role: data.mission || data.desc || data.name,
-    soul_text: soulParts.join('\n'),
+    soul_text: _buildRichSoul(workerName, data),
     preferred_backend: '',
     appearance_style: 'minecraft',
     appearance_spec: data.appearance_spec || {},
@@ -25613,30 +25632,10 @@ async function _createWorkerFromRecommendation(templateName, projectId) {
   // Fetch full template
   var detail = await fetch('/api/templates/' + match.id, {credentials:'same-origin'}).then(function(r) { return r.json(); });
   if (!detail || detail.error) { toast('Template load failed', 'err'); return; }
-  // Build rich SOUL.md from template spec
-  var soulParts = [];
-  soulParts.push('# ' + workerName);
-  soulParts.push('');
-  if (detail.mission) soulParts.push('**Mission:** ' + detail.mission);
-  if (detail.desc) soulParts.push('**Role:** ' + detail.desc);
-  soulParts.push('');
-  if (detail.soul && detail.soul.length) soulParts.push('## Personality\n' + detail.soul.map(function(s){return '- ' + s}).join('\n'));
-  soulParts.push('');
-  if (detail.authority && detail.authority.length) soulParts.push('## Authority\nDecision-making scope:\n' + (Array.isArray(detail.authority) ? detail.authority : [detail.authority]).map(function(a){return '- ' + a}).join('\n'));
-  soulParts.push('');
-  if (detail.inputs && detail.inputs.length) soulParts.push('## Inputs\n' + (Array.isArray(detail.inputs) ? detail.inputs : [detail.inputs]).map(function(i){return '- ' + i}).join('\n'));
-  soulParts.push('');
-  if (detail.outputs && detail.outputs.length) soulParts.push('## Outputs\n' + (Array.isArray(detail.outputs) ? detail.outputs : [detail.outputs]).map(function(o){return '- ' + o}).join('\n'));
-  soulParts.push('');
-  if (detail.tags && detail.tags.length) soulParts.push('## Skills\n' + detail.tags.map(function(t){return '- ' + t}).join('\n'));
-  soulParts.push('');
-  if (detail.communication_style) soulParts.push('## Communication Style\n' + detail.communication_style);
-  if (detail.archetype) soulParts.push('\n## Archetype\n' + detail.archetype);
-  var richSoul = soulParts.join('\n');
   var createData = {
     name: workerName,
     role: detail.mission || detail.desc || templateName,
-    soul_text: richSoul,
+    soul_text: _buildRichSoul(workerName, detail),
     preferred_backend: '',
     appearance_style: 'minecraft',
     appearance_spec: detail.appearance_spec || {},
