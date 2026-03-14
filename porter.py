@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.48 — Smart routing + remediation complete"""
+"""Porter v0.31.49 — UX cleanup (global chat history, button audit)"""
 
 
 import email
@@ -3149,8 +3149,12 @@ def _project_state_payload(project_id: str) -> dict:
 
 def _agent_state_payload(agent_id: str) -> dict:
     persona = _persona_by_id(agent_id) or {}
-    project_ids = _persona_project_ids(agent_id)
-    project_states = [_project_state_payload(pid) for pid in project_ids[:3]]
+    # v0.31.49 — Orchestrators see all projects, workers see only assigned
+    if persona.get("orchestrator_only"):
+        project_ids = [str(p.get("id", "")) for p in _config.get("projects", []) if p.get("id")]
+    else:
+        project_ids = _persona_project_ids(agent_id)
+    project_states = [_project_state_payload(pid) for pid in project_ids[:10]]
     directives = _state_list_directives("agent", str(agent_id or "").strip())
     notes = _state_get_agent_notes(agent_id, limit=40)
     if persona and persona.get("orchestrator_only"):
@@ -12413,7 +12417,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.48</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.49</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12873,7 +12877,7 @@ input[type="number"].settings-input { min-width: 60px; }
   <div id="projects-module" class="module-panel active">
     <div class="module-hdr">
       <span class="module-title">Projects</span>
-      <button class="btn btn-primary" onclick="_askPorterToCreate('project')" style="font-size:12px">Create Project With Porter</button>
+      <button class="btn btn-primary" onclick="_askPorterToCreate('project')" style="font-size:12px">Start A New Project</button>
     </div>
 
     <div id="projects-list-view" style="padding:0">
@@ -13316,7 +13320,7 @@ input[type="number"].settings-input { min-width: 60px; }
   </div>
   <div class="porter-popup-thread" id="popup-chat-thread"></div>
   <div class="porter-popup-composer">
-    <textarea class="porter-popup-input" id="popup-chat-input" rows="1" placeholder="Ask Porter..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_popupChatSend()}"></textarea>
+    <textarea class="porter-popup-input" id="popup-chat-input" rows="1" placeholder="Ask Porter..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_popupChatSend()}" oninput="_chatAutoGrow(this)"></textarea>
     <button class="porter-popup-send" onclick="_popupChatSend()">Send</button>
   </div>
 </div>
@@ -13524,6 +13528,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.49', date:'2026-03-14', notes:["Global / popup chat now persists to Porter chat history","Global chat textarea auto-grows with message","Porter State page now shows all projects (was 0 for orchestrators)","'Create Project With Porter' → 'Start A New Project'","Removed redundant Create Worker/Refine Project buttons from chat toolbar","Workers tab: add buttons hidden when empty state already shows CTAs"] },
   { ver:'v0.31.48', date:'2026-03-14', notes:["Smart routing: create_worker chat action uses project route hint instead of hardcoded backend","GPT-5.4 audit remediation complete: 10 findings across 4 releases (v0.31.45-48)"] },
   { ver:'v0.31.47', date:'2026-03-14', notes:["Fix: kickoff 'settings' tab navigation now correctly routes to overview","Chat actions now show toast notifications on success/failure","Worker USER.md now uses operator display name and timezone from config"] },
   { ver:'v0.31.46', date:'2026-03-14', notes:["Per-session active project isolation — users no longer cross-contaminate active project state","Fix milestone field name: chat actions now use 'name' matching REST API and UI","Startup backfill migrates existing milestones from title→name"] },
@@ -16584,7 +16589,7 @@ function _renderProjList() {
   if (!grid) return;
   if (!_projList.length) {
     grid.innerHTML = '<div style="padding:40px 20px;text-align:center"><div style="font-size:15px;color:var(--text2);margin-bottom:16px">No projects yet</div>'
-      + '<button class="btn btn-primary" onclick="_askPorterToCreate(\'project\')" style="font-size:12px">Create With Porter</button></div>';
+      + '<button class="btn btn-primary" onclick="_askPorterToCreate(\'project\')" style="font-size:12px">Start A New Project</button></div>';
     if (statsBar) statsBar.innerHTML = '';
     return;
   }
@@ -17238,8 +17243,6 @@ async function _renderProjTabContent() {
       + '<button class="pd-chat-toolbtn" onclick="_projNewChat()">＋ New Chat</button>'
       + '<button class="pd-chat-toolbtn" onclick="_projOpenHistory()">History</button>'
       + '<button class="pd-chat-toolbtn" onclick="_projClearChat()">Clear Chat</button>'
-      + '<button class="pd-chat-toolbtn" onclick="_projKickoff(\'worker\')">Create Worker</button>'
-      + '<button class="pd-chat-toolbtn" onclick="_projKickoff(\'project\')">Refine Project</button>'
       + '<div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap">'
       + '<div id="proj-chat-model-picker" class="chat-ctx-sel" onclick="_projChatModelToggle(event)" style="margin-left:auto;font-size:11px;padding:4px 10px">'
       + '<span class="ctx-label" id="proj-chat-model-label">Model: Auto</span><span class="ctx-arrow">▾</span>'
@@ -17325,9 +17328,11 @@ async function _renderProjTabContent() {
       });
       html += '</div>';
     }
-    // Add agent
+    // Add agent (only show when workers already exist — empty state has its own CTAs)
+    if (assigned.length) {
     html += '<div style="margin-top:8px"><button onclick="_projAssignAgent(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:11px">+ Assign Worker</button>';
     html += ' <button onclick="_projKickoff(\x27worker\x27)" class="btn btn-ghost" style="font-size:11px">+ Create New Worker</button></div>';
+    }
 
     // Worker recommendations based on project type
     var typeInfo = _projTypeInfo(proj.type);
@@ -27472,7 +27477,7 @@ async function selectPersona(id) {
     if (spBtn) spBtn.textContent = isOrchestrator ? 'Who Is Porter' : 'System Prompt';
     if (tabActions) {
       tabActions.innerHTML = isOrchestrator
-        ? '<button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'worker\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Worker With Porter</button><button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'project\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Project With Porter</button>'
+        ? '<button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'worker\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Worker</button><button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'project\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Start A New Project</button>'
         : '';
     }
     document.querySelectorAll('.pd-tab').forEach(function(btn) {
@@ -32408,7 +32413,7 @@ async function _popupChatSend() {
   _popupChatStreaming = true;
 
   try {
-    var url = '/api/chat/stream?model=auto&prompt=' + encodeURIComponent(fullPrompt) + '&route=general';
+    var url = '/api/chat/stream?model=auto&prompt=' + encodeURIComponent(fullPrompt) + '&route=general&chat_id=porter-global';
     var es = new EventSource(url);
     var idx = _popupChatMessages.length - 1;
     var fullText = '';
@@ -39322,7 +39327,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.48"})
+            self.reply_json({"v": "0.31.49"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39484,7 +39489,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.48"
+                health["porter_version"] = "0.31.49"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -41457,7 +41462,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.48'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.49'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -47083,7 +47088,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.48 ready (localhost only)")
+    print(f"\n  Porter v0.31.49 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
