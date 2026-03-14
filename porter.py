@@ -25414,14 +25414,19 @@ function _renderTemplateGrid(templates) {
   }
   if (countEl) countEl.textContent = templates.length + ' templates';
   grid.innerHTML = templates.map(function(t) {
-    var catColor = {'engineering':'#3b82f6','design':'#a855f7','content':'#f59e0b','research':'#22c55e','business':'#ef4444','creative':'#ec4899','management':'#6366f1'}[t.category] || 'var(--text3)';
-    return '<div class="cap-card" data-name="' + escHtml(t.name) + '" data-cat="' + escHtml(t.category||'') + '" data-desc="' + escHtml(t.description||'') + '" style="cursor:pointer" onclick="_showTemplateDetail(\'' + escHtml(t.id) + '\')">'
-      + '<div class="cap-card-hdr">'
+    var catColor = {'engineering':'#3b82f6','design':'#a855f7','content':'#f59e0b','research':'#22c55e','business':'#ef4444','creative':'#ec4899','management':'#6366f1','data_ai':'#14b8a6','legal':'#64748b','support':'#f97316','domain':'#8b5cf6'}[t.category] || 'var(--text3)';
+    var avatarHtml = '';
+    if (t.appearance_style === 'minecraft' && t.appearance_spec) {
+      avatarHtml = '<div style="width:32px;height:32px;flex-shrink:0"><img src="' + _minecraftPortraitSvg({appearance_spec:t.appearance_spec, appearance_style:'minecraft', name:t.name}, 32) + '" style="height:32px;image-rendering:pixelated"></div>';
+    }
+    return '<div class="cap-card" data-name="' + escHtml(t.name) + '" data-cat="' + escHtml(t.category||'') + '" data-desc="' + escHtml(t.description||'') + '" style="cursor:pointer;display:flex;align-items:flex-start;gap:10px" onclick="_showTemplateDetail(\'' + escHtml(t.id) + '\')">'
+      + avatarHtml
+      + '<div style="flex:1;min-width:0"><div class="cap-card-hdr">'
       + '<span class="cap-card-name">' + escHtml(t.name) + '</span>'
       + '</div>'
       + '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + escHtml(t.description || '') + '</div>'
       + '<div style="margin-top:6px"><span style="font-size:10px;padding:2px 6px;border-radius:3px;background:' + catColor + '20;color:' + catColor + '">' + escHtml(t.category || '') + '</span></div>'
-      + '</div>';
+      + '</div></div>';
   }).join('');
 }
 
@@ -25440,15 +25445,112 @@ function _filterTemplates() {
 async function _showTemplateDetail(id) {
   var data = await fetch('/api/templates/' + id, {credentials:'same-origin'}).then(function(r) { return r.json(); });
   if (!data || data.error) return;
-  var html = '<h3 style="margin:0 0 8px">' + escHtml(data.name) + '</h3>';
-  html += '<div style="color:var(--text3);font-size:13px;margin-bottom:12px">' + escHtml(data.desc || '') + '</div>';
-  if (data.mission) html += '<div style="margin-bottom:8px"><b>Mission:</b> ' + escHtml(data.mission) + '</div>';
-  if (data.authority) html += '<div style="margin-bottom:8px"><b>Authority:</b> ' + escHtml(data.authority) + '</div>';
-  if (data.inputs) html += '<div style="margin-bottom:8px"><b>Inputs:</b> ' + escHtml(data.inputs) + '</div>';
-  if (data.outputs) html += '<div style="margin-bottom:8px"><b>Outputs:</b> ' + escHtml(data.outputs) + '</div>';
-  if (data.soul && data.soul.length) html += '<div style="margin-bottom:8px"><b>Traits:</b> ' + data.soul.map(function(s){return escHtml(s)}).join(', ') + '</div>';
-  if (data.tags && data.tags.length) html += '<div style="margin-bottom:8px"><b>Tags:</b> ' + data.tags.map(function(t){return '<span style="font-size:11px;padding:2px 6px;margin:2px;border-radius:3px;background:var(--surface);border:1px solid var(--border);display:inline-block">' + escHtml(t) + '</span>'}).join(' ') + '</div>';
-  porterAlert(data.name, html);
+  window._currentTemplateId = id;
+  window._currentTemplateData = data;
+  // Replace the templates grid with a detail view
+  var grid = document.getElementById('tmpl-grid');
+  var countEl = document.getElementById('tmpl-count');
+  if (!grid) return;
+  var avatarHtml = '';
+  if (data.appearance_style === 'minecraft' && data.appearance_spec) {
+    avatarHtml = '<img src="' + _minecraftPortraitSvg({appearance_spec:data.appearance_spec, appearance_style:'minecraft', name:data.name}, 80) + '" style="height:80px;image-rendering:pixelated">';
+  }
+  var catColor = {'engineering':'#3b82f6','design':'#a855f7','content':'#f59e0b','research':'#22c55e','business':'#ef4444','creative':'#ec4899','data_ai':'#14b8a6','legal':'#64748b','support':'#f97316','domain':'#8b5cf6'}[data.cat] || 'var(--text3)';
+  var html = '<div style="margin-bottom:12px"><button class="btn btn-ghost" onclick="_backToTemplates()" style="font-size:12px">&larr; All Templates</button></div>';
+  html += '<div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:16px">';
+  if (avatarHtml) html += '<div style="flex-shrink:0">' + avatarHtml + '</div>';
+  html += '<div style="flex:1;min-width:0">';
+  html += '<div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px">' + escHtml(data.name) + '</div>';
+  html += '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">' + escHtml(data.desc || '') + '</div>';
+  html += '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:' + catColor + '20;color:' + catColor + '">' + escHtml(data.cat || '') + '</span>';
+  if (data.archetype) html += ' <span style="font-size:10px;padding:2px 8px;border-radius:4px;background:var(--surface);border:1px solid var(--border);color:var(--text2)">' + escHtml(data.archetype) + '</span>';
+  html += '</div>';
+  html += '<button class="btn btn-primary" onclick="_createFromTemplate()" style="flex-shrink:0;font-size:13px;padding:8px 20px">+ Create Worker</button>';
+  html += '</div>';
+  // Spec sections
+  var sections = [
+    ['Mission', data.mission],
+    ['Authority', Array.isArray(data.authority) ? data.authority.join(', ') : data.authority],
+    ['Personality', (data.soul || []).join(' \u00b7 ')],
+    ['Inputs', Array.isArray(data.inputs) ? data.inputs.map(function(i){return '\u2022 '+i}).join('\n') : data.inputs],
+    ['Outputs', Array.isArray(data.outputs) ? data.outputs.map(function(o){return '\u2022 '+o}).join('\n') : data.outputs],
+  ];
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">';
+  sections.forEach(function(s) {
+    if (!s[1]) return;
+    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px">';
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">' + s[0] + '</div>';
+    html += '<div style="font-size:12px;color:var(--text);white-space:pre-line">' + escHtml(s[1]) + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  // Skills / Tags
+  if (data.tags && data.tags.length) {
+    html += '<div style="margin-bottom:12px"><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Skills</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+    data.tags.forEach(function(t) {
+      html += '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:var(--surface);border:1px solid var(--border);color:var(--text2)">' + escHtml(t) + '</span>';
+    });
+    html += '</div></div>';
+  }
+  // SOUL.md preview
+  html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px">';
+  html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">SOUL.md Preview</div>';
+  var soul = '# ' + data.name + '\n\n';
+  if (data.mission) soul += '**Mission:** ' + data.mission + '\n';
+  if (data.desc) soul += '**Role:** ' + data.desc + '\n\n';
+  if (data.soul && data.soul.length) soul += '## Personality\n' + data.soul.map(function(s){return '- '+s}).join('\n') + '\n\n';
+  if (data.authority) soul += '## Authority\n' + (Array.isArray(data.authority)?data.authority:[''+data.authority]).map(function(a){return '- '+a}).join('\n') + '\n\n';
+  if (data.inputs) soul += '## Inputs\n' + (Array.isArray(data.inputs)?data.inputs:[''+data.inputs]).map(function(i){return '- '+i}).join('\n') + '\n\n';
+  if (data.outputs) soul += '## Outputs\n' + (Array.isArray(data.outputs)?data.outputs:[''+data.outputs]).map(function(o){return '- '+o}).join('\n') + '\n\n';
+  if (data.tags) soul += '## Skills\n' + data.tags.map(function(t){return '- '+t}).join('\n') + '\n';
+  html += '<pre style="margin:0;font-size:11px;color:var(--text2);white-space:pre-wrap;font-family:monospace;max-height:200px;overflow-y:auto">' + escHtml(soul) + '</pre>';
+  html += '</div>';
+  grid.innerHTML = html;
+  if (countEl) countEl.textContent = escHtml(data.name);
+}
+
+function _backToTemplates() {
+  _renderTemplateGrid(window._allTemplates || []);
+  var countEl = document.getElementById('tmpl-count');
+  if (countEl) countEl.textContent = (window._allTemplates || []).length + ' templates';
+}
+
+async function _createFromTemplate() {
+  var data = window._currentTemplateData;
+  if (!data) return;
+  var workerName = await porterPrompt('Create Worker from Template', 'Name your ' + data.name + ':', data.name);
+  if (!workerName) return;
+  var soulParts = [];
+  soulParts.push('# ' + workerName);
+  soulParts.push('');
+  if (data.mission) soulParts.push('**Mission:** ' + data.mission);
+  if (data.desc) soulParts.push('**Role:** ' + data.desc);
+  soulParts.push('');
+  if (data.soul && data.soul.length) soulParts.push('## Personality\n' + data.soul.map(function(s){return '- ' + s}).join('\n'));
+  soulParts.push('');
+  if (data.authority) soulParts.push('## Authority\n' + (Array.isArray(data.authority)?data.authority:[data.authority]).map(function(a){return '- '+a}).join('\n'));
+  soulParts.push('');
+  if (data.inputs) soulParts.push('## Inputs\n' + (Array.isArray(data.inputs)?data.inputs:[data.inputs]).map(function(i){return '- '+i}).join('\n'));
+  soulParts.push('');
+  if (data.outputs) soulParts.push('## Outputs\n' + (Array.isArray(data.outputs)?data.outputs:[data.outputs]).map(function(o){return '- '+o}).join('\n'));
+  soulParts.push('');
+  if (data.tags) soulParts.push('## Skills\n' + data.tags.map(function(t){return '- '+t}).join('\n'));
+  var result = await api('/api/personas', {
+    name: workerName,
+    role: data.mission || data.desc || data.name,
+    soul_text: soulParts.join('\n'),
+    preferred_backend: '',
+    appearance_style: 'minecraft',
+    appearance_spec: data.appearance_spec || {},
+  });
+  if (result && result.ok) {
+    toast(workerName + ' created', 'ok');
+    _setAgentView('grid');
+    loadAgents();
+  } else {
+    toast((result && result.error) || 'Worker creation failed', 'err');
+  }
 }
 
 async function _createWorkerFromRecommendation(templateName, projectId) {
@@ -25473,15 +25575,30 @@ async function _createWorkerFromRecommendation(templateName, projectId) {
   // Fetch full template
   var detail = await fetch('/api/templates/' + match.id, {credentials:'same-origin'}).then(function(r) { return r.json(); });
   if (!detail || detail.error) { toast('Template load failed', 'err'); return; }
-  // Create persona from template
+  // Build rich SOUL.md from template spec
+  var soulParts = [];
+  soulParts.push('# ' + workerName);
+  soulParts.push('');
+  if (detail.mission) soulParts.push('**Mission:** ' + detail.mission);
+  if (detail.desc) soulParts.push('**Role:** ' + detail.desc);
+  soulParts.push('');
+  if (detail.soul && detail.soul.length) soulParts.push('## Personality\n' + detail.soul.map(function(s){return '- ' + s}).join('\n'));
+  soulParts.push('');
+  if (detail.authority && detail.authority.length) soulParts.push('## Authority\nDecision-making scope:\n' + (Array.isArray(detail.authority) ? detail.authority : [detail.authority]).map(function(a){return '- ' + a}).join('\n'));
+  soulParts.push('');
+  if (detail.inputs && detail.inputs.length) soulParts.push('## Inputs\n' + (Array.isArray(detail.inputs) ? detail.inputs : [detail.inputs]).map(function(i){return '- ' + i}).join('\n'));
+  soulParts.push('');
+  if (detail.outputs && detail.outputs.length) soulParts.push('## Outputs\n' + (Array.isArray(detail.outputs) ? detail.outputs : [detail.outputs]).map(function(o){return '- ' + o}).join('\n'));
+  soulParts.push('');
+  if (detail.tags && detail.tags.length) soulParts.push('## Skills\n' + detail.tags.map(function(t){return '- ' + t}).join('\n'));
+  var richSoul = soulParts.join('\n');
   var createData = {
     name: workerName,
     role: detail.mission || detail.desc || templateName,
-    personality: (detail.soul || []).join(', '),
-    focus: detail.inputs || '',
-    style: detail.authority || '',
+    soul_text: richSoul,
     preferred_backend: '',
     appearance_style: 'minecraft',
+    appearance_spec: detail.appearance_spec || {},
   };
   var result = await api('/api/personas', createData);
   if (result && result.ok) {
@@ -40588,7 +40705,7 @@ class Handler(BaseHTTPRequestHandler):
             for tid, t in AGENT_TEMPLATES.items():
                 if cat and t.get("cat") != cat:
                     continue
-                templates.append({"id": tid, "name": t["name"], "category": t.get("cat",""), "description": t.get("desc",""), "tags": t.get("tags",[])})
+                templates.append({"id": tid, "name": t["name"], "category": t.get("cat",""), "description": t.get("desc",""), "tags": t.get("tags",[]), "appearance_style": t.get("appearance_style",""), "appearance_spec": t.get("appearance_spec",{})})
             self.reply_json({"templates": templates, "count": len(templates)})
 
         elif parsed.path.startswith("/api/templates/") and not parsed.path.endswith("/"):
