@@ -10638,14 +10638,15 @@ body.sidebar-collapsed .mount-item { padding-left: 0; justify-content: center; }
   width:100%; text-align:left; font-family:inherit; }
 .mnav-item:hover { background:var(--raised); color:var(--text); }
 .mnav-item.active { background:rgba(247,147,26,.10); color:var(--accent); font-weight:500; }
-.mnav-sep { height:1px; background:var(--border); margin:6px 10px; }
+.mnav-sep { height:1px; background:var(--border); margin:6px 0; }
 body.sidebar-collapsed .mnav-label { display:none; }
 body.sidebar-collapsed .mnav-item { justify-content:center; padding:8px; }
 body.sidebar-collapsed .module-nav { padding:8px 4px; }
 #loc-subnav { display:none; }
 #file-results-footer { padding:10px 16px; color:var(--text3); font-size:11px; border-top:1px solid var(--border); background:var(--panel); flex-shrink:0; }
 .sidebar-footer {
-  padding: 16px 20px 0;
+  padding: 8px 0;
+  margin: 0 10px;
   border-top: 1px solid var(--border);
   font-size: 12px; color: var(--text3);
 }
@@ -13247,7 +13248,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </button>
   </nav>
 
-  <div class="mnav-sep"></div>
+  <div class="mnav-sep" style="margin:6px 10px"></div>
   <div class="module-nav" style="padding-top:0">
     <button class="mnav-item" onclick="toggleTheme()" title="Toggle appearance">
       <svg id="sidebarThemeIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
@@ -13259,18 +13260,15 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div id="sidebar-user" style="display:flex;align-items:center;gap:8px;padding:4px 0 8px;margin-bottom:4px;border-bottom:1px solid var(--border)">
+  <div id="sidebar-user" style="display:flex;align-items:center;gap:8px;padding:8px 0">
     <div id="sidebar-avatar" style="width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0"></div>
     <div style="min-width:0;flex:1">
       <div id="sidebar-username" style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
       <div id="sidebar-role" style="font-size:10px;color:var(--text3);text-transform:capitalize"></div>
     </div>
+    <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <a href="#" onclick="doLogout();return false" style="font-size:11px;color:var(--text3);text-decoration:none;padding:2px 0;display:inline-block" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out">Sign out</a>
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.76</div>
-
-
-    <!-- tour button moved to ? keyboard help overlay -->
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.76</div>
   </div>
 </aside>
 
@@ -14047,12 +14045,8 @@ input[type="number"].settings-input { min-width: 60px; }
       <!-- Password page -->
       <div class="settings-page" id="spage-password">
         <div class="settings-page-title">Password</div>
-        <div class="pw-helper">Enter your current password and choose a new one.</div>
+        <div class="pw-helper">Choose a new password.</div>
         <div class="settings-field" style="margin-top:14px">
-          <label>Current password</label>
-          <input type="password" class="settings-input" id="sa-pwCurrent" autocomplete="current-password">
-        </div>
-        <div class="settings-field">
           <label>New password <span style="color:var(--text3);font-weight:400">(min 8 chars)</span></label>
           <input type="password" class="settings-input" id="sa-pwNew" autocomplete="new-password">
         </div>
@@ -31763,16 +31757,13 @@ async function saveAccount() {
 }
 
 async function changePassword() {
-  const curPw   = document.getElementById('sa-pwCurrent').value;
   const newPw   = document.getElementById('sa-pwNew').value;
   const confirm = document.getElementById('sa-pwConfirm').value;
-  if (!curPw) { toast('Enter your current password', 'err'); return; }
   if (!newPw || !confirm) { toast('Enter and confirm your new password', 'err'); return; }
   if (newPw.length < 8) { toast('New password must be at least 8 characters', 'err'); return; }
   if (newPw !== confirm) { toast('Passwords do not match', 'err'); return; }
-  const res = await api('/api/auth/change-password', { current_password: curPw, new_password: newPw });
+  const res = await api('/api/password/change', { new: newPw });
   if (res && res.ok) {
-    document.getElementById('sa-pwCurrent').value = '';
     document.getElementById('sa-pwNew').value = '';
     document.getElementById('sa-pwConfirm').value = '';
     toast('Password changed', 'ok');
@@ -44598,10 +44589,25 @@ class Handler(BaseHTTPRequestHandler):
             email = data.get("email", "").strip()
             if not display_name:
                 self.reply_json({"ok": False, "error": "Preferred name cannot be empty"}, 400); return
-            _config["full_name"] = full_name
-            _config["display_name"] = display_name
-            _config["email"] = email
-            save_config(_config)
+            # v0.31.76 — Update the correct user (not always config)
+            _pu_token = self.get_session_token()
+            _pu_session = get_session(_pu_token) if _pu_token else None
+            _pu_username = _pu_session["username"] if _pu_session else ""
+            _pu_is_config = (_pu_username == _config.get("username"))
+            if _pu_is_config:
+                _config["full_name"] = full_name
+                _config["display_name"] = display_name
+                _config["email"] = email
+                save_config(_config)
+            # Always update users table
+            try:
+                _pu_conn = _db_conn()
+                _pu_conn.execute("UPDATE users SET display_name=?, full_name=?, email=? WHERE username=?",
+                                 (display_name, full_name, email, _pu_username))
+                _pu_conn.commit()
+                _pu_conn.close()
+            except Exception:
+                pass
             self.reply_json({"ok": True, "full_name": full_name, "display_name": display_name, "email": email})
 
         elif parsed.path == "/api/auth/change-password":
