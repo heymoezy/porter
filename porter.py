@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.50 — Role system + 4 accounts + admin split phase 1"""
+"""Porter v0.31.51 — Admin shell at /admin/ for platform_admin"""
 
 
 import email
@@ -12412,6 +12412,10 @@ input[type="number"].settings-input { min-width: 60px; }
       <span class="mnav-label">Activity</span>
     </button>
     <div class="mnav-sep"></div>
+    <button class="mnav-item" id="mnav-platform" style="display:none" onclick="window.location.href='/admin/'">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      <span class="mnav-label">Admin</span>
+    </button>
     <button class="mnav-item" id="mnav-settings" onclick="openSettings('profile')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
       <span class="mnav-label">Settings</span>
@@ -12434,7 +12438,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
     <span class="mnav-label">Sign Out</span>
   </button>
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.50</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.51</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -13542,6 +13546,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.51', date:'2026-03-14', notes:["Porter Admin: separate shell at /admin/ for platform_admin users","Admin shell: Overview, Users, Health, Logs tabs with dedicated UI","Platform admin nav link appears for system-level users only","Admin shell is fully isolated from normal Porter app"] },
   { ver:'v0.31.50', date:'2026-03-14', notes:["Role system: platform_admin, admin (workspace), operator, viewer","4 default accounts: system (platform), admin (workspace), moe, jacob","Sign Out moved from Settings to main nav rail","Nav visibility: Logs tab now admin-only","Stopped legacy admin→slug username migration"] },
   { ver:'v0.31.49', date:'2026-03-14', notes:["Global / popup chat now persists to Porter chat history","Global chat textarea auto-grows with message","Porter State page now shows all projects (was 0 for orchestrators)","'Create Project With Porter' → 'Start A New Project'","Removed redundant Create Worker/Refine Project buttons from chat toolbar","Workers tab: add buttons hidden when empty state already shows CTAs"] },
   { ver:'v0.31.48', date:'2026-03-14', notes:["Smart routing: create_worker chat action uses project route hint instead of hardcoded backend","GPT-5.4 audit remediation complete: 10 findings across 4 releases (v0.31.45-48)"] },
@@ -30548,6 +30553,9 @@ async function loadMe() {
   var isAdmin = (role === 'admin' || role === 'platform_admin');
   var adminNav = document.getElementById('mnav-admin');
   if (adminNav) adminNav.style.display = isAdmin ? '' : 'none';
+  // v0.31.51 — Platform admin link
+  var platformLink = document.getElementById('mnav-platform');
+  if (platformLink) platformLink.style.display = (role === 'platform_admin') ? '' : 'none';
 }
 
 async function saveAccount() {
@@ -38710,6 +38718,186 @@ def _stream_chunk(run_id, backend, token):
             _active_streams[run_id]["chunks"].append(token)
     _emit_event("bridge:chunk", {"run_id": run_id, "backend": backend, "text": token})
 
+
+ADMIN_PAGE = """<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Porter Admin</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0f1318;--surface:#181e28;--raised:#222a38;--border:#2e3848;--text:#e8ecf2;--text2:#a0aab8;--text3:#6b7688;--accent:#3b82f6;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}
+.admin-nav{width:200px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 0}
+.admin-nav-hdr{padding:12px 16px;font-size:13px;font-weight:700;color:var(--accent);letter-spacing:.5px;border-bottom:1px solid var(--border);margin-bottom:8px}
+.admin-nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;font-size:13px;color:var(--text2);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:background .15s}
+.admin-nav-item:hover{background:var(--raised);color:var(--text)}
+.admin-nav-item.active{background:var(--raised);color:var(--text);font-weight:600;border-right:2px solid var(--accent)}
+.admin-main{flex:1;overflow-y:auto;padding:24px 32px}
+.admin-title{font-size:18px;font-weight:700;margin-bottom:20px}
+.admin-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px}
+.admin-card-title{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:8px}
+.admin-stat{font-size:28px;font-weight:800}
+.admin-stat.green{color:var(--green)}
+.admin-stat.red{color:var(--red)}
+.admin-stat.blue{color:var(--accent)}
+.admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+.admin-table{width:100%;border-collapse:collapse;font-size:12px}
+.admin-table th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.3px}
+.admin-table td{padding:8px 10px;border-bottom:1px solid var(--border)}
+.admin-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
+.admin-badge.green{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}
+.admin-badge.blue{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+.admin-badge.yellow{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}
+.admin-badge.red{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}
+.admin-btn{padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--raised);color:var(--text);font-size:12px;cursor:pointer}
+.admin-btn:hover{background:var(--surface)}
+.admin-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.admin-nav-footer{margin-top:auto;padding:12px 16px;border-top:1px solid var(--border)}
+.admin-nav-footer a{color:var(--text3);font-size:11px;text-decoration:none}
+.admin-nav-footer a:hover{color:var(--text)}
+.admin-log-line{font-family:monospace;font-size:11px;padding:2px 0;color:var(--text2);white-space:pre-wrap;word-break:break-all}
+</style>
+</head><body>
+<div class="admin-nav">
+  <div class="admin-nav-hdr">PORTER ADMIN</div>
+  <button class="admin-nav-item active" onclick="_adminTab('overview')">Overview</button>
+  <button class="admin-nav-item" onclick="_adminTab('users')">Users</button>
+  <button class="admin-nav-item" onclick="_adminTab('health')">Health</button>
+  <button class="admin-nav-item" onclick="_adminTab('logs')">Logs</button>
+  <div class="admin-nav-footer">
+    <a href="/">&larr; Back to Porter</a><br>
+    <span style="font-size:10px;color:var(--text3)">v""" + NEW_VER + """</span>
+  </div>
+</div>
+<div class="admin-main" id="admin-content">
+  <div class="admin-title">Loading...</div>
+</div>
+<script>
+var _adminCurrentTab = 'overview';
+async function _api(url, body) {
+  var opts = body ? {method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)} : {credentials:'same-origin'};
+  var r = await fetch(url, opts);
+  return r.json();
+}
+function _adminTab(tab) {
+  _adminCurrentTab = tab;
+  document.querySelectorAll('.admin-nav-item').forEach(function(b){b.classList.remove('active')});
+  event.target.classList.add('active');
+  if (tab === 'overview') _loadOverview();
+  else if (tab === 'users') _loadUsers();
+  else if (tab === 'health') _loadHealth();
+  else if (tab === 'logs') _loadLogs();
+}
+async function _loadOverview() {
+  var el = document.getElementById('admin-content');
+  el.innerHTML = '<div class="admin-title">Overview</div><div>Loading...</div>';
+  try {
+    var [health, users] = await Promise.all([_api('/api/admin/health'), _api('/api/admin/users', {action:'list'})]);
+    var h = health || {};
+    var userList = (users && users.users) || [];
+    var html = '<div class="admin-title">Overview</div>';
+    html += '<div class="admin-grid">';
+    html += '<div class="admin-card"><div class="admin-card-title">Status</div><div class="admin-stat green">Online</div></div>';
+    html += '<div class="admin-card"><div class="admin-card-title">Users</div><div class="admin-stat blue">' + userList.length + '</div></div>';
+    html += '<div class="admin-card"><div class="admin-card-title">Version</div><div class="admin-stat" style="font-size:20px;color:var(--text)">' + (h.porter_version || '?') + '</div></div>';
+    html += '<div class="admin-card"><div class="admin-card-title">Uptime</div><div class="admin-stat" style="font-size:16px;color:var(--text)">' + _fmtUptime(h.uptime_seconds || 0) + '</div></div>';
+    html += '<div class="admin-card"><div class="admin-card-title">CPU</div><div class="admin-stat ' + ((h.cpu_percent||0) > 80 ? 'red' : 'green') + '">' + (h.cpu_percent||0).toFixed(0) + '%</div></div>';
+    html += '<div class="admin-card"><div class="admin-card-title">Memory</div><div class="admin-stat ' + ((h.memory_percent||0) > 80 ? 'red' : 'green') + '">' + (h.memory_percent||0).toFixed(0) + '%</div></div>';
+    html += '</div>';
+    html += '<div class="admin-card"><div class="admin-card-title">Services</div>';
+    var svcs = h.services || [];
+    if (svcs.length) {
+      html += '<table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th></tr>';
+      svcs.forEach(function(s) {
+        var badge = s.status === 'ok' ? 'green' : 'red';
+        html += '<tr><td>' + (s.name||'') + '</td><td><span class="admin-badge ' + badge + '">' + (s.status||'?') + '</span></td><td>' + (s.latency_ms ? s.latency_ms.toFixed(0) + 'ms' : '-') + '</td></tr>';
+      });
+      html += '</table>';
+    } else { html += '<div style="color:var(--text3);font-size:12px">No services detected</div>'; }
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="admin-title">Overview</div><div style="color:var(--red)">Error loading: ' + e.message + '</div>'; }
+}
+function _fmtUptime(s) {
+  var d = Math.floor(s/86400), h = Math.floor((s%86400)/3600), m = Math.floor((s%3600)/60);
+  return (d ? d + 'd ' : '') + h + 'h ' + m + 'm';
+}
+async function _loadUsers() {
+  var el = document.getElementById('admin-content');
+  el.innerHTML = '<div class="admin-title">Users</div><div>Loading...</div>';
+  try {
+    var data = await _api('/api/admin/users', {action:'list'});
+    var users = (data && data.users) || [];
+    var html = '<div class="admin-title">Users (' + users.length + ')</div>';
+    html += '<table class="admin-table"><tr><th>Username</th><th>Display Name</th><th>Role</th><th>Email</th><th>Created</th></tr>';
+    users.forEach(function(u) {
+      var roleBadge = u.role === 'platform_admin' ? 'red' : u.role === 'admin' ? 'yellow' : 'blue';
+      var created = u.created_at ? new Date(u.created_at * 1000).toLocaleDateString() : '-';
+      html += '<tr><td style="font-weight:600">' + (u.username||'') + '</td><td>' + (u.display_name||'') + '</td><td><span class="admin-badge ' + roleBadge + '">' + (u.role||'') + '</span></td><td>' + (u.email||'-') + '</td><td>' + created + '</td></tr>';
+    });
+    html += '</table>';
+    html += '<div style="margin-top:16px"><button class="admin-btn primary" onclick="_adminCreateUser()">+ Create User</button></div>';
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="admin-title">Users</div><div style="color:var(--red)">Error: ' + e.message + '</div>'; }
+}
+async function _adminCreateUser() {
+  var username = prompt('Username:');
+  if (!username) return;
+  var display_name = prompt('Display name:', username);
+  var role = prompt('Role (operator/admin/platform_admin):', 'operator');
+  if (!['operator','admin','platform_admin','viewer'].includes(role)) { alert('Invalid role'); return; }
+  var res = await _api('/api/admin/users', {action:'create',username:username,display_name:display_name,role:role});
+  if (res && res.ok) { alert('Created! Default password: porter'); _loadUsers(); }
+  else { alert('Error: ' + (res && res.error || 'unknown')); }
+}
+async function _loadHealth() {
+  var el = document.getElementById('admin-content');
+  el.innerHTML = '<div class="admin-title">Health</div><div>Loading...</div>';
+  try {
+    var h = await _api('/api/admin/health');
+    var html = '<div class="admin-title">System Health</div>';
+    html += '<div class="admin-grid">';
+    var keys = ['porter_pid','python_version','porter_version','porter_size_kb','porter_lines','cpu_percent','memory_percent','disk_percent','uptime_seconds'];
+    keys.forEach(function(k) {
+      if (h[k] !== undefined) {
+        var v = h[k];
+        if (k.endsWith('_percent')) v = v.toFixed(1) + '%';
+        if (k === 'porter_size_kb') v = v.toFixed(0) + ' KB';
+        if (k === 'uptime_seconds') v = _fmtUptime(v);
+        html += '<div class="admin-card"><div class="admin-card-title">' + k.replace(/_/g,' ') + '</div><div style="font-size:16px;font-weight:600">' + v + '</div></div>';
+      }
+    });
+    html += '</div>';
+    if (h.services) {
+      html += '<div class="admin-card"><div class="admin-card-title">Services</div><table class="admin-table"><tr><th>Name</th><th>Status</th><th>Latency</th><th>URL</th></tr>';
+      h.services.forEach(function(s) {
+        html += '<tr><td>' + (s.name||'') + '</td><td><span class="admin-badge ' + (s.status==='ok'?'green':'red') + '">' + (s.status||'') + '</span></td><td>' + (s.latency_ms?s.latency_ms.toFixed(0)+'ms':'-') + '</td><td style="font-size:10px;color:var(--text3)">' + (s.url||'') + '</td></tr>';
+      });
+      html += '</table></div>';
+    }
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="admin-title">Health</div><div style="color:var(--red)">Error: ' + e.message + '</div>'; }
+}
+async function _loadLogs() {
+  var el = document.getElementById('admin-content');
+  el.innerHTML = '<div class="admin-title">Logs</div><div>Loading...</div>';
+  try {
+    var data = await _api('/api/admin/logs');
+    var lines = (data && data.lines) || [];
+    var html = '<div class="admin-title">System Logs (' + lines.length + ' lines)</div>';
+    html += '<div style="margin-bottom:12px"><button class="admin-btn" onclick="_loadLogs()">Refresh</button></div>';
+    html += '<div class="admin-card" style="max-height:600px;overflow-y:auto;font-family:monospace">';
+    lines.slice(-200).forEach(function(l) { html += '<div class="admin-log-line">' + _escHtml(l) + '</div>'; });
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="admin-title">Logs</div><div style="color:var(--red)">Error: ' + e.message + '</div>'; }
+}
+function _escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+// Init
+_loadOverview();
+</script>
+</body></html>"""
+
 class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
@@ -38893,6 +39081,22 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/login":
             self.reply_html(LOGIN_PAGE)
             return
+        elif parsed.path == "/admin" or parsed.path == "/admin/":
+            # v0.31.51 — Platform admin shell (separate app mode)
+            token = self.get_session_token()
+            session = get_session(token) if token else None
+            if not session:
+                self.send_response(302)
+                self.send_header("Location", "/login")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return
+            if session.get("role") != "platform_admin":
+                self.reply_json({"error": "forbidden", "reason": "platform_admin role required"}, 403)
+                return
+            self.reply_html(ADMIN_PAGE)
+            return
+
         elif parsed.path == "/":
             token = self.get_session_token()
             ip = self.client_address[0]
@@ -39347,7 +39551,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.50"})
+            self.reply_json({"v": "0.31.51"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39509,7 +39713,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.50"
+                health["porter_version"] = "0.31.51"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -41482,7 +41686,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.50'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.51'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -47108,7 +47312,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.50 ready (localhost only)")
+    print(f"\n  Porter v0.31.51 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
