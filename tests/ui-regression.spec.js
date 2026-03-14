@@ -66,7 +66,7 @@ test.describe('Tab Headers — every tab must have a title', () => {
     { id: 'agents', title: 'Agents', selector: '#agents-module .module-title' },
     { id: 'projects', title: 'Projects', selector: '#projects-module .module-title' },
     { id: 'people', title: 'People', selector: '#people-module .module-title' },
-    { id: 'capabilities', title: 'Connections', selector: '#capabilities-module .module-title' },
+    { id: 'capabilities', title: 'Tools', selector: '#capabilities-module .module-title' },
     { id: 'models', title: 'Models', selector: '#models-module .module-title' },
   ];
 
@@ -200,8 +200,8 @@ test.describe('Nav regression — all tabs render content', () => {
     await login(page);
   });
 
-  // Current visible nav tabs
-  const allTabs = ['agents', 'projects', 'models', 'people', 'capabilities', 'admin'];
+  // Current visible nav tabs (for operator role — admin/logs hidden)
+  const allTabs = ['agents', 'projects', 'models', 'people', 'capabilities'];
 
   test('every tab shows content when clicked', async ({ page }) => {
     for (const tab of allTabs) {
@@ -234,9 +234,9 @@ test.describe('Nav bar structure', () => {
     await login(page);
   });
 
-  // Current visible nav items
+  // Current visible nav items (for operator role — Logs hidden)
   const expectedNavItems = [
-    'Agents', 'Projects', 'Models', 'People', 'Connections', 'Logs', 'Settings'
+    'Agents', 'Projects', 'Models', 'People', 'Tools', 'Settings'
   ];
 
   test('sidebar contains all expected nav buttons', async ({ page }) => {
