@@ -12,7 +12,7 @@ Project-specific rules for Porter development. These supplement the global `~/CL
 - **Service file:** `~/.config/systemd/user/porter.service`
 - **Config:** `porter_config.json` (via `PORTER_DATA_DIR` env var in systemd unit)
 - **Access:** SSH tunnel — `ssh -fN -L 8877:127.0.0.1:8877 lobster@100.85.184.74`
-- **Tests:** `cd /home/lobster/documents/porter/tests && npx playwright test` (34 tests)
+- **Tests:** `cd /home/lobster/documents/porter/tests && npx playwright test` (35 tests)
 
 ### Serve Roots
 `SERVE_DIRS` dict at top of `porter.py` maps label → `Path`:
@@ -52,7 +52,7 @@ Project-specific rules for Porter development. These supplement the global `~/CL
 ### openclaw + Qwen Local Bridge
 - **Gateway:** `http://127.0.0.1:18789`, auth token `lobster-2026`
 - **Config:** `~/.openclaw/openclaw.json`
-- **Primary model:** `openai-codex/gpt-5.3-codex`
+- **Primary model:** `openai-codex/gpt-5.4`
 - **Local Ollama:** `http://127.0.0.1:11434`, model `qwen2.5-coder:7b-instruct-q4_K_M`
 - **RAM constraint:** Qwen 7B = 4.7GB; don't run alongside memory-heavy processes
 
@@ -68,7 +68,7 @@ All agents (Claude, Gemini, Codex, OpenClaw) must follow:
 
 1. **No route handler changes without design review.** Adding/removing/renaming HTTP endpoints requires Moe's approval.
 2. **No UI overrides.** Replacing root HTML, nav structure, or frameworks requires approval. Incremental patches only.
-3. **34-test regression pass required.** All tests must pass before any commit.
+3. **35-test regression pass required.** All tests must pass before any commit.
 4. **Version endpoint must match all strings.** Docstring (line 2), HTML badge, landing page, SSE welcome, startup banner — all must match.
 5. **Ship process is mandatory.** Version bump → git add + commit → git push → systemctl restart → verify `/api/admin/health` → update projects.md. Never skip steps.
 6. **No blank scaffolds.** Never commit UI that replaces working features with placeholders or boilerplate.

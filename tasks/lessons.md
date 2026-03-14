@@ -50,3 +50,8 @@
 **Date:** 2026-03-09
 **Trigger:** OpenClaw `--json` flag outputs pretty-printed multi-line JSON. Porter's test parser split on `\n` and tried `json.loads()` per line — every line failed because they were fragments like `{` or `"runId": "..."`. The response "OK" was right there but invisible to the parser.
 **Rule:** Always verify the actual output format of external tools. Try parsing the whole output first, then fall back to line-by-line. Don't assume JSONL when the tool might output pretty JSON.
+
+## L11: Stop the loop when the work queue is empty — don't burn tokens on idle monitoring
+**Date:** 2026-03-10
+**Trigger:** After shipping 15 versions (v0.30.30→v0.30.44), all planned work was complete by monitoring cycle 3-4. Instead of stopping or telling Moe, I ran 12+ identical "all green" health checks over 4+ hours, burning significant tokens with zero output.
+**Rule:** When the work queue is empty and there's nothing safe to ship without approval, say so clearly and recommend stopping the monitoring loop. Don't keep spinning. A single "nothing to do, stopping" message is worth more than 12 identical status reports.

@@ -9,19 +9,17 @@ Porter evolves from a tool humans drive → a system that drives itself. Agents 
 
 ## The Three Stages
 
-### Stage 1: Self-Monitoring (Foundation)
-Porter already has pieces of this. Formalize them:
-- **Health loop:** Porter watches its own `/api/admin/health`, restarts if degraded
-- **Test loop:** Playwright suite runs on every commit (pre-commit hook exists, extend to post-deploy)
-- **Anomaly detection:** Telemetry baselines (7-day rolling avg) flag latency/error spikes
-- **Log analysis:** MissionLog + AlertEngine already exist — add auto-triage (pattern match known errors → known fixes)
+### Stage 1: Self-Monitoring (Foundation) ✅ COMPLETE (v0.30.32-35)
+- ✅ **Health loop:** `_startup_self_check()` verifies 5 checks post-boot, System Health card in Runtime tab
+- ✅ **Anomaly detection:** `_detect_anomalies()` — 7-day rolling baselines, 2x deviation flagging (v0.30.34)
+- ✅ **Auto-triage:** `_error_self_heal_once()` — 10 error patterns with actionable remediation (v0.30.35)
+- ⬜ **Test loop:** Post-deploy Playwright trigger (deferred — pre-commit hook covers commits)
 
-### Stage 2: Self-Healing (Autonomy)
-Porter detects issues and fixes them without human intervention:
-- **Auto-rollback:** If health check fails after deploy, `git revert HEAD && restart`
-- **Circuit breaker on backends:** Auto-disable failing backends, re-enable after recovery probe passes
-- **Config drift detection:** Compare running state vs config file, auto-correct
-- **Memory hygiene:** Cortex consolidation already runs — add auto-archive for contradicted facts
+### Stage 2: Self-Healing (Autonomy) ✅ COMPLETE (v0.30.6, v0.30.27, v0.30.36)
+- ✅ **Auto-rollback:** Critical self-check failure → `git revert HEAD --no-edit` + restart, with loop prevention (v0.30.36)
+- ✅ **Circuit breaker on backends:** PEP/1 circuit breaker (v0.13.7) + dispatch circuit breaker (v0.30.6) + rate-limit tracking (v0.30.27)
+- ✅ **Config drift detection:** Hourly comparison of in-memory vs disk config, logs discrepancies (v0.30.36)
+- ✅ **Memory hygiene:** Cortex consolidation (4 rules, 6h cycle) + context hygiene (4 rules, 12h cycle)
 
 ### Stage 3: Self-Improvement (Intelligence)
 Porter improves its own code and capabilities:
@@ -59,8 +57,10 @@ Porter improves its own code and capabilities:
 
 ---
 
-## Next Steps (Phase 1 — Self-Monitoring)
-1. [ ] Formalize health loop as a workflow automation (not just background thread)
-2. [ ] Add post-deploy test trigger (after systemctl restart → run Playwright)
-3. [ ] Wire anomaly detection into AlertEngine (latency spike → mission log warning)
-4. [ ] Auto-triage: map common error patterns → fix scripts
+## Next Steps (Stage 3 — Self-Improvement)
+1. [x] Dispatch result scoring — quality signal 0-100 per response (v0.30.37)
+2. [x] Score-based routing — smart router overrides to higher-scoring backends after 10+ dispatches (v0.30.38)
+3. [x] Cortex-driven optimization — inject failure lessons from last 24h into dispatch context (v0.30.39)
+4. [x] Self-dispatch — Porter triggers agent work on anomalies/health failures (v0.30.40)
+5. [x] Pattern mining — 7-day dispatch analysis: per-agent scores, backend reliability, failure patterns, hourly trends (v0.30.41)
+6. [ ] Agent-driven development — BugBanisher → LogicLord → DeployDude pipeline (requires Moe's approval — allows agents to modify code)
