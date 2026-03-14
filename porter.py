@@ -13601,6 +13601,9 @@ input[type="number"].settings-input { min-width: 60px; }
 
     <!-- Agent Grid -->
     <div id="agents-grid-view">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <button class="btn btn-primary" onclick="_setAgentView('templates')" style="font-size:12px;padding:6px 14px">+ Create from Template</button>
+      </div>
       <div id="persona-org-chart" style="margin-bottom:16px">
         <div id="persona-cards-row" class="persona-cards-row">
           <div class="loading-indicator">Loading personas...</div>
