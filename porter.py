@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.52 — API route protection (admin split complete)"""
+"""Porter v0.31.53 — People tab accessible to all users"""
 
 
 import email
@@ -12438,7 +12438,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
     <span class="mnav-label">Sign Out</span>
   </button>
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.52</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.53</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -12956,7 +12956,7 @@ input[type="number"].settings-input { min-width: 60px; }
       <span class="module-title">People</span>
       <div style="flex:1"></div>
       <button class="btn btn-ghost" onclick="loadPeople()">&#8635; Refresh</button>
-      <button class="btn btn-ghost" onclick="_peopleAddUser()">+ Add User</button>
+      <button class="btn btn-ghost" onclick="_peopleAddUser()" id="people-add-btn">+ Add User</button>
     </div>
     <div class="module-intro">Team members and collaborators with access to this Porter instance.</div>
     <div class="people-stats" id="people-stats"></div>
@@ -13546,6 +13546,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.53', date:'2026-03-14', notes:["People tab: user list accessible to all authenticated users","Admin actions (add/edit/delete users) hidden for non-admin roles"] },
   { ver:'v0.31.52', date:'2026-03-14', notes:["API protection: all /api/admin/* endpoints now require admin role","Operators get 403 Forbidden on admin endpoints (was 200 OK)","Admin split complete: role system, nav visibility, admin shell, API protection"] },
   { ver:'v0.31.51', date:'2026-03-14', notes:["Porter Admin: separate shell at /admin/ for platform_admin users","Admin shell: Overview, Users, Health, Logs tabs with dedicated UI","Platform admin nav link appears for system-level users only","Admin shell is fully isolated from normal Porter app"] },
   { ver:'v0.31.50', date:'2026-03-14', notes:["Role system: platform_admin, admin (workspace), operator, viewer","4 default accounts: system (platform), admin (workspace), moe, jacob","Sign Out moved from Settings to main nav rail","Nav visibility: Logs tab now admin-only","Stopped legacy admin→slug username migration"] },
@@ -18270,7 +18271,7 @@ async function loadPeople() {
   grid.innerHTML = '<div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div>';
   try {
     var d = await api('/api/admin/users', {action:'list'});
-    if (!d || !d.ok) { grid.innerHTML = '<div class="people-empty">Could not load users</div>'; return; }
+    if (!d || !d.ok) { grid.innerHTML = '<div class="people-empty">Loading users...</div>'; return; }
     var users = d.users || [];
     var cfg = window.currentUser || {};
     var myUsername = cfg.username || '';
@@ -18304,8 +18305,10 @@ async function loadPeople() {
       if (joined) html += '<div class="people-card-joined">Joined ' + escHtml(joined) + '</div>';
       html += '</div>';
       html += '<div class="people-card-actions">';
-      html += '<button onclick="_peopleEditRole(\x27' + escHtml(u.username) + '\x27,\x27' + escHtml(u.role || 'operator') + '\x27)">Role</button>';
-      if (!isYou) html += '<button class="danger" onclick="_peopleDelete(\x27' + escHtml(u.username) + '\x27)">Remove</button>';
+      if (currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin')) {
+        html += '<button onclick="_peopleEditRole(\x27' + escHtml(u.username) + '\x27,\x27' + escHtml(u.role || 'operator') + '\x27)">Role</button>';
+        if (!isYou) html += '<button class="danger" onclick="_peopleDelete(\x27' + escHtml(u.username) + '\x27)">Remove</button>';
+      }
       html += '</div></div>';
     });
     grid.innerHTML = html;
@@ -30554,6 +30557,8 @@ async function loadMe() {
   var isAdmin = (role === 'admin' || role === 'platform_admin');
   var adminNav = document.getElementById('mnav-admin');
   if (adminNav) adminNav.style.display = isAdmin ? '' : 'none';
+  var addUserBtn = document.getElementById('people-add-btn');
+  if (addUserBtn) addUserBtn.style.display = isAdmin ? '' : 'none';
   // v0.31.51 — Platform admin link
   var platformLink = document.getElementById('mnav-platform');
   if (platformLink) platformLink.style.display = (role === 'platform_admin') ? '' : 'none';
@@ -38767,7 +38772,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   <button class="admin-nav-item" onclick="_adminTab('logs')">Logs</button>
   <div class="admin-nav-footer">
     <a href="/">&larr; Back to Porter</a><br>
-    <span style="font-size:10px;color:var(--text3)">v0.31.52</span>
+    <span style="font-size:10px;color:var(--text3)">v0.31.53</span>
   </div>
 </div>
 <div class="admin-main" id="admin-content">
@@ -39552,7 +39557,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.52"})
+            self.reply_json({"v": "0.31.53"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39714,7 +39719,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.52"
+                health["porter_version"] = "0.31.53"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -41687,7 +41692,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.52'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.53'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -45204,9 +45209,12 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": "Unknown action"}, 400)
 
         elif parsed.path == "/api/admin/users":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return
             data = self.read_json_body()
             action = data.get("action", "")
+            # list is open to all authenticated users; mutations need admin
+            if action != "list":
+                if not self.auth_check_cap("admin"): return
             # Mutations require user_manage capability; list is open to all authenticated users
             if action and action != "list":
                 if not self.auth_check_cap("user_manage"): return
@@ -47313,7 +47321,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.52 ready (localhost only)")
+    print(f"\n  Porter v0.31.53 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
