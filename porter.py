@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.46 — Data integrity (per-session projects + milestone fix)"""
+"""Porter v0.31.47 — UX fixes (tab aliases, action toasts, dynamic USER.md)"""
 
 
 import email
@@ -12409,7 +12409,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div style="flex:1"></div>
   <div class="sidebar-footer">
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.46</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.47</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -13520,6 +13520,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.47', date:'2026-03-14', notes:["Fix: kickoff 'settings' tab navigation now correctly routes to overview","Chat actions now show toast notifications on success/failure","Worker USER.md now uses operator display name and timezone from config"] },
   { ver:'v0.31.46', date:'2026-03-14', notes:["Per-session active project isolation — users no longer cross-contaminate active project state","Fix milestone field name: chat actions now use 'name' matching REST API and UI","Startup backfill migrates existing milestones from title→name"] },
   { ver:'v0.31.45', date:'2026-03-14', notes:["Security: project access control — mutations now check ownership and collaborator roles","Fix: note update/delete endpoints now require authentication","New helper: _check_project_access enforces role hierarchy (owner > editor > member > viewer)"] },
   { ver:'v0.31.39', date:'2026-03-12', notes:["People module: full CRM with user cards, stats, role management, add/remove users","Username migration: auto-renames 'admin' to display-name slug on startup","Backend: create user action in /api/admin/users"] },
@@ -17078,7 +17079,7 @@ function _renderProjTabs() {
 }
 
 function _projSwitchTab(t) {
-  if (t === 'memory' || t === 'state') t = 'overview';
+  if (t === 'memory' || t === 'state' || t === 'settings') t = 'overview';
   if (t === 'agents') t = 'workers';
   if (t === 'artifacts') t = 'deliverables';
   _projTab = t;
@@ -17808,7 +17809,15 @@ async function _projChatSend() {
         }
         if (data.actions_executed) {
         _projReloadList();
-        // v0.31.44 — Refresh current project detail after chat actions
+        // v0.31.47 — Toast feedback for chat actions (F8)
+        var _axr = data.actions_executed;
+        if (Array.isArray(_axr) && _axr.length > 0) {
+          var _axOk = _axr.filter(function(r) { return r.ok; }).length;
+          var _axFail = _axr.filter(function(r) { return !r.ok; }).length;
+          if (_axOk > 0) toast(_axOk + ' action' + (_axOk > 1 ? 's' : '') + ' completed', 'ok');
+          if (_axFail > 0) toast(_axFail + ' action' + (_axFail > 1 ? 's' : '') + ' failed', 'err');
+        }
+        // Refresh current project detail after chat actions
         if (window._projCurrent) {
           setTimeout(function() {
             loadProjects().then(function() {
@@ -35370,10 +35379,12 @@ def _persona_create(data):
 
     # 4. USER.md — operator preferences
     if not (pdir / "USER.md").exists():
+        _op_name = _config.get("display_name", "") or _config.get("username", "Operator")
+        _op_tz = _config.get("preferences", {}).get("timezone", "UTC")
         (pdir / "USER.md").write_text(
             f"# User Context for {name}\n\n"
-            "**Human:** Moe\n"
-            "**Timezone:** SGT (UTC+8)\n"
+            f"**Human:** {_op_name}\n"
+            f"**Timezone:** {_op_tz}\n"
             "**Style:** Direct, practical\n"
         )
 
@@ -35507,7 +35518,8 @@ def _persona_update_soul(persona_id, instruction):
     if "## Learned Traits" in existing:
         updated = existing + "\n" + entry
     else:
-        updated = existing + f"\n\n## Learned Traits\n_Shaped through conversation with Moe._\n\n{entry}"
+        _dn = _config.get("display_name", "") or _config.get("username", "the operator")
+        updated = existing + f"\n\n## Learned Traits\n_Shaped through conversation with {_dn}._\n\n{entry}"
     soul_path.write_text(updated + "\n")
     # Update soul_hash in DB
     import hashlib
@@ -39305,7 +39317,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.46"})
+            self.reply_json({"v": "0.31.47"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39467,7 +39479,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.46"
+                health["porter_version"] = "0.31.47"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -41440,7 +41452,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.46'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.47'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -47066,7 +47078,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.46 ready (localhost only)")
+    print(f"\n  Porter v0.31.47 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
