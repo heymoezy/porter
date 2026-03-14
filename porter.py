@@ -38766,7 +38766,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   <button class="admin-nav-item" onclick="_adminTab('logs')">Logs</button>
   <div class="admin-nav-footer">
     <a href="/">&larr; Back to Porter</a><br>
-    <span style="font-size:10px;color:var(--text3)">v""" + NEW_VER + """</span>
+    <span style="font-size:10px;color:var(--text3)">v0.31.51</span>
   </div>
 </div>
 <div class="admin-main" id="admin-content">
