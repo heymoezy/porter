@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.54 — Fix project isolation + First Mission cleanup"""
+"""Porter v0.31.55 — SaaS control system for platform_admin"""
 
 
 import email
@@ -12449,7 +12449,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
     <span class="mnav-label">Sign Out</span>
   </button>
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.54</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.55</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -13557,6 +13557,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.55', date:'2026-03-14', notes:["SaaS control system: full admin console for platform_admin role","Admin console: Overview, Users, Sessions, Projects, Health, Config, Logs tabs","Platform admin auto-redirects to /admin/ on login","Session management: view and revoke active sessions","Porter-style modal dialogs in admin console (no browser prompts)"] },
   { ver:'v0.31.54', date:'2026-03-14', notes:["Fix: project list now uses role-based filtering (was using legacy config username)","Fix: First Mission only created for operator/viewer roles, not admin/system","Startup cleanup removes orphan First Mission projects from admin/system accounts"] },
   { ver:'v0.31.53', date:'2026-03-14', notes:["People tab: user list accessible to all authenticated users","Admin actions (add/edit/delete users) hidden for non-admin roles"] },
   { ver:'v0.31.52', date:'2026-03-14', notes:["API protection: all /api/admin/* endpoints now require admin role","Operators get 403 Forbidden on admin endpoints (was 200 OK)","Admin split complete: role system, nav visibility, admin shell, API protection"] },
@@ -38737,184 +38738,8 @@ def _stream_chunk(run_id, backend, token):
     _emit_event("bridge:chunk", {"run_id": run_id, "backend": backend, "text": token})
 
 
-ADMIN_PAGE = """<!DOCTYPE html>
-<html lang="en"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Porter Admin</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0f1318;--surface:#181e28;--raised:#222a38;--border:#2e3848;--text:#e8ecf2;--text2:#a0aab8;--text3:#6b7688;--accent:#3b82f6;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}
-.admin-nav{width:200px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 0}
-.admin-nav-hdr{padding:12px 16px;font-size:13px;font-weight:700;color:var(--accent);letter-spacing:.5px;border-bottom:1px solid var(--border);margin-bottom:8px}
-.admin-nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;font-size:13px;color:var(--text2);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:background .15s}
-.admin-nav-item:hover{background:var(--raised);color:var(--text)}
-.admin-nav-item.active{background:var(--raised);color:var(--text);font-weight:600;border-right:2px solid var(--accent)}
-.admin-main{flex:1;overflow-y:auto;padding:24px 32px}
-.admin-title{font-size:18px;font-weight:700;margin-bottom:20px}
-.admin-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px}
-.admin-card-title{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:8px}
-.admin-stat{font-size:28px;font-weight:800}
-.admin-stat.green{color:var(--green)}
-.admin-stat.red{color:var(--red)}
-.admin-stat.blue{color:var(--accent)}
-.admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px}
-.admin-table{width:100%;border-collapse:collapse;font-size:12px}
-.admin-table th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.3px}
-.admin-table td{padding:8px 10px;border-bottom:1px solid var(--border)}
-.admin-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
-.admin-badge.green{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}
-.admin-badge.blue{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
-.admin-badge.yellow{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}
-.admin-badge.red{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}
-.admin-btn{padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--raised);color:var(--text);font-size:12px;cursor:pointer}
-.admin-btn:hover{background:var(--surface)}
-.admin-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.admin-nav-footer{margin-top:auto;padding:12px 16px;border-top:1px solid var(--border)}
-.admin-nav-footer a{color:var(--text3);font-size:11px;text-decoration:none}
-.admin-nav-footer a:hover{color:var(--text)}
-.admin-log-line{font-family:monospace;font-size:11px;padding:2px 0;color:var(--text2);white-space:pre-wrap;word-break:break-all}
-</style>
-</head><body>
-<div class="admin-nav">
-  <div class="admin-nav-hdr">PORTER ADMIN</div>
-  <button class="admin-nav-item active" onclick="_adminTab('overview')">Overview</button>
-  <button class="admin-nav-item" onclick="_adminTab('users')">Users</button>
-  <button class="admin-nav-item" onclick="_adminTab('health')">Health</button>
-  <button class="admin-nav-item" onclick="_adminTab('logs')">Logs</button>
-  <div class="admin-nav-footer">
-    <a href="/">&larr; Back to Porter</a><br>
-    <span style="font-size:10px;color:var(--text3)">v0.31.54</span>
-  </div>
-</div>
-<div class="admin-main" id="admin-content">
-  <div class="admin-title">Loading...</div>
-</div>
-<script>
-var _adminCurrentTab = 'overview';
-async function _api(url, body) {
-  var opts = body ? {method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)} : {credentials:'same-origin'};
-  var r = await fetch(url, opts);
-  return r.json();
-}
-function _adminTab(tab) {
-  _adminCurrentTab = tab;
-  document.querySelectorAll('.admin-nav-item').forEach(function(b){b.classList.remove('active')});
-  event.target.classList.add('active');
-  if (tab === 'overview') _loadOverview();
-  else if (tab === 'users') _loadUsers();
-  else if (tab === 'health') _loadHealth();
-  else if (tab === 'logs') _loadLogs();
-}
-async function _loadOverview() {
-  var el = document.getElementById('admin-content');
-  el.innerHTML = '<div class="admin-title">Overview</div><div>Loading...</div>';
-  try {
-    var [health, users] = await Promise.all([_api('/api/admin/health'), _api('/api/admin/users', {action:'list'})]);
-    var h = health || {};
-    var userList = (users && users.users) || [];
-    var html = '<div class="admin-title">Overview</div>';
-    html += '<div class="admin-grid">';
-    html += '<div class="admin-card"><div class="admin-card-title">Status</div><div class="admin-stat green">Online</div></div>';
-    html += '<div class="admin-card"><div class="admin-card-title">Users</div><div class="admin-stat blue">' + userList.length + '</div></div>';
-    html += '<div class="admin-card"><div class="admin-card-title">Version</div><div class="admin-stat" style="font-size:20px;color:var(--text)">' + (h.porter_version || '?') + '</div></div>';
-    html += '<div class="admin-card"><div class="admin-card-title">Uptime</div><div class="admin-stat" style="font-size:16px;color:var(--text)">' + _fmtUptime(h.uptime_seconds || 0) + '</div></div>';
-    html += '<div class="admin-card"><div class="admin-card-title">CPU</div><div class="admin-stat ' + ((h.cpu_percent||0) > 80 ? 'red' : 'green') + '">' + (h.cpu_percent||0).toFixed(0) + '%</div></div>';
-    html += '<div class="admin-card"><div class="admin-card-title">Memory</div><div class="admin-stat ' + ((h.memory_percent||0) > 80 ? 'red' : 'green') + '">' + (h.memory_percent||0).toFixed(0) + '%</div></div>';
-    html += '</div>';
-    html += '<div class="admin-card"><div class="admin-card-title">Services</div>';
-    var svcs = h.services || [];
-    if (svcs.length) {
-      html += '<table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th></tr>';
-      svcs.forEach(function(s) {
-        var badge = s.status === 'ok' ? 'green' : 'red';
-        html += '<tr><td>' + (s.name||'') + '</td><td><span class="admin-badge ' + badge + '">' + (s.status||'?') + '</span></td><td>' + (s.latency_ms ? s.latency_ms.toFixed(0) + 'ms' : '-') + '</td></tr>';
-      });
-      html += '</table>';
-    } else { html += '<div style="color:var(--text3);font-size:12px">No services detected</div>'; }
-    html += '</div>';
-    el.innerHTML = html;
-  } catch(e) { el.innerHTML = '<div class="admin-title">Overview</div><div style="color:var(--red)">Error loading: ' + e.message + '</div>'; }
-}
-function _fmtUptime(s) {
-  var d = Math.floor(s/86400), h = Math.floor((s%86400)/3600), m = Math.floor((s%3600)/60);
-  return (d ? d + 'd ' : '') + h + 'h ' + m + 'm';
-}
-async function _loadUsers() {
-  var el = document.getElementById('admin-content');
-  el.innerHTML = '<div class="admin-title">Users</div><div>Loading...</div>';
-  try {
-    var data = await _api('/api/admin/users', {action:'list'});
-    var users = (data && data.users) || [];
-    var html = '<div class="admin-title">Users (' + users.length + ')</div>';
-    html += '<table class="admin-table"><tr><th>Username</th><th>Display Name</th><th>Role</th><th>Email</th><th>Created</th></tr>';
-    users.forEach(function(u) {
-      var roleBadge = u.role === 'platform_admin' ? 'red' : u.role === 'admin' ? 'yellow' : 'blue';
-      var created = u.created_at ? new Date(u.created_at * 1000).toLocaleDateString() : '-';
-      html += '<tr><td style="font-weight:600">' + (u.username||'') + '</td><td>' + (u.display_name||'') + '</td><td><span class="admin-badge ' + roleBadge + '">' + (u.role||'') + '</span></td><td>' + (u.email||'-') + '</td><td>' + created + '</td></tr>';
-    });
-    html += '</table>';
-    html += '<div style="margin-top:16px"><button class="admin-btn primary" onclick="_adminCreateUser()">+ Create User</button></div>';
-    el.innerHTML = html;
-  } catch(e) { el.innerHTML = '<div class="admin-title">Users</div><div style="color:var(--red)">Error: ' + e.message + '</div>'; }
-}
-async function _adminCreateUser() {
-  var username = prompt('Username:');
-  if (!username) return;
-  var display_name = prompt('Display name:', username);
-  var role = prompt('Role (operator/admin/platform_admin):', 'operator');
-  if (!['operator','admin','platform_admin','viewer'].includes(role)) { alert('Invalid role'); return; }
-  var res = await _api('/api/admin/users', {action:'create',username:username,display_name:display_name,role:role});
-  if (res && res.ok) { alert('Created! Default password: porter'); _loadUsers(); }
-  else { alert('Error: ' + (res && res.error || 'unknown')); }
-}
-async function _loadHealth() {
-  var el = document.getElementById('admin-content');
-  el.innerHTML = '<div class="admin-title">Health</div><div>Loading...</div>';
-  try {
-    var h = await _api('/api/admin/health');
-    var html = '<div class="admin-title">System Health</div>';
-    html += '<div class="admin-grid">';
-    var keys = ['porter_pid','python_version','porter_version','porter_size_kb','porter_lines','cpu_percent','memory_percent','disk_percent','uptime_seconds'];
-    keys.forEach(function(k) {
-      if (h[k] !== undefined) {
-        var v = h[k];
-        if (k.endsWith('_percent')) v = v.toFixed(1) + '%';
-        if (k === 'porter_size_kb') v = v.toFixed(0) + ' KB';
-        if (k === 'uptime_seconds') v = _fmtUptime(v);
-        html += '<div class="admin-card"><div class="admin-card-title">' + k.replace(/_/g,' ') + '</div><div style="font-size:16px;font-weight:600">' + v + '</div></div>';
-      }
-    });
-    html += '</div>';
-    if (h.services) {
-      html += '<div class="admin-card"><div class="admin-card-title">Services</div><table class="admin-table"><tr><th>Name</th><th>Status</th><th>Latency</th><th>URL</th></tr>';
-      h.services.forEach(function(s) {
-        html += '<tr><td>' + (s.name||'') + '</td><td><span class="admin-badge ' + (s.status==='ok'?'green':'red') + '">' + (s.status||'') + '</span></td><td>' + (s.latency_ms?s.latency_ms.toFixed(0)+'ms':'-') + '</td><td style="font-size:10px;color:var(--text3)">' + (s.url||'') + '</td></tr>';
-      });
-      html += '</table></div>';
-    }
-    el.innerHTML = html;
-  } catch(e) { el.innerHTML = '<div class="admin-title">Health</div><div style="color:var(--red)">Error: ' + e.message + '</div>'; }
-}
-async function _loadLogs() {
-  var el = document.getElementById('admin-content');
-  el.innerHTML = '<div class="admin-title">Logs</div><div>Loading...</div>';
-  try {
-    var data = await _api('/api/admin/logs');
-    var lines = (data && data.lines) || [];
-    var html = '<div class="admin-title">System Logs (' + lines.length + ' lines)</div>';
-    html += '<div style="margin-bottom:12px"><button class="admin-btn" onclick="_loadLogs()">Refresh</button></div>';
-    html += '<div class="admin-card" style="max-height:600px;overflow-y:auto;font-family:monospace">';
-    lines.slice(-200).forEach(function(l) { html += '<div class="admin-log-line">' + _escHtml(l) + '</div>'; });
-    html += '</div>';
-    el.innerHTML = html;
-  } catch(e) { el.innerHTML = '<div class="admin-title">Logs</div><div style="color:var(--red)">Error: ' + e.message + '</div>'; }
-}
-function _escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-// Init
-_loadOverview();
-</script>
-</body></html>"""
+ADMIN_PAGE = '<!DOCTYPE html>\n<html lang="en"><head>\n<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n<title>Porter Admin Console</title>\n<style>\n*{margin:0;padding:0;box-sizing:border-box}\n:root{--bg:#0b0f14;--surface:#141a24;--raised:#1c2433;--border:#283040;--text:#e8ecf2;--text2:#a0aab8;--text3:#6b7688;--accent:#3b82f6;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--purple:#a855f7}\nbody{font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}\n.admin-nav{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}\n.admin-nav-brand{padding:16px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}\n.admin-nav-brand svg{color:var(--accent)}\n.admin-nav-brand-text{font-size:14px;font-weight:700;letter-spacing:.3px}\n.admin-nav-brand-sub{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px}\n.admin-nav-section{padding:12px 0 4px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;padding-left:18px}\n.admin-nav-item{display:flex;align-items:center;gap:10px;padding:9px 18px;font-size:13px;color:var(--text2);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .15s;border-left:2px solid transparent}\n.admin-nav-item:hover{background:var(--raised);color:var(--text)}\n.admin-nav-item.active{background:var(--raised);color:var(--text);font-weight:600;border-left-color:var(--accent)}\n.admin-nav-footer{margin-top:auto;padding:14px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}\n.admin-nav-footer a{color:var(--text3);font-size:11px;text-decoration:none;display:flex;align-items:center;gap:6px}\n.admin-nav-footer a:hover{color:var(--text)}\n.admin-main{flex:1;overflow-y:auto;padding:28px 36px}\n.admin-title{font-size:20px;font-weight:700;margin-bottom:4px}\n.admin-subtitle{font-size:12px;color:var(--text3);margin-bottom:24px}\n.admin-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:14px}\n.admin-card-title{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px}\n.admin-stat{font-size:32px;font-weight:800;line-height:1.1}\n.admin-stat-sub{font-size:11px;color:var(--text3);margin-top:4px}\n.admin-stat.green{color:var(--green)}.admin-stat.red{color:var(--red)}.admin-stat.blue{color:var(--accent)}.admin-stat.purple{color:var(--purple)}.admin-stat.yellow{color:var(--yellow)}\n.admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:20px}\n.admin-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}\n.admin-table{width:100%;border-collapse:collapse;font-size:12px}\n.admin-table th{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.4px}\n.admin-table td{padding:8px 12px;border-bottom:1px solid var(--border)}\n.admin-table tr:hover td{background:var(--raised)}\n.admin-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}\n.admin-badge.green{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}\n.admin-badge.blue{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n.admin-badge.yellow{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}\n.admin-badge.red{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}\n.admin-badge.purple{background:color-mix(in srgb,var(--purple) 15%,transparent);color:var(--purple)}\n.admin-btn{padding:7px 16px;border-radius:6px;border:1px solid var(--border);background:var(--raised);color:var(--text);font-size:12px;cursor:pointer;transition:all .15s}\n.admin-btn:hover{background:var(--surface);border-color:var(--text3)}\n.admin-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}\n.admin-btn.primary:hover{opacity:.9}\n.admin-btn.danger{border-color:var(--red);color:var(--red)}\n.admin-btn.danger:hover{background:color-mix(in srgb,var(--red) 10%,transparent)}\n.admin-btn.sm{padding:4px 10px;font-size:11px}\n.admin-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:16px}\n.admin-toolbar .spacer{flex:1}\n.admin-log-line{font-family:\'SF Mono\',Menlo,Monaco,monospace;font-size:11px;padding:3px 0;color:var(--text2);white-space:pre-wrap;word-break:break-all;line-height:1.5}\n.admin-log-line:hover{background:var(--raised)}\n.admin-kv{display:grid;grid-template-columns:160px 1fr;gap:0;font-size:12px}\n.admin-kv dt{padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border)}\n.admin-kv dd{padding:6px 10px;border-bottom:1px solid var(--border);word-break:break-all}\n.admin-empty{text-align:center;padding:40px;color:var(--text3);font-size:13px}\n.admin-modal-bg{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:center;justify-content:center}\n.admin-modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;min-width:360px;max-width:480px}\n.admin-modal h3{font-size:15px;margin-bottom:16px}\n.admin-modal label{display:block;font-size:11px;color:var(--text2);margin-bottom:4px;margin-top:12px}\n.admin-modal .admin-input,.admin-modal .admin-select{width:100%;margin-bottom:4px}\n.admin-modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}\n.admin-input{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n.admin-input:focus{border-color:var(--accent)}\n.admin-select{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}\n.pulse{animation:pulse 2s ease-in-out infinite}\n</style>\n</head><body>\n<div class="admin-nav">\n  <div class="admin-nav-brand">\n    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>\n    <div>\n      <div class="admin-nav-brand-text">Porter Admin</div>\n      <div class="admin-nav-brand-sub">SaaS Control</div>\n    </div>\n  </div>\n  <div class="admin-nav-section">Monitor</div>\n  <button class="admin-nav-item active" onclick="_at(\'overview\',this)">Overview</button>\n  <button class="admin-nav-item" onclick="_at(\'health\',this)">Health</button>\n  <div class="admin-nav-section">Manage</div>\n  <button class="admin-nav-item" onclick="_at(\'users\',this)">Users</button>\n  <button class="admin-nav-item" onclick="_at(\'sessions\',this)">Sessions</button>\n  <button class="admin-nav-item" onclick="_at(\'projects\',this)">Projects</button>\n  <div class="admin-nav-section">System</div>\n  <button class="admin-nav-item" onclick="_at(\'config\',this)">Config</button>\n  <button class="admin-nav-item" onclick="_at(\'logs\',this)">Logs</button>\n  <div class="admin-nav-footer">\n    <a href="/">&#8592; Porter Workspace</a>\n    <span style="font-size:10px;color:var(--text3)">v0.31.55</span>\n  </div>\n</div>\n<div class="admin-main" id="admin-content"><div class="admin-title">Loading...</div></div>\n<div id="admin-modal-root"></div>\n<script>\nvar _adminCurrentTab=\'overview\';\nasync function _api(u,b){var o=b?{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},credentials:\'same-origin\',body:JSON.stringify(b)}:{credentials:\'same-origin\'};try{var r=await fetch(u,o);if(!r.ok&&r.status===403)return{error:\'forbidden\'};return r.json();}catch(e){return{error:e.message};}}\nfunction _at(t,el){_adminCurrentTab=t;document.querySelectorAll(\'.admin-nav-item\').forEach(function(b){b.classList.remove(\'active\')});if(el)el.classList.add(\'active\');var fn={overview:_loadOverview,users:_loadUsers,sessions:_loadSessions,health:_loadHealth,projects:_loadProjects,config:_loadConfig,logs:_loadLogs};if(fn[t])fn[t]();}\nfunction _escH(s){var d=document.createElement(\'div\');d.textContent=s;return d.innerHTML;}\nfunction _fmtUp(s){var d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return(d?d+\'d \':\'\')+ h+\'h \'+m+\'m\';}\nfunction _fmtDate(ts){if(!ts)return\'-\';var d=new Date(typeof ts===\'number\'?ts*1000:ts);return d.toLocaleDateString(\'en-GB\',{day:\'2-digit\',month:\'short\',year:\'numeric\'})+\' \'+d.toLocaleTimeString(\'en-GB\',{hour:\'2-digit\',minute:\'2-digit\'});}\nfunction _fmtAgo(ts){if(!ts)return\'-\';var now=Date.now()/1000,diff=now-ts;if(diff<60)return\'just now\';if(diff<3600)return Math.floor(diff/60)+\'m ago\';if(diff<86400)return Math.floor(diff/3600)+\'h ago\';return Math.floor(diff/86400)+\'d ago\';}\nfunction _roleBadge(r){var c=r===\'platform_admin\'?\'purple\':r===\'admin\'?\'yellow\':r===\'operator\'?\'blue\':\'green\';return\'<span class="admin-badge \'+c+\'">\'+_escH(r)+\'</span>\';}\nfunction _modal(h){document.getElementById(\'admin-modal-root\').innerHTML=h;}\nfunction _closeModal(){document.getElementById(\'admin-modal-root\').innerHTML=\'\';}\n\nasync function _loadOverview(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div><div class="pulse" style="color:var(--text3)">Loading dashboard...</div>\';\n  try{\n    var [health,users,projects]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/users\',{action:\'list\'}),_api(\'/api/projects\')]);\n    var h=health||{},userList=(users&&users.users)||[],projList=(projects&&projects.projects)||[];\n    var activeProjects=projList.filter(function(p){return p.status===\'active\'}).length;\n    var adminCount=userList.filter(function(u){return u.role===\'admin\'||u.role===\'platform_admin\'}).length;\n    var opCount=userList.filter(function(u){return u.role===\'operator\'}).length;\n    var html=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div>\';\n    html+=\'<div class="admin-grid">\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System Status</div><div class="admin-stat green">Online</div><div class="admin-stat-sub">PID \'+(h.porter_pid||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Version</div><div class="admin-stat blue" style="font-size:22px">v\'+(h.porter_version||\'?\')+\'</div><div class="admin-stat-sub">Python \'+(h.python_version||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Uptime</div><div class="admin-stat" style="font-size:20px;color:var(--text)">\'+_fmtUp(h.uptime_seconds||0)+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div><div class="admin-stat blue">\'+userList.length+\'</div><div class="admin-stat-sub">\'+adminCount+\' admin, \'+opCount+\' operators</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Projects</div><div class="admin-stat purple">\'+projList.length+\'</div><div class="admin-stat-sub">\'+activeProjects+\' active</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-grid-3">\';\n    var cpuC=(h.cpu_percent||0)>80?\'red\':(h.cpu_percent||0)>50?\'yellow\':\'green\';\n    var memC=(h.memory_percent||0)>80?\'red\':(h.memory_percent||0)>50?\'yellow\':\'green\';\n    var diskC=(h.disk_percent||0)>90?\'red\':(h.disk_percent||0)>70?\'yellow\':\'green\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">CPU</div><div class="admin-stat \'+cpuC+\'">\'+(h.cpu_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Memory</div><div class="admin-stat \'+memC+\'">\'+(h.memory_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Disk</div><div class="admin-stat \'+diskC+\'">\'+(h.disk_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Services</div>\';\n    var svcs=h.services||[];\n    if(svcs.length){\n      html+=\'<table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>URL</th></tr>\';\n      svcs.forEach(function(s){var b=s.status===\'ok\'?\'green\':\'red\';html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+b+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table>\';\n    }else{html+=\'<div class="admin-empty">No services detected</div>\';}\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div>\';\n    html+=\'<table class="admin-table"><tr><th>User</th><th>Role</th><th>Created</th></tr>\';\n    userList.slice(0,10).forEach(function(u){html+=\'<tr><td style="font-weight:600">\'+_escH(u.display_name||u.username)+\' <span style="color:var(--text3);font-weight:400">@\'+_escH(u.username)+\'</span></td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td></tr>\';});\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Overview</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadUsers(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">User Management</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/users\',{action:\'list\'});\n    var users=(data&&data.users)||[];\n    var html=\'<div class="admin-title">User Management</div><div class="admin-subtitle">\'+users.length+\' registered users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn primary" onclick="_showCreateUser()">+ Create User</button><div class="spacer"></div><button class="admin-btn" onclick="_loadUsers()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Display Name</th><th>Role</th><th>Email</th><th>Created</th><th style="width:140px">Actions</th></tr>\';\n    users.forEach(function(u){\n      html+=\'<tr><td style="font-weight:600">\'+_escH(u.username)+\'</td><td>\'+_escH(u.display_name||\'\')+\'</td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_escH(u.email||\'-\')+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td>\';\n      html+=\'<td><div style="display:flex;gap:4px"><button class="admin-btn sm" onclick="_showEditRole(\\\'\'+_escH(u.username)+\'\\\',\\\'\'+_escH(u.role)+\'\\\')">Role</button>\';\n      if(u.username!==\'system\')html+=\'<button class="admin-btn sm danger" onclick="_deleteUser(\\\'\'+_escH(u.username)+\'\\\')">Delete</button>\';\n      html+=\'</div></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Users</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nfunction _showCreateUser(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Create User</h3><label>Username</label><input class="admin-input" id="_cu_user" placeholder="lowercase, no spaces"><label>Display Name</label><input class="admin-input" id="_cu_name" placeholder="Full display name"><label>Role</label><select class="admin-select" id="_cu_role"><option value="operator">Operator</option><option value="admin">Admin</option><option value="viewer">Viewer</option><option value="platform_admin">Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doCreateUser()">Create</button></div></div></div>\');\n  document.getElementById(\'_cu_user\').focus();\n}\nasync function _doCreateUser(){\n  var u=document.getElementById(\'_cu_user\').value.trim(),n=document.getElementById(\'_cu_name\').value.trim()||u,r=document.getElementById(\'_cu_role\').value;\n  if(!u)return;\n  var res=await _api(\'/api/admin/users\',{action:\'create\',username:u,display_name:n,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nfunction _showEditRole(username,currentRole){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Change Role &#8212; \'+_escH(username)+\'</h3><label>New Role</label><select class="admin-select" id="_er_role"><option value="operator"\'+(currentRole===\'operator\'?\' selected\':\'\')+\'>Operator</option><option value="admin"\'+(currentRole===\'admin\'?\' selected\':\'\')+\'>Admin</option><option value="viewer"\'+(currentRole===\'viewer\'?\' selected\':\'\')+\'>Viewer</option><option value="platform_admin"\'+(currentRole===\'platform_admin\'?\' selected\':\'\')+\'>Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doEditRole(\\\'\'+_escH(username)+\'\\\')">Save</button></div></div></div>\');\n}\nasync function _doEditRole(username){\n  var r=document.getElementById(\'_er_role\').value;\n  var res=await _api(\'/api/admin/users\',{action:\'update_role\',username:username,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _deleteUser(username){if(!confirm(\'Delete user \'+username+\'? This cannot be undone.\'))return;var res=await _api(\'/api/admin/users\',{action:\'delete\',username:username});if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n\nasync function _loadSessions(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Active Sessions</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/sessions\');\n    var sessions=(data&&data.sessions)||[];\n    var html=\'<div class="admin-title">Active Sessions</div><div class="admin-subtitle">\'+sessions.length+\' active sessions</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadSessions()">Refresh</button></div>\';\n    if(!sessions.length){html+=\'<div class="admin-empty">No active sessions</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Role</th><th>IP</th><th>User Agent</th><th>Created</th><th>Last Active</th><th>Actions</th></tr>\';\n    sessions.forEach(function(s){\n      var ua=(s.user_agent||\'\').substring(0,40);\n      html+=\'<tr><td style="font-weight:600">\'+_escH(s.username||\'?\')+\'</td><td>\'+_roleBadge(s.role||\'operator\')+\'</td><td style="font-family:monospace;font-size:11px">\'+_escH(s.ip||\'-\')+\'</td><td style="font-size:10px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis">\'+_escH(ua)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.created_at)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.last_active)+\'</td><td><button class="admin-btn sm danger" onclick="_revokeSession(\\\'\'+_escH(s.token_prefix||\'\')+\'\\\')">Revoke</button></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Sessions</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _revokeSession(tp){if(!confirm(\'Revoke this session?\'))return;await _api(\'/api/admin/sessions\',{action:\'revoke\',token_prefix:tp});_loadSessions();}\n\nasync function _loadProjects(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">All Projects</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/projects\');\n    var projects=(data&&data.projects)||[];\n    var html=\'<div class="admin-title">All Projects</div><div class="admin-subtitle">\'+projects.length+\' total projects across all users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadProjects()">Refresh</button></div>\';\n    if(!projects.length){html+=\'<div class="admin-empty">No projects</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>Project</th><th>Owner</th><th>Type</th><th>Status</th><th>Created</th></tr>\';\n    projects.forEach(function(p){\n      var sb=p.status===\'active\'?\'green\':p.status===\'completed\'?\'blue\':\'yellow\';\n      html+=\'<tr><td style="font-weight:600">\'+_escH(p.name||\'Untitled\')+\'</td><td>\'+_escH(p.owner||\'-\')+\'</td><td style="color:var(--text3)">\'+_escH(p.type||\'custom\')+\'</td><td><span class="admin-badge \'+sb+\'">\'+_escH(p.status||\'active\')+\'</span></td><td style="color:var(--text3)">\'+_fmtDate(p.created_at)+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Projects</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadHealth(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Health</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var h=await _api(\'/api/admin/health\');\n    var html=\'<div class="admin-title">System Health</div><div class="admin-subtitle">Detailed system diagnostics</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadHealth()">Refresh</button></div>\';\n    html+=\'<div class="admin-grid">\';\n    var metrics=[\n      {k:\'cpu_percent\',l:\'CPU Usage\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'memory_percent\',l:\'Memory\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'disk_percent\',l:\'Disk\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:70,crit:90},\n      {k:\'uptime_seconds\',l:\'Uptime\',fmt:_fmtUp},\n      {k:\'porter_pid\',l:\'Process ID\',fmt:function(v){return v}},\n      {k:\'porter_size_kb\',l:\'Binary Size\',fmt:function(v){return(v/1024).toFixed(1)+\' MB\'}},\n      {k:\'porter_lines\',l:\'Lines of Code\',fmt:function(v){return v.toLocaleString()}},\n      {k:\'python_version\',l:\'Python\',fmt:function(v){return v}},\n      {k:\'porter_version\',l:\'Porter Version\',fmt:function(v){return\'v\'+v}}\n    ];\n    metrics.forEach(function(m){\n      if(h[m.k]===undefined)return;var v=h[m.k];\n      var color=\'var(--text)\';\n      if(m.crit&&v>=m.crit)color=\'var(--red)\';else if(m.warn&&v>=m.warn)color=\'var(--yellow)\';else if(m.crit)color=\'var(--green)\';\n      html+=\'<div class="admin-card"><div class="admin-card-title">\'+m.l+\'</div><div style="font-size:20px;font-weight:700;color:\'+color+\'">\'+m.fmt(v)+\'</div></div>\';\n    });\n    html+=\'</div>\';\n    if(h.services&&h.services.length){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Service Probes</div><table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>Endpoint</th></tr>\';\n      h.services.forEach(function(s){html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+(s.status===\'ok\'?\'green\':\'red\')+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Health</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadConfig(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Configuration</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var [health,hyg]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/hygiene\')]);\n    var html=\'<div class="admin-title">System Configuration</div><div class="admin-subtitle">Read-only view of current system settings</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadConfig()">Refresh</button></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System</div><dl class="admin-kv">\';\n    var sk=[[\'Porter Version\',\'v\'+(health.porter_version||\'?\')],[\'Python\',health.python_version||\'?\'],[\'PID\',health.porter_pid||\'?\'],[\'Binary Size\',(health.porter_size_kb||0).toFixed(0)+\' KB\'],[\'Lines\',health.porter_lines||\'?\']];\n    sk.forEach(function(kv){html+=\'<dt>\'+kv[0]+\'</dt><dd>\'+_escH(String(kv[1]))+\'</dd>\';});\n    html+=\'</dl></div>\';\n    if(hyg&&!hyg.error){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Hygiene System</div><dl class="admin-kv">\';\n      Object.keys(hyg).filter(function(k){return typeof hyg[k]!==\'object\'}).forEach(function(k){html+=\'<dt>\'+_escH(k)+\'</dt><dd>\'+_escH(String(hyg[k]))+\'</dd>\';});\n      html+=\'</dl></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Config</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadLogs(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Logs</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/logs\');\n    var lines=(data&&data.lines)||[];\n    var html=\'<div class="admin-title">System Logs</div><div class="admin-subtitle">\'+lines.length+\' log lines</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadLogs()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="max-height:calc(100vh - 180px);overflow-y:auto;font-family:monospace;padding:12px">\';\n    lines.slice(-300).forEach(function(l){html+=\'<div class="admin-log-line">\'+_escH(l)+\'</div>\';});\n    html+=\'</div>\';\n    el.innerHTML=html;\n    var lb=el.querySelector(\'.admin-card\');if(lb)lb.scrollTop=lb.scrollHeight;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Logs</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\n_loadOverview();\n</script>\n</body></html>'
+
 
 class Handler(BaseHTTPRequestHandler):
 
@@ -39119,7 +38944,15 @@ class Handler(BaseHTTPRequestHandler):
             token = self.get_session_token()
             ip = self.client_address[0]
             ua = self.headers.get("User-Agent", "")
-            if token and get_session(token, ip=ip, ua=ua):
+            _root_sess = get_session(token, ip=ip, ua=ua) if token else None
+            if _root_sess:
+                # Platform admin always goes to admin console
+                if _root_sess.get("role") == "platform_admin":
+                    self.send_response(302)
+                    self.send_header("Location", "/admin/")
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    return
                 self.reply_html(PAGE)
             else:
                 self.reply_html(LANDING_PAGE)
@@ -39569,7 +39402,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.54"})
+            self.reply_json({"v": "0.31.55"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39731,7 +39564,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.54"
+                health["porter_version"] = "0.31.55"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -40540,6 +40373,31 @@ class Handler(BaseHTTPRequestHandler):
                 board[bucket].append(item)
             self.reply_json({"ok": True, "board": board})
 
+
+        elif parsed.path == "/api/admin/sessions":
+            if not self.auth_check_cap("admin"): return
+            try:
+                _sc = _db_conn()
+                _srows = _sc.execute(
+                    "SELECT token, username, role, ip, user_agent, created_at, last_active "
+                    "FROM sessions WHERE expires_at > ? ORDER BY last_active DESC",
+                    (time.time(),)
+                ).fetchall()
+                _sc.close()
+                _sess_list = []
+                for _sr in _srows:
+                    _sess_list.append({
+                        "token_prefix": _sr[0][:12],
+                        "username": _sr[1],
+                        "role": _sr[2] or "operator",
+                        "ip": _sr[3] or "",
+                        "user_agent": _sr[4] or "",
+                        "created_at": _sr[5],
+                        "last_active": _sr[6],
+                    })
+                self.reply_json({"sessions": _sess_list})
+            except Exception as _se:
+                self.reply_json({"sessions": [], "error": str(_se)})
 
         elif parsed.path == "/api/admin/logs":
             if not self.auth_check_cap("admin"): return
@@ -41703,7 +41561,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.54'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.55'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -45569,6 +45427,27 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             save_config(_config)
             self.reply_json({"ok": True, "updated": updated})
 
+        elif parsed.path == "/api/admin/sessions":
+            if not self.auth_check_cap("admin"): return
+            data = self.read_json_body()
+            if not data: return
+            action = data.get("action", "")
+            if action == "revoke":
+                prefix = data.get("token_prefix", "")
+                if prefix and len(prefix) >= 8:
+                    try:
+                        _rc = _db_conn()
+                        _rc.execute("DELETE FROM sessions WHERE token LIKE ?", (prefix + "%",))
+                        _rc.commit()
+                        _rc.close()
+                        self.reply_json({"ok": True})
+                    except Exception as _re:
+                        self.reply_json({"ok": False, "error": str(_re)})
+                else:
+                    self.reply_json({"ok": False, "error": "invalid token_prefix"})
+            else:
+                self.reply_json({"ok": False, "error": "unknown action"})
+
         elif parsed.path == "/api/admin/hygiene/run":
             if not self.auth_check_cap("admin"): return
             try:
@@ -47335,7 +47214,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.54 ready (localhost only)")
+    print(f"\n  Porter v0.31.55 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
