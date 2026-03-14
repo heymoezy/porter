@@ -26705,7 +26705,7 @@ async function loadAllFiles(path) {
           : '<a href="#" onclick="loadAllFiles(\x27' + escHtml(b.path) + '\x27);return false" style="color:var(--accent);text-decoration:none">' + escHtml(b.name) + '</a>');
       }).join('');
     }
-    if (!items.length) { el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text3);font-size:13px">Empty folder</div>'; return; }
+    if (!items.length) { el.innerHTML = '<div style="padding:48px 32px;text-align:center;color:var(--text3)"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;display:block;opacity:.4"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg><div style="font-size:13px;margin-bottom:4px">Drop files here or use Upload</div><div style="font-size:11px">You can also create folders with + Folder</div></div>'; return; }
     el.innerHTML = items.map(function(f) {
       var isDir = f.type === 'folder';
       var ext = isDir ? '' : (f.name || '').split('.').pop().toLowerCase();
@@ -26731,7 +26731,12 @@ function _fmFmtBytes(b) { if(!b)return ''; if(b<1024)return b+' B'; if(b<1048576
 async function _fmNewFolder() {
   var name = await porterPrompt('New Folder', 'Folder name:', '');
   if (!name) return;
-  var p = _fmCurrentPath === '/' ? '' : _fmCurrentPath;
+  var p = _fmCurrentPath;
+  // At root, create in My Files
+  if (p === '/') {
+    var me = window.currentUser;
+    p = '_files/' + (me ? me.username : 'default');
+  }
   var res = await api('/api/files/mkdir', {path: p, name: name});
   if (res && res.ok) { toast('Folder created', 'ok'); loadAllFiles(); }
   else toast((res && res.error) || 'Failed', 'err');
@@ -26739,8 +26744,11 @@ async function _fmNewFolder() {
 
 async function _fmUploadFiles(files) {
   if (!files || !files.length) return;
-  var p = _fmCurrentPath === '/' ? '' : _fmCurrentPath;
-  if (!p) { toast('Navigate into a project first', 'err'); return; }
+  var p = _fmCurrentPath;
+  if (p === '/') {
+    var me = window.currentUser;
+    p = '_files/' + (me ? me.username : 'default');
+  }
   for (var i = 0; i < files.length; i++) {
     try {
       var res = await fetch('/api/files/upload?path=' + encodeURIComponent(p) + '&filename=' + encodeURIComponent(files[i].name), {method:'POST', body:files[i], credentials:'same-origin'});
@@ -43343,16 +43351,22 @@ class Handler(BaseHTTPRequestHandler):
             _fl_user = _fl_session.get("username", "") if _fl_session else ""
             _fl_role = _fl_session.get("role", "operator") if _fl_session else "operator"
             base = AGENT_WORKSPACE_DIR / "projects"
+            # Ensure user files directory exists
+            _user_files = base / "_files" / _fl_user
+            _user_files.mkdir(parents=True, exist_ok=True)
             if not rel_path or rel_path == "/":
+                items = []
+                # User's personal files folder
+                items.append({"name": "My Files", "path": "_files/" + _fl_user, "type": "folder", "modified": _user_files.stat().st_mtime})
+                # Project folders
                 all_projects = _config.get("projects", [])
                 if _fl_role != "platform_admin":
                     all_projects = [p for p in all_projects if p.get("owner") == _fl_user]
-                items = []
                 for p in all_projects:
                     pid = p.get("id", "")
                     pdir = base / pid
                     items.append({"name": p.get("name", pid), "path": pid, "type": "folder", "project_id": pid, "modified": pdir.stat().st_mtime if pdir.exists() else 0})
-                self.reply_json({"ok": True, "path": "/", "items": items, "breadcrumbs": [{"name": "Projects", "path": "/"}]})
+                self.reply_json({"ok": True, "path": "/", "items": items, "breadcrumbs": [{"name": "Files", "path": "/"}]})
             else:
                 target = base / rel_path
                 if not target.exists() or not str(target.resolve()).startswith(str(base.resolve())):
@@ -43366,13 +43380,18 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as e:
                     self.reply_json({"ok": False, "error": str(e)}, 500); return
                 parts = rel_path.strip("/").split("/")
-                crumbs = [{"name": "Projects", "path": "/"}]
+                crumbs = [{"name": "Files", "path": "/"}]
                 if parts:
                     pid = parts[0]
-                    proj = next((p for p in _config.get("projects", []) if p.get("id") == pid), None)
-                    crumbs.append({"name": proj.get("name", pid) if proj else pid, "path": pid})
-                    for i in range(1, len(parts)):
-                        crumbs.append({"name": parts[i], "path": "/".join(parts[:i+1])})
+                    if pid == "_files":
+                        crumbs.append({"name": "My Files", "path": "_files/" + (parts[1] if len(parts) > 1 else "")})
+                        for i in range(2, len(parts)):
+                            crumbs.append({"name": parts[i], "path": "/".join(parts[:i+1])})
+                    else:
+                        proj = next((p for p in _config.get("projects", []) if p.get("id") == pid), None)
+                        crumbs.append({"name": proj.get("name", pid) if proj else pid, "path": pid})
+                        for i in range(1, len(parts)):
+                            crumbs.append({"name": parts[i], "path": "/".join(parts[:i+1])})
                 self.reply_json({"ok": True, "path": rel_path, "items": items, "breadcrumbs": crumbs})
 
         elif parsed.path == "/api/admin/usage":
