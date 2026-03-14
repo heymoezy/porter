@@ -26715,8 +26715,8 @@ async function loadAllFiles(path) {
         : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="' + iconColor + '" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
       var size = (!isDir && f.size) ? _fmFmtBytes(f.size) : '';
       var date = f.modified ? new Date(f.modified * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',year:'numeric'}) : '';
-      var onclick = isDir ? 'loadAllFiles(\x27' + escHtml(f.path) + '\x27)' : '';
-      return '<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--border);cursor:' + (isDir ? 'pointer' : 'default') + '" onclick="' + onclick + '" oncontextmenu="_fmCtx(event,\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)">'
+      var onclick = isDir ? 'loadAllFiles(\x27' + escHtml(f.path) + '\x27)' : '_fmPreview(\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--border);cursor:pointer" onclick="' + onclick + '" oncontextmenu="_fmCtx(event,\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)">'
         + icon
         + '<span style="flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(f.name) + '</span>'
         + '<span style="font-size:11px;color:var(--text3);min-width:60px;text-align:right">' + size + '</span>'
@@ -26724,6 +26724,42 @@ async function loadAllFiles(path) {
         + '</div>';
     }).join('');
   } catch(e) { el.innerHTML = '<div style="padding:24px;color:var(--err,#ef4444)">Error: ' + escHtml(e.message) + '</div>'; }
+}
+
+function _fmPreview(path, name) {
+  var ext = (name || '').split('.').pop().toLowerCase();
+  var url = '/api/files/content?path=' + encodeURIComponent(path);
+  var body = document.getElementById('previewBody');
+  var fname = document.getElementById('previewFilename');
+  var panel = document.getElementById('previewPanel');
+  var btnEdit = document.getElementById('btnEdit');
+  var btnSave = document.getElementById('btnSave');
+  if (!body || !panel) return;
+  if (fname) fname.textContent = name;
+  if (btnEdit) btnEdit.style.display = 'none';
+  if (btnSave) btnSave.style.display = 'none';
+  panel.classList.add('open');
+  document.getElementById('mainEl').classList.add('preview-open');
+  var imgExts = ['png','jpg','jpeg','gif','svg','webp'];
+  var textExts = ['py','js','ts','sh','json','yaml','yml','toml','md','txt','log','csv','html','css','xml','ini','conf','env','bash','rs','go','java','c','cpp','h'];
+  if (imgExts.indexOf(ext) >= 0) {
+    body.innerHTML = '<div class="preview-img"><img src="' + url + '" alt="' + escHtml(name) + '" style="max-width:100%;max-height:calc(100vh - 80px)"></div>';
+  } else if (ext === 'pdf') {
+    body.innerHTML = '<iframe src="' + url + '" style="width:100%;height:calc(100vh - 57px);border:none"></iframe>';
+  } else if (textExts.indexOf(ext) >= 0) {
+    body.innerHTML = '<div class="loading-indicator" style="padding:40px 16px;justify-content:center">Loading...</div>';
+    fetch(url, {credentials:'same-origin'}).then(function(r) { return r.text(); }).then(function(text) {
+      body.innerHTML = '<pre class="preview-pre" style="padding:16px;font-size:12px;white-space:pre-wrap;overflow:auto;max-height:calc(100vh - 80px)">' + escHtml(text) + '</pre>';
+    }).catch(function(e) {
+      body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text3)">Failed to load</div>';
+    });
+  } else {
+    body.innerHTML = '<div style="padding:48px;text-align:center;color:var(--text3)">'
+      + '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity=".3" style="margin-bottom:12px"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+      + '<p style="font-size:13px">No preview available</p>'
+      + '<a href="' + url + '" download="' + escHtml(name) + '" class="btn btn-ghost" style="margin-top:8px;font-size:12px">Download</a>'
+      + '</div>';
+  }
 }
 
 function _fmFmtBytes(b) { if(!b)return ''; if(b<1024)return b+' B'; if(b<1048576)return (b/1024).toFixed(1)+' KB'; return (b/1048576).toFixed(1)+' MB'; }
@@ -43393,6 +43429,34 @@ class Handler(BaseHTTPRequestHandler):
                         for i in range(1, len(parts)):
                             crumbs.append({"name": parts[i], "path": "/".join(parts[:i+1])})
                 self.reply_json({"ok": True, "path": rel_path, "items": items, "breadcrumbs": crumbs})
+
+        elif parsed.path == "/api/files/content":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            rel_path = qs.get("path", [""])[0].strip("/")
+            if not rel_path:
+                self.reply_json({"ok": False, "error": "Path required"}, 400); return
+            base = AGENT_WORKSPACE_DIR / "projects"
+            target = base / rel_path
+            if not target.exists() or not target.is_file() or not str(target.resolve()).startswith(str(base.resolve())):
+                self.reply_json({"ok": False, "error": "Not found"}, 404); return
+            ext = target.suffix.lower().lstrip(".")
+            mime_map = {"png":"image/png","jpg":"image/jpeg","jpeg":"image/jpeg","gif":"image/gif","svg":"image/svg+xml","webp":"image/webp","pdf":"application/pdf",
+                        "json":"application/json","html":"text/html","css":"text/css","js":"application/javascript"}
+            mime = mime_map.get(ext, "application/octet-stream")
+            text_exts = {"py","js","ts","sh","json","yaml","yml","toml","md","txt","log","csv","html","css","xml","ini","conf","rs","go","java","c","cpp","h","rb","php","env","bash"}
+            if ext in text_exts:
+                mime = "text/plain"
+            try:
+                data = target.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", mime)
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Content-Disposition", f"inline; filename=\"{target.name}\"")
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
 
         elif parsed.path == "/api/admin/usage":
             if not self.auth_check_cap("admin"): return
