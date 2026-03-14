@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.51 — Admin shell at /admin/ for platform_admin"""
+"""Porter v0.31.52 — API route protection (admin split complete)"""
 
 
 import email
@@ -12438,7 +12438,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
     <span class="mnav-label">Sign Out</span>
   </button>
-  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.51</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.5px">PORTER v0.31.52</div>
 
 
     <!-- tour button moved to ? keyboard help overlay -->
@@ -13546,6 +13546,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.52', date:'2026-03-14', notes:["API protection: all /api/admin/* endpoints now require admin role","Operators get 403 Forbidden on admin endpoints (was 200 OK)","Admin split complete: role system, nav visibility, admin shell, API protection"] },
   { ver:'v0.31.51', date:'2026-03-14', notes:["Porter Admin: separate shell at /admin/ for platform_admin users","Admin shell: Overview, Users, Health, Logs tabs with dedicated UI","Platform admin nav link appears for system-level users only","Admin shell is fully isolated from normal Porter app"] },
   { ver:'v0.31.50', date:'2026-03-14', notes:["Role system: platform_admin, admin (workspace), operator, viewer","4 default accounts: system (platform), admin (workspace), moe, jacob","Sign Out moved from Settings to main nav rail","Nav visibility: Logs tab now admin-only","Stopped legacy admin→slug username migration"] },
   { ver:'v0.31.49', date:'2026-03-14', notes:["Global / popup chat now persists to Porter chat history","Global chat textarea auto-grows with message","Porter State page now shows all projects (was 0 for orchestrators)","'Create Project With Porter' → 'Start A New Project'","Removed redundant Create Worker/Refine Project buttons from chat toolbar","Workers tab: add buttons hidden when empty state already shows CTAs"] },
@@ -38766,7 +38767,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   <button class="admin-nav-item" onclick="_adminTab('logs')">Logs</button>
   <div class="admin-nav-footer">
     <a href="/">&larr; Back to Porter</a><br>
-    <span style="font-size:10px;color:var(--text3)">v0.31.51</span>
+    <span style="font-size:10px;color:var(--text3)">v0.31.52</span>
   </div>
 </div>
 <div class="admin-main" id="admin-content">
@@ -39475,7 +39476,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
         elif parsed.path == "/api/admin/delegations":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("admin"): return
             with _delegation_lock:
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/self-check":
@@ -39551,7 +39552,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.51"})
+            self.reply_json({"v": "0.31.52"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -39628,7 +39629,7 @@ class Handler(BaseHTTPRequestHandler):
                 "changelog_current": changelog_current,
             })
         elif parsed.path == "/api/admin/health":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("admin"): return
             import platform
             health = {}
 
@@ -39713,7 +39714,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.51"
+                health["porter_version"] = "0.31.52"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -39793,7 +39794,7 @@ class Handler(BaseHTTPRequestHandler):
         # ── Mission Control Log API ──────────────────────────────────────
 
         elif parsed.path == "/api/admin/hygiene":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("admin"): return
             # Per-agent context sizes
             agent_sizes = {}
             try:
@@ -39822,7 +39823,7 @@ class Handler(BaseHTTPRequestHandler):
             })
 
         elif parsed.path == "/api/admin/dispatch-log":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("admin"): return
             limit = min(int(qs.get("limit", ["20"])[0]), 100)
             backend_filter = qs.get("backend", [""])[0]
             try:
@@ -40524,7 +40525,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
         elif parsed.path == "/api/admin/logs":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("admin"): return
             qs = parse_qs(parsed.query)
             n = min(int(qs.get("lines", ["100"])[0]), 1000)
             lines = []
@@ -41686,7 +41687,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.51'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.52'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -45203,7 +45204,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": "Unknown action"}, 400)
 
         elif parsed.path == "/api/admin/users":
-            if not self.auth_check(): return
+            if not self.auth_check_cap("admin"): return
             data = self.read_json_body()
             action = data.get("action", "")
             # Mutations require user_manage capability; list is open to all authenticated users
@@ -45547,7 +45548,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             self.reply_json({"ok": True, "updated": updated})
 
         elif parsed.path == "/api/admin/hygiene/run":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("admin"): return
             try:
                 results = _hygiene_run()
                 self.reply_json({"ok": True, "results": results})
@@ -45555,7 +45556,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": str(e)})
 
         elif parsed.path == "/api/admin/hygiene/config":
-            if not self.auth_check(redirect=False): return
+            if not self.auth_check_cap("admin"): return
             data = self.read_json_body()
             if "preferences" not in _config:
                 _config["preferences"] = {}
@@ -47312,7 +47313,7 @@ if __name__ == "__main__":
     tunnel_hint = (f"ssh -L {PORT}:localhost:{PORT} user@{host_hint}"
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
-    print(f"\n  Porter v0.31.51 ready (localhost only)")
+    print(f"\n  Porter v0.31.52 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
