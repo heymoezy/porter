@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.83 — Files: full file manager with folders, upload, breadcrumbs"""
+"""Porter v0.31.84 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
 
 
 import email
@@ -705,6 +705,17 @@ def _db_init():
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_project_artifacts_project ON project_artifacts(project_id, created_at DESC)")
+    # v0.31.84 — File analysis columns
+    for _col_sql in [
+        "ALTER TABLE project_artifacts ADD COLUMN summary TEXT DEFAULT ''",
+        "ALTER TABLE project_artifacts ADD COLUMN tags TEXT DEFAULT '[]'",
+        "ALTER TABLE project_artifacts ADD COLUMN word_count INTEGER DEFAULT 0",
+        "ALTER TABLE project_artifacts ADD COLUMN lang TEXT DEFAULT ''",
+    ]:
+        try:
+            conn.execute(_col_sql)
+        except Exception:
+            pass  # Column already exists
     for _sql in [
         "ALTER TABLE personas ADD COLUMN is_system INTEGER DEFAULT 0",
         "ALTER TABLE personas ADD COLUMN is_public INTEGER DEFAULT 1",
@@ -1128,10 +1139,106 @@ CAPABILITIES: list = [
      "install": "npm install -g @googleworkspace/cli",
      "features": ["Gmail", "Drive", "Calendar", "Sheets", "Docs", "MCP server"],
      "check": lambda: _check_gws_cli()},
-    {"id": "kraken",       "label": "Kraken CLI",
-     "install": "https://github.com/krakenfx/kraken-cli",
-     "features": ["Crypto trading", "Market data", "Portfolio management", "MCP server"],
-     "check": lambda: _cap_check_bin("kraken")},
+    {"id": "github",       "label": "GitHub CLI",
+     "install": "https://cli.github.com",
+     "features": ["Repository management", "Issues", "Pull requests", "Actions"],
+     "check": lambda: _cap_check_bin("gh")},
+    {"id": "slack",        "label": "Slack CLI",
+     "install": "https://api.slack.com/automation/cli",
+     "features": ["Messaging", "Channel management", "Workflow triggers"],
+     "check": lambda: _cap_check_bin("slack")},
+    {"id": "docker",       "label": "Docker",
+     "install": "https://docs.docker.com/get-docker/",
+     "features": ["Container runtime", "Image builds", "Compose"],
+     "check": lambda: _cap_check_bin("docker")},
+    {"id": "notion",       "label": "Notion API",
+     "install": "https://developers.notion.com",
+     "features": ["Page management", "Database CRUD", "Search"],
+     "check": lambda: bool(os.environ.get("NOTION_TOKEN"))},
+    {"id": "linear",       "label": "Linear CLI",
+     "install": "npm install -g @linear/cli",
+     "features": ["Issue tracking", "Sprint planning", "Team management"],
+     "check": lambda: _cap_check_bin("linear")},
+    {"id": "stripe",       "label": "Stripe CLI",
+     "install": "https://stripe.com/docs/stripe-cli",
+     "features": ["Payment processing", "Webhook testing", "Invoice management"],
+     "check": lambda: _cap_check_bin("stripe")},
+    {"id": "hubspot",      "label": "HubSpot CLI",
+     "install": "npm install -g @hubspot/cli",
+     "features": ["CRM management", "Contact sync", "Deal pipeline"],
+     "check": lambda: _cap_check_bin("hs")},
+    {"id": "figma",        "label": "Figma API",
+     "install": "https://www.figma.com/developers",
+     "features": ["Design export", "Component inspection", "Asset retrieval"],
+     "check": lambda: bool(os.environ.get("FIGMA_TOKEN"))},
+    {"id": "firecrawl",    "label": "Firecrawl",
+     "install": "pip install firecrawl-py",
+     "features": ["Web scraping", "Site crawling", "Structured extraction"],
+     "check": lambda: bool(os.environ.get("FIRECRAWL_API_KEY"))},
+    {"id": "twilio",       "label": "Twilio CLI",
+     "install": "npm install -g twilio-cli",
+     "features": ["SMS", "Voice calls", "WhatsApp messaging"],
+     "check": lambda: _cap_check_bin("twilio")},
+    {"id": "postgres",     "label": "PostgreSQL",
+     "install": "https://www.postgresql.org/download/",
+     "features": ["SQL database", "Data warehousing", "Full-text search"],
+     "check": lambda: _cap_check_bin("psql")},
+    {"id": "aws_cli",      "label": "AWS CLI",
+     "install": "https://aws.amazon.com/cli/",
+     "features": ["Cloud infrastructure", "S3 storage", "Lambda functions"],
+     "check": lambda: _cap_check_bin("aws")},
+    {"id": "vercel",       "label": "Vercel CLI",
+     "install": "npm install -g vercel",
+     "features": ["Frontend deployment", "Serverless functions", "Preview URLs"],
+     "check": lambda: _cap_check_bin("vercel")},
+    {"id": "cloudinary",   "label": "Cloudinary CLI",
+     "install": "npm install -g cloudinary-cli",
+     "features": ["Image optimization", "Video transcoding", "Asset management"],
+     "check": lambda: _cap_check_bin("cld")},
+    {"id": "sendgrid",     "label": "SendGrid",
+     "install": "https://docs.sendgrid.com",
+     "features": ["Transactional email", "Templates", "Analytics"],
+     "check": lambda: bool(os.environ.get("SENDGRID_API_KEY"))},
+    {"id": "docusign",     "label": "DocuSign",
+     "install": "https://developers.docusign.com",
+     "features": ["E-signatures", "Document workflows", "Contract management"],
+     "check": lambda: bool(os.environ.get("DOCUSIGN_TOKEN"))},
+    {"id": "sentry",       "label": "Sentry CLI",
+     "install": "npm install -g @sentry/cli",
+     "features": ["Error tracking", "Release management", "Source maps"],
+     "check": lambda: _cap_check_bin("sentry-cli")},
+    {"id": "datadog",      "label": "Datadog CLI",
+     "install": "npm install -g @datadog/datadog-ci",
+     "features": ["Monitoring", "Log management", "APM tracing"],
+     "check": lambda: _cap_check_bin("datadog-ci")},
+    {"id": "zendesk",      "label": "Zendesk API",
+     "install": "https://developer.zendesk.com",
+     "features": ["Support tickets", "Knowledge base", "Customer management"],
+     "check": lambda: bool(os.environ.get("ZENDESK_TOKEN"))},
+    {"id": "snyk",         "label": "Snyk CLI",
+     "install": "npm install -g snyk",
+     "features": ["Vulnerability scanning", "Dependency audit", "License compliance"],
+     "check": lambda: _cap_check_bin("snyk")},
+    {"id": "elevenlabs",   "label": "ElevenLabs",
+     "install": "https://elevenlabs.io/docs",
+     "features": ["Text-to-speech", "Voice cloning", "Audio generation"],
+     "check": lambda: bool(os.environ.get("ELEVENLABS_API_KEY"))},
+    {"id": "wordpress",    "label": "WordPress CLI",
+     "install": "https://wp-cli.org",
+     "features": ["Site management", "Plugin control", "Content publishing"],
+     "check": lambda: _cap_check_bin("wp")},
+    {"id": "bigquery",     "label": "BigQuery CLI",
+     "install": "https://cloud.google.com/sdk/docs/install",
+     "features": ["Data analytics", "SQL warehouse", "ML integration"],
+     "check": lambda: _cap_check_bin("bq")},
+    {"id": "terraform",    "label": "Terraform",
+     "install": "https://developer.hashicorp.com/terraform/install",
+     "features": ["Infrastructure as code", "Multi-cloud provisioning", "State management"],
+     "check": lambda: _cap_check_bin("terraform")},
+    {"id": "serpapi",      "label": "SerpAPI",
+     "install": "https://serpapi.com",
+     "features": ["Search engine results", "SERP scraping", "Keyword research"],
+     "check": lambda: bool(os.environ.get("SERPAPI_KEY"))},
 ]
 
 
@@ -4048,6 +4155,95 @@ def _project_file_chain(project_id: str) -> list:
     return chain
 
 
+
+def _analyze_file(filepath: "Path", mime_type: str = "") -> dict:
+    """Analyze a file and extract metadata useful for Porter context.
+    Returns: {summary, tags, word_count, lang}"""
+    import mimetypes
+    result = {"summary": "", "tags": [], "word_count": 0, "lang": ""}
+    try:
+        fp = Path(filepath) if not isinstance(filepath, Path) else filepath
+        if not fp.exists():
+            return result
+        if not mime_type:
+            mime_type = mimetypes.guess_type(str(fp))[0] or "application/octet-stream"
+        name = fp.name.lower()
+        ext = fp.suffix.lower()
+        size = fp.stat().st_size
+
+        # Detect language/type from extension
+        lang_map = {
+            ".py": "python", ".js": "javascript", ".ts": "typescript", ".jsx": "javascript",
+            ".tsx": "typescript", ".go": "go", ".rs": "rust", ".java": "java", ".c": "c",
+            ".cpp": "cpp", ".h": "c-header", ".rb": "ruby", ".php": "php", ".swift": "swift",
+            ".kt": "kotlin", ".sh": "bash", ".sql": "sql", ".html": "html", ".css": "css",
+            ".md": "markdown", ".txt": "text", ".json": "json", ".yaml": "yaml", ".yml": "yaml",
+            ".xml": "xml", ".csv": "csv", ".toml": "toml", ".ini": "ini", ".conf": "config",
+        }
+        result["lang"] = lang_map.get(ext, "")
+
+        # Auto-tag from extension and content
+        tags = []
+        if mime_type.startswith("image/"):
+            tags.append("image")
+        elif mime_type.startswith("video/"):
+            tags.append("video")
+        elif mime_type.startswith("audio/"):
+            tags.append("audio")
+        elif ext == ".pdf":
+            tags.append("document")
+            tags.append("pdf")
+        elif ext in (".doc", ".docx", ".odt", ".rtf"):
+            tags.append("document")
+        elif ext in (".xls", ".xlsx", ".csv", ".tsv"):
+            tags.append("data")
+            tags.append("spreadsheet")
+        elif ext in (".zip", ".tar", ".gz", ".bz2", ".7z"):
+            tags.append("archive")
+        elif result["lang"]:
+            tags.append("code")
+            tags.append(result["lang"])
+
+        # For text-readable files, extract word count + summary
+        text_exts = set(lang_map.keys()) | {".log", ".env", ".cfg", ".rst"}
+        if ext in text_exts or mime_type.startswith("text/"):
+            if size < 2 * 1024 * 1024:  # Only analyze files under 2MB
+                try:
+                    text = fp.read_text(encoding="utf-8", errors="replace")
+                    words = text.split()
+                    result["word_count"] = len(words)
+
+                    # Generate summary (first meaningful lines, up to 200 chars)
+                    lines = [l.strip() for l in text.split("\n") if l.strip() and not l.strip().startswith("#!")]
+                    summary_lines = []
+                    char_count = 0
+                    for line in lines[:10]:
+                        if char_count + len(line) > 200:
+                            break
+                        # Skip comment-only lines for code files
+                        if result["lang"] and line.startswith(("//", "#", "/*", "*", "<!--")):
+                            continue
+                        summary_lines.append(line)
+                        char_count += len(line)
+                    result["summary"] = " ".join(summary_lines)[:200]
+
+                    # Extract topic tags from content for markdown/text
+                    if ext in (".md", ".txt", ".rst"):
+                        # Find headings as topic tags
+                        import re as _re_fa
+                        headings = _re_fa.findall(r"^#{1,3}\s+(.+)", text, _re_fa.MULTILINE)
+                        for h in headings[:5]:
+                            tag = h.strip().lower().replace(" ", "-")[:30]
+                            if tag and tag not in tags:
+                                tags.append(tag)
+                except Exception:
+                    pass
+
+        result["tags"] = tags
+    except Exception as e:
+        log.debug("File analysis failed for %s: %s", filepath, e)
+    return result
+
 def _project_artifact_listing(project_id: str) -> dict:
     """Return project-scoped artifacts plus canonical project docs."""
     import mimetypes
@@ -4077,6 +4273,8 @@ def _project_artifact_listing(project_id: str) -> dict:
             return "archive"
         return "file"
 
+
+
     def _sync_project_artifact_record(relative_path: str, filename: str, kind: str, mime_type: str, size: int):
         try:
             conn = _db_conn()
@@ -4091,9 +4289,14 @@ def _project_artifact_listing(project_id: str) -> dict:
                 )
                 meta = dict(row)
             else:
+                # v0.31.84 — Analyze file for metadata
+                _artifact_path = AGENT_WORKSPACE_DIR / "projects" / project_id / relative_path
+                _fa = _analyze_file(_artifact_path, mime_type)
                 conn.execute(
-                    "INSERT INTO project_artifacts (project_id, relative_path, filename, kind, mime_type, size) VALUES (?, ?, ?, ?, ?, ?)",
-                    (project_id, relative_path, filename, kind, mime_type, size),
+                    "INSERT INTO project_artifacts (project_id, relative_path, filename, kind, mime_type, size, summary, tags, word_count, lang) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (project_id, relative_path, filename, kind, mime_type, size,
+                     _fa.get("summary", ""), json.dumps(_fa.get("tags", [])),
+                     _fa.get("word_count", 0), _fa.get("lang", "")),
                 )
                 new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
                 meta = {"id": new_id, "source": "workspace", "created_by": "", "created_at": time.time()}
@@ -4175,7 +4378,27 @@ def _load_integrations() -> dict:
         except Exception as e:
             log.debug("Ignored: %s", e)
 
-    # Read auth profiles
+    # v0.31.84 — Use CLI for resolved model/auth status (authoritative)
+    import subprocess as _sp_int
+    oc_bin = _resolve_cli("openclaw")
+    if oc_bin:
+        try:
+            r = _sp_int.run([oc_bin, "models", "status", "--json"],
+                capture_output=True, text=True, timeout=10, env=_agent_env())
+            if r.returncode == 0 and r.stdout.strip():
+                models_status = json.loads(r.stdout)
+                result["resolved_models"] = models_status
+                # Extract auth readiness from resolved state
+                result["model_auth_ready"] = models_status.get("authReady", False)
+                result["effective_model"] = models_status.get("effectiveModel", "")
+                result["fallbacks"] = models_status.get("fallbacks", [])
+                result["image_fallbacks"] = models_status.get("imageFallbacks", [])
+                result["allowed_models"] = models_status.get("allowedModels", [])
+                log.debug("Loaded resolved model status from CLI")
+        except Exception as e:
+            log.debug("openclaw models status CLI failed, using filesystem: %s", e)
+
+    # Read auth profiles (filesystem fallback)
     auth_file = oc_dir / "agents" / "main" / "agent" / "auth-profiles.json"
     if auth_file.exists():
         try:
@@ -4389,9 +4612,37 @@ def _ping_agent(agent: dict) -> dict:
     return result
 
 def _load_openclaw_skills() -> list:
-    """Read OpenClaw skill definitions from SKILL.md frontmatter.
+    """Load OpenClaw skills — prefer CLI (authoritative) with filesystem fallback.
     Install status comes from OpenClaw's resolvedSkills in sessions.json."""
     import re as _re
+    import subprocess as _sp
+    # v0.31.84 — Try CLI first for authoritative skill list
+    oc_bin = _resolve_cli("openclaw")
+    if oc_bin:
+        try:
+            r = _sp.run([oc_bin, "skills", "list", "--json"],
+                capture_output=True, text=True, timeout=15, env=_agent_env())
+            if r.returncode == 0 and r.stdout.strip():
+                data = json.loads(r.stdout)
+                cli_skills = data if isinstance(data, list) else data.get("skills", [])
+                if cli_skills:
+                    # Normalize to expected format
+                    normalized = []
+                    for sk in cli_skills:
+                        normalized.append({
+                            "name": sk.get("name", sk.get("id", "")),
+                            "id": sk.get("id", sk.get("name", "")),
+                            "description": sk.get("description", ""),
+                            "category": sk.get("category", ""),
+                            "installed": sk.get("installed", sk.get("eligible", False)),
+                            "manual": sk.get("manual", False),
+                            "tags": sk.get("tags", []),
+                        })
+                    log.debug("Loaded %d skills from openclaw CLI", len(normalized))
+                    return normalized
+        except Exception as e:
+            log.debug("openclaw skills CLI failed, falling back to filesystem: %s", e)
+    # Filesystem fallback
     skills = []
     skill_dirs = []
     oc_dir = OPENCLAW_STATE_DIR
@@ -4671,7 +4922,38 @@ def _epoch_to_iso(ts):
         return ""
 
 def _load_session_summaries() -> list:
-    """Read OpenClaw session .jsonl files and extract metadata summaries."""
+    """Load OpenClaw session summaries — prefer CLI (all-agent) with filesystem fallback."""
+    import subprocess as _sp_sess
+    # v0.31.84 — Use CLI for all-agent session aggregation
+    oc_bin = _resolve_cli("openclaw")
+    if oc_bin:
+        try:
+            r = _sp_sess.run([oc_bin, "sessions", "--json", "--all-agents"],
+                capture_output=True, text=True, timeout=15, env=_agent_env())
+            if r.returncode == 0 and r.stdout.strip():
+                data = json.loads(r.stdout)
+                sessions = data if isinstance(data, list) else data.get("sessions", [])
+                if sessions:
+                    # Normalize to expected format
+                    normalized = []
+                    for s in sessions:
+                        normalized.append({
+                            "session_id": s.get("sessionId", s.get("id", "")),
+                            "agent_id": s.get("agentId", "main"),
+                            "model": s.get("model", ""),
+                            "msg_count": s.get("messageCount", s.get("msgCount", 0)),
+                            "total_input": s.get("inputTokens", 0),
+                            "total_output": s.get("outputTokens", 0),
+                            "first_ts": s.get("firstTimestamp", s.get("createdAt", "")),
+                            "last_ts": s.get("lastTimestamp", s.get("updatedAt", "")),
+                            "channel": s.get("channel", ""),
+                            "chat_type": s.get("chatType", ""),
+                        })
+                    log.debug("Loaded %d sessions from openclaw CLI (all-agents)", len(normalized))
+                    return normalized
+        except Exception as e:
+            log.debug("openclaw sessions CLI failed, falling back to filesystem: %s", e)
+    # Filesystem fallback (single-agent only)
     oc_dir = OPENCLAW_STATE_DIR
     sessions_dir = oc_dir / "agents" / "main" / "sessions"
     if not sessions_dir.exists():
@@ -10038,7 +10320,7 @@ def _persona_skill_recommendation_reason(persona: dict | None, skill: dict | Non
         ("research and analysis", re.compile(r"research|strateg|analy"), re.compile(r"search|web|fetch|ai|llm|doc|scrape|data|report")),
         ("quality assurance", re.compile(r"qa|quality|test|bug"), re.compile(r"test|lint|check|format|security|scan|audit")),
         ("release and operations", re.compile(r"deploy|release|ops|infra|sre"), re.compile(r"deploy|docker|k8s|kube|ci|cd|pipeline|build|release|monitor")),
-        ("finance and market work", re.compile(r"trad|market|analyst|risk|execut|reconcil|financ|crypto"), re.compile(r"kraken|trade|ticker|ohlc|order|spread|asset|pair|market|price|balance|ledger|portfolio")),
+        ("finance and market work", re.compile(r"trad|market|analyst|risk|execut|reconcil|financ|crypto"), re.compile(r"stripe|trade|market|price|balance|ledger|portfolio|payment|invoice|billing")),
     ]
     for reason, role_re, skill_re in checks:
         if role_re.search(role) and skill_re.search(text):
@@ -14375,6 +14657,7 @@ input[type="number"].settings-input { min-width: 60px; }
       <span class="logo-sub">Orchestrator</span>
     </div>
     <!-- notifications removed: dead code, no callers -->
+    <button onclick="_showPorterAbout()" title="Who is Porter" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;border-radius:6px;display:flex;align-items:center;transition:color .15s" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text3)'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></button>
     <button class="hbg-btn" id="hbgBtn" onclick="toggleSidebar()" title="Toggle sidebar">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="3" y1="6" x2="21" y2="6"/>
@@ -14389,34 +14672,33 @@ input[type="number"].settings-input { min-width: 60px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
       <span class="mnav-label">Agents</span>
     </button>
-
-    <div class="mnav-group-label">Operations</div>
+    <button class="mnav-item" id="mnav-templates" onclick="switchModule('templates')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span class="mnav-label">Templates</span>
+    </button>
+    <div class="mnav-group-label">Work</div>
     <button class="mnav-item" id="mnav-projects" onclick="switchModule('projects')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
       <span class="mnav-label">Projects</span>
+    </button>
+    <button class="mnav-item" id="mnav-files" onclick="switchModule('allfiles')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      <span class="mnav-label">Files</span>
+    </button>
+    <button class="mnav-item" id="mnav-people" onclick="switchModule('people')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span class="mnav-label">People</span>
     </button>
     <div class="mnav-group-label">Intelligence</div>
     <button class="mnav-item" id="mnav-models" onclick="switchModule('models')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
       <span class="mnav-label">Models</span>
     </button>
-    <button class="mnav-item" id="mnav-system" style="display:none" onclick="switchModule('logs')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-      <span class="mnav-label">Logs</span>
-    </button>
-    <div class="mnav-group-label">Config</div>
-    <button class="mnav-item" id="mnav-people" onclick="switchModule('people')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      <span class="mnav-label">People</span>
-    </button>
-    <button class="mnav-item" id="mnav-files" onclick="switchModule('allfiles')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-      <span class="mnav-label">Files</span>
-    </button>
     <button class="mnav-item" id="mnav-capabilities" onclick="switchModule('capabilities')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
       <span class="mnav-label">Tools</span>
     </button>
+    <div class="mnav-group-label">System</div>
     <button class="mnav-item" id="mnav-logs" onclick="switchModule('logs')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       <span class="mnav-label">Logs</span>
@@ -14464,7 +14746,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.83</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.84</div>
   </div>
 </aside>
 
@@ -14618,16 +14900,13 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="module-hdr">
       <span class="module-title">Agents</span>
       <div style="flex:1"></div>
-      <div class="office-view-toggle" id="agents-view-toggle">
-        <button class="active" onclick="_setAgentView('grid')">Workers</button>
-        <button onclick="_setAgentView('templates')">Templates</button>
-      </div>
+      <!-- Toggle removed: Templates is now its own nav tab -->
     </div>
 
     <!-- Agent Grid -->
     <div id="agents-grid-view">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <button class="btn btn-primary" onclick="_setAgentView('templates')" style="font-size:12px;padding:6px 14px">+ Create from Template</button>
+        <button class="btn btn-primary" onclick="switchModule('templates')" style="font-size:12px;padding:6px 14px">+ Create from Template</button>
       </div>
       <div id="persona-org-chart" style="margin-bottom:16px">
         <div id="persona-cards-row" class="persona-cards-row">
@@ -15603,7 +15882,8 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.31.83', date:'2026-03-14', notes:["Files: full file manager with folder navigation and breadcrumbs","Files: create folders, upload, rename, delete via right-click","Files: drag-and-drop upload into any folder"] },
+  { ver:'v0.31.84', date:'2026-03-15', notes:["Nav restructure (Cast/Work/Intelligence/System)","Who is Porter button in sidebar header","Kraken CLI removed, 25 real tools registered","OpenClaw integration: multi-agent routing, channels, nodes, hooks, sessions","File analysis on upload (summary, tags, word count, language)","Skill recommendation engine expanded (business, legal, support, design, data)","OpenClaw health check: gateway + channels + security + doctor","OpenAI-compatible chat completions format for gateway dispatch"] },
+  { ver:'v0.31.84', date:'2026-03-14', notes:["Files: full file manager with folder navigation and breadcrumbs","Files: create folders, upload, rename, delete via right-click","Files: drag-and-drop upload into any folder"] },
   { ver:'v0.31.82', date:'2026-03-14', notes:["Terminal popup: run model update commands directly from Porter","POST /api/terminal/exec: execute shell commands with streaming output","Files nav tab: Dropbox-style artifact browser across all projects"] },
   { ver:'v0.31.81', date:'2026-03-14', notes:["Models: update button shows command in copyable dialog","Models: nav badge shows count of available updates","Models: skeleton cards render immediately, details fill async","Projects: worker recommendations create from templates with name prompt","Projects: create project is a fast modal, not a chat redirect"] },
   { ver:'v0.31.80', date:'2026-03-14', notes:["Agent detail: banner reduced 80% (compact identity row)","Agent detail: removed Back to Agents button (nav handles it)","Agent detail: Who is Porter moved above tabs","Model cards: condensed padding and gaps","Fix: chat delete confirm dialog z-index"] },
@@ -17816,8 +18096,9 @@ function switchModule(name) {
   _currentModule = name;
   document.querySelectorAll('.mnav-item').forEach(el =>
     el.classList.toggle('active', el.id === 'mnav-' + name));
+  var _panelName = name; if (name === 'templates') _panelName = 'agents';
   document.querySelectorAll('.module-panel').forEach(el => {
-    var isActive = el.id === name + '-module' || (name === 'settings' && el.id === 'settingsPanel');
+    var isActive = el.id === _panelName + '-module' || (name === 'settings' && el.id === 'settingsPanel');
     el.classList.toggle('active', isActive);
     if (isActive) el.scrollTop = 0;
   });
@@ -17901,6 +18182,15 @@ function switchModule(name) {
       if (_vtBtns.length) { _vtBtns[0].classList.add('active'); if (_vtBtns[1]) _vtBtns[1].classList.remove('active'); }
       _selectedPersonaId = null;
       loadAgents();
+    }, templates: function() {
+      var _g = document.getElementById('agents-grid-view');
+      var _t = document.getElementById('agents-templates-view');
+      var _d = document.getElementById('agent-detail-view');
+      if (_g) _g.style.display = 'none';
+      if (_t) _t.style.display = '';
+      if (_d) _d.style.display = 'none';
+      _selectedPersonaId = null;
+      _loadTemplates();
     }, projects: function() { loadProjects(); }, admin: loadAdmin,
     allfiles: loadAllFiles, files: loadLocations, policies: loadPolicy,
     models: loadModels, tools: loadTools, audit: loadAudit, people: loadPeople, capabilities: loadCapabilities, system: loadLogs, admin: loadLogs, logs: loadLogs, settings: syncSettingsUI,
@@ -21451,6 +21741,25 @@ async function _showSystemPrompt(personaId) {
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
   } catch(e) { toast('Failed to load system prompt', 'err'); }
+}
+
+
+function _showPorterAbout() {
+  // Find Porter (the orchestrator) persona
+  var porter = (_personas || []).find(function(p) { return p.orchestrator_only; });
+  if (porter) {
+    _showPersonaBrief(porter);
+  } else {
+    // Fallback: load personas first, then show
+    api('/api/personas').then(function(resp) {
+      if (resp && resp.ok) {
+        _personas = resp.personas || [];
+        var p = _personas.find(function(x) { return x.orchestrator_only; });
+        if (p) _showPersonaBrief(p);
+        else toast('Porter persona not found', 'err');
+      }
+    });
+  }
 }
 
 function _showPersonaBrief(persona) {
@@ -30368,6 +30677,8 @@ async function selectPersona(id) {
     if (bb) bb.textContent = isOrchestrator ? 'Delegates work' : (p.preferred_backend || 'Bridge-selected at run time');
     if (delBtn) delBtn.style.display = isLocked ? 'none' : '';
     if (spBtn) spBtn.textContent = isOrchestrator ? 'Who Is Porter' : 'System Prompt';
+    var _dtTitle = document.getElementById('pd-detail-title');
+    if (_dtTitle) _dtTitle.textContent = isOrchestrator ? '' : 'Worker';
     if (tabActions) {
       tabActions.innerHTML = isOrchestrator
         ? '<button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'worker\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Create Worker</button><button class="btn btn-ghost btn-sm" onclick="_askPorterToCreate(\'project\')" style="font-size:11px;border-radius:999px;padding:7px 12px">Start A New Project</button>'
@@ -30878,9 +31189,29 @@ function _isSkillRecommended(sk, persona) {
   if (/orchestrat|lead|manage|direct/.test(role)) {
     if (/ai|llm|deploy|git|search|doc/.test(n)) return true;
   }
-  // Trading/Finance agents → crypto/market/trading skills
+  // Trading/Finance agents
   if (/trad|market|analyst|risk|execut|reconcil|financ|crypto/.test(role)) {
-    if (/kraken|trade|ticker|ohlc|order|spread|asset|pair|market|price|balance|ledger|portfolio/.test(n)) return true;
+    if (/stripe|trade|market|price|balance|ledger|portfolio|payment|invoice|billing/.test(n)) return true;
+  }
+  // Business/CRM agents
+  if (/sales|business|growth|investor|pitch|product|operations/.test(role)) {
+    if (/hubspot|crm|linear|jira|notion|pipeline|deal|lead|prospect/.test(n)) return true;
+  }
+  // Legal/Compliance agents
+  if (/legal|contract|patent|privacy|regulat|policy|complian/.test(role)) {
+    if (/docusign|contract|sign|compliance|audit|regulation|policy|patent/.test(n)) return true;
+  }
+  // Support/Community agents
+  if (/support|success|community|knowledge|training/.test(role)) {
+    if (/zendesk|ticket|helpdesk|support|community|faq|knowledge/.test(n)) return true;
+  }
+  // Design/Visual agents
+  if (/design|ui|ux|brand|motion|graphic|accessib/.test(role)) {
+    if (/figma|cloudinary|image|video|design|prototype|wireframe|asset/.test(n)) return true;
+  }
+  // Data/Analytics agents
+  if (/data|bi|analytics|warehouse|nlp|prompt|ai.ethic/.test(role)) {
+    if (/bigquery|postgres|sql|database|warehouse|analytics|dashboard|metric/.test(n)) return true;
   }
   return false;
 }
@@ -35682,13 +36013,151 @@ def _chat_runtime_supports_images(model_id: str) -> bool:
         return True
     return False
 
-def _dispatch_openclaw(message, model=None, timeout=120):
-    """Invoke OpenClaw agent CLI and return normalized response."""
+def _openclaw_channels() -> list:
+    """List OpenClaw messaging channels and their status."""
+    import subprocess
+    oc_bin = _resolve_cli("openclaw")
+    if not oc_bin:
+        return []
+    try:
+        r = subprocess.run([oc_bin, "channels", "list", "--json"],
+            capture_output=True, text=True, timeout=10, env=_agent_env())
+        if r.returncode == 0 and r.stdout.strip():
+            data = json.loads(r.stdout)
+            return data if isinstance(data, list) else data.get("channels", [])
+    except Exception as e:
+        log.debug("openclaw channels list failed: %s", e)
+    return []
+
+
+def _openclaw_channel_status() -> dict:
+    """Get detailed status of all OpenClaw channels."""
+    import subprocess
+    oc_bin = _resolve_cli("openclaw")
+    if not oc_bin:
+        return {"ok": False, "error": "openclaw not available"}
+    try:
+        r = subprocess.run([oc_bin, "channels", "status", "--json"],
+            capture_output=True, text=True, timeout=15, env=_agent_env())
+        if r.returncode == 0 and r.stdout.strip():
+            return {"ok": True, "channels": json.loads(r.stdout)}
+    except Exception as e:
+        log.debug("openclaw channels status failed: %s", e)
+    return {"ok": False, "channels": []}
+
+
+def _openclaw_message_send(channel: str, text: str, thread_id: str = "") -> dict:
+    """Send a message via OpenClaw channel."""
+    import subprocess
+    oc_bin = _resolve_cli("openclaw")
+    if not oc_bin:
+        return {"ok": False, "error": "openclaw not available"}
+    cmd = [oc_bin, "message", "send", "--channel", channel, "--text", text, "--json"]
+    if thread_id:
+        cmd.extend(["--thread", thread_id])
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30, env=_agent_env())
+        if r.returncode == 0:
+            return {"ok": True, "result": json.loads(r.stdout) if r.stdout.strip() else {}}
+        return {"ok": False, "error": r.stderr[:300]}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def _openclaw_message_search(query: str, channel: str = "", limit: int = 20) -> list:
+    """Search messages across OpenClaw channels."""
+    import subprocess
+    oc_bin = _resolve_cli("openclaw")
+    if not oc_bin:
+        return []
+    cmd = [oc_bin, "message", "search", "--query", query, "--limit", str(limit), "--json"]
+    if channel:
+        cmd.extend(["--channel", channel])
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=15, env=_agent_env())
+        if r.returncode == 0 and r.stdout.strip():
+            data = json.loads(r.stdout)
+            return data if isinstance(data, list) else data.get("messages", [])
+    except Exception as e:
+        log.debug("openclaw message search failed: %s", e)
+    return []
+
+
+def _openclaw_list_agents() -> list:
+    """List available OpenClaw agents via CLI."""
+    import subprocess
+    oc_bin = _resolve_cli("openclaw")
+    if not oc_bin:
+        return []
+    try:
+        r = subprocess.run([oc_bin, "agents", "--json"],
+            capture_output=True, text=True, timeout=10, env=_agent_env())
+        if r.returncode == 0 and r.stdout.strip():
+            data = json.loads(r.stdout)
+            return data if isinstance(data, list) else data.get("agents", [])
+    except Exception as e:
+        log.debug("openclaw agents list failed: %s", e)
+    return []
+
+
+def _openclaw_nodes() -> list:
+    """List paired OpenClaw nodes (devices)."""
+    import subprocess
+    oc_bin = _resolve_cli("openclaw")
+    if not oc_bin:
+        return []
+    try:
+        r = subprocess.run([oc_bin, "nodes", "list", "--json"],
+            capture_output=True, text=True, timeout=10, env=_agent_env())
+        if r.returncode == 0 and r.stdout.strip():
+            data = json.loads(r.stdout)
+            return data if isinstance(data, list) else data.get("nodes", [])
+    except Exception as e:
+        log.debug("openclaw nodes list failed: %s", e)
+    return []
+
+
+def _openclaw_node_status(node_id: str) -> dict:
+    """Get status of a specific OpenClaw node."""
+    import subprocess
+    oc_bin = _resolve_cli("openclaw")
+    if not oc_bin:
+        return {"ok": False}
+    try:
+        r = subprocess.run([oc_bin, "nodes", "status", node_id, "--json"],
+            capture_output=True, text=True, timeout=10, env=_agent_env())
+        if r.returncode == 0 and r.stdout.strip():
+            return {"ok": True, "node": json.loads(r.stdout)}
+    except Exception as e:
+        log.debug("openclaw node status failed: %s", e)
+    return {"ok": False}
+
+
+def _openclaw_hooks() -> list:
+    """List OpenClaw hooks."""
+    import subprocess
+    oc_bin = _resolve_cli("openclaw")
+    if not oc_bin:
+        return []
+    try:
+        r = subprocess.run([oc_bin, "hooks", "list", "--json"],
+            capture_output=True, text=True, timeout=10, env=_agent_env())
+        if r.returncode == 0 and r.stdout.strip():
+            data = json.loads(r.stdout)
+            return data if isinstance(data, list) else data.get("hooks", [])
+    except Exception as e:
+        log.debug("openclaw hooks list failed: %s", e)
+    return []
+
+
+def _dispatch_openclaw(message, model=None, timeout=120, agent_id=None):
+    """Invoke OpenClaw agent CLI and return normalized response.
+    Supports multi-agent routing — pass agent_id to target a specific agent."""
     import subprocess
     oc_bin = _resolve_cli("openclaw")
     if not oc_bin:
         return {"ok": False, "error": "openclaw CLI not found. Install: npm i -g openclaw"}
-    agent_id = "main"
+    agent_id = agent_id or "main"
     cmd = [oc_bin, "agent", "--agent", agent_id, "--message", message, "--json", "--timeout", str(timeout)]
     log.info("Agent bridge [openclaw]: agent=%s requested_model=%s msg=%s", agent_id, model or "", message[:80])
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10, env=_agent_env(), cwd=str(Path.home()))
@@ -40414,16 +40883,56 @@ def _reboot_stalled_step(step: dict, run_id: str) -> dict:
 
 
 def _openclaw_health_check() -> dict:
-    """Check if OpenClaw gateway is responsive and restart if stalled."""
+    """Comprehensive OpenClaw health check — gateway, channels, security, doctor."""
+    import subprocess
+    result = {"ok": False, "gateway": {}, "channels": {}, "security": {}, "doctor": {}}
+    oc_settings = _openclaw_gateway_settings()
+    gw_host = oc_settings.get("host", "127.0.0.1")
+    gw_port = oc_settings.get("port", 18789)
+    auth_token = oc_settings.get("token", "")
+
+    # 1. Gateway HTTP probe
     try:
         import urllib.request
-        req = urllib.request.Request("http://127.0.0.1:18789/api/status",
-            headers={"Authorization": "Bearer lobster-2026"})
+        req = urllib.request.Request(f"http://{gw_host}:{gw_port}/health",
+            headers={"Authorization": f"Bearer {auth_token}"})
         resp = urllib.request.urlopen(req, timeout=5)
         data = json.loads(resp.read())
-        return {"ok": True, "status": data}
+        result["gateway"] = {"reachable": True, "status": data}
+        result["ok"] = True
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        result["gateway"] = {"reachable": False, "error": str(e)}
+
+    # 2. Channel status (are messaging channels healthy?)
+    oc_bin = _resolve_cli("openclaw")
+    if oc_bin:
+        try:
+            r = subprocess.run([oc_bin, "channels", "status", "--json"],
+                capture_output=True, text=True, timeout=10, env=_agent_env())
+            if r.returncode == 0 and r.stdout.strip():
+                result["channels"] = json.loads(r.stdout)
+        except Exception:
+            pass
+
+        # 3. Security audit
+        try:
+            r = subprocess.run([oc_bin, "security", "--json"],
+                capture_output=True, text=True, timeout=10, env=_agent_env())
+            if r.returncode == 0 and r.stdout.strip():
+                result["security"] = json.loads(r.stdout)
+        except Exception:
+            pass
+
+        # 4. Doctor (comprehensive diagnostics)
+        try:
+            r = subprocess.run([oc_bin, "doctor", "--json"],
+                capture_output=True, text=True, timeout=15, env=_agent_env())
+            if r.returncode == 0 and r.stdout.strip():
+                result["doctor"] = json.loads(r.stdout)
+        except Exception:
+            pass
+
+    return result
 
 
 def _openclaw_restart() -> dict:
@@ -41631,7 +42140,7 @@ def _stream_chunk(run_id, backend, token):
     _emit_event("bridge:chunk", {"run_id": run_id, "backend": backend, "text": token})
 
 
-ADMIN_PAGE = '<!DOCTYPE html>\n<html lang="en"><head>\n<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n<title>Porter Admin Console</title>\n<style>\n*{margin:0;padding:0;box-sizing:border-box}\n:root{--bg:#0b0f14;--surface:#141a24;--raised:#1c2433;--border:#283040;--text:#e8ecf2;--text2:#a0aab8;--text3:#6b7688;--accent:#3b82f6;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--purple:#a855f7}\nbody{font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}\n.admin-nav{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}\n.admin-nav-brand{padding:16px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}\n.admin-nav-brand svg{color:var(--accent)}\n.admin-nav-brand-text{font-size:14px;font-weight:700;letter-spacing:.3px}\n.admin-nav-brand-sub{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px}\n.admin-nav-section{padding:12px 0 4px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;padding-left:18px}\n.admin-nav-item{display:flex;align-items:center;gap:10px;padding:9px 18px;font-size:13px;color:var(--text2);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .15s;border-left:2px solid transparent}\n.admin-nav-item:hover{background:var(--raised);color:var(--text)}\n.admin-nav-item.active{background:var(--raised);color:var(--text);font-weight:600;border-left-color:var(--accent)}\n.admin-nav-footer{margin-top:auto;padding:14px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}\n.admin-nav-footer a{color:var(--text3);font-size:11px;text-decoration:none;display:flex;align-items:center;gap:6px}\n.admin-nav-footer a:hover{color:var(--text)}\n.admin-main{flex:1;overflow-y:auto;padding:28px 36px}\n.admin-title{font-size:20px;font-weight:700;margin-bottom:4px}\n.admin-subtitle{font-size:12px;color:var(--text3);margin-bottom:24px}\n.admin-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:14px}\n.admin-card-title{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px}\n.admin-stat{font-size:32px;font-weight:800;line-height:1.1}\n.admin-stat-sub{font-size:11px;color:var(--text3);margin-top:4px}\n.admin-stat.green{color:var(--green)}.admin-stat.red{color:var(--red)}.admin-stat.blue{color:var(--accent)}.admin-stat.purple{color:var(--purple)}.admin-stat.yellow{color:var(--yellow)}\n.admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:20px}\n.admin-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}\n.admin-table{width:100%;border-collapse:collapse;font-size:12px}\n.admin-table th{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.4px}\n.admin-table td{padding:8px 12px;border-bottom:1px solid var(--border)}\n.admin-table tr:hover td{background:var(--raised)}\n.admin-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}\n.admin-badge.green{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}\n.admin-badge.blue{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n.admin-badge.yellow{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}\n.admin-badge.red{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}\n.admin-badge.purple{background:color-mix(in srgb,var(--purple) 15%,transparent);color:var(--purple)}\n.admin-btn{padding:7px 16px;border-radius:6px;border:1px solid var(--border);background:var(--raised);color:var(--text);font-size:12px;cursor:pointer;transition:all .15s}\n.admin-btn:hover{background:var(--surface);border-color:var(--text3)}\n.admin-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}\n.admin-btn.primary:hover{opacity:.9}\n.admin-btn.danger{border-color:var(--red);color:var(--red)}\n.admin-btn.danger:hover{background:color-mix(in srgb,var(--red) 10%,transparent)}\n.admin-btn.sm{padding:4px 10px;font-size:11px}\n.admin-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:16px}\n.admin-toolbar .spacer{flex:1}\n.admin-log-line{font-family:\'SF Mono\',Menlo,Monaco,monospace;font-size:11px;padding:3px 0;color:var(--text2);white-space:pre-wrap;word-break:break-all;line-height:1.5}\n.admin-log-line:hover{background:var(--raised)}\n.admin-kv{display:grid;grid-template-columns:160px 1fr;gap:0;font-size:12px}\n.admin-kv dt{padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border)}\n.admin-kv dd{padding:6px 10px;border-bottom:1px solid var(--border);word-break:break-all}\n.admin-empty{text-align:center;padding:40px;color:var(--text3);font-size:13px}\n.admin-modal-bg{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:center;justify-content:center}\n.admin-modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;min-width:360px;max-width:480px}\n.admin-modal h3{font-size:15px;margin-bottom:16px}\n.admin-modal label{display:block;font-size:11px;color:var(--text2);margin-bottom:4px;margin-top:12px}\n.admin-modal .admin-input,.admin-modal .admin-select{width:100%;margin-bottom:4px}\n.admin-modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}\n.admin-input{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n.admin-input:focus{border-color:var(--accent)}\n.admin-select{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}\n.pulse{animation:pulse 2s ease-in-out infinite}\n</style>\n</head><body>\n<div class="admin-nav">\n  <div class="admin-nav-brand">\n    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>\n    <div>\n      <div class="admin-nav-brand-text">Porter Admin</div>\n      <div class="admin-nav-brand-sub">SaaS Control</div>\n    </div>\n  </div>\n  <div class="admin-nav-section">Monitor</div>\n  <button class="admin-nav-item active" onclick="_at(\'overview\',this)">Overview</button>\n  <button class="admin-nav-item" onclick="_at(\'health\',this)">Health</button>\n  <div class="admin-nav-section">Manage</div>\n  <button class="admin-nav-item" onclick="_at(\'users\',this)">Users</button>\n  <button class="admin-nav-item" onclick="_at(\'sessions\',this)">Sessions</button>\n  <button class="admin-nav-item" onclick="_at(\'projects\',this)">Projects</button>\n  <button class="admin-nav-item" onclick="_at(\'templates\',this)">Templates</button>\n  <button class="admin-nav-item" onclick="_at(\'directives\',this)">Directives</button>\n  <button class="admin-nav-item" onclick="_at(\'connections\',this)">Connections</button>\n  <div class="admin-nav-section">System</div>\n  <button class="admin-nav-item" onclick="_at(\'config\',this)">Config</button>\n  <button class="admin-nav-item" onclick="_at(\'logs\',this)">Logs</button>\n  <button class="admin-nav-item" onclick="_at(\'audit\',this)">Audit</button>\n  <div class="admin-nav-footer">\n    <a href="/">&#8592; Porter Workspace</a>\n    <span style="font-size:10px;color:var(--text3)">v0.31.83</span>\n  </div>\n</div>\n<div class="admin-main" id="admin-content"><div class="admin-title">Loading...</div></div>\n<div id="admin-modal-root"></div>\n<script>\nvar _adminCurrentTab=\'overview\';\nasync function _api(u,b){var o=b?{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},credentials:\'same-origin\',body:JSON.stringify(b)}:{credentials:\'same-origin\'};try{var r=await fetch(u,o);if(!r.ok&&r.status===403)return{error:\'forbidden\'};return r.json();}catch(e){return{error:e.message};}}\nfunction _at(t,el){_adminCurrentTab=t;document.querySelectorAll(\'.admin-nav-item\').forEach(function(b){b.classList.remove(\'active\')});if(el)el.classList.add(\'active\');var fn={overview:_loadOverview,users:_loadUsers,sessions:_loadSessions,health:_loadHealth,projects:_loadProjects,config:_loadConfig,logs:_loadLogs,audit:_loadAudit,templates:_loadTemplates,directives:_loadDirectives,connections:_loadConnections};if(fn[t])fn[t]();}\nfunction _escH(s){var d=document.createElement(\'div\');d.textContent=s;return d.innerHTML;}\nfunction _fmtUp(s){var d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return(d?d+\'d \':\'\')+ h+\'h \'+m+\'m\';}\nfunction _fmtDate(ts){if(!ts)return\'-\';var d=new Date(typeof ts===\'number\'?ts*1000:ts);return d.toLocaleDateString(\'en-GB\',{day:\'2-digit\',month:\'short\',year:\'numeric\'})+\' \'+d.toLocaleTimeString(\'en-GB\',{hour:\'2-digit\',minute:\'2-digit\'});}\nfunction _fmtAgo(ts){if(!ts)return\'-\';var now=Date.now()/1000,diff=now-ts;if(diff<60)return\'just now\';if(diff<3600)return Math.floor(diff/60)+\'m ago\';if(diff<86400)return Math.floor(diff/3600)+\'h ago\';return Math.floor(diff/86400)+\'d ago\';}\nfunction _roleBadge(r){var c=r===\'platform_admin\'?\'purple\':r===\'admin\'?\'yellow\':r===\'operator\'?\'blue\':\'green\';return\'<span class="admin-badge \'+c+\'">\'+_escH(r)+\'</span>\';}\nfunction _modal(h){document.getElementById(\'admin-modal-root\').innerHTML=h;}\nfunction _closeModal(){document.getElementById(\'admin-modal-root\').innerHTML=\'\';}\n\nasync async function _appendUsageStats(){\n  try{\n    var res=await fetch(\'/api/admin/usage\',{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var users=(res&&res.users)||[];\n    if(users.length===0)return;\n    var el=document.getElementById(\'admin-content\');\n    var html=\'<div class="admin-title" style="margin-top:24px">User Activity</div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Role</th><th>Sessions</th><th>Active Now</th><th>Last Active</th></tr>\';\n    users.forEach(function(u){\n      var la=u.last_active_at?new Date(u.last_active_at*1000).toLocaleString(\'en-SG\',{hour12:false,timeZone:\'Asia/Singapore\'}):\'Never\';\n      html+=\'<tr><td style="font-weight:600">\'+_escH(u.display_name||u.username)+\'</td>\';\n      html+=\'<td>\'+_escH(u.role)+\'</td>\';\n      html+=\'<td>\'+u.session_count+\'</td>\';\n      html+=\'<td>\'+u.active_sessions+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px">\'+la+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML+=html;\n  }catch(e){}\n}\nfunction _loadOverview(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div><div class="pulse" style="color:var(--text3)">Loading dashboard...</div>\';\n  try{\n    var [health,users,projects]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/users\',{action:\'list\'}),_api(\'/api/projects\')]);\n    var h=health||{},userList=(users&&users.users)||[],projList=(projects&&projects.projects)||[];\n    var activeProjects=projList.filter(function(p){return p.status===\'active\'}).length;\n    var adminCount=userList.filter(function(u){return u.role===\'admin\'||u.role===\'platform_admin\'}).length;\n    var opCount=userList.filter(function(u){return u.role===\'operator\'}).length;\n    var html=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div>\';\n    html+=\'<div class="admin-grid">\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System Status</div><div class="admin-stat green">Online</div><div class="admin-stat-sub">PID \'+(h.porter_pid||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Version</div><div class="admin-stat blue" style="font-size:22px">v\'+(h.porter_version||\'?\')+\'</div><div class="admin-stat-sub">Python \'+(h.python_version||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Uptime</div><div class="admin-stat" style="font-size:20px;color:var(--text)">\'+_fmtUp(h.uptime_seconds||0)+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div><div class="admin-stat blue">\'+userList.length+\'</div><div class="admin-stat-sub">\'+adminCount+\' admin, \'+opCount+\' operators</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Projects</div><div class="admin-stat purple">\'+projList.length+\'</div><div class="admin-stat-sub">\'+activeProjects+\' active</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-grid-3">\';\n    var cpuC=(h.cpu_percent||0)>80?\'red\':(h.cpu_percent||0)>50?\'yellow\':\'green\';\n    var memC=(h.memory_percent||0)>80?\'red\':(h.memory_percent||0)>50?\'yellow\':\'green\';\n    var diskC=(h.disk_percent||0)>90?\'red\':(h.disk_percent||0)>70?\'yellow\':\'green\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">CPU</div><div class="admin-stat \'+cpuC+\'">\'+(h.cpu_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Memory</div><div class="admin-stat \'+memC+\'">\'+(h.memory_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Disk</div><div class="admin-stat \'+diskC+\'">\'+(h.disk_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Services</div>\';\n    var svcs=h.services||[];\n    if(svcs.length){\n      html+=\'<table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>URL</th></tr>\';\n      svcs.forEach(function(s){var b=s.status===\'ok\'?\'green\':\'red\';html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+b+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table>\';\n    }else{html+=\'<div class="admin-empty">No services detected</div>\';}\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div>\';\n    html+=\'<table class="admin-table"><tr><th>User</th><th>Role</th><th>Created</th></tr>\';\n    userList.slice(0,10).forEach(function(u){html+=\'<tr><td style="font-weight:600">\'+_escH(u.display_name||u.username)+\' <span style="color:var(--text3);font-weight:400">@\'+_escH(u.username)+\'</span></td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td></tr>\';});\n    html+=\'</table></div>\';\n    el.innerHTML=html;_appendUsageStats();\n  }catch(e){el.innerHTML=\'<div class="admin-title">Overview</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadUsers(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">User Management</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/users\',{action:\'list\'});\n    var users=(data&&data.users)||[];\n    var html=\'<div class="admin-title">User Management</div><div class="admin-subtitle">\'+users.length+\' registered users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn primary" onclick="_showCreateUser()">+ Create User</button><button class="admin-btn" onclick="_showCreateInvite()">Invite User</button><div class="spacer"></div><button class="admin-btn" onclick="_loadUsers()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Display Name</th><th>Role</th><th>Email</th><th>Created</th><th style="width:140px">Actions</th></tr>\';\n    users.forEach(function(u){\n      html+=\'<tr><td style="font-weight:600">\'+_escH(u.username)+\'</td><td>\'+_escH(u.display_name||\'\')+\'</td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_escH(u.email||\'-\')+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td>\';\n      html+=\'<td><div style="display:flex;gap:4px"><button class="admin-btn sm" onclick="_showEditRole(\\\'\'+_escH(u.username)+\'\\\',\\\'\'+_escH(u.role)+\'\\\')">Role</button>\';\n      html+=\'<button class="admin-btn sm" onclick="_resetPassword(\\\'\'+_escH(u.username)+\'\\\')">Reset</button>\';\n      if(u.username!==\'system\')html+=\'<button class="admin-btn sm danger" onclick="_deleteUser(\\\'\'+_escH(u.username)+\'\\\')">Delete</button>\';\n      html+=\'</div></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n    try{var _inv_res=await fetch(\'/api/admin/invites\',{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},body:JSON.stringify({action:\'list\'}),credentials:\'same-origin\'}).then(function(r){return r.json();});var _invs=(_inv_res&&_inv_res.invites)||[];if(_invs.length>0){var ih=\'<div class="admin-title" style="margin-top:24px">Invites</div>\';ih+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';ih+=\'<tr><th>Code</th><th>Role</th><th>By</th><th>Uses</th><th>Status</th><th>Actions</th></tr>\';_invs.forEach(function(inv){var st=inv.status===\'active\'?\'\u25cf Active\':\'\u25cf \'+inv.status;ih+=\'<tr><td style="font-family:monospace;font-size:12px">\'+_escH(inv.code.slice(0,8))+\'...</td><td>\'+_escH(inv.role)+\'</td><td>\'+_escH(inv.created_by)+\'</td><td>\'+inv.use_count+\'/\'+inv.max_uses+\'</td><td>\'+st+\'</td><td>\';if(inv.status===\'active\')ih+=\'<button class="admin-btn sm danger" onclick="_revokeInvite(\\\'\'+_escH(inv.code)+\'\\\')">Revoke</button>\';ih+=\'</td></tr>\';});ih+=\'</table></div>\';el.innerHTML+=ih;}}catch(_ie){}\n  }catch(e){el.innerHTML=\'<div class="admin-title">Users</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nfunction _showCreateUser(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Create User</h3><label>Username</label><input class="admin-input" id="_cu_user" placeholder="lowercase, no spaces"><label>Display Name</label><input class="admin-input" id="_cu_name" placeholder="Full display name"><label>Role</label><select class="admin-select" id="_cu_role"><option value="operator">Operator</option><option value="admin">Admin</option><option value="viewer">Viewer</option><option value="platform_admin">Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doCreateUser()">Create</button></div></div></div>\');\n  document.getElementById(\'_cu_user\').focus();\n}\nasync function _doCreateUser(){\n  var u=document.getElementById(\'_cu_user\').value.trim(),n=document.getElementById(\'_cu_name\').value.trim()||u,r=document.getElementById(\'_cu_role\').value;\n  if(!u)return;\n  var res=await _api(\'/api/admin/users\',{action:\'create\',username:u,display_name:n,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nfunction _showEditRole(username,currentRole){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Change Role &#8212; \'+_escH(username)+\'</h3><label>New Role</label><select class="admin-select" id="_er_role"><option value="operator"\'+(currentRole===\'operator\'?\' selected\':\'\')+\'>Operator</option><option value="admin"\'+(currentRole===\'admin\'?\' selected\':\'\')+\'>Admin</option><option value="viewer"\'+(currentRole===\'viewer\'?\' selected\':\'\')+\'>Viewer</option><option value="platform_admin"\'+(currentRole===\'platform_admin\'?\' selected\':\'\')+\'>Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doEditRole(\\\'\'+_escH(username)+\'\\\')">Save</button></div></div></div>\');\n}\nasync function _doEditRole(username){\n  var r=document.getElementById(\'_er_role\').value;\n  var res=await _api(\'/api/admin/users\',{action:\'update_role\',username:username,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _deleteUser(username){if(!confirm(\'Delete user \'+username+\'? This cannot be undone.\'))return;var res=await _api(\'/api/admin/users\',{action:\'delete\',username:username});if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n\n\nvar _auditPage=0;var _auditFilters={actor:\'\',action:\'\',from:\'\',to:\'\'};\nasync function _loadAudit(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Audit Log</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var qs=\'limit=50&offset=\'+(_auditPage*50);\n    if(_auditFilters.actor)qs+=\'&actor=\'+encodeURIComponent(_auditFilters.actor);\n    if(_auditFilters.action)qs+=\'&action=\'+encodeURIComponent(_auditFilters.action);\n    var data=await fetch(\'/api/admin/audit?\'+qs,{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var stats=await fetch(\'/api/admin/audit/stats\',{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var events=(data&&data.events)||[];var total=(data&&data.total)||0;\n    var s24=(stats&&stats.period_24h)||{};\n    var html=\'<div class="admin-title">Audit Log</div>\';\n    html+=\'<div class="admin-subtitle">\'+total+\' total events | 24h: \'+(s24.total||0)+\' events</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:8px">\';\n    html+=\'<input class="admin-input" id="_af_actor" placeholder="Actor" value="\'+_escH(_auditFilters.actor)+\'" style="width:120px">\';\n    html+=\'<input class="admin-input" id="_af_action" placeholder="Action" value="\'+_escH(_auditFilters.action)+\'" style="width:150px">\';\n    html+=\'<button class="admin-btn primary" onclick="_auditApplyFilter()">Filter</button>\';\n    html+=\'<button class="admin-btn" onclick="_auditClearFilter()">Clear</button>\';\n    html+=\'<div class="spacer"></div><button class="admin-btn" onclick="_loadAudit()">Refresh</button>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>IP</th></tr>\';\n    events.forEach(function(e){\n      var dt=new Date(e.ts*1000);var ts=dt.toLocaleString(\'en-SG\',{hour12:false,timeZone:\'Asia/Singapore\'});\n      var det=JSON.stringify(e.details||{});if(det===\'{}\')det=\'-\';if(det.length>60)det=det.slice(0,57)+\'...\';\n      html+=\'<tr><td style="white-space:nowrap;color:var(--text3);font-size:12px">\'+_escH(ts)+\'</td>\';\n      html+=\'<td style="font-weight:600">\'+_escH(e.actor)+\'</td>\';\n      html+=\'<td><span style="background:var(--surface);padding:2px 8px;border-radius:4px;font-size:12px">\'+_escH(e.action)+\'</span></td>\';\n      html+=\'<td>\'+_escH(e.target||\'-\')+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis">\'+_escH(det)+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px">\'+_escH(e.ip_address||\'-\')+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    var pages=Math.ceil(total/50);\n    if(pages>1){\n      html+=\'<div style="display:flex;gap:8px;margin-top:12px;justify-content:center">\';\n      if(_auditPage>0)html+=\'<button class="admin-btn sm" onclick="_auditPage--;_loadAudit()">&laquo; Prev</button>\';\n      html+=\'<span style="color:var(--text3);padding:6px">Page \'+(_auditPage+1)+\' of \'+pages+\'</span>\';\n      if(_auditPage<pages-1)html+=\'<button class="admin-btn sm" onclick="_auditPage++;_loadAudit()">Next &raquo;</button>\';\n      html+=\'</div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Audit</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}}\nfunction _auditApplyFilter(){\n  _auditFilters.actor=document.getElementById(\'_af_actor\').value.trim();\n  _auditFilters.action=document.getElementById(\'_af_action\').value.trim();\n  _auditPage=0;_loadAudit();}\nfunction _auditClearFilter(){_auditFilters={actor:\'\',action:\'\',from:\'\',to:\'\'};_auditPage=0;_loadAudit();}\nasync function _showCreateInvite(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Create Invite</h3><label>Role</label><select class="admin-select" id="_inv_role"><option value="operator">Operator</option><option value="admin">Admin</option><option value="viewer">Viewer</option></select><label>Max Uses</label><input class="admin-input" id="_inv_max" type="number" value="1" min="1"><label>Expires (hours, 0=never)</label><input class="admin-input" id="_inv_hours" type="number" value="72" min="0"><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doCreateInvite()">Create</button></div></div></div>\');\n}\nasync function _doCreateInvite(){\n  var role=document.getElementById(\'_inv_role\').value;\n  var max=document.getElementById(\'_inv_max\').value;\n  var hours=document.getElementById(\'_inv_hours\').value;\n  var res=await _api(\'/api/admin/invites\',{action:\'create\',role:role,max_uses:parseInt(max),expires_hours:parseInt(hours)});\n  _closeModal();\n  if(res&&res.ok){\n    _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Invite Created</h3><p>Share this code:</p><div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-family:monospace;font-size:14px;text-align:center;margin:12px 0;user-select:all;word-break:break-all">\'+_escH(res.code)+\'</div><p style="color:var(--text3);font-size:12px">Role: \'+_escH(res.role)+\' | Max uses: \'+res.max_uses+\'</p><div class="admin-modal-actions"><button class="admin-btn primary" onclick="_closeModal();_loadUsers()">Done</button></div></div></div>\');\n  }else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n}\nasync function _revokeInvite(code){\n  if(!confirm(\'Revoke this invite code?\'))return;\n  var res=await _api(\'/api/admin/invites\',{action:\'revoke\',code:code});\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _resetPassword(username){if(!confirm(\'Reset password for \'+username+\'? A temporary password will be generated.\'))return;var res=await _api(\'/api/admin/users\',{action:\'reset_password\',username:username});if(res&&res.ok){_modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Password Reset</h3><p>Temporary password for <b>\'+_escH(username)+\'</b>:</p><div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-family:monospace;font-size:16px;text-align:center;margin:12px 0;user-select:all">\'+_escH(res.temp_password)+\'</div><p style="color:var(--text3);font-size:12px">User must change this on next login.</p><div class="admin-modal-actions"><button class="admin-btn primary" onclick="_closeModal()">Done</button></div></div></div>\');}else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}}\nasync function _loadSessions(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Active Sessions</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/sessions\');\n    var sessions=(data&&data.sessions)||[];\n    var html=\'<div class="admin-title">Active Sessions</div><div class="admin-subtitle">\'+sessions.length+\' active sessions</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadSessions()">Refresh</button></div>\';\n    if(!sessions.length){html+=\'<div class="admin-empty">No active sessions</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Role</th><th>IP</th><th>User Agent</th><th>Created</th><th>Last Active</th><th>Actions</th></tr>\';\n    sessions.forEach(function(s){\n      var ua=(s.user_agent||\'\').substring(0,40);\n      html+=\'<tr><td style="font-weight:600">\'+_escH(s.username||\'?\')+\'</td><td>\'+_roleBadge(s.role||\'operator\')+\'</td><td style="font-family:monospace;font-size:11px">\'+_escH(s.ip||\'-\')+\'</td><td style="font-size:10px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis">\'+_escH(ua)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.created_at)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.last_active)+\'</td><td><button class="admin-btn sm danger" onclick="_revokeSession(\\\'\'+_escH(s.token_prefix||\'\')+\'\\\')">Revoke</button></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Sessions</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _revokeSession(tp){if(!confirm(\'Revoke this session?\'))return;await _api(\'/api/admin/sessions\',{action:\'revoke\',token_prefix:tp});_loadSessions();}\n\nasync function _loadProjects(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">All Projects</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/projects\');\n    var projects=(data&&data.projects)||[];\n    var html=\'<div class="admin-title">All Projects</div><div class="admin-subtitle">\'+projects.length+\' total projects across all users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadProjects()">Refresh</button></div>\';\n    if(!projects.length){html+=\'<div class="admin-empty">No projects</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>Project</th><th>Owner</th><th>Type</th><th>Status</th><th>Created</th></tr>\';\n    projects.forEach(function(p){\n      var sb=p.status===\'active\'?\'green\':p.status===\'completed\'?\'blue\':\'yellow\';\n      html+=\'<tr><td style="font-weight:600">\'+_escH(p.name||\'Untitled\')+\'</td><td>\'+_escH(p.owner||\'-\')+\'</td><td style="color:var(--text3)">\'+_escH(p.type||\'custom\')+\'</td><td><span class="admin-badge \'+sb+\'">\'+_escH(p.status||\'active\')+\'</span></td><td style="color:var(--text3)">\'+_fmtDate(p.created_at)+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Projects</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadHealth(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Health</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var h=await _api(\'/api/admin/health\');\n    var html=\'<div class="admin-title">System Health</div><div class="admin-subtitle">Detailed system diagnostics</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadHealth()">Refresh</button></div>\';\n    html+=\'<div class="admin-grid">\';\n    var metrics=[\n      {k:\'cpu_percent\',l:\'CPU Usage\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'memory_percent\',l:\'Memory\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'disk_percent\',l:\'Disk\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:70,crit:90},\n      {k:\'uptime_seconds\',l:\'Uptime\',fmt:_fmtUp},\n      {k:\'porter_pid\',l:\'Process ID\',fmt:function(v){return v}},\n      {k:\'porter_size_kb\',l:\'Binary Size\',fmt:function(v){return(v/1024).toFixed(1)+\' MB\'}},\n      {k:\'porter_lines\',l:\'Lines of Code\',fmt:function(v){return v.toLocaleString()}},\n      {k:\'python_version\',l:\'Python\',fmt:function(v){return v}},\n      {k:\'porter_version\',l:\'Porter Version\',fmt:function(v){return\'v\'+v}}\n    ];\n    metrics.forEach(function(m){\n      if(h[m.k]===undefined)return;var v=h[m.k];\n      var color=\'var(--text)\';\n      if(m.crit&&v>=m.crit)color=\'var(--red)\';else if(m.warn&&v>=m.warn)color=\'var(--yellow)\';else if(m.crit)color=\'var(--green)\';\n      html+=\'<div class="admin-card"><div class="admin-card-title">\'+m.l+\'</div><div style="font-size:20px;font-weight:700;color:\'+color+\'">\'+m.fmt(v)+\'</div></div>\';\n    });\n    html+=\'</div>\';\n    if(h.services&&h.services.length){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Service Probes</div><table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>Endpoint</th></tr>\';\n      h.services.forEach(function(s){html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+(s.status===\'ok\'?\'green\':\'red\')+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Health</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync async function _loadWorkspaceConfig(){\n  var res=await _api(\'/api/admin/workspace\',{action:\'get\'});\n  var s=(res&&res.settings)||{};\n  var html=\'<div class="admin-title" style="margin-top:24px">Workspace Identity</div>\';\n  html+=\'<div class="admin-card">\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Workspace Name</label><input class="admin-input" id="_ws_name" value="\'+_escH(s.workspace_name||\'\')+\'" style="margin-top:4px"></div>\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Description</label><input class="admin-input" id="_ws_desc" value="\'+_escH(s.workspace_description||\'\')+\'" style="margin-top:4px"></div>\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Accent Color</label><input class="admin-input" id="_ws_accent" type="color" value="\'+_escH(s.workspace_accent||\'\')+\'" style="margin-top:4px;width:60px;height:32px;padding:2px"></div>\';\n  html+=\'<button class="admin-btn primary" onclick="_saveWorkspaceConfig()">Save</button>\';\n  html+=\'</div>\';\n  return html;\n}\nasync function _saveWorkspaceConfig(){\n  var name=document.getElementById(\'_ws_name\').value;\n  var desc=document.getElementById(\'_ws_desc\').value;\n  var accent=document.getElementById(\'_ws_accent\').value;\n  var res=await _api(\'/api/admin/workspace\',{action:\'update\',workspace_name:name,workspace_description:desc,workspace_accent:accent});\n  if(res&&res.ok){alert(\'Saved!\');_loadConfig();}else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n}\nfunction _loadConfig(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Configuration</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var [health,hyg]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/hygiene\')]);\n    var html=\'<div class="admin-title">System Configuration</div><div class="admin-subtitle">Read-only view of current system settings</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadConfig()">Refresh</button></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System</div><dl class="admin-kv">\';\n    var sk=[[\'Porter Version\',\'v\'+(health.porter_version||\'?\')],[\'Python\',health.python_version||\'?\'],[\'PID\',health.porter_pid||\'?\'],[\'Binary Size\',(health.porter_size_kb||0).toFixed(0)+\' KB\'],[\'Lines\',health.porter_lines||\'?\']];\n    sk.forEach(function(kv){html+=\'<dt>\'+kv[0]+\'</dt><dd>\'+_escH(String(kv[1]))+\'</dd>\';});\n    html+=\'</dl></div>\';\n    if(hyg&&!hyg.error){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Hygiene System</div><dl class="admin-kv">\';\n      Object.keys(hyg).filter(function(k){return typeof hyg[k]!==\'object\'}).forEach(function(k){html+=\'<dt>\'+_escH(k)+\'</dt><dd>\'+_escH(String(hyg[k]))+\'</dd>\';});\n      html+=\'</dl></div>\';\n    }\n    var wsHtml=await _loadWorkspaceConfig();html+=wsHtml;el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Config</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadLogs(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Logs</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/logs\');\n    var lines=(data&&data.lines)||[];\n    var html=\'<div class="admin-title">System Logs</div><div class="admin-subtitle">\'+lines.length+\' log lines</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadLogs()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="max-height:calc(100vh - 180px);overflow-y:auto;font-family:monospace;padding:12px">\';\n    lines.slice(-300).forEach(function(l){html+=\'<div class="admin-log-line">\'+_escH(l)+\'</div>\';});\n    html+=\'</div>\';\n    el.innerHTML=html;\n    var lb=el.querySelector(\'.admin-card\');if(lb)lb.scrollTop=lb.scrollHeight;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Logs</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nvar _tmplFilter=\'\';\nasync function _loadTemplates(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Worker Templates</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var url=\'/api/templates\';\n    if(_tmplFilter)url+=\'?category=\'+encodeURIComponent(_tmplFilter);\n    var data=await _api(url);\n    var all=await _api(\'/api/templates\');\n    var templates=(data&&data.templates)||[];\n    var allTemplates=(all&&all.templates)||[];\n    var cats={};allTemplates.forEach(function(t){var c=t.category||\'other\';cats[c]=(cats[c]||0)+1;});\n    var catList=Object.keys(cats).sort();\n    var html=\'<div class="admin-title">Worker Templates</div><div class="admin-subtitle">\'+allTemplates.length+\' archetypes across \'+catList.length+\' categories</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:6px">\';\n    html+=\'<button class="admin-btn\'+(!_tmplFilter?\' primary\':\'\')+\'" onclick="_tmplFilter=\\\'\\\';_loadTemplates()">All (\'+allTemplates.length+\')</button>\';\n    catList.forEach(function(c){\n      var active=_tmplFilter===c;\n      html+=\'<button class="admin-btn\'+(active?\' primary\':\'\')+\'" onclick="_tmplFilter=\\\'\'+_escH(c)+\'\\\'\\\';_loadTemplates()">\'+_escH(c.charAt(0).toUpperCase()+c.slice(1))+\' (\'+cats[c]+\')</button>\';\n    });\n    html+=\'</div>\';\n    if(!templates.length){html+=\'<div class="admin-empty">No templates in this category</div>\';el.innerHTML=html;return;}\n    html+=\'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">\';\n    templates.forEach(function(t){\n      html+=\'<div class="admin-card" style="cursor:pointer;transition:border-color .15s" onclick="_tmplDetail(\\\'\'+_escH(t.id)+\'\\\')" onmouseenter="this.style.borderColor=\\\'var(--accent)\\\'" onmouseleave="this.style.borderColor=\\\'var(--border)\\\'">\';\n      html+=\'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">\';\n      html+=\'<div style="font-size:14px;font-weight:700;color:var(--text)">\'+_escH(t.name)+\'</div>\';\n      html+=\'</div>\';\n      html+=\'<div style="font-size:11px;color:var(--text2);line-height:1.5;margin-bottom:8px">\'+_escH(t.description)+\'</div>\';\n      html+=\'<div style="display:flex;gap:4px;flex-wrap:wrap">\';\n      html+=\'<span class="admin-badge blue">\'+_escH(t.category)+\'</span>\';\n      (t.tags||[]).slice(0,4).forEach(function(tag){\n        html+=\'<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:var(--raised);color:var(--text3)">\'+_escH(tag)+\'</span>\';\n      });\n      html+=\'</div></div>\';\n    });\n    html+=\'</div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Templates</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _tmplDetail(tid){\n  try{\n    var data=await _api(\'/api/templates/\'+tid);\n    if(!data||data.error){alert(\'Template not found\');return;}\n    var html=\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal" style="max-width:560px;max-height:80vh;overflow-y:auto">\';\n    html+=\'<h3 style="margin-bottom:4px">\'+_escH(data.name||tid)+\'</h3>\';\n    html+=\'<div style="font-size:11px;color:var(--text3);margin-bottom:12px"><span class="admin-badge blue">\'+_escH(data.cat||\'\')+\'</span> <span class="admin-badge green">\'+_escH(data.archetype||\'\')+\'</span></div>\';\n    html+=\'<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:14px">\'+_escH(data.desc||\'\')+\'</div>\';\n    if(data.mission){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Mission</div><div style="font-size:12px;color:var(--text)">\'+_escH(data.mission)+\'</div></div>\';}\n    if(data.soul&&data.soul.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Soul Traits</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.soul.forEach(function(s){html+=\'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,var(--purple) 15%,transparent);color:var(--purple)">\'+_escH(s)+\'</span>\';});html+=\'</div></div>\';}\n    if(data.authority&&data.authority.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Authority</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.authority.forEach(function(a){html+=\'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">\'+_escH(a)+\'</span>\';});html+=\'</div></div>\';}\n    if(data.inputs&&data.inputs.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Inputs</div><div style="font-size:11px;color:var(--text2)">\'+data.inputs.map(function(i){return _escH(i)}).join(\' &middot; \')+\'</div></div>\';}\n    if(data.outputs&&data.outputs.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Outputs</div><div style="font-size:11px;color:var(--text2)">\'+data.outputs.map(function(o){return _escH(o)}).join(\' &middot; \')+\'</div></div>\';}\n    if(data.tags&&data.tags.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Tags</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.tags.forEach(function(t){html+=\'<span style="font-size:9px;padding:2px 6px;border-radius:3px;background:var(--raised);color:var(--text3)">\'+_escH(t)+\'</span>\';});html+=\'</div></div>\';}\n    html+=\'<div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Close</button></div>\';\n    html+=\'</div></div>\';\n    _modal(html);\n  }catch(e){alert(\'Error: \'+e.message);}\n}\nvar _dirScope=\'\';\nasync function _loadDirectives(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Directives</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var url=\'/api/state/directives\';\n    var params=[];\n    if(_dirScope)params.push(\'scope_type=\'+encodeURIComponent(_dirScope));\n    params.push(\'include_dismissed=1\');\n    if(params.length)url+=\'?\'+params.join(\'&\');\n    var data=await _api(url);\n    var dirs=(data&&data.directives)||[];\n    var active=dirs.filter(function(d){return d.status===\'active\'});\n    var dismissed=dirs.filter(function(d){return d.status!==\'active\'});\n    var scopes={};dirs.forEach(function(d){var s=d.scope_type||\'global\';scopes[s]=(scopes[s]||0)+1;});\n    var scopeList=Object.keys(scopes).sort();\n    var html=\'<div class="admin-title">Directives</div><div class="admin-subtitle">\'+active.length+\' active, \'+dismissed.length+\' dismissed/superseded</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:6px">\';\n    html+=\'<button class="admin-btn\'+(!_dirScope?\' primary\':\'\')+\'" onclick="_dirScope=\\\'\\\';_loadDirectives()">All (\'+dirs.length+\')</button>\';\n    scopeList.forEach(function(s){\n      html+=\'<button class="admin-btn\'+(_dirScope===s?\' primary\':\'\')+\'" onclick="_dirScope=\\\'\'+_escH(s)+\'\\\'\\\';_loadDirectives()">\'+_escH(s.charAt(0).toUpperCase()+s.slice(1))+\' (\'+scopes[s]+\')</button>\';\n    });\n    html+=\'<div class="spacer"></div>\';\n    html+=\'<button class="admin-btn primary" onclick="_showAddDirective()">+ Add Directive</button>\';\n    html+=\'</div>\';\n    if(!dirs.length){html+=\'<div class="admin-empty">No directives yet</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>ID</th><th>Scope</th><th>Directive</th><th>Status</th><th>Source</th><th>Created</th><th>Actions</th></tr>\';\n    dirs.forEach(function(d){\n      var sb=d.status===\'active\'?\'green\':d.status===\'dismissed\'?\'red\':\'yellow\';\n      var scopeLabel=d.scope_type===\'project\'?d.scope_type+\' (\'+_escH((d.scope_id||\'\').substring(0,8))+\')\':d.scope_type;\n      html+=\'<tr><td style="font-family:monospace;font-size:11px">#\'+d.id+\'</td>\';\n      html+=\'<td><span class="admin-badge blue">\'+_escH(scopeLabel)+\'</span></td>\';\n      html+=\'<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\'+_escH(d.text||\'\')+\'</td>\';\n      html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(d.status||\'active\')+\'</span></td>\';\n      html+=\'<td style="color:var(--text3);font-size:11px">\'+_escH(d.source||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_fmtAgo(d.created_at)+\'</td>\';\n      html+=\'<td>\';\n      if(d.status===\'active\')html+=\'<button class="admin-btn sm danger" onclick="_dismissDir(\'+d.id+\')">Dismiss</button>\';\n      else html+=\'<button class="admin-btn sm" onclick="_activateDir(\'+d.id+\')">Reactivate</button>\';\n      html+=\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Directives</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _dismissDir(id){\n  await _api(\'/api/state/directives/\'+id+\'/status\',{status:\'dismissed\'});\n  _loadDirectives();\n}\nasync function _activateDir(id){\n  await _api(\'/api/state/directives/\'+id+\'/status\',{status:\'active\'});\n  _loadDirectives();\n}\nfunction _showAddDirective(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Add Directive</h3><label>Scope</label><select class="admin-select" id="_ad_scope"><option value="global">Global</option><option value="project">Project</option><option value="agent">Agent</option></select><label>Scope ID (for project/agent)</label><input class="admin-input" id="_ad_sid" placeholder="Project or agent ID"><label>Directive Text</label><textarea class="admin-input" id="_ad_text" rows="3" placeholder="Always do X when Y happens..."></textarea><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doAddDirective()">Add</button></div></div></div>\');\n}\nasync function _doAddDirective(){\n  var scope=document.getElementById(\'_ad_scope\').value;\n  var sid=document.getElementById(\'_ad_sid\').value.trim();\n  var text=document.getElementById(\'_ad_text\').value.trim();\n  if(!text)return;\n  var res=await _api(\'/api/state/directives\',{action:\'create\',scope_type:scope,scope_id:sid,text:text});\n  _closeModal();\n  if(res&&res.ok)_loadDirectives();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _loadConnections(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Connections</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/connections\',{action:\'list\'});\n    var conns=(data&&data.connections)||[];\n    var active=conns.filter(function(c){return c.status===\'active\'}).length;\n    var html=\'<div class="admin-title">Workspace Connections</div><div class="admin-subtitle">\'+conns.length+\' connections (\'+active+\' active)</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn primary" onclick="_showAddConnection()">+ Add Connection</button><div class="spacer"></div><button class="admin-btn" onclick="_loadConnections()">Refresh</button></div>\';\n    if(!conns.length){html+=\'<div class="admin-empty">No connections yet. Add one to connect external services.</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>ID</th><th>Provider</th><th>Name</th><th>Kind</th><th>Status</th><th>Installed By</th><th>Created</th><th>Actions</th></tr>\';\n    conns.forEach(function(c){\n      var sb=c.status===\'active\'?\'green\':c.status===\'disconnected\'?\'yellow\':\'red\';\n      html+=\'<tr><td style="font-family:monospace;font-size:10px">\'+_escH((c.id||\'\').substring(0,12))+\'</td>\';\n      html+=\'<td style="font-weight:600">\'+_escH(c.provider||\'\')+\'</td>\';\n      html+=\'<td>\'+_escH(c.display_name||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_escH(c.kind||\'api_key\')+\'</td>\';\n      html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(c.status||\'disconnected\')+\'</span></td>\';\n      html+=\'<td style="color:var(--text3)">\'+_escH(c.installed_by||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_fmtAgo(c.created_at)+\'</td>\';\n      html+=\'<td><div style="display:flex;gap:4px">\';\n      if(c.status!==\'active\')html+=\'<button class="admin-btn sm" onclick="_connSetStatus(\\\'\'+_escH(c.id)+\'\\\',\\\'active\\\')">Activate</button>\';\n      else html+=\'<button class="admin-btn sm" onclick="_connSetStatus(\\\'\'+_escH(c.id)+\'\\\',\\\'disconnected\\\')">Disconnect</button>\';\n      html+=\'<button class="admin-btn sm danger" onclick="_connDelete(\\\'\'+_escH(c.id)+\'\\\')">Delete</button>\';\n      html+=\'</div></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    // Environment tools section\n    var envData=await _api(\'/api/admin/env-tools\');\n    var tools=(envData&&envData.tools)||[];\n    if(tools.length){\n      html+=\'<div class="admin-title" style="margin-top:28px">Environment Tools</div><div class="admin-subtitle">Auto-detected local tools</div>\';\n      html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n      html+=\'<tr><th>Tool</th><th>Status</th><th>Version</th><th>Last Checked</th></tr>\';\n      tools.forEach(function(t){\n        var sb=t.health===\'ok\'?\'green\':t.health===\'missing\'?\'red\':\'yellow\';\n        html+=\'<tr><td style="font-weight:600">\'+_escH(t.tool_key||\'\')+\'</td>\';\n        html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(t.detected?\'detected\':\'missing\')+\'</span></td>\';\n        html+=\'<td style="font-size:11px;color:var(--text2)">\'+_escH(t.version||\'-\')+\'</td>\';\n        html+=\'<td style="color:var(--text3)">\'+_fmtAgo(t.last_checked_at)+\'</td></tr>\';\n      });\n      html+=\'</table></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Connections</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _connSetStatus(id,status){\n  await _api(\'/api/admin/connections\',{action:\'update\',id:id,status:status});\n  _loadConnections();\n}\nasync function _connDelete(id){\n  if(!confirm(\'Delete this connection? Projects using it will be disconnected.\'))return;\n  await _api(\'/api/admin/connections\',{action:\'delete\',id:id});\n  _loadConnections();\n}\nfunction _showAddConnection(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Add Connection</h3><label>Provider</label><input class="admin-input" id="_ac_provider" placeholder="e.g. github, slack, google"><label>Display Name</label><input class="admin-input" id="_ac_name" placeholder="My GitHub"><label>Kind</label><select class="admin-select" id="_ac_kind"><option value="api_key">API Key</option><option value="oauth">OAuth</option><option value="webhook">Webhook</option><option value="local">Local</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doAddConnection()">Add</button></div></div></div>\');\n}\nasync function _doAddConnection(){\n  var provider=document.getElementById(\'_ac_provider\').value.trim();\n  var name=document.getElementById(\'_ac_name\').value.trim()||provider;\n  var kind=document.getElementById(\'_ac_kind\').value;\n  if(!provider)return;\n  var res=await _api(\'/api/admin/connections\',{action:\'create\',provider:provider,display_name:name,kind:kind});\n  _closeModal();\n  if(res&&res.ok)_loadConnections();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\n_loadOverview();\n</script>\n</body></html>'
+ADMIN_PAGE = '<!DOCTYPE html>\n<html lang="en"><head>\n<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n<title>Porter Admin Console</title>\n<style>\n*{margin:0;padding:0;box-sizing:border-box}\n:root{--bg:#0b0f14;--surface:#141a24;--raised:#1c2433;--border:#283040;--text:#e8ecf2;--text2:#a0aab8;--text3:#6b7688;--accent:#3b82f6;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--purple:#a855f7}\nbody{font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}\n.admin-nav{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}\n.admin-nav-brand{padding:16px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}\n.admin-nav-brand svg{color:var(--accent)}\n.admin-nav-brand-text{font-size:14px;font-weight:700;letter-spacing:.3px}\n.admin-nav-brand-sub{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px}\n.admin-nav-section{padding:12px 0 4px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;padding-left:18px}\n.admin-nav-item{display:flex;align-items:center;gap:10px;padding:9px 18px;font-size:13px;color:var(--text2);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .15s;border-left:2px solid transparent}\n.admin-nav-item:hover{background:var(--raised);color:var(--text)}\n.admin-nav-item.active{background:var(--raised);color:var(--text);font-weight:600;border-left-color:var(--accent)}\n.admin-nav-footer{margin-top:auto;padding:14px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}\n.admin-nav-footer a{color:var(--text3);font-size:11px;text-decoration:none;display:flex;align-items:center;gap:6px}\n.admin-nav-footer a:hover{color:var(--text)}\n.admin-main{flex:1;overflow-y:auto;padding:28px 36px}\n.admin-title{font-size:20px;font-weight:700;margin-bottom:4px}\n.admin-subtitle{font-size:12px;color:var(--text3);margin-bottom:24px}\n.admin-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:14px}\n.admin-card-title{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px}\n.admin-stat{font-size:32px;font-weight:800;line-height:1.1}\n.admin-stat-sub{font-size:11px;color:var(--text3);margin-top:4px}\n.admin-stat.green{color:var(--green)}.admin-stat.red{color:var(--red)}.admin-stat.blue{color:var(--accent)}.admin-stat.purple{color:var(--purple)}.admin-stat.yellow{color:var(--yellow)}\n.admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:20px}\n.admin-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}\n.admin-table{width:100%;border-collapse:collapse;font-size:12px}\n.admin-table th{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.4px}\n.admin-table td{padding:8px 12px;border-bottom:1px solid var(--border)}\n.admin-table tr:hover td{background:var(--raised)}\n.admin-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}\n.admin-badge.green{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}\n.admin-badge.blue{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n.admin-badge.yellow{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}\n.admin-badge.red{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}\n.admin-badge.purple{background:color-mix(in srgb,var(--purple) 15%,transparent);color:var(--purple)}\n.admin-btn{padding:7px 16px;border-radius:6px;border:1px solid var(--border);background:var(--raised);color:var(--text);font-size:12px;cursor:pointer;transition:all .15s}\n.admin-btn:hover{background:var(--surface);border-color:var(--text3)}\n.admin-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}\n.admin-btn.primary:hover{opacity:.9}\n.admin-btn.danger{border-color:var(--red);color:var(--red)}\n.admin-btn.danger:hover{background:color-mix(in srgb,var(--red) 10%,transparent)}\n.admin-btn.sm{padding:4px 10px;font-size:11px}\n.admin-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:16px}\n.admin-toolbar .spacer{flex:1}\n.admin-log-line{font-family:\'SF Mono\',Menlo,Monaco,monospace;font-size:11px;padding:3px 0;color:var(--text2);white-space:pre-wrap;word-break:break-all;line-height:1.5}\n.admin-log-line:hover{background:var(--raised)}\n.admin-kv{display:grid;grid-template-columns:160px 1fr;gap:0;font-size:12px}\n.admin-kv dt{padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border)}\n.admin-kv dd{padding:6px 10px;border-bottom:1px solid var(--border);word-break:break-all}\n.admin-empty{text-align:center;padding:40px;color:var(--text3);font-size:13px}\n.admin-modal-bg{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:center;justify-content:center}\n.admin-modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;min-width:360px;max-width:480px}\n.admin-modal h3{font-size:15px;margin-bottom:16px}\n.admin-modal label{display:block;font-size:11px;color:var(--text2);margin-bottom:4px;margin-top:12px}\n.admin-modal .admin-input,.admin-modal .admin-select{width:100%;margin-bottom:4px}\n.admin-modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}\n.admin-input{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n.admin-input:focus{border-color:var(--accent)}\n.admin-select{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}\n.pulse{animation:pulse 2s ease-in-out infinite}\n</style>\n</head><body>\n<div class="admin-nav">\n  <div class="admin-nav-brand">\n    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>\n    <div>\n      <div class="admin-nav-brand-text">Porter Admin</div>\n      <div class="admin-nav-brand-sub">SaaS Control</div>\n    </div>\n  </div>\n  <div class="admin-nav-section">Monitor</div>\n  <button class="admin-nav-item active" onclick="_at(\'overview\',this)">Overview</button>\n  <button class="admin-nav-item" onclick="_at(\'health\',this)">Health</button>\n  <div class="admin-nav-section">Manage</div>\n  <button class="admin-nav-item" onclick="_at(\'users\',this)">Users</button>\n  <button class="admin-nav-item" onclick="_at(\'sessions\',this)">Sessions</button>\n  <button class="admin-nav-item" onclick="_at(\'projects\',this)">Projects</button>\n  <button class="admin-nav-item" onclick="_at(\'templates\',this)">Templates</button>\n  <button class="admin-nav-item" onclick="_at(\'directives\',this)">Directives</button>\n  <button class="admin-nav-item" onclick="_at(\'connections\',this)">Connections</button>\n  <div class="admin-nav-section">System</div>\n  <button class="admin-nav-item" onclick="_at(\'config\',this)">Config</button>\n  <button class="admin-nav-item" onclick="_at(\'logs\',this)">Logs</button>\n  <button class="admin-nav-item" onclick="_at(\'audit\',this)">Audit</button>\n  <div class="admin-nav-footer">\n    <a href="/">&#8592; Porter Workspace</a>\n    <span style="font-size:10px;color:var(--text3)">v0.31.84</span>\n  </div>\n</div>\n<div class="admin-main" id="admin-content"><div class="admin-title">Loading...</div></div>\n<div id="admin-modal-root"></div>\n<script>\nvar _adminCurrentTab=\'overview\';\nasync function _api(u,b){var o=b?{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},credentials:\'same-origin\',body:JSON.stringify(b)}:{credentials:\'same-origin\'};try{var r=await fetch(u,o);if(!r.ok&&r.status===403)return{error:\'forbidden\'};return r.json();}catch(e){return{error:e.message};}}\nfunction _at(t,el){_adminCurrentTab=t;document.querySelectorAll(\'.admin-nav-item\').forEach(function(b){b.classList.remove(\'active\')});if(el)el.classList.add(\'active\');var fn={overview:_loadOverview,users:_loadUsers,sessions:_loadSessions,health:_loadHealth,projects:_loadProjects,config:_loadConfig,logs:_loadLogs,audit:_loadAudit,templates:_loadTemplates,directives:_loadDirectives,connections:_loadConnections};if(fn[t])fn[t]();}\nfunction _escH(s){var d=document.createElement(\'div\');d.textContent=s;return d.innerHTML;}\nfunction _fmtUp(s){var d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return(d?d+\'d \':\'\')+ h+\'h \'+m+\'m\';}\nfunction _fmtDate(ts){if(!ts)return\'-\';var d=new Date(typeof ts===\'number\'?ts*1000:ts);return d.toLocaleDateString(\'en-GB\',{day:\'2-digit\',month:\'short\',year:\'numeric\'})+\' \'+d.toLocaleTimeString(\'en-GB\',{hour:\'2-digit\',minute:\'2-digit\'});}\nfunction _fmtAgo(ts){if(!ts)return\'-\';var now=Date.now()/1000,diff=now-ts;if(diff<60)return\'just now\';if(diff<3600)return Math.floor(diff/60)+\'m ago\';if(diff<86400)return Math.floor(diff/3600)+\'h ago\';return Math.floor(diff/86400)+\'d ago\';}\nfunction _roleBadge(r){var c=r===\'platform_admin\'?\'purple\':r===\'admin\'?\'yellow\':r===\'operator\'?\'blue\':\'green\';return\'<span class="admin-badge \'+c+\'">\'+_escH(r)+\'</span>\';}\nfunction _modal(h){document.getElementById(\'admin-modal-root\').innerHTML=h;}\nfunction _closeModal(){document.getElementById(\'admin-modal-root\').innerHTML=\'\';}\n\nasync async function _appendUsageStats(){\n  try{\n    var res=await fetch(\'/api/admin/usage\',{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var users=(res&&res.users)||[];\n    if(users.length===0)return;\n    var el=document.getElementById(\'admin-content\');\n    var html=\'<div class="admin-title" style="margin-top:24px">User Activity</div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Role</th><th>Sessions</th><th>Active Now</th><th>Last Active</th></tr>\';\n    users.forEach(function(u){\n      var la=u.last_active_at?new Date(u.last_active_at*1000).toLocaleString(\'en-SG\',{hour12:false,timeZone:\'Asia/Singapore\'}):\'Never\';\n      html+=\'<tr><td style="font-weight:600">\'+_escH(u.display_name||u.username)+\'</td>\';\n      html+=\'<td>\'+_escH(u.role)+\'</td>\';\n      html+=\'<td>\'+u.session_count+\'</td>\';\n      html+=\'<td>\'+u.active_sessions+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px">\'+la+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML+=html;\n  }catch(e){}\n}\nfunction _loadOverview(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div><div class="pulse" style="color:var(--text3)">Loading dashboard...</div>\';\n  try{\n    var [health,users,projects]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/users\',{action:\'list\'}),_api(\'/api/projects\')]);\n    var h=health||{},userList=(users&&users.users)||[],projList=(projects&&projects.projects)||[];\n    var activeProjects=projList.filter(function(p){return p.status===\'active\'}).length;\n    var adminCount=userList.filter(function(u){return u.role===\'admin\'||u.role===\'platform_admin\'}).length;\n    var opCount=userList.filter(function(u){return u.role===\'operator\'}).length;\n    var html=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div>\';\n    html+=\'<div class="admin-grid">\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System Status</div><div class="admin-stat green">Online</div><div class="admin-stat-sub">PID \'+(h.porter_pid||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Version</div><div class="admin-stat blue" style="font-size:22px">v\'+(h.porter_version||\'?\')+\'</div><div class="admin-stat-sub">Python \'+(h.python_version||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Uptime</div><div class="admin-stat" style="font-size:20px;color:var(--text)">\'+_fmtUp(h.uptime_seconds||0)+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div><div class="admin-stat blue">\'+userList.length+\'</div><div class="admin-stat-sub">\'+adminCount+\' admin, \'+opCount+\' operators</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Projects</div><div class="admin-stat purple">\'+projList.length+\'</div><div class="admin-stat-sub">\'+activeProjects+\' active</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-grid-3">\';\n    var cpuC=(h.cpu_percent||0)>80?\'red\':(h.cpu_percent||0)>50?\'yellow\':\'green\';\n    var memC=(h.memory_percent||0)>80?\'red\':(h.memory_percent||0)>50?\'yellow\':\'green\';\n    var diskC=(h.disk_percent||0)>90?\'red\':(h.disk_percent||0)>70?\'yellow\':\'green\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">CPU</div><div class="admin-stat \'+cpuC+\'">\'+(h.cpu_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Memory</div><div class="admin-stat \'+memC+\'">\'+(h.memory_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Disk</div><div class="admin-stat \'+diskC+\'">\'+(h.disk_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Services</div>\';\n    var svcs=h.services||[];\n    if(svcs.length){\n      html+=\'<table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>URL</th></tr>\';\n      svcs.forEach(function(s){var b=s.status===\'ok\'?\'green\':\'red\';html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+b+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table>\';\n    }else{html+=\'<div class="admin-empty">No services detected</div>\';}\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div>\';\n    html+=\'<table class="admin-table"><tr><th>User</th><th>Role</th><th>Created</th></tr>\';\n    userList.slice(0,10).forEach(function(u){html+=\'<tr><td style="font-weight:600">\'+_escH(u.display_name||u.username)+\' <span style="color:var(--text3);font-weight:400">@\'+_escH(u.username)+\'</span></td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td></tr>\';});\n    html+=\'</table></div>\';\n    el.innerHTML=html;_appendUsageStats();\n  }catch(e){el.innerHTML=\'<div class="admin-title">Overview</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadUsers(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">User Management</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/users\',{action:\'list\'});\n    var users=(data&&data.users)||[];\n    var html=\'<div class="admin-title">User Management</div><div class="admin-subtitle">\'+users.length+\' registered users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn primary" onclick="_showCreateUser()">+ Create User</button><button class="admin-btn" onclick="_showCreateInvite()">Invite User</button><div class="spacer"></div><button class="admin-btn" onclick="_loadUsers()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Display Name</th><th>Role</th><th>Email</th><th>Created</th><th style="width:140px">Actions</th></tr>\';\n    users.forEach(function(u){\n      html+=\'<tr><td style="font-weight:600">\'+_escH(u.username)+\'</td><td>\'+_escH(u.display_name||\'\')+\'</td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_escH(u.email||\'-\')+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td>\';\n      html+=\'<td><div style="display:flex;gap:4px"><button class="admin-btn sm" onclick="_showEditRole(\\\'\'+_escH(u.username)+\'\\\',\\\'\'+_escH(u.role)+\'\\\')">Role</button>\';\n      html+=\'<button class="admin-btn sm" onclick="_resetPassword(\\\'\'+_escH(u.username)+\'\\\')">Reset</button>\';\n      if(u.username!==\'system\')html+=\'<button class="admin-btn sm danger" onclick="_deleteUser(\\\'\'+_escH(u.username)+\'\\\')">Delete</button>\';\n      html+=\'</div></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n    try{var _inv_res=await fetch(\'/api/admin/invites\',{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},body:JSON.stringify({action:\'list\'}),credentials:\'same-origin\'}).then(function(r){return r.json();});var _invs=(_inv_res&&_inv_res.invites)||[];if(_invs.length>0){var ih=\'<div class="admin-title" style="margin-top:24px">Invites</div>\';ih+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';ih+=\'<tr><th>Code</th><th>Role</th><th>By</th><th>Uses</th><th>Status</th><th>Actions</th></tr>\';_invs.forEach(function(inv){var st=inv.status===\'active\'?\'\u25cf Active\':\'\u25cf \'+inv.status;ih+=\'<tr><td style="font-family:monospace;font-size:12px">\'+_escH(inv.code.slice(0,8))+\'...</td><td>\'+_escH(inv.role)+\'</td><td>\'+_escH(inv.created_by)+\'</td><td>\'+inv.use_count+\'/\'+inv.max_uses+\'</td><td>\'+st+\'</td><td>\';if(inv.status===\'active\')ih+=\'<button class="admin-btn sm danger" onclick="_revokeInvite(\\\'\'+_escH(inv.code)+\'\\\')">Revoke</button>\';ih+=\'</td></tr>\';});ih+=\'</table></div>\';el.innerHTML+=ih;}}catch(_ie){}\n  }catch(e){el.innerHTML=\'<div class="admin-title">Users</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nfunction _showCreateUser(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Create User</h3><label>Username</label><input class="admin-input" id="_cu_user" placeholder="lowercase, no spaces"><label>Display Name</label><input class="admin-input" id="_cu_name" placeholder="Full display name"><label>Role</label><select class="admin-select" id="_cu_role"><option value="operator">Operator</option><option value="admin">Admin</option><option value="viewer">Viewer</option><option value="platform_admin">Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doCreateUser()">Create</button></div></div></div>\');\n  document.getElementById(\'_cu_user\').focus();\n}\nasync function _doCreateUser(){\n  var u=document.getElementById(\'_cu_user\').value.trim(),n=document.getElementById(\'_cu_name\').value.trim()||u,r=document.getElementById(\'_cu_role\').value;\n  if(!u)return;\n  var res=await _api(\'/api/admin/users\',{action:\'create\',username:u,display_name:n,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nfunction _showEditRole(username,currentRole){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Change Role &#8212; \'+_escH(username)+\'</h3><label>New Role</label><select class="admin-select" id="_er_role"><option value="operator"\'+(currentRole===\'operator\'?\' selected\':\'\')+\'>Operator</option><option value="admin"\'+(currentRole===\'admin\'?\' selected\':\'\')+\'>Admin</option><option value="viewer"\'+(currentRole===\'viewer\'?\' selected\':\'\')+\'>Viewer</option><option value="platform_admin"\'+(currentRole===\'platform_admin\'?\' selected\':\'\')+\'>Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doEditRole(\\\'\'+_escH(username)+\'\\\')">Save</button></div></div></div>\');\n}\nasync function _doEditRole(username){\n  var r=document.getElementById(\'_er_role\').value;\n  var res=await _api(\'/api/admin/users\',{action:\'update_role\',username:username,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _deleteUser(username){if(!confirm(\'Delete user \'+username+\'? This cannot be undone.\'))return;var res=await _api(\'/api/admin/users\',{action:\'delete\',username:username});if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n\n\nvar _auditPage=0;var _auditFilters={actor:\'\',action:\'\',from:\'\',to:\'\'};\nasync function _loadAudit(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Audit Log</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var qs=\'limit=50&offset=\'+(_auditPage*50);\n    if(_auditFilters.actor)qs+=\'&actor=\'+encodeURIComponent(_auditFilters.actor);\n    if(_auditFilters.action)qs+=\'&action=\'+encodeURIComponent(_auditFilters.action);\n    var data=await fetch(\'/api/admin/audit?\'+qs,{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var stats=await fetch(\'/api/admin/audit/stats\',{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var events=(data&&data.events)||[];var total=(data&&data.total)||0;\n    var s24=(stats&&stats.period_24h)||{};\n    var html=\'<div class="admin-title">Audit Log</div>\';\n    html+=\'<div class="admin-subtitle">\'+total+\' total events | 24h: \'+(s24.total||0)+\' events</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:8px">\';\n    html+=\'<input class="admin-input" id="_af_actor" placeholder="Actor" value="\'+_escH(_auditFilters.actor)+\'" style="width:120px">\';\n    html+=\'<input class="admin-input" id="_af_action" placeholder="Action" value="\'+_escH(_auditFilters.action)+\'" style="width:150px">\';\n    html+=\'<button class="admin-btn primary" onclick="_auditApplyFilter()">Filter</button>\';\n    html+=\'<button class="admin-btn" onclick="_auditClearFilter()">Clear</button>\';\n    html+=\'<div class="spacer"></div><button class="admin-btn" onclick="_loadAudit()">Refresh</button>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>IP</th></tr>\';\n    events.forEach(function(e){\n      var dt=new Date(e.ts*1000);var ts=dt.toLocaleString(\'en-SG\',{hour12:false,timeZone:\'Asia/Singapore\'});\n      var det=JSON.stringify(e.details||{});if(det===\'{}\')det=\'-\';if(det.length>60)det=det.slice(0,57)+\'...\';\n      html+=\'<tr><td style="white-space:nowrap;color:var(--text3);font-size:12px">\'+_escH(ts)+\'</td>\';\n      html+=\'<td style="font-weight:600">\'+_escH(e.actor)+\'</td>\';\n      html+=\'<td><span style="background:var(--surface);padding:2px 8px;border-radius:4px;font-size:12px">\'+_escH(e.action)+\'</span></td>\';\n      html+=\'<td>\'+_escH(e.target||\'-\')+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis">\'+_escH(det)+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px">\'+_escH(e.ip_address||\'-\')+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    var pages=Math.ceil(total/50);\n    if(pages>1){\n      html+=\'<div style="display:flex;gap:8px;margin-top:12px;justify-content:center">\';\n      if(_auditPage>0)html+=\'<button class="admin-btn sm" onclick="_auditPage--;_loadAudit()">&laquo; Prev</button>\';\n      html+=\'<span style="color:var(--text3);padding:6px">Page \'+(_auditPage+1)+\' of \'+pages+\'</span>\';\n      if(_auditPage<pages-1)html+=\'<button class="admin-btn sm" onclick="_auditPage++;_loadAudit()">Next &raquo;</button>\';\n      html+=\'</div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Audit</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}}\nfunction _auditApplyFilter(){\n  _auditFilters.actor=document.getElementById(\'_af_actor\').value.trim();\n  _auditFilters.action=document.getElementById(\'_af_action\').value.trim();\n  _auditPage=0;_loadAudit();}\nfunction _auditClearFilter(){_auditFilters={actor:\'\',action:\'\',from:\'\',to:\'\'};_auditPage=0;_loadAudit();}\nasync function _showCreateInvite(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Create Invite</h3><label>Role</label><select class="admin-select" id="_inv_role"><option value="operator">Operator</option><option value="admin">Admin</option><option value="viewer">Viewer</option></select><label>Max Uses</label><input class="admin-input" id="_inv_max" type="number" value="1" min="1"><label>Expires (hours, 0=never)</label><input class="admin-input" id="_inv_hours" type="number" value="72" min="0"><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doCreateInvite()">Create</button></div></div></div>\');\n}\nasync function _doCreateInvite(){\n  var role=document.getElementById(\'_inv_role\').value;\n  var max=document.getElementById(\'_inv_max\').value;\n  var hours=document.getElementById(\'_inv_hours\').value;\n  var res=await _api(\'/api/admin/invites\',{action:\'create\',role:role,max_uses:parseInt(max),expires_hours:parseInt(hours)});\n  _closeModal();\n  if(res&&res.ok){\n    _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Invite Created</h3><p>Share this code:</p><div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-family:monospace;font-size:14px;text-align:center;margin:12px 0;user-select:all;word-break:break-all">\'+_escH(res.code)+\'</div><p style="color:var(--text3);font-size:12px">Role: \'+_escH(res.role)+\' | Max uses: \'+res.max_uses+\'</p><div class="admin-modal-actions"><button class="admin-btn primary" onclick="_closeModal();_loadUsers()">Done</button></div></div></div>\');\n  }else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n}\nasync function _revokeInvite(code){\n  if(!confirm(\'Revoke this invite code?\'))return;\n  var res=await _api(\'/api/admin/invites\',{action:\'revoke\',code:code});\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _resetPassword(username){if(!confirm(\'Reset password for \'+username+\'? A temporary password will be generated.\'))return;var res=await _api(\'/api/admin/users\',{action:\'reset_password\',username:username});if(res&&res.ok){_modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Password Reset</h3><p>Temporary password for <b>\'+_escH(username)+\'</b>:</p><div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-family:monospace;font-size:16px;text-align:center;margin:12px 0;user-select:all">\'+_escH(res.temp_password)+\'</div><p style="color:var(--text3);font-size:12px">User must change this on next login.</p><div class="admin-modal-actions"><button class="admin-btn primary" onclick="_closeModal()">Done</button></div></div></div>\');}else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}}\nasync function _loadSessions(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Active Sessions</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/sessions\');\n    var sessions=(data&&data.sessions)||[];\n    var html=\'<div class="admin-title">Active Sessions</div><div class="admin-subtitle">\'+sessions.length+\' active sessions</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadSessions()">Refresh</button></div>\';\n    if(!sessions.length){html+=\'<div class="admin-empty">No active sessions</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Role</th><th>IP</th><th>User Agent</th><th>Created</th><th>Last Active</th><th>Actions</th></tr>\';\n    sessions.forEach(function(s){\n      var ua=(s.user_agent||\'\').substring(0,40);\n      html+=\'<tr><td style="font-weight:600">\'+_escH(s.username||\'?\')+\'</td><td>\'+_roleBadge(s.role||\'operator\')+\'</td><td style="font-family:monospace;font-size:11px">\'+_escH(s.ip||\'-\')+\'</td><td style="font-size:10px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis">\'+_escH(ua)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.created_at)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.last_active)+\'</td><td><button class="admin-btn sm danger" onclick="_revokeSession(\\\'\'+_escH(s.token_prefix||\'\')+\'\\\')">Revoke</button></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Sessions</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _revokeSession(tp){if(!confirm(\'Revoke this session?\'))return;await _api(\'/api/admin/sessions\',{action:\'revoke\',token_prefix:tp});_loadSessions();}\n\nasync function _loadProjects(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">All Projects</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/projects\');\n    var projects=(data&&data.projects)||[];\n    var html=\'<div class="admin-title">All Projects</div><div class="admin-subtitle">\'+projects.length+\' total projects across all users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadProjects()">Refresh</button></div>\';\n    if(!projects.length){html+=\'<div class="admin-empty">No projects</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>Project</th><th>Owner</th><th>Type</th><th>Status</th><th>Created</th></tr>\';\n    projects.forEach(function(p){\n      var sb=p.status===\'active\'?\'green\':p.status===\'completed\'?\'blue\':\'yellow\';\n      html+=\'<tr><td style="font-weight:600">\'+_escH(p.name||\'Untitled\')+\'</td><td>\'+_escH(p.owner||\'-\')+\'</td><td style="color:var(--text3)">\'+_escH(p.type||\'custom\')+\'</td><td><span class="admin-badge \'+sb+\'">\'+_escH(p.status||\'active\')+\'</span></td><td style="color:var(--text3)">\'+_fmtDate(p.created_at)+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Projects</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadHealth(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Health</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var h=await _api(\'/api/admin/health\');\n    var html=\'<div class="admin-title">System Health</div><div class="admin-subtitle">Detailed system diagnostics</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadHealth()">Refresh</button></div>\';\n    html+=\'<div class="admin-grid">\';\n    var metrics=[\n      {k:\'cpu_percent\',l:\'CPU Usage\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'memory_percent\',l:\'Memory\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'disk_percent\',l:\'Disk\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:70,crit:90},\n      {k:\'uptime_seconds\',l:\'Uptime\',fmt:_fmtUp},\n      {k:\'porter_pid\',l:\'Process ID\',fmt:function(v){return v}},\n      {k:\'porter_size_kb\',l:\'Binary Size\',fmt:function(v){return(v/1024).toFixed(1)+\' MB\'}},\n      {k:\'porter_lines\',l:\'Lines of Code\',fmt:function(v){return v.toLocaleString()}},\n      {k:\'python_version\',l:\'Python\',fmt:function(v){return v}},\n      {k:\'porter_version\',l:\'Porter Version\',fmt:function(v){return\'v\'+v}}\n    ];\n    metrics.forEach(function(m){\n      if(h[m.k]===undefined)return;var v=h[m.k];\n      var color=\'var(--text)\';\n      if(m.crit&&v>=m.crit)color=\'var(--red)\';else if(m.warn&&v>=m.warn)color=\'var(--yellow)\';else if(m.crit)color=\'var(--green)\';\n      html+=\'<div class="admin-card"><div class="admin-card-title">\'+m.l+\'</div><div style="font-size:20px;font-weight:700;color:\'+color+\'">\'+m.fmt(v)+\'</div></div>\';\n    });\n    html+=\'</div>\';\n    if(h.services&&h.services.length){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Service Probes</div><table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>Endpoint</th></tr>\';\n      h.services.forEach(function(s){html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+(s.status===\'ok\'?\'green\':\'red\')+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Health</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync async function _loadWorkspaceConfig(){\n  var res=await _api(\'/api/admin/workspace\',{action:\'get\'});\n  var s=(res&&res.settings)||{};\n  var html=\'<div class="admin-title" style="margin-top:24px">Workspace Identity</div>\';\n  html+=\'<div class="admin-card">\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Workspace Name</label><input class="admin-input" id="_ws_name" value="\'+_escH(s.workspace_name||\'\')+\'" style="margin-top:4px"></div>\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Description</label><input class="admin-input" id="_ws_desc" value="\'+_escH(s.workspace_description||\'\')+\'" style="margin-top:4px"></div>\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Accent Color</label><input class="admin-input" id="_ws_accent" type="color" value="\'+_escH(s.workspace_accent||\'\')+\'" style="margin-top:4px;width:60px;height:32px;padding:2px"></div>\';\n  html+=\'<button class="admin-btn primary" onclick="_saveWorkspaceConfig()">Save</button>\';\n  html+=\'</div>\';\n  return html;\n}\nasync function _saveWorkspaceConfig(){\n  var name=document.getElementById(\'_ws_name\').value;\n  var desc=document.getElementById(\'_ws_desc\').value;\n  var accent=document.getElementById(\'_ws_accent\').value;\n  var res=await _api(\'/api/admin/workspace\',{action:\'update\',workspace_name:name,workspace_description:desc,workspace_accent:accent});\n  if(res&&res.ok){alert(\'Saved!\');_loadConfig();}else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n}\nfunction _loadConfig(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Configuration</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var [health,hyg]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/hygiene\')]);\n    var html=\'<div class="admin-title">System Configuration</div><div class="admin-subtitle">Read-only view of current system settings</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadConfig()">Refresh</button></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System</div><dl class="admin-kv">\';\n    var sk=[[\'Porter Version\',\'v\'+(health.porter_version||\'?\')],[\'Python\',health.python_version||\'?\'],[\'PID\',health.porter_pid||\'?\'],[\'Binary Size\',(health.porter_size_kb||0).toFixed(0)+\' KB\'],[\'Lines\',health.porter_lines||\'?\']];\n    sk.forEach(function(kv){html+=\'<dt>\'+kv[0]+\'</dt><dd>\'+_escH(String(kv[1]))+\'</dd>\';});\n    html+=\'</dl></div>\';\n    if(hyg&&!hyg.error){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Hygiene System</div><dl class="admin-kv">\';\n      Object.keys(hyg).filter(function(k){return typeof hyg[k]!==\'object\'}).forEach(function(k){html+=\'<dt>\'+_escH(k)+\'</dt><dd>\'+_escH(String(hyg[k]))+\'</dd>\';});\n      html+=\'</dl></div>\';\n    }\n    var wsHtml=await _loadWorkspaceConfig();html+=wsHtml;el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Config</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadLogs(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Logs</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/logs\');\n    var lines=(data&&data.lines)||[];\n    var html=\'<div class="admin-title">System Logs</div><div class="admin-subtitle">\'+lines.length+\' log lines</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadLogs()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="max-height:calc(100vh - 180px);overflow-y:auto;font-family:monospace;padding:12px">\';\n    lines.slice(-300).forEach(function(l){html+=\'<div class="admin-log-line">\'+_escH(l)+\'</div>\';});\n    html+=\'</div>\';\n    el.innerHTML=html;\n    var lb=el.querySelector(\'.admin-card\');if(lb)lb.scrollTop=lb.scrollHeight;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Logs</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nvar _tmplFilter=\'\';\nasync function _loadTemplates(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Worker Templates</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var url=\'/api/templates\';\n    if(_tmplFilter)url+=\'?category=\'+encodeURIComponent(_tmplFilter);\n    var data=await _api(url);\n    var all=await _api(\'/api/templates\');\n    var templates=(data&&data.templates)||[];\n    var allTemplates=(all&&all.templates)||[];\n    var cats={};allTemplates.forEach(function(t){var c=t.category||\'other\';cats[c]=(cats[c]||0)+1;});\n    var catList=Object.keys(cats).sort();\n    var html=\'<div class="admin-title">Worker Templates</div><div class="admin-subtitle">\'+allTemplates.length+\' archetypes across \'+catList.length+\' categories</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:6px">\';\n    html+=\'<button class="admin-btn\'+(!_tmplFilter?\' primary\':\'\')+\'" onclick="_tmplFilter=\\\'\\\';_loadTemplates()">All (\'+allTemplates.length+\')</button>\';\n    catList.forEach(function(c){\n      var active=_tmplFilter===c;\n      html+=\'<button class="admin-btn\'+(active?\' primary\':\'\')+\'" onclick="_tmplFilter=\\\'\'+_escH(c)+\'\\\'\\\';_loadTemplates()">\'+_escH(c.charAt(0).toUpperCase()+c.slice(1))+\' (\'+cats[c]+\')</button>\';\n    });\n    html+=\'</div>\';\n    if(!templates.length){html+=\'<div class="admin-empty">No templates in this category</div>\';el.innerHTML=html;return;}\n    html+=\'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">\';\n    templates.forEach(function(t){\n      html+=\'<div class="admin-card" style="cursor:pointer;transition:border-color .15s" onclick="_tmplDetail(\\\'\'+_escH(t.id)+\'\\\')" onmouseenter="this.style.borderColor=\\\'var(--accent)\\\'" onmouseleave="this.style.borderColor=\\\'var(--border)\\\'">\';\n      html+=\'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">\';\n      html+=\'<div style="font-size:14px;font-weight:700;color:var(--text)">\'+_escH(t.name)+\'</div>\';\n      html+=\'</div>\';\n      html+=\'<div style="font-size:11px;color:var(--text2);line-height:1.5;margin-bottom:8px">\'+_escH(t.description)+\'</div>\';\n      html+=\'<div style="display:flex;gap:4px;flex-wrap:wrap">\';\n      html+=\'<span class="admin-badge blue">\'+_escH(t.category)+\'</span>\';\n      (t.tags||[]).slice(0,4).forEach(function(tag){\n        html+=\'<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:var(--raised);color:var(--text3)">\'+_escH(tag)+\'</span>\';\n      });\n      html+=\'</div></div>\';\n    });\n    html+=\'</div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Templates</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _tmplDetail(tid){\n  try{\n    var data=await _api(\'/api/templates/\'+tid);\n    if(!data||data.error){alert(\'Template not found\');return;}\n    var html=\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal" style="max-width:560px;max-height:80vh;overflow-y:auto">\';\n    html+=\'<h3 style="margin-bottom:4px">\'+_escH(data.name||tid)+\'</h3>\';\n    html+=\'<div style="font-size:11px;color:var(--text3);margin-bottom:12px"><span class="admin-badge blue">\'+_escH(data.cat||\'\')+\'</span> <span class="admin-badge green">\'+_escH(data.archetype||\'\')+\'</span></div>\';\n    html+=\'<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:14px">\'+_escH(data.desc||\'\')+\'</div>\';\n    if(data.mission){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Mission</div><div style="font-size:12px;color:var(--text)">\'+_escH(data.mission)+\'</div></div>\';}\n    if(data.soul&&data.soul.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Soul Traits</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.soul.forEach(function(s){html+=\'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,var(--purple) 15%,transparent);color:var(--purple)">\'+_escH(s)+\'</span>\';});html+=\'</div></div>\';}\n    if(data.authority&&data.authority.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Authority</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.authority.forEach(function(a){html+=\'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">\'+_escH(a)+\'</span>\';});html+=\'</div></div>\';}\n    if(data.inputs&&data.inputs.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Inputs</div><div style="font-size:11px;color:var(--text2)">\'+data.inputs.map(function(i){return _escH(i)}).join(\' &middot; \')+\'</div></div>\';}\n    if(data.outputs&&data.outputs.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Outputs</div><div style="font-size:11px;color:var(--text2)">\'+data.outputs.map(function(o){return _escH(o)}).join(\' &middot; \')+\'</div></div>\';}\n    if(data.tags&&data.tags.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Tags</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.tags.forEach(function(t){html+=\'<span style="font-size:9px;padding:2px 6px;border-radius:3px;background:var(--raised);color:var(--text3)">\'+_escH(t)+\'</span>\';});html+=\'</div></div>\';}\n    html+=\'<div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Close</button></div>\';\n    html+=\'</div></div>\';\n    _modal(html);\n  }catch(e){alert(\'Error: \'+e.message);}\n}\nvar _dirScope=\'\';\nasync function _loadDirectives(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Directives</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var url=\'/api/state/directives\';\n    var params=[];\n    if(_dirScope)params.push(\'scope_type=\'+encodeURIComponent(_dirScope));\n    params.push(\'include_dismissed=1\');\n    if(params.length)url+=\'?\'+params.join(\'&\');\n    var data=await _api(url);\n    var dirs=(data&&data.directives)||[];\n    var active=dirs.filter(function(d){return d.status===\'active\'});\n    var dismissed=dirs.filter(function(d){return d.status!==\'active\'});\n    var scopes={};dirs.forEach(function(d){var s=d.scope_type||\'global\';scopes[s]=(scopes[s]||0)+1;});\n    var scopeList=Object.keys(scopes).sort();\n    var html=\'<div class="admin-title">Directives</div><div class="admin-subtitle">\'+active.length+\' active, \'+dismissed.length+\' dismissed/superseded</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:6px">\';\n    html+=\'<button class="admin-btn\'+(!_dirScope?\' primary\':\'\')+\'" onclick="_dirScope=\\\'\\\';_loadDirectives()">All (\'+dirs.length+\')</button>\';\n    scopeList.forEach(function(s){\n      html+=\'<button class="admin-btn\'+(_dirScope===s?\' primary\':\'\')+\'" onclick="_dirScope=\\\'\'+_escH(s)+\'\\\'\\\';_loadDirectives()">\'+_escH(s.charAt(0).toUpperCase()+s.slice(1))+\' (\'+scopes[s]+\')</button>\';\n    });\n    html+=\'<div class="spacer"></div>\';\n    html+=\'<button class="admin-btn primary" onclick="_showAddDirective()">+ Add Directive</button>\';\n    html+=\'</div>\';\n    if(!dirs.length){html+=\'<div class="admin-empty">No directives yet</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>ID</th><th>Scope</th><th>Directive</th><th>Status</th><th>Source</th><th>Created</th><th>Actions</th></tr>\';\n    dirs.forEach(function(d){\n      var sb=d.status===\'active\'?\'green\':d.status===\'dismissed\'?\'red\':\'yellow\';\n      var scopeLabel=d.scope_type===\'project\'?d.scope_type+\' (\'+_escH((d.scope_id||\'\').substring(0,8))+\')\':d.scope_type;\n      html+=\'<tr><td style="font-family:monospace;font-size:11px">#\'+d.id+\'</td>\';\n      html+=\'<td><span class="admin-badge blue">\'+_escH(scopeLabel)+\'</span></td>\';\n      html+=\'<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\'+_escH(d.text||\'\')+\'</td>\';\n      html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(d.status||\'active\')+\'</span></td>\';\n      html+=\'<td style="color:var(--text3);font-size:11px">\'+_escH(d.source||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_fmtAgo(d.created_at)+\'</td>\';\n      html+=\'<td>\';\n      if(d.status===\'active\')html+=\'<button class="admin-btn sm danger" onclick="_dismissDir(\'+d.id+\')">Dismiss</button>\';\n      else html+=\'<button class="admin-btn sm" onclick="_activateDir(\'+d.id+\')">Reactivate</button>\';\n      html+=\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Directives</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _dismissDir(id){\n  await _api(\'/api/state/directives/\'+id+\'/status\',{status:\'dismissed\'});\n  _loadDirectives();\n}\nasync function _activateDir(id){\n  await _api(\'/api/state/directives/\'+id+\'/status\',{status:\'active\'});\n  _loadDirectives();\n}\nfunction _showAddDirective(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Add Directive</h3><label>Scope</label><select class="admin-select" id="_ad_scope"><option value="global">Global</option><option value="project">Project</option><option value="agent">Agent</option></select><label>Scope ID (for project/agent)</label><input class="admin-input" id="_ad_sid" placeholder="Project or agent ID"><label>Directive Text</label><textarea class="admin-input" id="_ad_text" rows="3" placeholder="Always do X when Y happens..."></textarea><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doAddDirective()">Add</button></div></div></div>\');\n}\nasync function _doAddDirective(){\n  var scope=document.getElementById(\'_ad_scope\').value;\n  var sid=document.getElementById(\'_ad_sid\').value.trim();\n  var text=document.getElementById(\'_ad_text\').value.trim();\n  if(!text)return;\n  var res=await _api(\'/api/state/directives\',{action:\'create\',scope_type:scope,scope_id:sid,text:text});\n  _closeModal();\n  if(res&&res.ok)_loadDirectives();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _loadConnections(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Connections</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/connections\',{action:\'list\'});\n    var conns=(data&&data.connections)||[];\n    var active=conns.filter(function(c){return c.status===\'active\'}).length;\n    var html=\'<div class="admin-title">Workspace Connections</div><div class="admin-subtitle">\'+conns.length+\' connections (\'+active+\' active)</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn primary" onclick="_showAddConnection()">+ Add Connection</button><div class="spacer"></div><button class="admin-btn" onclick="_loadConnections()">Refresh</button></div>\';\n    if(!conns.length){html+=\'<div class="admin-empty">No connections yet. Add one to connect external services.</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>ID</th><th>Provider</th><th>Name</th><th>Kind</th><th>Status</th><th>Installed By</th><th>Created</th><th>Actions</th></tr>\';\n    conns.forEach(function(c){\n      var sb=c.status===\'active\'?\'green\':c.status===\'disconnected\'?\'yellow\':\'red\';\n      html+=\'<tr><td style="font-family:monospace;font-size:10px">\'+_escH((c.id||\'\').substring(0,12))+\'</td>\';\n      html+=\'<td style="font-weight:600">\'+_escH(c.provider||\'\')+\'</td>\';\n      html+=\'<td>\'+_escH(c.display_name||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_escH(c.kind||\'api_key\')+\'</td>\';\n      html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(c.status||\'disconnected\')+\'</span></td>\';\n      html+=\'<td style="color:var(--text3)">\'+_escH(c.installed_by||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_fmtAgo(c.created_at)+\'</td>\';\n      html+=\'<td><div style="display:flex;gap:4px">\';\n      if(c.status!==\'active\')html+=\'<button class="admin-btn sm" onclick="_connSetStatus(\\\'\'+_escH(c.id)+\'\\\',\\\'active\\\')">Activate</button>\';\n      else html+=\'<button class="admin-btn sm" onclick="_connSetStatus(\\\'\'+_escH(c.id)+\'\\\',\\\'disconnected\\\')">Disconnect</button>\';\n      html+=\'<button class="admin-btn sm danger" onclick="_connDelete(\\\'\'+_escH(c.id)+\'\\\')">Delete</button>\';\n      html+=\'</div></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    // Environment tools section\n    var envData=await _api(\'/api/admin/env-tools\');\n    var tools=(envData&&envData.tools)||[];\n    if(tools.length){\n      html+=\'<div class="admin-title" style="margin-top:28px">Environment Tools</div><div class="admin-subtitle">Auto-detected local tools</div>\';\n      html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n      html+=\'<tr><th>Tool</th><th>Status</th><th>Version</th><th>Last Checked</th></tr>\';\n      tools.forEach(function(t){\n        var sb=t.health===\'ok\'?\'green\':t.health===\'missing\'?\'red\':\'yellow\';\n        html+=\'<tr><td style="font-weight:600">\'+_escH(t.tool_key||\'\')+\'</td>\';\n        html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(t.detected?\'detected\':\'missing\')+\'</span></td>\';\n        html+=\'<td style="font-size:11px;color:var(--text2)">\'+_escH(t.version||\'-\')+\'</td>\';\n        html+=\'<td style="color:var(--text3)">\'+_fmtAgo(t.last_checked_at)+\'</td></tr>\';\n      });\n      html+=\'</table></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Connections</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _connSetStatus(id,status){\n  await _api(\'/api/admin/connections\',{action:\'update\',id:id,status:status});\n  _loadConnections();\n}\nasync function _connDelete(id){\n  if(!confirm(\'Delete this connection? Projects using it will be disconnected.\'))return;\n  await _api(\'/api/admin/connections\',{action:\'delete\',id:id});\n  _loadConnections();\n}\nfunction _showAddConnection(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Add Connection</h3><label>Provider</label><input class="admin-input" id="_ac_provider" placeholder="e.g. github, slack, google"><label>Display Name</label><input class="admin-input" id="_ac_name" placeholder="My GitHub"><label>Kind</label><select class="admin-select" id="_ac_kind"><option value="api_key">API Key</option><option value="oauth">OAuth</option><option value="webhook">Webhook</option><option value="local">Local</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doAddConnection()">Add</button></div></div></div>\');\n}\nasync function _doAddConnection(){\n  var provider=document.getElementById(\'_ac_provider\').value.trim();\n  var name=document.getElementById(\'_ac_name\').value.trim()||provider;\n  var kind=document.getElementById(\'_ac_kind\').value;\n  if(!provider)return;\n  var res=await _api(\'/api/admin/connections\',{action:\'create\',provider:provider,display_name:name,kind:kind});\n  _closeModal();\n  if(res&&res.ok)_loadConnections();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\n_loadOverview();\n</script>\n</body></html>'
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -42352,7 +42861,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.83"})
+            self.reply_json({"v": "0.31.84"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -42514,7 +43023,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.83"
+                health["porter_version"] = "0.31.84"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -42556,7 +43065,6 @@ class Handler(BaseHTTPRequestHandler):
                 ("Gemini CLI", "gemini", "npm i -g @google/gemini-cli"),
                 ("OpenClaw CLI", "openclaw", "npm i -g openclaw"),
                 ("Claude CLI", "claude", "npm i -g @anthropic-ai/claude-code"),
-                ("Kraken CLI", "kraken", "cargo install kraken-cli"),
                 ("GitHub CLI", "gh", "apt install gh"),
                 ("Docker", "docker", "apt install docker.io"),
                 ("Node.js", "node", "apt install nodejs"),
@@ -44399,6 +44907,45 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             summaries = _load_session_summaries()
             self.reply_json({"ok": True, "sessions": summaries, "count": len(summaries)})
+
+        # ── v0.31.84: OpenClaw agents (GET) ─────────────────────────────────
+        elif parsed.path == "/api/openclaw/agents":
+            if not self.auth_check(redirect=False): return
+            agents = _openclaw_list_agents()
+            self.reply_json({"ok": True, "agents": agents, "count": len(agents)})
+
+        # ── v0.31.84: OpenClaw channels (GET) ───────────────────────────────
+        elif parsed.path == "/api/openclaw/channels":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            action = (qs.get("action", ["list"])[0]).strip()
+            if action == "status":
+                self.reply_json(_openclaw_channel_status())
+            else:
+                channels = _openclaw_channels()
+                self.reply_json({"ok": True, "channels": channels, "count": len(channels)})
+
+        # ── v0.31.84: OpenClaw nodes (GET) ──────────────────────────────────
+        elif parsed.path == "/api/openclaw/nodes":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            node_id = (qs.get("id", [""])[0]).strip()
+            if node_id:
+                self.reply_json(_openclaw_node_status(node_id))
+            else:
+                nodes = _openclaw_nodes()
+                self.reply_json({"ok": True, "nodes": nodes, "count": len(nodes)})
+
+        # ── v0.31.84: OpenClaw hooks (GET) ──────────────────────────────────
+        elif parsed.path == "/api/openclaw/hooks":
+            if not self.auth_check(redirect=False): return
+            hooks = _openclaw_hooks()
+            self.reply_json({"ok": True, "hooks": hooks, "count": len(hooks)})
+
+        # ── v0.31.84: OpenClaw health (GET) ─────────────────────────────────
+        elif parsed.path == "/api/openclaw/health":
+            if not self.auth_check(redirect=False): return
+            self.reply_json(_openclaw_health_check())
 
         # ── Sessions (GET, optional ?source=) ────────────────────────────────
         elif parsed.path == "/api/sessions":
@@ -47873,6 +48420,28 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             else:
                 self.reply_json({"ok": False, "error": f"Unknown action: {action}"}, 400)
 
+        # ── v0.31.84: OpenClaw messages (POST) ───────────────────────────────
+        elif parsed.path == "/api/openclaw/messages":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            action = str(data.get("action", "send")).strip()
+            if action == "send":
+                channel = str(data.get("channel", "")).strip()
+                text = str(data.get("text", "")).strip()
+                thread_id = str(data.get("thread_id", "")).strip()
+                if not channel or not text:
+                    self.reply_json({"ok": False, "error": "channel and text required"}, 400)
+                    return
+                self.reply_json(_openclaw_message_send(channel, text, thread_id))
+            elif action == "search":
+                query = str(data.get("query", "")).strip()
+                channel = str(data.get("channel", "")).strip()
+                limit = int(data.get("limit", 20))
+                results = _openclaw_message_search(query, channel, limit)
+                self.reply_json({"ok": True, "messages": results, "count": len(results)})
+            else:
+                self.reply_json({"ok": False, "error": f"Unknown action: {action}"}, 400)
+
         # ── Gap25: Session memory flush (POST) ───────────────────────────────
         elif parsed.path == "/api/openclaw/sessions/flush":
             if not self.auth_check(redirect=False): return
@@ -48634,7 +49203,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.31.83"
+                _ws_health["porter_version"] = "0.31.84"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -49110,13 +49679,18 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     gw_port = int(_oc_settings.get("port", 18789) or 18789)
                     auth_token = str(_oc_settings.get("token", "") or "")
                     gw_host = str(_oc_settings.get("host", "127.0.0.1") or "127.0.0.1")
-                    payload = json.dumps({"message": prompt}).encode()
-                    req = urllib.request.Request(f"http://{gw_host}:{gw_port}/v1/chat",
+                    payload = json.dumps({"model": "gpt-5.4", "messages": [{"role": "user", "content": prompt}]}).encode()
+                    req = urllib.request.Request(f"http://{gw_host}:{gw_port}/v1/chat/completions",
                         data=payload, headers={"Content-Type": "application/json",
                         "Authorization": f"Bearer {auth_token}"}, method="POST")
                     with urllib.request.urlopen(req, timeout=120) as resp:
                         result = json.loads(resp.read())
-                        response_text = result.get("response", result.get("message", result.get("content", str(result))))
+                        # OpenAI-compatible response format
+                        choices = result.get("choices", [])
+                        if choices:
+                            response_text = choices[0].get("message", {}).get("content", "")
+                        else:
+                            response_text = result.get("response", result.get("message", str(result)))
                         self.reply_json({"ok": True, "response": response_text, "model": model_id})
                 else:
                     self.reply_json({"ok": False, "error": f"Model {model_id} not callable directly"}, 400)
@@ -49304,6 +49878,21 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
+        elif parsed.path == "/api/files/analyze":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            rel_path = str(data.get("path", "")).strip("/")
+            if not rel_path:
+                self.reply_json({"ok": False, "error": "path required"}, 400); return
+            base = AGENT_WORKSPACE_DIR / "projects"
+            target = base / rel_path
+            if not str(target.resolve()).startswith(str(base.resolve())):
+                self.reply_json({"ok": False, "error": "Invalid path"}, 403); return
+            if not target.exists():
+                self.reply_json({"ok": False, "error": "File not found"}, 404); return
+            analysis = _analyze_file(target)
+            self.reply_json({"ok": True, "analysis": analysis})
+
         elif parsed.path == "/api/files/upload":
             if not self.auth_check(redirect=False): return
             qs_up = parse_qs(urlparse(self.path).query)
@@ -49321,8 +49910,16 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": "File too large (50MB max)"}, 413); return
             try:
                 body = self.rfile.read(content_length)
-                (target_dir / filename).write_bytes(body)
-                self.reply_json({"ok": True, "size": len(body)})
+                dest = target_dir / filename
+                dest.write_bytes(body)
+                # v0.31.84 — Analyze uploaded file
+                analysis = _analyze_file(dest)
+                self.reply_json({"ok": True, "size": len(body), "analysis": {
+                    "word_count": analysis.get("word_count", 0),
+                    "lang": analysis.get("lang", ""),
+                    "tags": analysis.get("tags", []),
+                    "summary": analysis.get("summary", "")[:100],
+                }})
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
@@ -51207,7 +51804,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.31.83 ready (localhost only)")
+    print(f"\n  Porter v0.31.84 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
