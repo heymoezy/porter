@@ -18924,7 +18924,8 @@ async function loadMemory() {
       {l:'Total',c:stats.total||0,clr:'var(--text)',tip:'All memories across all categories'}
     ];
     cards.forEach(function(s) {
-      var clickable = s.l !== 'Total' ? ' onclick="_memLoadKind(\x27' + s.l.toLowerCase() + '\x27)" style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg);cursor:pointer" title="' + s.tip + ' — Click to view"' : ' style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg);cursor:help" title="' + s.tip + '"';
+      var kindKey = s.l.toLowerCase().replace(/s$/,'');
+      var clickable = s.l !== 'Total' ? ' onclick="_memLoadKind(\x27' + kindKey + '\x27)" style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg);cursor:pointer" title="' + s.tip + ' — Click to view"' : ' style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg);cursor:help" title="' + s.tip + '"';
       html += '<div' + clickable + '><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:' + s.clr + '">' + s.l + '</div><div style="font-size:24px;font-weight:800;color:var(--text);margin-top:4px">' + s.c + '</div></div>';
     });
     html += '</div>';
