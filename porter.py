@@ -3739,7 +3739,7 @@ def _mem_record_injection(memory_id, run_id=''):
         return False
 
 
-def _mem_stats(scope=None, scope_id=None):
+def _mem_stats(scope=None, scope_id=None, exclude_system=False):
     """Aggregate counts by kind/status."""
     try:
         conn = _db_conn()
@@ -3752,6 +3752,8 @@ def _mem_stats(scope=None, scope_id=None):
         if scope_id:
             wheres.append("scope_id = ?")
             params.append(scope_id)
+        if exclude_system:
+            wheres.append("source_type != 'system'")
         if wheres:
             sql += " WHERE " + " AND ".join(wheres)
         sql += " GROUP BY memory_kind, status"
@@ -14651,6 +14653,21 @@ body.density-compact .file-name { padding: 6px 0; }
 #people-module.detail-open #people-detail-view { display:block; }
 .crm-editable { cursor:pointer; padding:1px 4px; border-radius:4px; transition:background .15s; }
 .crm-editable:hover { background:color-mix(in srgb, var(--accent) 8%, transparent); }
+.fm-pane { border:1px solid var(--border); border-radius:8px; background:var(--surface); margin-bottom:16px; overflow:hidden; }
+.fm-pane-hdr { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); background:var(--bg); }
+.fm-pane-title { font-size:11px; font-weight:600; color:var(--text); text-transform:uppercase; letter-spacing:.3px; }
+.fm-pane-empty { padding:32px 14px; text-align:center; color:var(--text3); font-size:12px; }
+.fm-row-actions { display:none; gap:2px; flex-shrink:0; }
+.fm-row:hover .fm-row-actions { display:flex; }
+.fm-row:hover .fm-row-date { display:none; }
+.fm-act { background:none; border:none; color:var(--text3); font-size:11px; padding:2px 6px; border-radius:4px; cursor:pointer; }
+.fm-act:hover { color:var(--text); background:var(--raised); }
+.fm-act.danger:hover { color:#ef4444; }
+.fm-pane { border:1px solid var(--border); border-radius:8px; background:var(--surface); margin-bottom:16px; }
+.fm-pane-hdr { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); }
+.fm-pane-title { font-size:12px; font-weight:600; color:var(--text); text-transform:uppercase; letter-spacing:.3px; }
+.fm-pane-body { min-height:60px; transition:border-color .15s; }
+.fm-pane-empty { padding:24px 14px; text-align:center; color:var(--text3); font-size:12px; }
 .crm-detail-hdr { display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--border); flex-shrink:0; }
 .crm-detail-hdr-avatar { width:48px; height:48px; border-radius:50%; background:var(--raised); display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:700; color:var(--text); flex-shrink:0; }
 .crm-detail-hdr-info { flex:1; min-width:0; }
@@ -16020,8 +16037,6 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="module-hdr">
       <span class="module-title">Files</span>
       <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
-        <button class="btn btn-ghost" onclick="_fmNewFolder()" style="font-size:12px">+ Folder</button>
-        <label class="btn btn-ghost" style="font-size:12px;cursor:pointer">Upload<input type="file" id="fm-upload-input" multiple style="display:none" onchange="_fmUploadFiles(this.files)"></label>
         <button class="btn btn-ghost" onclick="loadAllFiles()">&#8635;</button>
       </div>
     </div>
@@ -19006,17 +19021,17 @@ function switchModule(name) {
 async function loadMemory() {
   var el = document.getElementById('memory-dashboard');
   if (!el) return;
+  var _isPlatAdmin = currentUser && currentUser.role === 'platform_admin';
   el.innerHTML = '<div class="loading-indicator">Loading memory dashboard...</div>';
   try {
     var [statsRes, queueRes] = await Promise.all([
-      api('/api/memory/stats'),
-      api('/api/memory/review-queue?limit=10')
+      api('/api/memory/stats' + (_isPlatAdmin ? '' : '?exclude_system=1')),
+      _isPlatAdmin ? api('/api/memory/review-queue?limit=10') : Promise.resolve({queue:[]})
     ]);
     var stats = statsRes || {};
     var byKind = stats.by_kind || {};
     var queue = (queueRes && queueRes.queue) || [];
-    var _isPlatAdmin = currentUser && currentUser.role === 'platform_admin';
-    if (!_isPlatAdmin) { queue = queue.filter(function(s) { return s.source_type !== 'system'; }); }
+    if (!_isPlatAdmin) { queue = []; }
     var html = '';
     // Stat cards
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">';
@@ -28675,11 +28690,91 @@ async function _createWorkerFromRecommendation(templateName, projectId) {
 
 var _fmCurrentPath = '/';
 
+async function _fmSplitView(el) {
+  var me = currentUser ? currentUser.username : 'default';
+  var userPath = '_files/' + me;
+  var bcEl = document.getElementById('fm-breadcrumbs');
+  if (bcEl) bcEl.innerHTML = '<span style="color:var(--text);font-weight:600">Files</span>';
+  try {
+    var [rootData, userFilesData] = await Promise.all([
+      fetch('/api/files/list?path=/', {credentials:'same-origin'}).then(function(r){return r.json()}),
+      fetch('/api/files/list?path=' + encodeURIComponent(userPath), {credentials:'same-origin'}).then(function(r){return r.json()})
+    ]);
+    var userItems = (userFilesData && userFilesData.items) || [];
+    var rootItems = (rootData && rootData.items) || [];
+    var projItems = rootItems.filter(function(f) { return f.project_id; });
+    var h = '';
+    // My Files pane
+    h += '<div class="fm-pane">';
+    h += '<div class="fm-pane-hdr"><span class="fm-pane-title">My Files</span><div style="flex:1"></div>';
+    h += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="_fmNewFolder()">+ Folder</button>';
+    h += '<label class="btn btn-ghost" style="font-size:11px;padding:2px 8px;cursor:pointer">Upload<input type="file" multiple style="display:none" onchange="_fmUploadFiles(this.files)"></label>';
+    h += '</div>';
+    h += '<div ondragover="event.preventDefault();this.style.background=\'color-mix(in srgb, var(--accent) 5%, var(--surface))\'" ondragleave="this.style.background=\'\'" ondrop="event.preventDefault();this.style.background=\'\';_fmUploadFiles(event.dataTransfer.files)">';
+    if (userItems.length) {
+      userItems.forEach(function(f) { h += _fmRow(f); });
+    } else {
+      h += '<div class="fm-pane-empty">Drop files here or click Upload</div>';
+    }
+    h += '</div></div>';
+    // Projects pane
+    h += '<div class="fm-pane">';
+    h += '<div class="fm-pane-hdr"><span class="fm-pane-title">Projects</span></div>';
+    if (projItems.length) {
+      projItems.forEach(function(f) { h += _fmRow(f); });
+    } else {
+      h += '<div class="fm-pane-empty">No project files yet</div>';
+    }
+    h += '</div>';
+    el.innerHTML = h;
+  } catch(e) {
+    el.innerHTML = '<div style="padding:24px;color:var(--err,#ef4444)">Error: ' + escHtml(e.message) + '</div>';
+  }
+}
+
+function _fmRow(f) {
+  var isDir = f.type === 'folder';
+  var ext = isDir ? '' : (f.name || '').split('.').pop().toLowerCase();
+  var iconClr = isDir ? '#f59e0b' : ({'py':'#3b82f6','js':'#f59e0b','ts':'#3178c6','md':'#8b949e','json':'#22c55e','html':'#ef4444','css':'#a855f7'}[ext] || 'var(--text3)');
+  var icon = isDir
+    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="' + iconClr + '" stroke="none"><path d="M2 4a2 2 0 012-2h4l2 2h8a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V4z"/></svg>'
+    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="' + iconClr + '" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
+  var onclick = isDir ? 'loadAllFiles(\x27' + escHtml(f.path) + '\x27)' : '_fmPreview(\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)';
+  var size = (!isDir && f.size) ? _fmFmtBytes(f.size) : '';
+  var date = f.modified ? new Date(f.modified * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',year:'numeric'}) : '';
+  return '<div class="fm-row" style="display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--border);cursor:pointer" onclick="' + onclick + '" oncontextmenu="_fmCtx(event,\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)">'
+    + icon
+    + '<span style="flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(f.name) + '</span>'
+    + '<span style="font-size:11px;color:var(--text3);min-width:60px;text-align:right">' + size + '</span>'
+    + '<span class="fm-row-date" style="font-size:11px;color:var(--text3);min-width:80px;text-align:right">' + date + '</span>'
+    + '<div class="fm-row-actions">'
+    + '<button class="fm-act" onclick="event.stopPropagation();_fmRename(\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)" title="Rename">Rename</button>'
+    + '<button class="fm-act danger" onclick="event.stopPropagation();_fmDelete(\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)" title="Delete">Delete</button>'
+    + '</div></div>';
+}
+
+async function _fmRename(path, name) {
+  var newName = await porterPrompt('Rename', 'New name:', name);
+  if (!newName || newName === name) return;
+  var r = await api('/api/files/rename', {path: path, new_name: newName});
+  if (r && r.ok) { toast('Renamed', 'ok'); loadAllFiles(); }
+  else toast((r && r.error) || 'Failed', 'err');
+}
+
+async function _fmDelete(path, name) {
+  _porterConfirm('Delete', 'Delete "' + name + '"? This cannot be undone.', async function() {
+    var r = await api('/api/files/delete', {path: path});
+    if (r && r.ok) { toast('Deleted', 'ok'); loadAllFiles(); }
+    else toast((r && r.error) || 'Failed', 'err');
+  }, {danger:true, okLabel:'Delete'});
+}
+
 async function loadAllFiles(path) {
   if (path !== undefined) _fmCurrentPath = path;
   var el = document.getElementById('allfiles-list');
   if (!el) return;
   el.innerHTML = '<div class="loading-indicator" style="padding:24px">Loading...</div>';
+  if (!_fmCurrentPath || _fmCurrentPath === '/') { _fmSplitView(el); return; }
   try {
     var data = await fetch('/api/files/list?path=' + encodeURIComponent(_fmCurrentPath), {credentials:'same-origin'}).then(function(r) { return r.json(); });
     if (!data || !data.ok) { el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3)">' + escHtml((data && data.error) || 'Failed') + '</div>'; return; }
@@ -45392,7 +45487,8 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             scope = qs.get("scope", [""])[0].strip() or None
             scope_id = qs.get("scope_id", [""])[0].strip() or None
-            stats = _mem_stats(scope=scope, scope_id=scope_id)
+            _excl_sys = qs.get("exclude_system", [""])[0].strip() == '1'
+            stats = _mem_stats(scope=scope, scope_id=scope_id, exclude_system=_excl_sys)
             self.reply_json({"ok": True, **stats})
 
         elif parsed.path == "/api/memory/by-scope":
