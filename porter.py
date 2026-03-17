@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.0 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
+"""Porter v0.33.1 — Chat action fix, CRM redesign, Escape key nav"""
 
 
 import email
@@ -11381,7 +11381,7 @@ def _general_chat_identity_prompt() -> str:
         "You are responding inside Porter.\n"
         "Porter is the platform's built-in Master Orchestrator.\n"
         "If the user asks about Porter, describe him as the orchestration authority that shapes work, assigns or creates workers, selects runtime lanes, and keeps outcomes accountable.\n"
-        "Do not claim that Porter can patch the application, inspect arbitrary local files, or self-modify the product from inside the chat UI.\n"
+        "Porter can execute actions (create projects, contacts, manage agents) when asked. Use <porter-action> blocks for these.\n"
         "Do not volunteer backend/runtime boilerplate unless the user asks for it or it materially affects the answer.\n"
         "Be clear, concise, truthful, and structured only when it helps.\n\n"
     )
@@ -11560,7 +11560,8 @@ def _module_chat_action_prompt(module: str, context_id: str) -> str:
     parts.append("Available actions:")
     parts.append("Create project: <porter-action>{\"action\":\"project_create\",\"name\":\"...\",\"type\":\"custom\",\"description\":\"...\"}</porter-action>")
     parts.append("Create contact: <porter-action>{\"action\":\"crm_create_contact\",\"first_name\":\"...\",\"last_name\":\"...\",\"email\":\"...\",\"company_name\":\"...\"}</porter-action>")
-    parts.append("Add interaction: <porter-action>{\"action\":\"crm_add_interaction\",\"contact_id\":N,\"interaction_type\":\"note\",\"summary\":\"...\"}</porter-action>")
+    parts.append("Add interaction: <porter-action>{\"action\":\"crm_add_interaction\",\"contact_id\":N,\"interaction_type\":\"note\",\"body\":\"...\"}</porter-action>")
+    parts.append("Update contact: <porter-action>{\"action\":\"crm_update_contact\",\"id\":N,\"title\":\"..\",\"email\":\"..\",\"phone\":\"..\",\"contact_type\":\"...\"}</porter-action>")
     parts.append("Create worker: <porter-action>{\"action\":\"agent_create_worker\",\"name\":\"...\",\"role\":\"...\"}</porter-action>")
     parts.append("Create memory: <porter-action>{\"action\":\"memory_create\",\"text\":\"...\",\"memory_kind\":\"concept\",\"scope\":\"global\"}</porter-action>")
     parts.append("Promote memory: <porter-action>{\"action\":\"memory_promote\",\"memory_id\":N,\"trust_tier\":\"concept\"}</porter-action>")
@@ -11570,9 +11571,29 @@ def _module_chat_action_prompt(module: str, context_id: str) -> str:
     if module == 'people' and context_id:
         try:
             conn = _db_conn()
-            row = conn.execute("SELECT first_name, last_name, email, company_name FROM crm_contacts WHERE id=?", (context_id,)).fetchone()
+            row = conn.execute("""SELECT c.*, co.name as company_name FROM crm_contacts c
+                LEFT JOIN crm_companies co ON c.company_id = co.id WHERE c.id=?""", (context_id,)).fetchone()
             if row:
-                parts.append(f"Currently viewing contact: {row['first_name']} {row['last_name']} (ID: {context_id}, email: {row['email'] or 'n/a'})")
+                r = dict(row)
+                _tags = []; _social = {}
+                try:
+                    import json as _j
+                    _tags = _j.loads(r.get('tags_json') or '[]')
+                    _social = _j.loads(r.get('social_json') or '{}')
+                except Exception: pass
+                ctx = f"Currently viewing contact: {r['first_name']} {r.get('last_name','')} (ID: {context_id})"
+                if r.get('title'): ctx += f" | Title: {r['title']}"
+                if r.get('company_name'): ctx += f" | Company: {r['company_name']}"
+                if r.get('contact_type'): ctx += f" | Type: {r['contact_type']}"
+                if r.get('email'): ctx += f" | Email: {r['email']}"
+                if r.get('phone'): ctx += f" | Phone: {r['phone']}"
+                if _tags: ctx += f" | Tags: {', '.join(_tags)}"
+                if r.get('notes'): ctx += f" | Notes: {r['notes'][:200]}"
+                # Count interactions
+                icount = conn.execute("SELECT COUNT(*) FROM crm_interactions WHERE contact_id=?", (context_id,)).fetchone()[0]
+                if icount: ctx += f" | {icount} interactions"
+                parts.append(ctx)
+                parts.append(f"You can modify ANY field on this contact: title, email, phone, contact_type, notes, tags, social")
             conn.close()
         except Exception:
             pass
@@ -11585,19 +11606,42 @@ def _execute_module_action(action_name: str, data: dict) -> dict:
         if action_name == 'crm_create_contact':
             conn = _db_conn()
             conn.execute(
-                "INSERT INTO crm_contacts (first_name, last_name, email, phone, company_name, contact_type, status, created_at) "
-                "VALUES (?, ?, ?, ?, ?, 'lead', 'active', datetime('now'))",
+                "INSERT INTO crm_contacts (first_name, last_name, email, phone, title, contact_type, status) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'active')",
                 (data.get('first_name', ''), data.get('last_name', ''), data.get('email', ''),
-                 data.get('phone', ''), data.get('company_name', '')))
+                 data.get('phone', ''), data.get('title', ''), data.get('contact_type', 'lead')))
             conn.commit(); conn.close()
             return {"ok": True, "action": action_name, "message": "Contact created"}
         elif action_name == 'crm_add_interaction':
             conn = _db_conn()
             conn.execute(
-                "INSERT INTO crm_interactions (contact_id, interaction_type, summary, created_at) VALUES (?, ?, ?, datetime('now'))",
-                (data.get('contact_id'), data.get('interaction_type', 'note'), data.get('summary', '')))
+                "INSERT INTO crm_interactions (contact_id, interaction_type, body) VALUES (?, ?, ?)",
+                (data.get('contact_id'), data.get('interaction_type', 'note'), data.get('body', data.get('summary', ''))))
             conn.commit(); conn.close()
             return {"ok": True, "action": action_name, "message": "Interaction added"}
+        elif action_name == 'crm_update_contact':
+            conn = _db_conn()
+            cid = data.get('id') or data.get('contact_id')
+            if not cid:
+                return {"ok": False, "error": "id required"}
+            allowed = {'first_name','last_name','email','phone','title','contact_type','notes','status'}
+            sets, vals = [], []
+            for k in allowed:
+                if k in data:
+                    sets.append(f'{k} = ?'); vals.append(data[k])
+            if 'tags' in data:
+                import json as _j
+                sets.append('tags_json = ?'); vals.append(_j.dumps(data['tags']))
+            if 'social' in data:
+                import json as _j
+                sets.append('social_json = ?'); vals.append(_j.dumps(data['social']))
+            if not sets:
+                return {"ok": False, "error": "Nothing to update"}
+            sets.append("updated_at = strftime('%s','now')")
+            vals.append(cid)
+            conn.execute(f"UPDATE crm_contacts SET {', '.join(sets)} WHERE id = ?", vals)
+            conn.commit(); conn.close()
+            return {"ok": True, "action": action_name, "message": "Contact updated"}
         elif action_name == 'memory_promote':
             conn = _db_conn()
             conn.execute("UPDATE memories SET trust_tier=?, review_state='approved' WHERE id=?",
@@ -11676,7 +11720,7 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
             continue
         action = str(data.get("action", "")).strip()
         # v0.33.0 — Module actions (no project required)
-        _mod_acts = {'crm_create_contact','crm_add_interaction','memory_promote','memory_dismiss','memory_create','agent_create_worker','agent_update_role','project_create'}
+        _mod_acts = {'crm_create_contact','crm_add_interaction','crm_update_contact','memory_promote','memory_dismiss','memory_create','agent_create_worker','agent_update_role','project_create'}
         if action in _mod_acts:
             results.append(_execute_module_action(action, data))
             continue
@@ -15537,7 +15581,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.0</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.1</div>
   </div>
 </aside>
 
@@ -16679,6 +16723,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.1', date:'2026-03-17', notes:["Fix: chat actions now work from any module (persona_name always sent)","Fix: Escape key closes project and CRM detail views","CRM: single-column profiles, all fields editable inline","CRM: removed button zoo (Edit/Add Note) — use chat or click fields","New action: crm_update_contact via chat","Chat context: full contact profile injected for People module","Fix: crm_add_interaction column name (body not summary)","Fix: crm_create_contact schema (removed nonexistent company_name column)"] },
   { ver:'v0.33.0', date:'2026-03-17', notes:["Universal chat actions from People/Memory/Agents","CRM: full-page contact/company views, inline editing","CRM: + Person / + Company header buttons","AI Agents: + Create from Template in header","Timeline: vertical graphical nodes","Memory: system noise filtered","Chat context: proper display names","Dead code cleanup"] },
   { ver:'v0.32.1', date:'2026-03-17', notes:["CRM: unified directory replaces 3-tab split (Contacts/Team/Companies)","CRM: filter chips for People, Companies, Internal, Project-linked","CRM: inline search across all entities","CRM: /people search <query> slash command","CRM spec by GPT-5.4 (research/crm-redesign-spec.md)"] },
   { ver:'v0.32.0', date:'2026-03-17', notes:["Removed duplicate projects chat input — global popup chat is the single command interface","Popup chat auto-opens on first projects load","Ctrl+K / Cmd+K command palette shortcut","Dead code cleanup: removed 6 unreachable tab branches, orphaned _showPorterAbout","DO THIS NEXT card updated for 4-view tab names"] },
@@ -22276,11 +22321,30 @@ function _crmEditableField(label, value, contactId, field) {
 }
 function _crmInlineEdit(el) {
   var valEl = el.querySelector('.crm-detail-field-value');
-  if (!valEl || valEl.querySelector('input')) return;
+  if (!valEl || valEl.querySelector('input') || valEl.querySelector('select')) return;
   var contactId = parseInt(el.dataset.cid);
   var field = el.dataset.field;
   var current = valEl.textContent.trim();
   if (current === '-') current = '';
+  var isCompany = _crmDetailType === 'company';
+  var apiAction = isCompany ? 'companies.update' : 'contacts.update';
+  // Select dropdown for type fields
+  if (field === 'contact_type' || field === 'company_type') {
+    var sel = document.createElement('select');
+    sel.style.cssText = 'width:100%;padding:2px 6px;border:1px solid var(--accent);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;outline:none';
+    var opts = field === 'contact_type' ? ['client','collaborator','partner','vendor','stakeholder','lead','other'] : ['client','partner','vendor','agency','other'];
+    opts.forEach(function(o) { var op = document.createElement('option'); op.value = o; op.textContent = o; if (o === current) op.selected = true; sel.appendChild(op); });
+    valEl.textContent = ''; valEl.appendChild(sel); sel.focus();
+    sel.addEventListener('change', async function() {
+      var newVal = sel.value;
+      var payload = {action:apiAction, id:contactId};
+      payload[field] = newVal;
+      var r = await api('/api/workspace/crm', payload);
+      if (r && r.ok) { toast('Updated', 'ok'); if (!isCompany) _crmOpenContact(contactId); else _crmOpenCompany(contactId); }
+    });
+    sel.addEventListener('blur', function() { valEl.innerHTML = current ? escHtml(current) : '<span style="color:var(--text3)">-</span>'; });
+    return;
+  }
   var inp = document.createElement('input');
   inp.type = 'text'; inp.value = current;
   inp.style.cssText = 'width:100%;padding:2px 6px;border:1px solid var(--accent);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;outline:none';
@@ -22290,8 +22354,17 @@ function _crmInlineEdit(el) {
   inp.addEventListener('blur', async function() {
     var newVal = inp.value.trim();
     if (newVal !== current) {
-      var payload = {action:'contacts.update', id:contactId};
-      payload[field] = newVal;
+      var payload = {action:apiAction, id:contactId};
+      if (field === 'tags_json') {
+        payload.tags = newVal ? newVal.split(',').map(function(t) { return t.trim(); }).filter(Boolean) : [];
+      } else if (field.startsWith('social.')) {
+        var sKey = field.split('.')[1];
+        try { var soc = JSON.parse(document.querySelector('[data-social-json]')?.dataset.socialJson || '{}'); } catch(e) { var soc = {}; }
+        soc[sKey] = newVal;
+        payload.social = soc;
+      } else {
+        payload[field] = newVal;
+      }
       var r = await api('/api/workspace/crm', payload);
       if (r && r.ok) toast('Updated', 'ok');
     }
@@ -22314,62 +22387,53 @@ async function _crmOpenContact(id) {
   var dv = document.getElementById('people-detail-view');
   var isAdmin = currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin');
   var h = '';
-  h += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">';
+  // Header: back + admin actions
+  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">';
   h += '<button class="btn btn-ghost" onclick="_crmCloseDetail()" style="font-size:12px">&larr; People</button>';
   h += '<div style="flex:1"></div>';
-  if (isAdmin) {
-    h += '<button class="btn btn-ghost" onclick="_crmEditContact(' + c.id + ')" style="font-size:11px">Edit</button>';
-    if (c.status === 'active') h += '<button class="btn btn-ghost" onclick="_crmArchiveContact(' + c.id + ')" style="font-size:11px">Archive</button>';
-    h += '<button class="btn btn-ghost danger" onclick="_crmDeleteContact(' + c.id + ')" style="font-size:11px">Delete</button>';
-  }
+  if (isAdmin && c.status === 'active') h += '<button class="btn btn-ghost" onclick="_crmArchiveContact(' + c.id + ')" style="font-size:11px;color:var(--text3)">Archive</button>';
   h += '</div>';
-  h += '<div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">';
-  h += '<div style="width:64px;height:64px;border-radius:50%;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:var(--text);flex-shrink:0">' + escHtml(avatarInitials(name)) + '</div>';
-  h += '<div><div style="font-size:18px;font-weight:600;color:var(--text)">' + escHtml(name) + '</div>';
-  if (c.title || c.company_name) h += '<div style="font-size:12px;color:var(--text3);margin-top:2px">' + (c.title ? escHtml(c.title) : '') + (c.company_name ? (c.title ? ' at ' : '') + escHtml(c.company_name) : '') + '</div>';
-  h += '</div></div>';
-  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">';
+  // Hero: avatar + name + subtitle
+  h += '<div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">';
+  h += '<div style="width:52px;height:52px;border-radius:50%;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--text);flex-shrink:0">' + escHtml(avatarInitials(name)) + '</div>';
   h += '<div>';
-  h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Details</div>';
+  h += '<div style="font-size:17px;font-weight:600;color:var(--text)">' + escHtml(name) + '</div>';
+  var subtitle = [];
+  if (c.contact_type && c.contact_type !== 'other') subtitle.push(c.contact_type);
+  if (c.title) subtitle.push(c.title);
+  if (c.company_name) subtitle.push('at ' + c.company_name);
+  if (subtitle.length) h += '<div style="font-size:12px;color:var(--text3);margin-top:2px">' + escHtml(subtitle.join(' \u00b7 ')) + '</div>';
+  h += '</div></div>';
+  // Details — single column, all fields editable
+  h += '<div style="max-width:480px">';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Details</div>';
+  h += _crmEditableField('Title', c.title || '', c.id, 'title');
   h += _crmEditableField('Email', c.email || '', c.id, 'email');
   h += _crmEditableField('Phone', c.phone || '', c.id, 'phone');
-  h += '<div class="crm-detail-field"><span class="crm-detail-field-label">Type</span><span class="crm-detail-field-value"><span class="crm-type-badge ' + escHtml(c.contact_type) + '">' + escHtml(c.contact_type) + '</span></span></div>';
-  if (tags.length) {
-    h += '<div class="crm-detail-field"><span class="crm-detail-field-label">Tags</span><span class="crm-detail-field-value">';
-    tags.forEach(function(t) { h += '<span class="crm-tag">' + escHtml(t) + '</span> '; });
-    h += '</span></div>';
-  }
-  h += '</div>';
+  h += _crmEditableField('Type', c.contact_type || '', c.id, 'contact_type');
+  h += _crmEditableField('Tags', tags.join(', '), c.id, 'tags_json');
+  if (c.company_name) h += '<div class="crm-detail-field"><span class="crm-detail-field-label">Company</span><span class="crm-detail-field-value">' + escHtml(c.company_name) + '</span></div>';
+  // Social links — editable
+  var socialLabels = {linkedin:'LinkedIn', twitter:'Twitter', telegram:'Telegram', whatsapp:'WhatsApp', website:'Website'};
   var socialKeys = Object.keys(social).filter(function(k) { return social[k]; });
-  if (socialKeys.length) {
-    h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Social</div><div class="crm-social-links">';
-    var socialLabels = {linkedin:'LinkedIn', twitter:'Twitter', telegram:'Telegram', whatsapp:'WhatsApp', website:'Website'};
-    socialKeys.forEach(function(k) {
-      var v = social[k];
-      var href = v;
-      if (k === 'telegram' && !v.startsWith('http')) href = 'https://t.me/' + v.replace('@','');
-      else if (k === 'whatsapp' && !v.startsWith('http')) href = 'https://wa.me/' + v.replace(/[^0-9]/g,'');
-      else if (!v.startsWith('http')) href = 'https://' + v;
-      h += '<a class="crm-social-link" href="' + escHtml(href) + '" target="_blank" rel="noopener">' + escHtml(socialLabels[k] || k) + '</a>';
-    });
-    h += '</div></div>';
-  }
+  socialKeys.forEach(function(k) {
+    h += _crmEditableField(socialLabels[k] || k, social[k], c.id, 'social.' + k);
+  });
+  // Projects
   if (c.projects && c.projects.length) {
-    h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Projects</div>';
+    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 8px">Projects</div>';
     c.projects.forEach(function(p) {
-      h += '<div class="crm-project-link"><span>' + escHtml(p.project_id) + '</span><span class="crm-project-link-role">' + escHtml(p.role || '') + '</span></div>';
+      h += '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px"><span style="color:var(--text)">' + escHtml(p.project_id) + '</span><span style="color:var(--text3)">' + escHtml(p.role || '') + '</span></div>';
     });
-    h += '</div>';
   }
-  h += '</div>';
-  h += '<div>';
-  h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Notes</div>';
-  h += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Add notes..." style="min-height:120px">' + escHtml(c.notes || '') + '</textarea></div>';
-  h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Activity</div>';
-  h += '<button class="btn btn-ghost" style="margin-bottom:8px;font-size:11px" onclick="_crmAddInteraction(' + c.id + ')">+ Add note</button>';
-  h += _crmRenderTimeline(c.interactions || []);
-  h += '</div>';
-  h += '</div>';
+  // Notes — auto-save textarea
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 8px">Notes</div>';
+  h += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Notes..." style="min-height:80px">' + escHtml(c.notes || '') + '</textarea>';
+  // Activity timeline
+  if (c.interactions && c.interactions.length) {
+    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 8px">Activity</div>';
+    h += _crmRenderTimeline(c.interactions);
+  }
   h += '</div>';
   dv.innerHTML = h;
   var notesEl = document.getElementById('crm-detail-notes');
@@ -22393,45 +22457,50 @@ async function _crmOpenCompany(id) {
   var dv = document.getElementById('people-detail-view');
   var isAdmin = currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin');
   var h = '';
-  h += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">';
+  // Header
+  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">';
   h += '<button class="btn btn-ghost" onclick="_crmCloseDetail()" style="font-size:12px">&larr; People</button>';
   h += '<div style="flex:1"></div>';
-  if (isAdmin) {
-    h += '<button class="btn btn-ghost" onclick="_crmEditCompany(' + c.id + ')" style="font-size:11px">Edit</button>';
-    if (c.status === 'active') h += '<button class="btn btn-ghost" onclick="_crmArchiveCompany(' + c.id + ')" style="font-size:11px">Archive</button>';
-  }
+  if (isAdmin && c.status === 'active') h += '<button class="btn btn-ghost" onclick="_crmArchiveCompany(' + c.id + ')" style="font-size:11px;color:var(--text3)">Archive</button>';
   h += '</div>';
-  h += '<div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">';
-  h += '<div style="width:64px;height:64px;border-radius:12px;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:var(--text);flex-shrink:0">' + escHtml(avatarInitials(c.name)) + '</div>';
-  h += '<div><div style="font-size:18px;font-weight:600;color:var(--text)">' + escHtml(c.name) + '</div>';
-  if (c.industry || c.country) h += '<div style="font-size:12px;color:var(--text3);margin-top:2px">' + (c.industry ? escHtml(c.industry) : '') + (c.country ? (c.industry ? ' · ' : '') + escHtml(c.country) : '') + '</div>';
-  h += '</div></div>';
-  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">';
+  // Hero
+  h += '<div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">';
+  h += '<div style="width:52px;height:52px;border-radius:10px;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--text);flex-shrink:0">' + escHtml(avatarInitials(c.name)) + '</div>';
   h += '<div>';
-  h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Details</div>';
-  if (c.website) h += '<div class="crm-detail-field"><span class="crm-detail-field-label">Website</span><span class="crm-detail-field-value"><a href="' + escHtml(c.website) + '" target="_blank">' + escHtml(c.website) + '</a></span></div>';
-  h += '<div class="crm-detail-field"><span class="crm-detail-field-label">Type</span><span class="crm-detail-field-value"><span class="crm-type-badge ' + escHtml(c.company_type) + '">' + escHtml(c.company_type) + '</span></span></div>';
-  h += '</div>';
+  h += '<div style="font-size:17px;font-weight:600;color:var(--text)">' + escHtml(c.name) + '</div>';
+  var subtitle = [];
+  if (c.company_type && c.company_type !== 'other') subtitle.push(c.company_type);
+  if (c.industry) subtitle.push(c.industry);
+  if (c.country) subtitle.push(c.country);
+  if (subtitle.length) h += '<div style="font-size:12px;color:var(--text3);margin-top:2px">' + escHtml(subtitle.join(' \u00b7 ')) + '</div>';
+  h += '</div></div>';
+  // Details — single column
+  h += '<div style="max-width:480px">';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Details</div>';
+  h += _crmEditableField('Industry', c.industry || '', c.id, 'industry');
+  h += _crmEditableField('Website', c.website || '', c.id, 'website');
+  h += _crmEditableField('Country', c.country || '', c.id, 'country');
+  h += _crmEditableField('Type', c.company_type || '', c.id, 'company_type');
+  // Contacts
   if (c.contacts && c.contacts.length) {
-    h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Contacts (' + c.contacts.length + ')</div>';
+    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 8px">Contacts (' + c.contacts.length + ')</div>';
     c.contacts.forEach(function(ct) {
       var cname = (ct.first_name + ' ' + (ct.last_name||'')).trim();
-      h += '<div class="crm-row" style="padding:8px 10px;cursor:pointer" onclick="_crmCloseDetail();setTimeout(function(){_crmOpenContact(' + ct.id + ')},200)">';
-      h += '<div class="crm-row-avatar" style="width:28px;height:28px;font-size:11px">' + escHtml(avatarInitials(cname)) + '</div>';
-      h += '<div class="crm-row-info"><div class="crm-row-name" style="font-size:12px">' + escHtml(cname) + '</div>';
-      if (ct.title) h += '<div class="crm-row-sub" style="font-size:10px">' + escHtml(ct.title) + '</div>';
-      h += '</div></div>';
+      h += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer" onclick="_crmCloseDetail();setTimeout(function(){_crmOpenContact(' + ct.id + ')},200)">';
+      h += '<div style="width:24px;height:24px;border-radius:50%;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--text)">' + escHtml(avatarInitials(cname)) + '</div>';
+      h += '<span style="font-size:12px;color:var(--text)">' + escHtml(cname) + '</span>';
+      if (ct.title) h += '<span style="font-size:11px;color:var(--text3)">' + escHtml(ct.title) + '</span>';
+      h += '</div>';
     });
-    h += '</div>';
   }
-  h += '</div>';
-  h += '<div>';
-  h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Notes</div>';
-  h += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Add notes..." style="min-height:120px">' + escHtml(c.notes || '') + '</textarea></div>';
-  h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Activity</div>';
-  h += _crmRenderTimeline(c.interactions || []);
-  h += '</div>';
-  h += '</div>';
+  // Notes
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 8px">Notes</div>';
+  h += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Notes..." style="min-height:80px">' + escHtml(c.notes || '') + '</textarea>';
+  // Activity
+  if (c.interactions && c.interactions.length) {
+    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 8px">Activity</div>';
+    h += _crmRenderTimeline(c.interactions);
+  }
   h += '</div>';
   dv.innerHTML = h;
   var notesEl = document.getElementById('crm-detail-notes');
@@ -22482,22 +22551,6 @@ async function _crmAddContact() {
   else { toast((r && r.error) || 'Failed', 'err'); }
 }
 
-async function _crmEditContact(id) {
-  var d = await api('/api/workspace/crm', {action:'contacts.get', id:id});
-  if (!d || !d.ok) return;
-  var c = d.contact;
-  var firstName = await porterPrompt('Edit Contact', 'First name:', c.first_name);
-  if (!firstName) return;
-  var lastName = await porterPrompt('Last Name', 'Last name:', c.last_name || '');
-  var email = await porterPrompt('Email', 'Email:', c.email || '');
-  var phone = await porterPrompt('Phone', 'Phone:', c.phone || '');
-  var title = await porterPrompt('Title', 'Job title:', c.title || '');
-  var contactType = await porterPrompt('Type', 'client/collaborator/partner/vendor/stakeholder/lead/other:', c.contact_type);
-  var r = await api('/api/workspace/crm', {action:'contacts.update', id:id, first_name:firstName, last_name:lastName||'', email:email||'', phone:phone||'', title:title||'', contact_type:contactType||c.contact_type});
-  if (r && r.ok) { toast('Updated', 'ok'); _crmCloseDetail(); _crmLoadContacts(); setTimeout(function() { _crmOpenContact(id); }, 200); }
-  else { toast((r && r.error) || 'Failed', 'err'); }
-}
-
 function _crmArchiveContact(id) {
   _porterConfirm('Archive Contact', 'Archive this contact? They can be restored later.', async function() {
     var r = await api('/api/workspace/crm', {action:'contacts.archive', id:id});
@@ -22527,37 +22580,11 @@ async function _crmAddCompany() {
   else { toast((r && r.error) || 'Failed', 'err'); }
 }
 
-async function _crmEditCompany(id) {
-  var d = await api('/api/workspace/crm', {action:'companies.get', id:id});
-  if (!d || !d.ok) return;
-  var c = d.company;
-  var name = await porterPrompt('Edit Company', 'Name:', c.name);
-  if (!name) return;
-  var industry = await porterPrompt('Industry', 'Industry:', c.industry || '');
-  var website = await porterPrompt('Website', 'Website:', c.website || '');
-  var country = await porterPrompt('Country', 'Country:', c.country || '');
-  var r = await api('/api/workspace/crm', {action:'companies.update', id:id, name:name, industry:industry||'', website:website||'', country:country||''});
-  if (r && r.ok) { toast('Updated', 'ok'); _crmCloseDetail(); _crmLoadCompanies(); setTimeout(function() { _crmOpenCompany(id); }, 200); }
-  else { toast((r && r.error) || 'Failed', 'err'); }
-}
-
 function _crmArchiveCompany(id) {
   _porterConfirm('Archive Company', 'Archive this company?', async function() {
     var r = await api('/api/workspace/crm', {action:'companies.archive', id:id});
     if (r && r.ok) { toast('Archived', 'ok'); _crmCloseDetail(); _crmLoadCompanies(); }
   }, {okLabel:'Archive'});
-}
-
-async function _crmAddInteraction(contactId) {
-  var itype = await porterPrompt('Add Activity', 'Type (note, call, email, meeting, task, update):', 'note');
-  if (!itype) return;
-  var validTypes = ['note','call','email','meeting','task','update'];
-  if (validTypes.indexOf(itype) === -1) itype = 'note';
-  var body = await porterPrompt('Details', 'What happened?', '');
-  if (!body) return;
-  var r = await api('/api/workspace/crm', {action:'interactions.create', interaction_type:itype, body:body, contact_id:contactId});
-  if (r && r.ok) { toast('Added', 'ok'); _crmOpenContact(contactId); }
-  else { toast((r && r.error) || 'Failed', 'err'); }
 }
 
 // ── Team management (preserved from old People) ──
@@ -34318,6 +34345,12 @@ document.addEventListener('keydown', function(e) {
   if (_adv && _adv.classList.contains('open') && typeof closePersonaDetail === 'function') {
     closePersonaDetail(); e.stopPropagation(); return;
   }
+  // Project detail view
+  var pdv = document.getElementById('project-detail-view');
+  if (pdv && pdv.style.display !== 'none' && typeof _projBack === 'function') { _projBack(); e.stopPropagation(); return; }
+  // CRM detail view
+  var _pm = document.getElementById('people-module');
+  if (_pm && _pm.classList.contains('detail-open') && typeof _crmCloseDetail === 'function') { _crmCloseDetail(); e.stopPropagation(); return; }
   // Model activity slide-out
   var ma = document.getElementById('model-activity-panel');
   if (ma && ma.classList.contains('open')) { _closeModelActivity(); e.stopPropagation(); return; }
@@ -37507,7 +37540,10 @@ async function _popupChatSend() {
 
   try {
     var url = '/api/chat/stream?model=auto&prompt=' + encodeURIComponent(fullPrompt) + '&route=general&chat_id=' + encodeURIComponent(_popupChatId)
-      + (_popupProjectId ? '&project_id=' + encodeURIComponent(_popupProjectId) + '&persona_name=' + encodeURIComponent(_popupPersona) : '')
+      + '&persona_name=' + encodeURIComponent(_popupPersona)
+      + (_popupProjectId ? '&project_id=' + encodeURIComponent(_popupProjectId) : '')
+      + '&context_module=' + encodeURIComponent(_currentModule || '')
+      + '&context_id=' + encodeURIComponent(_crmDetailId || '')
       + '&raw_text=' + encodeURIComponent(text);
     var es = new EventSource(url);
     var idx = _popupChatMessages.length - 1;
@@ -44720,7 +44756,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.0"})
+            self.reply_json({"v": "0.33.1"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44882,7 +44918,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.33.0"
+                health["porter_version"] = "0.33.1"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -47205,7 +47241,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.0'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.1'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -47318,10 +47354,18 @@ class Handler(BaseHTTPRequestHandler):
                     _mod_prompt = _module_chat_action_prompt(_stream_context_module, _stream_context_id)
                     if _mod_prompt:
                         prompt = _mod_prompt + "\n\n" + prompt
+                else:
+                    # No project, no module — still inject global actions
+                    _mod_prompt = _module_chat_action_prompt('', '')
+                    if _mod_prompt:
+                        prompt = _mod_prompt + "\n\n" + prompt
             elif not _persona_name_param:
-                # General chat (no persona) — inject Porter awareness
+                # General chat (no persona) — inject Porter identity + actions
                 _porter_ctx = _general_chat_identity_prompt()
                 prompt = _porter_ctx + prompt
+                _mod_prompt = _module_chat_action_prompt('', '')
+                if _mod_prompt:
+                    prompt = _mod_prompt + "\n\n" + prompt
 
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -51244,7 +51288,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.33.0"
+                _ws_health["porter_version"] = "0.33.1"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -54218,7 +54262,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.0 ready (localhost only)")
+    print(f"\n  Porter v0.33.1 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
