@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.97 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
+"""Porter v0.31.98 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
 
 
 import email
@@ -15387,7 +15387,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.97</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.98</div>
   </div>
 </aside>
 
@@ -16573,6 +16573,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.98', date:'2026-03-17', notes:["CRM: fun empty states with Porter personality for contacts, team, companies","CRM: Team tab loads user cards immediately, enriches project counts async","CRM: empty contacts/companies use guided prompts"] },
   { ver:'v0.31.97', date:'2026-03-17', notes:["Nav: Work first, AI Agents second (Projects = primary interface)","AI Agents + Templates merged into single nav item","Empty projects: Porter avatar with personality (Paperclip-style)","Empty agents: fun 'Create your first agent' state"] },
   { ver:'v0.31.96', date:'2026-03-17', notes:["Agent detail: sliding drawer replaces full-page takeover","Agent grid stays visible behind drawer","Backdrop click or Escape closes drawer","CLI Phase 4: Work mode consolidation"] },
   { ver:'v0.31.95', date:'2026-03-17', notes:["Project workspace: 9 tabs consolidated into 4 views (Now, Plan, Timeline, Records)","Now view: operator cockpit with task summary and worker strip","Plan view: brief, workstreams, deliverables, workers, tasks","Records view: people, apps, links, state, settings","Persistent project command bar across all views"] },
@@ -21823,6 +21824,55 @@ var _crmDebounceTimer = null;
 var _crmDetailType = null; // 'contact' or 'company'
 var _crmDetailId = null;
 
+async function _crmEnrichTeam(users) {
+  try {
+    var [projData, sessData] = await Promise.all([
+      api('/api/projects'),
+      api('/api/workspace/status')
+    ]);
+    var allProjects = (projData && projData.projects) || [];
+    var sessions = (sessData && sessData.sessions) || [];
+    users.forEach(function(u) {
+      u._project_count = allProjects.filter(function(p) { return p.owner === u.username; }).length;
+      var userSessions = sessions.filter(function(s) { return s.username === u.username; });
+      if (userSessions.length) {
+        var latest = userSessions.sort(function(a,b) { return (b.last_active||0)-(a.last_active||0); })[0];
+        if (latest.last_active) {
+          var diff = (Date.now()/1000) - latest.last_active;
+          if (diff < 60) u._last_active = 'just now';
+          else if (diff < 3600) u._last_active = Math.floor(diff/60) + 'm ago';
+          else if (diff < 86400) u._last_active = Math.floor(diff/3600) + 'h ago';
+          else u._last_active = Math.floor(diff/86400) + 'd ago';
+        }
+      }
+      // Update card in DOM
+      var cards = document.querySelectorAll('.people-card');
+      cards.forEach(function(card) {
+        var nameEl = card.querySelector('.people-card-name');
+        if (nameEl && nameEl.textContent.trim() === (u.display_name || u.username)) {
+          var meta = card.querySelector('.people-card-meta');
+          if (meta) {
+            var existing = meta.querySelectorAll('.people-card-joined');
+            existing.forEach(function(e) { e.remove(); });
+            if (u._project_count !== undefined) {
+              var pEl = document.createElement('div');
+              pEl.className = 'people-card-joined';
+              pEl.textContent = u._project_count + ' project' + (u._project_count !== 1 ? 's' : '');
+              meta.appendChild(pEl);
+            }
+            if (u._last_active) {
+              var aEl = document.createElement('div');
+              aEl.className = 'people-card-joined';
+              aEl.textContent = 'Active ' + u._last_active;
+              meta.appendChild(aEl);
+            }
+          }
+        }
+      });
+    });
+  } catch(e) {}
+}
+
 async function loadPeople() { _crmSwitchTab(_crmTab); }
 
 function _crmSwitchTab(tab) {
@@ -21876,7 +21926,7 @@ async function _crmLoadContacts() {
     stats.innerHTML = statsHtml;
   }
   if (!contacts.length) {
-    el.innerHTML = '<div class="people-empty">No contacts yet. Add your first contact to get started.</div>';
+    el.innerHTML = '<div class="proj-guide-empty" style="padding:28px 20px"><div style="display:flex;justify-content:center;margin-bottom:10px">' + _personaAvatarMarkup({ name: 'Porter', orchestrator_only: true, appearance_style: 'minecraft' }, 56) + '</div><div class="proj-guide-empty-title">Your network starts here</div><div class="proj-guide-empty-hint" style="max-width:300px;margin:0 auto 12px">Add clients, partners, vendors — anyone you work with. I\x27ll help you track interactions and link them to projects.</div><div class="proj-next-actions" style="justify-content:center"><button class="proj-next-btn" onclick="_crmNewAction()">Add Your First Contact</button></div></div>';
     return;
   }
   var html = '<div class="crm-list">';
@@ -21912,30 +21962,8 @@ async function _crmLoadTeam() {
     var d = await api('/api/workspace/people', {action:'list'});
     if (!d || !d.ok) { el.innerHTML = '<div class="people-empty">Error loading team</div>'; return; }
     var users = d.users || [];
-    try {
-      var projData = await api('/api/projects');
-      var allProjects = (projData && projData.projects) || [];
-      users.forEach(function(u) {
-        u._project_count = allProjects.filter(function(p) { return p.owner === u.username; }).length;
-      });
-    } catch(e) {}
-    try {
-      var sessData = await api('/api/workspace/status');
-      var sessions = (sessData && sessData.sessions) || [];
-      users.forEach(function(u) {
-        var userSessions = sessions.filter(function(s) { return s.username === u.username; });
-        if (userSessions.length) {
-          var latest = userSessions.sort(function(a,b) { return (b.last_active||0)-(a.last_active||0); })[0];
-          if (latest.last_active) {
-            var diff = (Date.now()/1000) - latest.last_active;
-            if (diff < 60) u._last_active = 'just now';
-            else if (diff < 3600) u._last_active = Math.floor(diff/60) + 'm ago';
-            else if (diff < 86400) u._last_active = Math.floor(diff/3600) + 'h ago';
-            else u._last_active = Math.floor(diff/86400) + 'd ago';
-          }
-        }
-      });
-    } catch(e) {}
+    // Enrichment loaded async after initial render (v0.31.98)
+    setTimeout(function() { _crmEnrichTeam(users); }, 50);
     var myUsername = (window.currentUser || {}).username || '';
     var countEl = document.getElementById('crm-count-team');
     if (countEl) countEl.textContent = users.length;
@@ -21946,7 +21974,7 @@ async function _crmLoadTeam() {
         + '<div><div class="people-stat">' + admins + '</div><div class="people-stat-label">Admins</div></div>'
         + '<div><div class="people-stat">' + operators + '</div><div class="people-stat-label">Operators</div></div>';
     }
-    if (!users.length) { el.innerHTML = '<div class="people-empty">No users yet.</div>'; return; }
+    if (!users.length) { el.innerHTML = '<div class="proj-guide-empty" style="padding:28px 20px"><div class="proj-guide-empty-title">No team members yet</div><div class="proj-guide-empty-hint">Invite people to your workspace to collaborate on projects.</div></div>'; return; }
     var html = '<div class="people-grid">';
     users.forEach(function(u) {
       var isYou = u.username === myUsername;
@@ -21993,7 +22021,7 @@ async function _crmLoadCompanies() {
     stats.innerHTML = '<div><div class="people-stat">' + total + '</div><div class="people-stat-label">Companies</div></div>';
   }
   if (!companies.length) {
-    el.innerHTML = '<div class="people-empty">No companies yet. Add a company to start organizing contacts.</div>';
+    el.innerHTML = '<div class="proj-guide-empty" style="padding:28px 20px"><div style="display:flex;justify-content:center;margin-bottom:10px">' + _personaAvatarMarkup({ name: 'Porter', orchestrator_only: true, appearance_style: 'minecraft' }, 56) + '</div><div class="proj-guide-empty-title">Organize by company</div><div class="proj-guide-empty-hint" style="max-width:300px;margin:0 auto 12px">Group your contacts by company. Makes it easy to see who\x27s who when projects involve multiple organizations.</div><div class="proj-next-actions" style="justify-content:center"><button class="proj-next-btn" onclick="_crmNewAction()">Add A Company</button></div></div>';
     return;
   }
   var html = '<div class="crm-list">';
@@ -44156,7 +44184,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.97"})
+            self.reply_json({"v": "0.31.98"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44318,7 +44346,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.97"
+                health["porter_version"] = "0.31.98"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -46640,7 +46668,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.97'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.98'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -50673,7 +50701,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.31.97"
+                _ws_health["porter_version"] = "0.31.98"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -53647,7 +53675,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.31.97 ready (localhost only)")
+    print(f"\n  Porter v0.31.98 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
