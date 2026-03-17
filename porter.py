@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.98 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
+"""Porter v0.31.99 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
 
 
 import email
@@ -15387,7 +15387,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.98</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.99</div>
   </div>
 </aside>
 
@@ -16573,6 +16573,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.99', date:'2026-03-17', notes:["Command grammar: /new project|agent, /open <project>, /show active|all, /find <query>","Autocomplete shows new commands with descriptions","Updated /help to include new command grammar"] },
   { ver:'v0.31.98', date:'2026-03-17', notes:["CRM: fun empty states with Porter personality for contacts, team, companies","CRM: Team tab loads user cards immediately, enriches project counts async","CRM: empty contacts/companies use guided prompts"] },
   { ver:'v0.31.97', date:'2026-03-17', notes:["Nav: Work first, AI Agents second (Projects = primary interface)","AI Agents + Templates merged into single nav item","Empty projects: Porter avatar with personality (Paperclip-style)","Empty agents: fun 'Create your first agent' state"] },
   { ver:'v0.31.96', date:'2026-03-17', notes:["Agent detail: sliding drawer replaces full-page takeover","Agent grid stays visible behind drawer","Backdrop click or Escape closes drawer","CLI Phase 4: Work mode consolidation"] },
@@ -25882,6 +25883,10 @@ var _defaultSlashCmds = [
   {cmd: '/workspace', desc: 'Google Workspace'},
   {cmd: '/ship', desc: 'Ship validation & release'},
   {cmd: '/gws', desc: 'Google Workspace (alias)'},
+  {cmd: '/new', desc: 'Create project or agent'},
+  {cmd: '/open', desc: 'Open a project by name'},
+  {cmd: '/show', desc: 'Show projects (active/all)'},
+  {cmd: '/find', desc: 'Search memories'},
 ];
 
 var _defaultAtTargets = [
@@ -26139,18 +26144,23 @@ function chatSend() {
     _chatMessages.push({ role: 'user', content: text });
 
     if (cmd === '/help') {
-      _chatMessages.push({ role: 'assistant', content: '**Shortcuts**\n\n' +
-        '`/help` — This list\n' +
-        '`/projects` — View projects\n' +
-        '`/agents` — Connected agents\n' +
+      _chatMessages.push({ role: 'assistant', content: '**Commands**\n\n' +
+        '**Work**\n' +
+        '`/new project` — Start a new project\n' +
+        '`/new agent` — Create from templates\n' +
+        '`/open <name>` — Open a project\n' +
+        '`/show` — Active projects\n' +
+        '`/show all` — All projects\n\n' +
+        '**Inspect**\n' +
+        '`/find <query>` — Search memories\n' +
         '`/models` — Available AI models\n' +
-        '`/status` — System health\n' +
+        '`/status` — System health\n\n' +
+        '**Utility**\n' +
+        '`/clear` — Clear chat\n' +
         '`/version` — Porter version\n' +
-        '`/clear` — Clear chat history\n' +
+        '`/search <query>` — Web search\n' +
         '`/flush` — Flush to memory\n' +
-        '`/ship` — Ship validation & release\n' +
-        '`/search <query>` — Web search (Brave)\n' +
-        '`/workspace <service> <action>` — Google Workspace\n\n' +
+        '`/ship` — Ship validation\n\n' +
         '**Direct routing**\n' +
         '`@claude <msg>` `@openclaw <msg>` `@gemini <msg>` `@codex <msg>` `@ollama <msg>`', model: 'porter' });
       renderChatMessages();
@@ -26213,6 +26223,103 @@ function chatSend() {
         renderChatMessages();
       }).catch(function() {
         _chatMessages[_chatMessages.length-1].content = 'Failed to load models.';
+        renderChatMessages();
+      });
+      return;
+    }
+
+    if (cmd === '/new') {
+      var arg = text.slice(4).trim().toLowerCase();
+      if (!arg || arg.startsWith('project') || arg.startsWith('proj')) {
+        _chatMessages.push({ role: 'assistant', content: 'Starting new project...', model: 'porter' });
+        renderChatMessages();
+        _askPorterToCreate('project');
+      } else if (arg.startsWith('agent') || arg.startsWith('worker')) {
+        _chatMessages.push({ role: 'assistant', content: 'Opening agent templates...', model: 'porter' });
+        renderChatMessages();
+        switchModule('agents');
+        setTimeout(function() { switchModule('templates'); }, 200);
+      } else {
+        _chatMessages.push({ role: 'assistant', content: 'Usage: `/new project` or `/new agent`', model: 'porter' });
+        renderChatMessages();
+      }
+      return;
+    }
+
+    if (cmd === '/open') {
+      var name = text.slice(5).trim().toLowerCase();
+      if (!name) {
+        _chatMessages.push({ role: 'assistant', content: 'Usage: `/open <project name>`\n\nOpens the first project matching the name.', model: 'porter' });
+        renderChatMessages();
+        return;
+      }
+      var match = (_projList || []).find(function(p) {
+        return (p.name || '').toLowerCase().includes(name);
+      });
+      if (match) {
+        _chatMessages.push({ role: 'assistant', content: 'Opening **' + escHtml(match.name || match.id) + '**...', model: 'porter' });
+        renderChatMessages();
+        switchModule('projects');
+        setTimeout(function() { _projOpen(match.id); }, 200);
+      } else {
+        _chatMessages.push({ role: 'assistant', content: 'No project matching "' + escHtml(name) + '".', model: 'porter' });
+        renderChatMessages();
+      }
+      return;
+    }
+
+    if (cmd === '/show') {
+      var arg = text.slice(5).trim().toLowerCase();
+      _chatMessages.push({ role: 'assistant', content: 'Loading...', model: 'porter' });
+      renderChatMessages();
+      api('/api/projects').then(function(data) {
+        if (!data || !data.projects || !data.projects.length) {
+          _chatMessages[_chatMessages.length-1].content = 'No projects found.';
+          renderChatMessages(); return;
+        }
+        var projs = data.projects;
+        if (arg === 'all') { /* keep all */ }
+        else { projs = projs.filter(function(p) { return !p.completed_at; }); }
+        var lines = ['**' + (arg === 'all' ? 'All' : 'Active') + ' Projects** (' + projs.length + ')\n'];
+        projs.forEach(function(p) {
+          var workers = (p.assigned_personas || []).length;
+          var ms = (p.milestones || []);
+          var msDone = ms.filter(function(m) { return m.done; }).length;
+          lines.push('**' + escHtml(p.name) + '** \u2014 ' + (p.status || 'active'));
+          if (workers) lines.push('  ' + workers + ' worker' + (workers > 1 ? 's' : ''));
+          if (ms.length) lines.push('  Milestones: ' + msDone + '/' + ms.length);
+          lines.push('');
+        });
+        _chatMessages[_chatMessages.length-1].content = lines.join('\n');
+        renderChatMessages();
+      });
+      return;
+    }
+
+    if (cmd === '/find') {
+      var query = text.slice(5).trim();
+      if (!query) {
+        _chatMessages.push({ role: 'assistant', content: 'Usage: `/find <search query>`\n\nSearches across memories, concepts, and directives.', model: 'porter' });
+        renderChatMessages(); return;
+      }
+      _chatMessages.push({ role: 'assistant', content: 'Searching...', model: 'porter' });
+      renderChatMessages();
+      api('/api/memory/search?q=' + encodeURIComponent(query) + '&limit=10').then(function(res) {
+        var results = (res && res.results) || [];
+        if (!results.length) {
+          _chatMessages[_chatMessages.length-1].content = 'No results for "' + escHtml(query) + '".';
+          renderChatMessages(); return;
+        }
+        var lines = ['**Found ' + results.length + ' memor' + (results.length === 1 ? 'y' : 'ies') + '** for "' + escHtml(query) + '"\n'];
+        results.forEach(function(r) {
+          var kind = (r.memory_kind || 'unknown').charAt(0).toUpperCase() + (r.memory_kind || '').slice(1);
+          lines.push('**[' + kind + ']** ' + escHtml(r.preview || r.text || ''));
+          lines.push('');
+        });
+        _chatMessages[_chatMessages.length-1].content = lines.join('\n');
+        renderChatMessages();
+      }).catch(function() {
+        _chatMessages[_chatMessages.length-1].content = 'Search failed.';
         renderChatMessages();
       });
       return;
@@ -44184,7 +44291,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.98"})
+            self.reply_json({"v": "0.31.99"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44346,7 +44453,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.98"
+                health["porter_version"] = "0.31.99"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -46668,7 +46775,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.98'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.99'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -50701,7 +50808,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.31.98"
+                _ws_health["porter_version"] = "0.31.99"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -53675,7 +53782,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.31.98 ready (localhost only)")
+    print(f"\n  Porter v0.31.99 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
