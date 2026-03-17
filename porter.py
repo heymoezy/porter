@@ -23173,18 +23173,22 @@ function _showPersonaBrief(persona) {
 }
 
 function _askPorterToCreate(kind) {
-  // v0.32.0 — Route through popup chat instead of switching to agents module
-  var prompts = {
-    project: 'Create a new project for me. Ask me what it should be about.',
-    worker: 'Create a new AI agent worker for me. Ask me what role it should fill.',
-    agent: 'Create a new AI agent worker for me. Ask me what role it should fill.'
-  };
-  var msg = prompts[kind] || 'Help me create a new ' + kind;
+  // v0.32.1 — Direct modal for fast creation (no chat back-and-forth)
+  if (kind === 'project') {
+    _projCreate();
+    return;
+  }
+  if (kind === 'worker' || kind === 'agent') {
+    switchModule('agents');
+    setTimeout(function() { switchModule('templates'); }, 200);
+    return;
+  }
+  // Fallback: popup chat for unknown kinds
   _popupChatOpen();
   setTimeout(function() {
     var popupInput = document.getElementById('popup-chat-input');
     if (popupInput) {
-      popupInput.value = msg;
+      popupInput.value = 'Help me create a new ' + kind;
       _popupChatSend();
     }
   }, 100);
@@ -47472,10 +47476,10 @@ class Handler(BaseHTTPRequestHandler):
                 mlog.emit("info", "chat", "chat.stream.complete", f"Chat done: {model_id} ({_chat_dur}ms)",
                           model=model_id, duration_ms=_chat_dur, response_chars=len(full_response), ttft_ms=_chat_first_token_ms)
 
-                # Execute project chat actions from model response
+                # Execute chat actions from model response (project-scoped or global)
                 _action_project = qs.get("project_id", [""])[0].strip()
-                if _action_project and full_response and '<porter-action>' in full_response:
-                    _action_results = _execute_chat_actions(_action_project, full_response)
+                if full_response and '<porter-action>' in full_response:
+                    _action_results = _execute_chat_actions(_action_project or '_global', full_response)
                     if _action_results:
                         try:
                             self.wfile.write(f"data: {json.dumps({'actions_executed': _action_results})}\n\n".encode())
