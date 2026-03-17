@@ -18924,10 +18924,12 @@ async function loadMemory() {
       {l:'Total',c:stats.total||0,clr:'var(--text)',tip:'All memories across all categories'}
     ];
     cards.forEach(function(s) {
-      html += '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg);cursor:help" title="' + s.tip + '"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:' + s.clr + '">' + s.l + '</div><div style="font-size:24px;font-weight:800;color:var(--text);margin-top:4px">' + s.c + '</div></div>';
+      var clickable = s.l !== 'Total' ? ' onclick="_memLoadKind(\x27' + s.l.toLowerCase() + '\x27)" style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg);cursor:pointer" title="' + s.tip + ' — Click to view"' : ' style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg);cursor:help" title="' + s.tip + '"';
+      html += '<div' + clickable + '><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:' + s.clr + '">' + s.l + '</div><div style="font-size:24px;font-weight:800;color:var(--text);margin-top:4px">' + s.c + '</div></div>';
     });
     html += '</div>';
-    // Search results area
+    // Category viewer + Search results
+    html += '<div id="mem-kind-viewer"></div>';
     html += '<div id="mem-search-results"></div>';
     // Review queue
     if (queue.length) {
@@ -18993,6 +18995,41 @@ async function _memDashPromote(id) {
 async function _memDashDismiss(id) {
   await api('/api/memory/dismiss', {id: id});
   loadMemory();
+}
+
+async function _memLoadKind(kind) {
+  var el = document.getElementById('mem-kind-viewer');
+  if (!el) return;
+  var kindColors = {directive:'#3b82f6', concept:'#a855f7', episode:'var(--text3)', signal:'#f59e0b'};
+  var clr = kindColors[kind] || 'var(--text)';
+  var label = kind.charAt(0).toUpperCase() + kind.slice(1) + 's';
+  el.innerHTML = '<div class="loading-indicator">Loading ' + label + '...</div>';
+  try {
+    var res = await api('/api/memory/by-scope?kind=' + kind + '&limit=50');
+    var items = (res && res.memories) || [];
+    if (!items.length) {
+      el.innerHTML = '<div style="padding:12px;color:var(--text3);font-size:12px">No ' + label.toLowerCase() + ' found.</div>';
+      return;
+    }
+    var h = '<div style="margin-bottom:6px;display:flex;align-items:center;gap:8px"><span style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:' + clr + '">' + label + '</span><span style="font-size:10px;color:var(--text3)">' + items.length + ' items</span><button class="btn btn-ghost btn-sm" style="font-size:10px;margin-left:auto;color:var(--text3)" onclick="document.getElementById(\'mem-kind-viewer\').innerHTML=\'\'">Close</button></div>';
+    h += '<div style="display:flex;flex-direction:column;gap:4px">';
+    items.forEach(function(m) {
+      var preview = escHtml((m.text || m.preview || '').slice(0, 200));
+      var safePreview = (m.text || m.preview || '').replace(/'/g, '').replace(/"/g, '').slice(0, 120);
+      h += '<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg)">'
+        + '<div style="flex:1;min-width:0;font-size:11px;color:var(--text);line-height:1.4">' + preview + '</div>'
+        + '<div style="display:flex;gap:3px;flex-shrink:0;align-items:center">'
+        + '<button class="btn btn-ghost btn-sm" style="font-size:9px;color:#22c55e;padding:1px 5px" onclick="_memDashPromote(' + m.id + ')" title="True">\u2713</button>'
+        + '<button class="btn btn-ghost btn-sm" style="font-size:9px;color:#ef4444;padding:1px 5px" onclick="_memDashDismiss(' + m.id + ')" title="False">\u2717</button>'
+        + '<button class="btn btn-ghost btn-sm" style="font-size:9px;color:var(--text3);padding:1px 5px" onclick="_memDashDismiss(' + m.id + ')" title="Ignore">\u2014</button>'
+        + '<button class="btn btn-ghost btn-sm" style="font-size:9px;color:var(--accent);padding:1px 5px" onclick="_memDashChat(\x27' + escHtml(safePreview) + '\x27)" title="Chat">\u{1f4ac}</button>'
+        + '</div></div>';
+    });
+    h += '</div>';
+    el.innerHTML = h;
+  } catch(e) {
+    el.innerHTML = '<div style="padding:12px;color:var(--text3);font-size:12px">Failed to load.</div>';
+  }
 }
 
 function _memDashChat(preview) {
