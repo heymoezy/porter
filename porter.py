@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.94 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
+"""Porter v0.31.95 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
 
 
 import email
@@ -15386,7 +15386,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.94</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.95</div>
   </div>
 </aside>
 
@@ -15881,6 +15881,13 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
       <div id="proj-detail-tabs" class="agent-detail-tabs project-detail-tabs project-tab-rail"></div>
       <div id="proj-detail-content" class="agent-detail-content"></div>
+      <div id="proj-cmd-bar" style="border-top:1px solid var(--border);padding:6px 0 2px;margin-top:8px">
+        <div id="proj-chat-thread" style="max-height:200px;overflow-y:auto;padding:0 2px 6px;display:none"></div>
+        <div style="display:flex;align-items:flex-end;gap:6px">
+          <textarea id="proj-chat-input" class="pd-chat-input" placeholder="Ask Porter about this project..." rows="1" onkeydown="_projChatKey(event)" oninput="_chatAutoGrow(this)" style="flex:1"></textarea>
+          <button class="pd-send-btn" onclick="_projChatSend()" style="flex-shrink:0"><span>Send</span></button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -16565,6 +16572,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.95', date:'2026-03-17', notes:["Project workspace: 9 tabs consolidated into 4 views (Now, Plan, Timeline, Records)","Now view: operator cockpit with task summary and worker strip","Plan view: brief, workstreams, deliverables, workers, tasks","Records view: people, apps, links, state, settings","Persistent project command bar across all views"] },
   { ver:'v0.31.94', date:'2026-03-17', notes:["Nav restructure: AI Agents + Templates group, Files in Work, Settings gear icon","Combined Ask Porter + Projects home screen with chat bar","Agents renamed to AI Agents throughout","Templates restored to sidebar nav","Fix: Memory dashboard 'invalid memory ID' bug","Settings removed from nav, gear icon in sidebar footer"] },
   { ver:'v0.31.93', date:'2026-03-17', notes:["CLI Migration Phase 1: sidebar reorganized into Ask Porter / Work / Inspect / Admin groups","Ask Porter is now the default home module","Agents renamed to Workers in nav and module header","Logo updated to 'Ask Porter'","Agent Templates removed from sidebar nav (still accessible from Workers)"] },
   { ver:'v0.31.92', date:'2026-03-17', notes:["Memory V2: consolidation loop (decay, auto-archive, auto-promote) replaces cortex loop","Memory V2: Memory nav item in Intelligence group","Memory V2: Memory dashboard with stat cards, search, review queue","Memory V2: background consolidation every 4 hours"] },
@@ -19702,7 +19710,7 @@ function toggleCreateSkillForm() {
 }
 
 // ── Projects (v0.29.32 — real project containers) ─────────────────────
-var _projList = [], _projActive = null, _projTab = 'overview';
+var _projList = [], _projActive = null, _projTab = 'now';
 var _projActivitySseId = null;
 var _projActivityPoller = null;
 var _projActivityRefreshTimer = null;
@@ -20341,7 +20349,7 @@ async function _projOpen(id) {
     sb.style.color = done ? '#22c55e' : '#3b82f6';
   }
   window._projCurrent = proj;
-  _projTab = 'overview';
+  _projTab = 'now';
   var actions = document.getElementById('proj-detail-actions');
   if (actions) {
     actions.innerHTML = '<button class="btn btn-ghost" style="font-size:12px" onclick="_projKickoff(\'worker\')">Create Worker</button>'
@@ -20355,19 +20363,11 @@ async function _projOpen(id) {
 function _renderProjTabs() {
   var tabs = document.getElementById('proj-detail-tabs');
   if (!tabs) return;
-  var proj = window._projCurrent || {};
-  var agentCount = (proj.assigned_personas || []).length;
-  var collabCount = (proj._collaborator_count || 0);
   var items = [
-    {id:'overview', label:'Overview'},
-    {id:'chat', label:'Chat'},
+    {id:'now', label:'Now'},
     {id:'plan', label:'Plan'},
-    {id:'tasks', label:'Tasks'},
-    {id:'workers', label:'Workers' + (agentCount ? ' (' + agentCount + ')' : '')},
-    {id:'deliverables', label:'Deliverables'},
-    {id:'people', label:'People' + (collabCount ? ' (' + collabCount + ')' : '')},
-    {id:'apps', label:'Apps'},
-    {id:'activity', label:'Activity'}
+    {id:'timeline', label:'Timeline'},
+    {id:'records', label:'Records'}
   ];
   tabs.innerHTML = items.map(function(t) {
     var active = _projTab === t.id;
@@ -20376,13 +20376,13 @@ function _renderProjTabs() {
 }
 
 function _projSwitchTab(t) {
-  if (t === 'memory' || t === 'state' || t === 'settings') t = 'overview';
-  if (t === 'agents') t = 'workers';
-  if (t === 'artifacts') t = 'deliverables';
-  if (t === 'todos' || t === 'todo') t = 'tasks';
-  if (t === 'workflow' || t === 'schedule') t = 'plan';
+  // Legacy aliases -> 4-view structure
+  if (t === 'overview' || t === 'chat' || t === 'tasks' || t === 'todos' || t === 'todo') t = 'now';
+  if (t === 'agents' || t === 'workers' || t === 'deliverables' || t === 'artifacts' || t === 'workflow' || t === 'schedule') t = 'plan';
+  if (t === 'activity') t = 'timeline';
+  if (t === 'people' || t === 'apps' || t === 'memory' || t === 'state' || t === 'settings') t = 'records';
   _projTab = t;
-  if (t !== 'chat' && _projActivityRefreshTimer) {
+  if (t !== 'timeline' && _projActivityRefreshTimer) {
     clearTimeout(_projActivityRefreshTimer);
     _projActivityRefreshTimer = null;
   }
@@ -20573,32 +20573,115 @@ async function _renderProjTabContent() {
   var proj = window._projCurrent;
   var html = '';
 
-  if (_projTab === 'chat') {
-    html += _projNextCard(proj, 'chat');
-    html += '<section id="proj-chat-shell" class="pd-chat-shell" style="display:flex;flex-direction:column;flex:1;min-height:360px;padding:4px 2px 2px;background:transparent;box-sizing:border-box">'
-      + '<div id="proj-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 14px"></div>'
-      + '<div style="margin-top:8px;padding-top:4px">'
-      + '<div class="pd-chat-toolbar">'
-      + '<button class="pd-chat-toolbtn" onclick="_projNewChat()">＋ New Chat</button>'
-      + '<button class="pd-chat-toolbtn" onclick="_projOpenHistory()">History</button>'
-      + '<button class="pd-chat-toolbtn" onclick="_projClearChat()">Clear Chat</button>'
-      + '<div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap">'
-      + '<div id="proj-chat-model-picker" class="chat-ctx-sel" onclick="_projChatModelToggle(event)" style="margin-left:auto;font-size:11px;padding:4px 10px">'
-      + '<span class="ctx-label" id="proj-chat-model-label">Model: Auto</span><span class="ctx-arrow">▾</span>'
-      + '<div class="chat-ctx-dropdown" id="proj-chat-model-dd"></div></div>'
-      + '</div>'
-      + '</div>'
-      + '<div class="pd-chat-composer">'
-      + '<textarea id="proj-chat-input" class="pd-chat-input" placeholder="Ask Porter to shape this project, assign workers, or tighten the plan..." rows="1" onkeydown="_projChatKey(event)"></textarea>'
-      + '<button class="pd-send-btn" onclick="_projChatSend()"><span>Send To Porter</span><span class="pd-send-icon">↗</span></button>'
-      + '</div></div></section>';
+  if (_projTab === 'now') {
+
+    html += '<div style="display:flex;flex-direction:column;gap:10px">';
+
+    // ── DO THIS NEXT — smart suggestion card ──
+    html += _projNextCard(proj, 'overview');
+
+    // Header row: type + status + dates inline
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
+    html += _projTypeBadge(proj.type) + _projStatusBadge(proj);
+    if (proj.assigned_personas && proj.assigned_personas.length) html += '<span style="font-size:10px;color:var(--text3)">' + proj.assigned_personas.length + ' worker' + (proj.assigned_personas.length > 1 ? 's' : '') + '</span>';
+    if (proj.deadline) html += '<span style="font-size:10px;color:var(--text3)">Due ' + escHtml(_projFmtShortDate(proj.deadline)) + '</span>';
+    html += '</div>';
+
+    // v0.31.67 — Description and success criteria moved to Plan tab Brief section
+    if (proj.description) html += '<div style="font-size:11px;color:var(--text3);line-height:1.4;max-height:40px;overflow:hidden">' + escHtml(proj.description).slice(0,120) + (proj.description.length > 120 ? '...' : '') + '</div>';
+
+    // Milestones — only if any exist
+    var milestones = proj.milestones || [];
+    if (milestones.length) {
+      var msDone = milestones.filter(function(m) { return m.done; }).length;
+      html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">';
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px">Milestones</span><div style="flex:1;height:3px;border-radius:2px;background:var(--border)"><div style="height:100%;border-radius:2px;background:var(--accent);width:' + Math.round(msDone/milestones.length*100) + '%"></div></div><span style="font-size:10px;color:var(--text3)">' + msDone + '/' + milestones.length + '</span></div>';
+      milestones.forEach(function(m, i) {
+        html += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0"><input type="checkbox" ' + (m.done ? 'checked' : '') + ' onchange="_projToggleMilestone(\x27' + proj.id + '\x27,' + i + ')" style="margin:0;cursor:pointer"><span style="font-size:11px;color:' + (m.done ? 'var(--text3)' : 'var(--text)') + ';' + (m.done ? 'text-decoration:line-through;' : '') + '">' + escHtml(m.name) + '</span></div>';
+      });
+      html += '</div>';
+    }
+
+    // Links — only if any exist
+    var links = proj.links || {};
+    var hasLinks = links.repo || links.live_url || links.docs || (links.custom && links.custom.length);
+    if (hasLinks) {
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+      if (links.repo) html += '<a href="' + escHtml(links.repo) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Repo</a>';
+      if (links.live_url) html += '<a href="' + escHtml(links.live_url) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Live</a>';
+      if (links.docs) html += '<a href="' + escHtml(links.docs) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Docs</a>';
+      (links.custom || []).forEach(function(lk) { html += '<a href="' + escHtml(lk.url || '') + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">' + escHtml(lk.label || 'Link') + '</a>'; });
+      html += '</div>';
+    }
+
+    // Linked projects — only if any exist
+    var linkedProjs = proj.linked_projects || [];
+    if (linkedProjs.length) {
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span style="font-size:10px;color:var(--text3)">Linked:</span>';
+      linkedProjs.forEach(function(lp) {
+        var linked = _projList.find(function(p) { return p.id === lp.project_id; });
+        var linkName = linked ? linked.name : lp.project_id.slice(0,8);
+        html += '<button onclick="_projOpen(\x27' + escHtml(lp.project_id) + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">' + escHtml(linkName) + '</button>';
+      });
+      html += '</div>';
+    }
+
+    // Quick actions row — all "add" buttons in one line
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;font-size:10px">';
+    html += '<button onclick="_projAddMilestone(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Milestone</button>';
+    html += '<button onclick="_projAddLink(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Link</button>';
+    html += '<button onclick="_projLinkProject(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Linked Project</button>';
+    html += '<button onclick="_projEditDates(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">Timeline</button>';
+    var curStatus = proj.status || (proj.completed_at ? 'completed' : 'active');
+    if (curStatus === 'active') {
+      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27completed\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px;margin-left:auto">Complete</button>';
+    } else if (curStatus !== 'active') {
+      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27active\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px;margin-left:auto">Reopen</button>';
+    }
+    html += '</div>';
+
+    // State section (notes, directives) — loaded async
+    html += '<div id="proj-state-view" style="font-size:12px;color:var(--text3)">Loading state...</div>';
+    html += '</div>';
+
+    // ── Task Summary ──
+    html += '<div style="margin-top:8px">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+    html += '<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Tasks</span>';
+    html += '<button onclick="_projSwitchTab(\x27plan\x27)" class="btn btn-ghost" style="font-size:10px;padding:1px 6px;margin-left:auto">Full list \u2192</button>';
+    html += '</div>';
+    html += '<div id="proj-now-tasks" style="font-size:12px;color:var(--text3)"><span class="loading-spinner" style="width:12px;height:12px"></span></div>';
+    html += '</div>';
+
+    // ── Workers strip ──
+    var _nwAssigned = proj.assigned_personas || [];
+    html += '<div style="margin-top:8px">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+    html += '<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Workers (' + _nwAssigned.length + ')</span>';
+    html += '<button onclick="_projSwitchTab(\x27plan\x27)" class="btn btn-ghost" style="font-size:10px;padding:1px 6px;margin-left:auto">Manage \u2192</button>';
+    html += '</div>';
+    if (_nwAssigned.length) {
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+      _nwAssigned.forEach(function(pid) {
+        var p = (_personas || []).find(function(x) { return x.id === pid; });
+        var name = p ? p.name : pid.slice(0,8);
+        html += '<div style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:var(--surface);border:1px solid var(--border);font-size:11px;cursor:pointer" onclick="switchModule(\x27agents\x27);selectPersona(\x27' + pid + '\x27)">';
+        html += '<span style="width:16px;height:16px">' + (p ? _personaAvatarMarkup(p, 16) : '\u{1f916}') + '</span>';
+        html += '<span>' + escHtml(name) + '</span></div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div style="font-size:11px;color:var(--text3)">No workers assigned</div>';
+    }
+    html += '</div>';
+
     content.innerHTML = html;
-    var projState = _projChatGetState(proj.id);
-    _projChatSetModel(projState.modelOverride || '');
-    _projChatRender(proj.id);
+    _projLoadState(proj.id);
+    _projLoadNowTasks(proj.id);
     return;
 
   } else if (_projTab === 'plan') {
+
     html += _projNextCard(proj, 'plan');
     html += '<div style="display:flex;flex-direction:column;gap:12px">';
 
@@ -20710,58 +20793,49 @@ async function _renderProjTabContent() {
     html += '</div>';
 
     html += '</div>';
-    content.innerHTML = html;
-    return;
 
-  } else if (_projTab === 'tasks') {
-    html += _projNextCard(proj, 'tasks');
-    // Quick-add bar
-    html += '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">';
-    html += '<input type="text" id="proj-task-input" placeholder="Add a task..." onkeydown="if(event.key===\'Enter\')_projAddTask(\x27' + proj.id + '\x27)" style="flex:1;font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)">';
-    html += '<button onclick="_projAddTask(\x27' + proj.id + '\x27)" class="btn btn-primary" style="font-size:11px;padding:5px 12px">Add</button>';
-    html += '</div>';
-    // Filter row
-    html += '<div style="display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
-    var _tf = window._projTaskFilter || 'all';
-    ['all','todo','in_progress','done'].forEach(function(f) {
-      var label = f === 'all' ? 'All' : f === 'todo' ? 'To Do' : f === 'in_progress' ? 'In Progress' : 'Done';
-      html += '<button class="btn btn-ghost' + (_tf === f ? ' active' : '') + '" style="font-size:10px;padding:2px 8px' + (_tf === f ? ';background:var(--accent);color:#fff' : '') + '" onclick="window._projTaskFilter=\x27' + f + '\x27;_renderProjTabContent()">' + label + '</button>';
-    });
-    html += '</div>';
-    // Task list loaded async
-    html += '<div id="proj-task-list" style="font-size:12px;color:var(--text3)"><div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div></div>';
-    content.innerHTML = html;
-    _projLoadTasks(proj.id);
-    return;
+    // ── Deliverables ──
 
-  } else if (_projTab === 'apps') {
-    html += _projNextCard(proj, 'apps');
-    html += '<div style="display:flex;flex-direction:column;gap:12px">';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">';
-    html += '<span style="font-size:13px;font-weight:600;color:var(--text)">Connected Apps</span>';
-    html += '<button class="btn btn-ghost" style="font-size:11px" onclick="_projConnectApp(\x27' + proj.id + '\x27)">+ Connect App</button>';
+    html += _projNextCard(proj, 'deliverables');
+    // v0.31.69 — Planned deliverables from workstreams
+    var phases = proj.phases || [];
+    var hasDeliverables = phases.some(function(p){ return (p.deliverables||[]).length > 0; });
+    if (hasDeliverables) {
+      html += '<div style="margin-bottom:12px">';
+      html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Planned Deliverables</div>';
+      phases.forEach(function(ph) {
+        var dls = ph.deliverables || [];
+        if (!dls.length) return;
+        html += '<div style="margin-bottom:6px">';
+        html += '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:3px">' + escHtml(ph.name) + '</div>';
+        dls.forEach(function(d) {
+          var dd = d.status === 'done';
+          html += '<div style="display:flex;align-items:center;gap:6px;padding:1px 0 1px 12px">';
+          html += '<span style="font-size:9px;color:' + (dd ? '#22c55e' : 'var(--text3)') + '">' + (dd ? '\u2713' : '\u25cb') + '</span>';
+          html += '<span style="font-size:11px;color:' + (dd ? 'var(--text3)' : 'var(--text)') + ';' + (dd ? 'text-decoration:line-through;' : '') + '">' + escHtml(d.name) + '</span>';
+          html += '</div>';
+        });
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    // Artifacts section header
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Artifacts</div>';
+    // v0.31.44 — Drag-and-drop zone
+    html += '<div id="proj-deliv-drop" class="proj-drop-zone" onclick="_projUploadFile(\x27' + proj.id + '\x27)" ondragover="_projDelivDragOver(event)" ondragenter="_projDelivDragEnter(event)" ondragleave="_projDelivDragLeave(event)" ondrop="_projDelivDrop(event,\x27' + proj.id + '\x27)">Drop files here or click to upload</div>';
+    html += '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">';
+    html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27text\x27)" class="btn btn-ghost" style="font-size:11px">+ Text</button>';
+    html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27link\x27)" class="btn btn-ghost" style="font-size:11px">+ Link</button>';
+    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27image\x27)" class="btn btn-ghost" style="font-size:11px">+ Image</button>';
+    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27video\x27)" class="btn btn-ghost" style="font-size:11px">+ Video</button>';
+    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27audio\x27)" class="btn btn-ghost" style="font-size:11px">+ Audio</button>';
+    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27document\x27)" class="btn btn-ghost" style="font-size:11px">+ Doc</button>';
     html += '</div>';
-    html += '<div id="proj-apps-list" style="font-size:12px;color:var(--text3)"><div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div></div>';
-    html += '</div>';
-    content.innerHTML = html;
-    _projLoadApps(proj.id);
-    return;
+    html += '<div id="proj-content-list" style="font-size:12px;color:var(--text3)">Loading...</div>';
+    html += '<div id="proj-artifacts-list" style="font-size:12px;color:var(--text3);margin-top:14px"></div>';
 
-  } else if (_projTab === 'activity') {
-    html += _projNextCard(proj, 'activity');
-    html += '<div style="display:flex;flex-direction:column;gap:10px">';
-    html += '<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap">';
-    html += '<span style="font-size:13px;font-weight:600;color:var(--text)">Recent Activity</span>';
-    html += '<div style="display:flex;gap:8px"><span class="model-card-chip dim" style="font-size:10px">' + (proj.assigned_personas || []).length + ' workers</span>';
-    html += '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(proj.type === 'autonomous' ? 'Autonomous' : 'Guided') + '</span></div>';
-    html += '</div>';
-    html += '<div id="proj-activity-list" style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text3)"><div class="loading-indicator"><span class="loading-spinner"></span> Loading activity...</div></div>';
-    html += '</div>';
-    content.innerHTML = html;
-    _projLoadActivity(proj.id);
-    return;
+    // ── Workers ──
 
-  } else if (_projTab === 'workers') {
     html += _projNextCard(proj, 'workers');
     var assigned = proj.assigned_personas || [];
     // v0.31.44 — Ensure personas are loaded before rendering workers
@@ -20831,50 +20905,49 @@ async function _renderProjTabContent() {
       }
     }
 
-  } else if (_projTab === 'deliverables') {
-    html += _projNextCard(proj, 'deliverables');
-    // v0.31.69 — Planned deliverables from workstreams
-    var phases = proj.phases || [];
-    var hasDeliverables = phases.some(function(p){ return (p.deliverables||[]).length > 0; });
-    if (hasDeliverables) {
-      html += '<div style="margin-bottom:12px">';
-      html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Planned Deliverables</div>';
-      phases.forEach(function(ph) {
-        var dls = ph.deliverables || [];
-        if (!dls.length) return;
-        html += '<div style="margin-bottom:6px">';
-        html += '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:3px">' + escHtml(ph.name) + '</div>';
-        dls.forEach(function(d) {
-          var dd = d.status === 'done';
-          html += '<div style="display:flex;align-items:center;gap:6px;padding:1px 0 1px 12px">';
-          html += '<span style="font-size:9px;color:' + (dd ? '#22c55e' : 'var(--text3)') + '">' + (dd ? '\u2713' : '\u25cb') + '</span>';
-          html += '<span style="font-size:11px;color:' + (dd ? 'var(--text3)' : 'var(--text)') + ';' + (dd ? 'text-decoration:line-through;' : '') + '">' + escHtml(d.name) + '</span>';
-          html += '</div>';
-        });
-        html += '</div>';
-      });
-      html += '</div>';
-    }
-    // Artifacts section header
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Artifacts</div>';
-    // v0.31.44 — Drag-and-drop zone
-    html += '<div id="proj-deliv-drop" class="proj-drop-zone" onclick="_projUploadFile(\x27' + proj.id + '\x27)" ondragover="_projDelivDragOver(event)" ondragenter="_projDelivDragEnter(event)" ondragleave="_projDelivDragLeave(event)" ondrop="_projDelivDrop(event,\x27' + proj.id + '\x27)">Drop files here or click to upload</div>';
-    html += '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">';
-    html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27text\x27)" class="btn btn-ghost" style="font-size:11px">+ Text</button>';
-    html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27link\x27)" class="btn btn-ghost" style="font-size:11px">+ Link</button>';
-    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27image\x27)" class="btn btn-ghost" style="font-size:11px">+ Image</button>';
-    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27video\x27)" class="btn btn-ghost" style="font-size:11px">+ Video</button>';
-    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27audio\x27)" class="btn btn-ghost" style="font-size:11px">+ Audio</button>';
-    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27document\x27)" class="btn btn-ghost" style="font-size:11px">+ Doc</button>';
+    // ── Tasks ──
+
+    html += _projNextCard(proj, 'tasks');
+    // Quick-add bar
+    html += '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">';
+    html += '<input type="text" id="proj-task-input" placeholder="Add a task..." onkeydown="if(event.key===\'Enter\')_projAddTask(\x27' + proj.id + '\x27)" style="flex:1;font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)">';
+    html += '<button onclick="_projAddTask(\x27' + proj.id + '\x27)" class="btn btn-primary" style="font-size:11px;padding:5px 12px">Add</button>';
     html += '</div>';
-    html += '<div id="proj-content-list" style="font-size:12px;color:var(--text3)">Loading...</div>';
-    html += '<div id="proj-artifacts-list" style="font-size:12px;color:var(--text3);margin-top:14px"></div>';
+    // Filter row
+    html += '<div style="display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
+    var _tf = window._projTaskFilter || 'all';
+    ['all','todo','in_progress','done'].forEach(function(f) {
+      var label = f === 'all' ? 'All' : f === 'todo' ? 'To Do' : f === 'in_progress' ? 'In Progress' : 'Done';
+      html += '<button class="btn btn-ghost' + (_tf === f ? ' active' : '') + '" style="font-size:10px;padding:2px 8px' + (_tf === f ? ';background:var(--accent);color:#fff' : '') + '" onclick="window._projTaskFilter=\x27' + f + '\x27;_renderProjTabContent()">' + label + '</button>';
+    });
+    html += '</div>';
+    // Task list loaded async
+    html += '<div id="proj-task-list" style="font-size:12px;color:var(--text3)"><div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div></div>';
+
     content.innerHTML = html;
     _projLoadContent(proj.id);
     _projLoadArtifacts(proj.id);
+    _projLoadTasks(proj.id);
     return;
 
-  } else if (_projTab === 'people') {
+  } else if (_projTab === 'timeline') {
+
+    html += _projNextCard(proj, 'activity');
+    html += '<div style="display:flex;flex-direction:column;gap:10px">';
+    html += '<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap">';
+    html += '<span style="font-size:13px;font-weight:600;color:var(--text)">Recent Activity</span>';
+    html += '<div style="display:flex;gap:8px"><span class="model-card-chip dim" style="font-size:10px">' + (proj.assigned_personas || []).length + ' workers</span>';
+    html += '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(proj.type === 'autonomous' ? 'Autonomous' : 'Guided') + '</span></div>';
+    html += '</div>';
+    html += '<div id="proj-activity-list" style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text3)"><div class="loading-indicator"><span class="loading-spinner"></span> Loading activity...</div></div>';
+    html += '</div>';
+    content.innerHTML = html;
+    _projLoadActivity(proj.id);
+    return;
+
+  } else if (_projTab === 'records') {
+    // ── People ──
+
     // v0.31.44 — Project People / Collaborators CRM
     html += _projNextCard(proj, 'people');
     html += '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">';
@@ -20882,84 +20955,50 @@ async function _renderProjTabContent() {
     html += '<button onclick="_projAddCollaborator(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:11px;margin-left:auto">+ Add Person</button>';
     html += '</div>';
     html += '<div id="proj-people-list" class="proj-collab-grid"><div style="font-size:12px;color:var(--text3)">Loading...</div></div>';
-    content.innerHTML = html;
-    _projLoadCollaborators(proj.id);
-    return;
 
-  } else if (_projTab === 'overview') {
-    html += '<div style="display:flex;flex-direction:column;gap:10px">';
+    // ── Connected Apps ──
 
-    // ── DO THIS NEXT — smart suggestion card ──
-    html += _projNextCard(proj, 'overview');
-
-    // Header row: type + status + dates inline
-    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
-    html += _projTypeBadge(proj.type) + _projStatusBadge(proj);
-    if (proj.assigned_personas && proj.assigned_personas.length) html += '<span style="font-size:10px;color:var(--text3)">' + proj.assigned_personas.length + ' worker' + (proj.assigned_personas.length > 1 ? 's' : '') + '</span>';
-    if (proj.deadline) html += '<span style="font-size:10px;color:var(--text3)">Due ' + escHtml(_projFmtShortDate(proj.deadline)) + '</span>';
+    html += _projNextCard(proj, 'apps');
+    html += '<div style="display:flex;flex-direction:column;gap:12px">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">';
+    html += '<span style="font-size:13px;font-weight:600;color:var(--text)">Connected Apps</span>';
+    html += '<button class="btn btn-ghost" style="font-size:11px" onclick="_projConnectApp(\x27' + proj.id + '\x27)">+ Connect App</button>';
+    html += '</div>';
+    html += '<div id="proj-apps-list" style="font-size:12px;color:var(--text3)"><div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div></div>';
     html += '</div>';
 
-    // v0.31.67 — Description and success criteria moved to Plan tab Brief section
-    if (proj.description) html += '<div style="font-size:11px;color:var(--text3);line-height:1.4;max-height:40px;overflow:hidden">' + escHtml(proj.description).slice(0,120) + (proj.description.length > 120 ? '...' : '') + '</div>';
-
-    // Milestones — only if any exist
-    var milestones = proj.milestones || [];
-    if (milestones.length) {
-      var msDone = milestones.filter(function(m) { return m.done; }).length;
-      html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">';
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px">Milestones</span><div style="flex:1;height:3px;border-radius:2px;background:var(--border)"><div style="height:100%;border-radius:2px;background:var(--accent);width:' + Math.round(msDone/milestones.length*100) + '%"></div></div><span style="font-size:10px;color:var(--text3)">' + msDone + '/' + milestones.length + '</span></div>';
-      milestones.forEach(function(m, i) {
-        html += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0"><input type="checkbox" ' + (m.done ? 'checked' : '') + ' onchange="_projToggleMilestone(\x27' + proj.id + '\x27,' + i + ')" style="margin:0;cursor:pointer"><span style="font-size:11px;color:' + (m.done ? 'var(--text3)' : 'var(--text)') + ';' + (m.done ? 'text-decoration:line-through;' : '') + '">' + escHtml(m.name) + '</span></div>';
-      });
-      html += '</div>';
-    }
-
-    // Links — only if any exist
-    var links = proj.links || {};
-    var hasLinks = links.repo || links.live_url || links.docs || (links.custom && links.custom.length);
-    if (hasLinks) {
+    // ── Links ──
+    var _rLinks = proj.links || {};
+    var _rHasLinks = _rLinks.repo || _rLinks.live_url || _rLinks.docs || (_rLinks.custom && _rLinks.custom.length);
+    if (_rHasLinks) {
+      html += '<div style="margin-top:12px"><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Links</div>';
       html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
-      if (links.repo) html += '<a href="' + escHtml(links.repo) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Repo</a>';
-      if (links.live_url) html += '<a href="' + escHtml(links.live_url) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Live</a>';
-      if (links.docs) html += '<a href="' + escHtml(links.docs) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Docs</a>';
-      (links.custom || []).forEach(function(lk) { html += '<a href="' + escHtml(lk.url || '') + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">' + escHtml(lk.label || 'Link') + '</a>'; });
-      html += '</div>';
+      if (_rLinks.repo) html += '<a href="' + escHtml(_rLinks.repo) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Repo</a>';
+      if (_rLinks.live_url) html += '<a href="' + escHtml(_rLinks.live_url) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Live</a>';
+      if (_rLinks.docs) html += '<a href="' + escHtml(_rLinks.docs) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Docs</a>';
+      (_rLinks.custom || []).forEach(function(lk) { html += '<a href="' + escHtml(lk.url || '') + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">' + escHtml(lk.label || 'Link') + '</a>'; });
+      html += '</div></div>';
     }
-
-    // Linked projects — only if any exist
-    var linkedProjs = proj.linked_projects || [];
-    if (linkedProjs.length) {
-      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span style="font-size:10px;color:var(--text3)">Linked:</span>';
-      linkedProjs.forEach(function(lp) {
+    // ── Linked Projects ──
+    var _rLinkedProjs = proj.linked_projects || [];
+    if (_rLinkedProjs.length) {
+      html += '<div style="margin-top:12px"><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Linked Projects</div>';
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+      _rLinkedProjs.forEach(function(lp) {
         var linked = _projList.find(function(p) { return p.id === lp.project_id; });
         var linkName = linked ? linked.name : lp.project_id.slice(0,8);
         html += '<button onclick="_projOpen(\x27' + escHtml(lp.project_id) + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">' + escHtml(linkName) + '</button>';
       });
-      html += '</div>';
+      html += '</div></div>';
     }
 
-    // Quick actions row — all "add" buttons in one line
-    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;font-size:10px">';
-    html += '<button onclick="_projAddMilestone(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Milestone</button>';
-    html += '<button onclick="_projAddLink(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Link</button>';
-    html += '<button onclick="_projLinkProject(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Linked Project</button>';
-    html += '<button onclick="_projEditDates(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">Timeline</button>';
-    var curStatus = proj.status || (proj.completed_at ? 'completed' : 'active');
-    if (curStatus === 'active') {
-      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27completed\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px;margin-left:auto">Complete</button>';
-    } else if (curStatus !== 'active') {
-      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27active\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px;margin-left:auto">Reopen</button>';
-    }
-    html += '</div>';
+    // ── State / Notes ──
+    html += '<div id="proj-state-view" style="margin-top:12px;font-size:12px;color:var(--text3)">Loading state...</div>';
 
-    // State section (notes, directives) — loaded async
-    html += '<div id="proj-state-view" style="font-size:12px;color:var(--text3)">Loading state...</div>';
-    html += '</div>';
-    content.innerHTML = html;
-    _projLoadState(proj.id);
-    return;
+    // ── Project Settings ──
+    html += '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">';
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Project Settings</div>';
 
-  } else if (_projTab === 'settings') {
     html += '<div style="display:flex;flex-direction:column;gap:12px">';
     html += '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Project Name</label>';
     html += '<input type="text" id="proj-edit-name" value="' + escHtml(proj.name || '') + '" style="width:100%;font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)"></div>';
@@ -20977,10 +21016,47 @@ async function _renderProjTabContent() {
     html += '<button onclick="_projSetActive(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:12px">' + (proj.id === _projActive ? 'Deactivate' : 'Set as Active') + '</button>';
     html += '<button onclick="_projDelete(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:12px;color:var(--danger,#ef4444)">Delete</button>';
     html += '</div></div>';
+    html += '</div>';
+
+    content.innerHTML = html;
+    _projLoadCollaborators(proj.id);
+    _projLoadApps(proj.id);
+    _projLoadState(proj.id);
+    return;
   }
 
   content.innerHTML = html;
 }
+
+async function _projLoadNowTasks(projId) {
+  var el = document.getElementById('proj-now-tasks');
+  if (!el) return;
+  try {
+    var resp = await api('/api/projects/' + projId + '/tasks');
+    var tasks = (resp && resp.tasks) || [];
+    var inP = tasks.filter(function(t){ return t.status === 'in_progress'; }).length;
+    var todo = tasks.filter(function(t){ return t.status === 'todo'; }).length;
+    var done = tasks.filter(function(t){ return t.status === 'done'; }).length;
+    if (!tasks.length) { el.innerHTML = '<span style="color:var(--text3);font-size:11px">No tasks yet. Add them in Plan.</span>'; return; }
+    var h = '<div style="display:flex;gap:10px;font-size:11px;margin-bottom:4px">';
+    if (inP) h += '<span style="color:var(--accent)">\u25cf ' + inP + ' in progress</span>';
+    if (todo) h += '<span style="color:var(--text3)">\u25cb ' + todo + ' to do</span>';
+    if (done) h += '<span style="color:var(--text3);opacity:.6">\u2713 ' + done + ' done</span>';
+    h += '</div>';
+    var active = tasks.filter(function(t){ return t.status !== 'done'; }).slice(0, 5);
+    if (active.length) {
+      h += '<div style="display:flex;flex-direction:column;gap:2px">';
+      active.forEach(function(t) {
+        var st = t.status === 'in_progress' ? '\u25cf' : '\u25cb';
+        var stColor = t.status === 'in_progress' ? 'var(--accent)' : 'var(--text3)';
+        h += '<div style="display:flex;align-items:center;gap:6px;padding:1px 0;font-size:11px"><span style="color:' + stColor + ';font-size:8px">' + st + '</span><span style="color:var(--text)">' + escHtml(t.title || t.name || '?') + '</span></div>';
+      });
+      h += '</div>';
+    }
+    el.innerHTML = h;
+  } catch(e) { el.innerHTML = ''; }
+}
+
 
 window._projChatState = window._projChatState || {};
 
@@ -44084,7 +44160,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.94"})
+            self.reply_json({"v": "0.31.95"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44246,7 +44322,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.94"
+                health["porter_version"] = "0.31.95"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -46568,7 +46644,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.94'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.95'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -50601,7 +50677,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.31.94"
+                _ws_health["porter_version"] = "0.31.95"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -53575,7 +53651,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.31.94 ready (localhost only)")
+    print(f"\n  Porter v0.31.95 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
