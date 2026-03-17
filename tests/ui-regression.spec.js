@@ -63,7 +63,7 @@ test.describe('Tab Headers — every tab must have a title', () => {
   });
 
   const moduleTabs = [
-    { id: 'agents', title: 'Agents', selector: '#agents-module .module-title' },
+    { id: 'agents', title: 'AI Agents', selector: '#agents-module .module-title' },
     { id: 'projects', title: 'Projects', selector: '#projects-module .module-title' },
     { id: 'people', title: 'People', selector: '#people-module .module-title' },
     { id: 'capabilities', title: 'Tools', selector: '#capabilities-module .module-title' },
@@ -163,13 +163,21 @@ test.describe('People tab', () => {
     await expect(page.locator('#people-module .module-title')).toHaveText('People');
   });
 
-  test('shows user cards after loading', async ({ page }) => {
+  test('has CRM sub-tabs', async ({ page }) => {
+    await expect(page.locator('.crm-tab[data-tab="contacts"]')).toBeVisible();
+    await expect(page.locator('.crm-tab[data-tab="team"]')).toBeVisible();
+    await expect(page.locator('.crm-tab[data-tab="companies"]')).toBeVisible();
+  });
+
+  test('shows user cards on Team sub-tab', async ({ page }) => {
+    await page.locator('.crm-tab[data-tab="team"]').click();
     await page.waitForTimeout(1000);
     const cardCount = await page.locator('.people-card').count();
     expect(cardCount).toBeGreaterThanOrEqual(1);
   });
 
   test('user card shows display name', async ({ page }) => {
+    await page.locator('.crm-tab[data-tab="team"]').click();
     await page.waitForTimeout(1000);
     const nameEl = page.locator('.people-card-name').first();
     await expect(nameEl).toBeVisible();
@@ -236,7 +244,7 @@ test.describe('Nav bar structure', () => {
 
   // Current visible nav items (for operator role — Logs visible)
   const expectedNavItems = [
-    'Agents', 'Projects', 'Models', 'People', 'Tools', 'Logs', 'Settings'
+    'AI Agents', 'Templates', 'Projects', 'Files', 'People', 'Models', 'Tools', 'Memory', 'Logs'
   ];
 
   test('sidebar contains all expected nav buttons', async ({ page }) => {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.92 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
+"""Porter v0.31.94 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
 
 
 import email
@@ -15294,8 +15294,7 @@ input[type="number"].settings-input { min-width: 60px; }
       <rect x="20" y="9" width="4" height="11" rx="1.5" fill="white"/>
     </svg>
     <div class="logo-text">
-      <span class="logo-name">porter</span>
-      <span class="logo-sub">Orchestrator</span>
+      <span class="logo-name">Ask Porter</span>
     </div>
     <!-- notifications removed: dead code, no callers -->
     <button class="hbg-btn" id="hbgBtn" onclick="toggleSidebar()" title="Toggle sidebar">
@@ -15307,21 +15306,17 @@ input[type="number"].settings-input { min-width: 60px; }
     </button>
   </div>
   <nav class="module-nav">
-    <button class="mnav-item" onclick="_showPorterAbout()" title="Who is Porter" style="margin-bottom:4px">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      <span class="mnav-label">Who is Porter</span>
-    </button>
-    <div class="mnav-group-label">Cast</div>
-    <button class="mnav-item active" id="mnav-agents" onclick="switchModule('agents')">
+    <div class="mnav-group-label">AI Agents</div>
+    <button class="mnav-item" id="mnav-agents" onclick="switchModule('agents')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
-      <span class="mnav-label">Agents</span>
+      <span class="mnav-label">AI Agents</span>
     </button>
     <button class="mnav-item" id="mnav-templates" onclick="switchModule('templates')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      <span class="mnav-label">Agent Templates</span>
+      <span class="mnav-label">Templates</span>
     </button>
     <div class="mnav-group-label">Work</div>
-    <button class="mnav-item" id="mnav-projects" onclick="switchModule('projects')">
+    <button class="mnav-item active" id="mnav-projects" onclick="switchModule('projects')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
       <span class="mnav-label">Projects</span>
     </button>
@@ -15333,7 +15328,7 @@ input[type="number"].settings-input { min-width: 60px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       <span class="mnav-label">People</span>
     </button>
-    <div class="mnav-group-label">Intelligence</div>
+    <div class="mnav-group-label">Inspect</div>
     <button class="mnav-item" id="mnav-models" onclick="switchModule('models')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
       <span class="mnav-label">Models</span>
@@ -15346,11 +15341,11 @@ input[type="number"].settings-input { min-width: 60px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
       <span class="mnav-label">Memory</span>
     </button>
-    <div class="mnav-group-label">System</div>
     <button class="mnav-item" id="mnav-logs" onclick="switchModule('logs')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       <span class="mnav-label">Logs</span>
     </button>
+    <div class="mnav-group-label" style="display:none">Admin</div>
     <button class="mnav-item" id="mnav-policies" style="display:none" onclick="switchModule('policies')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/><circle cx="18" cy="14" r="4"/></svg>
       <span class="mnav-label">Policies</span>
@@ -15366,11 +15361,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="mnav-sep"></div>
     <button class="mnav-item" id="mnav-platform" style="display:none" onclick="window.location.href='/admin/'">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-      <span class="mnav-label">Admin</span>
-    </button>
-    <button class="mnav-item" id="mnav-settings" onclick="openSettings('profile')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-      <span class="mnav-label">Settings</span>
+      <span class="mnav-label">Platform</span>
     </button>
   </nav>
 
@@ -15392,9 +15383,10 @@ input[type="number"].settings-input { min-width: 60px; }
       <div id="sidebar-username" style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
       <div id="sidebar-role" style="font-size:10px;color:var(--text3);text-transform:capitalize"></div>
     </div>
+    <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.92</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.94</div>
   </div>
 </aside>
 
@@ -15482,7 +15474,7 @@ input[type="number"].settings-input { min-width: 60px; }
       <div id="chat-main">
         <div id="chat-messages" class="chat-messages welcome-state">
           <div class="chat-welcome">
-            <div class="chat-welcome-sub">\u26A1 Porter</div>
+            <div class="chat-welcome-sub">Ask Porter</div>
 
             <div class="chat-welcome-input-wrap">
               <div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>
@@ -15546,7 +15538,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
   <div id="agents-module" class="module-panel">
     <div class="module-hdr">
-      <span class="module-title">Agents</span>
+      <span class="module-title">AI Agents</span>
       <div style="flex:1"></div>
       <!-- Toggle removed: Templates is now its own nav tab -->
     </div>
@@ -15866,6 +15858,12 @@ input[type="number"].settings-input { min-width: 60px; }
       <button class="btn btn-primary" onclick="_askPorterToCreate('project')" style="font-size:12px">Start A New Project</button>
     </div>
 
+    <div id="proj-home-chat" style="margin-bottom:14px;padding:10px 14px;border:1px solid var(--border);border-radius:12px;background:var(--surface)">
+      <div style="display:flex;align-items:flex-end;gap:8px">
+        <textarea id="proj-home-input" class="pd-chat-input" placeholder="Ask Porter anything..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_homeChat()}" oninput="_chatAutoGrow(this)" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;resize:none;outline:none"></textarea>
+        <button onclick="_homeChat()" style="padding:6px 12px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:600;flex-shrink:0">Ask Porter</button>
+      </div>
+    </div>
     <div id="projects-list-view" style="padding:0">
       <div id="proj-stats-bar" style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--text3);margin-bottom:12px;padding:0 4px"></div>
       <div id="proj-grid" class="project-roster">
@@ -16567,6 +16565,8 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.94', date:'2026-03-17', notes:["Nav restructure: AI Agents + Templates group, Files in Work, Settings gear icon","Combined Ask Porter + Projects home screen with chat bar","Agents renamed to AI Agents throughout","Templates restored to sidebar nav","Fix: Memory dashboard 'invalid memory ID' bug","Settings removed from nav, gear icon in sidebar footer"] },
+  { ver:'v0.31.93', date:'2026-03-17', notes:["CLI Migration Phase 1: sidebar reorganized into Ask Porter / Work / Inspect / Admin groups","Ask Porter is now the default home module","Agents renamed to Workers in nav and module header","Logo updated to 'Ask Porter'","Agent Templates removed from sidebar nav (still accessible from Workers)"] },
   { ver:'v0.31.92', date:'2026-03-17', notes:["Memory V2: consolidation loop (decay, auto-archive, auto-promote) replaces cortex loop","Memory V2: Memory nav item in Intelligence group","Memory V2: Memory dashboard with stat cards, search, review queue","Memory V2: background consolidation every 4 hours"] },
   { ver:'v0.31.91', date:'2026-03-17', notes:["Fix: agent detail page — module header now hidden when detail panel opens","Fix: Who is Porter button moved above nav (own row between logo and Cast)"] },
   { ver:'v0.31.90', date:'2026-03-17', notes:["Memory surfaces: project overview shows memory stats (directives, concepts, signals needing review)","Memory surfaces: project state payload includes memory_stats field","Memory surfaces: file upload generates signal in memories table","Memory surfaces: project overview stat cards updated for Memory V2 terminology"] },
@@ -18722,7 +18722,6 @@ function _isCoordinationEventType(type) {
   return typeof type === 'string' && type.indexOf('coordination:') === 0;
 }
 function switchModule(name) {
-  if (name === 'overview') name = 'agents';
   if (name === 'system') name = 'admin';
   // v0.29.11 — Stop phantom pollers when leaving their tabs
   if ((_currentModule === 'admin' || _currentModule === 'system') && name !== 'admin') {
@@ -25571,7 +25570,7 @@ function renderChatMessages(streamUpdate) {
     // Centered welcome state
     el.classList.add('welcome-state');
     el.innerHTML = '<div class="chat-welcome">'
-      + '<div class="chat-welcome-sub">\u26A1 Porter</div>'
+      + '<div class="chat-welcome-sub">Ask Porter</div>'
 
       + '<div class="chat-welcome-input-wrap">'
       + '<div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>'
@@ -35567,6 +35566,21 @@ function _scheduleOverviewRefresh(delayMs) {
   }, Math.max(80, delayMs || 250));
 }
 
+function _homeChat() {
+  var input = document.getElementById('proj-home-input');
+  if (!input || !input.value.trim()) return;
+  var msg = input.value.trim();
+  input.value = '';
+  _popupChatOpen();
+  setTimeout(function() {
+    var popupInput = document.getElementById('popup-chat-input');
+    if (popupInput) {
+      popupInput.value = msg;
+      _popupChatSend();
+    }
+  }, 80);
+}
+
 async function init() {
   switchModule('projects');
   loadSettings();
@@ -44070,7 +44084,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.92"})
+            self.reply_json({"v": "0.31.94"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44232,7 +44246,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.92"
+                health["porter_version"] = "0.31.94"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -44871,7 +44885,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
-        elif parsed.path.startswith("/api/memory/") and not parsed.path.startswith("/api/memory/search") and not parsed.path.startswith("/api/memory/review") and not parsed.path.startswith("/api/memory/stats") and not parsed.path.startswith("/api/memory/by-scope"):
+        elif parsed.path.startswith("/api/memory/") and not parsed.path.startswith("/api/memory/search") and not parsed.path.startswith("/api/memory/review") and not parsed.path.startswith("/api/memory/stats") and not parsed.path.startswith("/api/memory/by-scope") and not parsed.path.startswith("/api/memory/overview") and not parsed.path.startswith("/api/memory/agent") and not parsed.path.startswith("/api/memory/read") and not parsed.path.startswith("/api/memory/export") and not parsed.path.startswith("/api/memory/flush"):
             # GET /api/memory/<id> — full memory detail
             if not self.auth_check(redirect=False): return
             mem_id = parsed.path.split("/")[3] if len(parsed.path.split("/")) >= 4 else ""
@@ -46554,7 +46568,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.92'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.94'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -50587,7 +50601,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.31.92"
+                _ws_health["porter_version"] = "0.31.94"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -53561,7 +53575,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.31.92 ready (localhost only)")
+    print(f"\n  Porter v0.31.94 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
