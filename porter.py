@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.88 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
+"""Porter v0.31.89 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
 
 
 import email
@@ -15241,7 +15241,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </button>
     <button class="mnav-item" id="mnav-templates" onclick="switchModule('templates')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      <span class="mnav-label">Templates</span>
+      <span class="mnav-label">Agent Templates</span>
     </button>
     <div class="mnav-group-label">Work</div>
     <button class="mnav-item" id="mnav-projects" onclick="switchModule('projects')">
@@ -15313,7 +15313,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.88</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.89</div>
   </div>
 </aside>
 
@@ -15530,7 +15530,7 @@ input[type="number"].settings-input { min-width: 60px; }
         <button class="pd-tab" onclick="switchPdTab('org')">Org</button>
         <button class="pd-tab" onclick="switchPdTab('activity')">Activity</button>
         <button class="pd-tab" onclick="switchPdTab('skills')">Skills</button>
-        <button class="pd-tab" onclick="switchPdTab('state')">State</button>
+        <button class="pd-tab" onclick="switchPdTab('concepts')">Concepts</button>
         <button class="pd-tab" onclick="switchPdTab('config')">Config</button>
         <div style="flex:1"></div>
         <div id="pd-tab-actions" style="display:flex;gap:8px;padding-right:8px"></div>
@@ -16473,6 +16473,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.89', date:'2026-03-17', notes:["Nav: Templates renamed to Agent Templates","Agent detail: State tab renamed to Concepts","Concepts tab: 4-section layout (Directives, Concepts, Episodes, Needs Review)","Concepts tab: inline Promote/Dismiss for review queue signals","Concepts tab: fetches from Memory V2 API"] },
   { ver:'v0.31.88', date:'2026-03-17', notes:["Memory V2: FTS5-based memory injection before dispatch (replaces file-based MEMORY.md + iterative retrieve)","Memory V2: lightweight signal extraction after dispatch (keyword-based, always on)","Memory V2: injection attribution — injected_memories tracked per dispatch","Dispatch context budget rebalanced: SOUL 55%, RULES 25%, Memory 20%"] },
   { ver:'v0.31.87', date:'2026-03-17', notes:["Memory V2 API: GET /api/memory/search, stats, review-queue, by-scope, detail","Memory V2 API: POST /api/memory/create, promote, dismiss, update, delete","Memory V2 API: full FTS5 search with scope/kind filtering","Memory V2 API: review queue for pending signals","Backward compat: /api/personas/state reads from unified memories table"] },
   { ver:'v0.31.86', date:'2026-03-17', notes:["Memory V2: unified memories table with 4-layer model (directives, concepts, episodes, signals)","Memory V2: FTS5 full-text search with auto-sync triggers","Memory V2: core memory functions (insert, search, get, promote, dismiss, stats)","Memory V2: one-time migration from legacy tables (directives, agent_notes, project_notes, cortex_memories)","Memory V2: bridge functions for backward compatibility"] },
@@ -23806,7 +23807,7 @@ async function _dismissDirective(memoryId) {
   try {
     var r = await api('/api/state/directives/' + memoryId + '/status', { status: 'dismissed' });
     if (!r || !r.ok) throw new Error((r && r.error) || 'Dismiss failed');
-    if (window._selectedPersona) switchPdTab('state');
+    if (window._selectedPersona) switchPdTab('concepts');
     toast('Directive dismissed', 'ok');
   } catch (e) {
     toast(e.message || 'Dismiss failed', 'err');
@@ -23824,7 +23825,7 @@ async function _statePromptDirective(scopeType, scopeId) {
     var res = await api('/api/state/directives', { action: 'create', scope_type: scopeType, scope_id: scopeId, text: text, confidence: isFinite(confidence) ? confidence : 1 });
     if (res && res.ok) {
       toast('Directive saved', 'ok');
-      if (_selectedPersonaId && _selectedPersonaId === scopeId) switchPdTab('state');
+      if (_selectedPersonaId && _selectedPersonaId === scopeId) switchPdTab('concepts');
       if (window._projCurrent && window._projCurrent.id === scopeId) _projLoadState(scopeId);
     } else {
       toast((res && res.error) || 'Failed to save directive', 'err');
@@ -23890,7 +23891,7 @@ async function _statePromptAgentNote(agentId) {
     var res = await api('/api/personas/' + enc(agentId) + '/state/notes', { note_kind: vals.note_kind || 'scope', body: body });
     if (res && res.ok) {
       toast('Agent note saved', 'ok');
-      if (_selectedPersonaId === agentId) switchPdTab('state');
+      if (_selectedPersonaId === agentId) switchPdTab('concepts');
     } else {
       toast((res && res.error) || 'Failed to save note', 'err');
     }
@@ -31732,7 +31733,7 @@ function closePersonaDetail() {
 }
 
 function switchPdTab(tab) {
-  if (tab === 'memory') tab = 'state';
+  if (tab === 'memory' || tab === 'state') tab = 'concepts';
   document.querySelectorAll('.pd-tab').forEach(t => t.classList.remove('active'));
   var _activeTab = document.querySelector(`.pd-tab[onclick*="${tab}"]`);
   if (_activeTab) _activeTab.classList.add('active');
@@ -31983,72 +31984,85 @@ function switchPdTab(tab) {
     }
     content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div style="font-size:12px;color:var(--text3)">Loading skills...</div></div>';
     _loadPersonaSkills(p.id);
-  } else if (tab === 'state') {
-    content.innerHTML = '<div class="loading-indicator">Loading state...</div>';
+  } else if (tab === 'concepts') {
+    content.innerHTML = '<div class="loading-indicator">Loading concepts...</div>';
     (async function() {
       try {
-        var payload = await api('/api/personas/' + p.id + '/state');
-        var directives = (payload && payload.directives) || [];
-        var notes = (payload && payload.notes) || [];
-        var projects = (payload && payload.projects) || [];
-        if (!directives.length && !notes.length && !projects.length) {
-          content.innerHTML = '<div style="display:flex;flex-direction:column;gap:10px"><div style="font-size:12px;color:var(--text3);padding:8px">No durable state has been recorded yet.</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptDirective(\'agent\', \'' + escHtml(p.id) + '\')">Add Directive</button><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptAgentNote(\'' + escHtml(p.id) + '\')">Add Note</button></div></div>';
+        var memRes = await api('/api/memory/by-scope?scope=agent&scope_id=' + encodeURIComponent(p.id) + '&limit=100');
+        var memories = (memRes && memRes.memories) || [];
+        if (p.orchestrator_only) {
+          var gRes = await api('/api/memory/by-scope?scope=global&kind=directive&limit=50');
+          memories = ((gRes && gRes.memories) || []).concat(memories);
+        }
+        var reviewRes = await api('/api/memory/review-queue?limit=20');
+        var queue = (reviewRes && reviewRes.queue) || [];
+        var directives = memories.filter(function(m) { return m.memory_kind === 'directive'; });
+        var concepts = memories.filter(function(m) { return m.memory_kind === 'concept'; });
+        var episodes = memories.filter(function(m) { return m.memory_kind === 'episode'; });
+        window._memPromote = async function(id, kind, trust) {
+          await api('/api/memory/promote', {id: id, target_kind: kind || 'concept', target_trust: trust || 'medium'});
+          switchPdTab('concepts');
+        };
+        window._memDismiss = async function(id) {
+          await api('/api/memory/dismiss', {id: id});
+          switchPdTab('concepts');
+        };
+        if (!directives.length && !concepts.length && !episodes.length && !queue.length) {
+          content.innerHTML = '<div style="display:flex;flex-direction:column;gap:10px"><div style="font-size:12px;color:var(--text3);padding:8px">No memories recorded yet.</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptDirective(\'agent\', \'' + escHtml(p.id) + '\')">Add Directive</button><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptAgentNote(\'' + escHtml(p.id) + '\')">Add Concept</button></div></div>';
           return;
         }
-        var activeProjects = projects.filter(function(pr) { return pr && pr.project; });
-        var openNotes = notes.filter(function(n) { return (n.status || 'active') === 'active'; });
         var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
-          + '<div style="font-size:12px;color:var(--text2);line-height:1.6;max-width:720px">' + (p.orchestrator_only ? 'Porter keeps durable directives and reviewed notes here so the project stays aligned across workers and projects.' : 'This worker keeps reviewed directives and durable notes here so handoffs stay clean.') + '</div>'
-          + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptDirective(\'agent\', \'' + escHtml(p.id) + '\')">Add Directive</button><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptAgentNote(\'' + escHtml(p.id) + '\')">Add Note</button></div>'
-          + '</div>'
-          + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'
-          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Directives</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + directives.length + '</div></div>'
-          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Notes</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + openNotes.length + '</div></div>'
-          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Projects</div><div style="font-size:26px;font-weight:800;color:#22c55e;margin-top:4px">' + activeProjects.length + '</div></div>'
-          + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Mode</div><div style="font-size:18px;font-weight:800;color:var(--text);margin-top:8px">Structured State</div></div>'
-          + '</div>';
-        function _directiveCard(f) {
-          var conf = Math.round(Number(f.confidence || 1) * 100);
-          return '<div style="padding:14px;background:color-mix(in srgb,var(--accent) 5%, var(--bg));border:1px solid var(--border);border-radius:16px">'
-            + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="model-card-chip ok" style="font-size:10px">Directive</span><span style="font-size:10px;color:' + (conf >= 70 ? '#22c55e' : '#f59e0b') + ';margin-left:auto">' + conf + '% confidence</span></div>'
-            + '<div style="font-size:12px;line-height:1.6;color:var(--text)">' + escHtml(f.text || '') + '</div>'
-            + '<div style="display:flex;gap:12px;align-items:center;margin-top:10px;font-size:10px;color:var(--text3)">'
-            + '<span>' + escHtml(f.scope_type || 'global') + '</span>'
-            + '<span>' + escHtml(f.source || 'system') + '</span>'
-            + '<button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" onclick="_dismissDirective(\'' + f.id + '\')">Dismiss</button>'
-            + '</div></div>';
-        }
-        function _noteCard(n, kindLabel) {
-          return '<div style="padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:16px">'
-            + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="model-card-chip dim" style="font-size:10px">' + escHtml(kindLabel) + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(n.note_kind || 'note') + '</span></div>'
-            + '<div style="font-size:12px;line-height:1.6;color:var(--text)">' + escHtml(n.body || '') + '</div></div>';
-        }
-        html += '<div style="display:flex;flex-direction:column;gap:16px">';
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptDirective(\'agent\', \'' + escHtml(p.id) + '\')">Add Directive</button><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptAgentNote(\'' + escHtml(p.id) + '\')">Add Concept</button></div></div>';
+        html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">';
+        [{l:'Directives',c:directives.length,clr:'#3b82f6'},{l:'Concepts',c:concepts.length,clr:'#a855f7'},{l:'Episodes',c:episodes.length,clr:'var(--text3)'},{l:'Review',c:queue.length,clr:'#f59e0b'}].forEach(function(s) {
+          html += '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:' + s.clr + '">' + s.l + '</div><div style="font-size:24px;font-weight:800;color:var(--text);margin-top:4px">' + s.c + '</div></div>';
+        });
+        html += '</div><div style="display:flex;flex-direction:column;gap:16px">';
         if (directives.length) {
-          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Operating Directives</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">' + directives.map(function(f) { return _directiveCard(f); }).join('') + '</div></section>';
+          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#3b82f6;margin-bottom:10px">Operating Directives</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">';
+          directives.forEach(function(d) {
+            var conf = Math.round(Number(d.confidence || 1) * 100);
+            html += '<div style="padding:14px;background:color-mix(in srgb,#3b82f6 5%, var(--bg));border:1px solid var(--border);border-radius:16px">'
+              + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="model-card-chip ok" style="font-size:10px">Directive</span><span style="font-size:10px;color:' + (conf >= 70 ? '#22c55e' : '#f59e0b') + ';margin-left:auto">' + conf + '%</span></div>'
+              + '<div style="font-size:12px;line-height:1.6;color:var(--text)">' + escHtml(d.text || '') + '</div>'
+              + '<div style="display:flex;gap:8px;margin-top:10px;font-size:10px;color:var(--text3)"><span>' + escHtml(d.scope || 'global') + '</span>'
+              + '<button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px" onclick="_memDismiss(' + d.id + ')">Dismiss</button></div></div>';
+          });
+          html += '</div></section>';
         }
-        if (openNotes.length) {
-          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">' + (p.orchestrator_only ? 'Porter Notes' : 'Agent Notes') + '</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">' + openNotes.map(function(n) { return _noteCard(n, p.orchestrator_only ? 'Porter Note' : 'Agent Note'); }).join('') + '</div></section>';
+        if (concepts.length) {
+          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a855f7;margin-bottom:10px">Strategic Concepts</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">';
+          concepts.forEach(function(c) {
+            html += '<div style="padding:14px;background:color-mix(in srgb,#a855f7 5%, var(--bg));border:1px solid var(--border);border-radius:16px">'
+              + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:10px;padding:2px 8px;border-radius:99px;background:color-mix(in srgb,#a855f7 15%, transparent);color:#a855f7">Concept</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(c.source_category || 'note') + '</span></div>'
+              + '<div style="font-size:12px;line-height:1.6;color:var(--text)">' + escHtml(c.text || '') + '</div>'
+              + '<div style="display:flex;gap:8px;margin-top:10px;font-size:10px"><button class="btn btn-ghost btn-sm" style="font-size:10px" onclick="_memDismiss(' + c.id + ')">Archive</button></div></div>';
+          });
+          html += '</div></section>';
         }
-        if (activeProjects.length) {
-          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Project State</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">';
-          activeProjects.forEach(function(pr) {
-            var projData = pr.project || {};
-            var prNotes = pr.notes || [];
-            var prDirectives = pr.directives || [];
-            html += '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)">';
-            html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="font-size:13px;font-weight:700;color:var(--text)">' + escHtml(projData.name || projData.id || 'Project') + '</div><span class="model-card-chip dim" style="margin-left:auto;font-size:10px">' + escHtml(projData.type || 'project') + '</span></div>';
-            if (projData.description) html += '<div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:10px">' + escHtml(projData.description) + '</div>';
-            html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><span class="model-card-chip dim" style="font-size:10px">' + prDirectives.length + ' directives</span><span class="model-card-chip dim" style="font-size:10px">' + prNotes.length + ' notes</span><span class="model-card-chip dim" style="font-size:10px">' + ((pr.artifacts || {}).count || 0) + ' artifacts</span></div>';
-            if (prNotes.length) html += '<div style="font-size:11px;color:var(--text3)">' + escHtml((prNotes[0].body || '').slice(0, 180)) + '</div>';
-            html += '</div>';
+        if (episodes.length) {
+          html += '<section><details><summary style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;cursor:pointer">Recent Episodes (' + episodes.length + ')</summary><div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">';
+          episodes.forEach(function(ep) {
+            var dt = ep.created_at ? new Date(ep.created_at * 1000).toLocaleDateString() : '';
+            html += '<div style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:12px"><div style="font-size:12px;line-height:1.5;color:var(--text2)">' + escHtml(ep.text || '') + '</div><div style="font-size:10px;color:var(--text3);margin-top:6px">' + dt + '</div></div>';
+          });
+          html += '</div></details></section>';
+        }
+        if (queue.length) {
+          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#f59e0b;margin-bottom:10px">Needs Review <span style="display:inline-block;padding:2px 8px;border-radius:99px;background:#f59e0b;color:#000;font-size:10px;font-weight:700;vertical-align:middle">' + queue.length + '</span></div><div style="display:flex;flex-direction:column;gap:8px">';
+          queue.forEach(function(s) {
+            html += '<div style="padding:12px;background:color-mix(in srgb,#f59e0b 4%, var(--bg));border:1px solid color-mix(in srgb,#f59e0b 20%, var(--border));border-radius:12px">'
+              + '<div style="font-size:12px;line-height:1.5;color:var(--text)">' + escHtml(s.preview || '') + '</div>'
+              + '<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><span style="font-size:10px;color:var(--text3)">' + escHtml(s.source_category || 'signal') + '</span>'
+              + '<div style="margin-left:auto;display:flex;gap:6px"><button class="btn btn-ghost btn-sm" style="font-size:10px;color:#22c55e" onclick="_memPromote(' + s.id + ',\'concept\',\'medium\')">Promote</button>'
+              + '<button class="btn btn-ghost btn-sm" style="font-size:10px;color:#ef4444" onclick="_memDismiss(' + s.id + ')">Dismiss</button></div></div></div>';
           });
           html += '</div></section>';
         }
         html += '</div>';
         content.innerHTML = html;
       } catch(e) {
-        content.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load state</div>';
+        content.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load concepts</div>';
       }
     })();
   } else if (tab === 'config') {
@@ -43856,7 +43870,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.88"})
+            self.reply_json({"v": "0.31.89"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44018,7 +44032,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.88"
+                health["porter_version"] = "0.31.89"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -46340,7 +46354,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.88'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.89'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -50373,7 +50387,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.31.88"
+                _ws_health["porter_version"] = "0.31.89"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -53335,7 +53349,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.31.88 ready (localhost only)")
+    print(f"\n  Porter v0.31.89 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
