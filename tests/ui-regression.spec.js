@@ -163,22 +163,20 @@ test.describe('People tab', () => {
     await expect(page.locator('#people-module .module-title')).toHaveText('People');
   });
 
-  test('has CRM sub-tabs', async ({ page }) => {
-    await expect(page.locator('.crm-tab[data-tab="contacts"]')).toBeVisible();
-    await expect(page.locator('.crm-tab[data-tab="team"]')).toBeVisible();
-    await expect(page.locator('.crm-tab[data-tab="companies"]')).toBeVisible();
+  test('has filter chips', async ({ page }) => {
+    await expect(page.locator('.crm-chip[data-filter="all"]')).toBeVisible();
+    await expect(page.locator('.crm-chip[data-filter="people"]')).toBeVisible();
+    await expect(page.locator('.crm-chip[data-filter="companies"]')).toBeVisible();
   });
 
-  test('shows user cards on Team sub-tab', async ({ page }) => {
-    await page.locator('.crm-tab[data-tab="team"]').click();
-    await page.waitForTimeout(1000);
+  test('shows people cards in unified directory', async ({ page }) => {
+    await page.waitForSelector('.people-card', { timeout: 8000 });
     const cardCount = await page.locator('.people-card').count();
     expect(cardCount).toBeGreaterThanOrEqual(1);
   });
 
-  test('user card shows display name', async ({ page }) => {
-    await page.locator('.crm-tab[data-tab="team"]').click();
-    await page.waitForTimeout(1000);
+  test('people card shows display name', async ({ page }) => {
+    await page.waitForSelector('.people-card-name', { timeout: 10000 });
     const nameEl = page.locator('.people-card-name').first();
     await expect(nameEl).toBeVisible();
     const name = await nameEl.textContent();
