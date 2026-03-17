@@ -7025,6 +7025,19 @@ def _project_activity_feed(project_id: str, limit: int = 20) -> list:
     except Exception as e:
         log.debug("Project activity feed failed for %s: %s", pid, e)
         return []
+    # Always include project creation as baseline activity
+    created_at = float(proj.get("created_at") or 0)
+    if created_at:
+        items.append({
+            "ts": created_at,
+            "type": "project",
+            "agent": "",
+            "action": "Project created",
+            "status": "ok",
+            "summary": proj.get("name", "Untitled") + " — " + (proj.get("description", "") or "No description")[:120],
+            "task_id": "",
+            "ref_id": pid,
+        })
     items.sort(key=lambda x: float(x.get("ts") or 0), reverse=True)
     return items[:limit]
 
