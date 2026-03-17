@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.84 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
+"""Porter v0.31.86 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
 
 
 import email
@@ -688,6 +688,49 @@ def _db_init():
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_notes_agent_status ON agent_notes(agent_id, status, created_at DESC)")
+    # --- Memory V2: unified memories table (v0.31.86) ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS memories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            memory_kind TEXT NOT NULL DEFAULT 'signal',
+            trust_tier TEXT NOT NULL DEFAULT 'low',
+            scope TEXT NOT NULL DEFAULT 'global',
+            scope_id TEXT DEFAULT '',
+            text TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            review_state TEXT NOT NULL DEFAULT 'pending',
+            source_type TEXT DEFAULT 'system',
+            source_id TEXT DEFAULT '',
+            source_category TEXT DEFAULT '',
+            confidence REAL NOT NULL DEFAULT 0.5,
+            importance INTEGER DEFAULT 5,
+            keywords TEXT DEFAULT '',
+            superseded_by_id INTEGER DEFAULT NULL,
+            last_used_at REAL DEFAULT NULL,
+            use_count INTEGER DEFAULT 0,
+            evidence_count INTEGER DEFAULT 1,
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            updated_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_mem_kind ON memories(memory_kind, scope, scope_id, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_mem_review ON memories(review_state, memory_kind, created_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_mem_status ON memories(status, created_at DESC)")
+    try:
+        conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(text, keywords, content='memories', content_rowid='id')")
+        conn.execute("""CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+            INSERT INTO memories_fts(rowid, text, keywords) VALUES (new.id, new.text, new.keywords);
+        END""")
+        conn.execute("""CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+            INSERT INTO memories_fts(memories_fts, rowid, text, keywords) VALUES('delete', old.id, old.text, old.keywords);
+        END""")
+        conn.execute("""CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+            INSERT INTO memories_fts(memories_fts, rowid, text, keywords) VALUES('delete', old.id, old.text, old.keywords);
+            INSERT INTO memories_fts(rowid, text, keywords) VALUES (new.id, new.text, new.keywords);
+        END""")
+    except Exception as _fts_err:
+        log.warning("FTS5 setup failed: %s", _fts_err)
+    _migrate_to_memory_v2(conn)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS project_artifacts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -762,6 +805,76 @@ def _db_init():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_project ON agent_messages(project_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_task ON agent_messages(task_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_backend_created ON agent_messages(to_agent, created_at DESC)")
+
+    # ── CRM tables (v0.31.85) ──────────────────────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS crm_contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT NOT NULL,
+            last_name TEXT DEFAULT '',
+            email TEXT DEFAULT '',
+            phone TEXT DEFAULT '',
+            title TEXT DEFAULT '',
+            company_id INTEGER DEFAULT NULL,
+            contact_type TEXT NOT NULL DEFAULT 'other',
+            tags_json TEXT DEFAULT '[]',
+            notes TEXT DEFAULT '',
+            social_json TEXT DEFAULT '{}',
+            status TEXT NOT NULL DEFAULT 'active',
+            created_by TEXT DEFAULT '',
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            updated_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_crm_contacts_status ON crm_contacts(status, created_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_crm_contacts_company ON crm_contacts(company_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_crm_contacts_type ON crm_contacts(contact_type)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS crm_companies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            industry TEXT DEFAULT '',
+            company_type TEXT NOT NULL DEFAULT 'other',
+            website TEXT DEFAULT '',
+            country TEXT DEFAULT '',
+            notes TEXT DEFAULT '',
+            tags_json TEXT DEFAULT '[]',
+            status TEXT NOT NULL DEFAULT 'active',
+            created_by TEXT DEFAULT '',
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            updated_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_crm_companies_status ON crm_companies(status, created_at DESC)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS crm_interactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            interaction_type TEXT NOT NULL DEFAULT 'note',
+            body TEXT NOT NULL DEFAULT '',
+            contact_id INTEGER DEFAULT NULL,
+            company_id INTEGER DEFAULT NULL,
+            project_id TEXT DEFAULT '',
+            created_by TEXT DEFAULT '',
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_crm_interactions_contact ON crm_interactions(contact_id, created_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_crm_interactions_company ON crm_interactions(company_id, created_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_crm_interactions_project ON crm_interactions(project_id, created_at DESC)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS crm_project_contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id TEXT NOT NULL,
+            contact_id INTEGER NOT NULL,
+            role TEXT NOT NULL DEFAULT 'stakeholder',
+            added_by TEXT DEFAULT '',
+            added_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            UNIQUE(project_id, contact_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_crm_pc_project ON crm_project_contacts(project_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_crm_pc_contact ON crm_project_contacts(contact_id)")
+
     
     # 1. Migrate users from _config if table is empty
     count = conn.execute("SELECT count(*) FROM users").fetchone()[0]
@@ -3209,22 +3322,296 @@ def _purge_legacy_cortex_dev_memories():
         log.warning("Legacy cortex purge failed: %s", e)
 
 
-def _state_list_directives(scope_type: str = "", scope_id: str = "", include_dismissed: bool = False) -> list[dict]:
+# ─── Memory V2: Core Functions (v0.31.86) ────────────────────────────────────
+
+
+def _migrate_to_memory_v2(conn):
+    """One-time migration: copy old tables into unified memories table."""
+    import sqlite3 as _sq
+    try:
+        count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        if count > 0:
+            return
+    except Exception:
+        return
+    old_rf = conn.row_factory
+    conn.row_factory = _sq.Row
+    migrated = 0
+    try:
+        # directives -> memories (kind=directive, trust=high)
+        try:
+            for r in conn.execute("SELECT scope_type, scope_id, text, status, source, confidence, created_at, updated_at FROM directives WHERE status != 'dismissed'").fetchall():
+                conn.execute(
+                    "INSERT INTO memories (memory_kind, trust_tier, scope, scope_id, text, status, review_state, source_type, confidence, created_at, updated_at) VALUES ('directive', 'high', ?, ?, ?, ?, 'accepted', ?, ?, ?, ?)",
+                    (r['scope_type'] or 'global', r['scope_id'] or '', r['text'], r['status'], r['source'] or 'operator', r['confidence'] or 1.0, r['created_at'], r['updated_at']))
+                migrated += 1
+        except Exception:
+            pass
+        # agent_notes -> memories (kind=concept, trust=medium, scope=agent)
+        try:
+            for r in conn.execute("SELECT agent_id, note_kind, body, status, source, created_at, updated_at FROM agent_notes WHERE status='active'").fetchall():
+                conn.execute(
+                    "INSERT INTO memories (memory_kind, trust_tier, scope, scope_id, text, status, review_state, source_type, source_category, created_at, updated_at) VALUES ('concept', 'medium', 'agent', ?, ?, 'active', 'accepted', ?, ?, ?, ?)",
+                    (r['agent_id'], r['body'], r['source'] or 'system', r['note_kind'] or 'scope', r['created_at'], r['updated_at']))
+                migrated += 1
+        except Exception:
+            pass
+        # project_notes -> memories (kind=concept, trust=medium, scope=project)
+        try:
+            for r in conn.execute("SELECT project_id, note_kind, body, status, source, created_at, updated_at FROM project_notes WHERE status='active'").fetchall():
+                conn.execute(
+                    "INSERT INTO memories (memory_kind, trust_tier, scope, scope_id, text, status, review_state, source_type, source_category, created_at, updated_at) VALUES ('concept', 'medium', 'project', ?, ?, 'active', 'accepted', ?, ?, ?, ?)",
+                    (r['project_id'], r['body'], r['source'] or 'system', r['note_kind'] or 'summary', r['created_at'], r['updated_at']))
+                migrated += 1
+        except Exception:
+            pass
+        # cortex_memories -> memories (semantic->signal, episodic->episode)
+        try:
+            for r in conn.execute("SELECT fact, scope, scope_id, source_type, source_id, importance, keywords, memory_type, status, confidence, last_used_at, use_count, evidence_count, created_at, updated_at FROM cortex_memories WHERE consolidated_into IS NULL").fetchall():
+                mt = r['memory_type'] or 'semantic'
+                kind = 'episode' if mt == 'episodic' else 'signal'
+                trust = 'medium' if mt == 'episodic' else 'low'
+                conn.execute(
+                    "INSERT INTO memories (memory_kind, trust_tier, scope, scope_id, text, status, review_state, source_type, source_id, confidence, importance, keywords, last_used_at, use_count, evidence_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (kind, trust, r['scope'] or 'global', r['scope_id'] or '', r['fact'], r['status'] or 'active', r['source_type'] or 'dispatch', r['source_id'] or '', r['confidence'] or 0.5, r['importance'] or 5, r['keywords'] or '', r['last_used_at'], r['use_count'] or 0, r['evidence_count'] or 1, r['created_at'], r['updated_at']))
+                migrated += 1
+        except Exception:
+            pass
+        conn.commit()
+        # Rebuild FTS index
+        try:
+            conn.execute("INSERT INTO memories_fts(memories_fts) VALUES('rebuild')")
+            conn.commit()
+        except Exception:
+            pass
+        if migrated:
+            log.info("Memory V2 migration: %d records migrated", migrated)
+    finally:
+        conn.row_factory = old_rf
+
+
+def _mem_insert(memory_kind='signal', text='', scope='global', scope_id='', trust_tier='low',
+                source_type='system', source_id='', source_category='', confidence=0.5,
+                importance=5, review_state='pending', keywords=''):
+    """Insert a memory into the unified memories table."""
+    text = str(text or '').strip()
+    if not text:
+        return None
+    kind = str(memory_kind or 'signal').strip().lower()
+    if kind not in ('directive', 'concept', 'episode', 'signal'):
+        kind = 'signal'
+    trust = str(trust_tier or 'low').strip().lower()
+    if trust not in ('low', 'medium', 'high'):
+        trust = 'low'
+    scope_val = str(scope or 'global').strip().lower()
+    if scope_val not in ('global', 'project', 'agent', 'run'):
+        scope_val = 'global'
+    sid = str(scope_id or '').strip()
+    review = str(review_state or 'pending').strip().lower()
+    if review not in ('pending', 'accepted', 'rejected'):
+        review = 'pending'
+    try:
+        conf = max(0.0, min(1.0, float(confidence if confidence is not None else 0.5)))
+    except Exception:
+        conf = 0.5
+    imp = max(1, min(10, int(importance or 5)))
+    kw = str(keywords or '').strip()
+    if not kw:
+        kw = ','.join(sorted(_cortex_tokenize(text)))
     try:
         conn = _db_conn()
-        where = []
+        cur = conn.execute(
+            "INSERT INTO memories (memory_kind, trust_tier, scope, scope_id, text, status, review_state, source_type, source_id, source_category, confidence, importance, keywords) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)",
+            (kind, trust, scope_val, sid, text, review, str(source_type or 'system').strip(), str(source_id or '').strip(), str(source_category or '').strip(), conf, imp, kw))
+        new_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return new_id
+    except Exception as e:
+        log.warning("Memory insert failed: %s", e)
+        return None
+
+
+def _mem_search(query, scope=None, scope_id=None, kind=None, limit=20):
+    """FTS5 search against memories table. Returns compact index."""
+    query = str(query or '').strip()
+    if not query:
+        return []
+    fts_q = re.sub(r'[^\w\s]', ' ', query).strip()
+    if not fts_q:
+        return []
+    terms = fts_q.split()
+    fts_q = ' OR '.join('"' + t + '"*' for t in terms if t)
+    try:
+        conn = _db_conn()
+        sql = ("SELECT m.id, substr(m.text, 1, 120) as preview, m.memory_kind, m.trust_tier, "
+               "m.scope, m.scope_id, m.status, m.confidence, m.importance, rank as score "
+               "FROM memories_fts f JOIN memories m ON m.id = f.rowid "
+               "WHERE memories_fts MATCH ? AND m.status = 'active'")
+        params = [fts_q]
+        if scope:
+            sql += " AND m.scope = ?"
+            params.append(scope)
+        if scope_id:
+            sql += " AND m.scope_id = ?"
+            params.append(scope_id)
+        if kind:
+            sql += " AND m.memory_kind = ?"
+            params.append(kind)
+        sql += " ORDER BY rank LIMIT ?"
+        params.append(max(1, min(100, int(limit or 20))))
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        # Fallback: LIKE search if FTS5 unavailable
+        try:
+            conn = _db_conn()
+            sql = ("SELECT id, substr(text, 1, 120) as preview, memory_kind, trust_tier, "
+                   "scope, scope_id, status, confidence, importance, 0 as score "
+                   "FROM memories WHERE status='active' AND text LIKE ?")
+            params = ['%' + query + '%']
+            if scope:
+                sql += " AND scope = ?"
+                params.append(scope)
+            if scope_id:
+                sql += " AND scope_id = ?"
+                params.append(scope_id)
+            if kind:
+                sql += " AND memory_kind = ?"
+                params.append(kind)
+            sql += " ORDER BY importance DESC, created_at DESC LIMIT ?"
+            params.append(max(1, min(100, int(limit or 20))))
+            rows = conn.execute(sql, params).fetchall()
+            conn.close()
+            return [dict(r) for r in rows]
+        except Exception:
+            return []
+
+
+def _mem_get(memory_id):
+    """Get full memory detail by ID."""
+    try:
+        conn = _db_conn()
+        row = conn.execute("SELECT * FROM memories WHERE id = ?", (int(memory_id),)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+    except Exception:
+        return None
+
+
+def _mem_update_status(memory_id, status):
+    """Update memory status: active/archived/superseded/dismissed."""
+    status = str(status or '').strip().lower()
+    if status not in ('active', 'archived', 'superseded', 'dismissed'):
+        return False
+    try:
+        conn = _db_conn()
+        conn.execute("UPDATE memories SET status=?, updated_at=strftime('%s','now') WHERE id=?", (status, int(memory_id)))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def _mem_promote(memory_id, new_kind, new_trust):
+    """Promote a memory: signal->concept, concept->directive."""
+    kind = str(new_kind or '').strip().lower()
+    trust = str(new_trust or '').strip().lower()
+    if kind not in ('directive', 'concept', 'episode', 'signal'):
+        return False
+    if trust not in ('low', 'medium', 'high'):
+        return False
+    try:
+        conn = _db_conn()
+        conn.execute("UPDATE memories SET memory_kind=?, trust_tier=?, review_state='accepted', updated_at=strftime('%s','now') WHERE id=?", (kind, trust, int(memory_id)))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def _mem_dismiss(memory_id):
+    """Dismiss a memory: status=dismissed, review_state=rejected."""
+    try:
+        conn = _db_conn()
+        conn.execute("UPDATE memories SET status='dismissed', review_state='rejected', updated_at=strftime('%s','now') WHERE id=?", (int(memory_id),))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def _mem_record_injection(memory_id, run_id=''):
+    """Record that a memory was injected into a dispatch."""
+    try:
+        conn = _db_conn()
+        conn.execute("UPDATE memories SET use_count=use_count+1, last_used_at=strftime('%s','now'), updated_at=strftime('%s','now') WHERE id=?", (int(memory_id),))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def _mem_stats(scope=None, scope_id=None):
+    """Aggregate counts by kind/status."""
+    try:
+        conn = _db_conn()
+        sql = "SELECT memory_kind, status, COUNT(*) as cnt FROM memories"
+        params = []
+        wheres = []
+        if scope:
+            wheres.append("scope = ?")
+            params.append(scope)
+        if scope_id:
+            wheres.append("scope_id = ?")
+            params.append(scope_id)
+        if wheres:
+            sql += " WHERE " + " AND ".join(wheres)
+        sql += " GROUP BY memory_kind, status"
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        total = 0
+        by_kind = {}
+        by_status = {}
+        for r in rows:
+            c = r['cnt']
+            total += c
+            by_kind[r['memory_kind']] = by_kind.get(r['memory_kind'], 0) + c
+            by_status[r['status']] = by_status.get(r['status'], 0) + c
+        return {"total": total, "by_kind": by_kind, "by_status": by_status}
+    except Exception:
+        return {"total": 0, "by_kind": {}, "by_status": {}}
+
+
+def _mem_tokenize(text):
+    """Reuse cortex tokenizer for keyword extraction."""
+    return _cortex_tokenize(text)
+
+
+# ─── Memory V2: Bridge Functions (v0.31.86) ──────────────────────────────────
+
+
+def _state_list_directives(scope_type: str = "", scope_id: str = "", include_dismissed: bool = False) -> list[dict]:
+    """Bridge V2: query memories table for directives."""
+    try:
+        conn = _db_conn()
+        where = ["memory_kind = 'directive'"]
         params = []
         if scope_type:
-            where.append("scope_type = ?")
+            where.append("scope = ?")
             params.append(scope_type)
         if scope_id:
             where.append("scope_id = ?")
             params.append(scope_id)
         if not include_dismissed:
             where.append("status != 'dismissed'")
-        sql = "SELECT id, scope_type, scope_id, text, status, source, confidence, created_at, updated_at FROM directives"
-        if where:
-            sql += " WHERE " + " AND ".join(where)
+        sql = ("SELECT id, scope as scope_type, scope_id, text, status, source_type as source, "
+               "confidence, created_at, updated_at FROM memories WHERE " + " AND ".join(where))
         sql += " ORDER BY created_at DESC, id DESC"
         rows = conn.execute(sql, params).fetchall()
         conn.close()
@@ -3234,20 +3621,13 @@ def _state_list_directives(scope_type: str = "", scope_id: str = "", include_dis
         return []
 
 
-def _state_set_directive_status(directive_id: str | int, status: str) -> bool:
-    try:
-        conn = _db_conn()
-        conn.execute("UPDATE directives SET status=?, updated_at=strftime('%s','now') WHERE id=?", (status, directive_id))
-        changed = conn.total_changes > 0
-        conn.commit()
-        conn.close()
-        return changed
-    except Exception as e:
-        log.warning("Directive status update failed for %s: %s", directive_id, e)
-        return False
+def _state_set_directive_status(directive_id, status: str) -> bool:
+    """Bridge V2: update directive status in memories table."""
+    return _mem_update_status(directive_id, status)
 
 
 def _state_add_directive(scope_type: str, scope_id: str, text: str, source: str = "operator", confidence: float = 1.0):
+    """Bridge V2: insert directive into memories table."""
     scope = str(scope_type or "").strip().lower()
     scope_ref = str(scope_id or "").strip()
     body = str(text or "").strip()
@@ -3257,62 +3637,41 @@ def _state_add_directive(scope_type: str, scope_id: str, text: str, source: str 
         scope_ref = ""
     elif not scope_ref:
         return None
-    try:
-        conf = max(0.0, min(1.0, float(confidence if confidence is not None else 1.0)))
-    except Exception:
-        conf = 1.0
-    try:
-        conn = _db_conn()
-        cur = conn.execute(
-            "INSERT INTO directives (scope_type, scope_id, text, status, source, confidence) VALUES (?, ?, ?, 'active', ?, ?)",
-            (scope, scope_ref, body, str(source or "operator").strip(), conf),
-        )
-        new_id = cur.lastrowid
-        conn.commit()
-        conn.close()
-        return new_id
-    except Exception as e:
-        log.warning("Directive insert failed for %s/%s: %s", scope, scope_ref, e)
-        return None
+    return _mem_insert(memory_kind='directive', text=body, scope=scope, scope_id=scope_ref,
+                       trust_tier='high', source_type=str(source or "operator").strip(),
+                       confidence=confidence, review_state='accepted')
 
 
 def _state_add_project_note(project_id: str, note_kind: str, body: str, source: str = "system", created_by: str = ""):
+    """Bridge V2: insert project note as concept in memories table."""
     if not str(project_id or "").strip() or not str(body or "").strip():
         return
-    try:
-        conn = _db_conn()
-        conn.execute(
-            "INSERT INTO project_notes (project_id, note_kind, body, status, source, created_by) VALUES (?, ?, ?, 'active', ?, ?)",
-            (str(project_id).strip(), str(note_kind or "summary").strip(), str(body).strip(), str(source or "system").strip(), str(created_by or "").strip()),
-        )
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        log.warning("Project note insert failed for %s: %s", project_id, e)
+    _mem_insert(memory_kind='concept', text=str(body).strip(), scope='project',
+                scope_id=str(project_id).strip(), trust_tier='medium',
+                source_type=str(source or "system").strip(),
+                source_category=str(note_kind or "summary").strip(), review_state='accepted')
 
 
 def _state_add_agent_note(agent_id: str, note_kind: str, body: str, source: str = "system", created_by: str = ""):
+    """Bridge V2: insert agent note as concept in memories table."""
     if not str(agent_id or "").strip() or not str(body or "").strip():
         return
-    try:
-        conn = _db_conn()
-        conn.execute(
-            "INSERT INTO agent_notes (agent_id, note_kind, body, status, source, created_by) VALUES (?, ?, ?, 'active', ?, ?)",
-            (str(agent_id).strip(), str(note_kind or "scope").strip(), str(body).strip(), str(source or "system").strip(), str(created_by or "").strip()),
-        )
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        log.warning("Agent note insert failed for %s: %s", agent_id, e)
+    _mem_insert(memory_kind='concept', text=str(body).strip(), scope='agent',
+                scope_id=str(agent_id).strip(), trust_tier='medium',
+                source_type=str(source or "system").strip(),
+                source_category=str(note_kind or "scope").strip(), review_state='accepted')
 
 
 def _state_get_project_notes(project_id: str, limit: int = 40) -> list[dict]:
+    """Bridge V2: query memories table for project concepts."""
     try:
         conn = _db_conn()
         rows = conn.execute(
-            "SELECT id, project_id, note_kind, body, status, source, created_by, created_at, updated_at FROM project_notes WHERE project_id=? AND status='active' ORDER BY created_at DESC LIMIT ?",
-            (str(project_id or "").strip(), max(1, int(limit or 40))),
-        ).fetchall()
+            "SELECT id, scope_id as project_id, source_category as note_kind, text as body, "
+            "status, source_type as source, '' as created_by, created_at, updated_at "
+            "FROM memories WHERE memory_kind='concept' AND scope='project' AND scope_id=? "
+            "AND status='active' ORDER BY created_at DESC LIMIT ?",
+            (str(project_id or "").strip(), max(1, int(limit or 40)))).fetchall()
         conn.close()
         return [dict(r) for r in rows]
     except Exception as e:
@@ -3321,12 +3680,15 @@ def _state_get_project_notes(project_id: str, limit: int = 40) -> list[dict]:
 
 
 def _state_get_agent_notes(agent_id: str, limit: int = 40) -> list[dict]:
+    """Bridge V2: query memories table for agent concepts."""
     try:
         conn = _db_conn()
         rows = conn.execute(
-            "SELECT id, agent_id, note_kind, body, status, source, created_by, created_at, updated_at FROM agent_notes WHERE agent_id=? AND status='active' ORDER BY created_at DESC LIMIT ?",
-            (str(agent_id or "").strip(), max(1, int(limit or 40))),
-        ).fetchall()
+            "SELECT id, scope_id as agent_id, source_category as note_kind, text as body, "
+            "status, source_type as source, '' as created_by, created_at, updated_at "
+            "FROM memories WHERE memory_kind='concept' AND scope='agent' AND scope_id=? "
+            "AND status='active' ORDER BY created_at DESC LIMIT ?",
+            (str(agent_id or "").strip(), max(1, int(limit or 40)))).fetchall()
         conn.close()
         return [dict(r) for r in rows]
     except Exception as e:
@@ -13906,7 +14268,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .office-view-toggle button { background:none; border:none; color:var(--text3); font-size:10px; padding:4px 10px; border-radius:4px; cursor:pointer; font-weight:500; transition:all .15s; }
 .office-view-toggle button.active { background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.15); }
 .office-view-toggle button:hover:not(.active) { color:var(--text2); }
-/* ── People Module ────────────────────────────────────────── */
+/* ── People / CRM Module ──────────────────────────────────── */
 .people-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:12px; margin-top:12px; }
 .people-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; gap:12px; align-items:flex-start; transition:border-color .15s, transform .15s; cursor:default; }
 .people-card:hover { border-color:color-mix(in srgb, var(--accent) 30%, var(--border)); transform:translateY(-1px); }
@@ -13927,6 +14289,83 @@ body.density-compact .file-name { padding: 6px 0; }
 .people-stats { display:flex; gap:16px; margin-bottom:12px; flex-wrap:wrap; }
 .people-stat { font-size:20px; font-weight:700; color:var(--text); line-height:1; }
 .people-stat-label { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.3px; margin-top:4px; }
+/* CRM sub-tabs */
+.crm-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); margin-bottom:12px; }
+.crm-tab { padding:8px 16px; font-size:12px; font-weight:500; color:var(--text3); cursor:pointer; border-bottom:2px solid transparent; transition:all .15s; background:none; border-top:none; border-left:none; border-right:none; }
+.crm-tab:hover { color:var(--text); }
+.crm-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+.crm-tab .crm-tab-count { font-size:10px; color:var(--text3); margin-left:4px; opacity:.7; }
+/* CRM filter bar */
+.crm-filters { display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+.crm-search { flex:1; min-width:160px; max-width:300px; padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); font-size:12px; outline:none; transition:border-color .15s; }
+.crm-search:focus { border-color:var(--accent); }
+.crm-select { padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); font-size:11px; cursor:pointer; outline:none; }
+.crm-toggle-label { font-size:11px; color:var(--text3); display:flex; align-items:center; gap:4px; cursor:pointer; }
+.crm-toggle-label input { accent-color:var(--accent); }
+/* CRM contact rows */
+.crm-list { display:flex; flex-direction:column; gap:1px; }
+.crm-row { display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--surface); border:1px solid var(--border); border-radius:10px; cursor:pointer; transition:all .15s; margin-bottom:4px; }
+.crm-row:hover { border-color:color-mix(in srgb, var(--accent) 30%, var(--border)); background:color-mix(in srgb, var(--accent) 3%, var(--surface)); }
+.crm-row-avatar { width:36px; height:36px; border-radius:50%; background:var(--raised); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:var(--text); flex-shrink:0; }
+.crm-row-info { flex:1; min-width:0; }
+.crm-row-name { font-size:13px; font-weight:600; color:var(--text); }
+.crm-row-sub { font-size:11px; color:var(--text3); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.crm-row-badges { display:flex; gap:4px; flex-shrink:0; align-items:center; }
+.crm-type-badge { font-size:9px; padding:2px 8px; border-radius:4px; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
+.crm-type-badge.client { background:color-mix(in srgb, #3b82f6 18%, transparent); color:#60a5fa; }
+.crm-type-badge.collaborator { background:color-mix(in srgb, #8b5cf6 18%, transparent); color:#a78bfa; }
+.crm-type-badge.partner { background:color-mix(in srgb, #22c55e 18%, transparent); color:#4ade80; }
+.crm-type-badge.vendor { background:color-mix(in srgb, #f97316 18%, transparent); color:#fb923c; }
+.crm-type-badge.stakeholder { background:color-mix(in srgb, #eab308 18%, transparent); color:#facc15; }
+.crm-type-badge.lead { background:color-mix(in srgb, #ec4899 18%, transparent); color:#f472b6; }
+.crm-type-badge.other { background:color-mix(in srgb, var(--text3) 15%, transparent); color:var(--text3); }
+.crm-tag { font-size:9px; padding:1px 6px; border-radius:3px; background:var(--raised); color:var(--text3); }
+/* CRM detail panel (520px slide-out) */
+.crm-detail-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.3); z-index:899; }
+.crm-detail-overlay.open { display:block; }
+.crm-detail-panel { position:fixed; top:0; right:0; width:520px; height:100vh; background:var(--bg); border-left:1px solid var(--border); z-index:900; transform:translateX(100%); transition:transform .2s ease; display:flex; flex-direction:column; box-shadow:-4px 0 20px rgba(0,0,0,.12); }
+.crm-detail-panel.open { transform:translateX(0); }
+.crm-detail-hdr { display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.crm-detail-hdr-avatar { width:48px; height:48px; border-radius:50%; background:var(--raised); display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:700; color:var(--text); flex-shrink:0; }
+.crm-detail-hdr-info { flex:1; min-width:0; }
+.crm-detail-hdr-name { font-size:15px; font-weight:600; color:var(--text); }
+.crm-detail-hdr-sub { font-size:11px; color:var(--text3); margin-top:2px; }
+.crm-detail-close { background:none; border:none; color:var(--text3); font-size:20px; cursor:pointer; padding:4px 8px; border-radius:6px; line-height:1; }
+.crm-detail-close:hover { color:var(--text); background:var(--raised); }
+.crm-detail-body { flex:1; overflow-y:auto; padding:16px 20px; }
+.crm-detail-section { margin-bottom:20px; }
+.crm-detail-section-title { font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px; }
+.crm-detail-field { display:flex; align-items:flex-start; gap:8px; padding:4px 0; }
+.crm-detail-field-label { font-size:11px; color:var(--text3); min-width:70px; flex-shrink:0; }
+.crm-detail-field-value { font-size:12px; color:var(--text); word-break:break-word; }
+.crm-detail-field-value a { color:var(--accent); text-decoration:none; }
+.crm-detail-field-value a:hover { text-decoration:underline; }
+.crm-detail-notes { width:100%; min-height:60px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); font-size:12px; resize:vertical; font-family:inherit; outline:none; }
+.crm-detail-notes:focus { border-color:var(--accent); }
+/* CRM social icons */
+.crm-social-links { display:flex; gap:8px; flex-wrap:wrap; }
+.crm-social-link { display:flex; align-items:center; gap:4px; font-size:11px; color:var(--accent); text-decoration:none; padding:3px 8px; border:1px solid var(--border); border-radius:6px; transition:all .15s; }
+.crm-social-link:hover { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent); }
+/* CRM timeline */
+.crm-timeline { display:flex; flex-direction:column; gap:0; }
+.crm-timeline-item { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid color-mix(in srgb, var(--border) 40%, transparent); }
+.crm-timeline-item:last-child { border-bottom:none; }
+.crm-timeline-icon { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; }
+.crm-timeline-icon.note { background:color-mix(in srgb, #3b82f6 18%, transparent); color:#60a5fa; }
+.crm-timeline-icon.call { background:color-mix(in srgb, #22c55e 18%, transparent); color:#4ade80; }
+.crm-timeline-icon.email { background:color-mix(in srgb, #eab308 18%, transparent); color:#facc15; }
+.crm-timeline-icon.meeting { background:color-mix(in srgb, #8b5cf6 18%, transparent); color:#a78bfa; }
+.crm-timeline-icon.task { background:color-mix(in srgb, #f97316 18%, transparent); color:#fb923c; }
+.crm-timeline-icon.update { background:color-mix(in srgb, var(--text3) 18%, transparent); color:var(--text3); }
+.crm-timeline-body { flex:1; min-width:0; }
+.crm-timeline-text { font-size:12px; color:var(--text); }
+.crm-timeline-meta { font-size:10px; color:var(--text3); margin-top:2px; }
+/* CRM detail actions */
+.crm-detail-actions { display:flex; gap:6px; padding:12px 20px; border-top:1px solid var(--border); flex-shrink:0; }
+.crm-detail-actions .btn { font-size:11px; padding:6px 14px; }
+/* CRM project links */
+.crm-project-link { display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); margin-bottom:4px; font-size:12px; color:var(--text); }
+.crm-project-link-role { font-size:9px; color:var(--text3); text-transform:uppercase; margin-left:auto; }
 .file-browser-preview { padding:12px; border-top:1px solid var(--border); background:var(--bg); }
 /* Legacy persona bar — replaced */
 .chat-persona-bar { display:none; }
@@ -14746,7 +15185,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.84</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.86</div>
   </div>
 </aside>
 
@@ -15291,13 +15730,37 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="module-hdr">
       <span class="module-title">People</span>
       <div style="flex:1"></div>
-      <button class="btn btn-ghost" onclick="loadPeople()">&#8635; Refresh</button>
-      <button class="btn btn-ghost" onclick="_peopleAddUser()" id="people-add-btn">+ Add User</button>
+      <button class="btn btn-ghost" onclick="loadPeople()">&#8635;</button>
+      <button class="btn btn-ghost" onclick="_crmNewAction()" id="people-add-btn">+ New</button>
     </div>
-    <div class="module-intro">Team members and collaborators with access to this Porter instance.</div>
+    <div class="crm-tabs" id="crm-tabs">
+      <button class="crm-tab active" data-tab="contacts" onclick="_crmSwitchTab('contacts')">Contacts <span class="crm-tab-count" id="crm-count-contacts"></span></button>
+      <button class="crm-tab" data-tab="team" onclick="_crmSwitchTab('team')">Team <span class="crm-tab-count" id="crm-count-team"></span></button>
+      <button class="crm-tab" data-tab="companies" onclick="_crmSwitchTab('companies')">Companies <span class="crm-tab-count" id="crm-count-companies"></span></button>
+    </div>
+    <div class="crm-filters" id="crm-filters">
+      <input type="text" class="crm-search" id="crm-search" placeholder="Search..." oninput="_crmFilterDebounced()">
+      <select class="crm-select" id="crm-type-filter" onchange="_crmApplyFilters()">
+        <option value="">All types</option>
+        <option value="client">Client</option>
+        <option value="collaborator">Collaborator</option>
+        <option value="partner">Partner</option>
+        <option value="vendor">Vendor</option>
+        <option value="stakeholder">Stakeholder</option>
+        <option value="lead">Lead</option>
+        <option value="other">Other</option>
+      </select>
+      <label class="crm-toggle-label"><input type="checkbox" id="crm-show-archived" onchange="_crmApplyFilters()"> Archived</label>
+    </div>
     <div class="people-stats" id="people-stats"></div>
-    <div class="people-grid" id="people-grid">
-      <div class="loading-indicator"><span class="loading-spinner"></span> Loading people...</div>
+    <div id="crm-content">
+      <div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div>
+    </div>
+    <div class="crm-detail-overlay" id="crm-detail-overlay" onclick="_crmCloseDetail()"></div>
+    <div class="crm-detail-panel" id="crm-detail-panel">
+      <div class="crm-detail-hdr" id="crm-detail-hdr"></div>
+      <div class="crm-detail-body" id="crm-detail-body"></div>
+      <div class="crm-detail-actions" id="crm-detail-actions"></div>
     </div>
   </div>
 
@@ -15882,6 +16345,8 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.86', date:'2026-03-17', notes:["Memory V2: unified memories table with 4-layer model (directives, concepts, episodes, signals)","Memory V2: FTS5 full-text search with auto-sync triggers","Memory V2: core memory functions (insert, search, get, promote, dismiss, stats)","Memory V2: one-time migration from legacy tables (directives, agent_notes, project_notes, cortex_memories)","Memory V2: bridge functions for backward compatibility"] },
+  { ver:'v0.31.85', date:'2026-03-15', notes:["CRM: contacts, companies, interactions with full CRUD API","CRM: 3 sub-tabs (Contacts, Team, Companies) with search and type filters","CRM: 520px slide-out detail panel with social links, notes auto-save, activity timeline","CRM: project-contact linking, 6 interaction types, tag support","CRM: 4 new SQLite tables (crm_contacts, crm_companies, crm_interactions, crm_project_contacts)"] },
   { ver:'v0.31.84', date:'2026-03-15', notes:["Nav restructure (Cast/Work/Intelligence/System)","Who is Porter button in sidebar header","Kraken CLI removed, 25 real tools registered","OpenClaw integration: multi-agent routing, channels, nodes, hooks, sessions","File analysis on upload (summary, tags, word count, language)","Skill recommendation engine expanded (business, legal, support, design, data)","OpenClaw health check: gateway + channels + security + doctor","OpenAI-compatible chat completions format for gateway dispatch"] },
   { ver:'v0.31.84', date:'2026-03-14', notes:["Files: full file manager with folder navigation and breadcrumbs","Files: create folders, upload, rename, delete via right-click","Files: drag-and-drop upload into any folder"] },
   { ver:'v0.31.82', date:'2026-03-14', notes:["Terminal popup: run model update commands directly from Porter","POST /api/terminal/exec: execute shell commands with streaming output","Files nav tab: Dropbox-style artifact browser across all projects"] },
@@ -20950,17 +21415,101 @@ async function _projDelete(pid) {
 // ── Capabilities / System module ──────────────────────────────────────────
 // renderGwsPanel removed v0.31.39
 
-// ── People Module ─────────────────────────────────────────
-async function loadPeople() {
-  var grid = document.getElementById('people-grid');
+// ── People / CRM Module ───────────────────────────────────
+var _crmTab = 'contacts';
+var _crmDebounceTimer = null;
+var _crmDetailType = null; // 'contact' or 'company'
+var _crmDetailId = null;
+
+async function loadPeople() { _crmSwitchTab(_crmTab); }
+
+function _crmSwitchTab(tab) {
+  _crmTab = tab;
+  document.querySelectorAll('.crm-tab').forEach(function(t) {
+    t.classList.toggle('active', t.getAttribute('data-tab') === tab);
+  });
+  var filters = document.getElementById('crm-filters');
+  var addBtn = document.getElementById('people-add-btn');
+  if (tab === 'team') {
+    if (filters) filters.style.display = 'none';
+    if (addBtn) addBtn.textContent = '+ Add User';
+  } else {
+    if (filters) filters.style.display = '';
+    if (addBtn) addBtn.textContent = '+ New';
+  }
+  if (tab === 'contacts') _crmLoadContacts();
+  else if (tab === 'team') _crmLoadTeam();
+  else if (tab === 'companies') _crmLoadCompanies();
+}
+
+function _crmNewAction() {
+  if (_crmTab === 'contacts') _crmAddContact();
+  else if (_crmTab === 'team') _crmAddTeamUser();
+  else if (_crmTab === 'companies') _crmAddCompany();
+}
+
+async function _crmLoadContacts() {
+  var el = document.getElementById('crm-content');
   var stats = document.getElementById('people-stats');
-  if (!grid) return;
-  grid.innerHTML = '<div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div>';
+  if (!el) return;
+  el.innerHTML = '<div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div>';
+  var search = (document.getElementById('crm-search') || {}).value || '';
+  var ctype = (document.getElementById('crm-type-filter') || {}).value || '';
+  var archived = (document.getElementById('crm-show-archived') || {}).checked;
+  var d = await api('/api/workspace/crm', {action:'contacts.list', search:search, contact_type:ctype, status: archived ? 'archived' : 'active'});
+  if (!d || !d.ok) { el.innerHTML = '<div class="people-empty">Error loading contacts</div>'; return; }
+  var contacts = d.contacts || [];
+  var total = d.total || 0;
+  // Update tab count
+  var countEl = document.getElementById('crm-count-contacts');
+  if (countEl) countEl.textContent = total;
+  // Stats
+  if (stats) {
+    var types = {};
+    contacts.forEach(function(c) { types[c.contact_type] = (types[c.contact_type]||0) + 1; });
+    var statsHtml = '<div><div class="people-stat">' + total + '</div><div class="people-stat-label">Contacts</div></div>';
+    ['client','partner','vendor','lead'].forEach(function(t) {
+      if (types[t]) statsHtml += '<div><div class="people-stat">' + types[t] + '</div><div class="people-stat-label">' + t.charAt(0).toUpperCase()+t.slice(1) + 's</div></div>';
+    });
+    stats.innerHTML = statsHtml;
+  }
+  if (!contacts.length) {
+    el.innerHTML = '<div class="people-empty">No contacts yet. Add your first contact to get started.</div>';
+    return;
+  }
+  var html = '<div class="crm-list">';
+  contacts.forEach(function(c) {
+    var name = (c.first_name + ' ' + (c.last_name || '')).trim();
+    var initials = avatarInitials(name);
+    var sub = '';
+    if (c.title) sub += escHtml(c.title);
+    if (c.company_name) sub += (sub ? ' at ' : '') + escHtml(c.company_name);
+    if (!sub && c.email) sub = escHtml(c.email);
+    var tags = [];
+    try { tags = JSON.parse(c.tags_json || '[]'); } catch(e) {}
+    html += '<div class="crm-row" onclick="_crmOpenContact(' + c.id + ')">';
+    html += '<div class="crm-row-avatar">' + escHtml(initials) + '</div>';
+    html += '<div class="crm-row-info"><div class="crm-row-name">' + escHtml(name) + '</div>';
+    if (sub) html += '<div class="crm-row-sub">' + sub + '</div>';
+    html += '</div>';
+    html += '<div class="crm-row-badges">';
+    tags.slice(0,2).forEach(function(t) { html += '<span class="crm-tag">' + escHtml(t) + '</span>'; });
+    html += '<span class="crm-type-badge ' + escHtml(c.contact_type) + '">' + escHtml(c.contact_type) + '</span>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+async function _crmLoadTeam() {
+  var el = document.getElementById('crm-content');
+  var stats = document.getElementById('people-stats');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div>';
   try {
     var d = await api('/api/workspace/people', {action:'list'});
-    if (!d || !d.ok) { grid.innerHTML = '<div class="people-empty">Loading users...</div>'; return; }
+    if (!d || !d.ok) { el.innerHTML = '<div class="people-empty">Error loading team</div>'; return; }
     var users = d.users || [];
-    // v0.31.65 — Enrich with project counts
     try {
       var projData = await api('/api/projects');
       var allProjects = (projData && projData.projects) || [];
@@ -20968,9 +21517,8 @@ async function loadPeople() {
         u._project_count = allProjects.filter(function(p) { return p.owner === u.username; }).length;
       });
     } catch(e) {}
-    // Enrich with last-active from sessions
     try {
-      var sessData = await api('/api/workspace/status');  // v0.31.70: sessions moved
+      var sessData = await api('/api/workspace/status');
       var sessions = (sessData && sessData.sessions) || [];
       users.forEach(function(u) {
         var userSessions = sessions.filter(function(s) { return s.username === u.username; });
@@ -20986,29 +21534,22 @@ async function loadPeople() {
         }
       });
     } catch(e) {}
-    var cfg = window.currentUser || {};
-    var myUsername = cfg.username || '';
-
-    // Stats
+    var myUsername = (window.currentUser || {}).username || '';
+    var countEl = document.getElementById('crm-count-team');
+    if (countEl) countEl.textContent = users.length;
     if (stats) {
       var admins = users.filter(function(u) { return u.role === 'admin'; }).length;
       var operators = users.filter(function(u) { return u.role === 'operator'; }).length;
-      stats.innerHTML = '<div><div class="people-stat">' + users.length + '</div><div class="people-stat-label">Total Users</div></div>'
+      stats.innerHTML = '<div><div class="people-stat">' + users.length + '</div><div class="people-stat-label">Users</div></div>'
         + '<div><div class="people-stat">' + admins + '</div><div class="people-stat-label">Admins</div></div>'
         + '<div><div class="people-stat">' + operators + '</div><div class="people-stat-label">Operators</div></div>';
     }
-
-    if (!users.length) {
-      grid.innerHTML = '<div class="people-empty">No users yet. Add someone to get started.</div>';
-      return;
-    }
-
-    var html = '';
+    if (!users.length) { el.innerHTML = '<div class="people-empty">No users yet.</div>'; return; }
+    var html = '<div class="people-grid">';
     users.forEach(function(u) {
       var isYou = u.username === myUsername;
       var initials = avatarInitials(u.display_name || u.username);
       var joined = u.created_at ? new Date(u.created_at * 1000).toLocaleDateString('en-US', {year:'numeric', month:'short', day:'numeric'}) : '';
-
       html += '<div class="people-card' + (isYou ? ' is-you' : '') + '">';
       html += '<div class="people-card-avatar">' + escHtml(initials) + '</div>';
       html += '<div class="people-card-meta">';
@@ -21016,8 +21557,8 @@ async function loadPeople() {
       html += '<div class="people-card-role">' + escHtml(u.role || 'operator') + '</div>';
       if (u.email) html += '<div class="people-card-email">' + escHtml(u.email) + '</div>';
       if (u._project_count !== undefined) html += '<div class="people-card-joined">' + u._project_count + ' project' + (u._project_count !== 1 ? 's' : '') + '</div>';
-     if (u._last_active) html += '<div class="people-card-joined">Active ' + escHtml(u._last_active) + '</div>';
-     else if (joined) html += '<div class="people-card-joined">Joined ' + escHtml(joined) + '</div>';
+      if (u._last_active) html += '<div class="people-card-joined">Active ' + escHtml(u._last_active) + '</div>';
+      else if (joined) html += '<div class="people-card-joined">Joined ' + escHtml(joined) + '</div>';
       html += '</div>';
       html += '<div class="people-card-actions">';
       if (currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin')) {
@@ -21026,13 +21567,324 @@ async function loadPeople() {
       }
       html += '</div></div>';
     });
-    grid.innerHTML = html;
+    html += '</div>';
+    el.innerHTML = html;
   } catch(e) {
-    grid.innerHTML = '<div class="people-empty">Error loading users</div>';
+    el.innerHTML = '<div class="people-empty">Error loading team</div>';
   }
 }
 
-async function _peopleAddUser() {
+async function _crmLoadCompanies() {
+  var el = document.getElementById('crm-content');
+  var stats = document.getElementById('people-stats');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div>';
+  var search = (document.getElementById('crm-search') || {}).value || '';
+  var archived = (document.getElementById('crm-show-archived') || {}).checked;
+  var d = await api('/api/workspace/crm', {action:'companies.list', search:search, status: archived ? 'archived' : 'active'});
+  if (!d || !d.ok) { el.innerHTML = '<div class="people-empty">Error loading companies</div>'; return; }
+  var companies = d.companies || [];
+  var total = d.total || 0;
+  var countEl = document.getElementById('crm-count-companies');
+  if (countEl) countEl.textContent = total;
+  if (stats) {
+    stats.innerHTML = '<div><div class="people-stat">' + total + '</div><div class="people-stat-label">Companies</div></div>';
+  }
+  if (!companies.length) {
+    el.innerHTML = '<div class="people-empty">No companies yet. Add a company to start organizing contacts.</div>';
+    return;
+  }
+  var html = '<div class="crm-list">';
+  companies.forEach(function(c) {
+    var sub = '';
+    if (c.industry) sub += escHtml(c.industry);
+    if (c.country) sub += (sub ? ' · ' : '') + escHtml(c.country);
+    if (c.contact_count) sub += (sub ? ' · ' : '') + c.contact_count + ' contact' + (c.contact_count !== 1 ? 's' : '');
+    html += '<div class="crm-row" onclick="_crmOpenCompany(' + c.id + ')">';
+    html += '<div class="crm-row-avatar">' + escHtml(avatarInitials(c.name)) + '</div>';
+    html += '<div class="crm-row-info"><div class="crm-row-name">' + escHtml(c.name) + '</div>';
+    if (sub) html += '<div class="crm-row-sub">' + sub + '</div>';
+    html += '</div>';
+    html += '<div class="crm-row-badges">';
+    html += '<span class="crm-type-badge ' + escHtml(c.company_type) + '">' + escHtml(c.company_type) + '</span>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function _crmFilterDebounced() {
+  clearTimeout(_crmDebounceTimer);
+  _crmDebounceTimer = setTimeout(function() { _crmApplyFilters(); }, 300);
+}
+
+function _crmApplyFilters() {
+  if (_crmTab === 'contacts') _crmLoadContacts();
+  else if (_crmTab === 'companies') _crmLoadCompanies();
+}
+
+// ── Contact detail slide-out ──
+var _crmInteractionIcons = {note:'\u270E', call:'\u260E', email:'\u2709', meeting:'\u{1F465}', task:'\u2713', update:'\u21BB'};
+
+async function _crmOpenContact(id) {
+  _crmDetailType = 'contact'; _crmDetailId = id;
+  var d = await api('/api/workspace/crm', {action:'contacts.get', id:id});
+  if (!d || !d.ok) { toast('Contact not found', 'err'); return; }
+  var c = d.contact;
+  var name = (c.first_name + ' ' + (c.last_name || '')).trim();
+  var social = {}; try { social = JSON.parse(c.social_json || '{}'); } catch(e) {}
+  var tags = []; try { tags = JSON.parse(c.tags_json || '[]'); } catch(e) {}
+  // Header
+  var hdr = document.getElementById('crm-detail-hdr');
+  hdr.innerHTML = '<div class="crm-detail-hdr-avatar">' + escHtml(avatarInitials(name)) + '</div>'
+    + '<div class="crm-detail-hdr-info"><div class="crm-detail-hdr-name">' + escHtml(name) + '</div>'
+    + '<div class="crm-detail-hdr-sub">' + (c.title ? escHtml(c.title) : '') + (c.company_name ? (c.title ? ' at ' : '') + escHtml(c.company_name) : '') + '</div></div>'
+    + '<button class="crm-detail-close" onclick="_crmCloseDetail()">&times;</button>';
+  // Body
+  var body = document.getElementById('crm-detail-body');
+  var bh = '';
+  // Details section
+  bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Details</div>';
+  if (c.email) bh += '<div class="crm-detail-field"><span class="crm-detail-field-label">Email</span><span class="crm-detail-field-value"><a href="mailto:' + escHtml(c.email) + '">' + escHtml(c.email) + '</a></span></div>';
+  if (c.phone) bh += '<div class="crm-detail-field"><span class="crm-detail-field-label">Phone</span><span class="crm-detail-field-value">' + escHtml(c.phone) + '</span></div>';
+  bh += '<div class="crm-detail-field"><span class="crm-detail-field-label">Type</span><span class="crm-detail-field-value"><span class="crm-type-badge ' + escHtml(c.contact_type) + '">' + escHtml(c.contact_type) + '</span></span></div>';
+  if (tags.length) {
+    bh += '<div class="crm-detail-field"><span class="crm-detail-field-label">Tags</span><span class="crm-detail-field-value">';
+    tags.forEach(function(t) { bh += '<span class="crm-tag">' + escHtml(t) + '</span> '; });
+    bh += '</span></div>';
+  }
+  bh += '</div>';
+  // Social section
+  var socialKeys = Object.keys(social).filter(function(k) { return social[k]; });
+  if (socialKeys.length) {
+    bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Social</div><div class="crm-social-links">';
+    var socialLabels = {linkedin:'LinkedIn', twitter:'Twitter', telegram:'Telegram', whatsapp:'WhatsApp', website:'Website'};
+    socialKeys.forEach(function(k) {
+      var v = social[k];
+      var href = v;
+      if (k === 'telegram' && !v.startsWith('http')) href = 'https://t.me/' + v.replace('@','');
+      else if (k === 'whatsapp' && !v.startsWith('http')) href = 'https://wa.me/' + v.replace(/[^0-9]/g,'');
+      else if (!v.startsWith('http')) href = 'https://' + v;
+      bh += '<a class="crm-social-link" href="' + escHtml(href) + '" target="_blank" rel="noopener">' + escHtml(socialLabels[k] || k) + '</a>';
+    });
+    bh += '</div></div>';
+  }
+  // Notes section
+  bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Notes</div>';
+  bh += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Add notes...">' + escHtml(c.notes || '') + '</textarea></div>';
+  // Projects section
+  if (c.projects && c.projects.length) {
+    bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Projects</div>';
+    c.projects.forEach(function(p) {
+      bh += '<div class="crm-project-link"><span>' + escHtml(p.project_id) + '</span><span class="crm-project-link-role">' + escHtml(p.role || '') + '</span></div>';
+    });
+    bh += '</div>';
+  }
+  // Activity section
+  bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Activity</div>';
+  bh += '<button class="btn btn-ghost" style="margin-bottom:8px;font-size:11px" onclick="_crmAddInteraction(' + c.id + ')">+ Add note</button>';
+  bh += _crmRenderTimeline(c.interactions || []);
+  bh += '</div>';
+  body.innerHTML = bh;
+  // Wire up notes auto-save
+  var notesEl = document.getElementById('crm-detail-notes');
+  if (notesEl) {
+    var _noteTimer = null;
+    notesEl.addEventListener('input', function() {
+      clearTimeout(_noteTimer);
+      _noteTimer = setTimeout(function() {
+        api('/api/workspace/crm', {action:'contacts.update', id:c.id, notes:notesEl.value});
+      }, 1000);
+    });
+  }
+  // Actions
+  var actions = document.getElementById('crm-detail-actions');
+  var isAdmin = currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin');
+  actions.innerHTML = isAdmin
+    ? '<button class="btn btn-ghost" onclick="_crmEditContact(' + c.id + ')">Edit</button>'
+      + (c.status === 'active' ? '<button class="btn btn-ghost" onclick="_crmArchiveContact(' + c.id + ')">Archive</button>' : '')
+      + '<button class="btn btn-ghost danger" onclick="_crmDeleteContact(' + c.id + ')">Delete</button>'
+    : '';
+  // Open panel
+  document.getElementById('crm-detail-overlay').classList.add('open');
+  document.getElementById('crm-detail-panel').classList.add('open');
+}
+
+async function _crmOpenCompany(id) {
+  _crmDetailType = 'company'; _crmDetailId = id;
+  var d = await api('/api/workspace/crm', {action:'companies.get', id:id});
+  if (!d || !d.ok) { toast('Company not found', 'err'); return; }
+  var c = d.company;
+  var hdr = document.getElementById('crm-detail-hdr');
+  hdr.innerHTML = '<div class="crm-detail-hdr-avatar">' + escHtml(avatarInitials(c.name)) + '</div>'
+    + '<div class="crm-detail-hdr-info"><div class="crm-detail-hdr-name">' + escHtml(c.name) + '</div>'
+    + '<div class="crm-detail-hdr-sub">' + (c.industry ? escHtml(c.industry) : '') + (c.country ? (c.industry ? ' · ' : '') + escHtml(c.country) : '') + '</div></div>'
+    + '<button class="crm-detail-close" onclick="_crmCloseDetail()">&times;</button>';
+  var body = document.getElementById('crm-detail-body');
+  var bh = '';
+  bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Details</div>';
+  if (c.website) bh += '<div class="crm-detail-field"><span class="crm-detail-field-label">Website</span><span class="crm-detail-field-value"><a href="' + escHtml(c.website) + '" target="_blank">' + escHtml(c.website) + '</a></span></div>';
+  bh += '<div class="crm-detail-field"><span class="crm-detail-field-label">Type</span><span class="crm-detail-field-value"><span class="crm-type-badge ' + escHtml(c.company_type) + '">' + escHtml(c.company_type) + '</span></span></div>';
+  bh += '</div>';
+  // Notes
+  bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Notes</div>';
+  bh += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Add notes...">' + escHtml(c.notes || '') + '</textarea></div>';
+  // Contacts at this company
+  if (c.contacts && c.contacts.length) {
+    bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Contacts (' + c.contacts.length + ')</div>';
+    c.contacts.forEach(function(ct) {
+      var cname = (ct.first_name + ' ' + (ct.last_name||'')).trim();
+      bh += '<div class="crm-row" style="padding:8px 10px" onclick="_crmCloseDetail();setTimeout(function(){_crmOpenContact(' + ct.id + ')},200)">';
+      bh += '<div class="crm-row-avatar" style="width:28px;height:28px;font-size:11px">' + escHtml(avatarInitials(cname)) + '</div>';
+      bh += '<div class="crm-row-info"><div class="crm-row-name" style="font-size:12px">' + escHtml(cname) + '</div>';
+      if (ct.title) bh += '<div class="crm-row-sub" style="font-size:10px">' + escHtml(ct.title) + '</div>';
+      bh += '</div></div>';
+    });
+    bh += '</div>';
+  }
+  // Activity
+  bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Activity</div>';
+  bh += _crmRenderTimeline(c.interactions || []);
+  bh += '</div>';
+  body.innerHTML = bh;
+  // Notes auto-save for company
+  var notesEl = document.getElementById('crm-detail-notes');
+  if (notesEl) {
+    var _noteTimer = null;
+    notesEl.addEventListener('input', function() {
+      clearTimeout(_noteTimer);
+      _noteTimer = setTimeout(function() {
+        api('/api/workspace/crm', {action:'companies.update', id:c.id, notes:notesEl.value});
+      }, 1000);
+    });
+  }
+  var actions = document.getElementById('crm-detail-actions');
+  var isAdmin = currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin');
+  actions.innerHTML = isAdmin
+    ? '<button class="btn btn-ghost" onclick="_crmEditCompany(' + c.id + ')">Edit</button>'
+      + (c.status === 'active' ? '<button class="btn btn-ghost" onclick="_crmArchiveCompany(' + c.id + ')">Archive</button>' : '')
+    : '';
+  document.getElementById('crm-detail-overlay').classList.add('open');
+  document.getElementById('crm-detail-panel').classList.add('open');
+}
+
+function _crmCloseDetail() {
+  document.getElementById('crm-detail-overlay').classList.remove('open');
+  document.getElementById('crm-detail-panel').classList.remove('open');
+  _crmDetailType = null; _crmDetailId = null;
+}
+
+function _crmRenderTimeline(interactions) {
+  if (!interactions.length) return '<div class="people-empty" style="padding:12px">No activity yet</div>';
+  var h = '<div class="crm-timeline">';
+  interactions.forEach(function(i) {
+    var icon = _crmInteractionIcons[i.interaction_type] || '\u21BB';
+    var ts = i.created_at ? new Date(i.created_at * 1000).toLocaleDateString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+    h += '<div class="crm-timeline-item">';
+    h += '<div class="crm-timeline-icon ' + escHtml(i.interaction_type) + '">' + icon + '</div>';
+    h += '<div class="crm-timeline-body"><div class="crm-timeline-text">' + escHtml(i.body) + '</div>';
+    h += '<div class="crm-timeline-meta">' + escHtml(i.interaction_type) + (i.created_by ? ' by ' + escHtml(i.created_by) : '') + ' · ' + escHtml(ts) + '</div></div></div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+// ── CRM Create/Edit Flows ──
+async function _crmAddContact() {
+  var firstName = await porterPrompt('New Contact', 'First name:', '');
+  if (!firstName) return;
+  var lastName = await porterPrompt('Last Name', 'Last name:', '');
+  var email = await porterPrompt('Email', 'Email address (optional):', '');
+  var contactType = await porterPrompt('Type', 'client, collaborator, partner, vendor, stakeholder, lead, or other:', 'client');
+  contactType = (contactType || 'other').toLowerCase();
+  var validTypes = ['client','collaborator','partner','vendor','stakeholder','lead','other'];
+  if (validTypes.indexOf(contactType) === -1) contactType = 'other';
+  var title = await porterPrompt('Title', 'Job title (optional):', '');
+  var r = await api('/api/workspace/crm', {action:'contacts.create', first_name:firstName, last_name:lastName||'', email:email||'', contact_type:contactType, title:title||''});
+  if (r && r.ok) { toast('Contact created', 'ok'); _crmLoadContacts(); if (r.id) _crmOpenContact(r.id); }
+  else { toast((r && r.error) || 'Failed', 'err'); }
+}
+
+async function _crmEditContact(id) {
+  var d = await api('/api/workspace/crm', {action:'contacts.get', id:id});
+  if (!d || !d.ok) return;
+  var c = d.contact;
+  var firstName = await porterPrompt('Edit Contact', 'First name:', c.first_name);
+  if (!firstName) return;
+  var lastName = await porterPrompt('Last Name', 'Last name:', c.last_name || '');
+  var email = await porterPrompt('Email', 'Email:', c.email || '');
+  var phone = await porterPrompt('Phone', 'Phone:', c.phone || '');
+  var title = await porterPrompt('Title', 'Job title:', c.title || '');
+  var contactType = await porterPrompt('Type', 'client/collaborator/partner/vendor/stakeholder/lead/other:', c.contact_type);
+  var r = await api('/api/workspace/crm', {action:'contacts.update', id:id, first_name:firstName, last_name:lastName||'', email:email||'', phone:phone||'', title:title||'', contact_type:contactType||c.contact_type});
+  if (r && r.ok) { toast('Updated', 'ok'); _crmCloseDetail(); _crmLoadContacts(); setTimeout(function() { _crmOpenContact(id); }, 200); }
+  else { toast((r && r.error) || 'Failed', 'err'); }
+}
+
+function _crmArchiveContact(id) {
+  _porterConfirm('Archive Contact', 'Archive this contact? They can be restored later.', async function() {
+    var r = await api('/api/workspace/crm', {action:'contacts.archive', id:id});
+    if (r && r.ok) { toast('Archived', 'ok'); _crmCloseDetail(); _crmLoadContacts(); }
+  }, {okLabel:'Archive'});
+}
+
+function _crmDeleteContact(id) {
+  _porterConfirm('Delete Contact', 'Permanently delete this contact and all their activity? This cannot be undone.', async function() {
+    var r = await api('/api/workspace/crm', {action:'contacts.delete', id:id});
+    if (r && r.ok) { toast('Deleted', 'ok'); _crmCloseDetail(); _crmLoadContacts(); }
+  }, {danger:true, okLabel:'Delete'});
+}
+
+async function _crmAddCompany() {
+  var name = await porterPrompt('New Company', 'Company name:', '');
+  if (!name) return;
+  var industry = await porterPrompt('Industry', 'Industry (optional):', '');
+  var companyType = await porterPrompt('Type', 'client, partner, vendor, agency, or other:', 'client');
+  var validTypes = ['client','partner','vendor','agency','other'];
+  companyType = (companyType || 'other').toLowerCase();
+  if (validTypes.indexOf(companyType) === -1) companyType = 'other';
+  var website = await porterPrompt('Website', 'Website URL (optional):', '');
+  var country = await porterPrompt('Country', 'Country (optional):', '');
+  var r = await api('/api/workspace/crm', {action:'companies.create', name:name, industry:industry||'', company_type:companyType, website:website||'', country:country||''});
+  if (r && r.ok) { toast('Company created', 'ok'); _crmLoadCompanies(); if (r.id) _crmOpenCompany(r.id); }
+  else { toast((r && r.error) || 'Failed', 'err'); }
+}
+
+async function _crmEditCompany(id) {
+  var d = await api('/api/workspace/crm', {action:'companies.get', id:id});
+  if (!d || !d.ok) return;
+  var c = d.company;
+  var name = await porterPrompt('Edit Company', 'Name:', c.name);
+  if (!name) return;
+  var industry = await porterPrompt('Industry', 'Industry:', c.industry || '');
+  var website = await porterPrompt('Website', 'Website:', c.website || '');
+  var country = await porterPrompt('Country', 'Country:', c.country || '');
+  var r = await api('/api/workspace/crm', {action:'companies.update', id:id, name:name, industry:industry||'', website:website||'', country:country||''});
+  if (r && r.ok) { toast('Updated', 'ok'); _crmCloseDetail(); _crmLoadCompanies(); setTimeout(function() { _crmOpenCompany(id); }, 200); }
+  else { toast((r && r.error) || 'Failed', 'err'); }
+}
+
+function _crmArchiveCompany(id) {
+  _porterConfirm('Archive Company', 'Archive this company?', async function() {
+    var r = await api('/api/workspace/crm', {action:'companies.archive', id:id});
+    if (r && r.ok) { toast('Archived', 'ok'); _crmCloseDetail(); _crmLoadCompanies(); }
+  }, {okLabel:'Archive'});
+}
+
+async function _crmAddInteraction(contactId) {
+  var itype = await porterPrompt('Add Activity', 'Type (note, call, email, meeting, task, update):', 'note');
+  if (!itype) return;
+  var validTypes = ['note','call','email','meeting','task','update'];
+  if (validTypes.indexOf(itype) === -1) itype = 'note';
+  var body = await porterPrompt('Details', 'What happened?', '');
+  if (!body) return;
+  var r = await api('/api/workspace/crm', {action:'interactions.create', interaction_type:itype, body:body, contact_id:contactId});
+  if (r && r.ok) { toast('Added', 'ok'); _crmOpenContact(contactId); }
+  else { toast((r && r.error) || 'Failed', 'err'); }
+}
+
+// ── Team management (preserved from old People) ──
+async function _crmAddTeamUser() {
   var username = await porterPrompt('Add User', 'Username (lowercase, no spaces):', '');
   if (!username) return;
   username = username.toLowerCase().replace(/[^a-z0-9_]/g, '');
@@ -21043,16 +21895,15 @@ async function _peopleAddUser() {
   role = (role || 'operator').toLowerCase();
   if (role !== 'admin' && role !== 'operator') role = 'operator';
   var r = await api('/api/workspace/people', {action:'create', username:username, display_name:displayName, role:role});
-  if (r && r.ok) { toast('User ' + username + ' created', 'ok'); loadPeople(); }
+  if (r && r.ok) { toast('User ' + username + ' created', 'ok'); _crmLoadTeam(); }
   else { toast((r && r.error) || 'Failed to create user', 'err'); }
 }
 
 function _peopleEditRole(username, currentRole) {
-  var roles = ['operator', 'admin'];
   var newRole = currentRole === 'admin' ? 'operator' : 'admin';
   _porterConfirm('Change Role', 'Change ' + username + ' from ' + currentRole + ' to ' + newRole + '?', async function() {
     var r = await api('/api/workspace/people', {action:'update_role', username:username, role:newRole});
-    if (r && r.ok) { toast('Role updated', 'ok'); loadPeople(); }
+    if (r && r.ok) { toast('Role updated', 'ok'); _crmLoadTeam(); }
     else { toast((r && r.error) || 'Failed', 'err'); }
   }, {okLabel:'Change Role'});
 }
@@ -21060,7 +21911,7 @@ function _peopleEditRole(username, currentRole) {
 function _peopleDelete(username) {
   _porterConfirm('Remove User', 'Remove ' + username + ' from this Porter instance? This cannot be undone.', async function() {
     var r = await api('/api/workspace/people', {action:'delete', username:username});
-    if (r && r.ok) { toast('User removed', 'ok'); loadPeople(); }
+    if (r && r.ok) { toast('User removed', 'ok'); _crmLoadTeam(); }
     else { toast((r && r.error) || 'Failed', 'err'); }
   }, {danger:true, okLabel:'Remove'});
 }
@@ -42861,7 +43712,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.84"})
+            self.reply_json({"v": "0.31.86"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -43023,7 +43874,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.84"
+                health["porter_version"] = "0.31.86"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -45269,7 +46120,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.71'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.86'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -49203,7 +50054,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.31.84"
+                _ws_health["porter_version"] = "0.31.86"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -49384,6 +50235,367 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     self.reply_json({"ok": False, "error": str(e)}, 500)
             else:
                 self.reply_json({"ok": False, "error": "Unknown action"}, 400)
+
+
+        # ── CRM API (v0.31.85) ────────────────────────────────────
+        elif parsed.path == "/api/workspace/crm":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            action = data.get("action", "")
+            _crm_tok = self.get_session_token()
+            _crm_sess = get_session(_crm_tok, ip=self.client_address[0], ua=self.headers.get("User-Agent", "")) if _crm_tok else None
+            current_user = (_crm_sess or {}).get("username", "unknown")
+
+            # ── contacts.list ──
+            if action == "contacts.list":
+                search = data.get("search", "").strip()
+                ctype = data.get("contact_type", "")
+                status = data.get("status", "active")
+                limit = min(int(data.get("limit", 100)), 500)
+                offset = int(data.get("offset", 0))
+                conn = _db_conn()
+                clauses, params = ["c.status = ?"], [status]
+                if ctype:
+                    clauses.append("c.contact_type = ?"); params.append(ctype)
+                if search:
+                    clauses.append("(c.first_name LIKE ? OR c.last_name LIKE ? OR c.email LIKE ?)")
+                    params.extend([f"%{search}%"] * 3)
+                where = " AND ".join(clauses)
+                rows = conn.execute(f"""
+                    SELECT c.*, co.name as company_name FROM crm_contacts c
+                    LEFT JOIN crm_companies co ON c.company_id = co.id
+                    WHERE {where} ORDER BY c.updated_at DESC LIMIT ? OFFSET ?
+                """, params + [limit, offset]).fetchall()
+                total = conn.execute(f"SELECT COUNT(*) FROM crm_contacts c WHERE {where}", params).fetchone()[0]
+                conn.close()
+                self.reply_json({"ok": True, "contacts": [dict(r) for r in rows], "total": total})
+
+            # ── contacts.get ──
+            elif action == "contacts.get":
+                cid = data.get("id")
+                if not cid:
+                    self.reply_json({"ok": False, "error": "id required"}, 400); return
+                conn = _db_conn()
+                row = conn.execute("""
+                    SELECT c.*, co.name as company_name FROM crm_contacts c
+                    LEFT JOIN crm_companies co ON c.company_id = co.id WHERE c.id = ?
+                """, (cid,)).fetchone()
+                if not row:
+                    conn.close(); self.reply_json({"ok": False, "error": "Not found"}, 404); return
+                contact = dict(row)
+                contact["interactions"] = [dict(r) for r in conn.execute(
+                    "SELECT * FROM crm_interactions WHERE contact_id = ? ORDER BY created_at DESC LIMIT 50", (cid,)
+                ).fetchall()]
+                contact["projects"] = [dict(r) for r in conn.execute(
+                    "SELECT pc.*, 'project' as _type FROM crm_project_contacts pc WHERE pc.contact_id = ?", (cid,)
+                ).fetchall()]
+                conn.close()
+                self.reply_json({"ok": True, "contact": contact})
+
+            # ── contacts.create ──
+            elif action == "contacts.create":
+                if not self.auth_check_cap("admin"): return
+                fn = data.get("first_name", "").strip()
+                if not fn:
+                    self.reply_json({"ok": False, "error": "first_name required"}, 400); return
+                conn = _db_conn()
+                cur = conn.execute("""
+                    INSERT INTO crm_contacts (first_name, last_name, email, phone, title,
+                        company_id, contact_type, tags_json, notes, social_json, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    fn, data.get("last_name", ""), data.get("email", ""),
+                    data.get("phone", ""), data.get("title", ""),
+                    data.get("company_id") or None,
+                    data.get("contact_type", "other"),
+                    json.dumps(data.get("tags", [])),
+                    data.get("notes", ""),
+                    json.dumps(data.get("social", {})),
+                    current_user
+                ))
+                conn.commit()
+                new_id = cur.lastrowid
+                conn.close()
+                _append_audit("crm.contact.create", str(new_id), current_user, details={"name": fn})
+                self.reply_json({"ok": True, "id": new_id})
+
+            # ── contacts.update ──
+            elif action == "contacts.update":
+                if not self.auth_check_cap("admin"): return
+                cid = data.get("id")
+                if not cid:
+                    self.reply_json({"ok": False, "error": "id required"}, 400); return
+                allowed = {"first_name", "last_name", "email", "phone", "title",
+                           "company_id", "contact_type", "notes", "status"}
+                sets, vals = [], []
+                for k in allowed:
+                    if k in data:
+                        sets.append(f"{k} = ?"); vals.append(data[k])
+                if "tags" in data:
+                    sets.append("tags_json = ?"); vals.append(json.dumps(data["tags"]))
+                if "social" in data:
+                    sets.append("social_json = ?"); vals.append(json.dumps(data["social"]))
+                if not sets:
+                    self.reply_json({"ok": False, "error": "Nothing to update"}, 400); return
+                sets.append("updated_at = strftime('%s','now')")
+                vals.append(cid)
+                conn = _db_conn()
+                conn.execute(f"UPDATE crm_contacts SET {', '.join(sets)} WHERE id = ?", vals)
+                conn.commit(); conn.close()
+                _append_audit("crm.contact.update", str(cid), current_user)
+                self.reply_json({"ok": True})
+
+            # ── contacts.archive ──
+            elif action == "contacts.archive":
+                if not self.auth_check_cap("admin"): return
+                cid = data.get("id")
+                if not cid:
+                    self.reply_json({"ok": False, "error": "id required"}, 400); return
+                conn = _db_conn()
+                conn.execute("UPDATE crm_contacts SET status = 'archived', updated_at = strftime('%s','now') WHERE id = ?", (cid,))
+                conn.commit(); conn.close()
+                _append_audit("crm.contact.archive", str(cid), current_user)
+                self.reply_json({"ok": True})
+
+            # ── contacts.delete ──
+            elif action == "contacts.delete":
+                if not self.auth_check_cap("admin"): return
+                cid = data.get("id")
+                if not cid:
+                    self.reply_json({"ok": False, "error": "id required"}, 400); return
+                conn = _db_conn()
+                conn.execute("DELETE FROM crm_interactions WHERE contact_id = ?", (cid,))
+                conn.execute("DELETE FROM crm_project_contacts WHERE contact_id = ?", (cid,))
+                conn.execute("DELETE FROM crm_contacts WHERE id = ?", (cid,))
+                conn.commit(); conn.close()
+                _append_audit("crm.contact.delete", str(cid), current_user)
+                self.reply_json({"ok": True})
+
+            # ── companies.list ──
+            elif action == "companies.list":
+                search = data.get("search", "").strip()
+                status = data.get("status", "active")
+                limit = min(int(data.get("limit", 100)), 500)
+                offset = int(data.get("offset", 0))
+                conn = _db_conn()
+                clauses, params = ["status = ?"], [status]
+                if search:
+                    clauses.append("(name LIKE ? OR industry LIKE ?)")
+                    params.extend([f"%{search}%"] * 2)
+                where = " AND ".join(clauses)
+                rows = conn.execute(f"""
+                    SELECT * FROM crm_companies WHERE {where}
+                    ORDER BY updated_at DESC LIMIT ? OFFSET ?
+                """, params + [limit, offset]).fetchall()
+                total = conn.execute(f"SELECT COUNT(*) FROM crm_companies WHERE {where}", params).fetchone()[0]
+                # attach contact counts
+                companies = []
+                for r in rows:
+                    c = dict(r)
+                    c["contact_count"] = conn.execute(
+                        "SELECT COUNT(*) FROM crm_contacts WHERE company_id = ? AND status = 'active'", (r["id"],)
+                    ).fetchone()[0]
+                    companies.append(c)
+                conn.close()
+                self.reply_json({"ok": True, "companies": companies, "total": total})
+
+            # ── companies.get ──
+            elif action == "companies.get":
+                cid = data.get("id")
+                if not cid:
+                    self.reply_json({"ok": False, "error": "id required"}, 400); return
+                conn = _db_conn()
+                row = conn.execute("SELECT * FROM crm_companies WHERE id = ?", (cid,)).fetchone()
+                if not row:
+                    conn.close(); self.reply_json({"ok": False, "error": "Not found"}, 404); return
+                company = dict(row)
+                company["contacts"] = [dict(r) for r in conn.execute(
+                    "SELECT * FROM crm_contacts WHERE company_id = ? AND status = 'active' ORDER BY first_name", (cid,)
+                ).fetchall()]
+                company["interactions"] = [dict(r) for r in conn.execute(
+                    "SELECT * FROM crm_interactions WHERE company_id = ? ORDER BY created_at DESC LIMIT 50", (cid,)
+                ).fetchall()]
+                conn.close()
+                self.reply_json({"ok": True, "company": company})
+
+            # ── companies.create ──
+            elif action == "companies.create":
+                if not self.auth_check_cap("admin"): return
+                name = data.get("name", "").strip()
+                if not name:
+                    self.reply_json({"ok": False, "error": "name required"}, 400); return
+                conn = _db_conn()
+                cur = conn.execute("""
+                    INSERT INTO crm_companies (name, industry, company_type, website, country, notes, tags_json, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    name, data.get("industry", ""), data.get("company_type", "other"),
+                    data.get("website", ""), data.get("country", ""),
+                    data.get("notes", ""), json.dumps(data.get("tags", [])), current_user
+                ))
+                conn.commit()
+                new_id = cur.lastrowid
+                conn.close()
+                _append_audit("crm.company.create", str(new_id), current_user, details={"name": name})
+                self.reply_json({"ok": True, "id": new_id})
+
+            # ── companies.update ──
+            elif action == "companies.update":
+                if not self.auth_check_cap("admin"): return
+                cid = data.get("id")
+                if not cid:
+                    self.reply_json({"ok": False, "error": "id required"}, 400); return
+                allowed = {"name", "industry", "company_type", "website", "country", "notes", "status"}
+                sets, vals = [], []
+                for k in allowed:
+                    if k in data:
+                        sets.append(f"{k} = ?"); vals.append(data[k])
+                if "tags" in data:
+                    sets.append("tags_json = ?"); vals.append(json.dumps(data["tags"]))
+                if not sets:
+                    self.reply_json({"ok": False, "error": "Nothing to update"}, 400); return
+                sets.append("updated_at = strftime('%s','now')")
+                vals.append(cid)
+                conn = _db_conn()
+                conn.execute(f"UPDATE crm_companies SET {', '.join(sets)} WHERE id = ?", vals)
+                conn.commit(); conn.close()
+                _append_audit("crm.company.update", str(cid), current_user)
+                self.reply_json({"ok": True})
+
+            # ── companies.archive ──
+            elif action == "companies.archive":
+                if not self.auth_check_cap("admin"): return
+                cid = data.get("id")
+                if not cid:
+                    self.reply_json({"ok": False, "error": "id required"}, 400); return
+                conn = _db_conn()
+                conn.execute("UPDATE crm_companies SET status = 'archived', updated_at = strftime('%s','now') WHERE id = ?", (cid,))
+                conn.commit(); conn.close()
+                _append_audit("crm.company.archive", str(cid), current_user)
+                self.reply_json({"ok": True})
+
+            # ── interactions.list ──
+            elif action == "interactions.list":
+                contact_id = data.get("contact_id")
+                company_id = data.get("company_id")
+                project_id = data.get("project_id")
+                limit = min(int(data.get("limit", 50)), 200)
+                conn = _db_conn()
+                clauses, params = [], []
+                if contact_id:
+                    clauses.append("contact_id = ?"); params.append(contact_id)
+                if company_id:
+                    clauses.append("company_id = ?"); params.append(company_id)
+                if project_id:
+                    clauses.append("project_id = ?"); params.append(project_id)
+                where = " AND ".join(clauses) if clauses else "1=1"
+                rows = conn.execute(f"""
+                    SELECT * FROM crm_interactions WHERE {where}
+                    ORDER BY created_at DESC LIMIT ?
+                """, params + [limit]).fetchall()
+                conn.close()
+                self.reply_json({"ok": True, "interactions": [dict(r) for r in rows]})
+
+            # ── interactions.create ──
+            elif action == "interactions.create":
+                if not self.auth_check_cap("admin"): return
+                itype = data.get("interaction_type", "note")
+                body = data.get("body", "").strip()
+                if not body:
+                    self.reply_json({"ok": False, "error": "body required"}, 400); return
+                if itype not in ("note", "call", "email", "meeting", "task", "update"):
+                    self.reply_json({"ok": False, "error": "Invalid interaction_type"}, 400); return
+                conn = _db_conn()
+                cur = conn.execute("""
+                    INSERT INTO crm_interactions (interaction_type, body, contact_id, company_id, project_id, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    itype, body,
+                    data.get("contact_id") or None,
+                    data.get("company_id") or None,
+                    data.get("project_id", ""),
+                    current_user
+                ))
+                conn.commit()
+                new_id = cur.lastrowid
+                conn.close()
+                _append_audit("crm.interaction.create", str(new_id), current_user, details={"type": itype})
+                self.reply_json({"ok": True, "id": new_id})
+
+            # ── interactions.delete ──
+            elif action == "interactions.delete":
+                if not self.auth_check_cap("admin"): return
+                iid = data.get("id")
+                if not iid:
+                    self.reply_json({"ok": False, "error": "id required"}, 400); return
+                conn = _db_conn()
+                conn.execute("DELETE FROM crm_interactions WHERE id = ?", (iid,))
+                conn.commit(); conn.close()
+                _append_audit("crm.interaction.delete", str(iid), current_user)
+                self.reply_json({"ok": True})
+
+            # ── project_contacts.list ──
+            elif action == "project_contacts.list":
+                project_id = data.get("project_id")
+                contact_id = data.get("contact_id")
+                conn = _db_conn()
+                if project_id:
+                    rows = conn.execute("""
+                        SELECT pc.*, c.first_name, c.last_name, c.email, c.title, c.contact_type,
+                               co.name as company_name
+                        FROM crm_project_contacts pc
+                        JOIN crm_contacts c ON pc.contact_id = c.id
+                        LEFT JOIN crm_companies co ON c.company_id = co.id
+                        WHERE pc.project_id = ? ORDER BY pc.added_at DESC
+                    """, (project_id,)).fetchall()
+                elif contact_id:
+                    rows = conn.execute("""
+                        SELECT pc.* FROM crm_project_contacts pc WHERE pc.contact_id = ?
+                        ORDER BY pc.added_at DESC
+                    """, (contact_id,)).fetchall()
+                else:
+                    conn.close()
+                    self.reply_json({"ok": False, "error": "project_id or contact_id required"}, 400); return
+                conn.close()
+                self.reply_json({"ok": True, "links": [dict(r) for r in rows]})
+
+            # ── project_contacts.add ──
+            elif action == "project_contacts.add":
+                if not self.auth_check_cap("admin"): return
+                pid = data.get("project_id", "")
+                cid = data.get("contact_id")
+                role = data.get("role", "stakeholder")
+                if not pid or not cid:
+                    self.reply_json({"ok": False, "error": "project_id and contact_id required"}, 400); return
+                conn = _db_conn()
+                try:
+                    conn.execute("""
+                        INSERT INTO crm_project_contacts (project_id, contact_id, role, added_by)
+                        VALUES (?, ?, ?, ?)
+                    """, (pid, cid, role, current_user))
+                    conn.commit()
+                except Exception:
+                    conn.close()
+                    self.reply_json({"ok": False, "error": "Already linked"}, 409); return
+                conn.close()
+                _append_audit("crm.project_contact.add", f"{pid}:{cid}", current_user, details={"role": role})
+                self.reply_json({"ok": True})
+
+            # ── project_contacts.remove ──
+            elif action == "project_contacts.remove":
+                if not self.auth_check_cap("admin"): return
+                pid = data.get("project_id", "")
+                cid = data.get("contact_id")
+                if not pid or not cid:
+                    self.reply_json({"ok": False, "error": "project_id and contact_id required"}, 400); return
+                conn = _db_conn()
+                conn.execute("DELETE FROM crm_project_contacts WHERE project_id = ? AND contact_id = ?", (pid, cid))
+                conn.commit(); conn.close()
+                _append_audit("crm.project_contact.remove", f"{pid}:{cid}", current_user)
+                self.reply_json({"ok": True})
+
+            else:
+                self.reply_json({"ok": False, "error": "Unknown CRM action"}, 400)
 
         elif parsed.path == "/api/admin/users":
             if not self.auth_check(redirect=False): return
@@ -51804,7 +53016,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.31.84 ready (localhost only)")
+    print(f"\n  Porter v0.31.86 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
