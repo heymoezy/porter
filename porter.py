@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.5 — Chat action fix, CRM redesign, Escape key nav"""
+"""Porter v0.33.6 — Chat action fix, CRM redesign, Escape key nav"""
 
 
 import email
@@ -15587,7 +15587,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.5</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.6</div>
   </div>
 </aside>
 
@@ -16728,6 +16728,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.6', date:'2026-03-17', notes:["Projects V2: empty sections hidden — page grows organically as content is added","Projects V2: live reload after chat actions (personas loaded, full refresh chain)","Fix: popup chat context shows objective instead of tab reference","Fix: _projReload updates header + re-renders properly"] },
   { ver:'v0.33.5', date:'2026-03-17', notes:["Fix: _projReload defined (was undefined)","Fix: project delete via chat auto-closes detail view","Old tab content renderer redirected to new single-page renderer"] },
   { ver:'v0.33.4', date:'2026-03-17', notes:["Projects V2: single scrollable page replaces 4-tab layout","Projects V2: Inputs/Outputs/To-Do/Team/Files/Progress/Timeline blocks","Local project chat hidden — all actions through Ask Porter","File drag-drop: larger drop zone, visual feedback, global drop prevention","API: list_content action, add_content with category support"] },
   { ver:'v0.33.3', date:'2026-03-17', notes:["Projects V2 backend: objective field, Inputs/Outputs categories","New actions: set_objective, add_input, add_output, remove_input, remove_output","Chat prompt: V2 vocabulary (Objective/Inputs/Outputs/To-Do/Team/Progress)","Simplified project creation: name + objective only, no templates","Templates only applied when explicitly requested","Removed overmodeled prompt sections: workstreams, schedule, autonomy, quality gates"] },
@@ -20505,16 +20506,23 @@ async function _projReloadList() {
 
 async function _projReload(pid) {
   await _projReloadList();
-  if (window._projCurrent) {
-    var updated = _projList.find(function(p) { return p.id === pid; });
-    if (updated) {
-      window._projCurrent = updated;
-      _renderProjectPage();
-    } else {
-      // Project was deleted — auto-close detail view
-      _projBack();
-      toast('Project deleted', 'ok');
+  await loadPersonas();
+  var updated = _projList.find(function(p) { return p.id === pid; });
+  if (updated) {
+    window._projCurrent = updated;
+    // Update header
+    var nameEl = document.getElementById('proj-detail-name');
+    if (nameEl) nameEl.textContent = updated.name || 'Untitled';
+    var sb = document.getElementById('proj-detail-status');
+    if (sb) {
+      var done = !!updated.completed_at;
+      sb.textContent = done ? 'Completed' : (updated.status || 'Active');
+      sb.style.background = done ? 'color-mix(in srgb,#22c55e 15%,transparent)' : 'color-mix(in srgb,#3b82f6 15%,transparent)';
+      sb.style.color = done ? '#22c55e' : '#3b82f6';
     }
+    _renderProjectPage();
+  } else if (window._projCurrent) {
+    _projBack();
   }
 }
 
@@ -20750,7 +20758,8 @@ async function _renderProjectPage() {
   if (!proj) return;
   var el = document.getElementById('proj-detail-content');
   if (!el) return;
-  el.innerHTML = '<div class="loading-indicator" style="padding:24px">Loading...</div>';
+  // Ensure personas are loaded for worker name resolution
+  if (!_personas || !_personas.length) { try { await loadPersonas(); } catch(e) {} }
   // Fetch all project data in parallel
   var pid = proj.id;
   var [tasksRes, contentRes, collabRes, actRes] = await Promise.all([
@@ -20772,148 +20781,144 @@ async function _renderProjectPage() {
   var todoTasks = tasks.filter(function(t) { return t.status === 'todo'; });
   var ipTasks = tasks.filter(function(t) { return t.status === 'in_progress'; });
   var doneTasks = tasks.filter(function(t) { return t.status === 'done'; });
+  var hasTeam = workers.length || collabs.length;
+  var hasTasks = tasks.length > 0;
+  var hasInputs = inputs.length > 0;
+  var hasOutputs = outputs.length > 0;
+  var hasFiles = files.length > 0;
+  var hasMilestones = milestones.length > 0;
+  var hasActivity = activity.length > 0;
+  var hasAnything = hasTeam || hasTasks || hasInputs || hasOutputs || hasFiles || hasMilestones || hasActivity;
   var h = '';
-  // ── Header band ──
-  h += '<div style="margin-bottom:20px">';
-  if (objective) h += '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:8px">' + escHtml(objective) + '</div>';
-  // Progress summary
-  var progParts = [];
-  if (tasks.length) progParts.push(doneTasks.length + '/' + tasks.length + ' tasks done');
-  if (milestones.length) { var msDone = milestones.filter(function(m){return m.done}).length; progParts.push(msDone + '/' + milestones.length + ' milestones'); }
-  if (progParts.length) h += '<div style="font-size:11px;color:var(--text3)">' + progParts.join(' · ') + '</div>';
-  h += '</div>';
-  // ── Two-column workspace ──
-  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">';
-  // ── Left column ──
-  h += '<div>';
-  // Inputs
-  h += '<div style="margin-bottom:20px">';
-  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Inputs</div>';
-  if (inputs.length) {
+  // ── Objective ──
+  if (objective) {
+    h += '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:16px;max-width:560px">' + escHtml(objective) + '</div>';
+  }
+  // ── Progress bar (only if tasks exist) ──
+  if (hasTasks) {
+    var pct = Math.round(doneTasks.length / tasks.length * 100);
+    h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">';
+    h += '<div style="flex:1;height:3px;background:var(--border);border-radius:2px"><div style="height:100%;width:' + pct + '%;background:' + (pct === 100 ? '#22c55e' : 'var(--accent)') + ';border-radius:2px;transition:width .3s"></div></div>';
+    h += '<span style="font-size:11px;color:var(--text3);white-space:nowrap">' + doneTasks.length + '/' + tasks.length + ' done</span>';
+    h += '</div>';
+  }
+  // If project is completely empty, show a clean welcome
+  if (!hasAnything && !objective) {
+    h += '<div style="text-align:center;padding:40px 20px;max-width:400px;margin:0 auto">';
+    h += '<div style="font-size:14px;color:var(--text);margin-bottom:8px">Fresh project</div>';
+    h += '<div style="font-size:12px;color:var(--text3);line-height:1.5">Use Ask Porter to set it up: define the objective, add inputs and outputs, assign team members.</div>';
+    h += '</div>';
+    el.innerHTML = h;
+    return;
+  }
+  // ── Content grid — only show sections that have data ──
+  var leftParts = [];
+  var rightParts = [];
+  // LEFT: Inputs
+  if (hasInputs) {
+    var s = '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Inputs</div>';
     inputs.forEach(function(c) {
-      h += '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px">';
-      h += '<span style="color:var(--text3);font-size:10px">' + (c.content_type === 'link' ? '🔗' : '📄') + '</span>';
-      if (c.url) h += '<a href="' + escHtml(c.url) + '" target="_blank" style="color:var(--accent);text-decoration:none">' + escHtml(c.title || c.url) + '</a>';
-      else h += '<span style="color:var(--text)">' + escHtml(c.title || 'Untitled') + '</span>';
-      h += '</div>';
+      s += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
+      if (c.url) s += '<a href="' + escHtml(c.url) + '" target="_blank" style="color:var(--accent);text-decoration:none">' + escHtml(c.title || c.url) + '</a>';
+      else s += '<span style="color:var(--text)">' + escHtml(c.title || 'Untitled') + '</span>';
+      s += '</div>';
     });
-  } else {
-    h += '<div style="font-size:12px;color:var(--text3);font-style:italic">None — ask Porter to add inputs</div>';
+    leftParts.push(s);
   }
-  h += '</div>';
-  // Outputs
-  h += '<div style="margin-bottom:20px">';
-  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Outputs</div>';
-  if (outputs.length) {
+  // LEFT: Outputs
+  if (hasOutputs) {
+    var s = '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Outputs</div>';
     outputs.forEach(function(c) {
-      h += '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px">';
-      h += '<span style="color:var(--text3);font-size:10px">📦</span>';
-      h += '<span style="color:var(--text)">' + escHtml(c.title || 'Untitled') + '</span>';
-      h += '</div>';
+      s += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
+      s += '<span style="color:var(--text)">' + escHtml(c.title || 'Untitled') + '</span>';
+      s += '</div>';
     });
-  } else {
-    h += '<div style="font-size:12px;color:var(--text3);font-style:italic">None — ask Porter to add outputs</div>';
+    leftParts.push(s);
   }
-  h += '</div>';
-  // To-Do
-  h += '<div style="margin-bottom:20px">';
-  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">To-Do</div>';
-  if (tasks.length) {
-    // In-progress first, then todo, then done
+  // LEFT: To-Do
+  if (hasTasks) {
+    var s = '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">To-Do</div>';
     var orderedTasks = ipTasks.concat(todoTasks).concat(doneTasks);
     orderedTasks.forEach(function(t) {
       var isDone = t.status === 'done';
       var isIP = t.status === 'in_progress';
-      h += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">';
-      h += '<span style="font-size:10px;color:' + (isDone ? '#22c55e' : (isIP ? '#f59e0b' : 'var(--text3)')) + '">' + (isDone ? '✓' : (isIP ? '◉' : '○')) + '</span>';
-      h += '<span style="color:' + (isDone ? 'var(--text3)' : 'var(--text)') + ';' + (isDone ? 'text-decoration:line-through' : '') + '">' + escHtml(t.title) + '</span>';
-      if (t.owner) h += '<span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(t.owner) + '</span>';
-      h += '</div>';
+      s += '<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px">';
+      s += '<span style="color:' + (isDone ? '#22c55e' : (isIP ? '#f59e0b' : 'var(--text3)')) + ';font-size:10px">' + (isDone ? '✓' : (isIP ? '◉' : '○')) + '</span>';
+      s += '<span style="color:' + (isDone ? 'var(--text3)' : 'var(--text)') + ';' + (isDone ? 'text-decoration:line-through' : '') + '">' + escHtml(t.title) + '</span>';
+      if (t.owner) s += '<span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(t.owner) + '</span>';
+      s += '</div>';
     });
-  } else {
-    h += '<div style="font-size:12px;color:var(--text3);font-style:italic">No tasks — ask Porter to add to-dos</div>';
+    leftParts.push(s);
   }
-  h += '</div>';
-  h += '</div>';
-  // ── Right column ──
-  h += '<div>';
-  // Team
-  h += '<div style="margin-bottom:20px">';
-  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Team</div>';
-  if (workers.length || collabs.length) {
+  // RIGHT: Team
+  if (hasTeam) {
+    var s = '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Team</div>';
     workers.forEach(function(wid) {
       var wName = wid;
-      try {
-        var p = (_personas || []).find(function(p){return p.id===wid});
-        if (p) wName = p.name || wid;
-      } catch(e) {}
-      h += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
-      h += '<span style="font-size:10px">🤖</span>';
-      h += '<span style="color:var(--text)">' + escHtml(wName) + '</span>';
-      h += '<span style="font-size:10px;color:var(--text3)">worker</span>';
-      h += '</div>';
+      try { var p = (_personas || []).find(function(x){return x.id===wid}); if (p) wName = p.name || wid; } catch(e) {}
+      s += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
+      s += '<span style="color:var(--text)">' + escHtml(wName) + '</span>';
+      s += '<span style="font-size:10px;color:var(--text3)">worker</span>';
+      s += '</div>';
     });
     collabs.forEach(function(c) {
-      h += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
-      h += '<span style="font-size:10px">👤</span>';
-      h += '<span style="color:var(--text)">' + escHtml(c.username) + '</span>';
-      h += '<span style="font-size:10px;color:var(--text3)">' + escHtml(c.role || 'member') + '</span>';
-      h += '</div>';
+      s += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
+      s += '<span style="color:var(--text)">' + escHtml(c.display_name || c.username) + '</span>';
+      s += '<span style="font-size:10px;color:var(--text3)">' + escHtml(c.role || 'member') + '</span>';
+      s += '</div>';
     });
-  } else {
-    h += '<div style="font-size:12px;color:var(--text3);font-style:italic">No team — ask Porter to assign workers</div>';
+    rightParts.push(s);
   }
-  h += '</div>';
-  // Files
-  h += '<div style="margin-bottom:20px">';
-  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Files</div>';
-  if (files.length) {
+  // RIGHT: Files
+  if (hasFiles) {
+    var s = '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Files</div>';
     files.forEach(function(f) {
-      h += '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px">';
-      h += '<span style="font-size:10px;color:var(--text3)">📎</span>';
-      h += '<span style="color:var(--text)">' + escHtml(f.title || f.file_path || 'File') + '</span>';
-      h += '</div>';
+      s += '<div style="padding:3px 0;font-size:12px;color:var(--text)">' + escHtml(f.title || f.file_path || 'File') + '</div>';
     });
-  } else {
-    h += '<div style="font-size:12px;color:var(--text3);font-style:italic">No files yet</div>';
+    rightParts.push(s);
   }
-  h += '</div>';
-  // Progress
-  h += '<div style="margin-bottom:20px">';
-  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Progress</div>';
-  if (milestones.length) {
+  // RIGHT: Milestones
+  if (hasMilestones) {
+    var s = '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Milestones</div>';
     milestones.forEach(function(m) {
-      h += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
-      h += '<span style="font-size:10px;color:' + (m.done ? '#22c55e' : 'var(--text3)') + '">' + (m.done ? '✓' : '○') + '</span>';
-      h += '<span style="color:' + (m.done ? 'var(--text3)' : 'var(--text)') + '">' + escHtml(m.title || m.name || '?') + '</span>';
-      h += '</div>';
+      s += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
+      s += '<span style="color:' + (m.done ? '#22c55e' : 'var(--text3)') + ';font-size:10px">' + (m.done ? '✓' : '○') + '</span>';
+      s += '<span style="color:var(--text)">' + escHtml(m.title || m.name || '?') + '</span>';
+      s += '</div>';
     });
-  } else if (tasks.length) {
-    // Show task-based progress
-    var pct = tasks.length ? Math.round(doneTasks.length / tasks.length * 100) : 0;
-    h += '<div style="height:4px;background:var(--border);border-radius:2px;margin:8px 0"><div style="height:100%;width:' + pct + '%;background:#22c55e;border-radius:2px"></div></div>';
-    h += '<div style="font-size:11px;color:var(--text3)">' + pct + '% complete (' + doneTasks.length + '/' + tasks.length + ' tasks)</div>';
-  } else {
-    h += '<div style="font-size:12px;color:var(--text3);font-style:italic">No milestones or tasks yet</div>';
+    rightParts.push(s);
   }
-  h += '</div>';
-  h += '</div>';
-  h += '</div>';
-  // ── Timeline ──
-  if (activity.length) {
-    h += '<div style="margin-top:20px">';
-    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Timeline</div>';
-    activity.slice(0, 10).forEach(function(ev) {
-      var ts = ev.ts ? new Date(ev.ts * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
-      h += '<div style="display:flex;gap:8px;padding:4px 0;font-size:11px;border-bottom:1px solid color-mix(in srgb, var(--border) 50%, transparent)">';
-      h += '<span style="color:var(--text3);min-width:90px">' + ts + '</span>';
-      h += '<span style="color:var(--text)">' + escHtml(ev.summary || ev.text || ev.action || '') + '</span>';
+  // Render grid — adapt columns based on content
+  if (leftParts.length || rightParts.length) {
+    if (leftParts.length && rightParts.length) {
+      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">';
+      h += '<div style="display:flex;flex-direction:column;gap:20px">' + leftParts.join('') + '</div>';
+      h += '<div style="display:flex;flex-direction:column;gap:20px">' + rightParts.join('') + '</div>';
+      h += '</div>';
+    } else {
+      // Single column if only one side has content
+      var parts = leftParts.concat(rightParts);
+      h += '<div style="display:flex;flex-direction:column;gap:20px;max-width:480px">';
+      parts.forEach(function(p) { h += p; });
+      h += '</div>';
+    }
+  }
+  // ── Timeline — compact, at the bottom ──
+  if (hasActivity) {
+    h += '<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">';
+    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Recent</div>';
+    activity.slice(0, 8).forEach(function(ev) {
+      var ts = ev.ts ? new Date(ev.ts * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short'}) : '';
+      h += '<div style="display:flex;gap:8px;padding:2px 0;font-size:11px">';
+      h += '<span style="color:var(--text3);min-width:50px">' + ts + '</span>';
+      h += '<span style="color:var(--text2)">' + escHtml((ev.summary || ev.text || ev.action || '').slice(0, 120)) + '</span>';
       h += '</div>';
     });
     h += '</div>';
   }
   el.innerHTML = h;
 }
+
 
 async function _renderProjTabContent() { return _renderProjectPage(); }
 async function _renderProjTabContent_LEGACY() {
@@ -37654,8 +37659,9 @@ async function _popupChatSend() {
   if (window._projCurrent && _currentModule === 'projects') {
     _popupProjectId = window._projCurrent.id || '';
     _popupChatId = 'popup-proj-' + _popupProjectId;
-    ctxParts.push('User is in project "' + (window._projCurrent.name || '') + '" (' + (_projTab || 'now') + ' view).');
-    if (window._projCurrent.description) ctxParts.push('Project: ' + window._projCurrent.description);
+    ctxParts.push('User is viewing project "' + (window._projCurrent.name || '') + '".');
+    if (window._projCurrent.objective) ctxParts.push('Objective: ' + window._projCurrent.objective);
+    else if (window._projCurrent.description) ctxParts.push('Project: ' + window._projCurrent.description);
   } else {
     ctxParts.push('User is on ' + (_currentModule || 'main') + '.');
     // Inject page-specific context so Porter can "see" what's on screen
@@ -37737,7 +37743,11 @@ async function _popupChatSend() {
             else if (_currentModule === 'projects') setTimeout(loadProjects, 300);
             else if (_currentModule === 'people') setTimeout(loadPeople, 300);
             else if (_currentModule === 'memory') setTimeout(loadMemory, 300);
-            else if (_currentModule === 'agents') setTimeout(function() { switchModule('agents'); }, 300);
+            else if (_currentModule === 'agents') setTimeout(function() { loadPersonas(); switchModule('agents'); }, 300);
+            // Always reload projects if a project action was executed
+            if (!_hasDelete && data.actions_executed.some(function(a) { return a.ok; })) {
+              setTimeout(loadProjects, 500);
+            }
           }
           _popupChatRender();
           es.close();
@@ -44915,7 +44925,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.5"})
+            self.reply_json({"v": "0.33.6"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -45077,7 +45087,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.33.5"
+                health["porter_version"] = "0.33.6"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -47400,7 +47410,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.5'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.6'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -51447,7 +51457,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.33.5"
+                _ws_health["porter_version"] = "0.33.6"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -54437,7 +54447,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.5 ready (localhost only)")
+    print(f"\n  Porter v0.33.6 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
