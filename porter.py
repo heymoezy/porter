@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.2 — Chat action fix, CRM redesign, Escape key nav"""
+"""Porter v0.33.3 — Chat action fix, CRM redesign, Escape key nav"""
 
 
 import email
@@ -781,6 +781,7 @@ def _db_init():
         "ALTER TABLE personas ADD COLUMN portrait_asset_path TEXT DEFAULT ''",
         "CREATE TABLE IF NOT EXISTS project_content (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, content_type TEXT NOT NULL DEFAULT 'text', title TEXT DEFAULT '', body TEXT DEFAULT '', url TEXT DEFAULT '', file_path TEXT DEFAULT '', mime_type TEXT DEFAULT '', file_size INTEGER DEFAULT 0, sort_order INTEGER DEFAULT 0, created_at REAL DEFAULT 0)",
         "CREATE INDEX IF NOT EXISTS idx_project_content_project ON project_content(project_id, sort_order, created_at DESC)",
+        "ALTER TABLE project_content ADD COLUMN category TEXT NOT NULL DEFAULT 'general'",
         "CREATE TABLE IF NOT EXISTS project_collaborators (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, username TEXT NOT NULL, role TEXT DEFAULT 'member', added_by TEXT DEFAULT '', added_at REAL DEFAULT 0, UNIQUE(project_id, username))",
         "ALTER TABLE users ADD COLUMN onboarded INTEGER DEFAULT 0",
         "CREATE INDEX IF NOT EXISTS idx_proj_collab_project ON project_collaborators(project_id)",
@@ -11467,80 +11468,65 @@ def _project_chat_action_prompt(project_id: str) -> str:
             collab_str = ", ".join(f"{r[0]} ({r[1]})" for r in _cr)
     except Exception:
         pass
+    # V2: Inputs/Outputs from project_content
+    _inputs_str = "none"
+    _outputs_str = "none"
+    try:
+        _ioc = _db_conn()
+        _inputs = _ioc.execute("SELECT title, content_type FROM project_content WHERE project_id=? AND category='input' ORDER BY sort_order", (project_id,)).fetchall()
+        _outputs = _ioc.execute("SELECT title, content_type FROM project_content WHERE project_id=? AND category='output' ORDER BY sort_order", (project_id,)).fetchall()
+        _ioc.close()
+        if _inputs:
+            _inputs_str = ", ".join(f"{r[0]} ({r[1]})" for r in _inputs)
+        if _outputs:
+            _outputs_str = ", ".join(f"{r[0]} ({r[1]})" for r in _outputs)
+    except Exception:
+        pass
     ctx = (
         f"\n--- Project Context ---\n"
         f"Project: {proj.get('name', 'Untitled')} (id: {project_id})\n"
-        f"Type: {proj.get('type', 'custom')} | Status: {proj.get('status', 'active')}\n"
-        f"Description: {proj.get('description', 'none')}\n"
-        f"Success criteria: {proj.get('success_bar', 'none')}\n"
-        f"Start: {proj.get('start_date', 'not set')} | Deadline: {proj.get('deadline', 'not set')}\n"
-        f"Plan: {proj.get('plan', 'none')[:200]}\n"
-        f"Workstreams: {phases_str}\n"
-        f"Schedule: {sched_str}\n"
-        f"Autonomy: {autonomy_str}\n"
-        f"Quality gates: {qg_str}\n"
-        f"Workers: {', '.join(worker_names) or 'none assigned'}\n"
-        f"Milestones: {ms_str}\n"
-        f"Links: {links_str}\n"
-        f"Tasks: {_task_str}\n"
-        f"People: {collab_str}\n\n"
+        f"Status: {proj.get('status', 'active')}\n"
+        f"Objective: {proj.get('objective', proj.get('description', 'none'))}\n"
+        f"Inputs: {_inputs_str}\n"
+        f"Outputs: {_outputs_str}\n"
+        f"Team: {', '.join(worker_names) or 'none'}"  # noqa
+        f"{(' | People: ' + collab_str) if collab_str != 'none' else ''}\n"
+        f"To-Do: {_task_str}\n"
+        f"Progress: milestones {ms_str}\n"
+        f"Links: {links_str}\n\n"
         "You CAN execute project actions. When the user asks you to change something, "
         "DO IT immediately by including action block(s) in your response. You can include MULTIPLE action blocks. Format:\n"
         '<porter-action>{"action":"ACTION_NAME", ...params}</porter-action>\n\n'
         "Available actions:\n"
-        "PROJECT SETTINGS:\n"
+        "PROJECT:\n"
         '  rename: {"action":"rename","name":"..."}\n'
-        '  update_description: {"action":"update_description","description":"..."}\n'
-        '  set_success_bar: {"action":"set_success_bar","text":"..."}\n'
-        '  set_type: {"action":"set_type","type":"website|app|presentation|research|content|design|ops|custom"}\n'
+        '  set_objective: {"action":"set_objective","text":"one clear sentence"}\n'
         '  set_status: {"action":"set_status","status":"active|paused|completed|archived"}\n'
         '  set_deadline: {"action":"set_deadline","deadline":"YYYY-MM-DD"}\n'
-        '  set_start_date: {"action":"set_start_date","date":"YYYY-MM-DD"}\n'
-        '  set_plan: {"action":"set_plan","plan":"..."}\n'
-        "MILESTONES:\n"
+        "PROGRESS:\n"
         '  add_milestone: {"action":"add_milestone","name":"...","due":"YYYY-MM-DD"}  (due is optional)\n'
         '  toggle_milestone: {"action":"toggle_milestone","name":"exact milestone name"}\n'
-        '  remove_milestone: {"action":"remove_milestone","name":"exact milestone name"}\n'
-        "WORKERS:\n"
+        "TEAM:\n"
         '  create_worker: {"action":"create_worker","name":"...","role":"..."}\n'
         '  assign_worker: {"action":"assign_worker","worker_name":"exact name or ID prefix"}\n'
         '  unassign_worker: {"action":"unassign_worker","worker_name":"exact name or ID prefix"}\n'
         "LINKS:\n"
         '  add_link: {"action":"add_link","kind":"repo|live_url|docs|custom","url":"...","label":"..."}\n'
         '  remove_link: {"action":"remove_link","kind":"repo|live_url|docs|custom","url":"..."}\n'
-        "TASKS:\n"
-        '  add_task: {"action":"add_task","title":"...","workstream":"optional workstream name","owner":"optional","due":"YYYY-MM-DD","priority":"low|medium|high|urgent"}\n'
+        "TO-DO:\n"
+        '  add_task: {"action":"add_task","title":"...","owner":"optional","due":"YYYY-MM-DD","priority":"low|medium|high|urgent"}\n'
         '  update_task: {"action":"update_task","title":"exact task title","status":"todo|in_progress|done"}\n'
         '  remove_task: {"action":"remove_task","title":"exact task title"}\n'
-        "CONTENT/DELIVERABLES:\n"
-        '  add_content: {"action":"add_content","type":"text|link","title":"...","body":"...","url":"..."}\n'
-        '  remove_content: {"action":"remove_content","title":"exact title to remove"}\n'
-        "PEOPLE:\n"
-        '  add_collaborator: {"action":"add_collaborator","username":"...","role":"owner|editor|viewer|member"}\n'
+        "INPUTS (what the project needs):\n"
+        '  add_input: {"action":"add_input","title":"...","type":"text|link|document","body":"...","url":"..."}\n'
+        '  remove_input: {"action":"remove_input","title":"exact title"}\n'
+        "OUTPUTS (what the project produces):\n"
+        '  add_output: {"action":"add_output","title":"...","type":"text|document","body":"..."}\n'
+        '  remove_output: {"action":"remove_output","title":"exact title"}\n'
+        '  add_collaborator: {"action":"add_collaborator","username":"...","role":"member|editor|viewer"}\n'
         '  remove_collaborator: {"action":"remove_collaborator","username":"..."}\n'
         "NOTES:\n"
         '  add_note: {"action":"add_note","text":"..."}\n'
-        "DIRECTIVES:\n"
-        '  add_directive: {"action":"add_directive","text":"...","scope":"project"}  (scope: project or global)\n'
-        '  dismiss_directive: {"action":"dismiss_directive","id":0}  (use directive ID from context)\n'
-        "WORKSTREAMS (parallel work tracks — each can have deliverables):\n"
-        '  add_phase: {"action":"add_phase","name":"...","order":0,"done_when":"..."}  (adds a workstream; order/done_when optional)\n'
-        '  update_phase: {"action":"update_phase","name":"exact workstream name","status":"pending|active|done","owner":"worker name"}  (status/owner optional)\n'
-        '  remove_phase: {"action":"remove_phase","name":"exact workstream name"}\n'
-        '  add_workstream_deliverable: {"action":"add_workstream_deliverable","workstream":"exact workstream name","deliverable":"deliverable name"}\n'
-        '  toggle_workstream_deliverable: {"action":"toggle_workstream_deliverable","workstream":"exact workstream name","deliverable":"exact deliverable name"}\n'
-        "SCHEDULE:\n"
-        '  set_cadence: {"action":"set_cadence","cadence":"none|daily|weekly|biweekly|monthly"}\n'
-        '  set_next_review: {"action":"set_next_review","date":"YYYY-MM-DD"}\n'
-        '  add_checkpoint: {"action":"add_checkpoint","date":"YYYY-MM-DD","label":"..."}\n'
-        '  toggle_checkpoint: {"action":"toggle_checkpoint","label":"exact label"}\n'
-        '  remove_checkpoint: {"action":"remove_checkpoint","label":"exact label"}\n'
-        "AUTONOMY:\n"
-        '  set_autonomy: {"action":"set_autonomy","mode":"manual|guided|autonomous","can_create_workers":true,"can_reassign":true,"can_update_state":true}  (toggles optional)\n'
-        "QUALITY GATES:\n"
-        '  add_quality_gate: {"action":"add_quality_gate","item":"..."}\n'
-        '  toggle_quality_gate: {"action":"toggle_quality_gate","item":"exact item text"}\n'
-        '  remove_quality_gate: {"action":"remove_quality_gate","item":"exact item text"}\n'
         "DANGER:\n"
         '  delete_project: {"action":"delete_project"}  (ask for confirmation first!)\n\n'
         "Rules:\n"
@@ -11691,7 +11677,8 @@ def _execute_module_action(action_name: str, data: dict) -> dict:
                 "name": name,
                 "type": data.get('type', 'custom'),
                 "owner": "",
-                "description": data.get('description', ''),
+                "objective": data.get('objective', ''),
+                "description": data.get('description', data.get('objective', '')),
                 "status": "active",
                 "success_bar": "",
                 "milestones": [],
@@ -11758,6 +11745,12 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
                 proj["description"] = str(data["description"]).strip()
                 save_config(_config)
                 results.append({"ok": True, "action": "update_description"})
+
+            elif action == "set_objective" and data.get("text"):
+                proj["objective"] = str(data["text"]).strip()
+                proj["description"] = proj["objective"]  # keep in sync
+                save_config(_config)
+                results.append({"ok": True, "action": "set_objective"})
 
             elif action == "set_success_bar" and data.get("text"):
                 proj["success_bar"] = str(data["text"]).strip()
@@ -11945,11 +11938,16 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
                     results.append({"ok": False, "error": "Link not found"})
 
             # ── Content / Deliverables ──
-            elif action == "add_content":
+            elif action in ("add_content", "add_input", "add_output"):
                 _ctype = str(data.get("type", "text")).strip()
                 _ctitle = str(data.get("title", "")).strip()
                 _cbody = str(data.get("body", "")).strip()
                 _curl = str(data.get("url", "")).strip()
+                _cat = "general"
+                if action == "add_input":
+                    _cat = "input"
+                elif action == "add_output":
+                    _cat = "output"
                 if not _ctitle and not _cbody and not _curl:
                     results.append({"ok": False, "error": "title, body, or url required"})
                 else:
@@ -11957,26 +11955,31 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
                     conn = _db_conn()
                     try:
                         conn.execute(
-                            "INSERT INTO project_content (id, project_id, content_type, title, body, url, created_at) VALUES (?,?,?,?,?,?,?)",
-                            (_cid, project_id, _ctype, _ctitle, _cbody, _curl, time.time())
+                            "INSERT INTO project_content (id, project_id, content_type, category, title, body, url, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                            (_cid, project_id, _ctype, _cat, _ctitle, _cbody, _curl, time.time())
                         )
                         conn.commit()
                     finally:
                         conn.close()
-                    log.info("Chat action: added content '%s' to project %s", _ctitle or _curl, project_id)
-                    results.append({"ok": True, "action": "add_content", "id": _cid, "title": _ctitle})
+                    log.info("Chat action: added %s '%s' to project %s", _cat, _ctitle or _curl, project_id)
+                    results.append({"ok": True, "action": action, "id": _cid, "title": _ctitle})
 
-            elif action == "remove_content" and data.get("title"):
+            elif action in ("remove_content", "remove_input", "remove_output") and data.get("title"):
                 _ct = str(data["title"]).strip().lower()
+                _cat_filter = ""
+                if action == "remove_input":
+                    _cat_filter = " AND category='input'"
+                elif action == "remove_output":
+                    _cat_filter = " AND category='output'"
                 conn = _db_conn()
                 try:
-                    _row = conn.execute("SELECT id FROM project_content WHERE project_id=? AND LOWER(title)=?", (project_id, _ct)).fetchone()
+                    _row = conn.execute(f"SELECT id FROM project_content WHERE project_id=? AND LOWER(title)=?{_cat_filter}", (project_id, _ct)).fetchone()
                     if _row:
                         conn.execute("DELETE FROM project_content WHERE id=?", (_row[0],))
                         conn.commit()
-                        results.append({"ok": True, "action": "remove_content", "title": data["title"]})
+                        results.append({"ok": True, "action": action, "title": data["title"]})
                     else:
-                        results.append({"ok": False, "error": f"Content not found: {data['title']}"})
+                        results.append({"ok": False, "error": f"Not found: {data['title']}"})
                 finally:
                     conn.close()
 
@@ -15583,7 +15586,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.2</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.3</div>
   </div>
 </aside>
 
@@ -16724,6 +16727,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.3', date:'2026-03-17', notes:["Projects V2 backend: objective field, Inputs/Outputs categories","New actions: set_objective, add_input, add_output, remove_input, remove_output","Chat prompt: V2 vocabulary (Objective/Inputs/Outputs/To-Do/Team/Progress)","Simplified project creation: name + objective only, no templates","Templates only applied when explicitly requested","Removed overmodeled prompt sections: workstreams, schedule, autonomy, quality gates"] },
   { ver:'v0.33.2', date:'2026-03-17', notes:["Fix: memory signals counter only counts active (was showing dismissed)","Projects: removed stats bar (redundant clutter)"] },
   { ver:'v0.33.1', date:'2026-03-17', notes:["Fix: chat actions now work from any module (persona_name always sent)","Fix: Escape key closes project and CRM detail views","CRM: single-column profiles, all fields editable inline","CRM: removed button zoo (Edit/Add Note) — use chat or click fields","New action: crm_update_contact via chat","Chat context: full contact profile injected for People module","Fix: crm_add_interaction column name (body not summary)","Fix: crm_create_contact schema (removed nonexistent company_name column)"] },
   { ver:'v0.33.0', date:'2026-03-17', notes:["Universal chat actions from People/Memory/Agents","CRM: full-page contact/company views, inline editing","CRM: + Person / + Company header buttons","AI Agents: + Create from Template in header","Timeline: vertical graphical nodes","Memory: system noise filtered","Chat context: proper display names","Dead code cleanup"] },
@@ -20095,16 +20099,12 @@ function _projOpenActiveOrFirst() {
 
 async function _projCreate() {
   _porterPrompt('New Project', [
-    {name: 'template', label: 'Template (optional)', type: 'select', options: [{value:'',label:'Blank project'},{value:'saas_app',label:'SaaS Application'},{value:'marketing_site',label:'Marketing Website'},{value:'mobile_app',label:'Mobile App'},{value:'investor_deck',label:'Investor Pitch Deck'},{value:'research_paper',label:'Research Report'},{value:'brand_launch',label:'Brand Launch'},{value:'content_campaign',label:'Content Campaign'},{value:'api_product',label:'API Product'},{value:'data_pipeline',label:'Data Pipeline'},{value:'ml_project',label:'ML Model'},{value:'product_launch',label:'Product Launch'},{value:'security_audit',label:'Security Audit'},{value:'ecommerce_store',label:'E-commerce Store'},{value:'design_system',label:'Design System'},{value:'ux_redesign',label:'UX Redesign'},{value:'fund_setup',label:'Investment Fund Setup'},{value:'compliance_program',label:'Compliance Program'},{value:'onboarding_program',label:'Employee Onboarding'},{value:'podcast_show',label:'Podcast Show'},{value:'video_series',label:'Video Series'}], defaultValue: ''},
-    {name: 'name', label: 'Project Name', placeholder: 'My Project'},
-    {name: 'description', label: 'Description', type: 'textarea', placeholder: 'What is this project about?'}
+    {name: 'name', label: 'Name', placeholder: 'Project name'},
+    {name: 'objective', label: 'Objective', type: 'textarea', placeholder: 'What should this project achieve?'}
   ], async function(vals) {
     if (!vals.name) { toast('Name required', 'err'); return; }
     try {
-      var _pt = vals.template || '';
-      var _ptype = vals.type || 'custom';
-      if (_pt && !_ptype) _ptype = 'custom';
-      var r = await api('/api/projects', {action: 'create', name: vals.name, type: _ptype, description: vals.description || '', template: _pt});
+      var r = await api('/api/projects', {action: 'create', name: vals.name, objective: vals.objective || '', description: vals.objective || ''});
       if (r && r.ok) {
         toast('Project created', 'ok');
         loadProjects();
@@ -44748,7 +44748,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.2"})
+            self.reply_json({"v": "0.33.3"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44910,7 +44910,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.33.2"
+                health["porter_version"] = "0.33.3"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -47233,7 +47233,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.2'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.3'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -51280,7 +51280,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.33.2"
+                _ws_health["porter_version"] = "0.33.3"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -52698,17 +52698,20 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 # v0.31.44 — Track project owner
                 _create_session = get_session(self.get_session_token())
                 _create_owner = _create_session.get("username", "") if _create_session else _config.get("username", "admin")
+                _raw_obj = str(data.get("objective", "")).strip()
                 proj = {
                     "id": pid,
                     "name": name,
                     "type": ptype,
                     "owner": _create_owner,
-                    "description": _raw_desc,
+                    "objective": _raw_obj or _raw_desc,
+                    "description": _raw_desc or _raw_obj,
                     "success_bar": _raw_sbar,
                     "created_at": time.time(),
                 }
-                # v0.31.67 — Auto-generate workstreams from type template
-                _tmpl = PROJECT_TYPE_TEMPLATES.get(ptype, {})
+                # v0.31.67 — Auto-generate workstreams from template (only if template explicitly requested)
+                _use_tmpl = str(data.get("template", "")).strip()
+                _tmpl = PROJECT_TYPE_TEMPLATES.get(_use_tmpl, {}) if _use_tmpl else {}
                 if _tmpl:
                     proj["phases"] = []
                     for _wi, _ws in enumerate(_tmpl.get("workstreams", [])):
@@ -54254,7 +54257,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.2 ready (localhost only)")
+    print(f"\n  Porter v0.33.3 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
