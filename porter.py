@@ -25857,6 +25857,11 @@ var _defaultSlashCmds = [
   {cmd: '/open', desc: 'Open a project by name'},
   {cmd: '/show', desc: 'Show projects (active/all)'},
   {cmd: '/find', desc: 'Search memories'},
+  {cmd: '/people', desc: 'People & contacts'},
+  {cmd: '/files', desc: 'File manager'},
+  {cmd: '/tools', desc: 'Capabilities & tools'},
+  {cmd: '/memory', desc: 'Memory dashboard'},
+  {cmd: '/logs', desc: 'System logs'},
 ];
 
 var _defaultAtTargets = [
@@ -26123,8 +26128,15 @@ function chatSend() {
         '`/show all` — All projects\n\n' +
         '**Inspect**\n' +
         '`/find <query>` — Search memories\n' +
-        '`/models` — Available AI models\n' +
+        '`/memory` — Memory dashboard\n' +
+        '`/models` — AI models\n' +
+        '`/tools` — Capabilities\n' +
+        '`/logs` — System logs\n' +
         '`/status` — System health\n\n' +
+        '**Navigate**\n' +
+        '`/people` — Contacts & team\n' +
+        '`/files` — File manager\n' +
+        '`/agents` — AI agents\n\n' +
         '**Utility**\n' +
         '`/clear` — Clear chat\n' +
         '`/version` — Porter version\n' +
@@ -26342,6 +26354,41 @@ function chatSend() {
         _chatMessages[_chatMessages.length-1].content = lines.join('\n');
         renderChatMessages();
       });
+      return;
+    }
+
+    if (cmd === '/people') {
+      switchModule('people');
+      _chatMessages.push({ role: 'assistant', content: 'Switched to **People**. Manage contacts, team, and companies.', model: 'porter' });
+      renderChatMessages();
+      return;
+    }
+
+    if (cmd === '/files') {
+      switchModule('allfiles');
+      _chatMessages.push({ role: 'assistant', content: 'Switched to **Files**. Browse and manage project files.', model: 'porter' });
+      renderChatMessages();
+      return;
+    }
+
+    if (cmd === '/tools') {
+      switchModule('capabilities');
+      _chatMessages.push({ role: 'assistant', content: 'Switched to **Tools**. View detected capabilities and connections.', model: 'porter' });
+      renderChatMessages();
+      return;
+    }
+
+    if (cmd === '/memory') {
+      switchModule('memory');
+      _chatMessages.push({ role: 'assistant', content: 'Switched to **Memory**. Review directives, concepts, and signals.', model: 'porter' });
+      renderChatMessages();
+      return;
+    }
+
+    if (cmd === '/logs') {
+      switchModule('logs');
+      _chatMessages.push({ role: 'assistant', content: 'Switched to **Logs**. Live tail of system events.', model: 'porter' });
+      renderChatMessages();
       return;
     }
 
