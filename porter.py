@@ -37228,6 +37228,32 @@ async function _popupChatSend() {
     if (window._projCurrent.description) ctxParts.push('Project: ' + window._projCurrent.description);
   } else {
     ctxParts.push('User is on ' + (_currentModule || 'main') + '.');
+    // Inject page-specific context so Porter can "see" what's on screen
+    if (_currentModule === 'memory') {
+      var memStats = document.querySelectorAll('#memory-dashboard div[title]');
+      if (memStats.length) {
+        var vis = [];
+        memStats.forEach(function(el) { vis.push(el.title.split(' —')[0] + ': ' + (el.querySelector('div:last-child') || {}).textContent); });
+        ctxParts.push('Memory dashboard shows: ' + vis.join(', ') + '.');
+      }
+      var kindViewer = document.getElementById('mem-kind-viewer');
+      if (kindViewer && kindViewer.innerHTML.trim()) {
+        var kindItems = kindViewer.querySelectorAll('div[style*="line-height"]');
+        if (kindItems.length) {
+          var previews = [];
+          kindItems.forEach(function(el, i) { if (i < 5) previews.push('"' + el.textContent.slice(0, 80) + '"'); });
+          ctxParts.push('User is viewing these memories: ' + previews.join('; '));
+        }
+      }
+    }
+    if (_currentModule === 'agents') {
+      var agentCards = document.querySelectorAll('.persona-card');
+      if (agentCards.length) ctxParts.push(agentCards.length + ' agents visible.');
+    }
+    if (_currentModule === 'people') {
+      var peopleCards = document.querySelectorAll('.people-card');
+      if (peopleCards.length) ctxParts.push(peopleCards.length + ' people/companies visible.');
+    }
   }
   var fullPrompt = ctxParts.join(' ') + '\n\nUser: ' + text;
 
