@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.3 — Chat action fix, CRM redesign, Escape key nav"""
+"""Porter v0.33.4 — Chat action fix, CRM redesign, Escape key nav"""
 
 
 import email
@@ -14699,6 +14699,7 @@ body.density-compact .file-name { padding: 6px 0; }
 /* CRM detail panel (520px slide-out) */
 #people-module.detail-open #crm-filters, #people-module.detail-open #people-stats, #people-module.detail-open #crm-content { display:none !important; }
 #people-detail-view { display:none; }
+#proj-cmd-bar { display:none !important; }
 #people-module.detail-open #people-detail-view { display:block; }
 .crm-editable { cursor:pointer; padding:1px 4px; border-radius:4px; transition:background .15s; }
 .crm-editable:hover { background:color-mix(in srgb, var(--accent) 8%, transparent); }
@@ -15586,7 +15587,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.3</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.4</div>
   </div>
 </aside>
 
@@ -16727,6 +16728,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.4', date:'2026-03-17', notes:["Projects V2: single scrollable page replaces 4-tab layout","Projects V2: Inputs/Outputs/To-Do/Team/Files/Progress/Timeline blocks","Local project chat hidden — all actions through Ask Porter","File drag-drop: larger drop zone, visual feedback, global drop prevention","API: list_content action, add_content with category support"] },
   { ver:'v0.33.3', date:'2026-03-17', notes:["Projects V2 backend: objective field, Inputs/Outputs categories","New actions: set_objective, add_input, add_output, remove_input, remove_output","Chat prompt: V2 vocabulary (Objective/Inputs/Outputs/To-Do/Team/Progress)","Simplified project creation: name + objective only, no templates","Templates only applied when explicitly requested","Removed overmodeled prompt sections: workstreams, schedule, autonomy, quality gates"] },
   { ver:'v0.33.2', date:'2026-03-17', notes:["Fix: memory signals counter only counts active (was showing dismissed)","Projects: removed stats bar (redundant clutter)"] },
   { ver:'v0.33.1', date:'2026-03-17', notes:["Fix: chat actions now work from any module (persona_name always sent)","Fix: Escape key closes project and CRM detail views","CRM: single-column profiles, all fields editable inline","CRM: removed button zoo (Edit/Add Note) — use chat or click fields","New action: crm_update_contact via chat","Chat context: full contact profile injected for People module","Fix: crm_add_interaction column name (body not summary)","Fix: crm_create_contact schema (removed nonexistent company_name column)"] },
@@ -20558,47 +20560,16 @@ async function _projOpen(id) {
     sb.style.color = done ? '#22c55e' : '#3b82f6';
   }
   window._projCurrent = proj;
-  _projTab = 'now';
   var actions = document.getElementById('proj-detail-actions');
-  if (actions) {
-    actions.innerHTML = '<button class="btn btn-ghost" style="font-size:12px" onclick="_projKickoff(\'worker\')">Create Worker</button>'
-      + '<button class="btn btn-primary" style="font-size:12px" onclick="_projKickoff(\'project\')">Refine Project</button>'
-      + '<button class="btn btn-ghost" style="font-size:12px;color:var(--text3)" onclick="_projDelete(\'' + proj.id + '\')">Delete</button>';
-  }
-  _renderProjTabs();
-  _renderProjTabContent();
-}
-
-function _renderProjTabs() {
+  if (actions) actions.innerHTML = '';
   var tabs = document.getElementById('proj-detail-tabs');
-  if (!tabs) return;
-  var items = [
-    {id:'now', label:'Now'},
-    {id:'plan', label:'Plan'},
-    {id:'timeline', label:'Timeline'},
-    {id:'records', label:'Records'}
-  ];
-  tabs.innerHTML = items.map(function(t) {
-    var active = _projTab === t.id;
-    return '<button class="pd-tab' + (active ? ' active' : '') + '" onclick="_projSwitchTab(\x27' + t.id + '\x27)">' + t.label + '</button>';
-  }).join('');
+  if (tabs) tabs.innerHTML = '';
+  _renderProjectPage();
 }
 
-function _projSwitchTab(t) {
-  // Legacy aliases -> 4-view structure
-  if (t === 'overview' || t === 'chat' || t === 'tasks' || t === 'todos' || t === 'todo') t = 'now';
-  if (t === 'agents' || t === 'workers' || t === 'deliverables' || t === 'artifacts' || t === 'workflow' || t === 'schedule') t = 'plan';
-  if (t === 'activity') t = 'timeline';
-  if (t === 'people' || t === 'apps' || t === 'memory' || t === 'state' || t === 'settings') t = 'records';
-  _projTab = t;
-  if (t !== 'timeline' && _projActivityRefreshTimer) {
-    clearTimeout(_projActivityRefreshTimer);
-    _projActivityRefreshTimer = null;
-  }
-  _renderProjTabs();
-  _renderProjTabContent();
-  if (typeof _popupChatUpdateCtx === 'function') _popupChatUpdateCtx();
-}
+function _renderProjTabs() { /* V2: no tabs */ }
+
+function _projSwitchTab(t) { _renderProjectPage(); }
 
 function _projNextCard(proj, tab) {
   tab = tab || _projTab || 'overview';
@@ -20755,6 +20726,176 @@ function _projAllSuggestions(proj, tab) {
     if (done === ms.length) suggestions.push({ text:'All milestones done — mark complete.', btn:'Complete', action:"_projSetStatus('" + pid + "','completed')" });
   }
   return suggestions;
+}
+
+async function _renderProjectPage() {
+  var proj = window._projCurrent;
+  if (!proj) return;
+  var el = document.getElementById('proj-detail-content');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-indicator" style="padding:24px">Loading...</div>';
+  // Fetch all project data in parallel
+  var pid = proj.id;
+  var [tasksRes, contentRes, collabRes, actRes] = await Promise.all([
+    api('/api/workspace/tasks', {action:'list', project_id:pid}),
+    api('/api/projects', {action:'list_content', project_id:pid}).catch(function() { return {ok:true,content:[]}; }),
+    api('/api/projects', {action:'list_collaborators', project_id:pid}).catch(function() { return {ok:true,collaborators:[]}; }),
+    fetch('/api/projects/' + encodeURIComponent(pid) + '/activity?limit=15', {credentials:'same-origin'}).then(function(r){return r.json()}).catch(function(){return {events:[]};})
+  ]);
+  var tasks = (tasksRes && tasksRes.tasks) || [];
+  var allContent = (contentRes && contentRes.content) || [];
+  var inputs = allContent.filter(function(c) { return c.category === 'input'; });
+  var outputs = allContent.filter(function(c) { return c.category === 'output'; });
+  var files = allContent.filter(function(c) { return c.category === 'file' || (!c.category || c.category === 'general'); });
+  var collabs = (collabRes && collabRes.collaborators) || [];
+  var activity = (actRes && actRes.events) || [];
+  var workers = proj.assigned_personas || [];
+  var milestones = proj.milestones || [];
+  var objective = proj.objective || proj.description || '';
+  var todoTasks = tasks.filter(function(t) { return t.status === 'todo'; });
+  var ipTasks = tasks.filter(function(t) { return t.status === 'in_progress'; });
+  var doneTasks = tasks.filter(function(t) { return t.status === 'done'; });
+  var h = '';
+  // ── Header band ──
+  h += '<div style="margin-bottom:20px">';
+  if (objective) h += '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:8px">' + escHtml(objective) + '</div>';
+  // Progress summary
+  var progParts = [];
+  if (tasks.length) progParts.push(doneTasks.length + '/' + tasks.length + ' tasks done');
+  if (milestones.length) { var msDone = milestones.filter(function(m){return m.done}).length; progParts.push(msDone + '/' + milestones.length + ' milestones'); }
+  if (progParts.length) h += '<div style="font-size:11px;color:var(--text3)">' + progParts.join(' · ') + '</div>';
+  h += '</div>';
+  // ── Two-column workspace ──
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">';
+  // ── Left column ──
+  h += '<div>';
+  // Inputs
+  h += '<div style="margin-bottom:20px">';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Inputs</div>';
+  if (inputs.length) {
+    inputs.forEach(function(c) {
+      h += '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px">';
+      h += '<span style="color:var(--text3);font-size:10px">' + (c.content_type === 'link' ? '🔗' : '📄') + '</span>';
+      if (c.url) h += '<a href="' + escHtml(c.url) + '" target="_blank" style="color:var(--accent);text-decoration:none">' + escHtml(c.title || c.url) + '</a>';
+      else h += '<span style="color:var(--text)">' + escHtml(c.title || 'Untitled') + '</span>';
+      h += '</div>';
+    });
+  } else {
+    h += '<div style="font-size:12px;color:var(--text3);font-style:italic">None — ask Porter to add inputs</div>';
+  }
+  h += '</div>';
+  // Outputs
+  h += '<div style="margin-bottom:20px">';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Outputs</div>';
+  if (outputs.length) {
+    outputs.forEach(function(c) {
+      h += '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px">';
+      h += '<span style="color:var(--text3);font-size:10px">📦</span>';
+      h += '<span style="color:var(--text)">' + escHtml(c.title || 'Untitled') + '</span>';
+      h += '</div>';
+    });
+  } else {
+    h += '<div style="font-size:12px;color:var(--text3);font-style:italic">None — ask Porter to add outputs</div>';
+  }
+  h += '</div>';
+  // To-Do
+  h += '<div style="margin-bottom:20px">';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">To-Do</div>';
+  if (tasks.length) {
+    // In-progress first, then todo, then done
+    var orderedTasks = ipTasks.concat(todoTasks).concat(doneTasks);
+    orderedTasks.forEach(function(t) {
+      var isDone = t.status === 'done';
+      var isIP = t.status === 'in_progress';
+      h += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">';
+      h += '<span style="font-size:10px;color:' + (isDone ? '#22c55e' : (isIP ? '#f59e0b' : 'var(--text3)')) + '">' + (isDone ? '✓' : (isIP ? '◉' : '○')) + '</span>';
+      h += '<span style="color:' + (isDone ? 'var(--text3)' : 'var(--text)') + ';' + (isDone ? 'text-decoration:line-through' : '') + '">' + escHtml(t.title) + '</span>';
+      if (t.owner) h += '<span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(t.owner) + '</span>';
+      h += '</div>';
+    });
+  } else {
+    h += '<div style="font-size:12px;color:var(--text3);font-style:italic">No tasks — ask Porter to add to-dos</div>';
+  }
+  h += '</div>';
+  h += '</div>';
+  // ── Right column ──
+  h += '<div>';
+  // Team
+  h += '<div style="margin-bottom:20px">';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Team</div>';
+  if (workers.length || collabs.length) {
+    workers.forEach(function(wid) {
+      var wName = wid;
+      try {
+        var p = (_personas || []).find(function(p){return p.id===wid});
+        if (p) wName = p.name || wid;
+      } catch(e) {}
+      h += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
+      h += '<span style="font-size:10px">🤖</span>';
+      h += '<span style="color:var(--text)">' + escHtml(wName) + '</span>';
+      h += '<span style="font-size:10px;color:var(--text3)">worker</span>';
+      h += '</div>';
+    });
+    collabs.forEach(function(c) {
+      h += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
+      h += '<span style="font-size:10px">👤</span>';
+      h += '<span style="color:var(--text)">' + escHtml(c.username) + '</span>';
+      h += '<span style="font-size:10px;color:var(--text3)">' + escHtml(c.role || 'member') + '</span>';
+      h += '</div>';
+    });
+  } else {
+    h += '<div style="font-size:12px;color:var(--text3);font-style:italic">No team — ask Porter to assign workers</div>';
+  }
+  h += '</div>';
+  // Files
+  h += '<div style="margin-bottom:20px">';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Files</div>';
+  if (files.length) {
+    files.forEach(function(f) {
+      h += '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px">';
+      h += '<span style="font-size:10px;color:var(--text3)">📎</span>';
+      h += '<span style="color:var(--text)">' + escHtml(f.title || f.file_path || 'File') + '</span>';
+      h += '</div>';
+    });
+  } else {
+    h += '<div style="font-size:12px;color:var(--text3);font-style:italic">No files yet</div>';
+  }
+  h += '</div>';
+  // Progress
+  h += '<div style="margin-bottom:20px">';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Progress</div>';
+  if (milestones.length) {
+    milestones.forEach(function(m) {
+      h += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
+      h += '<span style="font-size:10px;color:' + (m.done ? '#22c55e' : 'var(--text3)') + '">' + (m.done ? '✓' : '○') + '</span>';
+      h += '<span style="color:' + (m.done ? 'var(--text3)' : 'var(--text)') + '">' + escHtml(m.title || m.name || '?') + '</span>';
+      h += '</div>';
+    });
+  } else if (tasks.length) {
+    // Show task-based progress
+    var pct = tasks.length ? Math.round(doneTasks.length / tasks.length * 100) : 0;
+    h += '<div style="height:4px;background:var(--border);border-radius:2px;margin:8px 0"><div style="height:100%;width:' + pct + '%;background:#22c55e;border-radius:2px"></div></div>';
+    h += '<div style="font-size:11px;color:var(--text3)">' + pct + '% complete (' + doneTasks.length + '/' + tasks.length + ' tasks)</div>';
+  } else {
+    h += '<div style="font-size:12px;color:var(--text3);font-style:italic">No milestones or tasks yet</div>';
+  }
+  h += '</div>';
+  h += '</div>';
+  h += '</div>';
+  // ── Timeline ──
+  if (activity.length) {
+    h += '<div style="margin-top:20px">';
+    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Timeline</div>';
+    activity.slice(0, 10).forEach(function(ev) {
+      var ts = ev.ts ? new Date(ev.ts * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+      h += '<div style="display:flex;gap:8px;padding:4px 0;font-size:11px;border-bottom:1px solid color-mix(in srgb, var(--border) 50%, transparent)">';
+      h += '<span style="color:var(--text3);min-width:90px">' + ts + '</span>';
+      h += '<span style="color:var(--text)">' + escHtml(ev.summary || ev.text || ev.action || '') + '</span>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+  el.innerHTML = h;
 }
 
 async function _renderProjTabContent() {
@@ -28729,7 +28870,7 @@ async function _fmSplitView(el) {
     h += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="_fmNewFolder()">+ Folder</button>';
     h += '<label class="btn btn-ghost" style="font-size:11px;padding:2px 8px;cursor:pointer">Upload<input type="file" multiple style="display:none" onchange="_fmUploadFiles(this.files)"></label>';
     h += '</div>';
-    h += '<div ondragover="event.preventDefault();this.style.background=\'color-mix(in srgb, var(--accent) 5%, var(--surface))\'" ondragleave="this.style.background=\'\'" ondrop="event.preventDefault();this.style.background=\'\';_fmUploadFiles(event.dataTransfer.files)">';
+    h += '<div style="min-height:80px" ondragover="event.preventDefault();event.stopPropagation();this.style.background=\'color-mix(in srgb, var(--accent) 5%, var(--surface))\';this.style.outline=\'2px dashed var(--accent)\';this.style.outlineOffset=\'-4px\'" ondragleave="this.style.background=\'\';this.style.outline=\'\'" ondrop="event.preventDefault();event.stopPropagation();this.style.background=\'\';this.style.outline=\'\';_fmUploadFiles(event.dataTransfer.files)">';
     if (userItems.length) {
       userItems.forEach(function(f) { h += _fmRow(f); });
     } else {
@@ -28771,6 +28912,10 @@ function _fmRow(f) {
     + '<button class="fm-act danger" onclick="event.stopPropagation();_fmDelete(\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)" title="Delete">Delete</button>'
     + '</div></div>';
 }
+
+// Prevent browser from opening dropped files
+document.addEventListener('dragover', function(e) { e.preventDefault(); });
+document.addEventListener('drop', function(e) { e.preventDefault(); });
 
 async function _fmRename(path, name) {
   var newName = await porterPrompt('Rename', 'New name:', name);
@@ -44748,7 +44893,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.3"})
+            self.reply_json({"v": "0.33.4"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44910,7 +45055,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.33.3"
+                health["porter_version"] = "0.33.4"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -47233,7 +47378,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.3'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.4'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -51280,7 +51425,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.33.3"
+                _ws_health["porter_version"] = "0.33.4"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -53093,6 +53238,19 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 save_config(_config)
                 self.reply_json({"ok": True, "linked_projects": proj["linked_projects"]})
 
+            elif action == "list_content":
+                pid = str(data.get("project_id", "")).strip()
+                if not pid:
+                    self.reply_json({"ok": False, "error": "project_id required"}, 400); return
+                conn = _db_conn()
+                try:
+                    rows = conn.execute("SELECT id, project_id, content_type, category, title, body, url, file_path, mime_type, file_size, sort_order, created_at FROM project_content WHERE project_id=? ORDER BY sort_order, created_at DESC", (pid,)).fetchall()
+                except Exception:
+                    # category column might not exist yet (pre-migration)
+                    rows = conn.execute("SELECT id, project_id, content_type, 'general' as category, title, body, url, file_path, mime_type, file_size, sort_order, created_at FROM project_content WHERE project_id=? ORDER BY sort_order, created_at DESC", (pid,)).fetchall()
+                conn.close()
+                self.reply_json({"ok": True, "content": [dict(r) for r in rows]})
+
             elif action == "add_content":
                 pid = str(data.get("project_id", "")).strip()
                 if not pid or not any(p.get("id") == pid for p in _config.get("projects", [])):
@@ -53110,8 +53268,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 now = time.time()
                 conn = _db_conn()
                 conn.execute(
-                    "INSERT INTO project_content (id, project_id, content_type, title, body, url, file_path, mime_type, file_size, sort_order, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                    (cid, pid, ctype, title, body, url, file_path, mime, fsize, int(now), now)
+                    "INSERT INTO project_content (id, project_id, content_type, category, title, body, url, file_path, mime_type, file_size, sort_order, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (cid, pid, ctype, str(data.get("category", "general")).strip() or "general", title, body, url, file_path, mime, fsize, int(now), now)
                 )
                 conn.commit(); conn.close()
                 self.reply_json({"ok": True, "content_id": cid})
@@ -54257,7 +54415,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.3 ready (localhost only)")
+    print(f"\n  Porter v0.33.4 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
