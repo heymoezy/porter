@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.86 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
+"""Porter v0.31.87 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
 
 
 import email
@@ -15185,7 +15185,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.86</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.87</div>
   </div>
 </aside>
 
@@ -16345,6 +16345,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.87', date:'2026-03-17', notes:["Memory V2 API: GET /api/memory/search, stats, review-queue, by-scope, detail","Memory V2 API: POST /api/memory/create, promote, dismiss, update, delete","Memory V2 API: full FTS5 search with scope/kind filtering","Memory V2 API: review queue for pending signals","Backward compat: /api/personas/state reads from unified memories table"] },
   { ver:'v0.31.86', date:'2026-03-17', notes:["Memory V2: unified memories table with 4-layer model (directives, concepts, episodes, signals)","Memory V2: FTS5 full-text search with auto-sync triggers","Memory V2: core memory functions (insert, search, get, promote, dismiss, stats)","Memory V2: one-time migration from legacy tables (directives, agent_notes, project_notes, cortex_memories)","Memory V2: bridge functions for backward compatibility"] },
   { ver:'v0.31.85', date:'2026-03-15', notes:["CRM: contacts, companies, interactions with full CRUD API","CRM: 3 sub-tabs (Contacts, Team, Companies) with search and type filters","CRM: 520px slide-out detail panel with social links, notes auto-save, activity timeline","CRM: project-contact linking, 6 interaction types, tag support","CRM: 4 new SQLite tables (crm_contacts, crm_companies, crm_interactions, crm_project_contacts)"] },
   { ver:'v0.31.84', date:'2026-03-15', notes:["Nav restructure (Cast/Work/Intelligence/System)","Who is Porter button in sidebar header","Kraken CLI removed, 25 real tools registered","OpenClaw integration: multi-agent routing, channels, nodes, hooks, sessions","File analysis on upload (summary, tags, word count, language)","Skill recommendation engine expanded (business, legal, support, design, data)","OpenClaw health check: gateway + channels + security + doctor","OpenAI-compatible chat completions format for gateway dispatch"] },
@@ -43712,7 +43713,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.86"})
+            self.reply_json({"v": "0.31.87"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -43874,7 +43875,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.86"
+                health["porter_version"] = "0.31.87"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -44448,6 +44449,82 @@ class Handler(BaseHTTPRequestHandler):
             cols = [d[0] for d in conn.description] if rows else []
             results = [dict(zip(cols, r)) for r in rows]
             self.reply_json({"ok": True, "results": results})
+
+        # ── Memory V2 API (GET) ──────────────────────────────────────────
+        elif parsed.path == "/api/memory/search":
+            if not self.auth_check(redirect=False): return
+            q = qs.get("q", [""])[0].strip()
+            scope = qs.get("scope", [""])[0].strip() or None
+            scope_id = qs.get("scope_id", [""])[0].strip() or None
+            kind = qs.get("kind", [""])[0].strip() or None
+            limit = min(100, max(1, int(qs.get("limit", ["20"])[0])))
+            results = _mem_search(q, scope=scope, scope_id=scope_id, kind=kind, limit=limit)
+            self.reply_json({"ok": True, "results": results, "count": len(results)})
+
+        elif parsed.path == "/api/memory/review-queue":
+            if not self.auth_check(redirect=False): return
+            limit = min(100, max(1, int(qs.get("limit", ["20"])[0])))
+            try:
+                conn = _db_conn()
+                rows = conn.execute(
+                    "SELECT id, substr(text, 1, 200) as preview, memory_kind, trust_tier, scope, scope_id, "
+                    "source_type, source_category, confidence, importance, created_at "
+                    "FROM memories WHERE review_state='pending' AND status='active' "
+                    "ORDER BY importance DESC, created_at DESC LIMIT ?", (limit,)).fetchall()
+                conn.close()
+                self.reply_json({"ok": True, "queue": [dict(r) for r in rows], "count": len(rows)})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
+
+        elif parsed.path == "/api/memory/stats":
+            if not self.auth_check(redirect=False): return
+            scope = qs.get("scope", [""])[0].strip() or None
+            scope_id = qs.get("scope_id", [""])[0].strip() or None
+            stats = _mem_stats(scope=scope, scope_id=scope_id)
+            self.reply_json({"ok": True, **stats})
+
+        elif parsed.path == "/api/memory/by-scope":
+            if not self.auth_check(redirect=False): return
+            scope = qs.get("scope", [""])[0].strip()
+            scope_id = qs.get("scope_id", [""])[0].strip()
+            kind = qs.get("kind", [""])[0].strip()
+            limit = min(200, max(1, int(qs.get("limit", ["50"])[0])))
+            try:
+                conn = _db_conn()
+                where = ["status='active'"]
+                params = []
+                if scope:
+                    where.append("scope = ?")
+                    params.append(scope)
+                if scope_id:
+                    where.append("scope_id = ?")
+                    params.append(scope_id)
+                if kind:
+                    where.append("memory_kind = ?")
+                    params.append(kind)
+                sql = ("SELECT id, memory_kind, trust_tier, scope, scope_id, text, status, review_state, "
+                       "source_type, source_id, source_category, confidence, importance, keywords, "
+                       "use_count, evidence_count, created_at, updated_at "
+                       "FROM memories WHERE " + " AND ".join(where) +
+                       " ORDER BY memory_kind, importance DESC, created_at DESC LIMIT ?")
+                params.append(limit)
+                rows = conn.execute(sql, params).fetchall()
+                conn.close()
+                self.reply_json({"ok": True, "memories": [dict(r) for r in rows], "count": len(rows)})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
+
+        elif parsed.path.startswith("/api/memory/") and not parsed.path.startswith("/api/memory/search") and not parsed.path.startswith("/api/memory/review") and not parsed.path.startswith("/api/memory/stats") and not parsed.path.startswith("/api/memory/by-scope"):
+            # GET /api/memory/<id> — full memory detail
+            if not self.auth_check(redirect=False): return
+            mem_id = parsed.path.split("/")[3] if len(parsed.path.split("/")) >= 4 else ""
+            if not mem_id or not mem_id.isdigit():
+                self.reply_json({"ok": False, "error": "Invalid memory ID"}, 400); return
+            mem = _mem_get(int(mem_id))
+            if mem:
+                self.reply_json({"ok": True, "memory": mem})
+            else:
+                self.reply_json({"ok": False, "error": "Not found"}, 404)
 
         elif parsed.path == "/api/cortex/consolidate":
             if not self.auth_check(redirect=False): return
@@ -46120,7 +46197,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.86'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.87'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -49403,6 +49480,105 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             result = _extract_learnings_preview(session_id, source, force=force)
             self.reply_json(result)
 
+        # ── Memory V2 API (POST) ─────────────────────────────────────────
+        elif parsed.path == "/api/memory/create":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            if data is None: return
+            text = str(data.get("text", "")).strip()
+            if not text:
+                self.reply_json({"ok": False, "error": "text required"}, 400); return
+            new_id = _mem_insert(
+                memory_kind=data.get("memory_kind", "signal"),
+                text=text,
+                scope=data.get("scope", "global"),
+                scope_id=data.get("scope_id", ""),
+                trust_tier=data.get("trust_tier", "low"),
+                source_type=data.get("source_type", "operator"),
+                source_id=data.get("source_id", ""),
+                source_category=data.get("source_category", ""),
+                confidence=data.get("confidence", 0.5),
+                importance=data.get("importance", 5),
+                review_state=data.get("review_state", "pending"),
+                keywords=data.get("keywords", ""))
+            if new_id:
+                self.reply_json({"ok": True, "id": new_id})
+            else:
+                self.reply_json({"ok": False, "error": "Insert failed"}, 500)
+
+        elif parsed.path == "/api/memory/promote":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            if data is None: return
+            mem_id = data.get("id")
+            target_kind = data.get("target_kind", "concept")
+            target_trust = data.get("target_trust", "medium")
+            if not mem_id:
+                self.reply_json({"ok": False, "error": "id required"}, 400); return
+            ok = _mem_promote(int(mem_id), target_kind, target_trust)
+            self.reply_json({"ok": ok})
+
+        elif parsed.path == "/api/memory/dismiss":
+            if not self.auth_check(redirect=False): return
+            data = self.read_json_body()
+            if data is None: return
+            mem_id = data.get("id")
+            if not mem_id:
+                self.reply_json({"ok": False, "error": "id required"}, 400); return
+            ok = _mem_dismiss(int(mem_id))
+            self.reply_json({"ok": ok})
+
+        elif parsed.path.startswith("/api/memory/") and parsed.path.endswith("/update"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.split("/")
+            mem_id = parts[3] if len(parts) >= 5 else ""
+            if not mem_id or not mem_id.isdigit():
+                self.reply_json({"ok": False, "error": "Invalid memory ID"}, 400); return
+            data = self.read_json_body()
+            if data is None: return
+            try:
+                conn = _db_conn()
+                sets = []
+                params = []
+                for field in ("text", "scope", "scope_id", "memory_kind", "trust_tier", "source_category", "keywords"):
+                    if field in data:
+                        sets.append(field + "=?")
+                        params.append(str(data[field]).strip())
+                if "confidence" in data:
+                    sets.append("confidence=?")
+                    params.append(max(0.0, min(1.0, float(data["confidence"]))))
+                if "importance" in data:
+                    sets.append("importance=?")
+                    params.append(max(1, min(10, int(data["importance"]))))
+                if not sets:
+                    self.reply_json({"ok": False, "error": "No fields to update"}, 400); return
+                sets.append("updated_at=strftime('%s','now')")
+                if "text" in data and "keywords" not in data:
+                    sets.append("keywords=?")
+                    params.append(",".join(sorted(_cortex_tokenize(str(data["text"]).strip()))))
+                params.append(int(mem_id))
+                conn.execute("UPDATE memories SET " + ",".join(sets) + " WHERE id=?", params)
+                conn.commit()
+                conn.close()
+                self.reply_json({"ok": True, "id": int(mem_id)})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
+
+        elif parsed.path.startswith("/api/memory/") and parsed.path.endswith("/delete"):
+            if not self.auth_check(redirect=False): return
+            parts = parsed.path.split("/")
+            mem_id = parts[3] if len(parts) >= 5 else ""
+            if not mem_id or not mem_id.isdigit():
+                self.reply_json({"ok": False, "error": "Invalid memory ID"}, 400); return
+            try:
+                conn = _db_conn()
+                conn.execute("DELETE FROM memories WHERE id=?", (int(mem_id),))
+                conn.commit()
+                conn.close()
+                self.reply_json({"ok": True, "id": int(mem_id)})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
+
         # ── Update individual cortex memory (POST) ─────────────────────────
         elif parsed.path.startswith("/api/cortex/memories/") and parsed.path.endswith("/update"):
             if not self.auth_check(redirect=False): return
@@ -50054,7 +50230,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.31.86"
+                _ws_health["porter_version"] = "0.31.87"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -53016,7 +53192,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.31.86 ready (localhost only)")
+    print(f"\n  Porter v0.31.87 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
