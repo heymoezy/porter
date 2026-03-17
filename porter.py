@@ -19015,16 +19015,19 @@ async function loadMemory() {
     var stats = statsRes || {};
     var byKind = stats.by_kind || {};
     var queue = (queueRes && queueRes.queue) || [];
+    var _isPlatAdmin = currentUser && currentUser.role === 'platform_admin';
+    if (!_isPlatAdmin) { queue = queue.filter(function(s) { return s.source_type !== 'system'; }); }
     var html = '';
     // Stat cards
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">';
-    var cards = [
-      {l:'Directives',c:byKind.directive||0,clr:'#3b82f6',tip:'Stable rules Porter always follows (high trust)'},
+    var cards = [];
+    if (_isPlatAdmin) cards.push({l:'Directives',c:byKind.directive||0,clr:'#3b82f6',tip:'Stable rules Porter always follows (high trust)'});
+    cards = cards.concat([
       {l:'Concepts',c:byKind.concept||0,clr:'#a855f7',tip:'Durable facts about your product, users, or strategy'},
       {l:'Episodes',c:byKind.episode||0,clr:'var(--text3)',tip:'Time-bound session summaries and run logs'},
       {l:'Signals',c:byKind.signal||0,clr:'#f59e0b',tip:'Observations awaiting your review (promote or dismiss)'},
-      {l:'Total',c:stats.total||0,clr:'var(--text)',tip:'All memories across all categories'}
-    ];
+      {l:'Total',c:_isPlatAdmin ? (stats.total||0) : ((byKind.concept||0)+(byKind.episode||0)+(byKind.signal||0)),clr:'var(--text)',tip:'All memories across all categories'}
+    ]);
     cards.forEach(function(s) {
       var kindKey = s.l.toLowerCase().replace(/s$/,'');
       var clickable = s.l !== 'Total' ? ' onclick="_memLoadKind(\x27' + kindKey + '\x27)" style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg);cursor:pointer" title="' + s.tip + ' — Click to view"' : ' style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg);cursor:help" title="' + s.tip + '"';
@@ -19110,7 +19113,7 @@ async function _memLoadKind(kind) {
   try {
     var res = await api('/api/memory/by-scope?kind=' + kind + '&limit=50');
     var items = (res && res.memories) || [];
-    if (!(currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin'))) { items = items.filter(function(m) { return m.source_type !== 'system'; }); }
+    if (!(currentUser && currentUser.role==='platform_admin')) { items = items.filter(function(m) { return m.source_type !== 'system'; }); }
     if (!items.length) {
       el.innerHTML = '<div style="padding:12px;color:var(--text3);font-size:12px">No ' + label.toLowerCase() + ' found.</div>';
       return;
