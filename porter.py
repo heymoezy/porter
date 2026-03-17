@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.90 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
+"""Porter v0.31.91 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
 
 
 import email
@@ -15237,7 +15237,6 @@ input[type="number"].settings-input { min-width: 60px; }
       <span class="logo-sub">Orchestrator</span>
     </div>
     <!-- notifications removed: dead code, no callers -->
-    <button onclick="_showPorterAbout()" title="Who is Porter" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;border-radius:6px;display:flex;align-items:center;transition:color .15s" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text3)'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></button>
     <button class="hbg-btn" id="hbgBtn" onclick="toggleSidebar()" title="Toggle sidebar">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="3" y1="6" x2="21" y2="6"/>
@@ -15245,6 +15244,9 @@ input[type="number"].settings-input { min-width: 60px; }
         <line x1="3" y1="18" x2="21" y2="18"/>
       </svg>
     </button>
+  </div>
+  <div style="padding:4px 12px 6px">
+    <button onclick="_showPorterAbout()" title="Who is Porter" style="width:100%;padding:7px 12px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--text2);cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px;transition:border-color .15s,color .15s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text2)'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Who is Porter</button>
   </div>
   <nav class="module-nav">
     <div class="mnav-group-label">Cast</div>
@@ -15326,7 +15328,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.90</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.91</div>
   </div>
 </aside>
 
@@ -16486,6 +16488,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.91', date:'2026-03-17', notes:["Fix: agent detail page — module header now hidden when detail panel opens","Fix: Who is Porter button moved above nav (own row between logo and Cast)"] },
   { ver:'v0.31.90', date:'2026-03-17', notes:["Memory surfaces: project overview shows memory stats (directives, concepts, signals needing review)","Memory surfaces: project state payload includes memory_stats field","Memory surfaces: file upload generates signal in memories table","Memory surfaces: project overview stat cards updated for Memory V2 terminology"] },
   { ver:'v0.31.89', date:'2026-03-17', notes:["Nav: Templates renamed to Agent Templates","Agent detail: State tab renamed to Concepts","Concepts tab: 4-section layout (Directives, Concepts, Episodes, Needs Review)","Concepts tab: inline Promote/Dismiss for review queue signals","Concepts tab: fetches from Memory V2 API"] },
   { ver:'v0.31.88', date:'2026-03-17', notes:["Memory V2: FTS5-based memory injection before dispatch (replaces file-based MEMORY.md + iterative retrieve)","Memory V2: lightweight signal extraction after dispatch (keyword-based, always on)","Memory V2: injection attribution — injected_memories tracked per dispatch","Dispatch context budget rebalanced: SOUL 55%, RULES 25%, Memory 20%"] },
@@ -31642,6 +31645,7 @@ async function selectPersona(id) {
   if (office) office.style.display = 'none';
   if (toggle) toggle.style.display = 'none';
   if (detail) detail.style.display = 'flex';
+  var agentsHdr = document.querySelector('#agents-module > .module-hdr'); if (agentsHdr) agentsHdr.style.display = 'none';
   // Close other panels
   var re = document.getElementById('rules-editor'); if (re) re.style.display = 'none';
   var wz = document.getElementById('persona-wizard'); if (wz) wz.style.display = 'none';
@@ -31734,6 +31738,7 @@ function closePersonaDetail() {
   var toggle = document.getElementById('agents-view-toggle');
   var detail = document.getElementById('agent-detail-view');
   if (detail) detail.style.display = 'none';
+  var agentsHdr = document.querySelector('#agents-module > .module-hdr'); if (agentsHdr) agentsHdr.style.display = '';
   if (toggle) toggle.style.display = '';
   if (_agentViewMode === 'office') {
     if (grid) grid.style.display = 'none';
@@ -43884,7 +43889,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.90"})
+            self.reply_json({"v": "0.31.91"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44046,7 +44051,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.90"
+                health["porter_version"] = "0.31.91"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -46368,7 +46373,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.90'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.91'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -50401,7 +50406,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.31.90"
+                _ws_health["porter_version"] = "0.31.91"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -53375,7 +53380,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.31.90 ready (localhost only)")
+    print(f"\n  Porter v0.31.91 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
