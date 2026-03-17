@@ -14369,6 +14369,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .porter-popup-chat.open { display:flex; animation:popupSlideIn .22s ease-out; }
 @keyframes popupSlideIn { from { opacity:0; transform:translateY(16px) scale(.96); } to { opacity:1; transform:translateY(0) scale(1); } }
 .porter-popup-hdr { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); background:color-mix(in srgb, var(--accent) 4%, var(--surface)); flex-shrink:0; }
+.porter-popup-avatar { width:24px; height:24px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
 .porter-popup-hdr-title { font-size:12px; font-weight:600; color:var(--text); flex:1; }
 .porter-popup-hdr-ctx { font-size:10px; color:var(--text3); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .porter-popup-close { background:none; border:none; color:var(--text3); cursor:pointer; font-size:16px; padding:2px 6px; border-radius:4px; }
@@ -14380,10 +14381,10 @@ body.density-compact .file-name { padding: 6px 0; }
 .porter-popup-input:focus { border-color:var(--accent); }
 .porter-popup-send { background:var(--accent); color:#000; border:none; border-radius:8px; padding:8px 14px; font-size:11px; font-weight:600; cursor:pointer; white-space:nowrap; flex-shrink:0; }
 .porter-popup-send:hover { filter:brightness(1.1); }
-.porter-popup-msg { padding:8px 10px; border-radius:10px; font-size:12px; line-height:1.5; white-space:pre-wrap; }
-.porter-popup-msg.user { background:color-mix(in srgb, var(--accent) 10%, var(--surface)); color:var(--text); border:1px solid color-mix(in srgb, var(--accent) 18%, transparent); align-self:flex-end; max-width:85%; }
-.porter-popup-msg.assistant { background:var(--bg); color:var(--text2); border:1px solid var(--border); max-width:90%; }
-.porter-popup-msg.pending { color:var(--text3); font-style:italic; }
+.porter-popup-msg { padding:6px 10px; border-radius:8px; font-size:12px; line-height:1.5; white-space:pre-wrap; }
+.porter-popup-msg.user { background:color-mix(in srgb, var(--accent) 8%, transparent); color:var(--text); align-self:flex-end; max-width:85%; }
+.porter-popup-msg.assistant { color:var(--text2); max-width:90%; }
+.porter-popup-msg.pending { color:var(--text3); font-style:italic; font-size:11px; }
 /* ── Guided UX — DO THIS NEXT card ────────────────────────── */
 .proj-next-card { padding:14px 16px; border:1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); border-radius:12px; background:color-mix(in srgb, var(--accent) 6%, var(--surface)); margin-bottom:4px; }
 .proj-next-label { font-size:9px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
@@ -16353,6 +16354,7 @@ input[type="number"].settings-input { min-width: 60px; }
 <div class="slash-hint" onclick="_popupChatOpen()" title="Quick chat with Porter"><kbd>/</kbd> Ask Porter</div>
 <div id="porter-popup-chat" class="porter-popup-chat">
   <div class="porter-popup-hdr">
+    <span id="popup-porter-avatar" class="porter-popup-avatar"></span>
     <span class="porter-popup-hdr-title">Porter</span>
     <span class="porter-popup-hdr-ctx" id="popup-chat-ctx"></span>
     <button class="porter-popup-close" onclick="_popupChatClose()" title="Close (Esc)">&times;</button>
@@ -18794,6 +18796,7 @@ function switchModule(name) {
   if (name === 'connections') name = 'capabilities';
   if (name === 'skills') name = 'agents';
   _currentModule = name;
+  if (typeof _popupChatUpdateCtx === 'function') _popupChatUpdateCtx();
   document.querySelectorAll('.mnav-item').forEach(el =>
     el.classList.toggle('active', el.id === 'mnav-' + name));
   var _panelName = name; if (name === 'templates') _panelName = 'agents';
@@ -20389,6 +20392,7 @@ function _projSwitchTab(t) {
   }
   _renderProjTabs();
   _renderProjTabContent();
+  if (typeof _popupChatUpdateCtx === 'function') _popupChatUpdateCtx();
 }
 
 function _projNextCard(proj, tab) {
@@ -36982,8 +36986,24 @@ function _popupChatOpen() {
       ctxEl.textContent = ctx;
     }
   }
+  // Render Porter avatar
+  var avEl = document.getElementById('popup-porter-avatar');
+  if (avEl && !avEl.innerHTML.trim()) {
+    avEl.innerHTML = _personaAvatarMarkup({ name: 'Porter', orchestrator_only: true, appearance_style: 'minecraft' }, 24);
+  }
   el.classList.add('open');
   setTimeout(function() { var inp = document.getElementById('popup-chat-input'); if (inp) inp.focus(); }, 60);
+}
+
+// Update popup chat context when switching modules/tabs
+function _popupChatUpdateCtx() {
+  var ctxEl = document.getElementById('popup-chat-ctx');
+  if (!ctxEl) return;
+  if (window._projCurrent && _currentModule === 'projects') {
+    ctxEl.innerHTML = '<span style="background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent);padding:1px 6px;border-radius:4px;font-size:9px;font-weight:600">' + escHtml(window._projCurrent.name || 'Project') + '</span> ' + escHtml((_projTab || 'now'));
+  } else if (_currentModule) {
+    ctxEl.textContent = _currentModule.charAt(0).toUpperCase() + _currentModule.slice(1);
+  }
 }
 
 function _popupChatClose() {
