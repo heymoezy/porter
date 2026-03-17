@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.89 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
+"""Porter v0.31.90 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
 
 
 import email
@@ -3829,6 +3829,17 @@ def _project_state_payload(project_id: str) -> dict:
     artifact_info = _project_artifact_listing(project_id)
     directives = _state_list_directives("project", str(project_id or "").strip())
     notes = _state_get_project_notes(project_id, limit=50)
+    mem_stats = _mem_stats(scope='project', scope_id=str(project_id or "").strip())
+    # Count pending signals for review badge
+    pending_signals = 0
+    try:
+        conn = _db_conn()
+        pending_signals = conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE review_state='pending' AND status='active' AND scope='project' AND scope_id=?",
+            (str(project_id or "").strip(),)).fetchone()[0]
+        conn.close()
+    except Exception:
+        pass
     return {
         "project": dict(proj),
         "directives": directives,
@@ -3838,6 +3849,8 @@ def _project_state_payload(project_id: str) -> dict:
             "dir": artifact_info.get("artifacts_dir", ""),
             "docs_count": artifact_info.get("project_docs_count", 0),
         },
+        "memory_stats": mem_stats,
+        "pending_signals": pending_signals,
     }
 
 
@@ -15313,7 +15326,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.89</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.90</div>
   </div>
 </aside>
 
@@ -16473,6 +16486,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.90', date:'2026-03-17', notes:["Memory surfaces: project overview shows memory stats (directives, concepts, signals needing review)","Memory surfaces: project state payload includes memory_stats field","Memory surfaces: file upload generates signal in memories table","Memory surfaces: project overview stat cards updated for Memory V2 terminology"] },
   { ver:'v0.31.89', date:'2026-03-17', notes:["Nav: Templates renamed to Agent Templates","Agent detail: State tab renamed to Concepts","Concepts tab: 4-section layout (Directives, Concepts, Episodes, Needs Review)","Concepts tab: inline Promote/Dismiss for review queue signals","Concepts tab: fetches from Memory V2 API"] },
   { ver:'v0.31.88', date:'2026-03-17', notes:["Memory V2: FTS5-based memory injection before dispatch (replaces file-based MEMORY.md + iterative retrieve)","Memory V2: lightweight signal extraction after dispatch (keyword-based, always on)","Memory V2: injection attribution — injected_memories tracked per dispatch","Dispatch context budget rebalanced: SOUL 55%, RULES 25%, Memory 20%"] },
   { ver:'v0.31.87', date:'2026-03-17', notes:["Memory V2 API: GET /api/memory/search, stats, review-queue, by-scope, detail","Memory V2 API: POST /api/memory/create, promote, dismiss, update, delete","Memory V2 API: full FTS5 search with scope/kind filtering","Memory V2 API: review queue for pending signals","Backward compat: /api/personas/state reads from unified memories table"] },
@@ -21421,14 +21435,14 @@ async function _projLoadState(pid) {
     var project = (payload && payload.project) || {};
     var activeNotes = notes.filter(function(n) { return (n.status || 'active') === 'active'; });
     var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
-      + '<div style="font-size:12px;color:var(--text2);line-height:1.6;max-width:720px">Persistent state keeps project directives, decisions, and notes separate from chat. Porter can build on this without dragging old conversations along.</div>'
+      + '<div style="font-size:12px;color:var(--text2);line-height:1.6;max-width:720px">Project memory keeps directives, concepts, and learned signals persistent across conversations. Porter builds on this knowledge automatically.</div>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptDirective(\'project\', \'' + escHtml(pid) + '\')">Add Directive</button><button class="btn btn-ghost" style="font-size:11px" onclick="_statePromptProjectNote(\'' + escHtml(pid) + '\')">Add Note</button></div>'
       + '</div>'
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'
-      + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Directives</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + directives.length + '</div></div>'
-      + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Project Notes</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + activeNotes.length + '</div></div>'
-      + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Artifacts</div><div style="font-size:26px;font-weight:800;color:#22c55e;margin-top:4px">' + Number(artifacts.count || 0) + '</div></div>'
-      + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">State Model</div><div style="font-size:18px;font-weight:800;color:var(--text);margin-top:8px">Persistent</div></div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">'
+      + '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#3b82f6">Directives</div><div style="font-size:24px;font-weight:800;color:var(--text);margin-top:4px">' + directives.length + '</div></div>'
+      + '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#a855f7">Concepts</div><div style="font-size:24px;font-weight:800;color:var(--text);margin-top:4px">' + activeNotes.length + '</div></div>'
+      + '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#22c55e">Artifacts</div><div style="font-size:24px;font-weight:800;color:var(--text);margin-top:4px">' + Number(artifacts.count || 0) + '</div></div>'
+      + '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#f59e0b">Signals</div><div style="font-size:24px;font-weight:800;color:var(--text);margin-top:4px">' + Number(payload.pending_signals || 0) + '</div>' + (Number(payload.pending_signals || 0) > 0 ? '<div style="font-size:10px;color:#f59e0b;margin-top:2px">needs review</div>' : '') + '</div>'
       + '</div>';
     if (!directives.length && !activeNotes.length) {
       html += '<div style="padding:18px;border:1px dashed var(--border);border-radius:16px;background:var(--surface);color:var(--text3);text-align:center">No durable project state has been recorded yet.<br><span style="font-size:11px">Porter will keep directives, decisions, and project notes here as the work evolves.</span></div>';
@@ -43870,7 +43884,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.89"})
+            self.reply_json({"v": "0.31.90"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44032,7 +44046,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.89"
+                health["porter_version"] = "0.31.90"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -46354,7 +46368,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.89'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.90'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -50387,7 +50401,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.31.89"
+                _ws_health["porter_version"] = "0.31.90"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -51459,6 +51473,18 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 dest.write_bytes(body)
                 # v0.31.84 — Analyze uploaded file
                 analysis = _analyze_file(dest)
+                # v0.31.90 — Memory V2: generate signal for file upload
+                try:
+                    _proj_id = rel_path.split("/")[0] if "/" in rel_path else ""
+                    _summary = analysis.get("summary", "")[:100]
+                    _tags = ",".join(analysis.get("tags", [])[:5])
+                    _mem_insert(memory_kind='signal', text=f'File uploaded: {filename} ({len(body)} bytes). {_summary}',
+                                scope='project' if _proj_id else 'global', scope_id=_proj_id,
+                                trust_tier='low', source_type='system', source_category='discovery',
+                                confidence=0.4, importance=3, review_state='pending',
+                                keywords=f'file,upload,{filename},{_tags}')
+                except Exception:
+                    pass
                 self.reply_json({"ok": True, "size": len(body), "analysis": {
                     "word_count": analysis.get("word_count", 0),
                     "lang": analysis.get("lang", ""),
@@ -53349,7 +53375,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.31.89 ready (localhost only)")
+    print(f"\n  Porter v0.31.90 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
