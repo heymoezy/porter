@@ -22412,8 +22412,8 @@ function _filterTools() {
 var _memOverview = null;
 var _memAgentStatus = {};
 
-// loadMemory stub — refreshes overview data for config panel use
-async function loadMemory() {
+// _loadMemConfigData — legacy overview data for config panel (renamed from loadMemory to avoid conflict)
+async function _loadMemConfigData() {
   try {
     const [overviewResp, statusResp] = await Promise.all([
       api('/api/memory/overview'),
@@ -22423,7 +22423,7 @@ async function loadMemory() {
       _memOverview = overviewResp;
       if (statusResp && statusResp.ok) _memAgentStatus = statusResp.status || {};
     }
-  } catch(e) { /* loadMemory error silenced */ }
+  } catch(e) { /* _loadMemConfigData error silenced */ }
 }
 
 function _memSize(bytes) {
@@ -24901,7 +24901,7 @@ async function _memCfgSave() {
     if (resp && resp.ok) {
       _memCfgOriginal = textarea.value;
       toast('Saved ' + _memCfgPath.split('/').pop());
-      loadMemory();
+      _loadMemConfigData();
     } else {
       toast((resp && resp.error) || 'Save failed', 'err');
     }
@@ -24929,7 +24929,7 @@ async function _memCfgQuickAdd(agentId) {
       toast('Added to ' + target.name);
       keyInput.value = '';
       valInput.value = '';
-      loadMemory();
+      _loadMemConfigData();
       // Refresh editor if viewing same file
       if (_memCfgPath === target.path) _memCfgViewFile(agentId, target.path);
     } else { toast((res && res.error) || 'Failed to write', 'err'); }
