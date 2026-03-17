@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.91 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
+"""Porter v0.31.92 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
 
 
 import email
@@ -2362,6 +2362,67 @@ def _cortex_consolidate_once():
         raise
     finally:
         conn.close()
+
+
+def _mem_consolidation_loop():
+    """Memory V2: background consolidation loop (every 4 hours).
+    - Decay unused memories (confidence -= 0.03)
+    - Auto-archive memories with confidence < 0.15
+    - Auto-promote signals with evidence_count >= 3 and confidence > 0.7
+    """
+    import time as _t
+    with _wf_lock:
+        _wf_registry.setdefault("mem_consolidation", {"enabled": True, "started_at": 0, "runs": []})
+        _wf_registry["mem_consolidation"]["started_at"] = _t.time()
+    while True:
+        prefs = _config.get("preferences", {})
+        hours = max(1, prefs.get("mem_consolidate_hours", 4))
+        _t.sleep(hours * 3600)
+        _t0 = _t.time()
+        try:
+            result = _mem_consolidate_once()
+            _wf_record_run("mem_consolidation", success=True, result=result, duration_s=_t.time()-_t0)
+        except Exception as e:
+            _wf_record_run("mem_consolidation", success=False, error=e, duration_s=_t.time()-_t0)
+
+
+def _mem_consolidate_once():
+    """Run one Memory V2 consolidation pass."""
+    import time as _t
+    conn = _db_conn()
+    decayed = 0
+    archived = 0
+    promoted = 0
+    try:
+        now = _t.time()
+        seven_days_ago = now - 7 * 86400
+        # Decay: confidence -= 0.03 for unused memories older than 7 days
+        conn.execute(
+            "UPDATE memories SET confidence = MAX(0, confidence - 0.03), updated_at=strftime('%s','now') "
+            "WHERE use_count = 0 AND created_at < ? AND status = 'active' AND confidence > 0.15",
+            (seven_days_ago,))
+        decayed = conn.total_changes
+        conn.commit()
+        # Auto-archive: confidence < 0.15
+        conn.execute(
+            "UPDATE memories SET status = 'archived', updated_at=strftime('%s','now') "
+            "WHERE confidence < 0.15 AND status = 'active'")
+        archived = conn.total_changes
+        conn.commit()
+        # Auto-promote: signals with evidence_count >= 3 and confidence > 0.7
+        conn.execute(
+            "UPDATE memories SET memory_kind = 'concept', trust_tier = 'medium', review_state = 'accepted', updated_at=strftime('%s','now') "
+            "WHERE memory_kind = 'signal' AND evidence_count >= 3 AND confidence > 0.7 AND status = 'active'")
+        promoted = conn.total_changes
+        conn.commit()
+    except Exception as e:
+        log.warning("Memory V2 consolidation error: %s", e)
+    finally:
+        conn.close()
+    result = f"decayed={decayed}, archived={archived}, promoted={promoted}"
+    if decayed or archived or promoted:
+        log.info("Memory V2 consolidation: %s", result)
+    return result
 
 
 def _cortex_consolidate_loop():
@@ -15280,6 +15341,10 @@ input[type="number"].settings-input { min-width: 60px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
       <span class="mnav-label">Tools</span>
     </button>
+    <button class="mnav-item" id="mnav-memory" onclick="switchModule('memory')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+      <span class="mnav-label">Memory</span>
+    </button>
     <div class="mnav-group-label">System</div>
     <button class="mnav-item" id="mnav-logs" onclick="switchModule('logs')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -15328,7 +15393,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.91</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.92</div>
   </div>
 </aside>
 
@@ -15835,7 +15900,20 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
   </div>
 
-  <div id="capabilities-module" class="module-panel">
+  <div id="memory-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Memory</span>
+      <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+        <input type="text" id="mem-search-input" placeholder="Search memories…" style="padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;width:180px;outline:none">
+        <button class="btn btn-ghost" style="font-size:11px" onclick="loadMemory()">&#8635;</button>
+      </div>
+    </div>
+    <div id="memory-dashboard" style="display:flex;flex-direction:column;gap:14px">
+      <div class="loading-indicator">Loading memory dashboard...</div>
+    </div>
+  </div>
+
+    <div id="capabilities-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Tools</span>
       <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
@@ -16488,6 +16566,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.92', date:'2026-03-17', notes:["Memory V2: consolidation loop (decay, auto-archive, auto-promote) replaces cortex loop","Memory V2: Memory nav item in Intelligence group","Memory V2: Memory dashboard with stat cards, search, review queue","Memory V2: background consolidation every 4 hours"] },
   { ver:'v0.31.91', date:'2026-03-17', notes:["Fix: agent detail page — module header now hidden when detail panel opens","Fix: Who is Porter button moved above nav (own row between logo and Cast)"] },
   { ver:'v0.31.90', date:'2026-03-17', notes:["Memory surfaces: project overview shows memory stats (directives, concepts, signals needing review)","Memory surfaces: project state payload includes memory_stats field","Memory surfaces: file upload generates signal in memories table","Memory surfaces: project overview stat cards updated for Memory V2 terminology"] },
   { ver:'v0.31.89', date:'2026-03-17', notes:["Nav: Templates renamed to Agent Templates","Agent detail: State tab renamed to Concepts","Concepts tab: 4-section layout (Directives, Concepts, Episodes, Needs Review)","Concepts tab: inline Promote/Dismiss for review queue signals","Concepts tab: fetches from Memory V2 API"] },
@@ -18806,11 +18885,106 @@ function switchModule(name) {
       _loadTemplates();
     }, projects: function() { loadProjects(); }, admin: loadAdmin,
     allfiles: loadAllFiles, files: loadLocations, policies: loadPolicy,
-    models: loadModels, tools: loadTools, audit: loadAudit, people: loadPeople, capabilities: loadCapabilities, system: loadLogs, admin: loadLogs, logs: loadLogs, settings: syncSettingsUI,
+    models: loadModels, tools: loadTools, audit: loadAudit, people: loadPeople, capabilities: loadCapabilities, memory: loadMemory, system: loadLogs, admin: loadLogs, logs: loadLogs, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
 }
 
+
+// ── Memory V2 Dashboard ──────────────────────────────────────────────────
+
+async function loadMemory() {
+  var el = document.getElementById('memory-dashboard');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-indicator">Loading memory dashboard...</div>';
+  try {
+    var [statsRes, queueRes] = await Promise.all([
+      api('/api/memory/stats'),
+      api('/api/memory/review-queue?limit=10')
+    ]);
+    var stats = statsRes || {};
+    var byKind = stats.by_kind || {};
+    var queue = (queueRes && queueRes.queue) || [];
+    var html = '';
+    // Stat cards
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">';
+    var cards = [
+      {l:'Directives',c:byKind.directive||0,clr:'#3b82f6'},
+      {l:'Concepts',c:byKind.concept||0,clr:'#a855f7'},
+      {l:'Episodes',c:byKind.episode||0,clr:'var(--text3)'},
+      {l:'Signals',c:byKind.signal||0,clr:'#f59e0b'},
+      {l:'Total',c:stats.total||0,clr:'var(--text)'}
+    ];
+    cards.forEach(function(s) {
+      html += '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:' + s.clr + '">' + s.l + '</div><div style="font-size:24px;font-weight:800;color:var(--text);margin-top:4px">' + s.c + '</div></div>';
+    });
+    html += '</div>';
+    // Search results area
+    html += '<div id="mem-search-results"></div>';
+    // Review queue
+    if (queue.length) {
+      html += '<div><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#f59e0b;margin-bottom:10px">Needs Review <span style="display:inline-block;padding:2px 8px;border-radius:99px;background:#f59e0b;color:#000;font-size:10px;font-weight:700;vertical-align:middle">' + queue.length + '</span></div>';
+      html += '<div style="display:flex;flex-direction:column;gap:8px">';
+      queue.forEach(function(s) {
+        html += '<div style="padding:12px;background:color-mix(in srgb,#f59e0b 4%, var(--bg));border:1px solid color-mix(in srgb,#f59e0b 20%, var(--border));border-radius:12px">'
+          + '<div style="font-size:12px;line-height:1.5;color:var(--text)">' + escHtml(s.preview || '') + '</div>'
+          + '<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><span style="font-size:10px;color:var(--text3)">' + escHtml(s.source_category || 'signal') + '</span>'
+          + '<div style="margin-left:auto;display:flex;gap:6px">'
+          + '<button class="btn btn-ghost btn-sm" style="font-size:10px;color:#22c55e" onclick="_memDashPromote(' + s.id + ')">Promote</button>'
+          + '<button class="btn btn-ghost btn-sm" style="font-size:10px;color:#ef4444" onclick="_memDashDismiss(' + s.id + ')">Dismiss</button>'
+          + '</div></div></div>';
+      });
+      html += '</div></div>';
+    } else {
+      html += '<div style="font-size:12px;color:var(--text3)">No signals pending review.</div>';
+    }
+    el.innerHTML = html;
+    // Wire search
+    var searchInput = document.getElementById('mem-search-input');
+    if (searchInput) {
+      searchInput.onkeydown = function(e) {
+        if (e.key === 'Enter') _memDashSearch(searchInput.value);
+      };
+    }
+  } catch(e) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load memory dashboard</div>';
+  }
+}
+
+async function _memDashSearch(q) {
+  if (!q || !q.trim()) return;
+  var el = document.getElementById('mem-search-results');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-indicator">Searching...</div>';
+  try {
+    var res = await api('/api/memory/search?q=' + encodeURIComponent(q) + '&limit=20');
+    var results = (res && res.results) || [];
+    if (!results.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text3)">No results.</div>'; return; }
+    var html = '<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Search Results (' + results.length + ')</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:6px">';
+    results.forEach(function(r) {
+      var kindColor = r.memory_kind === 'directive' ? '#3b82f6' : r.memory_kind === 'concept' ? '#a855f7' : r.memory_kind === 'episode' ? 'var(--text3)' : '#f59e0b';
+      html += '<div style="padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">'
+        + '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px"><span style="font-size:10px;padding:2px 6px;border-radius:99px;background:color-mix(in srgb,' + kindColor + ' 15%, transparent);color:' + kindColor + '">' + escHtml(r.memory_kind) + '</span>'
+        + '<span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(r.scope || 'global') + '</span></div>'
+        + '<div style="font-size:12px;color:var(--text)">' + escHtml(r.preview || '') + '</div></div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text3)">Search failed.</div>';
+  }
+}
+
+async function _memDashPromote(id) {
+  await api('/api/memory/promote', {id: id, target_kind: 'concept', target_trust: 'medium'});
+  loadMemory();
+}
+
+async function _memDashDismiss(id) {
+  await api('/api/memory/dismiss', {id: id});
+  loadMemory();
+}
 
 // ── S10: Workflow Registry UI ──────────────────────────────────────────────
 
@@ -43889,7 +44063,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.91"})
+            self.reply_json({"v": "0.31.92"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44051,7 +44225,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.91"
+                health["porter_version"] = "0.31.92"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -46373,7 +46547,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.91'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.92'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -50406,7 +50580,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.31.91"
+                _ws_health["porter_version"] = "0.31.92"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -53364,7 +53538,7 @@ if __name__ == "__main__":
             (_cap_checks_loop, "porter-cap-check"),
             (_heartbeat_loop, "porter-heartbeat"),
             (_telemetry_rollup_loop, "porter-rollup"),
-            (_cortex_consolidate_loop, "porter-cortex"),
+            (_mem_consolidation_loop, "porter-memory"),
             (_context_hygiene_loop, "porter-hygiene"),
             (_agent_eval_loop, "porter-eval"),
             (_error_self_heal_loop, "porter-self-heal"),
@@ -53380,7 +53554,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.31.91 ready (localhost only)")
+    print(f"\n  Porter v0.31.92 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
