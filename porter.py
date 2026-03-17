@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.99 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
+"""Porter v0.32.0 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
 
 
 import email
@@ -15387,7 +15387,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.99</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.32.0</div>
   </div>
 </aside>
 
@@ -15859,12 +15859,6 @@ input[type="number"].settings-input { min-width: 60px; }
       <button class="btn btn-primary" onclick="_askPorterToCreate('project')" style="font-size:12px">Start A New Project</button>
     </div>
 
-    <div id="proj-home-chat" style="margin-bottom:14px;padding:10px 14px;border:1px solid var(--border);border-radius:12px;background:var(--surface)">
-      <div style="display:flex;align-items:flex-end;gap:8px">
-        <textarea id="proj-home-input" class="pd-chat-input" placeholder="Ask Porter anything..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_homeChat()}" oninput="_chatAutoGrow(this)" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;resize:none;outline:none"></textarea>
-        <button onclick="_homeChat()" style="padding:6px 12px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:600;flex-shrink:0">Ask Porter</button>
-      </div>
-    </div>
     <div id="projects-list-view" style="padding:0">
       <div id="proj-stats-bar" style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--text3);margin-bottom:12px;padding:0 4px"></div>
       <div id="proj-grid" class="project-roster">
@@ -16573,6 +16567,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.32.0', date:'2026-03-17', notes:["Removed duplicate projects chat input — global popup chat is the single command interface","Popup chat auto-opens on first projects load","Ctrl+K / Cmd+K command palette shortcut","Dead code cleanup: removed 6 unreachable tab branches, orphaned _showPorterAbout","DO THIS NEXT card updated for 4-view tab names"] },
   { ver:'v0.31.99', date:'2026-03-17', notes:["Command grammar: /new project|agent, /open <project>, /show active|all, /find <query>","Autocomplete shows new commands with descriptions","Updated /help to include new command grammar"] },
   { ver:'v0.31.98', date:'2026-03-17', notes:["CRM: fun empty states with Porter personality for contacts, team, companies","CRM: Team tab loads user cards immediately, enriches project counts async","CRM: empty contacts/companies use guided prompts"] },
   { ver:'v0.31.97', date:'2026-03-17', notes:["Nav: Work first, AI Agents second (Projects = primary interface)","AI Agents + Templates merged into single nav item","Empty projects: Porter avatar with personality (Paperclip-style)","Empty agents: fun 'Create your first agent' state"] },
@@ -18898,7 +18893,7 @@ function switchModule(name) {
       if (_d) _d.style.display = 'none';
       _selectedPersonaId = null;
       _loadTemplates();
-    }, projects: function() { loadProjects(); }, admin: loadAdmin,
+    }, projects: function() { loadProjects(); if (!window._projPopupOpened) { window._projPopupOpened = true; setTimeout(_popupChatOpen, 400); } }, admin: loadAdmin,
     allfiles: loadAllFiles, files: loadLocations, policies: loadPolicy,
     models: loadModels, tools: loadTools, audit: loadAudit, people: loadPeople, capabilities: loadCapabilities, memory: loadMemory, system: loadLogs, admin: loadLogs, logs: loadLogs, settings: syncSettingsUI,
   };
@@ -20414,34 +20409,19 @@ function _projNextCard(proj, tab) {
   if (!hasSuccess) suggestions.push({ text:'Define what "done" looks like — set success criteria.', btn:'Set Success Bar', action:"_projSwitchTab('settings')", priority:2 });
 
   // ── Tab-specific suggestions ──
-  if (tab === 'overview' || tab === 'chat') {
+  if (tab === 'now') {
     if (!hasMs) suggestions.push({ text:'Break this into milestones to track progress.', btn:'Add Milestone', action:"_projAddMilestone('" + pid + "')", priority:3 });
     if (!hasWorkers) suggestions.push({ text:'No workers assigned yet — assign one to start making progress.', btn:'Assign Worker', action:"_projAssignAgent('" + pid + "')", btn2:'Create Worker', action2:"_projKickoff('worker')", priority:3 });
     if (!hasLinks) suggestions.push({ text:'Link a repo, live URL, or docs for quick access.', btn:'Add Link', action:"_projAddLink('" + pid + "')", priority:5 });
   }
 
-  if (tab === 'chat') {
-    if (hasWorkers && hasMs) {
-      var nextMs = ms.find(function(m) { return !m.done; });
-      if (nextMs) suggestions.push({ text:'Try asking Porter: "What should we work on next for ' + (nextMs.name || 'the next milestone') + '?"', btn:'Focus Chat', action:"_projChatPrefill('What should we work on next for " + (nextMs.name || 'the next milestone') + "?')", priority:4 });
-    }
-    if (!hasWorkers) suggestions.push({ text:'Ask Porter to create a specialist worker for this project.', btn:'Ask Porter', action:"_projChatPrefill('Create a worker for this project')", priority:3 });
-  }
 
-  if (tab === 'workers') {
-    if (!hasWorkers) suggestions.push({ text:'Every project needs workers. Assign an existing agent or let Porter create one.', btn:'Assign Worker', action:"_projAssignAgent('" + pid + "')", btn2:'Create Worker', action2:"_projKickoff('worker')", priority:1 });
-    if (hasWorkers && workers.length === 1) suggestions.push({ text:'Consider adding more specialists — a reviewer, a researcher, or a QA agent.', btn:'Create Worker', action:"_projKickoff('worker')", priority:4 });
-    if (hasWorkers && !hasMs) suggestions.push({ text:'Workers need milestones to know what to work on.', btn:'Add Milestone', action:"_projAddMilestone('" + pid + "')", priority:3 });
-  }
 
-  if (tab === 'tasks') {
-    suggestions.push({ text:'Add tasks to track what needs to be done.', btn:'Add Task', action:"document.getElementById('proj-task-input').focus()", priority:1 });
-  }
 
-  if (tab === 'deliverables') {
-    suggestions.push({ text:'Upload artifacts or add content to document project outputs.', btn:'Add Text', action:"_projAddContent('" + pid + "','text')", btn2:'Upload', action2:"_projUploadFile('" + pid + "')", priority:4 });
-    if (!hasMs) suggestions.push({ text:'Set milestones so deliverables can be organized by phase.', btn:'Add Milestone', action:"_projAddMilestone('" + pid + "')", priority:5 });
-  }
+
+
+
+
 
   if (tab === 'plan') {
     var phases = proj.phases || [];
@@ -20451,14 +20431,9 @@ function _projNextCard(proj, tab) {
     if (!gates.length) suggestions.push({ text:'Add quality gates \u2014 criteria that must pass before the project is done.', btn:'Add Gate', action:"_projChatPrefill('Add quality gates for this project')", priority:2 });
   }
 
-  if (tab === 'apps') {
-    suggestions.push({ text:'Connect external tools like GitHub, Slack, or Google Drive to this project.', btn:'Connect App', action:"_projConnectApp('" + pid + "')", btn2:'Ask Porter', action2:"_projSwitchTab('chat')", priority:3 });
-  }
 
-  if (tab === 'activity') {
-    if (!hasWorkers) suggestions.push({ text:'No workers means no activity. Assign a worker to get things moving.', btn:'Go to Workers', action:"_projSwitchTab('workers')", priority:2 });
-    if (hasWorkers) suggestions.push({ text:'Check worker progress or ask Porter for a status update.', btn:'Open Chat', action:"_projSwitchTab('chat')", priority:5 });
-  }
+
+
 
   // ── Milestone-based suggestions ──
   if (hasMs) {
@@ -20467,7 +20442,7 @@ function _projNextCard(proj, tab) {
     if (pct === 100) {
       suggestions.unshift({ text:'All milestones complete! Time to mark this project as done.', btn:'Complete Project', action:"_projSetStatus('" + pid + "','completed')", priority:0 });
     } else if (pct >= 75) {
-      suggestions.push({ text:'Almost there — ' + pct + '% of milestones done. Push to the finish line.', btn:'Open Chat', action:"_projSwitchTab('chat')", priority:2 });
+      suggestions.push({ text:'Almost there — ' + pct + '% of milestones done. Push to the finish line.', btn:'View Timeline', action:"_projSwitchTab('timeline')", priority:2 });
     }
   }
 
@@ -23026,23 +23001,7 @@ async function _showSystemPrompt(personaId) {
 }
 
 
-function _showPorterAbout() {
-  // Find Porter (the orchestrator) persona
-  var porter = (_personas || []).find(function(p) { return p.orchestrator_only; });
-  if (porter) {
-    _showPersonaBrief(porter);
-  } else {
-    // Fallback: load personas first, then show
-    api('/api/personas').then(function(resp) {
-      if (resp && resp.ok) {
-        _personas = resp.personas || [];
-        var p = _personas.find(function(x) { return x.orchestrator_only; });
-        if (p) _showPersonaBrief(p);
-        else toast('Porter persona not found', 'err');
-      }
-    });
-  }
-}
+/* _showPorterAbout removed — v0.32.0 */
 
 function _showPersonaBrief(persona) {
   if (!persona) return;
@@ -33952,6 +33911,14 @@ document.addEventListener('keydown', function(e) {
   if (re && re.style.display !== 'none' && re.style.display !== '') { closeRulesEditor(); e.stopPropagation(); return; }
 }, true);
 
+// Ctrl+K / Cmd+K — command palette (opens popup chat)
+document.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    _popupChatOpen();
+  }
+});
+
 // S7: Project config editor (uses existing config slide-out panel)
 function openProjectConfig(projId) {
   const panel = document.getElementById('configPanel');
@@ -35771,21 +35738,6 @@ function _scheduleOverviewRefresh(delayMs) {
     loadPersonas();
     if (typeof _loadQuestLog === 'function') _loadQuestLog();
   }, Math.max(80, delayMs || 250));
-}
-
-function _homeChat() {
-  var input = document.getElementById('proj-home-input');
-  if (!input || !input.value.trim()) return;
-  var msg = input.value.trim();
-  input.value = '';
-  _popupChatOpen();
-  setTimeout(function() {
-    var popupInput = document.getElementById('popup-chat-input');
-    if (popupInput) {
-      popupInput.value = msg;
-      _popupChatSend();
-    }
-  }, 80);
 }
 
 async function init() {
@@ -44291,7 +44243,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.99"})
+            self.reply_json({"v": "0.32.0"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44453,7 +44405,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.99"
+                health["porter_version"] = "0.32.0"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -46775,7 +46727,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.99'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.32.0'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -50808,7 +50760,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.31.99"
+                _ws_health["porter_version"] = "0.32.0"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -53782,7 +53734,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.31.99 ready (localhost only)")
+    print(f"\n  Porter v0.32.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
