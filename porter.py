@@ -11579,6 +11579,11 @@ def _module_chat_action_prompt(module: str, context_id: str) -> str:
         parts.append("Available actions:")
         parts.append('<porter-action>{"action":"agent_create_worker","name":"...","role":"..."}</porter-action>')
         parts.append('<porter-action>{"action":"agent_update_role","persona_id":"...","role":"..."}</porter-action>')
+    # Global actions available on every module
+    parts.append("")
+    parts.append("You can also create projects from anywhere:")
+    parts.append('<porter-action>{"action":"project_create","name":"...","type":"custom","description":"..."}</porter-action>')
+    parts.append("Always use <porter-action> blocks when the user asks you to create, update, or manage something. Execute the action, don't just describe it.")
     return "\n".join(parts)
 
 
@@ -11639,6 +11644,25 @@ def _execute_module_action(action_name: str, data: dict) -> dict:
                     _save_config()
                     return {"ok": True, "action": action_name}
             return {"ok": False, "error": "Agent not found"}
+        elif action_name == 'project_create':
+            import uuid as _uuid
+            pid = str(_uuid.uuid4())
+            name = data.get('name', 'New Project')
+            proj = {
+                "id": pid,
+                "name": name,
+                "type": data.get('type', 'custom'),
+                "owner": "",
+                "description": data.get('description', ''),
+                "status": "active",
+                "success_bar": "",
+                "milestones": [],
+                "assigned_personas": [],
+                "links": [],
+            }
+            _config.setdefault("projects", []).append(proj)
+            _save_config()
+            return {"ok": True, "action": action_name, "message": f"Project '{name}' created"}
         return {"ok": False, "error": f"Unknown action: {action_name}"}
     except Exception as e:
         log.error("Module action %s failed: %s", action_name, e)
@@ -11660,7 +11684,7 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
             continue
         action = str(data.get("action", "")).strip()
         # v0.33.0 — Module actions (no project required)
-        _mod_acts = {'crm_create_contact','crm_add_interaction','memory_promote','memory_dismiss','memory_create','agent_create_worker','agent_update_role'}
+        _mod_acts = {'crm_create_contact','crm_add_interaction','memory_promote','memory_dismiss','memory_create','agent_create_worker','agent_update_role','project_create'}
         if action in _mod_acts:
             results.append(_execute_module_action(action, data))
             continue
@@ -37427,6 +37451,7 @@ async function _popupChatSend() {
             if (window._projCurrent && _currentModule === 'projects') {
               setTimeout(function() { _projReload(window._projCurrent.id); }, 300);
             }
+            else if (_currentModule === 'projects') setTimeout(loadProjects, 300);
             else if (_currentModule === 'people') setTimeout(loadPeople, 300);
             else if (_currentModule === 'memory') setTimeout(loadMemory, 300);
             else if (_currentModule === 'agents') setTimeout(function() { switchModule('agents'); }, 300);
