@@ -26366,14 +26366,14 @@ function chatSend() {
 
     if (cmd === '/files') {
       switchModule('allfiles');
-      _chatMessages.push({ role: 'assistant', content: 'Switched to **Files**. Browse and manage project files.', model: 'porter' });
+      _chatMessages.push({ role: 'assistant', content: 'Switched to **Files**.', model: 'porter' });
       renderChatMessages();
       return;
     }
 
     if (cmd === '/tools') {
       switchModule('capabilities');
-      _chatMessages.push({ role: 'assistant', content: 'Switched to **Tools**. View detected capabilities and connections.', model: 'porter' });
+      _chatMessages.push({ role: 'assistant', content: 'Switched to **Tools**.', model: 'porter' });
       renderChatMessages();
       return;
     }
