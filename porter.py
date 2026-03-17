@@ -11552,38 +11552,28 @@ def _project_chat_action_prompt(project_id: str) -> str:
 
 
 def _module_chat_action_prompt(module: str, context_id: str) -> str:
-    """v0.33.0 — Build action prompt for module-specific chat actions."""
+    """v0.33.0 — Build action prompt. All actions available globally; module adds context."""
     parts = []
-    if module == 'people':
-        parts.append("You can execute CRM actions using <porter-action>JSON</porter-action> blocks.")
-        parts.append("Available actions:")
-        parts.append('<porter-action>{"action":"crm_create_contact","first_name":"...","last_name":"...","email":"...","company_name":"..."}</porter-action>')
-        parts.append('<porter-action>{"action":"crm_add_interaction","contact_id":N,"interaction_type":"note","summary":"..."}</porter-action>')
-        if context_id:
-            try:
-                conn = _db_conn()
-                row = conn.execute("SELECT first_name, last_name, email, company_name FROM crm_contacts WHERE id=?", (context_id,)).fetchone()
-                if row:
-                    parts.append(f"Currently viewing contact: {row['first_name']} {row['last_name']} (ID: {context_id}, email: {row['email'] or 'n/a'})")
-                conn.close()
-            except Exception:
-                pass
-    elif module == 'memory':
-        parts.append("You can execute memory actions using <porter-action>JSON</porter-action> blocks.")
-        parts.append("Available actions:")
-        parts.append('<porter-action>{"action":"memory_promote","memory_id":N,"trust_tier":"concept"}</porter-action>')
-        parts.append('<porter-action>{"action":"memory_dismiss","memory_id":N}</porter-action>')
-        parts.append('<porter-action>{"action":"memory_create","text":"...","memory_kind":"concept","scope":"global"}</porter-action>')
-    elif module == 'agents':
-        parts.append("You can execute agent actions using <porter-action>JSON</porter-action> blocks.")
-        parts.append("Available actions:")
-        parts.append('<porter-action>{"action":"agent_create_worker","name":"...","role":"..."}</porter-action>')
-        parts.append('<porter-action>{"action":"agent_update_role","persona_id":"...","role":"..."}</porter-action>')
-    # Global actions available on every module
-    parts.append("")
-    parts.append("You can also create projects from anywhere:")
-    parts.append('<porter-action>{"action":"project_create","name":"...","type":"custom","description":"..."}</porter-action>')
-    parts.append("Always use <porter-action> blocks when the user asks you to create, update, or manage something. Execute the action, don't just describe it.")
+    parts.append("You can execute actions using <porter-action>JSON</porter-action> blocks. ALWAYS use them when asked to create, update, or manage something.")
+    parts.append("Available actions:")
+    parts.append("Create project: <porter-action>{\"action\":\"project_create\",\"name\":\"...\",\"type\":\"custom\",\"description\":\"...\"}</porter-action>")
+    parts.append("Create contact: <porter-action>{\"action\":\"crm_create_contact\",\"first_name\":\"...\",\"last_name\":\"...\",\"email\":\"...\",\"company_name\":\"...\"}</porter-action>")
+    parts.append("Add interaction: <porter-action>{\"action\":\"crm_add_interaction\",\"contact_id\":N,\"interaction_type\":\"note\",\"summary\":\"...\"}</porter-action>")
+    parts.append("Create worker: <porter-action>{\"action\":\"agent_create_worker\",\"name\":\"...\",\"role\":\"...\"}</porter-action>")
+    parts.append("Create memory: <porter-action>{\"action\":\"memory_create\",\"text\":\"...\",\"memory_kind\":\"concept\",\"scope\":\"global\"}</porter-action>")
+    parts.append("Promote memory: <porter-action>{\"action\":\"memory_promote\",\"memory_id\":N,\"trust_tier\":\"concept\"}</porter-action>")
+    parts.append("Dismiss memory: <porter-action>{\"action\":\"memory_dismiss\",\"memory_id\":N}</porter-action>")
+    parts.append("Update agent role: <porter-action>{\"action\":\"agent_update_role\",\"persona_id\":\"...\",\"role\":\"...\"}</porter-action>")
+    # Module-specific context enrichment
+    if module == 'people' and context_id:
+        try:
+            conn = _db_conn()
+            row = conn.execute("SELECT first_name, last_name, email, company_name FROM crm_contacts WHERE id=?", (context_id,)).fetchone()
+            if row:
+                parts.append(f"Currently viewing contact: {row['first_name']} {row['last_name']} (ID: {context_id}, email: {row['email'] or 'n/a'})")
+            conn.close()
+        except Exception:
+            pass
     return "\n".join(parts)
 
 
