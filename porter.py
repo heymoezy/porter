@@ -15306,10 +15306,11 @@ input[type="number"].settings-input { min-width: 60px; }
       </svg>
     </button>
   </div>
-  <div style="padding:4px 12px 6px">
-    <button onclick="_showPorterAbout()" title="Who is Porter" style="width:100%;padding:7px 12px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--text2);cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px;transition:border-color .15s,color .15s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text2)'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Who is Porter</button>
-  </div>
   <nav class="module-nav">
+    <button class="mnav-item" onclick="_showPorterAbout()" title="Who is Porter" style="margin-bottom:4px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span class="mnav-label">Who is Porter</span>
+    </button>
     <div class="mnav-group-label">Cast</div>
     <button class="mnav-item active" id="mnav-agents" onclick="switchModule('agents')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
@@ -27994,9 +27995,11 @@ async function _showTemplateDetail(id) {
   if (!data || data.error) return;
   window._currentTemplateId = id;
   window._currentTemplateData = data;
-  // Replace the templates grid with a detail view — hide search controls
+  // Replace the templates grid with a detail view — hide search, fix layout
   var _tmplSearch = document.getElementById('tmpl-search'); if (_tmplSearch) _tmplSearch.parentElement.style.display = 'none';
+  var _tmplCount = document.getElementById('tmpl-count'); if (_tmplCount) _tmplCount.style.display = 'none';
   var grid = document.getElementById('tmpl-grid');
+  if (grid) { grid.style.display = 'block'; grid.style.gridTemplateColumns = ''; }
   var countEl = document.getElementById('tmpl-count');
   if (!grid) return;
   var avatarHtml = '';
@@ -28054,6 +28057,9 @@ async function _showTemplateDetail(id) {
 
 function _backToTemplates() {
   var _tmplSearch = document.getElementById('tmpl-search'); if (_tmplSearch) _tmplSearch.parentElement.style.display = '';
+  var _tmplCount = document.getElementById('tmpl-count'); if (_tmplCount) _tmplCount.style.display = '';
+  var grid = document.getElementById('tmpl-grid');
+  if (grid) { grid.style.display = ''; grid.style.gridTemplateColumns = ''; }
   _renderTemplateGrid(window._allTemplates || []);
   var countEl = document.getElementById('tmpl-count');
   if (countEl) countEl.textContent = (window._allTemplates || []).length + ' templates';
