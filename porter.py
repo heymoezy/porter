@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.6 — Chat action fix, CRM redesign, Escape key nav"""
+"""Porter v0.33.7 — Chat action fix, CRM redesign, Escape key nav"""
 
 
 import email
@@ -15587,7 +15587,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.6</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.7</div>
   </div>
 </aside>
 
@@ -16728,6 +16728,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.7', date:'2026-03-17', notes:["Fix: file uploads now use session username (was going to _files/default)","Fix: legacy files auto-migrated from _files/default and _files/admin to user folder","Fix: popup chat context shows objective, not stale tab reference"] },
   { ver:'v0.33.6', date:'2026-03-17', notes:["Projects V2: empty sections hidden — page grows organically as content is added","Projects V2: live reload after chat actions (personas loaded, full refresh chain)","Fix: popup chat context shows objective instead of tab reference","Fix: _projReload updates header + re-renders properly"] },
   { ver:'v0.33.5', date:'2026-03-17', notes:["Fix: _projReload defined (was undefined)","Fix: project delete via chat auto-closes detail view","Old tab content renderer redirected to new single-page renderer"] },
   { ver:'v0.33.4', date:'2026-03-17', notes:["Projects V2: single scrollable page replaces 4-tab layout","Projects V2: Inputs/Outputs/To-Do/Team/Files/Progress/Timeline blocks","Local project chat hidden — all actions through Ask Porter","File drag-drop: larger drop zone, visual feedback, global drop prevention","API: list_content action, add_content with category support"] },
@@ -44925,7 +44926,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.6"})
+            self.reply_json({"v": "0.33.7"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -45087,7 +45088,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.33.6"
+                health["porter_version"] = "0.33.7"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -46036,9 +46037,20 @@ class Handler(BaseHTTPRequestHandler):
             _fl_user = _fl_session.get("username", "") if _fl_session else ""
             _fl_role = _fl_session.get("role", "operator") if _fl_session else "operator"
             base = AGENT_WORKSPACE_DIR / "projects"
-            # Ensure user files directory exists
+            # Ensure user files directory exists + migrate from legacy paths
             _user_files = base / "_files" / _fl_user
             _user_files.mkdir(parents=True, exist_ok=True)
+            # Migrate files from _files/default and _files/admin if they exist and user folder is empty
+            for _legacy_dir in ["default", "admin"]:
+                _ld = base / "_files" / _legacy_dir
+                if _ld.exists() and _fl_user != _legacy_dir:
+                    try:
+                        for _lf in _ld.iterdir():
+                            if _lf.is_file() and not (_user_files / _lf.name).exists():
+                                import shutil
+                                shutil.copy2(str(_lf), str(_user_files / _lf.name))
+                    except Exception:
+                        pass
             if not rel_path or rel_path == "/":
                 items = []
                 # User's personal files folder
@@ -47410,7 +47422,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.6'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.7'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -51457,7 +51469,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.33.6"
+                _ws_health["porter_version"] = "0.33.7"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -52515,6 +52527,11 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             filename = qs_up.get("filename", ["upload"])[0]
             if not rel_path:
                 self.reply_json({"ok": False, "error": "Path required"}, 400); return
+            # Fix: resolve _files/default to actual session username
+            if rel_path.startswith("_files/default") or rel_path == "_files":
+                _up_session = get_session(self.get_session_token())
+                _up_user = _up_session.get("username", "default") if _up_session else "default"
+                rel_path = rel_path.replace("_files/default", "_files/" + _up_user, 1) if "default" in rel_path else "_files/" + _up_user
             base = AGENT_WORKSPACE_DIR / "projects"
             target_dir = base / rel_path
             if not str(target_dir.resolve()).startswith(str(base.resolve())):
@@ -54447,7 +54464,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.6 ready (localhost only)")
+    print(f"\n  Porter v0.33.7 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
