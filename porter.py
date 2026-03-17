@@ -18869,14 +18869,12 @@ function switchModule(name) {
       if (_agv) _agv.style.display = '';
       if (_avt) _avt.style.display = '';
       if (_atv) _atv.style.display = 'none';
-      var _ahdr = document.querySelector('#agents-module > .module-hdr'); if (_ahdr) _ahdr.style.display = '';
       // Reset toggle buttons
       var _vtBtns = document.querySelectorAll('#agents-view-toggle button');
       if (_vtBtns.length) { _vtBtns[0].classList.add('active'); if (_vtBtns[1]) _vtBtns[1].classList.remove('active'); }
       _selectedPersonaId = null;
       loadAgents();
     }, templates: function() {
-      var _ahdr = document.querySelector('#agents-module > .module-hdr'); if (_ahdr) _ahdr.style.display = '';
       var _g = document.getElementById('agents-grid-view');
       var _t = document.getElementById('agents-templates-view');
       var _d = document.getElementById('agent-detail-view');
@@ -27996,7 +27994,8 @@ async function _showTemplateDetail(id) {
   if (!data || data.error) return;
   window._currentTemplateId = id;
   window._currentTemplateData = data;
-  // Replace the templates grid with a detail view
+  // Replace the templates grid with a detail view — hide search controls
+  var _tmplSearch = document.getElementById('tmpl-search'); if (_tmplSearch) _tmplSearch.parentElement.style.display = 'none';
   var grid = document.getElementById('tmpl-grid');
   var countEl = document.getElementById('tmpl-count');
   if (!grid) return;
@@ -28054,6 +28053,7 @@ async function _showTemplateDetail(id) {
 }
 
 function _backToTemplates() {
+  var _tmplSearch = document.getElementById('tmpl-search'); if (_tmplSearch) _tmplSearch.parentElement.style.display = '';
   _renderTemplateGrid(window._allTemplates || []);
   var countEl = document.getElementById('tmpl-count');
   if (countEl) countEl.textContent = (window._allTemplates || []).length + ' templates';
@@ -31822,7 +31822,6 @@ async function selectPersona(id) {
   if (toggle) toggle.style.display = 'none';
   var tmplView = document.getElementById('agents-templates-view'); if (tmplView) tmplView.style.display = 'none';
   if (detail) detail.style.display = 'flex';
-  var agentsHdr = document.querySelector('#agents-module > .module-hdr'); if (agentsHdr) agentsHdr.style.display = 'none';
   // Close other panels
   var re = document.getElementById('rules-editor'); if (re) re.style.display = 'none';
   var wz = document.getElementById('persona-wizard'); if (wz) wz.style.display = 'none';
@@ -31915,7 +31914,6 @@ function closePersonaDetail() {
   var toggle = document.getElementById('agents-view-toggle');
   var detail = document.getElementById('agent-detail-view');
   if (detail) detail.style.display = 'none';
-  var agentsHdr = document.querySelector('#agents-module > .module-hdr'); if (agentsHdr) agentsHdr.style.display = '';
   if (toggle) toggle.style.display = '';
   if (_agentViewMode === 'office') {
     if (grid) grid.style.display = 'none';
