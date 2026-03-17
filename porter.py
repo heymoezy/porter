@@ -15860,7 +15860,7 @@ input[type="number"].settings-input { min-width: 60px; }
   <div id="projects-module" class="module-panel active">
     <div class="module-hdr">
       <span class="module-title">Projects</span>
-      <button class="btn btn-primary" onclick="_askPorterToCreate('project')" style="font-size:12px">Start A New Project</button>
+      <button class="btn btn-ghost" onclick="_askPorterToCreate('project')" style="font-size:12px">+ New Project</button>
     </div>
 
     <div id="projects-list-view" style="padding:0">
@@ -15969,7 +15969,7 @@ input[type="number"].settings-input { min-width: 60px; }
         <button class="crm-chip" data-filter="linked" onclick="_crmSetFilter('linked')">Project-linked</button>
       </div>
     </div>
-    <div class="people-stats" id="people-stats"></div>
+    <div class="people-stats" id="people-stats" style="display:none"></div>
     <div id="crm-content">
       <div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div>
     </div>
@@ -19900,6 +19900,8 @@ function _renderProjList() {
     if (p.deadline) html += '<span style="font-size:10px;color:var(--text3)">Due ' + _projFmtShortDate(p.deadline) + '</span>';
     html += '</div></div></div>';
   });
+  // Always-visible "New Project" card
+  html += '<div class="project-card" style="border:2px dashed var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:120px;opacity:.7;transition:opacity .15s" onclick="_askPorterToCreate(\'project\')" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7"><div style="text-align:center;padding:16px"><div style="font-size:24px;color:var(--text3);margin-bottom:4px">+</div><div style="font-size:12px;color:var(--text3)">New Project</div></div></div>';
   grid.innerHTML = html;
   // Stagger entrance
   grid.querySelectorAll('.project-card').forEach(function(c, i) { c.style.animationDelay = (i * 55) + 'ms'; });
