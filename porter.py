@@ -18922,30 +18922,31 @@ async function loadMemory() {
     // Stat cards
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">';
     var cards = [
-      {l:'Directives',c:byKind.directive||0,clr:'#3b82f6'},
-      {l:'Concepts',c:byKind.concept||0,clr:'#a855f7'},
-      {l:'Episodes',c:byKind.episode||0,clr:'var(--text3)'},
-      {l:'Signals',c:byKind.signal||0,clr:'#f59e0b'},
-      {l:'Total',c:stats.total||0,clr:'var(--text)'}
+      {l:'Directives',c:byKind.directive||0,clr:'#3b82f6',tip:'Stable rules Porter always follows (high trust)'},
+      {l:'Concepts',c:byKind.concept||0,clr:'#a855f7',tip:'Durable facts about your product, users, or strategy'},
+      {l:'Episodes',c:byKind.episode||0,clr:'var(--text3)',tip:'Time-bound session summaries and run logs'},
+      {l:'Signals',c:byKind.signal||0,clr:'#f59e0b',tip:'Observations awaiting your review (promote or dismiss)'},
+      {l:'Total',c:stats.total||0,clr:'var(--text)',tip:'All memories across all categories'}
     ];
     cards.forEach(function(s) {
-      html += '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:' + s.clr + '">' + s.l + '</div><div style="font-size:24px;font-weight:800;color:var(--text);margin-top:4px">' + s.c + '</div></div>';
+      html += '<div style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg);cursor:help" title="' + s.tip + '"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:' + s.clr + '">' + s.l + '</div><div style="font-size:24px;font-weight:800;color:var(--text);margin-top:4px">' + s.c + '</div></div>';
     });
     html += '</div>';
     // Search results area
     html += '<div id="mem-search-results"></div>';
     // Review queue
     if (queue.length) {
-      html += '<div><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#f59e0b;margin-bottom:10px">Needs Review <span style="display:inline-block;padding:2px 8px;border-radius:99px;background:#f59e0b;color:#000;font-size:10px;font-weight:700;vertical-align:middle">' + queue.length + '</span></div>';
-      html += '<div style="display:flex;flex-direction:column;gap:8px">';
+      html += '<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer" onclick="var l=this.nextElementSibling;l.style.display=l.style.display===\'none\'?\'\':\'none\';this.querySelector(\'span:last-child\').textContent=l.style.display===\'none\'?\'\u25b8\':\'\u25be\'"><span style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#f59e0b">Needs Review</span><span style="display:inline-block;padding:2px 8px;border-radius:99px;background:#f59e0b;color:#000;font-size:10px;font-weight:700">' + queue.length + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">\u25be</span></div>';
+      html += '<div style="display:flex;flex-direction:column;gap:4px">';
       queue.forEach(function(s) {
-        html += '<div style="padding:12px;background:color-mix(in srgb,#f59e0b 4%, var(--bg));border:1px solid color-mix(in srgb,#f59e0b 20%, var(--border));border-radius:12px">'
-          + '<div style="font-size:12px;line-height:1.5;color:var(--text)">' + escHtml(s.preview || '') + '</div>'
-          + '<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><span style="font-size:10px;color:var(--text3)">' + escHtml(s.source_category || 'signal') + '</span>'
-          + '<div style="margin-left:auto;display:flex;gap:6px">'
-          + '<button class="btn btn-ghost btn-sm" style="font-size:10px;color:#22c55e" onclick="_memDashPromote(' + s.id + ')">Promote</button>'
-          + '<button class="btn btn-ghost btn-sm" style="font-size:10px;color:#ef4444" onclick="_memDashDismiss(' + s.id + ')">Dismiss</button>'
-          + '</div></div></div>';
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:color-mix(in srgb,#f59e0b 3%, var(--bg));border:1px solid var(--border)">'
+          + '<div style="flex:1;min-width:0;font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(s.preview || '') + '">' + escHtml(s.preview || '') + '</div>'
+          + '<div style="display:flex;gap:4px;flex-shrink:0">'
+          + '<button class="btn btn-ghost btn-sm" style="font-size:10px;color:#22c55e;padding:2px 6px" onclick="_memDashPromote(' + s.id + ')" title="This is true — promote to concept">\u2713 True</button>'
+          + '<button class="btn btn-ghost btn-sm" style="font-size:10px;color:#ef4444;padding:2px 6px" onclick="_memDashDismiss(' + s.id + ')" title="This is false — dismiss">\u2717 False</button>'
+          + '<button class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--text3);padding:2px 6px" onclick="_memDashDismiss(' + s.id + ')" title="Not useful — ignore">\u2014</button>'
+          + '<button class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--accent);padding:2px 6px" onclick="_memDashChat(\x27' + escHtml((s.preview || '').replace(/'/g, '')) + '\x27)" title="Discuss with Porter">\u{1f4ac}</button>'
+          + '</div></div>';
       });
       html += '</div></div>';
     } else {
@@ -18997,6 +18998,17 @@ async function _memDashPromote(id) {
 async function _memDashDismiss(id) {
   await api('/api/memory/dismiss', {id: id});
   loadMemory();
+}
+
+function _memDashChat(preview) {
+  _popupChatOpen();
+  setTimeout(function() {
+    var inp = document.getElementById('popup-chat-input');
+    if (inp) {
+      inp.value = 'I want to discuss this memory signal: "' + preview + '". Is this true? Should I keep it?';
+      _popupChatSend();
+    }
+  }, 100);
 }
 
 // ── S10: Workflow Registry UI ──────────────────────────────────────────────
