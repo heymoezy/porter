@@ -15358,7 +15358,7 @@ input[type="number"].settings-input { min-width: 60px; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
       <span class="mnav-label">Activity</span>
     </button>
-    <div class="mnav-sep"></div>
+    <div class="mnav-sep" style="display:none"></div>
     <button class="mnav-item" id="mnav-platform" style="display:none" onclick="window.location.href='/admin/'">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
       <span class="mnav-label">Platform</span>
@@ -19817,8 +19817,7 @@ function _renderProjList() {
   var statsBar = document.getElementById('proj-stats-bar');
   if (!grid) return;
   if (!_projList.length) {
-    grid.innerHTML = '<div style="padding:40px 20px;text-align:center"><div style="font-size:15px;color:var(--text2);margin-bottom:16px">No projects yet</div>'
-      + '<button class="btn btn-primary" onclick="_askPorterToCreate(\'project\')" style="font-size:12px">Start A New Project</button></div>';
+    grid.innerHTML = '<div class="proj-guide-empty"><div class="proj-guide-empty-title">Ready to get started</div><div class="proj-guide-empty-hint">Projects are where work happens. Create your first one and Porter will help you plan, staff, and track it.</div><div class="proj-next-actions" style="justify-content:center"><button class="proj-next-btn" onclick="_askPorterToCreate(\'project\')">Create Your First Project</button></div></div>';
     if (statsBar) statsBar.innerHTML = '';
     return;
   }
