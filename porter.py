@@ -23060,26 +23060,21 @@ function _showPersonaBrief(persona) {
 }
 
 function _askPorterToCreate(kind) {
-  var detail = document.getElementById('agent-detail-view');
-  var selected = window._selectedPersona;
-  if (detail && detail.style.display !== 'none' && selected && selected.orchestrator_only) {
-    _pdChatStartCreation(kind);
-    return;
-  }
-  toast('Opening Porter chat — ' + kind + ' creation guide', 'ok');
-  switchModule('agents');
+  // v0.32.0 — Route through popup chat instead of switching to agents module
+  var prompts = {
+    project: 'Create a new project for me. Ask me what it should be about.',
+    worker: 'Create a new AI agent worker for me. Ask me what role it should fill.',
+    agent: 'Create a new AI agent worker for me. Ask me what role it should fill.'
+  };
+  var msg = prompts[kind] || 'Help me create a new ' + kind;
+  _popupChatOpen();
   setTimeout(function() {
-    selectPersona('porter-core');
-    setTimeout(function() {
-      _pdChatStartCreation(kind);
-      setTimeout(function() {
-        var chatHost = document.getElementById('pd-chat-thread');
-        if (chatHost) chatHost.scrollTop = chatHost.scrollHeight;
-        var pdInput = document.getElementById('pd-chat-input');
-        if (pdInput) pdInput.focus();
-      }, 80);
-    }, 120);
-  }, 40);
+    var popupInput = document.getElementById('popup-chat-input');
+    if (popupInput) {
+      popupInput.value = msg;
+      _popupChatSend();
+    }
+  }, 100);
 }
 
 window._pdChatState = window._pdChatState || {};
