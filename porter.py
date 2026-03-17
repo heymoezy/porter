@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.32.1 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
+"""Porter v0.33.0 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
 
 
 import email
@@ -2761,13 +2761,6 @@ def _session_resume(chat_id):
     _session_update_activity(chat_id)
 
 
-def _iterative_retrieve(message, persona_id="", max_chunks=3):
-    """v0.29.26 — Iterative Retrieval: 2-pass context assembly.
-    Pass 1: keyword extraction from message.
-    Pass 2: retrieve relevant memory chunks using extracted keywords.
-    Returns a short context string suitable for injection."""
-    if not message or len(message) < 10:
-        return ""
     import re as _ir_re
     # Pass 1: Extract significant keywords (nouns/verbs, skip stopwords)
     stopwords = {'the','a','an','is','are','was','were','be','been','being','have','has','had',
@@ -11557,9 +11550,103 @@ def _project_chat_action_prompt(project_id: str) -> str:
     return ctx
 
 
+
+def _module_chat_action_prompt(module: str, context_id: str) -> str:
+    """v0.33.0 — Build action prompt for module-specific chat actions."""
+    parts = []
+    if module == 'people':
+        parts.append("You can execute CRM actions using <porter-action>JSON</porter-action> blocks.")
+        parts.append("Available actions:")
+        parts.append('<porter-action>{"action":"crm_create_contact","first_name":"...","last_name":"...","email":"...","company_name":"..."}</porter-action>')
+        parts.append('<porter-action>{"action":"crm_add_interaction","contact_id":N,"interaction_type":"note","summary":"..."}</porter-action>')
+        if context_id:
+            try:
+                conn = _db_conn()
+                row = conn.execute("SELECT first_name, last_name, email, company_name FROM crm_contacts WHERE id=?", (context_id,)).fetchone()
+                if row:
+                    parts.append(f"Currently viewing contact: {row['first_name']} {row['last_name']} (ID: {context_id}, email: {row['email'] or 'n/a'})")
+                conn.close()
+            except Exception:
+                pass
+    elif module == 'memory':
+        parts.append("You can execute memory actions using <porter-action>JSON</porter-action> blocks.")
+        parts.append("Available actions:")
+        parts.append('<porter-action>{"action":"memory_promote","memory_id":N,"trust_tier":"concept"}</porter-action>')
+        parts.append('<porter-action>{"action":"memory_dismiss","memory_id":N}</porter-action>')
+        parts.append('<porter-action>{"action":"memory_create","text":"...","memory_kind":"concept","scope":"global"}</porter-action>')
+    elif module == 'agents':
+        parts.append("You can execute agent actions using <porter-action>JSON</porter-action> blocks.")
+        parts.append("Available actions:")
+        parts.append('<porter-action>{"action":"agent_create_worker","name":"...","role":"..."}</porter-action>')
+        parts.append('<porter-action>{"action":"agent_update_role","persona_id":"...","role":"..."}</porter-action>')
+    return "\n".join(parts)
+
+
+def _execute_module_action(action_name: str, data: dict) -> dict:
+    """v0.33.0 — Execute module-level actions (no project required)."""
+    try:
+        if action_name == 'crm_create_contact':
+            conn = _db_conn()
+            conn.execute(
+                "INSERT INTO crm_contacts (first_name, last_name, email, phone, company_name, contact_type, status, created_at) "
+                "VALUES (?, ?, ?, ?, ?, 'lead', 'active', datetime('now'))",
+                (data.get('first_name', ''), data.get('last_name', ''), data.get('email', ''),
+                 data.get('phone', ''), data.get('company_name', '')))
+            conn.commit(); conn.close()
+            return {"ok": True, "action": action_name, "message": "Contact created"}
+        elif action_name == 'crm_add_interaction':
+            conn = _db_conn()
+            conn.execute(
+                "INSERT INTO crm_interactions (contact_id, interaction_type, summary, created_at) VALUES (?, ?, ?, datetime('now'))",
+                (data.get('contact_id'), data.get('interaction_type', 'note'), data.get('summary', '')))
+            conn.commit(); conn.close()
+            return {"ok": True, "action": action_name, "message": "Interaction added"}
+        elif action_name == 'memory_promote':
+            conn = _db_conn()
+            conn.execute("UPDATE memories SET trust_tier=?, review_state='approved' WHERE id=?",
+                (data.get('trust_tier', 'concept'), data.get('memory_id')))
+            conn.commit(); conn.close()
+            return {"ok": True, "action": action_name}
+        elif action_name == 'memory_dismiss':
+            conn = _db_conn()
+            conn.execute("UPDATE memories SET status='dismissed', review_state='dismissed' WHERE id=?",
+                (data.get('memory_id'),))
+            conn.commit(); conn.close()
+            return {"ok": True, "action": action_name}
+        elif action_name == 'memory_create':
+            conn = _db_conn()
+            conn.execute(
+                "INSERT INTO memories (text, memory_kind, trust_tier, scope, status, review_state, source_type, created_at) "
+                "VALUES (?, ?, ?, ?, 'active', 'approved', 'operator', datetime('now'))",
+                (data.get('text', ''), data.get('memory_kind', 'concept'),
+                 data.get('memory_kind', 'concept'), data.get('scope', 'global')))
+            conn.commit(); conn.close()
+            return {"ok": True, "action": action_name}
+        elif action_name == 'agent_create_worker':
+            name = data.get('name', 'New Worker')
+            role = data.get('role', 'assistant')
+            pid = name.lower().replace(' ', '_').replace("'", "")
+            if any(p.get("id") == pid for p in _config.get("personas", [])):
+                return {"ok": False, "error": f"Agent '{pid}' already exists"}
+            _config.setdefault("personas", []).append({"id": pid, "name": name, "role": role})
+            _save_config()
+            return {"ok": True, "action": action_name}
+        elif action_name == 'agent_update_role':
+            pid = data.get('persona_id', '')
+            for p in _config.get("personas", []):
+                if p.get("id") == pid:
+                    p["role"] = data.get('role', p.get('role', ''))
+                    _save_config()
+                    return {"ok": True, "action": action_name}
+            return {"ok": False, "error": "Agent not found"}
+        return {"ok": False, "error": f"Unknown action: {action_name}"}
+    except Exception as e:
+        log.error("Module action %s failed: %s", action_name, e)
+        return {"ok": False, "error": str(e)}
+
 def _execute_chat_actions(project_id: str, response_text: str) -> list:
     """Parse and execute <porter-action> blocks from model response. v0.31.48 — 20+ actions.
-    Note: Action bus is project-scoped only. Global/popup/worker chat cannot execute actions (future feature).
+    v0.33.0 — Module actions (CRM, memory, agents) work without a project. Project actions still require project_id.
     """
     import json as _json
     results = []
@@ -11572,6 +11659,11 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
             results.append({"ok": False, "error": f"Invalid JSON: {raw[:100]}"})
             continue
         action = str(data.get("action", "")).strip()
+        # v0.33.0 — Module actions (no project required)
+        _mod_acts = {'crm_create_contact','crm_add_interaction','memory_promote','memory_dismiss','memory_create','agent_create_worker','agent_update_role'}
+        if action in _mod_acts:
+            results.append(_execute_module_action(action, data))
+            continue
         proj = None
         for p in _config.get("projects", []):
             if p.get("id") == project_id:
@@ -14388,7 +14480,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .porter-popup-close { background:none; border:none; color:var(--text3); cursor:pointer; font-size:16px; padding:2px 6px; border-radius:4px; }
 .porter-popup-close:hover { color:var(--text); background:var(--raised); }
 .porter-popup-thread { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:10px 12px; }
-.porter-popup-thread:empty::before { content:'Ask Porter anything. This chat stays on your current context.'; display:block; text-align:center; color:var(--text3); font-size:11px; padding:30px 12px; }
+.porter-popup-thread:empty::before { content:'Ask Porter anything.'; display:block; text-align:center; color:var(--text3); font-size:11px; padding:30px 12px; }
 .porter-popup-composer { display:flex; gap:6px; padding:8px 12px; border-top:1px solid var(--border); align-items:flex-end; }
 .porter-popup-input { flex:1; resize:none; border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12px; font-family:inherit; background:var(--bg); color:var(--text); outline:none; max-height:100px; min-height:36px; }
 .porter-popup-input:focus { border-color:var(--accent); }
@@ -14540,10 +14632,11 @@ body.density-compact .file-name { padding: 6px 0; }
 .crm-type-badge.other { background:color-mix(in srgb, var(--text3) 15%, transparent); color:var(--text3); }
 .crm-tag { font-size:9px; padding:1px 6px; border-radius:3px; background:var(--raised); color:var(--text3); }
 /* CRM detail panel (520px slide-out) */
-.crm-detail-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.3); z-index:899; }
-.crm-detail-overlay.open { display:block; }
-.crm-detail-panel { position:fixed; top:0; right:0; width:520px; height:100vh; background:var(--bg); border-left:1px solid var(--border); z-index:900; transform:translateX(100%); transition:transform .2s ease; display:flex; flex-direction:column; box-shadow:-4px 0 20px rgba(0,0,0,.12); }
-.crm-detail-panel.open { transform:translateX(0); }
+#people-module.detail-open #crm-filters, #people-module.detail-open #people-stats, #people-module.detail-open #crm-content { display:none !important; }
+#people-detail-view { display:none; }
+#people-module.detail-open #people-detail-view { display:block; }
+.crm-editable { cursor:pointer; padding:1px 4px; border-radius:4px; transition:background .15s; }
+.crm-editable:hover { background:color-mix(in srgb, var(--accent) 8%, transparent); }
 .crm-detail-hdr { display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--border); flex-shrink:0; }
 .crm-detail-hdr-avatar { width:48px; height:48px; border-radius:50%; background:var(--raised); display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:700; color:var(--text); flex-shrink:0; }
 .crm-detail-hdr-info { flex:1; min-width:0; }
@@ -14566,6 +14659,16 @@ body.density-compact .file-name { padding: 6px 0; }
 .crm-social-link { display:flex; align-items:center; gap:4px; font-size:11px; color:var(--accent); text-decoration:none; padding:3px 8px; border:1px solid var(--border); border-radius:6px; transition:all .15s; }
 .crm-social-link:hover { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent); }
 /* CRM timeline */
+.proj-timeline { position:relative; padding-left:28px; }
+.proj-timeline::before { content:''; position:absolute; left:9px; top:8px; bottom:8px; width:2px; background:var(--border); border-radius:1px; }
+.proj-timeline-item { position:relative; padding-bottom:16px; }
+.proj-timeline-item:last-child { padding-bottom:0; }
+.proj-timeline-node { position:absolute; left:-23px; top:6px; width:10px; height:10px; border-radius:50%; border:2px solid var(--bg); box-shadow:0 0 0 1px var(--border); }
+.proj-timeline-node.complete { background:#22c55e; }
+.proj-timeline-node.failed { background:#ef4444; }
+.proj-timeline-node.pending { background:#f59e0b; }
+.proj-timeline-card { padding:8px 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface); transition:border-color .15s; }
+.proj-timeline-card:hover { border-color:color-mix(in srgb, var(--accent) 30%, var(--border)); }
 .crm-timeline { display:flex; flex-direction:column; gap:0; }
 .crm-timeline-item { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid color-mix(in srgb, var(--border) 40%, transparent); }
 .crm-timeline-item:last-child { border-bottom:none; }
@@ -14852,7 +14955,6 @@ body.density-compact .file-name { padding: 6px 0; }
   max-width:110px;
 }
 .persona-card.orchestrator .persona-card-role { font-size:9px; max-width:120px; }
-.persona-card-status, .persona-card-dot { display:none; }
 @keyframes pixel-walk {
   0%,100% { transform:translateY(0) rotate(0deg); }
   25% { transform:translateY(-2px) rotate(-1deg); }
@@ -15404,7 +15506,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.32.1</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.0</div>
   </div>
 </aside>
 
@@ -15558,14 +15660,11 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="module-hdr">
       <span class="module-title">AI Agents</span>
       <div style="flex:1"></div>
-      <!-- Toggle removed: Templates is now its own nav tab -->
+      <button class="btn btn-ghost" onclick="switchModule('templates')" style="font-size:12px">+ Create from Template</button>
     </div>
 
     <!-- Agent Grid -->
     <div id="agents-grid-view">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <button class="btn btn-primary" onclick="switchModule('templates')" style="font-size:12px;padding:6px 14px">+ Create from Template</button>
-      </div>
       <div id="persona-org-chart" style="margin-bottom:16px">
         <div id="persona-cards-row" class="persona-cards-row">
           <div class="loading-indicator">Loading personas...</div>
@@ -15913,7 +16012,7 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
     </div>
     <div id="fm-breadcrumbs" style="display:flex;align-items:center;gap:2px;padding:0 0 8px;font-size:12px;flex-wrap:wrap"></div>
-    <div id="allfiles-list" style="display:flex;flex-direction:column;border:1px solid var(--border);border-radius:8px;background:var(--surface);min-height:200px;transition:border-color .15s" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'" ondragleave="this.style.borderColor='var(--border)'" ondrop="event.preventDefault();this.style.borderColor='var(--border)';_fmUploadFiles(event.dataTransfer.files)">
+    <div id="allfiles-list" style="display:flex;flex-direction:column;border:1px solid var(--border);border-radius:8px;background:var(--surface);min-height:400px;transition:border-color .15s" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'" ondragleave="this.style.borderColor='var(--border)'" ondrop="event.preventDefault();this.style.borderColor='var(--border)';_fmUploadFiles(event.dataTransfer.files)">
       <div class="loading-indicator" style="padding:24px">Loading files...</div>
     </div>
   </div>
@@ -15970,7 +16069,8 @@ input[type="number"].settings-input { min-width: 60px; }
       <span class="module-title">People</span>
       <div style="flex:1"></div>
       <button class="btn btn-ghost" onclick="loadPeople()">&#8635;</button>
-      <button class="btn btn-ghost" onclick="_crmNewAction()" id="people-add-btn">+ New</button>
+      <button class="btn btn-ghost" onclick="_crmAddContact()" style="font-size:12px">+ Person</button>
+      <button class="btn btn-ghost" onclick="_crmAddCompany()" style="font-size:12px">+ Company</button>
     </div>
     <div class="crm-filters" id="crm-filters" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
       <input type="text" class="crm-search" id="crm-search" placeholder="Search people & companies..." oninput="_crmFilterDebounced()" style="flex:1;min-width:200px">
@@ -15986,12 +16086,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <div id="crm-content">
       <div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div>
     </div>
-    <div class="crm-detail-overlay" id="crm-detail-overlay" onclick="_crmCloseDetail()"></div>
-    <div class="crm-detail-panel" id="crm-detail-panel">
-      <div class="crm-detail-hdr" id="crm-detail-hdr"></div>
-      <div class="crm-detail-body" id="crm-detail-body"></div>
-      <div class="crm-detail-actions" id="crm-detail-actions"></div>
-    </div>
+    <div id="people-detail-view"></div>
   </div>
 
     <div id="logs-module" class="module-panel">
@@ -16009,27 +16104,6 @@ input[type="number"].settings-input { min-width: 60px; }
         <button class="btn btn-ghost" style="font-size:11px" onclick="mcClearFilters()">Clear</button>
         <button class="btn btn-ghost" style="font-size:11px" onclick="mcExport()">Export</button>
         <button class="btn btn-ghost" style="font-size:11px;color:var(--err)" onclick="mcSwitchTab('report');mcShowReportForm()">Report Bug</button>
-      </div>
-    </div>
-
-    <div class="mc-overview">
-      <div class="mc-heart-panel">
-        <div class="mc-heart-icon" aria-hidden="true"></div>
-        <div class="mc-heart-copy">
-          <div class="mc-heart-title">Live Signal</div>
-          <div id="mc-heart-sub" class="mc-heart-sub">Watching live activity</div>
-          <div id="mc-heart-stats" class="mc-heart-stats"></div>
-        </div>
-      </div>
-      <div>
-        <div id="mc-heartbeat" class="mc-heartbeat"></div>
-        <div class="mc-now-strip" style="margin-top:8px">
-          <div class="mc-card" onclick="mcPreset('incidents')"><div id="mc-card-incidents" class="mc-card-val">0</div><div class="mc-card-label">Incidents</div></div>
-          <div class="mc-card" onclick="mcPreset('errors')"><div id="mc-card-errors" class="mc-card-val">0</div><div class="mc-card-label">Errors (5m)</div></div>
-          <div class="mc-card" onclick="mcPreset('routing')"><div id="mc-card-routing" class="mc-card-val">0</div><div class="mc-card-label">Routing Events</div></div>
-          <div class="mc-card" onclick="mcPreset('schedule')"><div id="mc-card-runs" class="mc-card-val">0</div><div class="mc-card-label">Run Events</div></div>
-          <div class="mc-card" onclick="mcPreset('all')"><div id="mc-card-total" class="mc-card-val">0</div><div class="mc-card-label">Total Events</div></div>
-        </div>
       </div>
     </div>
 
@@ -16576,6 +16650,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.0', date:'2026-03-17', notes:["Universal chat actions from People/Memory/Agents","CRM: full-page contact/company views, inline editing","CRM: + Person / + Company header buttons","AI Agents: + Create from Template in header","Timeline: vertical graphical nodes","Memory: system noise filtered","Chat context: proper display names","Dead code cleanup"] },
   { ver:'v0.32.1', date:'2026-03-17', notes:["CRM: unified directory replaces 3-tab split (Contacts/Team/Companies)","CRM: filter chips for People, Companies, Internal, Project-linked","CRM: inline search across all entities","CRM: /people search <query> slash command","CRM spec by GPT-5.4 (research/crm-redesign-spec.md)"] },
   { ver:'v0.32.0', date:'2026-03-17', notes:["Removed duplicate projects chat input — global popup chat is the single command interface","Popup chat auto-opens on first projects load","Ctrl+K / Cmd+K command palette shortcut","Dead code cleanup: removed 6 unreachable tab branches, orphaned _showPorterAbout","DO THIS NEXT card updated for 4-view tab names"] },
   { ver:'v0.31.99', date:'2026-03-17', notes:["Command grammar: /new project|agent, /open <project>, /show active|all, /find <query>","Autocomplete shows new commands with descriptions","Updated /help to include new command grammar"] },
@@ -19021,6 +19096,7 @@ async function _memLoadKind(kind) {
   try {
     var res = await api('/api/memory/by-scope?kind=' + kind + '&limit=50');
     var items = (res && res.memories) || [];
+    if (!(currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin'))) { items = items.filter(function(m) { return m.source_type !== 'system'; }); }
     if (!items.length) {
       el.innerHTML = '<div style="padding:12px;color:var(--text3);font-size:12px">No ' + label.toLowerCase() + ' found.</div>';
       return;
@@ -19914,7 +19990,7 @@ function _renderProjList() {
     html += '</div></div></div>';
   });
   // Always-visible "New Project" card
-  html += '<div class="project-card" style="border:2px dashed var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:120px;opacity:.7;transition:opacity .15s" onclick="_askPorterToCreate(\'project\')" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7"><div style="text-align:center;padding:16px"><div style="font-size:24px;color:var(--text3);margin-bottom:4px">+</div><div style="font-size:12px;color:var(--text3)">New Project</div></div></div>';
+  html += '<div class="project-card" style="border:1px dashed var(--border);cursor:pointer;min-height:120px;opacity:.85;transition:opacity .15s" onclick="_askPorterToCreate(\'project\')" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.85"><div class="project-card-cover" style="background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 15%,var(--surface)),var(--surface));height:60px;display:flex;align-items:center;justify-content:center"><div style="width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#000">P</div></div><div class="project-card-body"><div class="project-card-title" style="color:var(--accent)">New Project</div><div class="project-card-desc">Porter will guide you</div></div></div>';
   grid.innerHTML = html;
   // Stagger entrance
   grid.querySelectorAll('.project-card').forEach(function(c, i) { c.style.animationDelay = (i * 55) + 'ms'; });
@@ -21393,7 +21469,7 @@ async function _projChatSend() {
       + '&chat_id=' + encodeURIComponent(chatId)
       + '&project_id=' + encodeURIComponent(project.id)
       + '&persona_name=' + encodeURIComponent('Porter')
-      + '&raw_text=' + encodeURIComponent(text);
+      + '&context_module=' + encodeURIComponent(_currentModule || '') + '&context_id=' + encodeURIComponent(_crmDetailId || '') + '&raw_text=' + encodeURIComponent(text);
     var full = '';
     var buffered = '';
     var flushTimer = null;
@@ -21497,24 +21573,24 @@ async function _projLoadActivity(pid) {
       el.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);text-align:center;color:var(--text3)">No project activity yet.</div>';
       return;
     }
-    el.innerHTML = rows.map(function(r) {
-      var tone = r.status === 'complete' || r.status === 'done' ? '#22c55e' : (r.status === 'failed' || r.status === 'error' ? '#ef4444' : '#f59e0b');
+    el.innerHTML = '<div class="proj-timeline">' + rows.map(function(r) {
+      var nc = r.status === 'complete' || r.status === 'done' ? 'complete' : (r.status === 'failed' || r.status === 'error' ? 'failed' : 'pending');
       var actor = r.agent_name || 'Porter';
       var action = r.action || (r.source === 'dispatch' ? 'dispatch' : 'activity');
       var summary = r.summary || '';
-      return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">'
-        + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+      return '<div class="proj-timeline-item">'
+        + '<div class="proj-timeline-node ' + nc + '"></div>'
+        + '<div class="proj-timeline-card">'
+        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
         + '<span style="font-size:11px;font-weight:600;color:var(--text)">' + escHtml(actor) + '</span>'
         + '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(action) + '</span>'
         + (r.task_id ? '<span class="model-card-chip dim" style="font-size:10px">task ' + escHtml(r.task_id) + '</span>' : '')
+        + '<span style="font-size:10px;color:' + (nc === 'complete' ? '#22c55e' : nc === 'failed' ? '#ef4444' : '#f59e0b') + ';font-weight:600;margin-left:auto">' + escHtml((r.status || 'unknown').toUpperCase()) + '</span>'
         + '</div>'
-        + '<span style="font-size:10px;color:' + tone + ';font-weight:600">' + escHtml((r.status || 'unknown').toUpperCase()) + '</span>'
-        + '</div>'
-        + '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">' + escHtml(summary.substring(0, 220) || '(no summary recorded)') + '</div>'
+        + '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">' + escHtml(summary.substring(0, 220) || '(no summary)') + '</div>'
         + '<div style="font-size:10px;color:var(--text3)">' + escHtml(_relativeTime(r.ts)) + '</div>'
-        + '</div>';
-    }).join('');
+        + '</div></div>';
+    }).join('') + '</div>';
   } catch (e) {
     el.innerHTML = '<div style="padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);text-align:center;color:#ef4444">Could not load project activity.</div>';
   }
@@ -22157,11 +22233,43 @@ function _crmFilterDebounced() {
   _crmDebounceTimer = setTimeout(function() { _crmLoadDirectory(); }, 300);
 }
 
-/* _crmApplyFilters removed — replaced by unified _crmLoadDirectory in v0.32.1 */
 
 // ── Contact detail slide-out ──
 var _crmInteractionIcons = {note:'\u270E', call:'\u260E', email:'\u2709', meeting:'\u{1F465}', task:'\u2713', update:'\u21BB'};
 
+function _crmEditableField(label, value, contactId, field) {
+  return '<div class="crm-detail-field crm-editable" data-field="' + field + '" data-cid="' + contactId + '" onclick="_crmInlineEdit(this)" title="Click to edit">'
+    + '<span class="crm-detail-field-label">' + label + '</span>'
+    + '<span class="crm-detail-field-value">' + (value ? escHtml(value) : '<span style="color:var(--text3)">-</span>') + '</span></div>';
+}
+function _crmInlineEdit(el) {
+  var valEl = el.querySelector('.crm-detail-field-value');
+  if (!valEl || valEl.querySelector('input')) return;
+  var contactId = parseInt(el.dataset.cid);
+  var field = el.dataset.field;
+  var current = valEl.textContent.trim();
+  if (current === '-') current = '';
+  var inp = document.createElement('input');
+  inp.type = 'text'; inp.value = current;
+  inp.style.cssText = 'width:100%;padding:2px 6px;border:1px solid var(--accent);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;outline:none';
+  valEl.textContent = '';
+  valEl.appendChild(inp);
+  inp.focus();
+  inp.addEventListener('blur', async function() {
+    var newVal = inp.value.trim();
+    if (newVal !== current) {
+      var payload = {action:'contacts.update', id:contactId};
+      payload[field] = newVal;
+      var r = await api('/api/workspace/crm', payload);
+      if (r && r.ok) toast('Updated', 'ok');
+    }
+    valEl.innerHTML = newVal ? escHtml(newVal) : '<span style="color:var(--text3)">-</span>';
+  });
+  inp.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') inp.blur();
+    if (e.key === 'Escape') { valEl.innerHTML = current ? escHtml(current) : '<span style="color:var(--text3)">-</span>'; }
+  });
+}
 async function _crmOpenContact(id) {
   _crmDetailType = 'contact'; _crmDetailId = id;
   var d = await api('/api/workspace/crm', {action:'contacts.get', id:id});
@@ -22170,30 +22278,39 @@ async function _crmOpenContact(id) {
   var name = (c.first_name + ' ' + (c.last_name || '')).trim();
   var social = {}; try { social = JSON.parse(c.social_json || '{}'); } catch(e) {}
   var tags = []; try { tags = JSON.parse(c.tags_json || '[]'); } catch(e) {}
-  // Header
-  var hdr = document.getElementById('crm-detail-hdr');
-  hdr.innerHTML = '<div class="crm-detail-hdr-avatar">' + escHtml(avatarInitials(name)) + '</div>'
-    + '<div class="crm-detail-hdr-info"><div class="crm-detail-hdr-name">' + escHtml(name) + '</div>'
-    + '<div class="crm-detail-hdr-sub">' + (c.title ? escHtml(c.title) : '') + (c.company_name ? (c.title ? ' at ' : '') + escHtml(c.company_name) : '') + '</div></div>'
-    + '<button class="crm-detail-close" onclick="_crmCloseDetail()">&times;</button>';
-  // Body
-  var body = document.getElementById('crm-detail-body');
-  var bh = '';
-  // Details section
-  bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Details</div>';
-  if (c.email) bh += '<div class="crm-detail-field"><span class="crm-detail-field-label">Email</span><span class="crm-detail-field-value"><a href="mailto:' + escHtml(c.email) + '">' + escHtml(c.email) + '</a></span></div>';
-  if (c.phone) bh += '<div class="crm-detail-field"><span class="crm-detail-field-label">Phone</span><span class="crm-detail-field-value">' + escHtml(c.phone) + '</span></div>';
-  bh += '<div class="crm-detail-field"><span class="crm-detail-field-label">Type</span><span class="crm-detail-field-value"><span class="crm-type-badge ' + escHtml(c.contact_type) + '">' + escHtml(c.contact_type) + '</span></span></div>';
-  if (tags.length) {
-    bh += '<div class="crm-detail-field"><span class="crm-detail-field-label">Tags</span><span class="crm-detail-field-value">';
-    tags.forEach(function(t) { bh += '<span class="crm-tag">' + escHtml(t) + '</span> '; });
-    bh += '</span></div>';
+  document.getElementById('people-module').classList.add('detail-open');
+  var dv = document.getElementById('people-detail-view');
+  var isAdmin = currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin');
+  var h = '';
+  h += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">';
+  h += '<button class="btn btn-ghost" onclick="_crmCloseDetail()" style="font-size:12px">&larr; People</button>';
+  h += '<div style="flex:1"></div>';
+  if (isAdmin) {
+    h += '<button class="btn btn-ghost" onclick="_crmEditContact(' + c.id + ')" style="font-size:11px">Edit</button>';
+    if (c.status === 'active') h += '<button class="btn btn-ghost" onclick="_crmArchiveContact(' + c.id + ')" style="font-size:11px">Archive</button>';
+    h += '<button class="btn btn-ghost danger" onclick="_crmDeleteContact(' + c.id + ')" style="font-size:11px">Delete</button>';
   }
-  bh += '</div>';
-  // Social section
+  h += '</div>';
+  h += '<div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">';
+  h += '<div style="width:64px;height:64px;border-radius:50%;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:var(--text);flex-shrink:0">' + escHtml(avatarInitials(name)) + '</div>';
+  h += '<div><div style="font-size:18px;font-weight:600;color:var(--text)">' + escHtml(name) + '</div>';
+  if (c.title || c.company_name) h += '<div style="font-size:12px;color:var(--text3);margin-top:2px">' + (c.title ? escHtml(c.title) : '') + (c.company_name ? (c.title ? ' at ' : '') + escHtml(c.company_name) : '') + '</div>';
+  h += '</div></div>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">';
+  h += '<div>';
+  h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Details</div>';
+  h += _crmEditableField('Email', c.email || '', c.id, 'email');
+  h += _crmEditableField('Phone', c.phone || '', c.id, 'phone');
+  h += '<div class="crm-detail-field"><span class="crm-detail-field-label">Type</span><span class="crm-detail-field-value"><span class="crm-type-badge ' + escHtml(c.contact_type) + '">' + escHtml(c.contact_type) + '</span></span></div>';
+  if (tags.length) {
+    h += '<div class="crm-detail-field"><span class="crm-detail-field-label">Tags</span><span class="crm-detail-field-value">';
+    tags.forEach(function(t) { h += '<span class="crm-tag">' + escHtml(t) + '</span> '; });
+    h += '</span></div>';
+  }
+  h += '</div>';
   var socialKeys = Object.keys(social).filter(function(k) { return social[k]; });
   if (socialKeys.length) {
-    bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Social</div><div class="crm-social-links">';
+    h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Social</div><div class="crm-social-links">';
     var socialLabels = {linkedin:'LinkedIn', twitter:'Twitter', telegram:'Telegram', whatsapp:'WhatsApp', website:'Website'};
     socialKeys.forEach(function(k) {
       var v = social[k];
@@ -22201,28 +22318,28 @@ async function _crmOpenContact(id) {
       if (k === 'telegram' && !v.startsWith('http')) href = 'https://t.me/' + v.replace('@','');
       else if (k === 'whatsapp' && !v.startsWith('http')) href = 'https://wa.me/' + v.replace(/[^0-9]/g,'');
       else if (!v.startsWith('http')) href = 'https://' + v;
-      bh += '<a class="crm-social-link" href="' + escHtml(href) + '" target="_blank" rel="noopener">' + escHtml(socialLabels[k] || k) + '</a>';
+      h += '<a class="crm-social-link" href="' + escHtml(href) + '" target="_blank" rel="noopener">' + escHtml(socialLabels[k] || k) + '</a>';
     });
-    bh += '</div></div>';
+    h += '</div></div>';
   }
-  // Notes section
-  bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Notes</div>';
-  bh += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Add notes...">' + escHtml(c.notes || '') + '</textarea></div>';
-  // Projects section
   if (c.projects && c.projects.length) {
-    bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Projects</div>';
+    h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Projects</div>';
     c.projects.forEach(function(p) {
-      bh += '<div class="crm-project-link"><span>' + escHtml(p.project_id) + '</span><span class="crm-project-link-role">' + escHtml(p.role || '') + '</span></div>';
+      h += '<div class="crm-project-link"><span>' + escHtml(p.project_id) + '</span><span class="crm-project-link-role">' + escHtml(p.role || '') + '</span></div>';
     });
-    bh += '</div>';
+    h += '</div>';
   }
-  // Activity section
-  bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Activity</div>';
-  bh += '<button class="btn btn-ghost" style="margin-bottom:8px;font-size:11px" onclick="_crmAddInteraction(' + c.id + ')">+ Add note</button>';
-  bh += _crmRenderTimeline(c.interactions || []);
-  bh += '</div>';
-  body.innerHTML = bh;
-  // Wire up notes auto-save
+  h += '</div>';
+  h += '<div>';
+  h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Notes</div>';
+  h += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Add notes..." style="min-height:120px">' + escHtml(c.notes || '') + '</textarea></div>';
+  h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Activity</div>';
+  h += '<button class="btn btn-ghost" style="margin-bottom:8px;font-size:11px" onclick="_crmAddInteraction(' + c.id + ')">+ Add note</button>';
+  h += _crmRenderTimeline(c.interactions || []);
+  h += '</div>';
+  h += '</div>';
+  h += '</div>';
+  dv.innerHTML = h;
   var notesEl = document.getElementById('crm-detail-notes');
   if (notesEl) {
     var _noteTimer = null;
@@ -22233,17 +22350,6 @@ async function _crmOpenContact(id) {
       }, 1000);
     });
   }
-  // Actions
-  var actions = document.getElementById('crm-detail-actions');
-  var isAdmin = currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin');
-  actions.innerHTML = isAdmin
-    ? '<button class="btn btn-ghost" onclick="_crmEditContact(' + c.id + ')">Edit</button>'
-      + (c.status === 'active' ? '<button class="btn btn-ghost" onclick="_crmArchiveContact(' + c.id + ')">Archive</button>' : '')
-      + '<button class="btn btn-ghost danger" onclick="_crmDeleteContact(' + c.id + ')">Delete</button>'
-    : '';
-  // Open panel
-  document.getElementById('crm-detail-overlay').classList.add('open');
-  document.getElementById('crm-detail-panel').classList.add('open');
 }
 
 async function _crmOpenCompany(id) {
@@ -22251,39 +22357,51 @@ async function _crmOpenCompany(id) {
   var d = await api('/api/workspace/crm', {action:'companies.get', id:id});
   if (!d || !d.ok) { toast('Company not found', 'err'); return; }
   var c = d.company;
-  var hdr = document.getElementById('crm-detail-hdr');
-  hdr.innerHTML = '<div class="crm-detail-hdr-avatar">' + escHtml(avatarInitials(c.name)) + '</div>'
-    + '<div class="crm-detail-hdr-info"><div class="crm-detail-hdr-name">' + escHtml(c.name) + '</div>'
-    + '<div class="crm-detail-hdr-sub">' + (c.industry ? escHtml(c.industry) : '') + (c.country ? (c.industry ? ' · ' : '') + escHtml(c.country) : '') + '</div></div>'
-    + '<button class="crm-detail-close" onclick="_crmCloseDetail()">&times;</button>';
-  var body = document.getElementById('crm-detail-body');
-  var bh = '';
-  bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Details</div>';
-  if (c.website) bh += '<div class="crm-detail-field"><span class="crm-detail-field-label">Website</span><span class="crm-detail-field-value"><a href="' + escHtml(c.website) + '" target="_blank">' + escHtml(c.website) + '</a></span></div>';
-  bh += '<div class="crm-detail-field"><span class="crm-detail-field-label">Type</span><span class="crm-detail-field-value"><span class="crm-type-badge ' + escHtml(c.company_type) + '">' + escHtml(c.company_type) + '</span></span></div>';
-  bh += '</div>';
-  // Notes
-  bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Notes</div>';
-  bh += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Add notes...">' + escHtml(c.notes || '') + '</textarea></div>';
-  // Contacts at this company
+  document.getElementById('people-module').classList.add('detail-open');
+  var dv = document.getElementById('people-detail-view');
+  var isAdmin = currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin');
+  var h = '';
+  h += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">';
+  h += '<button class="btn btn-ghost" onclick="_crmCloseDetail()" style="font-size:12px">&larr; People</button>';
+  h += '<div style="flex:1"></div>';
+  if (isAdmin) {
+    h += '<button class="btn btn-ghost" onclick="_crmEditCompany(' + c.id + ')" style="font-size:11px">Edit</button>';
+    if (c.status === 'active') h += '<button class="btn btn-ghost" onclick="_crmArchiveCompany(' + c.id + ')" style="font-size:11px">Archive</button>';
+  }
+  h += '</div>';
+  h += '<div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">';
+  h += '<div style="width:64px;height:64px;border-radius:12px;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:var(--text);flex-shrink:0">' + escHtml(avatarInitials(c.name)) + '</div>';
+  h += '<div><div style="font-size:18px;font-weight:600;color:var(--text)">' + escHtml(c.name) + '</div>';
+  if (c.industry || c.country) h += '<div style="font-size:12px;color:var(--text3);margin-top:2px">' + (c.industry ? escHtml(c.industry) : '') + (c.country ? (c.industry ? ' · ' : '') + escHtml(c.country) : '') + '</div>';
+  h += '</div></div>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">';
+  h += '<div>';
+  h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Details</div>';
+  if (c.website) h += '<div class="crm-detail-field"><span class="crm-detail-field-label">Website</span><span class="crm-detail-field-value"><a href="' + escHtml(c.website) + '" target="_blank">' + escHtml(c.website) + '</a></span></div>';
+  h += '<div class="crm-detail-field"><span class="crm-detail-field-label">Type</span><span class="crm-detail-field-value"><span class="crm-type-badge ' + escHtml(c.company_type) + '">' + escHtml(c.company_type) + '</span></span></div>';
+  h += '</div>';
   if (c.contacts && c.contacts.length) {
-    bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Contacts (' + c.contacts.length + ')</div>';
+    h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Contacts (' + c.contacts.length + ')</div>';
     c.contacts.forEach(function(ct) {
       var cname = (ct.first_name + ' ' + (ct.last_name||'')).trim();
-      bh += '<div class="crm-row" style="padding:8px 10px" onclick="_crmCloseDetail();setTimeout(function(){_crmOpenContact(' + ct.id + ')},200)">';
-      bh += '<div class="crm-row-avatar" style="width:28px;height:28px;font-size:11px">' + escHtml(avatarInitials(cname)) + '</div>';
-      bh += '<div class="crm-row-info"><div class="crm-row-name" style="font-size:12px">' + escHtml(cname) + '</div>';
-      if (ct.title) bh += '<div class="crm-row-sub" style="font-size:10px">' + escHtml(ct.title) + '</div>';
-      bh += '</div></div>';
+      h += '<div class="crm-row" style="padding:8px 10px;cursor:pointer" onclick="_crmCloseDetail();setTimeout(function(){_crmOpenContact(' + ct.id + ')},200)">';
+      h += '<div class="crm-row-avatar" style="width:28px;height:28px;font-size:11px">' + escHtml(avatarInitials(cname)) + '</div>';
+      h += '<div class="crm-row-info"><div class="crm-row-name" style="font-size:12px">' + escHtml(cname) + '</div>';
+      if (ct.title) h += '<div class="crm-row-sub" style="font-size:10px">' + escHtml(ct.title) + '</div>';
+      h += '</div></div>';
     });
-    bh += '</div>';
+    h += '</div>';
   }
-  // Activity
-  bh += '<div class="crm-detail-section"><div class="crm-detail-section-title">Activity</div>';
-  bh += _crmRenderTimeline(c.interactions || []);
-  bh += '</div>';
-  body.innerHTML = bh;
-  // Notes auto-save for company
+  h += '</div>';
+  h += '<div>';
+  h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Notes</div>';
+  h += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Add notes..." style="min-height:120px">' + escHtml(c.notes || '') + '</textarea></div>';
+  h += '<div class="crm-detail-section"><div class="crm-detail-section-title">Activity</div>';
+  h += _crmRenderTimeline(c.interactions || []);
+  h += '</div>';
+  h += '</div>';
+  h += '</div>';
+  dv.innerHTML = h;
   var notesEl = document.getElementById('crm-detail-notes');
   if (notesEl) {
     var _noteTimer = null;
@@ -22294,19 +22412,10 @@ async function _crmOpenCompany(id) {
       }, 1000);
     });
   }
-  var actions = document.getElementById('crm-detail-actions');
-  var isAdmin = currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin');
-  actions.innerHTML = isAdmin
-    ? '<button class="btn btn-ghost" onclick="_crmEditCompany(' + c.id + ')">Edit</button>'
-      + (c.status === 'active' ? '<button class="btn btn-ghost" onclick="_crmArchiveCompany(' + c.id + ')">Archive</button>' : '')
-    : '';
-  document.getElementById('crm-detail-overlay').classList.add('open');
-  document.getElementById('crm-detail-panel').classList.add('open');
 }
 
 function _crmCloseDetail() {
-  document.getElementById('crm-detail-overlay').classList.remove('open');
-  document.getElementById('crm-detail-panel').classList.remove('open');
+  document.getElementById('people-module').classList.remove('detail-open');
   _crmDetailType = null; _crmDetailId = null;
 }
 
@@ -25064,6 +25173,8 @@ function openSettings(tab = 'profile') {
   if (moduleMap[tab]) { switchModule(moduleMap[tab]); return; }
   switchSettingsTab(tab);
   syncSettingsUI();
+  _currentModule = 'settings';
+  if (typeof _popupChatUpdateCtx === 'function') _popupChatUpdateCtx();
   const panel = document.getElementById('settingsPanel');
   if (panel) panel.classList.add('open');
 }
@@ -37196,7 +37307,7 @@ function _popupChatUpdateCtx() {
   if (window._projCurrent && _currentModule === 'projects') {
     ctxEl.innerHTML = '<span style="background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent);padding:1px 6px;border-radius:4px;font-size:9px;font-weight:600">' + escHtml(window._projCurrent.name || 'Project') + '</span> ' + escHtml((_projTab || 'now'));
   } else if (_currentModule) {
-    ctxEl.textContent = _currentModule.charAt(0).toUpperCase() + _currentModule.slice(1);
+    var _mdn={allfiles:'Files',capabilities:'Tools',people:'People',agents:'AI Agents',models:'Models',memory:'Memory',logs:'Logs',settings:'Settings',admin:'Admin',audit:'Audit',templates:'Templates'};ctxEl.textContent=_mdn[_currentModule]||(_currentModule.charAt(0).toUpperCase()+_currentModule.slice(1));
   }
 }
 
@@ -37316,6 +37427,9 @@ async function _popupChatSend() {
             if (window._projCurrent && _currentModule === 'projects') {
               setTimeout(function() { _projReload(window._projCurrent.id); }, 300);
             }
+            else if (_currentModule === 'people') setTimeout(loadPeople, 300);
+            else if (_currentModule === 'memory') setTimeout(loadMemory, 300);
+            else if (_currentModule === 'agents') setTimeout(function() { switchModule('agents'); }, 300);
           }
           _popupChatRender();
           es.close();
@@ -44493,7 +44607,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.32.1"})
+            self.reply_json({"v": "0.33.0"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44655,7 +44769,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.32.1"
+                health["porter_version"] = "0.33.0"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -46977,7 +47091,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.32.1'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.0'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -47071,6 +47185,8 @@ class Handler(BaseHTTPRequestHandler):
             # Porter context: tell models they're operating within Porter
             _persona_name_param = persona_name
             _stream_project_id = qs.get("project_id", [""])[0].strip()
+            _stream_context_module = qs.get("context_module", [""])[0].strip()
+            _stream_context_id = qs.get("context_id", [""])[0].strip()
             if str(_persona_name_param or "").strip().lower() == "porter":
                 prompt = _porter_chat_identity_prompt() + prompt
                 # v0.31.63 — Inject global directives into all Porter chats
@@ -47084,6 +47200,10 @@ class Handler(BaseHTTPRequestHandler):
                     _proj_ctx = _project_state_context(_stream_project_id)
                     if _proj_ctx:
                         prompt = _proj_ctx + "\n\n" + prompt
+                elif _stream_context_module:
+                    _mod_prompt = _module_chat_action_prompt(_stream_context_module, _stream_context_id)
+                    if _mod_prompt:
+                        prompt = _mod_prompt + "\n\n" + prompt
             elif not _persona_name_param:
                 # General chat (no persona) — inject Porter awareness
                 _porter_ctx = _general_chat_identity_prompt()
@@ -51010,7 +51130,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.32.1"
+                _ws_health["porter_version"] = "0.33.0"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -53984,7 +54104,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.32.1 ready (localhost only)")
+    print(f"\n  Porter v0.33.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
