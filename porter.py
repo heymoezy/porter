@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.31.87 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
+"""Porter v0.31.88 — Nav restructure, 25 tools, OpenClaw integration, file analysis"""
 
 
 import email
@@ -547,6 +547,14 @@ def _db_init():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_status ON agent_messages(status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_chain ON agent_messages(chain_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_created ON agent_messages(created_at DESC)")
+    # v0.31.88 — Memory V2: track injected memories per dispatch
+    for _col_sql in [
+        "ALTER TABLE agent_messages ADD COLUMN injected_memories TEXT DEFAULT '[]'",
+    ]:
+        try:
+            conn.execute(_col_sql)
+        except Exception:
+            pass
     conn.execute("""
         CREATE TABLE IF NOT EXISTS bridge_benchmarks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2929,16 +2937,151 @@ def _build_project_dispatch_context(project_id, persona_id="", task_id="", messa
     return "\n\n".join(parts)[:3200]
 
 
+# ─── Memory V2: Dispatch Integration (v0.31.88) ──────────────────────────────
+
+
+def _mem_inject_for_dispatch(message, persona_id='', project_id='', run_id=''):
+    """Memory V2: inject relevant memories before dispatch via FTS5.
+    Returns (formatted_context_block, list_of_injected_memory_ids)."""
+    if not message or len(message) < 10:
+        return '', []
+    injected_ids = []
+    sections = {'directive': [], 'concept': [], 'episode': []}
+    seen_ids = set()
+    # Always inject directives for active scopes
+    try:
+        conn = _db_conn()
+        scopes = [('global', '')]
+        if persona_id:
+            scopes.append(('agent', persona_id))
+        if project_id:
+            scopes.append(('project', project_id))
+        for scope, sid in scopes:
+            if scope == 'global':
+                rows = conn.execute(
+                    "SELECT id, text, memory_kind FROM memories "
+                    "WHERE memory_kind='directive' AND scope='global' AND status='active' "
+                    "ORDER BY importance DESC, confidence DESC LIMIT 10").fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, text, memory_kind FROM memories "
+                    "WHERE memory_kind='directive' AND scope=? AND scope_id=? AND status='active' "
+                    "ORDER BY importance DESC, confidence DESC LIMIT 5", (scope, sid)).fetchall()
+            for r in rows:
+                rid = r['id']
+                if rid not in seen_ids:
+                    seen_ids.add(rid)
+                    sections['directive'].append(dict(r))
+        conn.close()
+    except Exception:
+        pass
+    # FTS5 search for message-relevant memories
+    try:
+        results = _mem_search(message, limit=15)
+        for r in results:
+            rid = r.get('id')
+            kind = r.get('memory_kind', 'signal')
+            if rid in seen_ids or kind == 'signal':
+                continue
+            seen_ids.add(rid)
+            if kind in sections:
+                sections[kind].append(r)
+    except Exception:
+        pass
+    # Scope-specific concepts (always inject)
+    try:
+        conn = _db_conn()
+        for scope, sid in [('agent', persona_id), ('project', project_id)]:
+            if not sid:
+                continue
+            rows = conn.execute(
+                "SELECT id, text, memory_kind FROM memories "
+                "WHERE memory_kind='concept' AND scope=? AND scope_id=? AND status='active' "
+                "ORDER BY importance DESC, confidence DESC LIMIT 5", (scope, sid)).fetchall()
+            for r in rows:
+                rid = r['id']
+                if rid not in seen_ids:
+                    seen_ids.add(rid)
+                    sections['concept'].append(dict(r))
+        conn.close()
+    except Exception:
+        pass
+    # Format: directives first, then concepts, then episodes
+    parts = []
+    for kind in ('directive', 'concept', 'episode'):
+        for mem in sections[kind]:
+            text = (mem.get('text') or mem.get('preview') or '')[:200]
+            parts.append(f"[{kind.upper()}] {text}")
+            injected_ids.append(mem.get('id', 0))
+    if not parts:
+        return '', []
+    # Record injection
+    for mid in injected_ids:
+        _mem_record_injection(mid, run_id)
+    block = "--- Operational Memory ---\n" + "\n".join(parts) + "\n---"
+    return block, injected_ids
+
+
+def _mem_extract_signals(message, response, persona_id='', project_id='', run_id=''):
+    """Memory V2: extract signals from dispatch response.
+    Lightweight keyword-based extraction — no LLM call needed."""
+    if not response or len(response) < 50:
+        return 0
+    import re as _re
+    sentences = _re.split(r'[.!?\n]+', response)
+    signal_keywords = ('should', 'must', 'need to', 'recommend', 'decided', 'confirmed',
+                       'discovered', 'found that', 'learned', 'note:', 'important:',
+                       'bug:', 'fix:', 'issue:', 'prefer', 'always', 'never')
+    signals = []
+    for s in sentences:
+        s = s.strip()
+        if len(s) < 20 or len(s) > 300:
+            continue
+        lower = s.lower()
+        if any(kw in lower for kw in signal_keywords):
+            signals.append(s)
+    if not signals:
+        return 0
+    inserted = 0
+    for sig_text in signals[:5]:
+        # Dedup via FTS5
+        try:
+            existing = _mem_search(sig_text, limit=3)
+            if any(e.get('preview', '')[:60].lower() in sig_text.lower() for e in existing if e.get('preview')):
+                continue
+        except Exception:
+            pass
+        # Categorize
+        lower = sig_text.lower()
+        if any(k in lower for k in ('bug', 'fix', 'error', 'issue')):
+            cat = 'bugfix'
+        elif any(k in lower for k in ('decided', 'decision', 'chose')):
+            cat = 'decision'
+        elif any(k in lower for k in ('prefer', 'always', 'never')):
+            cat = 'preference'
+        elif any(k in lower for k in ('found', 'discover', 'learned')):
+            cat = 'discovery'
+        else:
+            cat = 'rule'
+        _mem_insert(
+            memory_kind='signal', text=sig_text, scope='global',
+            scope_id='', trust_tier='low', source_type='dispatch',
+            source_id=run_id or '', source_category=cat,
+            confidence=0.3, importance=4, review_state='pending')
+        inserted += 1
+    return inserted
+
+
 def _build_context_suffix(persona_id, message="", project_id="", task_id=""):
     """Build a lean context suffix for persona dispatch.
     v0.29.18: Trimmed from ~4.5KB to ~2KB by dropping redundant files."""
     prefs = _config.get("preferences", {})
     total_budget = max(800, prefs.get("hygiene_ctx_budget", 2500))
     pdir = PERSONAS_DIR / persona_id
-    # Budget: SOUL 60%, RULES 25%, MEMORY 15% (v0.29.23: Cortex removed — bloats prompt)
-    soul_budget = int(total_budget * 0.60)
+    # Budget: SOUL 55%, RULES 25%, MEMORY V2 20% (v0.31.88: FTS5 injection)
+    soul_budget = int(total_budget * 0.55)
     rules_budget = int(total_budget * 0.25)
-    memory_budget = int(total_budget * 0.15)
+    memory_budget = int(total_budget * 0.20)
     parts = []
     # SOUL.md — primary identity source (replaces IDENTITY.md + ROLE_CARD.md)
     soul_path = pdir / "SOUL.md"
@@ -2956,26 +3099,11 @@ def _build_context_suffix(persona_id, message="", project_id="", task_id=""):
             if _ship_idx > 0:
                 rules = rules[:_ship_idx].rstrip()
             parts.append(f"--- Rules ---\n{rules[:rules_budget]}\n---")
-    # Agent MEMORY.md — skip boilerplate headers, only real content
-    mem_path = pdir / "MEMORY.md"
-    if mem_path.exists():
-        mem = mem_path.read_text().strip()
-        if mem:
-            # Strip template boilerplate
-            import re as _re
-            mem = _re.sub(r"## Conflict Detection\n.*?(?=\n## |$)", "", mem, flags=_re.DOTALL).strip()
-            mem = _re.sub(r"## Preferences\n\*.*?\*\n?", "", mem).strip()
-            mem = _re.sub(r"## Learned Behaviors\n\*.*?\*\n?", "", mem).strip()
-            mem = _re.sub(r"# MEMORY\.md - \w+\n?", "", mem).strip()
-            if mem:
-                parts.append(f"--- Memory ---\n{mem[:memory_budget]}\n---")
-    # v0.29.23 — Cortex removed from system prompts (unnecessary bloat, slows dispatch)
-
-    # v0.29.26 — Iterative Retrieval: inject relevant memory chunks based on message keywords
+    # v0.31.88 — Memory V2: inject operational memories via FTS5
     try:
-        ir_ctx = _iterative_retrieve(message, persona_id=persona_id)
-        if ir_ctx:
-            parts.append(f"--- Relevant Context ---\n{ir_ctx[:memory_budget // 2]}\n---")
+        _mem_ctx, _mem_ids = _mem_inject_for_dispatch(message, persona_id=persona_id, project_id=project_id)
+        if _mem_ctx:
+            parts.append(_mem_ctx[:memory_budget])
     except Exception:
         pass
     # Squad roster — compact one-liner per teammate
@@ -15185,7 +15313,7 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.87</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.31.88</div>
   </div>
 </aside>
 
@@ -16345,6 +16473,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.31.88', date:'2026-03-17', notes:["Memory V2: FTS5-based memory injection before dispatch (replaces file-based MEMORY.md + iterative retrieve)","Memory V2: lightweight signal extraction after dispatch (keyword-based, always on)","Memory V2: injection attribution — injected_memories tracked per dispatch","Dispatch context budget rebalanced: SOUL 55%, RULES 25%, Memory 20%"] },
   { ver:'v0.31.87', date:'2026-03-17', notes:["Memory V2 API: GET /api/memory/search, stats, review-queue, by-scope, detail","Memory V2 API: POST /api/memory/create, promote, dismiss, update, delete","Memory V2 API: full FTS5 search with scope/kind filtering","Memory V2 API: review queue for pending signals","Backward compat: /api/personas/state reads from unified memories table"] },
   { ver:'v0.31.86', date:'2026-03-17', notes:["Memory V2: unified memories table with 4-layer model (directives, concepts, episodes, signals)","Memory V2: FTS5 full-text search with auto-sync triggers","Memory V2: core memory functions (insert, search, get, promote, dismiss, stats)","Memory V2: one-time migration from legacy tables (directives, agent_notes, project_notes, cortex_memories)","Memory V2: bridge functions for backward compatibility"] },
   { ver:'v0.31.85', date:'2026-03-15', notes:["CRM: contacts, companies, interactions with full CRUD API","CRM: 3 sub-tabs (Contacts, Team, Companies) with search and type filters","CRM: 520px slide-out detail panel with social links, notes auto-save, activity timeline","CRM: project-contact linking, 6 interaction types, tag support","CRM: 4 new SQLite tables (crm_contacts, crm_companies, crm_interactions, crm_project_contacts)"] },
@@ -40329,6 +40458,20 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
                 except Exception as _pe:
                     log.debug("Job proposal insert failed: %s", _pe)
 
+    # v0.31.88 — Memory V2: lightweight signal extraction (always on)
+    if result.get("ok") and result.get("text"):
+        _mem_msg = message
+        _mem_resp = result.get("text", "")
+        _mem_pid = persona_id
+        _mem_project = resolved_project_id
+        _mem_run = run_id
+        def _mem_bg():
+            try:
+                _mem_extract_signals(_mem_msg, _mem_resp, _mem_pid, _mem_project, _mem_run)
+            except Exception:
+                pass
+        threading.Thread(target=_mem_bg, name="mem-extract", daemon=True).start()
+
     # Legacy extractive memory is disabled by default in Memory V3.
     if _memory_auto_extract_enabled() and result.get("ok") and result.get("text"):
         _cortex_msg = message
@@ -43713,7 +43856,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.31.87"})
+            self.reply_json({"v": "0.31.88"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -43875,7 +44018,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.31.87"
+                health["porter_version"] = "0.31.88"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -46197,7 +46340,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.87'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.31.88'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -50230,7 +50373,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.31.87"
+                _ws_health["porter_version"] = "0.31.88"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -53192,7 +53335,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.31.87 ready (localhost only)")
+    print(f"\n  Porter v0.31.88 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
