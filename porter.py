@@ -37018,11 +37018,23 @@ function _popupChatClose() {
   if (el) el.classList.remove('open');
 }
 
-function _popupChatRender() {
+function _popupChatRender(tokenUpdate) {
   var thread = document.getElementById('popup-chat-thread');
   if (!thread) return;
+  // Fast path: if just updating the last message (streaming token), only update that element
+  if (tokenUpdate && thread.lastElementChild) {
+    var last = thread.lastElementChild;
+    var m = _popupChatMessages[_popupChatMessages.length - 1];
+    if (m && m.role === 'assistant') {
+      last.className = 'porter-popup-msg assistant';
+      last.textContent = _stripActionTags(m.content);
+      thread.scrollTop = thread.scrollHeight;
+      return;
+    }
+  }
+  // Full rebuild
   thread.innerHTML = _popupChatMessages.map(function(m) {
-    if (m.role === 'pending') return '<div class="porter-popup-msg pending">Porter is thinking...</div>';
+    if (m.role === 'pending') return '<div class="porter-popup-msg pending">Porter is thinking\u2026</div>';
     var cls = m.role === 'user' ? 'user' : 'assistant';
     return '<div class="porter-popup-msg ' + cls + '">' + escHtml(_stripActionTags(m.content)) + '</div>';
   }).join('');
@@ -37036,22 +37048,20 @@ async function _popupChatSend() {
   var text = input.value.trim();
   if (!text) return;
 
-  // v0.31.60 — Context-aware prompt with project binding (F4 fix)
-  var ctxParts = [];
+  // v0.32.0 — Always-aware context with Porter identity
+  var ctxParts = ['You are Porter, the AI orchestrator. Be concise, helpful, and direct.'];
   var _popupProjectId = '';
-  var _popupPersona = '';
+  var _popupPersona = 'Porter';
   var _popupChatId = 'porter-global';
   if (window._projCurrent && _currentModule === 'projects') {
     _popupProjectId = window._projCurrent.id || '';
-    _popupPersona = 'Porter';
     _popupChatId = 'popup-proj-' + _popupProjectId;
-    ctxParts.push('Context: User is viewing project "' + (window._projCurrent.name || '') + '" on the ' + (_projTab || 'overview') + ' tab.');
-    if (window._projCurrent.description) ctxParts.push('Project description: ' + window._projCurrent.description);
-    if (window._projCurrent.success_bar) ctxParts.push('Success criteria: ' + window._projCurrent.success_bar);
+    ctxParts.push('User is in project "' + (window._projCurrent.name || '') + '" (' + (_projTab || 'now') + ' view).');
+    if (window._projCurrent.description) ctxParts.push('Project: ' + window._projCurrent.description);
   } else {
-    ctxParts.push('Context: User is on the ' + (_currentModule || 'main') + ' tab in Porter.');
+    ctxParts.push('User is on ' + (_currentModule || 'main') + '.');
   }
-  var fullPrompt = ctxParts.join('\n') + '\n\nUser: ' + text;
+  var fullPrompt = ctxParts.join(' ') + '\n\nUser: ' + text;
 
   _popupChatMessages.push({ role: 'user', content: text });
   _popupChatMessages.push({ role: 'pending', content: '' });
@@ -37074,7 +37084,7 @@ async function _popupChatSend() {
         if (data.token) {
           fullText += data.token;
           _popupChatMessages[idx] = { role: 'assistant', content: fullText };
-          _popupChatRender();
+          _popupChatRender(true);
         }
         if (data.done) {
           _esDone = true;
