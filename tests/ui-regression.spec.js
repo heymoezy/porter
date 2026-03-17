@@ -244,7 +244,7 @@ test.describe('Nav bar structure', () => {
 
   // Current visible nav items (for operator role — Logs visible)
   const expectedNavItems = [
-    'AI Agents', 'Templates', 'Projects', 'Files', 'People', 'Models', 'Tools', 'Memory', 'Logs'
+    'Projects', 'Files', 'People', 'AI Agents', 'Models', 'Tools', 'Memory', 'Logs'
   ];
 
   test('sidebar contains all expected nav buttons', async ({ page }) => {
