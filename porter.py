@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.14 — Agent detail: full-page view"""
+"""Porter v0.33.15 — Agent cards: uniform sizing"""
 
 
 import email
@@ -15600,7 +15600,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.14</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.15</div>
   </div>
 </aside>
 
@@ -16716,6 +16716,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.15', date:'2026-03-18', notes:['Agent cards: uniform avatar sizing (96px for all), view switcher properly closes detail'] },
   { ver:'v0.33.14', date:'2026-03-18', notes:['Agent detail: full-page view replaces slide-out drawer, back button, legacy panel removed'] },
   { ver:'v0.33.13', date:'2026-03-18', notes:['Dead code cleanup: removed 124 unused JS functions (~1900 lines)'] },
   { ver:'v0.33.12', date:'2026-03-18', notes:['CRM overhaul: ACT!-style dense 2-column layout, quick interaction add, project name resolution, social fields always visible'] },
@@ -30435,7 +30436,7 @@ function renderPersonaOrg() {
     var isOrch = p.agent_group === 'Orchestrator' || p.orchestrator_only;
     var isBusy = String(p.status || '').toLowerCase() && String(p.status || '').toLowerCase() !== 'idle';
     return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + (isBusy ? ' is-busy' : '') + '" data-persona-id="' + p.id + '" onclick="selectPersona(\'' + p.id + '\')">'
-      + '<div class="persona-card-avatar" style="display:flex;align-items:center;justify-content:center;overflow:hidden">' + _personaAvatarMarkup(p, isOrch ? 120 : 88) + '</div>'
+      + '<div class="persona-card-avatar" style="display:flex;align-items:center;justify-content:center;overflow:hidden">' + _personaAvatarMarkup(p, 96) + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
       + '<div class="persona-card-role">' + escHtml(p.role || (isOrch ? 'Master Orchestrator' : 'Worker')) + '</div>'
       + '</div>';
@@ -30450,13 +30451,14 @@ function _setAgentView(mode) {
   var grid = document.getElementById('agents-grid-view');
   var office = document.getElementById('agents-office-view');
   var tmpl = document.getElementById('agents-templates-view');
-  var detail = document.getElementById('agent-detail-view');
   var btns = document.querySelectorAll('#agents-view-toggle button');
   btns.forEach(function(b,i) { b.classList.toggle('active', (i===0 && mode==='grid') || (i===1 && mode==='templates')); });
   if (grid) grid.style.display = mode === 'grid' ? '' : 'none';
   if (office) office.style.display = 'none';
   if (tmpl) tmpl.style.display = mode === 'templates' ? '' : 'none';
-  if (detail) detail.style.display = 'none';
+  // Close detail view via class toggle (v0.33.15)
+  var agentsModule = document.getElementById('agents-module');
+  if (agentsModule) agentsModule.classList.remove('detail-open');
   _selectedPersonaId = null;
   if (mode === 'templates') _loadTemplates();
 }
@@ -42651,7 +42653,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.14"})
+            self.reply_json({"v": "0.33.15"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -45147,7 +45149,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.14'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.15'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -52194,7 +52196,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.14 ready (localhost only)")
+    print(f"\n  Porter v0.33.15 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
