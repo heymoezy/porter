@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.13 — Dead code cleanup"""
+"""Porter v0.33.14 — Agent detail: full-page view"""
 
 
 import email
@@ -15159,31 +15159,20 @@ body.density-compact .file-name { padding: 6px 0; }
   .pulse-board { grid-template-columns:1fr; }
 }
 
-/* ── Persona Detail — slide-out right panel ──────────────── */
-.persona-detail { position:fixed; top:0; right:0; width:520px; height:100vh; z-index:900;
-  background:var(--surface); border-left:1px solid var(--border); box-shadow:-4px 0 20px rgba(0,0,0,.12);
-  display:flex; flex-direction:column; transform:translateX(100%); transition:transform .2s ease; }
-.persona-detail.open { transform:translateX(0); }
-.persona-detail-header { display:flex; align-items:center; gap:12px;
-  padding:14px 20px; border-bottom:1px solid var(--border); flex-shrink:0; }
-.persona-detail-avatar { font-size:24px; }
-.persona-detail-name { font-size:15px; font-weight:600; color:var(--text); }
-.persona-detail-role { font-size:11px; color:var(--text3); }
-.persona-detail-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); flex-shrink:0; }
+/* Legacy slide-out panel removed in v0.33.14 */
 .pd-tab { padding:10px 16px; font-size:12px; font-weight:500; color:var(--text3);
   background:none; border:none; border-bottom:2px solid transparent; cursor:pointer;
   transition:color .15s, border-color .15s; }
 .pd-tab:hover { color:var(--text); }
-#agent-detail-view { position:fixed; right:0; top:0; bottom:0; width:min(520px,85vw); background:var(--bg); border-left:1px solid var(--border); box-shadow:-8px 0 32px rgba(0,0,0,.25); z-index:200; flex-direction:column; transform:translateX(100%); transition:transform .22s ease; overflow:hidden; }
-#agent-detail-view.open { transform:translateX(0); display:flex; }
-#agent-detail-view.open #pd-content { height:auto; flex:1; }
-.agent-drawer-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.3); z-index:199; opacity:0; pointer-events:none; transition:opacity .22s ease; }
-.agent-drawer-backdrop.open { opacity:1; pointer-events:auto; }
+/* Agent detail — full-page in-place view (v0.33.14) */
+#agent-detail-view { display:none; flex-direction:column; gap:10px; min-height:0; height:100%; overflow:hidden; }
+#agents-module.detail-open #agents-grid-view { display:none !important; }
+#agents-module.detail-open #agents-templates-view { display:none !important; }
+#agents-module.detail-open #agents-office-view { display:none !important; }
+#agents-module.detail-open .module-hdr { display:none !important; }
+#agents-module.detail-open #agent-detail-view { display:flex; }
 .pd-tab.active { color:var(--accent); border-bottom-color:transparent; border-color:color-mix(in srgb,var(--accent) 24%, var(--border)); background:color-mix(in srgb,var(--accent) 8%, transparent); }
-.persona-detail-content { padding:20px; flex:1; overflow-y:auto; }
-.persona-detail-overlay { position:fixed; top:0; left:0; width:100vw; height:100vh;
-  background:rgba(0,0,0,.3); z-index:899; opacity:0; transition:opacity .2s; pointer-events:none; }
-.persona-detail-overlay.open { opacity:1; pointer-events:auto; }
+/* Legacy overlay removed in v0.33.14 */
 .persona-editor { width:100%; min-height:300px; padding:14px; font-family:monospace; font-size:13px;
   background:var(--bg2); color:var(--text); border:1px solid var(--border); border-radius:8px;
   resize:vertical; line-height:1.6; }
@@ -15611,7 +15600,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.13</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.14</div>
   </div>
 </aside>
 
@@ -15800,6 +15789,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <!-- v0.29.1 — Full-page Agent Detail View -->
     <div id="agent-detail-view" class="agent-detail-view">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <button class="btn btn-ghost btn-sm" onclick="closePersonaDetail()" style="font-size:12px;padding:4px 8px">&larr;</button>
         <span id="pd-detail-title" style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Agent</span>
         <div style="flex:1"></div>
         <button class="btn btn-ghost btn-sm" id="pd-sp-btn" onclick="_showSystemPrompt(_selectedPersonaId)" style="font-size:11px">System Prompt</button>
@@ -15833,27 +15823,7 @@ input[type="number"].settings-input { min-width: 60px; }
       <div id="pd-content" class="agent-detail-content"></div>
     </div>
 
-    <!-- Slide-out overlay -->
-    <div id="persona-detail-overlay" class="persona-detail-overlay" onclick="closePersonaDetail()"></div>
-    <!-- Persona Detail Panel — slides from right -->
-    <div id="persona-detail" class="persona-detail">
-      <div class="persona-detail-header">
-        <span id="pd-avatar" class="persona-detail-avatar"></span>
-        <div>
-          <div id="pd-name" class="persona-detail-name"></div>
-          <div id="pd-role" class="persona-detail-role"></div>
-        </div>
-        <div style="margin-left:auto;display:flex;gap:8px">
-          <button class="btn btn-ghost" onclick="_showSystemPrompt(window._selectedPersona && window._selectedPersona.id)" style="font-size:11px">System Prompt</button>
-          <button class="btn btn-ghost" onclick="deletePersona()" style="color:#ef4444;font-size:11px">Delete</button>
-          <button class="btn btn-ghost" onclick="closePersonaDetail()">Close</button>
-        </div>
-      </div>
-      <div class="persona-detail-tabs">
-        <!-- old slide-out tabs removed in v0.29.1 -->
-      </div>
-      <div id="pd-content-slideout" class="persona-detail-content"></div>
-    </div>
+    <!-- Legacy persona-detail panel removed in v0.33.14 -->
 
     <!-- Model Activity Slide-Out -->
     <div id="model-activity-overlay" class="model-activity-overlay" onclick="_closeModelActivity()"></div>
@@ -16746,6 +16716,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.14', date:'2026-03-18', notes:['Agent detail: full-page view replaces slide-out drawer, back button, legacy panel removed'] },
   { ver:'v0.33.13', date:'2026-03-18', notes:['Dead code cleanup: removed 124 unused JS functions (~1900 lines)'] },
   { ver:'v0.33.12', date:'2026-03-18', notes:['CRM overhaul: ACT!-style dense 2-column layout, quick interaction add, project name resolution, social fields always visible'] },
   { ver:'v0.33.11', date:'2026-03-18', notes:['Project detail overhaul: header actions, meta bar, inline tasks, team avatars, 2-column layout'] },
@@ -30697,19 +30668,9 @@ function openAgentDetail(personaId) {
 
 async function selectPersona(id) {
   _selectedPersonaId = id;
-  renderPersonaOrg();
-  // v0.31.96 — Open drawer (grid stays visible)
-  var detail = document.getElementById('agent-detail-view');
-  if (detail) detail.classList.add('open');
-  var bd = document.getElementById('agent-drawer-backdrop');
-  if (!bd) {
-    bd = document.createElement('div');
-    bd.id = 'agent-drawer-backdrop';
-    bd.className = 'agent-drawer-backdrop';
-    bd.onclick = function() { closePersonaDetail(); };
-    document.body.appendChild(bd);
-  }
-  bd.classList.add('open');
+  // v0.33.14 — Full-page detail (replaces drawer)
+  var agentsModule = document.getElementById('agents-module');
+  if (agentsModule) agentsModule.classList.add('detail-open');
   // Close other panels
   var re = document.getElementById('rules-editor'); if (re) re.style.display = 'none';
   var wz = document.getElementById('persona-wizard'); if (wz) wz.style.display = 'none';
@@ -30796,11 +30757,9 @@ function closePersonaDetail() {
   if (window._pdLiveSseId) { _sseUnsubscribe(window._pdLiveSseId); window._pdLiveSseId = null; }
   _selectedPersonaId = null;
   window._selectedPersona = null;
-  // v0.31.96 — Close drawer
-  var detail = document.getElementById('agent-detail-view');
-  if (detail) detail.classList.remove('open');
-  var bd = document.getElementById('agent-drawer-backdrop');
-  if (bd) bd.classList.remove('open');
+  // v0.33.14 — Close full-page detail
+  var agentsModule = document.getElementById('agents-module');
+  if (agentsModule) agentsModule.classList.remove('detail-open');
   renderPersonaOrg();
 }
 
@@ -42692,7 +42651,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.13"})
+            self.reply_json({"v": "0.33.14"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -45188,7 +45147,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.13'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.14'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -52235,7 +52194,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.13 ready (localhost only)")
+    print(f"\n  Porter v0.33.14 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
