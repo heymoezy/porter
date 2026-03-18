@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.12 — CRM overhaul: dense layout, quick interactions"""
+"""Porter v0.33.13 — Dead code cleanup"""
 
 
 import email
@@ -15611,7 +15611,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.12</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.13</div>
   </div>
 </aside>
 
@@ -16687,12 +16687,6 @@ var _modelsRenderedOnce = false;
 var _modelsStatusCheckSeq = 0;
 var _modelsStatusCheckTimer = null;
 var _modelsStatusIdleHandle = null;
-function _readModelsClientCache(key, maxAgeMs) {
-  return null;
-}
-function _writeModelsClientCache(key, data) {
-  return;
-}
 function _modelsStructureSignature(snap) {
   try {
     var providers = (snap && snap.providers ? snap.providers : []).map(function(p) {
@@ -16752,6 +16746,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.13', date:'2026-03-18', notes:['Dead code cleanup: removed 124 unused JS functions (~1900 lines)'] },
   { ver:'v0.33.12', date:'2026-03-18', notes:['CRM overhaul: ACT!-style dense 2-column layout, quick interaction add, project name resolution, social fields always visible'] },
   { ver:'v0.33.11', date:'2026-03-18', notes:['Project detail overhaul: header actions, meta bar, inline tasks, team avatars, 2-column layout'] },
   { ver:'v0.33.10', date:'2026-03-18', notes:['Fix: chat prefill now routes to popup widget (embedded bar was hidden)'] },
@@ -18583,10 +18578,6 @@ function loadSettings() {
   if (localStorage.getItem('porter_sidebar') === '1') document.body.classList.add('sidebar-collapsed');
 }
 function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
-function setSetting(key, val) {
-  settings[key] = val; saveSettings(); applySettings(); syncSettingsUI();
-  if (key === 'showHidden' || key === 'density') renderListing(curEntries);
-}
 function applySettings() {
   document.body.classList.toggle('density-compact', settings.density === 'compact');
   document.documentElement.style.setProperty('--editor-font-size', settings.fontSize + 'px');
@@ -18743,19 +18734,6 @@ function getTailscaleNodeStatus(node) {
   return 'online';
 }
 
-async function tailscaleControl(action) {
-  const st = document.getElementById('ts-control-status');
-  if (st) st.textContent = action === 'up' ? 'Connecting…' : action === 'down' ? 'Disconnecting…' : 'Testing…';
-  const res = await api('/api/tailscale/control', { action });
-  if (!res || !res.ok) {
-    if (st) st.textContent = (res && res.error) || 'Control action failed';
-    return;
-  }
-  if (st) st.textContent = res.message || 'Done';
-  await loadTailscaleStatus(true);
-  await loadLocations();
-}
-
 async function loadTailscaleStatus(force = false) {
   const now = Date.now();
   if (!force && _tsCache && (now - _tsCache.ts < 20000)) {
@@ -18849,24 +18827,12 @@ function renderTailscaleStatus(data) {
   panels.forEach(renderInto);
 }
 
-function startTsPolling() {
-  stopTsPolling();
-  loadTailscaleStatus();
-  _tsPollTimer = setInterval(() => loadTailscaleStatus(), 20000);
-}
 function stopTsPolling() {
   if (_tsPollTimer) { clearInterval(_tsPollTimer); _tsPollTimer = null; }
 }
 
 // ── config summary ──
 let _cfgCache = null;
-async function loadConfigSummary(force = false) {
-  if (!force && _cfgCache) { renderConfigSummary(_cfgCache); return; }
-  const data = await api('/api/config/summary');
-  if (!data) return;
-  _cfgCache = data;
-  renderConfigSummary(data);
-}
 function renderConfigSummary(d) {
   const el = document.getElementById('config-panel');
   if (!el) return;
@@ -19348,36 +19314,6 @@ async function loadWorkflowRegistry() {
   // Skill/ext sections removed — system workflows only
 }
 
-async function _loadSkillWorkflows() {
-  var grid = document.getElementById('wf-skill-grid');
-  var countEl = document.getElementById('wf-skill-count');
-  if (!grid) return;
-  try {
-    var data = await api('/api/openclaw/skills?action=list');
-    var skills = (data && data.skills) ? data.skills : [];
-    var installed = skills.filter(function(s) { return s.installed; });
-    if (countEl) countEl.textContent = installed.length + ' skill' + (installed.length !== 1 ? 's' : '');
-    if (!installed.length) {
-      grid.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px"><div style="font-size:20px;opacity:.4;margin-bottom:6px">\u26a1</div>No installed skills<br><span style="font-size:11px">Porter can create or assign the right skill when needed</span></div>';
-      return;
-    }
-    grid.innerHTML = installed.map(function(sk) {
-      return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'
-        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
-        + '<span style="font-size:16px">' + (sk.emoji || '\u2699') + '</span>'
-        + '<span style="font-weight:600;font-size:13px;color:var(--text)">' + escHtml(sk.name || sk.id) + '</span>'
-        + '</div>'
-        + '<div style="font-size:12px;color:var(--text3);margin-bottom:8px;line-height:1.4">' + escHtml(sk.description || 'OpenClaw skill') + '</div>'
-        + '<div style="display:flex;gap:6px">'
-        + '<button class="btn btn-ghost" style="font-size:11px" onclick="_wfRunSkill(\'' + escHtml(sk.name || sk.id) + '\')">\u25B6 Run Now</button>'
-        + '</div>'
-        + '</div>';
-    }).join('');
-  } catch(e) {
-    grid.innerHTML = '<div style="padding:12px;color:var(--text3);font-size:12px">Skills unavailable</div>';
-  }
-}
-
 async function _wfRunSkill(skillName) {
   toast('Running skill: ' + skillName);
   try {
@@ -19385,44 +19321,6 @@ async function _wfRunSkill(skillName) {
     if (r && r.ok !== false) { toast('Skill completed', 'ok'); }
     else toast((r && r.error) || 'Skill failed', 'err');
   } catch(e) { toast('Error: ' + e.message, 'err'); }
-}
-
-async function _loadExternalSchedulers() {
-  var grid = document.getElementById('wf-ext-grid');
-  var countEl = document.getElementById('wf-ext-count');
-  if (!grid) return;
-  var schedulers = [];
-  // Check for Ollama keepalive / model loading
-  try {
-    var olResp = await fetch('/api/models/available', {credentials:'same-origin'});
-    var olData = await olResp.json();
-    if (olData && olData.backends && olData.backends.ollama && olData.backends.ollama.available) {
-      schedulers.push({ name: 'Ollama Model Server', type: 'service', status: 'running', detail: 'Auto-loads models on demand, keeps warm for 5min idle timeout' });
-    }
-  } catch(e) {}
-  // Check for OpenClaw gateway
-  try {
-    var ocResp = await fetch('/api/models/available', {credentials:'same-origin'});
-    var ocData = await ocResp.json();
-    if (ocData && ocData.backends && ocData.backends.openclaw && ocData.backends.openclaw.available) {
-      schedulers.push({ name: 'OpenClaw Gateway', type: 'service', status: 'running', detail: 'Agent orchestration + skill execution on port 18789' });
-    }
-  } catch(e) {}
-  // System cron detection
-  schedulers.push({ name: 'Porter Systemd Timer', type: 'systemd', status: 'active', detail: 'porter.service — auto-restart on failure' });
-
-  if (countEl) countEl.textContent = schedulers.length + ' detected';
-  grid.innerHTML = schedulers.map(function(s) {
-    var dotColor = s.status === 'running' || s.status === 'active' ? '#22c55e' : '#9ca3af';
-    return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'
-      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
-      + '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0"></span>'
-      + '<span style="font-weight:600;font-size:13px;color:var(--text)">' + escHtml(s.name) + '</span>'
-      + '<span style="margin-left:auto;font-size:10px;color:var(--text3);background:var(--bg2);padding:2px 6px;border-radius:4px">' + escHtml(s.type) + '</span>'
-      + '</div>'
-      + '<div style="font-size:12px;color:var(--text3);line-height:1.4">' + escHtml(s.detail) + '</div>'
-      + '</div>';
-  }).join('');
 }
 
 async function _wfRefreshSystemOnly() {
@@ -19542,27 +19440,6 @@ async function _wfTrigger(id) {
       loadWorkflowRegistry();
     }
   } catch(e) { toast('Error: ' + e.message, 'err'); loadWorkflowRegistry(); }
-}
-
-function _wfShowConfig(id) {
-  var el = document.getElementById('wf-config-' + id);
-  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
-}
-
-async function _wfSaveConfig(id) {
-  var inputs = document.querySelectorAll('.wf-cfg-input[data-wf="' + id + '"]');
-  var body = {};
-  inputs.forEach(function(inp) {
-    var key = inp.getAttribute('data-key');
-    var val = inp.value;
-    var num = Number(val);
-    body[key] = (val !== '' && !isNaN(num)) ? num : (val === 'true' ? true : val === 'false' ? false : val);
-  });
-  try {
-    var r = await api('/api/workflows/' + id + '/config', body);
-    if (r && r.ok) { toast('Config saved', 'ok'); loadWorkflowRegistry(); }
-    else toast((r && r.error) || 'Save failed', 'err');
-  } catch(e) { toast('Error: ' + e.message, 'err'); }
 }
 
 function _wfParseInterval(intervalInput) {
@@ -19867,19 +19744,6 @@ function _buildSkillCard(sk) {
     + '</div>';
 }
 
-function _useSkillInChat(skillName) {
-  switchModule('agents');
-  setTimeout(function() {
-    selectPersona('porter-core');
-    var input = document.getElementById('pd-chat-input');
-    if (input) {
-      input.value = '/' + skillName + ' ';
-      input.focus();
-      input.setSelectionRange(input.value.length, input.value.length);
-    }
-  }, 200);
-}
-
 function _filterSkillCat(cat) {
   _skillCatFilter = (_skillCatFilter === cat) ? '' : cat;
   _renderSkillsTab();
@@ -19939,43 +19803,11 @@ async function removeSkill(id, name) {
   }
 }
 
-async function createSkill() {
-  const name = (document.getElementById('wf-new-skill-name') || {}).value || '';
-  const desc = (document.getElementById('wf-new-skill-desc') || {}).value || '';
-  const emoji = (document.getElementById('wf-new-skill-emoji') || {}).value || '';
-  if (!name.trim()) { toast('Skill name is required', 'err'); return; }
-  const res = await api('/api/openclaw/skills', { action: 'create', name: name.trim(), description: desc.trim(), emoji: emoji.trim() });
-  if (res && res.ok) {
-    toast('Skill "' + name.trim() + '" created');
-    // Clear form
-    const n = document.getElementById('wf-new-skill-name'); if (n) n.value = '';
-    const d = document.getElementById('wf-new-skill-desc'); if (d) d.value = '';
-    const e = document.getElementById('wf-new-skill-emoji'); if (e) e.value = '';
-    // Collapse form
-    const form = document.getElementById('wf-create-form');
-    if (form) form.style.display = 'none';
-    loadSkills();
-  } else {
-    toast((res && res.error) || 'Failed to create skill', 'err');
-  }
-}
-
-function toggleCreateSkillForm() {
-  const form = document.getElementById('wf-create-form');
-  if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
-}
-
 // ── Projects (v0.29.32 — real project containers) ─────────────────────
 var _projList = [], _projActive = null, _projTab = 'now';
 var _projActivitySseId = null;
 var _projActivityPoller = null;
 var _projActivityRefreshTimer = null;
-
-function _projFmtDate(ms) {
-  var d = new Date(ms);
-  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return d.getDate() + '-' + months[d.getMonth()] + '-' + d.getFullYear();
-}
 
 // Pixel art cover generator — deterministic from project ID
 function _projPixelCover(id, type, w, h) {
@@ -20124,12 +19956,6 @@ function _renderProjList() {
   });
 }
 
-function _projOpenActiveOrFirst() {
-  if (!_projList.length) { _askPorterToCreate('project'); return; }
-  var target = _projList.find(function(p) { return p.id === _projActive; }) || _projList[0];
-  if (target) _projOpen(target.id);
-}
-
 async function _projCreate() {
   _porterPrompt('New Project', [
     {name: 'name', label: 'Name', placeholder: 'Project name'},
@@ -20174,13 +20000,6 @@ async function _projToggleMilestone(pid, idx) {
   } catch(e) { toast('Failed', 'err'); }
 }
 
-async function _projRemoveMilestone(pid, idx) {
-  try {
-    var r = await api('/api/projects', {action: 'remove_milestone', project_id: pid, index: idx});
-    if (r && r.ok) { toast('Removed', 'ok'); await loadProjects(); if (window._projCurrent && window._projCurrent.id === pid) { window._projCurrent = _projList.find(function(p) { return p.id === pid; }); _renderProjTabContent(); } }
-  } catch(e) { toast('Failed', 'err'); }
-}
-
 async function _projAddLink(pid) {
   _porterPrompt('Add Link', [
     {name: 'kind', label: 'Type', type: 'select', options: [{value:'repo',label:'Repository'},{value:'live_url',label:'Live Site'},{value:'docs',label:'Docs'},{value:'custom',label:'Custom'}]},
@@ -20209,78 +20028,11 @@ async function _projSetStatus(pid, status) {
   } catch(e) { toast('Failed', 'err'); }
 }
 
-async function _projLinkProject(pid) {
-  var others = _projList.filter(function(p) { return p.id !== pid; });
-  if (!others.length) { toast('No other projects to link', 'err'); return; }
-  _porterPrompt('Link Project', [
-    {name: 'target', label: 'Project', type: 'select', options: others.map(function(p) { return {value: p.id, label: p.name || p.id.slice(0,8)}; })},
-    {name: 'rel', label: 'Relationship', type: 'select', options: [{value:'related',label:'Related'},{value:'depends_on',label:'Depends on'},{value:'feeds_into',label:'Feeds into'}]}
-  ], async function(vals) {
-    if (!vals.target) { toast('Select a project', 'err'); return; }
-    try {
-      var r = await api('/api/projects', {action: 'link_project', project_id: pid, target_project_id: vals.target, relationship: vals.rel || 'related'});
-      if (r && r.ok) { toast('Linked', 'ok'); await loadProjects(); if (window._projCurrent && window._projCurrent.id === pid) { window._projCurrent = _projList.find(function(p) { return p.id === pid; }); _renderProjTabContent(); } }
-      else { toast(r && r.error || 'Failed', 'err'); }
-    } catch(e) { toast('Failed', 'err'); }
-  }, {okLabel: 'Link'});
-}
-
-async function _projUnlinkProject(pid, targetId) {
-  try {
-    var r = await api('/api/projects', {action: 'unlink_project', project_id: pid, target_project_id: targetId});
-    if (r && r.ok) { toast('Unlinked', 'ok'); await loadProjects(); if (window._projCurrent && window._projCurrent.id === pid) { window._projCurrent = _projList.find(function(p) { return p.id === pid; }); _renderProjTabContent(); } }
-  } catch(e) { toast('Failed', 'err'); }
-}
-
 async function _projReorder(fromId, toId) {
   try {
     var r = await api('/api/projects', {action: 'reorder', from_id: fromId, to_id: toId});
     if (r && r.ok) { await loadProjects(); }
   } catch(e) {}
-}
-
-async function _projEditDates(pid) {
-  var proj = _projList.find(function(p) { return p.id === pid; });
-  if (!proj) return;
-  _porterPrompt('Edit Timeline', [
-    {name: 'start_date', label: 'Start Date', placeholder: 'YYYY-MM-DD', value: proj.start_date || ''},
-    {name: 'deadline', label: 'Deadline', placeholder: 'YYYY-MM-DD', value: proj.deadline || ''},
-    {name: 'plan', label: 'Project Plan', type: 'textarea', placeholder: 'High-level plan or key phases...', value: proj.plan || ''}
-  ], async function(vals) {
-    try {
-      var r = await api('/api/projects', {action: 'update', project_id: pid, start_date: vals.start_date || '', deadline: vals.deadline || '', plan: vals.plan || ''});
-      if (r && r.ok) { toast('Timeline updated', 'ok'); await loadProjects(); if (window._projCurrent && window._projCurrent.id === pid) { window._projCurrent = _projList.find(function(p) { return p.id === pid; }); _renderProjTabContent(); } }
-      else { toast(r && r.error || 'Failed', 'err'); }
-    } catch(e) { toast('Failed', 'err'); }
-  }, {okLabel: 'Save'});
-}
-
-async function _projUploadFile(pid) {
-  var input = document.createElement('input');
-  input.type = 'file';
-  input.multiple = true;
-  input.onchange = async function() {
-    if (!input.files || !input.files.length) return;
-    for (var i = 0; i < input.files.length; i++) {
-      var file = input.files[i];
-      var fd = new FormData();
-      fd.append('file', file);
-      fd.append('root', 'documents');
-      fd.append('path', 'porter/workspace/projects/' + pid + '/artifacts');
-      try {
-        var xhr = new XMLHttpRequest();
-        xhr.open('POST', '/upload', false);
-        xhr.send(fd);
-        if (xhr.status === 200) {
-          toast('Uploaded: ' + file.name, 'ok');
-        } else {
-          toast('Upload failed: ' + file.name, 'err');
-        }
-      } catch(e) { toast('Upload failed', 'err'); }
-    }
-    _projLoadArtifacts(pid);
-  };
-  input.click();
 }
 
 // v0.31.44 — Project People / Collaborators
@@ -20320,21 +20072,6 @@ async function _projLoadCollaborators(pid) {
   }
 }
 
-async function _projAddCollaborator(pid) {
-  var username = await porterPrompt('Add Collaborator', 'Username to add:', '');
-  if (!username) return;
-  username = username.toLowerCase().replace(/[^a-z0-9_]/g, '');
-  if (!username) { toast('Invalid username', 'err'); return; }
-  var role = await porterPrompt('Collaborator Role', 'Role (owner, editor, viewer, member):', 'member');
-  if (!role) return;
-  try {
-    var r = await fetch('/api/projects', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify({action:'add_collaborator', project_id: pid, username: username, role: role})});
-    var d = await r.json();
-    if (d.ok) { toast('Added ' + username, 'ok'); _projLoadCollaborators(pid); }
-    else { toast(d.error || 'Failed', 'err'); }
-  } catch(e) { toast('Failed to add collaborator', 'err'); }
-}
-
 async function _projRemoveCollaborator(pid, username) {
   if (!confirm('Remove ' + username + ' from this project?')) return;
   try {
@@ -20357,102 +20094,6 @@ async function _projChangeCollabRole(pid, username) {
 }
 
 var _projDelivDragCtr = 0;
-function _projDelivDragOver(e) { e.preventDefault(); e.stopPropagation(); }
-function _projDelivDragEnter(e) {
-  e.preventDefault(); e.stopPropagation();
-  _projDelivDragCtr++;
-  var el = document.getElementById('proj-deliv-drop');
-  if (el) el.classList.add('drag-over');
-}
-function _projDelivDragLeave(e) {
-  e.preventDefault(); e.stopPropagation();
-  _projDelivDragCtr--;
-  if (_projDelivDragCtr <= 0) {
-    _projDelivDragCtr = 0;
-    var el = document.getElementById('proj-deliv-drop');
-    if (el) el.classList.remove('drag-over');
-  }
-}
-function _projDelivDrop(e, pid) {
-  e.preventDefault(); e.stopPropagation();
-  _projDelivDragCtr = 0;
-  var el = document.getElementById('proj-deliv-drop');
-  if (el) el.classList.remove('drag-over');
-  var files = e.dataTransfer.files;
-  if (!files || !files.length) return;
-  var uploaded = 0;
-  var total = files.length;
-  for (var i = 0; i < files.length; i++) {
-    (function(file) {
-      var fd = new FormData();
-      fd.append('file', file);
-      fd.append('root', 'documents');
-      fd.append('path', 'porter/workspace/projects/' + pid + '/artifacts');
-      var xhr = new XMLHttpRequest();
-      xhr.open('POST', '/upload', true);
-      xhr.onload = function() {
-        uploaded++;
-        if (xhr.status === 200) {
-          toast('Uploaded: ' + file.name, 'ok');
-        } else {
-          toast('Upload failed: ' + file.name, 'err');
-        }
-        if (uploaded === total) _projLoadArtifacts(pid);
-      };
-      xhr.onerror = function() { uploaded++; toast('Upload failed: ' + file.name, 'err'); if (uploaded === total) _projLoadArtifacts(pid); };
-      xhr.send(fd);
-    })(files[i]);
-  }
-}
-
-async function _projUploadMedia(pid, ctype) {
-  var accept = '';
-  if (ctype === 'image') accept = 'image/*';
-  else if (ctype === 'video') accept = 'video/*';
-  else if (ctype === 'audio') accept = 'audio/*';
-  else if (ctype === 'document') accept = '.pdf,.doc,.docx,.txt,.md,.csv,.xlsx';
-  var input = document.createElement('input');
-  input.type = 'file';
-  if (accept) input.accept = accept;
-  input.onchange = async function() {
-    if (!input.files || !input.files.length) return;
-    var file = input.files[0];
-    var fd = new FormData();
-    fd.append('file', file);
-    fd.append('root', 'documents');
-    fd.append('path', 'porter/workspace/projects/' + pid + '/artifacts');
-    try {
-      var xhr = new XMLHttpRequest();
-      xhr.open('POST', '/upload', false);
-      xhr.send(fd);
-      if (xhr.status === 200) {
-        var dlUrl = '/download?root=documents&path=' + encodeURIComponent('porter/workspace/projects/' + pid + '/artifacts/' + file.name) + '&inline=1';
-        var r = await api('/api/projects', {action:'add_content', project_id:pid, content_type:ctype, title:file.name, url:dlUrl, file_path:file.name, mime_type:file.type, file_size:file.size});
-        if (r && r.ok) { toast('Added ' + ctype, 'ok'); _projLoadContent(pid); _projLoadArtifacts(pid); }
-        else toast('Save failed', 'err');
-      } else { toast('Upload failed', 'err'); }
-    } catch(e) { toast('Upload failed', 'err'); }
-  };
-  input.click();
-}
-
-async function _projAddContent(pid, ctype) {
-  if (ctype === 'text') {
-    var title = await porterPrompt('Add Text', 'Title (optional):');
-    if (title === null) return;
-    var body = await porterPrompt('Add Text', 'Content:', '', 'textarea');
-    if (body === null || !body.trim()) return;
-    var r = await api('/api/projects', {action:'add_content', project_id:pid, content_type:'text', title:title.trim(), body:body.trim()});
-    if (r && r.ok) { toast('Text added', 'ok'); _projLoadContent(pid); }
-  } else if (ctype === 'link') {
-    var url = await porterPrompt('Add Link', 'URL:');
-    if (!url || !url.trim()) return;
-    var title = await porterPrompt('Add Link', 'Title (optional):');
-    var r = await api('/api/projects', {action:'add_content', project_id:pid, content_type:'link', title:(title||'').trim(), url:url.trim()});
-    if (r && r.ok) { toast('Link added', 'ok'); _projLoadContent(pid); }
-  }
-}
-
 async function _projRemoveContent(pid, cid) {
   var r = await api('/api/projects', {action:'remove_content', content_id:cid});
   if (r && r.ok) { toast('Removed', 'ok'); _projLoadContent(pid); }
@@ -20751,43 +20392,6 @@ function _projChatPrefill(text) {
 }
 
 // ── Plan tab interaction helpers ──
-async function _projSetAutonomy(pid, mode) {
-  var proj = window._projCurrent;
-  if (!proj) return;
-  proj.autonomy = proj.autonomy || {};
-  proj.autonomy.mode = mode;
-  await fetch('/api/projects', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({action:'update_plan_field', project_id:pid, field:'autonomy', value:proj.autonomy}) });
-  _renderProjTabContent();
-}
-async function _projToggleAutonomyFlag(pid, key) {
-  var proj = window._projCurrent;
-  if (!proj) return;
-  proj.autonomy = proj.autonomy || {};
-  proj.autonomy[key] = !(proj.autonomy[key] !== false);
-  await fetch('/api/projects', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({action:'update_plan_field', project_id:pid, field:'autonomy', value:proj.autonomy}) });
-  _renderProjTabContent();
-}
-async function _projToggleCheckpoint(pid, label) {
-  var proj = window._projCurrent;
-  if (!proj) return;
-  var sched = proj.schedule || {};
-  var cps = sched.checkpoints || [];
-  cps.forEach(function(cp) { if (cp.label === label) cp.done = !cp.done; });
-  proj.schedule = sched;
-  proj.schedule.checkpoints = cps;
-  await fetch('/api/projects', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({action:'update_plan_field', project_id:pid, field:'schedule', value:proj.schedule}) });
-  _renderProjTabContent();
-}
-async function _projToggleGate(pid, idx) {
-  var proj = window._projCurrent;
-  if (!proj) return;
-  var gates = proj.quality_gates || [];
-  if (gates[idx]) gates[idx].done = !gates[idx].done;
-  proj.quality_gates = gates;
-  await fetch('/api/projects', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({action:'update_plan_field', project_id:pid, field:'quality_gates', value:proj.quality_gates}) });
-  _renderProjTabContent();
-}
-
 function _projShowAllSuggestions() {
   var proj = window._projCurrent;
   if (!proj) return;
@@ -20993,36 +20597,6 @@ async function _renderProjectPage() {
 }
 
 async function _renderProjTabContent() { return _renderProjectPage(); }
-async function _projLoadNowTasks(projId) {
-  var el = document.getElementById('proj-now-tasks');
-  if (!el) return;
-  try {
-    var resp = await api('/api/projects/' + projId + '/tasks');
-    var tasks = (resp && resp.tasks) || [];
-    var inP = tasks.filter(function(t){ return t.status === 'in_progress'; }).length;
-    var todo = tasks.filter(function(t){ return t.status === 'todo'; }).length;
-    var done = tasks.filter(function(t){ return t.status === 'done'; }).length;
-    if (!tasks.length) { el.innerHTML = '<span style="color:var(--text3);font-size:11px">No tasks yet. Add them in Plan.</span>'; return; }
-    var h = '<div style="display:flex;gap:10px;font-size:11px;margin-bottom:4px">';
-    if (inP) h += '<span style="color:var(--accent)">\u25cf ' + inP + ' in progress</span>';
-    if (todo) h += '<span style="color:var(--text3)">\u25cb ' + todo + ' to do</span>';
-    if (done) h += '<span style="color:var(--text3);opacity:.6">\u2713 ' + done + ' done</span>';
-    h += '</div>';
-    var active = tasks.filter(function(t){ return t.status !== 'done'; }).slice(0, 5);
-    if (active.length) {
-      h += '<div style="display:flex;flex-direction:column;gap:2px">';
-      active.forEach(function(t) {
-        var st = t.status === 'in_progress' ? '\u25cf' : '\u25cb';
-        var stColor = t.status === 'in_progress' ? 'var(--accent)' : 'var(--text3)';
-        h += '<div style="display:flex;align-items:center;gap:6px;padding:1px 0;font-size:11px"><span style="color:' + stColor + ';font-size:8px">' + st + '</span><span style="color:var(--text)">' + escHtml(t.title || t.name || '?') + '</span></div>';
-      });
-      h += '</div>';
-    }
-    el.innerHTML = h;
-  } catch(e) { el.innerHTML = ''; }
-}
-
-
 window._projChatState = window._projChatState || {};
 
 function _projChatGetState(pid) {
@@ -21050,34 +20624,6 @@ function _projChatSetModel(value) {
   if (picker) {
     if (state.modelOverride) { picker.classList.add('active'); } else { picker.classList.remove('active'); }
   }
-}
-
-function _projChatModelToggle(event) {
-  event.stopPropagation();
-  document.querySelectorAll('.chat-ctx-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
-  var dd = document.getElementById('proj-chat-model-dd');
-  if (!dd) return;
-  var proj = window._projCurrent;
-  var state = proj ? _projChatGetState(proj.id) : {};
-  var cur = state.modelOverride || '';
-  var opts = _pdChatModelOptions();
-  var html = '';
-  opts.forEach(function(opt, i) {
-    var sel = (cur === opt.value) ? ' selected' : '';
-    html += '<div class="chat-ctx-opt' + sel + '" onclick="event.stopPropagation();_projChatModelPick(\x27' + opt.value + '\x27)">'
-      + escHtml(opt.label) + '</div>';
-    if (i === 0) html += '<div class="chat-ctx-divider"></div>';
-  });
-  dd.innerHTML = html;
-  var rect = event.currentTarget.getBoundingClientRect();
-  var spaceBelow = window.innerHeight - rect.bottom;
-  if (spaceBelow < 220) {
-    dd.style.top = ''; dd.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
-  } else {
-    dd.style.bottom = ''; dd.style.top = (rect.bottom + 4) + 'px';
-  }
-  dd.style.left = Math.max(4, rect.left) + 'px';
-  dd.classList.add('open');
 }
 
 function _projChatModelPick(value) {
@@ -21156,22 +20702,6 @@ function _projNewChat() {
   state.chatId = '';
   state.greetingSeed = Date.now() + Math.floor(Math.random() * 1000);
   _projChatRender(project.id);
-}
-
-async function _projClearChat() {
-  var project = window._projCurrent;
-  if (!project) return;
-  var state = _projChatGetState(project.id);
-  var oldId = state.chatId;
-  state.messages = [];
-  state.chatId = '';
-  state.greetingSeed = Date.now() + Math.floor(Math.random() * 1000);
-  _projChatRender(project.id);
-  if (oldId) {
-    try {
-      await api('/api/chat', { action: 'delete', chat_id: oldId }, 30000);
-    } catch (_) {}
-  }
 }
 
 async function _projOpenHistory() {
@@ -21585,63 +21115,6 @@ function _projPreviewArtifact(url, kind, name, rowEl) {
   pv.style.display = '';
 }
 
-async function _projShowBrief(pid) {
-  try {
-    var data = await api('/api/projects/' + pid + '/brief');
-    if (!data || !data.ok) { toast('Brief unavailable', 'warn'); return; }
-    var b = data;
-    var html = '<div style="max-width:500px">';
-    html += '<div style="font-size:13px;font-weight:600;margin-bottom:8px">' + escHtml(b.project.name || 'Project') + ' — Knowledge Brief</div>';
-    // Knowledge stats
-    html += '<div style="font-size:11px;color:var(--text2);margin-bottom:8px">';
-    html += '<strong>' + b.knowledge.total + '</strong> memories';
-    if (b.agents.length) html += ' · <strong>' + b.agents.length + '</strong> agents';
-    var taskTotal = b.tasks.pending + b.tasks.in_progress + b.tasks.complete;
-    if (taskTotal) html += ' · <strong>' + taskTotal + '</strong> tasks (' + b.tasks.complete + ' done)';
-    html += '</div>';
-    // Top keywords
-    var kws = Object.entries(b.knowledge.top_keywords || {}).slice(0, 8);
-    if (kws.length) {
-      html += '<div style="margin-bottom:8px;display:flex;gap:4px;flex-wrap:wrap">';
-      kws.forEach(function(kv) {
-        html += '<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:var(--raised);color:var(--text2)">' + escHtml(kv[0]) + ' (' + kv[1] + ')</span>';
-      });
-      html += '</div>';
-    }
-    // By agent
-    var byAgent = Object.entries(b.knowledge.by_agent || {});
-    if (byAgent.length) {
-      html += '<div style="font-size:10px;font-weight:600;color:var(--text3);margin-bottom:4px">KNOWLEDGE BY AGENT</div>';
-      byAgent.forEach(function(kv) {
-        html += '<div style="font-size:11px;color:var(--text2)">' + escHtml(kv[0]) + ': ' + kv[1] + ' facts</div>';
-      });
-      html += '<div style="margin-bottom:8px"></div>';
-    }
-    // Top facts
-    var facts = (b.knowledge.facts || []).slice(0, 5);
-    if (facts.length) {
-      html += '<div style="font-size:10px;font-weight:600;color:var(--text3);margin-bottom:4px">TOP KNOWLEDGE</div>';
-      facts.forEach(function(f) {
-        var conf = Math.round((f.confidence || 0.5) * 100);
-        html += '<div style="font-size:11px;color:var(--text);padding:4px 0;border-bottom:1px solid var(--border)">';
-        html += escHtml(f.fact);
-        html += ' <span style="color:var(--text3);font-size:10px">(' + conf + '%';
-        if (f.agent) html += ', ' + escHtml(f.agent);
-        html += ')</span></div>';
-      });
-      html += '<div style="margin-bottom:8px"></div>';
-    }
-    // Recent activity
-    if (b.recent_activity && b.recent_activity.length) {
-      html += '<div style="font-size:10px;font-weight:600;color:var(--text3);margin-bottom:4px">RECENT ACTIVITY</div>';
-      b.recent_activity.slice(0, 5).forEach(function(a) {
-        html += '<div style="font-size:11px;color:var(--text2)">' + escHtml(a.agent || '?') + ': ' + escHtml(a.action || '') + ' [' + escHtml(a.status || '') + ']</div>';
-      });
-    }
-    html += '</div>';
-    porterAlert('Knowledge Brief', html);
-  } catch(e) { toast('Failed to load brief', 'err'); }
-}
 async function _projLoadState(pid) {
   var el = document.getElementById('proj-state-view');
   if (!el) return;
@@ -21718,33 +21191,6 @@ async function _projAssignAgent(pid) {
       } else { toast(r && r.error || 'Failed', 'err'); }
     } catch(e) { toast('Failed', 'err'); }
   });
-}
-
-async function _projUnassign(pid, agentId) {
-  try {
-    var r = await api('/api/projects', {action: 'unassign_agent', project_id: pid, persona_id: agentId});
-    if (r && r.ok) {
-      toast('Agent removed', 'ok');
-      await loadProjects();
-      var updated = _projList.find(function(p) { return p.id === pid; });
-      if (updated) { window._projCurrent = updated; _renderProjTabContent(); }
-    } else { toast(r && r.error || 'Failed', 'err'); }
-  } catch(e) { toast('Failed', 'err'); }
-}
-
-async function _projSave(pid) {
-  var name = (document.getElementById('proj-edit-name') || {}).value;
-  var desc = (document.getElementById('proj-edit-desc') || {}).value;
-  var type = (document.getElementById('proj-edit-type') || {}).value;
-  try {
-    var r = await api('/api/projects', {action: 'update', project_id: pid, name: name, description: desc, type: type});
-    if (r && r.ok) {
-      toast('Saved', 'ok');
-      await loadProjects();
-      var updated = _projList.find(function(p) { return p.id === pid; });
-      if (updated) { window._projCurrent = updated; document.getElementById('proj-detail-name').textContent = updated.name || 'Untitled'; }
-    } else { toast(r && r.error || 'Failed', 'err'); }
-  } catch(e) { toast('Failed', 'err'); }
 }
 
 async function _projSetActive(pid) {
@@ -22369,13 +21815,6 @@ function _crmArchiveContact(id) {
   }, {okLabel:'Archive'});
 }
 
-function _crmDeleteContact(id) {
-  _porterConfirm('Delete Contact', 'Permanently delete this contact and all their activity? This cannot be undone.', async function() {
-    var r = await api('/api/workspace/crm', {action:'contacts.delete', id:id});
-    if (r && r.ok) { toast('Deleted', 'ok'); _crmCloseDetail(); _crmLoadContacts(); }
-  }, {danger:true, okLabel:'Delete'});
-}
-
 async function _crmAddCompany() {
   var name = await porterPrompt('New Company', 'Company name:', '');
   if (!name) return;
@@ -22447,18 +21886,6 @@ async function loadCapabilities() {
     })
     .catch(function(e) { if (el) el.innerHTML = '<div style="color:var(--danger);font-size:13px">Could not load: ' + escHtml(e.message) + '</div>'; });
 }
-
-function _capSkeletons(n) {
-  var html = '';
-  for (var i = 0; i < n; i++) {
-    html += '<div style="padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);animation:pulse 1.5s ease-in-out infinite">'
-      + '<div style="height:14px;width:' + (60 + Math.random()*80) + 'px;background:var(--border);border-radius:3px;margin-bottom:6px"></div>'
-      + '<div style="height:10px;width:' + (100 + Math.random()*60) + 'px;background:var(--border);border-radius:3px;opacity:.6"></div>'
-      + '</div>';
-  }
-  return html;
-}
-
 
 // v0.31.39 — Integrations section removed (redundant with Models tab)
 
@@ -22545,27 +21972,6 @@ function _memSize(bytes) {
   return bytes + ' B';
 }
 
-function _memTimeAgo(ts) {
-  var diff = Math.floor(Date.now() / 1000 - ts);
-  if (diff < 60) return 'now';
-  if (diff < 3600) return Math.floor(diff / 60) + 'm';
-  if (diff < 86400) return Math.floor(diff / 3600) + 'h';
-  return Math.floor(diff / 86400) + 'd';
-}
-
-
-function populateMemPersonaSelector() {
-  const sel = document.getElementById('mem-persona-sel');
-  if (!sel) return;
-  const current = sel.value;
-  sel.innerHTML = '<option value="">All Agents (legacy)</option>' +
-    (_personas || []).map(p =>
-      '<option value="' + p.id + '"' + (current === p.id ? ' selected' : '') + '>' +
-      (p.avatar || '🤖') + ' ' + escHtml(p.name) + '</option>'
-    ).join('');
-}
-
-
 function _memAgeBadge(ts) {
   if (!ts) return '';
   var ageMs = Date.now() - new Date(ts).getTime();
@@ -22579,65 +21985,6 @@ function _memAgeBadge(ts) {
 var _maSessionsData = [];
 
 
-
-async function _loadIntelligence() {
-  var el = document.getElementById('runtime-intelligence-content');
-  if (!el) return;
-  try {
-    var [scores, patterns, selfHeal, selfDispatch] = await Promise.all([
-      api('/api/dispatch-scores'),
-      api('/api/intelligence/patterns'),
-      api('/api/self-heal/status'),
-      api('/api/self-dispatch/status')
-    ]);
-    var html = '';
-    // Backend scores
-    if (scores && scores.cache && Object.keys(scores.cache).length > 0) {
-      html += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:4px">Backend Quality Scores</div>';
-      html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
-      for (var bk in scores.cache) {
-        var s = scores.cache[bk];
-        var color = s.avg >= 70 ? '#22c55e' : s.avg >= 50 ? '#eab308' : '#ef4444';
-        html += '<div style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);min-width:120px">'
-          + '<div style="font-size:11px;font-weight:500;color:var(--text)">' + escHtml(bk) + '</div>'
-          + '<div style="font-size:16px;font-weight:700;color:' + color + '">' + (s.avg || 0).toFixed(1) + '</div>'
-          + '<div style="font-size:10px;color:var(--text3)">' + (s.count || 0) + ' dispatches</div>'
-          + '</div>';
-      }
-      html += '</div></div>';
-    }
-    // Pattern mining insights
-    if (patterns && patterns.insights && patterns.insights.length > 0) {
-      html += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:4px">Insights</div>';
-      html += '<div style="display:flex;flex-direction:column;gap:4px">';
-      patterns.insights.forEach(function(insight) {
-        html += '<div style="padding:4px 8px;border-left:2px solid #8b5cf6;font-size:11px;color:var(--text2)">' + escHtml(insight) + '</div>';
-      });
-      html += '</div></div>';
-    }
-    // Self-heal + self-dispatch status
-    var statusParts = [];
-    if (selfHeal) {
-      var rb = selfHeal.auto_rollback || {};
-      statusParts.push('Rollback: ' + (rb.state || 'none'));
-      statusParts.push('Self-heal: ' + (selfHeal.self_heal_enabled ? 'on' : 'off'));
-    }
-    if (selfDispatch) {
-      statusParts.push('Self-dispatch: ' + (selfDispatch.enabled ? 'on' : 'off') + ' (' + (selfDispatch.recent_count || 0) + '/5 this hour)');
-    }
-    if (statusParts.length) {
-      html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">';
-      statusParts.forEach(function(s) {
-        html += '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:var(--bg);border:1px solid var(--border);color:var(--text3)">' + escHtml(s) + '</span>';
-      });
-      html += '</div>';
-    }
-    if (!html) html = '<span style="color:var(--text3)">No intelligence data yet (dispatches needed)</span>';
-    el.innerHTML = html;
-  } catch(e) {
-    el.innerHTML = '<span style="color:var(--text3)">Failed to load intelligence data</span>';
-  }
-}
 
 async function _loadRuntimeOperations() {
   _loadPulseOps();
@@ -22702,36 +22049,6 @@ async function _loadPulseOps(force) {
 function _gatewayActivityChip(text, tone) {
   if (!text) return '';
   return '<span class="model-card-chip ' + (tone || 'dim') + '" style="font-size:10px">' + escHtml(text) + '</span>';
-}
-
-async function _loadSelfCheck() {
-  var el = document.getElementById('runtime-health-checks');
-  var badge = document.getElementById('health-status-badge');
-  if (!el) return;
-  try {
-    var data = await api('/api/self-check');
-    if (!data || !data.checks) { el.innerHTML = '<span style="color:var(--text3)">No self-check data</span>'; return; }
-    var allOk = data.all_ok;
-    if (badge) {
-      badge.textContent = allOk ? 'healthy' : 'issues found';
-      badge.style.background = allOk ? 'color-mix(in srgb,#22c55e 15%,transparent)' : 'color-mix(in srgb,#ef4444 15%,transparent)';
-      badge.style.color = allOk ? '#22c55e' : '#ef4444';
-    }
-    el.innerHTML = data.checks.map(function(c) {
-      var ok = c.ok;
-      var color = ok ? '#22c55e' : '#ef4444';
-      var icon = ok ? '\u2713' : '\u2717';
-      var name = (c.check || '').replace(/_/g, ' ');
-      return '<div style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);display:flex;align-items:center;gap:6px;min-width:140px">'
-        + '<span style="color:' + color + ';font-weight:bold">' + icon + '</span>'
-        + '<div><div style="font-size:11px;font-weight:500;color:var(--text)">' + escHtml(name) + '</div>'
-        + '<div style="font-size:10px;color:var(--text3)">' + escHtml((c.detail || '').substring(0, 60)) + '</div></div></div>';
-    }).join('');
-    if (data.ts) {
-      var ago = Math.round((Date.now()/1000 - data.ts) / 60);
-      el.innerHTML += '<div style="font-size:10px;color:var(--text3);display:flex;align-items:center;padding:6px 0">' + ago + 'm ago</div>';
-    }
-  } catch(e) { el.innerHTML = '<span style="color:var(--text3)">Could not load health data</span>'; }
 }
 
 async function _loadGatewayActivity(force) {
@@ -22934,58 +22251,6 @@ async function _cancelOrchRun(runId) {
       toast((data && data.error) || 'Failed to cancel run', 'err');
     }
   }, {danger: true, okLabel: 'Cancel Run'});
-}
-
-function _newOrchRun() {
-  _porterPrompt('New Orchestration Run', [
-    {name: 'goal', label: 'Goal', placeholder: 'Fix the bridge visibility gaps and verify end to end'},
-    {name: 'context', label: 'Context', type: 'textarea', placeholder: 'Optional context, constraints, or project scope'}
-  ], async function(vals) {
-    if (!vals.goal) { toast('Goal required', 'err'); return; }
-    var res = await api('/api/orchestration/run', {
-      goal: vals.goal,
-      context: vals.context || '',
-      requested_by: 'operator',
-      project_id: (window._projCurrent && window._projCurrent.id) || '',
-      execute: true
-    }, 120000);
-    if (res && res.ok) {
-      toast('Orchestration run started', 'ok');
-      _loadOrchRuns(true);
-    } else {
-      toast((res && res.error) || 'Failed to start orchestration run', 'err');
-    }
-  }, {okLabel: 'Start Run'});
-}
-
-function _coordinationTone(type) {
-  if (type === 'complete' || type === 'result') return 'ok';
-  if (type === 'block') return 'err';
-  if (type === 'handoff' || type === 'progress' || type === 'start') return 'warn';
-  return 'dim';
-}
-
-function _coordinationEntryLabel(type) {
-  var t = String(type || '').toLowerCase();
-  if (t === 'claim') return 'Claim';
-  if (t === 'progress') return 'Progress';
-  if (t === 'complete') return 'Complete';
-  if (t === 'handoff') return 'Handoff';
-  if (t === 'block') return 'Blocked';
-  if (t === 'release') return 'Release';
-  if (t === 'start') return 'Run start';
-  if (t === 'result') return 'Run result';
-  return t || 'event';
-}
-
-function _coordinationPanelCard(title, bodyHtml, tone) {
-  var border = tone === 'err' ? 'color-mix(in srgb,#ef4444 28%,var(--border))'
-    : (tone === 'ok' ? 'color-mix(in srgb,#22c55e 28%,var(--border))'
-    : (tone === 'warn' ? 'color-mix(in srgb,#f59e0b 28%,var(--border))' : 'var(--border)'));
-  return '<div style="padding:12px 14px;border:1px solid ' + border + ';border-radius:10px;background:var(--bg)">'
-    + '<div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:8px">' + escHtml(title) + '</div>'
-    + bodyHtml
-    + '</div>';
 }
 
 async function _loadCoordinationPanel(force) {
@@ -23749,43 +23014,6 @@ function _pdCreationProposal(flow) {
     + 'Reply `Approve` to create this project, or tell Porter what to change.';
 }
 
-async function _pdChatStartCreation(kind) {
-  var p = window._selectedPersona;
-  if (!p) return;
-  switchPdTab('overview');
-  var state = _pdChatGetState(p.id);
-  if (state.flow) {
-    state.messages.push({
-      role: 'assistant',
-      label: p.name || 'Porter',
-      content: 'Porter is already guiding a ' + _pdCreationTypeLabel(state.flow.kind) + ' setup. Exit the current sequence first if you want to start over.',
-      meta: 'guided creation'
-    });
-    _pdChatRender(p.id);
-    return;
-  }
-  if (state.messages.length || (state.attachments || []).length) {
-    state.messages = [];
-    state.attachments = [];
-    state.chatId = '';
-  }
-  var ctx = await _pdCreationLoadContext();
-  state.flow = { kind: kind, stage: 0, draft: {}, context: ctx };
-  state.messages.push({
-    role: 'assistant',
-    label: p.name || 'Porter',
-    content: 'We’ll shape this ' + _pdCreationTypeLabel(kind) + ' together. Porter will keep the structure clean and wait for approval before creating anything.\n\n' + _pdCreationPrompt(state.flow),
-    meta: 'guided creation'
-  });
-  _pdChatRender(p.id);
-  setTimeout(function() {
-    var pdInput = document.getElementById('pd-chat-input');
-    if (!pdInput) return;
-    pdInput.value = '';
-    pdInput.focus();
-  }, 30);
-}
-
 function _pdCancelCreation() {
   var p = window._selectedPersona;
   if (!p) return;
@@ -24169,18 +23397,6 @@ function _pdChatKey(e) {
   }
 }
 
-async function _dismissDirective(memoryId) {
-  if (!memoryId) return;
-  try {
-    var r = await api('/api/state/directives/' + memoryId + '/status', { status: 'dismissed' });
-    if (!r || !r.ok) throw new Error((r && r.error) || 'Dismiss failed');
-    if (window._selectedPersona) switchPdTab('concepts');
-    toast('Directive dismissed', 'ok');
-  } catch (e) {
-    toast(e.message || 'Dismiss failed', 'err');
-  }
-}
-
 async function _statePromptDirective(scopeType, scopeId) {
   _porterPrompt('Add Directive', [
     {name: 'text', label: 'Directive', type: 'textarea', placeholder: scopeType === 'project' ? 'Keep deliverables lightweight and approval-ready.' : 'Escalate ambiguity instead of guessing.'},
@@ -24294,68 +23510,6 @@ function _toggleInlineSessions(btn, backend, source) {
   _loadInlineSessions(source, backend);
 }
 
-function _showUpdateModal(backend, version) {
-  var cmds = {
-    openclaw: 'npm update -g openclaw',
-    ollama: 'curl -fsSL https://ollama.com/install.sh | sh',
-    codex: 'npm i -g @openai/codex@latest',
-    gemini: 'npm i -g @google/gemini-cli@latest',
-    claude: 'npm i -g @anthropic-ai/claude-code@latest'
-  };
-  var cmd = cmds[backend] || 'Check the ' + backend + ' docs for update instructions';
-  var modal = document.createElement('div');
-  modal.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)';
-  modal.innerHTML = '<div style="background:var(--raised);border:1px solid var(--border);border-radius:10px;padding:24px;max-width:400px;width:90%">'
-    + '<div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px">Update ' + escHtml(backend) + ' to v' + escHtml(version) + '</div>'
-    + '<div style="font-size:12px;color:var(--text2);margin-bottom:16px">Run this command to update:</div>'
-    + '<div style="position:relative"><code style="display:block;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 36px 10px 10px;font-size:12px;color:var(--accent);word-break:break-all">' + escHtml(cmd) + '</code>'
-    + '<button class="btn btn-ghost" style="position:absolute;top:6px;right:6px;font-size:10px;padding:2px 6px" onclick="navigator.clipboard.writeText(\'' + cmd.replace(/'/g, "\\'") + '\');toast(\'Copied\',\'ok\')">Copy</button></div>'
-    + '<div style="margin-top:16px;text-align:right"><button class="btn btn-ghost" style="font-size:12px" onclick="this.closest(\u0027div[style*=fixed]\u0027).remove()">Close</button></div>'
-    + '</div>';
-  document.body.appendChild(modal);
-  modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
-}
-
-function _renameSession(btn, sessionId, source) {
-  var card = btn.closest('.inline-sess-card') || btn.closest('.ma-session-card') || btn.closest('[data-session-id]');
-  if (!card) return;
-  // Find the name span — look for the data attribute first, fall back to style query
-  var nameEl = card.querySelector('.sess-name-label');
-  if (!nameEl) nameEl = card.querySelector('span[style*="font-weight:500"]');
-  if (!nameEl || nameEl.tagName === 'INPUT') return;
-  var oldName = nameEl.textContent;
-  var input = document.createElement('input');
-  input.type = 'text';
-  input.value = oldName;
-  input.style.cssText = 'font-size:11px;font-weight:500;color:var(--text);background:var(--bg);border:1px solid var(--accent);border-radius:3px;padding:1px 4px;width:100%;outline:none';
-  nameEl.replaceWith(input);
-  input.focus();
-  input.select();
-  var saved = false;
-  function save() {
-    if (saved) return;
-    saved = true;
-    var newName = input.value.trim();
-    if (!newName || newName === oldName) {
-      _replaceInputWithSpan(input, oldName);
-      return;
-    }
-    api('/api/sessions/' + encodeURIComponent(sessionId) + '/rename', {name: newName}).then(function(res) {
-      if (res && res.ok) {
-        _replaceInputWithSpan(input, newName);
-        toast('Session renamed');
-      } else {
-        _replaceInputWithSpan(input, oldName);
-        toast('Rename failed', 'err');
-      }
-    }).catch(function() {
-      _replaceInputWithSpan(input, oldName);
-      toast('Rename failed', 'err');
-    });
-  }
-  input.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); save(); } if (e.key === 'Escape') { input.value = oldName; save(); } });
-  input.addEventListener('blur', save);
-}
 function _replaceInputWithSpan(input, text) {
   if (!input.parentNode) return;
   var span = document.createElement('span');
@@ -24484,52 +23638,6 @@ function _renderActivitySessions(sessions, source) {
       + '</div>';
   }).join('')
   + (sessions.length > 30 ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">Showing 30 of ' + sessions.length + '</div>' : '');
-}
-
-function _maFilterSessions(query) {
-  var q = query.toLowerCase().trim();
-  var cards = document.querySelectorAll('#ma-sessions-list .ma-session-card');
-  cards.forEach(function(card) {
-    var name = card.getAttribute('data-session-name') || '';
-    var id = card.getAttribute('data-session-id') || '';
-    card.style.display = (name.indexOf(q) >= 0 || id.indexOf(q) >= 0) ? '' : 'none';
-  });
-}
-
-async function _maSessionSummary(sessionId, source) {
-  // Show loading modal
-  var modal = document.createElement('div');
-  modal.className = 'ma-summary-modal';
-  modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
-  modal.innerHTML = '<div class="ma-summary-box"><div class="loading-indicator" style="padding:20px">Loading summary...</div></div>';
-  document.body.appendChild(modal);
-  try {
-    var resp = await api('/api/sessions/' + encodeURIComponent(sessionId) + '/summary?source=' + encodeURIComponent(source));
-    var box = modal.querySelector('.ma-summary-box');
-    if (!resp || !resp.ok) {
-      box.innerHTML = '<div style="color:var(--err);padding:12px">' + escHtml(resp ? resp.error || 'Failed' : 'Failed') + '</div>'
-        + '<div style="text-align:right;margin-top:12px"><button class="btn btn-ghost" onclick="this.closest(\'.ma-summary-modal\').remove()">Close</button></div>';
-      return;
-    }
-    var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
-      + '<span style="font-weight:600;font-size:14px;color:var(--text)">Session Summary</span>'
-      + '<span style="font-size:11px;color:var(--text3)">' + resp.total_turns + ' total turns</span>'
-      + '<button class="btn btn-ghost" style="margin-left:auto;font-size:11px" onclick="this.closest(\'.ma-summary-modal\').remove()">Close</button>'
-      + '</div>';
-    if (resp.total_turns > 10) {
-      html += '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Showing last 10 of ' + resp.total_turns + ' turns</div>';
-    }
-    (resp.turns || []).forEach(function(t) {
-      html += '<div class="ma-summary-turn ' + t.role + '">'
-        + '<div class="ma-summary-role">' + t.role + '</div>'
-        + escHtml(t.text)
-        + '</div>';
-    });
-    box.innerHTML = html;
-  } catch(e) {
-    modal.remove();
-    toast('Failed to load summary', 'err');
-  }
 }
 
 async function _maSessionChat(sessionId, source, name) {
@@ -24768,145 +23876,8 @@ async function _populateLearnDests() {
   // Retry once if selects are still empty (race condition guard)
   setTimeout(function() { _fillLearnSelects(); }, 500);
 }
-async function _saveLearnDirect(btn, sid, source) {
-  var container = btn.closest('.sess-learnings-inline');
-  if (!container) return;
-  var textEl = container.querySelector('.sess-learn-text');
-  var destEl = container.querySelector('.sess-learn-dest');
-  var text = (textEl.value || textEl.textContent || '').trim();
-  var dest = destEl ? destEl.value : '';
-  if (!text) { toast('No learnings to save', 'err'); return; }
-  if (!dest) { toast('Select a destination', 'err'); return; }
-  btn.disabled = true;
-  btn.textContent = 'Saving\u2026';
-  try {
-    var res = await api('/api/sessions/' + encodeURIComponent(sid) + '/save-learnings', {
-      learnings: text, destination: dest, source: source
-    });
-    if (res && res.ok) {
-      toast('Saved to ' + (res.path || dest).split('/').pop());
-      btn.textContent = 'Saved \u2713';
-      setTimeout(function() { btn.textContent = 'Save'; btn.disabled = false; }, 2000);
-    } else {
-      toast((res && res.error) || 'Failed', 'err');
-      btn.disabled = false;
-      btn.textContent = 'Save';
-    }
-  } catch(e) {
-    toast('Save failed', 'err');
-    btn.disabled = false;
-    btn.textContent = 'Save';
-  }
-}
-
-async function _reextractLearn(sid, source) {
-  var el = document.querySelector('.sess-learnings-inline[data-sid="' + sid + '"]');
-  if (!el) return;
-  var textDiv = el.querySelector('.sess-learn-text');
-  var old = textDiv.value || textDiv.textContent || '';
-  textDiv.value = 'Re-analyzing\u2026';
-  textDiv.disabled = true;
-  var _start = Date.now();
-  var _timer = setInterval(function() {
-    var s = Math.round((Date.now() - _start) / 1000);
-    textDiv.value = 'Re-analyzing\u2026 ' + s + 's';
-  }, 1000);
-  try {
-    var resp = await api('/api/sessions/' + encodeURIComponent(sid) + '/extract-learnings', { source: source, force: true }, 60000);
-    clearInterval(_timer);
-    textDiv.disabled = false;
-    if (resp && resp.ok && resp.learnings) {
-      textDiv.value = resp.learnings;
-      _autoSizeTextarea(textDiv);
-      el.style.maxHeight = 'none';
-      toast('Learnings refreshed');
-    } else {
-      textDiv.value = old;
-      _autoSizeTextarea(textDiv);
-      toast('Re-extract failed', 'err');
-    }
-  } catch(e) {
-    clearInterval(_timer);
-    textDiv.disabled = false;
-    textDiv.value = old;
-    _autoSizeTextarea(textDiv);
-    toast('Re-extract failed', 'err');
-  }
-}
-
 var _extractAllRunning = false;
 var _extractAllSource = '';
-async function _extractAllLearnings(source) {
-  if (_extractAllRunning) {
-    _extractAllRunning = false;
-    _extractAllSource = '';
-    return;
-  }
-  _extractAllRunning = true;
-  _extractAllSource = source || '';
-  var btn = document.getElementById('extract-all-btn');
-
-  // Get sessions that need extraction
-  var sessions = (_maSessionsData || []).filter(function(s) { return !s.learnings; });
-  var total = sessions.length;
-  var cached = (_maSessionsData || []).length - total;
-  if (total === 0) {
-    toast('All ' + cached + ' sessions already have learnings');
-    _extractAllRunning = false;
-    return;
-  }
-  var done = 0, errors = 0;
-  if (btn) btn.innerHTML = '<span class="learn-spinner"></span> 0/' + total + ' extracting\u2026';
-
-  for (var i = 0; i < sessions.length; i++) {
-    if (!_extractAllRunning) break; // cancelled
-    var s = sessions[i];
-    var sid = s.id;
-    var ssrc = s.source || source;
-
-    // Show spinner on this session's Learnings button
-    var learnBtn = null;
-    var card = document.querySelector('.ma-session-card[data-session-id="' + sid.toLowerCase() + '"]');
-    if (card) {
-      var btns = card.querySelectorAll('button');
-      btns.forEach(function(b) { if (b.textContent.indexOf('Learnings') >= 0) learnBtn = b; });
-      if (learnBtn) learnBtn.innerHTML = '<span class="learn-spinner"></span>';
-    }
-
-    try {
-      var resp = await api('/api/sessions/' + encodeURIComponent(sid) + '/extract-learnings', { source: ssrc }, 60000);
-      if (resp && resp.ok && resp.learnings) {
-        done++;
-        // Update the card's learnings panel
-        var el = document.querySelector('.sess-learnings-inline[data-sid="' + sid + '"]');
-        if (el) {
-          var ta = el.querySelector('.sess-learn-text');
-          if (ta) { ta.value = resp.learnings; _autoSizeTextarea(ta); }
-        }
-        if (learnBtn) learnBtn.textContent = '\u25be Learnings';
-      } else {
-        errors++;
-        if (learnBtn) learnBtn.textContent = 'Learnings';
-      }
-    } catch(e) {
-      errors++;
-      if (learnBtn) learnBtn.textContent = 'Learnings';
-    }
-    if (btn) btn.innerHTML = '<span class="learn-spinner"></span> ' + (done + errors) + '/' + total + ' extracting\u2026';
-  }
-
-  var msg = 'Done: ' + done + ' extracted';
-  if (cached) msg += ', ' + cached + ' cached';
-  if (errors) msg += ', ' + errors + ' failed';
-  if (!_extractAllRunning) msg = 'Stopped: ' + done + ' extracted';
-  toast(msg);
-  _extractAllRunning = false;
-  _extractAllSource = '';
-  if (btn) btn.textContent = 'Update Learnings';
-  // Reload to get fresh data
-  if (done > 0 && typeof _loadActivitySessions === 'function') _loadActivitySessions(source);
-}
-
 // Legacy aliases (no-ops)
 
 
@@ -24941,21 +23912,6 @@ async function deleteSession(sessionId, source) {
     });
   } else { toast('Delete failed', 'err'); }
 }
-
-async function archiveSession(sessionId, source) {
-  _porterConfirm('Archive Session', 'This session will be hidden from the default list. You can still find it in archived sessions.', async function() {
-    var res = await api('/api/sessions/' + encodeURIComponent(sessionId) + '/archive', { source: source });
-    if (res && res.ok) {
-      toast('Session archived');
-      var cards = document.querySelectorAll('.ma-session-card[data-session-id="' + sessionId.toLowerCase() + '"]');
-      cards.forEach(function(c) { c.style.display = 'none'; });
-    } else {
-      toast((res && res.error) || 'Archive failed', 'err');
-    }
-  });
-}
-
-
 
 // ── Memory config panel editing state ──
 var _memCfgPath = '';
@@ -25124,21 +24080,6 @@ function cancelApiKeyAdd() {
   _apiKeyAddTarget = null;
   var form = document.getElementById('apikey-add-form');
   if (form) form.style.display = 'none';
-}
-function saveApiKey() {
-  if (!_apiKeyAddTarget) return;
-  var val = (document.getElementById('apikey-add-value') || {}).value || '';
-  if (!val.trim()) { toast('Key cannot be empty', 'err'); return; }
-  var payload = {};
-  payload[_apiKeyAddTarget] = val.trim();
-  fetch('/api/config/apikeys', {
-    method: 'POST', credentials: 'same-origin',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(payload)
-  }).then(r=>r.json()).then(function(d) {
-    if (d.ok) { toast('Key saved'); cancelApiKeyAdd(); loadApiKeys(); }
-    else toast(d.error || 'Save failed', 'err');
-  }).catch(function(e) { toast('Error: ' + e.message, 'err'); });
 }
 async function deleteApiKey(id) {
   var _delOk = await porterConfirm('Delete API Key', 'Delete this API key?', {confirmLabel: 'Delete', danger: true});
@@ -25364,8 +24305,6 @@ async function _runAtChain(fullText, matches) {
 }
 
 // Backward compat alias
-function invokeSkill(message) { invokeAgent(message, 'openclaw'); }
-
 function _save_chat_message_local(chatId, model, userMsg, assistantMsg, personaName) {
   // v0.29.48 — properly save message pair via dedicated endpoint
   fetch('/api/chat/save', {
@@ -25432,37 +24371,6 @@ async function populateChatRoutes() {
   }
 }
 
-function chatRouteChanged() {
-  const sel = document.getElementById('chat-route');
-  if (!sel) return;
-  _chatRoute = sel.value;
-  _chatRouteContext = '';
-
-  // Update indicator
-  const ind = document.getElementById('chat-route-indicator');
-  if (ind) {
-    if (_chatRoute === 'general') {
-      ind.innerHTML = '<span class="route-dot general"></span>General';
-    } else if (_chatRoute === 'squad') {
-      ind.innerHTML = '<span class="route-dot" style="background:#a855f7"></span>Agent Squad';
-    } else if (_chatRoute.startsWith('project:')) {
-      const name = sel.options[sel.selectedIndex].textContent.replace('Project: ', '');
-      ind.innerHTML = '<span class="route-dot project"></span>' + escHtml(name);
-      loadProjectContext(_chatRoute.split(':')[1]);
-    } else if (_chatRoute.startsWith('auto:')) {
-      const name = sel.options[sel.selectedIndex].textContent.replace('Automation: ', '');
-      ind.innerHTML = '<span class="route-dot auto"></span>' + escHtml(name);
-    }
-  }
-
-  // Start fresh conversation for new route
-  _chatId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-  _chatMessages = [];
-  _chatContextFiles = [];
-  renderContextBar();
-  renderChatMessages();
-}
-
 async function loadProjectContext(projectId) {
   try {
     const data = await api('/api/projects');
@@ -25521,10 +24429,6 @@ function _finishChatStreamReveal(evtSource, assistantIdx, modelId) {
   renderChatMessages();
 }
 
-function _drainChatStreamReveal(evtSource, assistantIdx, modelId) {
-  _finishChatStreamReveal(evtSource, assistantIdx, modelId);
-}
-
 function _queueChatStreamReveal(token, evtSource, assistantIdx, modelId) {
   if (!token) return;
   if (assistantIdx < 0 || !_chatMessages[assistantIdx]) return;
@@ -25537,25 +24441,6 @@ function _chatModelChanged() {
   // No send button to toggle — model selected via dropdown
 }
 
-function _mpToggle(e) {
-  e.stopPropagation();
-  var picker = e.currentTarget.closest('.model-picker');
-  var wasOpen = picker.classList.contains('open');
-  document.querySelectorAll('.model-picker.open').forEach(function(p) { p.classList.remove('open'); });
-  if (!wasOpen) picker.classList.add('open');
-}
-function _mpSelect(el) {
-  var picker = el.closest('.model-picker');
-  picker.querySelectorAll('.mp-opt').forEach(function(o) { o.classList.remove('selected'); });
-  el.classList.add('selected');
-  var trigger = picker.querySelector('.mp-trigger');
-  trigger.textContent = el.textContent;
-  picker.classList.remove('open');
-  // Sync to hidden select
-  var selId = picker.dataset.sel;
-  var sel = selId ? document.getElementById(selId) : null;
-  if (sel) sel.value = el.dataset.v;
-}
 document.addEventListener('click', function() {
   document.querySelectorAll('.model-picker.open').forEach(function(p) { p.classList.remove('open'); });
 });
@@ -25834,9 +24719,6 @@ function _chatAutoGrow(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 160) + 'px';
 }
-function chatAutoResize(el) { _chatAutoGrow(el); }
-
-
 // Notification center removed — dead code (addNotification never called)
 
 
@@ -25934,13 +24816,6 @@ var _acItems = [];
 var _acIdx = -1;
 
 // Smart routing indicator
-function _showRouteIndicator(backend) {
-  var ind = document.getElementById('chat-route-indicator');
-  if (!ind) return;
-  var colors = {openclaw:'#059669', gemini:'#2563eb', ollama:'#8b5cf6'};
-  ind.innerHTML = '<span class="route-dot" style="background:' + (colors[backend]||'var(--text3)') + '"></span>' + backend;
-}
-
 var _defaultSlashCmds = [
   {cmd: '/help', desc: 'Available commands'},
   {cmd: '/status', desc: 'System status'},
@@ -27195,28 +26070,6 @@ async function removeRule(id) {
 }
 
 
-async function loadDelegationLog() {
-  var el = document.getElementById('admin-deleg-log');
-  if (!el) return;
-  var resp = await api('/api/workspace/dispatch?action=delegations');
-  if (!resp || !resp.delegations || !resp.delegations.length) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--text3);font-style:italic">No delegations this session</div>';
-    return;
-  }
-  var html = '';
-  resp.delegations.slice().reverse().forEach(function(d) {
-    var ago = Math.round((Date.now()/1000 - d.ts) / 60);
-    var timeStr = ago < 1 ? 'just now' : ago + 'm ago';
-    html += '<div class="deleg-entry">';
-    html += '<span class="deleg-backend ' + d.backend + '">' + d.backend + '</span>';
-    html += '<span style="flex:1;color:var(--text)">' + escHtml(d.prompt) + '</span>';
-    html += '<span class="deleg-dur">' + (d.duration_ms/1000).toFixed(1) + 's</span>';
-    html += '<span class="deleg-time">' + timeStr + '</span>';
-    html += '</div>';
-  });
-  el.innerHTML = html;
-}
-
 async function loadLogs() {
   mcInit();
 }
@@ -28086,12 +26939,6 @@ async function promptDeviceNickname(nodeId, type, isVirtual, hostname, tailscale
   await setDeviceNickname(nodeId, type, isVirtual, hostname, tailscaleIp, canonicalName, nickname);
 }
 
-async function clearDeviceNickname(nodeId, type, isVirtual, hostname, tailscaleIp, canonicalName) {
-  var nickOk = await porterConfirm("Remove Nickname", `Remove nickname for <b>${escHtml(canonicalName)}</b>?`, { confirmLabel:"Remove" });
-  if (!nickOk) return;
-  await setDeviceNickname(nodeId, type, isVirtual, hostname, tailscaleIp, canonicalName, '');
-}
-
 async function setDeviceNickname(nodeId, type, isVirtual, hostname, tailscaleIp, canonicalName, currentNickname) {
   const nickname = (currentNickname || '').trim();
   const hostRef = (hostname || nodeId || '').trim();
@@ -28122,13 +26969,6 @@ async function setDeviceNickname(nodeId, type, isVirtual, hostname, tailscaleIp,
 }
 
 // node / mount CRUD
-async function deleteNode(nodeId, label) {
-  var locOk = await porterConfirm("Remove Location", `Remove <b>${escHtml(label)}</b> and all its paths?`, { danger:true, confirmLabel:"Remove" });
-  if (!locOk) return;
-  const res = await api('/api/nodes', { action: 'delete_node', id: nodeId });
-  if (res && res.ok) { toast('Location removed', 'ok'); loadLocations(); }
-  else toast((res && res.error) || 'Remove failed', 'err');
-}
 async function deleteMount(nodeId, mountId, label) {
   var mountOk = await porterConfirm("Remove Mount", `Remove mount <b>${escHtml(label)}</b>?`, { danger:true, confirmLabel:"Remove" });
   if (!mountOk) return;
@@ -28136,96 +26976,7 @@ async function deleteMount(nodeId, mountId, label) {
   if (res && res.ok) { toast('Mount removed', 'ok'); loadLocations(); }
   else toast((res && res.error) || 'Remove failed', 'err');
 }
-function openAddMount(nodeId) {
-  document.getElementById('lf-edit-id').value = '';
-  document.getElementById('nm-node-id').value = nodeId;
-  document.getElementById('lf-label').value = '';
-  document.getElementById('lf-path').value = '';
-  document.getElementById('lf-status').textContent = '';
-  document.getElementById('loc-form').style.display = 'none';
-  document.getElementById('mount-form').style.display = 'block';
-}
-function openEditMount(nodeId, mountId, label, path) {
-  document.getElementById('nm-node-id').value = nodeId;
-  document.getElementById('nm-mount-id').value = mountId;
-  document.getElementById('nm-label').value = label;
-  document.getElementById('nm-path').value = path;
-  document.getElementById('mount-form').style.display = 'block';
-}
 function cancelMountForm() { document.getElementById('mount-form').style.display = 'none'; }
-async function saveMountForm() {
-  const nodeId  = document.getElementById('nm-node-id').value;
-  const mountId = document.getElementById('nm-mount-id').value;
-  const label   = document.getElementById('nm-label').value.trim();
-  const path    = document.getElementById('nm-path').value.trim();
-  if (!label || !path) { toast('Label and path required', 'err'); return; }
-  const action = mountId ? 'update_mount' : 'add_mount';
-  const body   = mountId
-    ? { action, node_id: nodeId, mount_id: mountId, updates: { label, path } }
-    : { action, node_id: nodeId, mount: { label, path } };
-  const res = await api('/api/nodes', body);
-  if (res && res.ok) {
-    cancelMountForm(); toast(mountId ? 'Mount updated' : 'Mount added', 'ok'); loadLocations();
-  } else toast((res && res.error) || 'Save failed', 'err');
-}
-async function testMountPath() {
-  const path = document.getElementById('nm-path').value.trim();
-  if (!path) return;
-  const res = await api('/api/locations/test', { path });
-  const st  = document.getElementById('nm-status');
-  if (!st) return;
-  if (res && res.exists) st.textContent = res.writable ? '✓ Found, writable' : '✓ Found, read-only';
-  else st.textContent = '✗ Path not found on server';
-}
-
-function openAddLocation() {
-  document.getElementById('lf-status').textContent = '';
-  document.getElementById('lf-ts-picker').style.display = 'none';
-  document.getElementById('loc-form').style.display = 'block';
-}
-
-async function addLocalNode() {
-  const hn = (window._serverHostname || 'local');
-  const res = await api('/api/nodes', { action: 'add_node', id: hn, label: hn, type: 'local', hostname: hn });
-  if (res && res.ok) {
-    toast('Location added — now add paths', 'ok');
-    cancelLocationForm(); loadLocations();
-  } else toast((res && res.error) || 'Failed', 'err');
-}
-
-async function addVpsNode() {
-  const hn = (window._serverHostname || 'vps');
-  const label = `VPS (${hn})`;
-  const res = await api('/api/nodes', { action: 'add_node', id: hn + '-vps', label, type: 'vps', hostname: hn });
-  if (res && res.ok) {
-    toast('VPS location added — now add paths', 'ok');
-    cancelLocationForm(); loadLocations();
-  } else toast((res && res.error) || 'Failed', 'err');
-}
-
-function addTailscaleNode() {
-  document.getElementById('lf-ts-picker').style.display = 'block';
-  loadTailscalePeers();
-}
-
-async function addTailscaleNodeFromPeer() {
-  const sel = document.getElementById('lf-ts-peer');
-  const ip  = sel.value;
-  const opt = sel.selectedOptions[0];
-  const name = opt ? (opt.getAttribute('data-name') || ip) : ip;
-  if (!ip) { toast('Select a peer first', 'err'); return; }
-  const res = await api('/api/nodes', { action: 'add_node', id: name, label: name, type: 'tailscale', hostname: name, tailscale_ip: ip });
-  if (res && res.ok) {
-    toast('Tailscale location added — now add paths', 'ok');
-    cancelLocationForm(); loadLocations();
-  } else toast((res && res.error) || 'Failed', 'err');
-}
-
-function quickPick(label, path) {
-  document.getElementById('nm-label').value = label;
-  document.getElementById('nm-path').value  = path;
-}
-
 async function loadTailscalePeers() {
   const sel = document.getElementById('lf-ts-peer');
   const st  = document.getElementById('lf-ts-status');
@@ -28252,24 +27003,11 @@ async function loadTailscalePeers() {
   st.textContent = `✓ ${peers.length} device${peers.length !== 1 ? 's' : ''} on tailnet`;
 }
 
-function onTsPeerSelect() {
-  const sel = document.getElementById('lf-ts-peer');
-  const btn = document.getElementById('lf-ts-add-btn');
-  if (btn) btn.disabled = !sel.value;
-}
-
 function cancelLocationForm() {
   document.getElementById('loc-form').style.display = 'none';
 }
 
 // node rename (inline prompt)
-async function openEditNode(nodeId, currentLabel, currentType) {
-  const newLabel = await porterPrompt('Rename Location', 'Enter new label:', currentLabel);
-  if (newLabel === null) return;  // cancelled
-  const trimmed = newLabel.trim();
-  if (!trimmed) { toast('Label cannot be empty', 'err'); return; }
-  saveEditNode(nodeId, trimmed, currentType);
-}
 async function saveEditNode(nodeId, label, type) {
   const res = await api('/api/nodes', { action: 'update_node', node_id: nodeId, label, type });
   if (res && res.ok) { toast('Location updated', 'ok'); loadLocations(); }
@@ -28478,49 +27216,6 @@ async function _createFromTemplate() {
     toast(workerName + ' created', 'ok');
     _setAgentView('grid');
     loadAgents();
-  } else {
-    toast((result && result.error) || 'Worker creation failed', 'err');
-  }
-}
-
-async function _createWorkerFromRecommendation(templateName, projectId) {
-  // Find best matching template
-  var data = await fetch('/api/templates', {credentials:'same-origin'}).then(function(r) { return r.json(); });
-  var templates = (data && data.templates) || [];
-  var match = templates.find(function(t) { return t.name.toLowerCase() === templateName.toLowerCase(); });
-  if (!match) {
-    // Fuzzy: find one containing the key word
-    var words = templateName.toLowerCase().split(' ');
-    match = templates.find(function(t) {
-      var tn = t.name.toLowerCase();
-      return words.some(function(w) { return tn.indexOf(w) >= 0; });
-    });
-  }
-  if (!match) {
-    toast('No matching template found for ' + templateName, 'err');
-    return;
-  }
-  var workerName = await porterPrompt('Create Worker', 'Name your ' + templateName + ':', templateName);
-  if (!workerName) return;
-  // Fetch full template
-  var detail = await fetch('/api/templates/' + match.id, {credentials:'same-origin'}).then(function(r) { return r.json(); });
-  if (!detail || detail.error) { toast('Template load failed', 'err'); return; }
-  var createData = {
-    name: workerName,
-    role: detail.mission || detail.desc || templateName,
-    soul_text: _buildRichSoul(workerName, detail),
-    preferred_backend: '',
-    appearance_style: 'minecraft',
-    appearance_spec: detail.appearance_spec || {},
-  };
-  var result = await api('/api/personas', createData);
-  if (result && result.ok) {
-    // Assign to project if we have a project ID
-    if (projectId && result.persona && result.persona.id) {
-      await api('/api/projects', {action: 'assign_agent', id: projectId, persona_id: result.persona.id});
-    }
-    toast(workerName + ' created', 'ok');
-    loadProjects();
   } else {
     toast((result && result.error) || 'Worker creation failed', 'err');
   }
@@ -28750,22 +27445,6 @@ function _fmCtx(event, path, name) {
   document.body.appendChild(ov);
 }
 
-function _filterAllFiles() {
-  var q = (document.getElementById('files-search').value || '').toLowerCase();
-  document.querySelectorAll('#allfiles-list .allfiles-project').forEach(function(proj) {
-    var projName = (proj.dataset.project || '').toLowerCase();
-    var rows = proj.querySelectorAll('.allfiles-row');
-    var anyVisible = false;
-    rows.forEach(function(row) {
-      var name = (row.dataset.name || '').toLowerCase();
-      var show = !q || name.indexOf(q) >= 0 || projName.indexOf(q) >= 0;
-      row.style.display = show ? '' : 'none';
-      if (show) anyVisible = true;
-    });
-    proj.style.display = anyVisible || !q ? '' : 'none';
-  });
-}
-
 function _fmtBytes(b) {
   if (!b) return '';
   if (b < 1024) return b + ' B';
@@ -28813,44 +27492,6 @@ async function autoRefreshUsage() {
 }
 
 
-async function showBootstrapCmd(osName) {
-  const data = await api(`/api/agent/bootstrap?os=${enc(osName)}&arch=x64`);
-  if (!data || !data.install_command) return;
-  const cmd = data.install_command;
-  navigator.clipboard.writeText(cmd).then(() => toast('Bootstrap command copied to clipboard', 'ok')).catch(()=>{});
-}
-
-function toggleAgentDefaultsEditor() {
-  const el = document.getElementById('agents-defaults-editor');
-  if (!el) return;
-  el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
-}
-
-
-async function saveOperatorConfig() {
-  const body = {
-    setup_profile: document.getElementById('cfg-setup-profile')?.value || 'vps-tailnet',
-    skills_routing: document.getElementById('cfg-skills-routing')?.value || 'guided',
-    memory_mode: document.getElementById('cfg-memory-mode')?.value || 'assisted',
-    behavior_preset: document.getElementById('cfg-behavior-preset')?.value || 'balanced',
-    memory_visibility: document.getElementById('cfg-memory-visibility')?.value || 'shared',
-    usage_warn_threshold: parseInt(document.getElementById('cfg-usage-threshold')?.value || '20', 10),
-    skills_safe_mode: !!document.getElementById('cfg-skills-safe-mode')?.checked,
-    external_send_approval: !!document.getElementById('cfg-external-approval')?.checked,
-  };
-  const state = document.getElementById('cfg-save-state');
-  if (state) state.textContent = 'Saving…';
-  const res = await api('/api/preferences', body);
-  if (res && res.ok) {
-    if (state) state.textContent = 'Saved';
-    toast('Operator config saved', 'ok');
-    window._operatorPrefs = body;
-  } else {
-    if (state) state.textContent = 'Save failed';
-    toast((res && res.error) || 'Failed to save config', 'err');
-  }
-}
-
 function _maskKey(k) {
   const v = String(k || '');
   if (!v) return '';
@@ -28862,10 +27503,6 @@ function _toggleKey(agentId) {
   window._revealedKeys[agentId] = !window._revealedKeys[agentId];
   if (window._lastAgents) renderAgents(window._lastAgents);
 }
-function renderInfraCards(providers, agents) {
-  // Legacy stub — orchestration view replaces this
-}
-
 // ── Orchestration flow rendering ──────────────────────────────────────────
 
 var MODEL_OPTIMIZED = {
@@ -29084,16 +27721,6 @@ function _relativeTime(ts) {
   return Math.round(diff / 86400) + 'd ago';
 }
 
-function _relativeFutureTime(ts) {
-  if (!ts) return '';
-  var now = Date.now() / 1000;
-  var diff = Math.max(0, ts - now);
-  if (diff < 60) return Math.round(diff) + 's';
-  if (diff < 3600) return Math.round(diff / 60) + 'm';
-  if (diff < 86400) return Math.round(diff / 3600) + 'h';
-  return Math.round(diff / 86400) + 'd';
-}
-
 function _renderStoredTestResult(testId) {
   var rec = _modelTestResults[testId];
   if (!rec) return '';
@@ -29249,11 +27876,6 @@ function _applyBackendStatus(provider) {
   if (footEl) footEl.innerHTML = '';
 }
 
-function _checkBackendStatuses(providers) {
-  if (!providers) return;
-  providers.forEach(_applyBackendStatus);
-}
-
 function _scheduleBackendStatusChecks(providers) {
   providers = Array.isArray(providers) ? providers.slice() : [];
   _modelsStatusCheckSeq += 1;
@@ -29347,13 +27969,6 @@ async function _checkGatewayCardStatus(backendId, el) {
 function _recheckGw(backendId) {
   var el = document.getElementById('backend-status-' + backendId);
   if (el) _checkGatewayCardStatus(backendId, el);
-}
-
-async function _restartBackend(backendId) {
-  var r = await api('/api/gateway/action', {action: 'restart'});
-  if (r && r.ok) toast(r.message || 'Restart signal sent', 'ok');
-  else toast((r && r.error) || 'Failed to restart', 'err');
-  setTimeout(function() { _recheckGw(backendId); }, 2000);
 }
 
 async function _runModelTest(btn, backendId, modelId, testId) {
@@ -29951,18 +28566,6 @@ var _cortexMemories = [];
 var _wfSkills = [];
 var _wfShowAll = false;
 var _cortexAgents = [];
-async function _cortexBatchExtract(btn) {
-  if (btn) { btn.disabled = true; btn.textContent = 'Extracting...'; }
-  try {
-    await api('/api/cortex/batch-extract');
-    if (btn) { btn.textContent = 'Started!'; setTimeout(function() { btn.textContent = 'Extract Now'; btn.disabled = false; }, 3000); }
-    // Refresh after a delay
-    setTimeout(function() { _loadCortexTab(); }, 10000);
-  } catch(e) {
-    if (btn) { btn.textContent = 'Failed'; btn.disabled = false; }
-  }
-}
-
 async function _loadCortexTab() {
   // v0.28.49 — Show loading indicator immediately on canvas
   var _lcCanvas = document.getElementById('cx-graph-canvas');
@@ -30083,66 +28686,6 @@ function _renderCortexMemories(memories, isFiltered) {
   el.innerHTML = html;
 }
 
-function _openCortexSession(sessionId) {
-  // Navigate to Models tab and expand the session
-  switchModule('models');
-  // After a brief delay for models to load, find and highlight the session
-  setTimeout(function() {
-    // Look for inline session cards that contain this session ID
-    var cards = document.querySelectorAll('.inline-sess-card');
-    var found = false;
-    cards.forEach(function(c) {
-      if (c.innerHTML.indexOf(sessionId) >= 0 || c.innerHTML.indexOf(sessionId.substring(0,8)) >= 0) {
-        c.scrollIntoView({behavior: 'smooth', block: 'center'});
-        c.style.transition = 'box-shadow 0.3s';
-        c.style.boxShadow = '0 0 0 2px var(--accent)';
-        setTimeout(function() { c.style.boxShadow = ''; }, 3000);
-        found = true;
-      }
-    });
-    if (!found) {
-      // Try data-session-id attribute
-      var el = document.querySelector('[data-session-id="' + sessionId.toLowerCase() + '"]');
-      if (el) {
-        el.scrollIntoView({behavior: 'smooth', block: 'center'});
-        el.style.transition = 'box-shadow 0.3s';
-        el.style.boxShadow = '0 0 0 2px var(--accent)';
-        setTimeout(function() { el.style.boxShadow = ''; }, 3000);
-      } else {
-        toast('Session not visible — expand the model card first');
-      }
-    }
-  }, 800);
-}
-
-function _filterCortexType(type, btn) {
-  document.querySelectorAll('.cx-type-filter').forEach(function(b) { b.classList.remove('active'); });
-  btn.classList.add('active');
-  document.querySelectorAll('.cx-mem-row').forEach(function(r) {
-    r.style.display = (type === 'all' || r.getAttribute('data-type') === type) ? '' : 'none';
-  });
-}
-function _searchCortexMemories(query) {
-  query = (query || '').toLowerCase().trim();
-  document.querySelectorAll('.cx-mem-row').forEach(function(r) {
-    if (!query) { r.style.display = ''; return; }
-    var text = (r.querySelector('.cx-fact-text') || {}).textContent || '';
-    r.style.display = text.toLowerCase().indexOf(query) >= 0 ? '' : 'none';
-  });
-}
-function _filterCortexScope(scope, btn) {
-  document.querySelectorAll('.cx-scope-filter').forEach(function(b) { b.classList.remove('active'); });
-  if (btn) btn.classList.add('active');
-  if (scope === 'all') { _clearCortexFilter(); return; }
-  var filtered;
-  if (scope === 'unassigned') {
-    filtered = (_cortexMemories || []).filter(function(m) { return m.scope === 'agent' && !m.scope_id; });
-  } else {
-    filtered = (_cortexMemories || []).filter(function(m) { return m.scope === scope; });
-  }
-  _renderCortexMemories(filtered, true);
-  _showCortexFilterBar(scope.charAt(0).toUpperCase() + scope.slice(1) + ' — ' + filtered.length);
-}
 function _showCortexFilterBar(label) {
   var bar = document.getElementById('cx-filter-bar');
   var lbl = document.getElementById('cx-filter-label');
@@ -30354,7 +28897,6 @@ function _loadGraphZoom() {
   try { var z = JSON.parse(localStorage.getItem('porter_graph_zoom') || 'null'); return z && z.scale ? z : null; } catch(e) { return null; }
 }
 
-function _resetGraphZoom() { _fitGraphToView(); }
 function _fitGraphToView() {
   var canvas = document.getElementById('cx-graph-canvas');
   if (!canvas || !_graphNodes.length) { _graphZoom = {x: 0, y: 0, scale: 1}; _drawGraph(); return; }
@@ -30381,42 +28923,6 @@ function _fitGraphToView() {
   _drawGraph();
   _saveGraphZoom();
 }
-function _centerGraph() {
-  var canvas = document.getElementById('cx-graph-canvas');
-  if (!canvas || !_graphNodes.length) return;
-  var dpr = window._cxDpr || 1;
-  var cw = canvas.width / dpr, ch = canvas.height / dpr;
-  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  _graphNodes.forEach(function(n) { if (n.x < minX) minX = n.x; if (n.y < minY) minY = n.y; if (n.x > maxX) maxX = n.x; if (n.y > maxY) maxY = n.y; });
-  var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-  _graphZoom.scale = 1;
-  _graphZoom.x = cw / 2 - cx;
-  _graphZoom.y = ch / 2 - cy;
-  _drawGraph();
-  _saveGraphZoom();
-}
-function _graphZoomIn() { _graphZoom.scale = Math.min(3, _graphZoom.scale * 1.2); _drawGraph(); _saveGraphZoom(); }
-function _graphZoomOut() { _graphZoom.scale = Math.max(0.3, _graphZoom.scale / 1.2); _drawGraph(); _saveGraphZoom(); }
-function _toggleGraphLock() {
-  window._cxGraphLocked = !window._cxGraphLocked;
-  var btn = document.getElementById('cx-lock-btn');
-  if (btn) {
-    btn.innerHTML = window._cxGraphLocked ? '&#x1f512;' : '&#x1f513;';
-    btn.style.color = window._cxGraphLocked ? 'var(--accent)' : '';
-    btn.title = window._cxGraphLocked ? 'Unlock layout (nodes frozen, canvas still resizes)' : 'Lock layout';
-  }
-  // v0.28.47 — Lock freezes NODE positions only, container always stays flex:1
-  // No container size freeze — canvas should always resize with browser
-  toast(window._cxGraphLocked ? 'Layout locked — nodes frozen' : 'Layout unlocked');
-}
-function _graphFilterScope(scope, btn) {
-  _graphFilter = scope;
-  var toolbar = btn.parentElement;
-  toolbar.querySelectorAll('.gf-btn').forEach(function(b) { b.classList.remove('active'); });
-  btn.classList.add('active');
-  _drawGraph();
-}
-
 async function _initMemoryGraph() {
   var canvas = document.getElementById('cx-graph-canvas');
   if (!canvas) return;
@@ -31706,21 +30212,7 @@ async function loadSquads() {
   } catch(e) { console.error('loadSquads', e); }
 }
 
-function renderSquadChips() {
-  return;
-}
-
-function _filterSquad(squadId) {
-  _activeSquadFilter = null;
-  renderPersonaOrg();
-}
-
-
 // v0.29.67 — Squad Creation Wizard + inline config panel
-function _openSquadManager() {
-  openSquadWizard();
-}
-
 function openSquadWizard() {
   var overlay = document.getElementById('squad-wizard-overlay');
   var panel = document.getElementById('squad-wizard');
@@ -31761,16 +30253,6 @@ function squadWizSelectColor(btn, color) {
   if (input) input.value = color;
   document.querySelectorAll('#sq-wiz-color-grid .emoji-btn').forEach(function(b) { b.classList.remove('selected'); });
   if (btn) btn.classList.add('selected');
-}
-
-function squadWizStep(dir) {
-  _squadWizStep += dir;
-  if (_squadWizStep < 1) _squadWizStep = 1;
-  if (_squadWizStep > 3) {
-    createSquadFromWizard();
-    return;
-  }
-  updateSquadWizUI();
 }
 
 function updateSquadWizUI() {
@@ -31828,18 +30310,6 @@ async function _createSquad(name, color, description) {
   } else {
     toast(r && r.error || 'Failed', 'err');
   }
-}
-
-async function _deleteSquad(id, name) {
-  _porterConfirm('Delete Squad', 'Delete "' + escHtml(name) + '"? Members will be unlinked but agents are not deleted.', async function() {
-    var r = await api('/api/squads', { action:'delete', id:id });
-    if (r && r.ok) {
-      toast('Squad deleted', 'ok');
-      await loadSquads();
-      renderPersonaOrg();
-      if (window._activeSquadEditId === id) _closeSquadConfig();
-    } else { toast('Failed', 'err'); }
-  }, {danger: true, okLabel: 'Delete'});
 }
 
 function _editSquad(id) {
@@ -32061,32 +30531,6 @@ function _renderOffice() {
 // mousedown/mousemove/mouseup for reliable cross-browser drag. 5px deadzone.
 var _pDragId = null, _pClone = null, _pGap = null, _pRAF = 0;
 var _pStartX = 0, _pStartY = 0, _pDragging = false, _pCard = null, _pOffX = 0, _pOffY = 0;
-
-function _pMouseDown(e) {
-  if (e.button !== 0) return;  // left click only
-  var card = e.currentTarget;
-  if (!card.dataset.personaId) return;
-  e.preventDefault();
-  _pCard = card;
-  _pStartX = e.clientX;
-  _pStartY = e.clientY;
-  _pDragging = false;
-  document.addEventListener('mousemove', _pMouseMove);
-  document.addEventListener('mouseup', _pMouseUp);
-}
-
-function _pTouchStart(e) {
-  if (e.touches.length !== 1) return;
-  var card = e.currentTarget;
-  if (!card.dataset.personaId) return;
-  _pCard = card;
-  _pStartX = e.touches[0].clientX;
-  _pStartY = e.touches[0].clientY;
-  _pDragging = false;
-  document.addEventListener('touchmove', _pTouchMove, {passive: false});
-  document.addEventListener('touchend', _pTouchEnd);
-  document.addEventListener('touchcancel', _pTouchEnd);
-}
 
 function _pActivateDrag() {
   if (_pDragging || !_pCard) return;
@@ -33123,17 +31567,6 @@ async function savePersonaFile(filename, key) {
   }
 }
 
-async function saveSoul() {
-  const p = window._selectedPersona;
-  if (!p) return;
-  const text = document.getElementById('pd-soul-editor').value;
-  const r = await api('/api/personas/' + p.id, { soul_text: text });
-  if (r.ok) {
-    window._selectedPersona.soul_text = text;
-    _showToast('SOUL.md saved');
-  }
-}
-
 async function savePersonaMeta() {
   const p = window._selectedPersona;
   if (!p) return;
@@ -33343,19 +31776,6 @@ async function _saveAgentConfig() {
   }
 }
 
-async function _setWorkerLifecycle(pid, makeTemporary) {
-  try {
-    var r = await api('/api/personas/' + pid, { is_temporary: !!makeTemporary });
-    if (r && r.ok) {
-      toast(makeTemporary ? 'Worker marked temporary' : 'Worker promoted to persistent', 'ok');
-      await loadPersonas();
-      setTimeout(function() { selectPersona(pid); }, 150);
-    } else {
-      toast((r && r.error) || 'Failed to update lifecycle', 'err');
-    }
-  } catch (e) { toast('Failed to update lifecycle', 'err'); }
-}
-
 async function _loadAgentEvalResults(pid) {
   var container = document.getElementById('pd-eval-results');
   var table = document.getElementById('pd-eval-table');
@@ -33434,16 +31854,6 @@ async function sleepPersona(id) {
 }
 
 // ── Rules Editor ──
-async function openRulesEditor() {
-  document.getElementById('rules-editor').style.display = 'flex';
-  closePersonaDetail();
-  closePersonaWizard();
-  const r = await api('/api/personas/rules');
-  if (r.ok) {
-    document.getElementById('rules-editor-textarea').value = r.rules || '';
-  }
-}
-
 function closeRulesEditor() {
   document.getElementById('rules-editor').style.display = 'none';
 }
@@ -33458,38 +31868,6 @@ async function saveRules() {
 }
 
 // ── Onboarding Wizard ──
-function openPersonaWizard() {
-  document.getElementById('persona-wizard-overlay').style.display = 'block';
-  document.getElementById('persona-wizard').style.display = 'flex';
-  document.getElementById('persona-detail').style.display = 'none';
-  document.getElementById('rules-editor').style.display = 'none';
-  _wizCurrentStep = 1;
-  _wizSelectedEmoji = '🤖';
-  // Reset inputs
-  ['wiz-name','wiz-role','wiz-personality','wiz-focus','wiz-style'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = '';
-  });
-  const backendSel = document.getElementById('wiz-backend');
-  if (backendSel) backendSel.value = '';
-  const temporaryEl = document.getElementById('wiz-temporary');
-  if (temporaryEl) temporaryEl.checked = false;
-  const squadSel = document.getElementById('wiz-squad');
-  if (squadSel) {
-    var squadOptions = '<option value="">No squad yet</option>';
-    (_squads || []).forEach(function(s) {
-      squadOptions += '<option value="' + escHtml(s.id) + '">' + escHtml(s.name) + '</option>';
-    });
-    squadSel.innerHTML = squadOptions;
-    squadSel.value = '';
-  }
-  // Build emoji grid
-  const grid = document.getElementById('wiz-emoji-grid');
-  grid.innerHTML = PERSONA_EMOJIS.map(e =>
-    `<button class="emoji-btn${e === _wizSelectedEmoji ? ' selected' : ''}" onclick="wizSelectEmoji(this, '${e}')">${e}</button>`
-  ).join('');
-  updateWizUI();
-}
-
 function closePersonaWizard() {
   document.getElementById('persona-wizard').style.display = 'none';
   document.getElementById('persona-wizard-overlay').style.display = 'none';
@@ -34098,10 +32476,6 @@ async function setPreferredModelFromConfig(modelId) {
   }
 }
 
-async function clearPreferredModelFromConfig() {
-  await setPreferredModelFromConfig('');
-}
-
 function _getModelRank(modelId) {
   var prefs = window._currentPrefs || {};
   var rankings = prefs.model_rankings || {};
@@ -34189,64 +32563,6 @@ document.addEventListener('keydown', function(e) {
 });
 
 // S7: Project config editor (uses existing config slide-out panel)
-function openProjectConfig(projId) {
-  const panel = document.getElementById('configPanel');
-  const title = document.getElementById('configPanelTitle');
-  const body  = document.getElementById('configPanelBody');
-  const main  = document.getElementById('mainEl');
-  if (!panel || !title || !body) return;
-
-  // Find project in config
-  const proj = (_projConfigProjects || []).find(p => p.id === projId);
-  if (!proj) { toast('Project not found', 'err'); return; }
-
-  title.textContent = 'Project Settings';
-  const pType = proj.type || 'manual';
-  const pMem  = proj.memory_isolation || 'shared';
-  const created = proj.created_at ? new Date(proj.created_at * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',year:'numeric',timeZone:_porterTz()}) : 'Unknown';
-
-  body.innerHTML = `
-    <div style="margin-bottom:16px">
-      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Project name</div>
-      <input id="pc-name" type="text" class="form-input" style="width:100%" value="${escHtml(proj.name || '')}">
-    </div>
-    <div style="margin-bottom:16px">
-      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Type</div>
-      <select id="pc-type" class="form-input" style="width:100%">
-        <option value="manual"${pType==='manual'?' selected':''}>Manual (sprint-based)</option>
-        <option value="autonomous"${pType==='autonomous'?' selected':''}>Autonomous (agent-driven)</option>
-      </select>
-      <div style="font-size:11px;color:var(--text3);margin-top:4px">Manual shows sprint progress; autonomous shows run history.</div>
-    </div>
-    <div style="margin-bottom:16px">
-      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Memory isolation</div>
-      <select id="pc-mem" class="form-input" style="width:100%">
-        <option value="shared"${pMem==='shared'?' selected':''}>Shared (global memory)</option>
-        <option value="isolated"${pMem==='isolated'?' selected':''}>Isolated (project-scoped)</option>
-      </select>
-    </div>
-    <div style="margin-bottom:16px;padding-top:12px;border-top:1px solid var(--border)">
-      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:6px">
-        <span>Status</span>
-        <span style="color:var(--text2)">${proj.id === _projActiveId ? 'Active' : 'Inactive'}</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3)">
-        <span>Created</span>
-        <span style="color:var(--text2)">${created}</span>
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn btn-sm" style="flex:1" onclick="saveProjectConfig('${projId}')">Save</button>
-      <button class="btn btn-sm btn-ghost" onclick="closeConfigPanel()">Cancel</button>
-    </div>
-    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
-      <button class="btn btn-sm btn-ghost" style="color:#ef4444;width:100%" onclick="_projDelete('${projId}')">Delete project</button>
-    </div>`;
-
-  panel.classList.add('open');
-  if (main) main.classList.add('config-open');
-}
-
 async function saveProjectConfig(projId) {
   const name = (document.getElementById('pc-name') || {}).value || '';
   const type = (document.getElementById('pc-type') || {}).value || 'manual';
@@ -34273,25 +32589,6 @@ async function saveProjectConfig(projId) {
 
 
 // S7h: Rename project via prompt dialog
-async function promptRenameProject(pid, currentName) {
-  const newName = await porterPrompt('Rename Project', 'Enter new project name:', currentName);
-  if (newName === null || !newName.trim() || newName.trim() === currentName) return;
-  const d = await api('/api/projects', { action: 'update', project_id: pid, name: newName.trim() });
-  if (d && d.ok) {
-    toast('Project renamed');
-    _projFileCache = {};
-    const d2 = await api('/api/projects');
-    if (d2 && d2.projects) {
-      _projConfigProjects = d2.projects;
-      _projActiveId = d2.active_project_id;
-      _projProjects = d2.projects;
-    }
-    _renderProjectList();
-  } else {
-    toast((d && d.error) || 'Rename failed', 'err');
-  }
-}
-
 function renderAgents(agents, showAll) {
   if (typeof showAll === 'undefined') showAll = false;
   const el = document.getElementById('agent-list');
@@ -34594,19 +32891,6 @@ async function openAgentWorkspaceFile(path) {
   loadAgentWorkspaceList(false);
 }
 
-function findInWorkspace() {
-  const q = (document.getElementById('aw-find')?.value || '').trim();
-  const ed = document.getElementById('aw-editor');
-  if (!ed || !q) return;
-  const start = (ed.selectionEnd || 0);
-  const text = ed.value || '';
-  let idx = text.toLowerCase().indexOf(q.toLowerCase(), start);
-  if (idx < 0) idx = text.toLowerCase().indexOf(q.toLowerCase(), 0);
-  if (idx < 0) { toast('Text not found', 'err'); return; }
-  ed.focus();
-  ed.setSelectionRange(idx, idx + q.length);
-}
-
 async function saveAgentWorkspaceFile() {
   if (!_awCurrentFile) { toast('Pick a file first', 'err'); return; }
   const ed = document.getElementById('aw-editor');
@@ -34692,9 +32976,6 @@ function _showModal(title, bodyHtml) {
     + '</div>' + bodyHtml + '</div>';
   overlay.style.display = 'flex';
 }
-
-function loadBridgeRuns() { /* removed — dispatch moved to @backend in chat */ }
-
 
 function _timeAgo(ts) {
   if (typeof _timeAgo._fn === 'function') return _timeAgo._fn(ts);
@@ -34839,18 +33120,6 @@ async function saveAgentConcurrency(agentId) {
 // ── task operations ───────────────────────────────────────────────────────
 
 // S7h: Number/duration formatters for project metrics
-function _fmtNum(n) {
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
-  return String(n);
-}
-function _fmtDuration(mins) {
-  if (mins < 60) return mins + 'm';
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return h + 'h' + (m ? ' ' + m + 'm' : '');
-}
-
 function _tsAgo(unixTs) {
   if (!unixTs) return 'never';
   const secs = Math.floor(Date.now() / 1000 - unixTs);
@@ -34861,88 +33130,6 @@ function _tsAgo(unixTs) {
 }
 
 async function loadTasks() { loadTaskRegistry(); }
-
-function renderTasks(tasks) {
-  const el3 = document.getElementById('agents-jobs-list');
-  const noTasks = '<div style="color:var(--text2);padding:20px 0">No tasks found.</div>';
-  if (!tasks.length) {
-    if (el3) el3.innerHTML = noTasks;
-    return;
-  }
-
-  const card = (t) => {
-    const state = t.state || 'unknown';
-    const badgeCls = 'task-badge badge-' + state;
-    const canPause  = state === 'running' || state === 'stalled';
-    const canResume = state === 'paused';
-    const canCancel = state !== 'complete' && state !== 'cancelled';
-    const ownerDisplay = t.owner
-      ? `<span style="font-weight:500">${escHtml(t.owner_name || t.owner)}</span>${t.owner_name && t.owner_name !== t.owner ? ` <span style="font-family:monospace;color:var(--text3);font-size:11px">(${escHtml(t.owner)})</span>` : ''}`
-      : `<span style="color:var(--text3);font-style:italic">Unassigned</span>`;
-
-    let primaryAction = '';
-    if (state === 'stalled') primaryAction = `<button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="taskAction('resume','${t.task_id}')">Recover</button>`;
-    else if (canResume) primaryAction = `<button class="btn btn-sm btn-ghost" onclick="taskAction('resume','${t.task_id}')">Resume</button>`;
-    else if (canPause) primaryAction = `<button class="btn btn-sm btn-ghost" onclick="taskAction('pause','${t.task_id}')">Pause</button>`;
-
-    const secondary = canCancel
-      ? `<button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="taskAction('cancel','${t.task_id}')">Cancel</button>`
-      : '';
-
-    const hbAgoSecs = t.last_heartbeat ? Math.floor(Date.now()/1000 - t.last_heartbeat) : null;
-    const recommendCancel = (state === 'running' || state === 'stalled') && hbAgoSecs !== null && hbAgoSecs > 600;
-    const nextHint = recommendCancel
-      ? 'Next: cancel stale task and relaunch clean'
-      : (state === 'stalled'
-          ? 'Next: click Recover'
-          : (state === 'running' ? 'Next: monitor or pause' : (state === 'paused' ? 'Next: resume or cancel' : (state === 'complete' ? 'Next: clear completed' : 'Next: review'))));
-
-    const stallInfo = (state === 'stalled' && t.stall_reason)
-      ? `<div style="margin-top:6px;font-size:11px;color:#b91c1c;background:#fee2e2;border-radius:4px;padding:4px 8px">⚠ ${escHtml(t.stall_reason)}</div>`
-      : '';
-
-    return `<div class="task-card">
-      <div class="task-hdr">
-        <span class="task-id">${escHtml(t.task_id)}</span>
-        <span class="${badgeCls}">${state}</span>
-      </div>
-      <div class="task-meta">
-        <span>Owner: ${ownerDisplay}</span>
-        <span>Steps: ${t.step_count || 0}</span>
-        <span>Heartbeat: ${_tsAgo(t.last_heartbeat)}</span>
-        ${t.started_at ? '<span>Started: ' + _tsAgo(t.started_at) + '</span>' : ''}
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:6px"><div style="font-size:11px;color:var(--text3)">${nextHint}</div>${recommendCancel ? '<span class="task-badge badge-stalled" title="Stale heartbeat detected">recommend cancel</span>' : ''}</div>
-      ${stallInfo}
-      ${(primaryAction || secondary) ? `<div class="task-actions">${primaryAction}${secondary}</div>` : ''}
-    </div>`;
-  };
-
-  const needsAction = tasks.filter(t => ['stalled','paused'].includes(t.state));
-  const inProgress = tasks.filter(t => t.state === 'running');
-  const done = tasks.filter(t => ['complete','cancelled'].includes(t.state));
-
-  const section = (title, items, subtitle='') => {
-    if (!items.length) return '';
-    return `<div style="margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px">${title}</div>
-        <div style="font-size:11px;color:var(--text3)">${items.length}</div>
-      </div>
-      ${subtitle ? `<div style="font-size:12px;color:var(--text3);margin-bottom:6px">${subtitle}</div>` : ''}
-      ${items.map(card).join('')}
-    </div>`;
-  };
-
-  const html =
-    section('Needs action', needsAction, 'Handle these first.') +
-    section('In progress', inProgress, 'Active execution lane.') +
-    section('Completed', done, 'Archive lane — clear periodically.');
-
-
-  if (el3) el3.innerHTML = html || noTasks;
-}
-
 
 async function taskAction(action, taskId) {
   const res = await api('/api/tasks', { action, task_id: taskId });
@@ -35140,37 +33327,6 @@ function openCreateTaskModal() {
 function closeCreateTaskModal() {
   const m = document.getElementById('create-task-modal');
   if (m) m.style.display = 'none';
-}
-
-function ctSetPrio(btn) {
-  document.querySelectorAll('.ct-prio-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-}
-
-async function submitCreateTask() {
-  const titleEl = document.getElementById('ct-title');
-  const title   = (titleEl ? titleEl.value : '').trim();
-  if (!title) { toast('Title is required', 'err'); if (titleEl) titleEl.focus(); return; }
-  const descEl  = document.getElementById('ct-desc');
-  const projEl  = document.getElementById('ct-project');
-  const tagsEl  = document.getElementById('ct-tags');
-  const prioBtn = document.querySelector('.ct-prio-btn.active');
-  const desc    = descEl  ? descEl.value.trim() : '';
-  const projId  = projEl  ? projEl.value        : '';
-  const prio    = prioBtn ? prioBtn.dataset.prio : 'normal';
-  const tags    = tagsEl  ? tagsEl.value.split(',').map(s => s.trim()).filter(Boolean) : [];
-  const body    = { action: 'create', title, description: desc, priority: prio, tags };
-  if (projId) body.project_id = projId;
-  const res = await api('/api/task-registry', body);
-  if (res && res.ok) {
-    toast('Task created', 'ok');
-    closeCreateTaskModal();
-    _cpTaskForModal = null;
-    if (_currentModule === 'projects') loadProjects();
-    else loadTaskRegistry();
-  } else {
-    toast((res && res.error) || 'Failed to create task', 'err');
-  }
 }
 
 // ── policy presets ────────────────────────────────────────────────────────
@@ -35877,10 +34033,6 @@ function showIosBrowserAccess(node, targetLabel) {
 }
 
 // Backward-compatible stub — delegates to showIosBrowserAccess.
-async function openIosPrepWizard(node, targetLabel) {
-  showIosBrowserAccess(node, targetLabel);
-}
-
 async function quickExposePath(node) {
 
   let nodeId = node.id;
@@ -35936,39 +34088,6 @@ async function quickExposePath(node) {
   return;
 }
 // kept for backward compat during transition
-function _renderSidebarLocs(locs, activeRoot) {
-  // group by node_id if available, else render flat
-  const byNode = {};
-  locs.forEach(l => {
-    const nid = l.node_id || '__flat__';
-    (byNode[nid] = byNode[nid] || []).push(l);
-  });
-
-  if (Object.keys(byNode).length === 1 && byNode['__flat__']) {
-    // flat legacy: no node grouping
-    // always populate rootMeta first
-    locs.forEach(l => {
-      rootMeta[l.id] = { path: l.path || '', label: l.label || l.id, node: l.node_id || '', type: l.type || 'local', hostname: l.node || '', tailscale_ip: l.tailscale_ip || '', isSelf: true };
-    });
-    const locEl = document.getElementById('locations');
-    if (locEl) {
-      locEl.innerHTML = '';
-      locs.forEach(l => {
-        const div = document.createElement('div');
-        div.className = 'loc' + (l.id === activeRoot ? ' active' : '');
-        div.dataset.root = l.id;
-        div.innerHTML = `${_locIcon(l)}<span class="loc-name">${escHtml(l.label)}</span>`;
-        div.onclick = () => navigate(l.id, '');
-        locEl.appendChild(div);
-      });
-    }
-  } else {
-    // has node context: build pseudo-nodes and delegate
-    const nodes = Object.entries(byNode).map(([nid, ms]) => ({id:nid, label:nid, type:'local', mounts:ms}));
-    _renderSidebarNodes(nodes, activeRoot);
-  }
-}
-
 // v0.29.16 — Shared SSE bus (single connection, multiple consumers)
 var _sseBus = null;
 var _sseSubs = {};
@@ -36577,13 +34696,6 @@ function updateFooter(count) {
 // setSort defined above
 
 // ── search ──
-function onSearchInput(val) {
-  clearTimeout(searchTimer);
-  if (!val.trim()) { clearSearch(); return; }
-  if (!curRoot) return;
-  searchTimer = setTimeout(() => runSearch(val.trim()), 300);
-}
-
 function openSearch() {
   const si = document.getElementById('searchInput');
   if (si) si.focus();
@@ -44580,7 +42692,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.12"})
+            self.reply_json({"v": "0.33.13"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -47076,7 +45188,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.12'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.13'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -54123,7 +52235,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.12 ready (localhost only)")
+    print(f"\n  Porter v0.33.13 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
