@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.11 — Project detail overhaul"""
+"""Porter v0.33.12 — CRM overhaul: dense layout, quick interactions"""
 
 
 import email
@@ -14728,13 +14728,34 @@ body.density-compact .file-name { padding: 6px 0; }
 .crm-detail-body { flex:1; overflow-y:auto; padding:16px 20px; }
 .crm-detail-section { margin-bottom:20px; }
 .crm-detail-section-title { font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px; }
-.crm-detail-field { display:flex; align-items:flex-start; gap:8px; padding:4px 0; }
-.crm-detail-field-label { font-size:11px; color:var(--text3); min-width:70px; flex-shrink:0; }
-.crm-detail-field-value { font-size:12px; color:var(--text); word-break:break-word; }
+/* crm-detail-field styles defined in dense detail layout section above */
 .crm-detail-field-value a { color:var(--accent); text-decoration:none; }
 .crm-detail-field-value a:hover { text-decoration:underline; }
 .crm-detail-notes { width:100%; min-height:60px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); font-size:12px; resize:vertical; font-family:inherit; outline:none; }
 .crm-detail-notes:focus { border-color:var(--accent); }
+/* CRM dense detail layout */
+.crm-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 32px; }
+@media (max-width:640px) { .crm-detail-grid { grid-template-columns:1fr; } }
+.crm-detail-col { }
+.crm-detail-field { display:flex; align-items:baseline; gap:6px; padding:5px 0; border-bottom:1px solid color-mix(in srgb, var(--border) 30%, transparent); }
+.crm-detail-field:last-child { border-bottom:none; }
+.crm-detail-field-label { font-size:11px; color:var(--text3); min-width:72px; flex-shrink:0; font-weight:500; }
+.crm-detail-field-value { font-size:12px; color:var(--text); word-break:break-word; flex:1; }
+.crm-quick-add { display:flex; gap:8px; align-items:center; padding:10px 0; margin-bottom:8px; }
+.crm-quick-add select { padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text); font-size:11px; cursor:pointer; outline:none; }
+.crm-quick-add select:focus { border-color:var(--accent); }
+.crm-quick-add input { flex:1; padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text); font-size:12px; outline:none; }
+.crm-quick-add input:focus { border-color:var(--accent); }
+.crm-quick-add button { padding:5px 12px; border:1px solid var(--accent); border-radius:6px; background:color-mix(in srgb, var(--accent) 10%, transparent); color:var(--accent); font-size:11px; font-weight:600; cursor:pointer; transition:all .15s; }
+.crm-quick-add button:hover { background:var(--accent); color:#fff; }
+.crm-contact-chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border:1px solid var(--border); border-radius:8px; font-size:12px; color:var(--text); cursor:pointer; transition:all .15s; margin:0 4px 4px 0; }
+.crm-contact-chip:hover { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 5%, transparent); }
+.crm-contact-chip .chip-avatar { width:20px; height:20px; border-radius:50%; background:var(--raised); display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:700; }
+.crm-project-chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border:1px solid var(--border); border-radius:8px; font-size:12px; color:var(--text); cursor:pointer; transition:all .15s; margin:0 4px 4px 0; }
+.crm-project-chip:hover { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 5%, transparent); }
+.crm-project-chip .chip-role { font-size:9px; color:var(--text3); text-transform:uppercase; }
+.crm-section-hdr { font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; margin:20px 0 8px; display:flex; align-items:center; gap:8px; }
+.crm-section-hdr .count { font-size:10px; color:var(--text3); font-weight:400; }
 /* CRM social icons */
 .crm-social-links { display:flex; gap:8px; flex-wrap:wrap; }
 .crm-social-link { display:flex; align-items:center; gap:4px; font-size:11px; color:var(--accent); text-decoration:none; padding:3px 8px; border:1px solid var(--border); border-radius:6px; transition:all .15s; }
@@ -15590,7 +15611,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.11</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.12</div>
   </div>
 </aside>
 
@@ -16731,6 +16752,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.12', date:'2026-03-18', notes:['CRM overhaul: ACT!-style dense 2-column layout, quick interaction add, project name resolution, social fields always visible'] },
   { ver:'v0.33.11', date:'2026-03-18', notes:['Project detail overhaul: header actions, meta bar, inline tasks, team avatars, 2-column layout'] },
   { ver:'v0.33.10', date:'2026-03-18', notes:['Fix: chat prefill now routes to popup widget (embedded bar was hidden)'] },
   { ver:'v0.33.9', date:'2026-03-18', notes:['Project detail: empty state prompts for To-Do and Team','Agent cards: role text truncated to 1 line'] },
@@ -22132,55 +22154,69 @@ async function _crmOpenContact(id) {
   var dv = document.getElementById('people-detail-view');
   var isAdmin = currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin');
   var h = '';
-  // Header: back + admin actions
-  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">';
-  h += '<button class="btn btn-ghost" onclick="_crmCloseDetail()" style="font-size:12px">&larr; People</button>';
-  h += '<div style="flex:1"></div>';
-  if (isAdmin && c.status === 'active') h += '<button class="btn btn-ghost" onclick="_crmArchiveContact(' + c.id + ')" style="font-size:11px;color:var(--text3)">Archive</button>';
-  h += '</div>';
-  // Hero: avatar + name + subtitle
-  h += '<div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">';
-  h += '<div style="width:52px;height:52px;border-radius:50%;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--text);flex-shrink:0">' + escHtml(avatarInitials(name)) + '</div>';
-  h += '<div>';
-  h += '<div style="font-size:17px;font-weight:600;color:var(--text)">' + escHtml(name) + '</div>';
+  // Header: back + name + actions
+  h += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">';
+  h += '<button class="btn btn-ghost" onclick="_crmCloseDetail()" style="font-size:12px;padding:4px 8px">&larr;</button>';
+  h += '<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">';
+  h += '<div style="width:44px;height:44px;border-radius:50%;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:var(--text);flex-shrink:0">' + escHtml(avatarInitials(name)) + '</div>';
+  h += '<div style="min-width:0">';
+  h += '<div style="font-size:16px;font-weight:600;color:var(--text)">' + escHtml(name) + '</div>';
   var subtitle = [];
   if (c.contact_type && c.contact_type !== 'other') subtitle.push(c.contact_type);
   if (c.title) subtitle.push(c.title);
   if (c.company_name) subtitle.push('at ' + c.company_name);
-  if (subtitle.length) h += '<div style="font-size:12px;color:var(--text3);margin-top:2px">' + escHtml(subtitle.join(' \u00b7 ')) + '</div>';
+  if (subtitle.length) h += '<div style="font-size:11px;color:var(--text3);margin-top:1px">' + escHtml(subtitle.join(' \u00b7 ')) + '</div>';
   h += '</div></div>';
-  // Details — single column, all fields editable
-  h += '<div style="max-width:480px">';
-  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Details</div>';
+  if (isAdmin && c.status === 'active') h += '<button class="btn btn-ghost" onclick="_crmArchiveContact(' + c.id + ')" style="font-size:11px;color:var(--text3)">Archive</button>';
+  h += '</div>';
+  // Two-column dense field grid
+  h += '<div class="crm-detail-grid">';
+  // Left column: identity
+  h += '<div class="crm-detail-col">';
   h += _crmEditableField('Title', c.title || '', c.id, 'title');
-  h += _crmEditableField('Email', c.email || '', c.id, 'email');
-  h += _crmEditableField('Phone', c.phone || '', c.id, 'phone');
+  h += _crmEditableField('Company', c.company_name || '', c.id, 'company_name');
   h += _crmEditableField('Type', c.contact_type || '', c.id, 'contact_type');
   h += _crmEditableField('Tags', tags.join(', '), c.id, 'tags_json');
-  if (c.company_name) h += '<div class="crm-detail-field"><span class="crm-detail-field-label">Company</span><span class="crm-detail-field-value">' + escHtml(c.company_name) + '</span></div>';
-  // Social links — editable
-  var socialLabels = {linkedin:'LinkedIn', twitter:'Twitter', telegram:'Telegram', whatsapp:'WhatsApp', website:'Website'};
-  var socialKeys = Object.keys(social).filter(function(k) { return social[k]; });
-  socialKeys.forEach(function(k) {
-    h += _crmEditableField(socialLabels[k] || k, social[k], c.id, 'social.' + k);
-  });
-  // Projects
-  if (c.projects && c.projects.length) {
-    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 8px">Projects</div>';
-    c.projects.forEach(function(p) {
-      h += '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px"><span style="color:var(--text)">' + escHtml(p.project_id) + '</span><span style="color:var(--text3)">' + escHtml(p.role || '') + '</span></div>';
-    });
-  }
-  // Notes — auto-save textarea
-  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 8px">Notes</div>';
-  h += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Notes..." style="min-height:80px">' + escHtml(c.notes || '') + '</textarea>';
-  // Activity timeline
-  if (c.interactions && c.interactions.length) {
-    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 8px">Activity</div>';
-    h += _crmRenderTimeline(c.interactions);
-  }
+  h += _crmEditableField('Status', c.status || 'active', c.id, 'status');
   h += '</div>';
+  // Right column: contact info
+  h += '<div class="crm-detail-col">';
+  h += _crmEditableField('Email', c.email || '', c.id, 'email');
+  h += _crmEditableField('Phone', c.phone || '', c.id, 'phone');
+  // Social — always show all fields
+  var socialFields = {linkedin:'LinkedIn', twitter:'Twitter', telegram:'Telegram', whatsapp:'WhatsApp', website:'Website'};
+  Object.keys(socialFields).forEach(function(k) {
+    h += _crmEditableField(socialFields[k], social[k] || '', c.id, 'social.' + k);
+  });
+  h += '</div>';
+  h += '</div>'; // end grid
+  // Projects section (chips, not a boring list)
+  if (c.projects && c.projects.length) {
+    h += '<div class="crm-section-hdr">Projects <span class="count">(' + c.projects.length + ')</span></div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:0">';
+    c.projects.forEach(function(p) {
+      var pname = p.project_name || p.project_id || '?';
+      h += '<div class="crm-project-chip" onclick="_projOpen(\'' + escHtml(p.project_id) + '\');switchModule(\'projects\')">';
+      h += '<span>' + escHtml(pname) + '</span>';
+      if (p.role) h += '<span class="chip-role">' + escHtml(p.role) + '</span>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+  // Notes — auto-save
+  h += '<div class="crm-section-hdr">Notes</div>';
+  h += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Add notes..." style="min-height:60px">' + escHtml(c.notes || '') + '</textarea>';
+  // Quick interaction add
+  h += '<div class="crm-section-hdr">Activity</div>';
+  h += '<div class="crm-quick-add">';
+  h += '<select id="crm-interaction-type"><option value="note">Note</option><option value="call">Call</option><option value="email">Email</option><option value="meeting">Meeting</option><option value="task">Task</option></select>';
+  h += '<input id="crm-interaction-body" placeholder="Log an interaction..." onkeydown="if(event.key===\'Enter\')_crmQuickInteraction(' + c.id + ',\'contact\')">';
+  h += '<button onclick="_crmQuickInteraction(' + c.id + ',\'contact\')">Add</button>';
+  h += '</div>';
+  // Timeline
+  h += _crmRenderTimeline(c.interactions || []);
   dv.innerHTML = h;
+  // Notes auto-save
   var notesEl = document.getElementById('crm-detail-notes');
   if (notesEl) {
     var _noteTimer = null;
@@ -22202,51 +22238,59 @@ async function _crmOpenCompany(id) {
   var dv = document.getElementById('people-detail-view');
   var isAdmin = currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin');
   var h = '';
-  // Header
-  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">';
-  h += '<button class="btn btn-ghost" onclick="_crmCloseDetail()" style="font-size:12px">&larr; People</button>';
-  h += '<div style="flex:1"></div>';
-  if (isAdmin && c.status === 'active') h += '<button class="btn btn-ghost" onclick="_crmArchiveCompany(' + c.id + ')" style="font-size:11px;color:var(--text3)">Archive</button>';
-  h += '</div>';
-  // Hero
-  h += '<div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">';
-  h += '<div style="width:52px;height:52px;border-radius:10px;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--text);flex-shrink:0">' + escHtml(avatarInitials(c.name)) + '</div>';
-  h += '<div>';
-  h += '<div style="font-size:17px;font-weight:600;color:var(--text)">' + escHtml(c.name) + '</div>';
+  // Header: back + name + actions
+  h += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">';
+  h += '<button class="btn btn-ghost" onclick="_crmCloseDetail()" style="font-size:12px;padding:4px 8px">&larr;</button>';
+  h += '<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">';
+  h += '<div style="width:44px;height:44px;border-radius:10px;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:var(--text);flex-shrink:0">' + escHtml(avatarInitials(c.name)) + '</div>';
+  h += '<div style="min-width:0">';
+  h += '<div style="font-size:16px;font-weight:600;color:var(--text)">' + escHtml(c.name) + '</div>';
   var subtitle = [];
   if (c.company_type && c.company_type !== 'other') subtitle.push(c.company_type);
   if (c.industry) subtitle.push(c.industry);
   if (c.country) subtitle.push(c.country);
-  if (subtitle.length) h += '<div style="font-size:12px;color:var(--text3);margin-top:2px">' + escHtml(subtitle.join(' \u00b7 ')) + '</div>';
+  if (subtitle.length) h += '<div style="font-size:11px;color:var(--text3);margin-top:1px">' + escHtml(subtitle.join(' \u00b7 ')) + '</div>';
   h += '</div></div>';
-  // Details — single column
-  h += '<div style="max-width:480px">';
-  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Details</div>';
+  if (isAdmin && c.status === 'active') h += '<button class="btn btn-ghost" onclick="_crmArchiveCompany(' + c.id + ')" style="font-size:11px;color:var(--text3)">Archive</button>';
+  h += '</div>';
+  // Two-column dense field grid
+  h += '<div class="crm-detail-grid">';
+  h += '<div class="crm-detail-col">';
   h += _crmEditableField('Industry', c.industry || '', c.id, 'industry');
-  h += _crmEditableField('Website', c.website || '', c.id, 'website');
-  h += _crmEditableField('Country', c.country || '', c.id, 'country');
   h += _crmEditableField('Type', c.company_type || '', c.id, 'company_type');
-  // Contacts
+  h += _crmEditableField('Country', c.country || '', c.id, 'country');
+  h += '</div>';
+  h += '<div class="crm-detail-col">';
+  h += _crmEditableField('Website', c.website || '', c.id, 'website');
+  h += _crmEditableField('Status', c.status || 'active', c.id, 'status');
+  h += '</div>';
+  h += '</div>';
+  // Contacts as chips
   if (c.contacts && c.contacts.length) {
-    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 8px">Contacts (' + c.contacts.length + ')</div>';
+    h += '<div class="crm-section-hdr">Contacts <span class="count">(' + c.contacts.length + ')</span></div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:0">';
     c.contacts.forEach(function(ct) {
       var cname = (ct.first_name + ' ' + (ct.last_name||'')).trim();
-      h += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer" onclick="_crmCloseDetail();setTimeout(function(){_crmOpenContact(' + ct.id + ')},200)">';
-      h += '<div style="width:24px;height:24px;border-radius:50%;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--text)">' + escHtml(avatarInitials(cname)) + '</div>';
-      h += '<span style="font-size:12px;color:var(--text)">' + escHtml(cname) + '</span>';
-      if (ct.title) h += '<span style="font-size:11px;color:var(--text3)">' + escHtml(ct.title) + '</span>';
+      var initials = cname.split(' ').map(function(w){return w[0]||''}).join('').slice(0,2).toUpperCase();
+      h += '<div class="crm-contact-chip" onclick="_crmOpenContact(' + ct.id + ')">';
+      h += '<div class="chip-avatar">' + escHtml(initials) + '</div>';
+      h += '<span>' + escHtml(cname) + '</span>';
+      if (ct.title) h += '<span style="font-size:10px;color:var(--text3)">' + escHtml(ct.title) + '</span>';
       h += '</div>';
     });
+    h += '</div>';
   }
   // Notes
-  h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 8px">Notes</div>';
-  h += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Notes..." style="min-height:80px">' + escHtml(c.notes || '') + '</textarea>';
-  // Activity
-  if (c.interactions && c.interactions.length) {
-    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 8px">Activity</div>';
-    h += _crmRenderTimeline(c.interactions);
-  }
+  h += '<div class="crm-section-hdr">Notes</div>';
+  h += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Add notes..." style="min-height:60px">' + escHtml(c.notes || '') + '</textarea>';
+  // Quick interaction add
+  h += '<div class="crm-section-hdr">Activity</div>';
+  h += '<div class="crm-quick-add">';
+  h += '<select id="crm-interaction-type"><option value="note">Note</option><option value="call">Call</option><option value="email">Email</option><option value="meeting">Meeting</option><option value="task">Task</option></select>';
+  h += '<input id="crm-interaction-body" placeholder="Log an interaction..." onkeydown="if(event.key===\'Enter\')_crmQuickInteraction(' + c.id + ',\'company\')">';
+  h += '<button onclick="_crmQuickInteraction(' + c.id + ',\'company\')">Add</button>';
   h += '</div>';
+  h += _crmRenderTimeline(c.interactions || []);
   dv.innerHTML = h;
   var notesEl = document.getElementById('crm-detail-notes');
   if (notesEl) {
@@ -22265,8 +22309,30 @@ function _crmCloseDetail() {
   _crmDetailType = null; _crmDetailId = null;
 }
 
+async function _crmQuickInteraction(entityId, entityType) {
+  var typeEl = document.getElementById('crm-interaction-type');
+  var bodyEl = document.getElementById('crm-interaction-body');
+  if (!typeEl || !bodyEl) return;
+  var itype = typeEl.value;
+  var body = bodyEl.value.trim();
+  if (!body) { bodyEl.focus(); return; }
+  var payload = {action:'interactions.create', interaction_type:itype, body:body};
+  if (entityType === 'contact') payload.contact_id = entityId;
+  else payload.company_id = entityId;
+  var r = await api('/api/workspace/crm', payload);
+  if (r && r.ok) {
+    toast('Logged', 'ok');
+    bodyEl.value = '';
+    // Refresh the detail view
+    if (entityType === 'contact') _crmOpenContact(entityId);
+    else _crmOpenCompany(entityId);
+  } else {
+    toast((r && r.error) || 'Failed', 'err');
+  }
+}
+
 function _crmRenderTimeline(interactions) {
-  if (!interactions.length) return '<div class="people-empty" style="padding:12px">No activity yet</div>';
+  if (!interactions.length) return '<div style="padding:12px 0;color:var(--text3);font-size:12px">No activity yet. Use the form above to log calls, notes, and meetings.</div>';
   var h = '<div class="crm-timeline">';
   interactions.forEach(function(i) {
     var icon = _crmInteractionIcons[i.interaction_type] || '\u21BB';
@@ -44514,7 +44580,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.11"})
+            self.reply_json({"v": "0.33.12"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -47010,7 +47076,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.11'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.12'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -51293,6 +51359,11 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     "SELECT pc.*, 'project' as _type FROM crm_project_contacts pc WHERE pc.contact_id = ?", (cid,)
                 ).fetchall()]
                 conn.close()
+                # Enrich project links with names from config
+                all_projects = _config.get("projects", [])
+                proj_map = {p.get("id",""): p.get("name","") for p in all_projects}
+                for pl in contact["projects"]:
+                    pl["project_name"] = proj_map.get(pl.get("project_id",""), pl.get("project_id",""))
                 self.reply_json({"ok": True, "contact": contact})
 
             # ── contacts.create ──
@@ -54052,7 +54123,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.11 ready (localhost only)")
+    print(f"\n  Porter v0.33.12 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
