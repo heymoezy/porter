@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.16 — Files: Finder-like UX"""
+"""Porter v0.33.17 — Dead code cleanup: Python functions"""
 
 
 import email
@@ -1640,9 +1640,6 @@ def _jaccard_similarity(kw_a, kw_b):
     union = kw_a | kw_b
     return len(intersection) / len(union) if union else 0.0
 
-def _cortex_relevance_score(query_kw, stored_kw, importance=5):
-    """Jaccard similarity weighted by importance."""
-    return _jaccard_similarity(query_kw, stored_kw) * (importance / 10.0)
 
 def _parse_cortex_json(text):
     """Extract JSON from LLM response — handles code fences."""
@@ -2149,94 +2146,6 @@ def _cortex_batch_extract(limit=20):
     return {"ok": True, "processed": len(rows), "extracted": extracted}
 
 
-def _cortex_inject_context(message, persona_id="", project_id=""):
-    """Inject relevant memories before a persona dispatch. Pure SQL + keyword matching, no LLM."""
-    prefs = _config.get("preferences", {})
-    if not prefs.get("cortex_enabled", True):
-        return ""
-    inject_limit = prefs.get("cortex_inject_limit", 5)
-
-    query_kw = _cortex_tokenize(message)
-    if not query_kw:
-        return ""
-
-    import time as _t_inj
-
-    try:
-        conn = _db_conn()
-        rows = conn.execute(
-            "SELECT id, fact, scope, scope_id, importance, keywords, created_at, use_count FROM cortex_memories "
-            "WHERE consolidated_into IS NULL AND status='active' ORDER BY created_at DESC LIMIT 200"
-        ).fetchall()
-        conn.close()
-    except Exception:
-        return ""
-
-    if not rows:
-        return ""
-
-    now = _t_inj.time()
-    max_age = 90 * 86400  # 90 days normalization window
-
-    # Score each memory — v0.28.52 formula: keyword + confidence + recency + use_freq
-    scored = []
-    for row in rows:
-        rid, fact, scope, scope_id, importance, kw_str, created_at, use_count = row
-        stored_kw = set(k.strip() for k in kw_str.split(",") if k.strip()) if kw_str else _cortex_tokenize(fact)
-        keyword_score = _jaccard_similarity(query_kw, stored_kw)
-        # v0.28.52 — confidence replaces raw importance in scoring
-        _conf = 0.5
-        try:
-            _cc = _db_conn()
-            _cr = _cc.execute("SELECT confidence FROM cortex_memories WHERE id=?", (rid,)).fetchone()
-            if _cr: _conf = _cr[0] or 0.5
-            _cc.close()
-        except Exception:
-            pass
-        recency = max(0, 1.0 - (now - created_at) / max_age) if created_at else 0.5
-        use_freq = min(1.0, (use_count or 0) / 20.0)
-        base_score = 0.35 * keyword_score + 0.3 * _conf + 0.2 * recency + 0.15 * use_freq
-        # Scope bonus
-        if scope == "agent" and scope_id == persona_id:
-            base_score *= 1.5
-        elif scope == "project" and scope_id == project_id:
-            base_score *= 1.3
-        if base_score > 0.05:
-            scored.append((base_score, fact, rid))
-
-    if not scored:
-        return ""
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    top = scored[:inject_limit]
-
-    # Update usage stats for injected memories
-    try:
-        conn2 = _db_conn()
-        for _, _, rid in top:
-            conn2.execute("UPDATE cortex_memories SET last_used_at=?, use_count=use_count+1 WHERE id=?", (now, rid))
-        conn2.commit()
-        conn2.close()
-    except Exception:
-        pass
-
-    facts = [f"- {s[1]}" for s in top]
-    result = "Relevant memories:\n" + "\n".join(facts)
-
-    # v0.28.2 — inject recent episodic memories (max 2)
-    try:
-        conn3 = _db_conn()
-        episodic = conn3.execute(
-            "SELECT fact FROM cortex_memories WHERE memory_type='episodic' AND status='active' "
-            "ORDER BY created_at DESC LIMIT 2"
-        ).fetchall()
-        conn3.close()
-        if episodic:
-            result += "\n\nRecent sessions:\n" + "\n".join(f"- {e[0]}" for e in episodic)
-    except Exception:
-        pass
-
-    return result
 
 def _cortex_consolidate_once():
     """Run one cortex consolidation pass. Returns summary string."""
@@ -2426,25 +2335,6 @@ def _mem_consolidate_once():
     return result
 
 
-def _cortex_consolidate_loop():
-    """Background daemon: periodically merge similar memories."""
-    import time as _t
-    with _wf_lock:
-        _wf_registry["cortex_consolidation"]["started_at"] = _t.time()
-    while True:
-        prefs = _config.get("preferences", {})
-        hours = max(1, prefs.get("cortex_consolidate_hours", 6))
-        _t.sleep(hours * 3600)
-        if not prefs.get("cortex_enabled", True):
-            continue
-        if not _wf_is_enabled("cortex_consolidation"):
-            continue
-        _t0 = _t.time()
-        try:
-            result = _cortex_consolidate_once()
-            _wf_record_run("cortex_consolidation", success=True, result=result, duration_s=_t.time()-_t0)
-        except Exception as e:
-            _wf_record_run("cortex_consolidation", success=False, error=e, duration_s=_t.time()-_t0)
 
 
 
@@ -2757,50 +2647,6 @@ def _session_lifecycle_sweep():
     except Exception:
         pass
 
-def _session_resume(chat_id):
-    """Resume a paused/archived session."""
-    _session_update_activity(chat_id)
-
-
-    import re as _ir_re
-    # Pass 1: Extract significant keywords (nouns/verbs, skip stopwords)
-    stopwords = {'the','a','an','is','are','was','were','be','been','being','have','has','had',
-                 'do','does','did','will','would','shall','should','may','might','can','could',
-                 'i','me','my','we','our','you','your','he','him','his','she','her','it','its',
-                 'they','them','their','this','that','these','those','what','which','who','whom',
-                 'when','where','why','how','not','no','nor','but','and','or','if','then','else',
-                 'so','for','to','of','in','on','at','by','with','from','up','out','about','into',
-                 'over','after','before','between','through','during','above','below','just','also',
-                 'very','too','quite','really','here','there','now','all','each','every','both',
-                 'few','more','most','other','some','such','only','own','same','than','like','want',
-                 'need','make','get','go','come','take','give','tell','say','know','think','see',
-                 'use','try','find','help','let','please','could','would'}
-    words = _ir_re.findall(r'[a-zA-Z]{3,}', message.lower())
-    keywords = [w for w in words if w not in stopwords][:10]
-    if not keywords:
-        return ""
-    # Pass 2: Search memory files for keyword matches
-    try:
-        persona_dir = PERSONAS_DIR / persona_id if persona_id else None
-        chunks = []
-        if persona_dir and persona_dir.exists():
-            for md_file in sorted(persona_dir.glob("*.md")):
-                if md_file.name in ("ROLE_CARD.md", "IDENTITY.md"):
-                    continue  # Already in SOUL budget
-                try:
-                    content = md_file.read_text(encoding="utf-8")[:2000]
-                    score = sum(1 for kw in keywords if kw in content.lower())
-                    if score >= 2:  # At least 2 keyword matches
-                        chunks.append((score, md_file.name, content[:300]))
-                except Exception:
-                    pass
-        chunks.sort(key=lambda x: -x[0])
-        result_parts = []
-        for score, fname, text in chunks[:max_chunks]:
-            result_parts.append(f"[{fname}] {text.strip()}")
-        return "\n".join(result_parts)
-    except Exception:
-        return ""
 
 
 
@@ -3775,9 +3621,6 @@ def _mem_stats(scope=None, scope_id=None, exclude_system=False):
         return {"total": 0, "by_kind": {}, "by_status": {}}
 
 
-def _mem_tokenize(text):
-    """Reuse cortex tokenizer for keyword extraction."""
-    return _cortex_tokenize(text)
 
 
 # ─── Memory V2: Bridge Functions (v0.31.86) ──────────────────────────────────
@@ -8989,19 +8832,6 @@ def _agent_by_id(agent_id: str) -> "dict | None":
             return a
     return None
 
-def _agent_by_key(raw_key: str) -> "dict | None":
-    h = _hash_agent_key(raw_key)
-    h_legacy = _hash_agent_key_legacy(raw_key)
-    for a in _config.get("agents", []):
-        if a.get("key_hash") == h:
-            return a
-        if a.get("key_hash") == h_legacy:
-            # Auto-upgrade legacy SHA-256 hash to scrypt
-            a["key_hash"] = h
-            try: save_config(_config)
-            except Exception: pass
-            return a
-    return None
 # ── PEP/1 Phase 1 — Hub config helpers ────────────────────────────────────
 
 PEP_REG_TOKEN_TTL = 900   # 15 minutes
@@ -10880,8 +10710,6 @@ def _persona_is_orchestrator_only(persona: dict | None) -> bool:
     return bool(persona and int(persona.get("orchestrator_only") or 0))
 
 
-def _persona_chat_selectable(persona: dict | None) -> bool:
-    return bool(persona) and _persona_is_public(persona) and not _persona_is_orchestrator_only(persona)
 
 
 def _persona_skill_recommendation_reason(persona: dict | None, skill: dict | None) -> str:
@@ -15609,7 +15437,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.16</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.17</div>
   </div>
 </aside>
 
@@ -16728,6 +16556,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.17', date:'2026-03-18', notes:['Dead code cleanup: 11 unused Python functions removed'] },
   { ver:'v0.33.16', date:'2026-03-18', notes:['Files: Finder-like UX with column headers, search filter, status bar, sortable columns'] },
   { ver:'v0.33.15', date:'2026-03-18', notes:['Agent cards: uniform avatar sizing (96px for all), view switcher properly closes detail'] },
   { ver:'v0.33.14', date:'2026-03-18', notes:['Agent detail: full-page view replaces slide-out drawer, back button, legacy panel removed'] },
@@ -36936,22 +36765,6 @@ def _unique_model_catalog(entries, preferred_id=""):
     return ordered
 
 
-def _preferred_runtime_model_id(backend: str, models: list, active_choice: str = "") -> str:
-    active_choice = _clean_runtime_model_id(active_choice)
-    ids = [str(m.get("id", "")).strip() for m in (models or []) if isinstance(m, dict)]
-    if active_choice and active_choice in ids:
-        return active_choice
-    if backend == "gemini":
-        for needle in ("gemini-2.5-flash", "gemini-2.5-pro", "flash", "pro"):
-            for model_id in ids:
-                low = model_id.lower()
-                if needle in low and "preview" not in low:
-                    return model_id
-        for model_id in ids:
-            low = model_id.lower()
-            if "preview" not in low:
-                return model_id
-    return ""
 
 
 def _discover_openclaw_models(active_choice=""):
@@ -38536,13 +38349,6 @@ def _squad_list(public_only: bool = False):
         log.error("_squad_list failed: %s", e)
         return []
 
-def _squad_by_id(squad_id):
-    """Return single squad with members."""
-    squads = _squad_list()
-    for s in squads:
-        if s["id"] == squad_id:
-            return s
-    return None
 
 
 def _persona_create(data):
@@ -41959,20 +41765,6 @@ def _emit_event(event_type, data):
             q.put(payload)
 
 
-def _sse_broadcast(payload):
-    """Compatibility wrapper for newer coordination code that emits raw SSE-style JSON."""
-    try:
-        if isinstance(payload, str):
-            event = json.loads(payload)
-        elif isinstance(payload, dict):
-            event = dict(payload)
-        else:
-            return
-    except Exception:
-        return
-    event_type = str(event.get("type") or "event")
-    data = {k: v for k, v in event.items() if k != "type"}
-    _emit_event(event_type, data)
 
 
 def _stream_chunk(run_id, backend, token):
@@ -42043,25 +41835,6 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def serve_static_file(self, file_path, code=200):
-        ctype, _ = mimetypes.guess_type(str(file_path))
-        ctype = ctype or "application/octet-stream"
-        try:
-            body = file_path.read_bytes()
-            self.send_response(code)
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(body)))
-            # Cache immutable assets, but not index.html
-            if file_path.name == "index.html":
-                self.send_header("Cache-Control", "no-store")
-            else:
-                self.send_header("Cache-Control", "public, max-age=31536000, immutable")
-            self._add_security_headers()
-            self.end_headers()
-            self.wfile.write(body)
-        except Exception as e:
-            log.error("Failed to serve static file %s: %s", file_path, e)
-            self.reply_html("<h1>Internal Server Error</h1>", 500)
 
     _MAX_BODY_SIZE = 10 * 1024 * 1024  # 10 MB
 
@@ -42704,7 +42477,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.16"})
+            self.reply_json({"v": "0.33.17"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -45200,7 +44973,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.16'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.17'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -52247,7 +52020,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.16 ready (localhost only)")
+    print(f"\n  Porter v0.33.17 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
