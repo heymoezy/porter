@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.7 — Chat action fix, CRM redesign, Escape key nav"""
+"""Porter v0.33.8 — Dead code cleanup, duplicate badge fix"""
 
 
 import email
@@ -15587,7 +15587,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.7</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.8</div>
   </div>
 </aside>
 
@@ -16728,6 +16728,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.8', date:'2026-03-18', notes:['Fix: removed duplicate Active badge on project cards','Cleanup: removed 460 lines of dead legacy tab renderer'] },
   { ver:'v0.33.7', date:'2026-03-17', notes:["Fix: file uploads now use session username (was going to _files/default)","Fix: legacy files auto-migrated from _files/default and _files/admin to user folder","Fix: popup chat context shows objective, not stale tab reference"] },
   { ver:'v0.33.6', date:'2026-03-17', notes:["Projects V2: empty sections hidden — page grows organically as content is added","Projects V2: live reload after chat actions (personas loaded, full refresh chain)","Fix: popup chat context shows objective instead of tab reference","Fix: _projReload updates header + re-renders properly"] },
   { ver:'v0.33.5', date:'2026-03-17', notes:["Fix: _projReload defined (was undefined)","Fix: project delete via chat auto-closes detail view","Old tab content renderer redirected to new single-page renderer"] },
@@ -20061,7 +20062,6 @@ function _renderProjList() {
     if (p.description || p.success_bar) html += '<div class="project-card-desc">' + escHtml(p.description || p.success_bar || '') + '</div>';
     html += '<div class="project-card-footer">';
     html += _projTypeBadge(p.type) + _projStatusBadge(p);
-    if (isActive) html += '<span class="proj-type-badge" style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">Active</span>';
     if (agentCount) html += '<span style="font-size:10px;color:var(--text3)">' + agentCount + ' worker' + (agentCount !== 1 ? 's' : '') + '</span>';
     if (milestones.length) html += '<span style="font-size:10px;color:var(--text3)">' + msDone + '/' + milestones.length + '</span>';
     if (p.deadline) html += '<span style="font-size:10px;color:var(--text3)">Due ' + _projFmtShortDate(p.deadline) + '</span>';
@@ -20922,467 +20922,6 @@ async function _renderProjectPage() {
 
 
 async function _renderProjTabContent() { return _renderProjectPage(); }
-async function _renderProjTabContent_LEGACY() {
-  var content = document.getElementById('proj-detail-content');
-  if (!content || !window._projCurrent) return;
-  var proj = window._projCurrent;
-  var html = '';
-
-  if (_projTab === 'now') {
-
-    html += '<div style="display:flex;flex-direction:column;gap:10px">';
-
-    // ── DO THIS NEXT — smart suggestion card ──
-    html += _projNextCard(proj, 'overview');
-
-    // Header row: type + status + dates inline
-    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
-    html += _projTypeBadge(proj.type) + _projStatusBadge(proj);
-    if (proj.assigned_personas && proj.assigned_personas.length) html += '<span style="font-size:10px;color:var(--text3)">' + proj.assigned_personas.length + ' worker' + (proj.assigned_personas.length > 1 ? 's' : '') + '</span>';
-    if (proj.deadline) html += '<span style="font-size:10px;color:var(--text3)">Due ' + escHtml(_projFmtShortDate(proj.deadline)) + '</span>';
-    html += '</div>';
-
-    // v0.31.67 — Description and success criteria moved to Plan tab Brief section
-    if (proj.description) html += '<div style="font-size:11px;color:var(--text3);line-height:1.4;max-height:40px;overflow:hidden">' + escHtml(proj.description).slice(0,120) + (proj.description.length > 120 ? '...' : '') + '</div>';
-
-    // Milestones — only if any exist
-    var milestones = proj.milestones || [];
-    if (milestones.length) {
-      var msDone = milestones.filter(function(m) { return m.done; }).length;
-      html += '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">';
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px">Milestones</span><div style="flex:1;height:3px;border-radius:2px;background:var(--border)"><div style="height:100%;border-radius:2px;background:var(--accent);width:' + Math.round(msDone/milestones.length*100) + '%"></div></div><span style="font-size:10px;color:var(--text3)">' + msDone + '/' + milestones.length + '</span></div>';
-      milestones.forEach(function(m, i) {
-        html += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0"><input type="checkbox" ' + (m.done ? 'checked' : '') + ' onchange="_projToggleMilestone(\x27' + proj.id + '\x27,' + i + ')" style="margin:0;cursor:pointer"><span style="font-size:11px;color:' + (m.done ? 'var(--text3)' : 'var(--text)') + ';' + (m.done ? 'text-decoration:line-through;' : '') + '">' + escHtml(m.name) + '</span></div>';
-      });
-      html += '</div>';
-    }
-
-    // Links — only if any exist
-    var links = proj.links || {};
-    var hasLinks = links.repo || links.live_url || links.docs || (links.custom && links.custom.length);
-    if (hasLinks) {
-      html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
-      if (links.repo) html += '<a href="' + escHtml(links.repo) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Repo</a>';
-      if (links.live_url) html += '<a href="' + escHtml(links.live_url) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Live</a>';
-      if (links.docs) html += '<a href="' + escHtml(links.docs) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Docs</a>';
-      (links.custom || []).forEach(function(lk) { html += '<a href="' + escHtml(lk.url || '') + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">' + escHtml(lk.label || 'Link') + '</a>'; });
-      html += '</div>';
-    }
-
-    // Linked projects — only if any exist
-    var linkedProjs = proj.linked_projects || [];
-    if (linkedProjs.length) {
-      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span style="font-size:10px;color:var(--text3)">Linked:</span>';
-      linkedProjs.forEach(function(lp) {
-        var linked = _projList.find(function(p) { return p.id === lp.project_id; });
-        var linkName = linked ? linked.name : lp.project_id.slice(0,8);
-        html += '<button onclick="_projOpen(\x27' + escHtml(lp.project_id) + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">' + escHtml(linkName) + '</button>';
-      });
-      html += '</div>';
-    }
-
-    // Quick actions row — all "add" buttons in one line
-    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;font-size:10px">';
-    html += '<button onclick="_projAddMilestone(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Milestone</button>';
-    html += '<button onclick="_projAddLink(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Link</button>';
-    html += '<button onclick="_projLinkProject(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Linked Project</button>';
-    html += '<button onclick="_projEditDates(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">Timeline</button>';
-    var curStatus = proj.status || (proj.completed_at ? 'completed' : 'active');
-    if (curStatus === 'active') {
-      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27completed\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px;margin-left:auto">Complete</button>';
-    } else if (curStatus !== 'active') {
-      html += '<button onclick="_projSetStatus(\x27' + proj.id + '\x27,\x27active\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px;margin-left:auto">Reopen</button>';
-    }
-    html += '</div>';
-
-    // State section (notes, directives) — loaded async
-    html += '<div id="proj-state-view" style="font-size:12px;color:var(--text3)">Loading state...</div>';
-    html += '</div>';
-
-    // ── Task Summary ──
-    html += '<div style="margin-top:8px">';
-    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
-    html += '<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Tasks</span>';
-    html += '<button onclick="_projSwitchTab(\x27plan\x27)" class="btn btn-ghost" style="font-size:10px;padding:1px 6px;margin-left:auto">Full list \u2192</button>';
-    html += '</div>';
-    html += '<div id="proj-now-tasks" style="font-size:12px;color:var(--text3)"><span class="loading-spinner" style="width:12px;height:12px"></span></div>';
-    html += '</div>';
-
-    // ── Workers strip ──
-    var _nwAssigned = proj.assigned_personas || [];
-    html += '<div style="margin-top:8px">';
-    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
-    html += '<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Workers (' + _nwAssigned.length + ')</span>';
-    html += '<button onclick="_projSwitchTab(\x27plan\x27)" class="btn btn-ghost" style="font-size:10px;padding:1px 6px;margin-left:auto">Manage \u2192</button>';
-    html += '</div>';
-    if (_nwAssigned.length) {
-      html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
-      _nwAssigned.forEach(function(pid) {
-        var p = (_personas || []).find(function(x) { return x.id === pid; });
-        var name = p ? p.name : pid.slice(0,8);
-        html += '<div style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:var(--surface);border:1px solid var(--border);font-size:11px;cursor:pointer" onclick="switchModule(\x27agents\x27);selectPersona(\x27' + pid + '\x27)">';
-        html += '<span style="width:16px;height:16px">' + (p ? _personaAvatarMarkup(p, 16) : '\u{1f916}') + '</span>';
-        html += '<span>' + escHtml(name) + '</span></div>';
-      });
-      html += '</div>';
-    } else {
-      html += '<div style="font-size:11px;color:var(--text3)">No workers assigned</div>';
-    }
-    html += '</div>';
-
-    content.innerHTML = html;
-    _projLoadState(proj.id);
-    _projLoadNowTasks(proj.id);
-    return;
-
-  } else if (_projTab === 'plan') {
-
-    html += _projNextCard(proj, 'plan');
-    html += '<div style="display:flex;flex-direction:column;gap:12px">';
-
-    // ── Section 1: Brief ──
-    html += '<div class="plan-section">';
-    html += '<div class="plan-section-hdr"><span class="plan-section-title">Brief</span></div>';
-    if (proj.description) html += '<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:6px">' + escHtml(proj.description) + '</div>';
-    if (proj.success_bar) html += '<div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:6px"><span style="font-weight:600;color:var(--text2)">Success:</span> ' + escHtml(proj.success_bar) + '</div>';
-    if (proj.plan) html += '<div style="font-size:11px;color:var(--text3);line-height:1.5;white-space:pre-wrap;border-top:1px solid var(--border);padding-top:6px;margin-top:4px">' + escHtml(proj.plan) + '</div>';
-    if (!proj.description && !proj.success_bar && !proj.plan) html += '<div style="font-size:11px;color:var(--text3);padding:6px 0">No project brief yet. Tell Porter about your project.</div>';
-    html += '</div>';
-
-    // ── Section 2: Workstreams ──
-    html += '<div class="plan-section">';
-    html += '<div class="plan-section-hdr"><span class="plan-section-title">Workstreams</span></div>';
-    var phases = proj.phases || [];
-    if (phases.length) {
-      phases.sort(function(a,b){ return (a.order||0)-(b.order||0); });
-      phases.forEach(function(ph) {
-        var st = ph.status || 'pending';
-        html += '<div style="margin-bottom:8px">';
-        html += '<div class="plan-phase">';
-        html += '<span class="plan-phase-status ' + st + '">' + st + '</span>';
-        html += '<span class="plan-phase-name">' + escHtml(ph.name || '?') + '</span>';
-        if (ph.owner) html += '<span class="plan-phase-owner">' + escHtml(ph.owner) + '</span>';
-        if (ph.done_when) html += '<span style="font-size:10px;color:var(--text3);font-style:italic">' + escHtml(ph.done_when) + '</span>';
-        html += '</div>';
-        var dls = ph.deliverables || [];
-        if (dls.length) {
-          dls.forEach(function(d) {
-            var dd = d.status === 'done';
-            html += '<div style="display:flex;align-items:center;gap:6px;padding:1px 0 1px 24px">';
-            html += '<span style="font-size:9px;color:' + (dd ? '#22c55e' : 'var(--text3)') + '">' + (dd ? '\u2713' : '\u25cb') + '</span>';
-            html += '<span style="font-size:11px;color:' + (dd ? 'var(--text3)' : 'var(--text)') + ';' + (dd ? 'text-decoration:line-through;' : '') + '">' + escHtml(d.name || '?') + '</span>';
-            html += '</div>';
-          });
-        }
-        html += '</div>';
-      });
-    } else {
-      html += '<div style="font-size:11px;color:var(--text3);padding:6px 0">No workstreams defined yet.</div>';
-    }
-    var milestones = proj.milestones || [];
-    if (milestones.length) {
-      var msDone = milestones.filter(function(m){ return m.done; }).length;
-      html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">';
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px">Milestones</span><div style="flex:1;height:3px;border-radius:2px;background:var(--border)"><div style="height:100%;border-radius:2px;background:var(--accent);width:' + Math.round(msDone/milestones.length*100) + '%"></div></div><span style="font-size:10px;color:var(--text3)">' + msDone + '/' + milestones.length + '</span></div>';
-      milestones.forEach(function(m, i) {
-        html += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0"><input type="checkbox" ' + (m.done ? 'checked' : '') + ' onchange="_projToggleMilestone(\x27' + proj.id + '\x27,' + i + ')" style="margin:0;cursor:pointer"><span style="font-size:11px;color:' + (m.done ? 'var(--text3)' : 'var(--text)') + ';' + (m.done ? 'text-decoration:line-through;' : '') + '">' + escHtml(m.name) + '</span></div>';
-      });
-      html += '</div>';
-    }
-    html += '<div style="display:flex;gap:6px;margin-top:8px">';
-    html += '<button onclick="_projChatPrefill(\'Add a new workstream to this project\')" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Workstream</button>';
-    html += '<button onclick="_projAddMilestone(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Milestone</button>';
-    html += '</div>';
-    html += '</div>';
-
-    // ── Section 3: Quality Gates ── (moved up from Section 4)
-    html += '<div class="plan-section">';
-    html += '<div class="plan-section-hdr"><span class="plan-section-title">Quality Gates</span></div>';
-    var gates = proj.quality_gates || [];
-    if (gates.length) {
-      var gDone = gates.filter(function(g){ return g.done; }).length;
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:10px;color:var(--text3)">Progress</span><span style="font-size:10px;color:var(--text3)">' + gDone + '/' + gates.length + '</span></div>';
-      gates.forEach(function(g, i) {
-        html += '<div class="plan-gate">';
-        html += '<input type="checkbox" ' + (g.done ? 'checked' : '') + ' onchange="_projToggleGate(\x27' + proj.id + '\x27,' + i + ')" style="margin:0;cursor:pointer">';
-        html += '<span style="font-size:11px;color:' + (g.done ? 'var(--text3)' : 'var(--text)') + ';' + (g.done ? 'text-decoration:line-through;' : '') + '">' + escHtml(g.item || '') + '</span>';
-        html += '</div>';
-      });
-    } else {
-      html += '<div style="font-size:11px;color:var(--text3);padding:4px 0">No quality gates defined.</div>';
-    }
-    html += '<div style="display:flex;gap:6px;margin-top:8px">';
-    html += '<button onclick="_projChatPrefill(\'Add a quality gate: all tests pass\')" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">+ Quality Gate</button>';
-    html += '</div>';
-    html += '</div>';
-
-    // ── Section 4: Settings (collapsed) ──
-    html += '<div class="plan-section" style="border-color:var(--border)">';
-    html += '<div class="plan-section-hdr" style="cursor:pointer" onclick="var c=this.nextElementSibling;c.style.display=c.style.display===\'none\'?\'\':\'none\';this.querySelector(\'span:last-child\').textContent=c.style.display===\'none\'?\'\u25b8\':\'\u25be\'">';
-    html += '<span class="plan-section-title">Settings</span><span style="font-size:10px;color:var(--text3);margin-left:auto">\u25b8</span></div>';
-    html += '<div style="display:none;padding-top:8px">';
-    // Schedule
-    var sched = proj.schedule || {};
-    html += '<div style="margin-bottom:12px">';
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Schedule</div>';
-    html += '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px">';
-    if (proj.start_date) html += '<span style="color:var(--text3)">Start: <span style="color:var(--text)">' + escHtml(proj.start_date) + '</span></span>';
-    if (proj.deadline) html += '<span style="color:var(--text3)">Deadline: <span style="color:var(--accent);font-weight:600">' + escHtml(proj.deadline) + '</span></span>';
-    html += '<span style="color:var(--text3)">Cadence: <span style="color:var(--text)">' + escHtml(sched.cadence || 'none') + '</span></span>';
-    html += '</div>';
-    html += '<div style="display:flex;gap:6px;margin-top:6px">';
-    html += '<button onclick="_projChatPrefill(\'Set a weekly review cadence\')" class="btn btn-ghost" style="font-size:10px;padding:2px 6px">Cadence</button>';
-    html += '<button onclick="_projEditDates(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 6px">Dates</button>';
-    html += '</div></div>';
-    // Autonomy
-    var auton = proj.autonomy || {};
-    var aMode = auton.mode || 'manual';
-    html += '<div>';
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Autonomy</div>';
-    html += '<div class="plan-autonomy-mode" style="margin-bottom:6px">';
-    ['manual','guided','autonomous'].forEach(function(m) {
-      html += '<button class="plan-autonomy-btn' + (aMode === m ? ' active' : '') + '" onclick="_projSetAutonomy(\x27' + proj.id + '\x27,\x27' + m + '\x27)">' + m.charAt(0).toUpperCase() + m.slice(1) + '</button>';
-    });
-    html += '</div></div>';
-    html += '</div>';
-    html += '</div>';
-
-    html += '</div>';
-
-    // ── Deliverables ──
-
-    html += _projNextCard(proj, 'deliverables');
-    // v0.31.69 — Planned deliverables from workstreams
-    var phases = proj.phases || [];
-    var hasDeliverables = phases.some(function(p){ return (p.deliverables||[]).length > 0; });
-    if (hasDeliverables) {
-      html += '<div style="margin-bottom:12px">';
-      html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Planned Deliverables</div>';
-      phases.forEach(function(ph) {
-        var dls = ph.deliverables || [];
-        if (!dls.length) return;
-        html += '<div style="margin-bottom:6px">';
-        html += '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:3px">' + escHtml(ph.name) + '</div>';
-        dls.forEach(function(d) {
-          var dd = d.status === 'done';
-          html += '<div style="display:flex;align-items:center;gap:6px;padding:1px 0 1px 12px">';
-          html += '<span style="font-size:9px;color:' + (dd ? '#22c55e' : 'var(--text3)') + '">' + (dd ? '\u2713' : '\u25cb') + '</span>';
-          html += '<span style="font-size:11px;color:' + (dd ? 'var(--text3)' : 'var(--text)') + ';' + (dd ? 'text-decoration:line-through;' : '') + '">' + escHtml(d.name) + '</span>';
-          html += '</div>';
-        });
-        html += '</div>';
-      });
-      html += '</div>';
-    }
-    // Artifacts section header
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Artifacts</div>';
-    // v0.31.44 — Drag-and-drop zone
-    html += '<div id="proj-deliv-drop" class="proj-drop-zone" onclick="_projUploadFile(\x27' + proj.id + '\x27)" ondragover="_projDelivDragOver(event)" ondragenter="_projDelivDragEnter(event)" ondragleave="_projDelivDragLeave(event)" ondrop="_projDelivDrop(event,\x27' + proj.id + '\x27)">Drop files here or click to upload</div>';
-    html += '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">';
-    html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27text\x27)" class="btn btn-ghost" style="font-size:11px">+ Text</button>';
-    html += '<button onclick="_projAddContent(\x27' + proj.id + '\x27,\x27link\x27)" class="btn btn-ghost" style="font-size:11px">+ Link</button>';
-    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27image\x27)" class="btn btn-ghost" style="font-size:11px">+ Image</button>';
-    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27video\x27)" class="btn btn-ghost" style="font-size:11px">+ Video</button>';
-    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27audio\x27)" class="btn btn-ghost" style="font-size:11px">+ Audio</button>';
-    html += '<button onclick="_projUploadMedia(\x27' + proj.id + '\x27,\x27document\x27)" class="btn btn-ghost" style="font-size:11px">+ Doc</button>';
-    html += '</div>';
-    html += '<div id="proj-content-list" style="font-size:12px;color:var(--text3)">Loading...</div>';
-    html += '<div id="proj-artifacts-list" style="font-size:12px;color:var(--text3);margin-top:14px"></div>';
-
-    // ── Workers ──
-
-    html += _projNextCard(proj, 'workers');
-    var assigned = proj.assigned_personas || [];
-    // v0.31.44 — Ensure personas are loaded before rendering workers
-    if (assigned.length && (!_personas || !_personas.length)) {
-      content.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:12px">Loading workers...</div>';
-      loadPersonas().then(function() { _renderProjTabContent(); });
-      return;
-    }
-    // Sort by agent hierarchy (sort_order from Agents tab)
-    var sortedAssigned = assigned.slice().sort(function(a, b) {
-      var pa = (_personas || []).find(function(x) { return x.id === a; });
-      var pb = (_personas || []).find(function(x) { return x.id === b; });
-      var oa = pa && typeof pa.sort_order === 'number' ? pa.sort_order : 50;
-      var ob = pb && typeof pb.sort_order === 'number' ? pb.sort_order : 50;
-      if (oa !== ob) return oa - ob;
-      return ((pa && pa.name) || '').localeCompare((pb && pb.name) || '');
-    });
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Assigned Workers (' + assigned.length + ')</div>';
-    if (!assigned.length) {
-      html += '<div class="proj-guide-empty"><div class="proj-guide-empty-title">No workers assigned yet</div><div class="proj-guide-empty-hint">Workers handle the actual tasks. Assign existing agents or ask Porter to create the right specialist for this project.</div><div class="proj-next-actions" style="justify-content:center"><button class="proj-next-btn" onclick="_projAssignAgent(\x27' + proj.id + '\x27)">Assign Worker</button><button class="proj-next-btn" onclick="_projKickoff(\x27worker\x27)">Ask Porter to Create One</button></div></div>';
-    } else {
-      html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">';
-      sortedAssigned.forEach(function(pid) {
-        var p = (_personas || []).find(function(x) { return x.id === pid; });
-        var name = p ? p.name : pid.slice(0,8);
-        var role = p ? (p.role || '') : '';
-        var backend = p ? (p.preferred_backend || '') : '';
-        html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);font-size:12px;min-width:200px;cursor:pointer" onclick="switchModule(\x27agents\x27);selectPersona(\x27' + pid + '\x27)">';
-        html += '<div style="width:36px;height:36px;flex-shrink:0">' + (p ? _personaAvatarMarkup(p, 36) : '<span style="font-size:22px">\u{1f916}</span>') + '</div>';
-        html += '<div style="flex:1;min-width:0">';
-        html += '<div style="font-weight:600;color:var(--text)">' + escHtml(name) + '</div>';
-        if (role) html += '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + escHtml(role) + '</div>';
-        html += '<div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">';
-        if (backend) html += '<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:var(--raised);color:var(--text3)">' + escHtml(backend) + '</span>';
-        if (p && p.managed_by_porter) html += '<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:color-mix(in srgb, var(--accent) 15%, var(--bg));color:var(--accent)">Porter-managed</span>';
-        html += '</div></div>';
-        html += '<button onclick="event.stopPropagation();_projUnassign(\x27' + proj.id + '\x27,\x27' + pid + '\x27)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 2px;flex-shrink:0" title="Remove">&times;</button>';
-        html += '</div>';
-      });
-      html += '</div>';
-    }
-    // Add agent (only show when workers already exist — empty state has its own CTAs)
-    if (assigned.length) {
-    html += '<div style="margin-top:8px"><button onclick="_projAssignAgent(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:11px">+ Assign Worker</button>';
-    html += ' <button onclick="_projKickoff(\x27worker\x27)" class="btn btn-ghost" style="font-size:11px">+ Create New Worker</button></div>';
-    }
-
-    // Worker recommendations based on project type
-    var typeInfo = _projTypeInfo(proj.type);
-    if (typeInfo.workers && typeInfo.workers.length) {
-      var existingRoles = [];
-      (proj.assigned_personas || []).forEach(function(pid) {
-        var p = (_personas || []).find(function(x) { return x.id === pid; });
-        if (p && p.role) existingRoles.push(p.role.toLowerCase());
-      });
-      var recs = typeInfo.workers.filter(function(w) {
-        return !existingRoles.some(function(r) { return r.indexOf(w.toLowerCase()) !== -1 || w.toLowerCase().indexOf(r) !== -1; });
-      });
-      if (recs.length) {
-        html += '<div style="margin-top:16px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border));border-radius:10px;background:color-mix(in srgb,var(--accent) 4%,var(--surface))">';
-        html += '<div style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Recommended for ' + escHtml(typeInfo.label) + ' Projects</div>';
-        html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
-        recs.forEach(function(w) {
-          html += '<button onclick="_createWorkerFromRecommendation(\x27' + escHtml(w) + '\x27,\x27' + escHtml(proj.id) + '\x27)" class="btn btn-ghost" style="font-size:11px;padding:4px 10px;border-color:color-mix(in srgb,var(--accent) 30%,var(--border))">+ ' + escHtml(w) + '</button>';
-        });
-        html += '</div></div>';
-      }
-    }
-
-    // ── Tasks ──
-
-    html += _projNextCard(proj, 'tasks');
-    // Quick-add bar
-    html += '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">';
-    html += '<input type="text" id="proj-task-input" placeholder="Add a task..." onkeydown="if(event.key===\'Enter\')_projAddTask(\x27' + proj.id + '\x27)" style="flex:1;font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)">';
-    html += '<button onclick="_projAddTask(\x27' + proj.id + '\x27)" class="btn btn-primary" style="font-size:11px;padding:5px 12px">Add</button>';
-    html += '</div>';
-    // Filter row
-    html += '<div style="display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
-    var _tf = window._projTaskFilter || 'all';
-    ['all','todo','in_progress','done'].forEach(function(f) {
-      var label = f === 'all' ? 'All' : f === 'todo' ? 'To Do' : f === 'in_progress' ? 'In Progress' : 'Done';
-      html += '<button class="btn btn-ghost' + (_tf === f ? ' active' : '') + '" style="font-size:10px;padding:2px 8px' + (_tf === f ? ';background:var(--accent);color:#fff' : '') + '" onclick="window._projTaskFilter=\x27' + f + '\x27;_renderProjTabContent()">' + label + '</button>';
-    });
-    html += '</div>';
-    // Task list loaded async
-    html += '<div id="proj-task-list" style="font-size:12px;color:var(--text3)"><div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div></div>';
-
-    content.innerHTML = html;
-    _projLoadContent(proj.id);
-    _projLoadArtifacts(proj.id);
-    _projLoadTasks(proj.id);
-    return;
-
-  } else if (_projTab === 'timeline') {
-
-    html += _projNextCard(proj, 'activity');
-    html += '<div style="display:flex;flex-direction:column;gap:10px">';
-    html += '<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap">';
-    html += '<span style="font-size:13px;font-weight:600;color:var(--text)">Recent Activity</span>';
-    html += '<div style="display:flex;gap:8px"><span class="model-card-chip dim" style="font-size:10px">' + (proj.assigned_personas || []).length + ' workers</span>';
-    html += '<span class="model-card-chip dim" style="font-size:10px">' + escHtml(proj.type === 'autonomous' ? 'Autonomous' : 'Guided') + '</span></div>';
-    html += '</div>';
-    html += '<div id="proj-activity-list" style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text3)"><div class="loading-indicator"><span class="loading-spinner"></span> Loading activity...</div></div>';
-    html += '</div>';
-    content.innerHTML = html;
-    _projLoadActivity(proj.id);
-    return;
-
-  } else if (_projTab === 'records') {
-    // ── People ──
-
-    // v0.31.44 — Project People / Collaborators CRM
-    html += _projNextCard(proj, 'people');
-    html += '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">';
-    html += '<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Collaborators</span>';
-    html += '<button onclick="_projAddCollaborator(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:11px;margin-left:auto">+ Add Person</button>';
-    html += '</div>';
-    html += '<div id="proj-people-list" class="proj-collab-grid"><div style="font-size:12px;color:var(--text3)">Loading...</div></div>';
-
-    // ── Connected Apps ──
-
-    html += _projNextCard(proj, 'apps');
-    html += '<div style="display:flex;flex-direction:column;gap:12px">';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">';
-    html += '<span style="font-size:13px;font-weight:600;color:var(--text)">Connected Apps</span>';
-    html += '<button class="btn btn-ghost" style="font-size:11px" onclick="_projConnectApp(\x27' + proj.id + '\x27)">+ Connect App</button>';
-    html += '</div>';
-    html += '<div id="proj-apps-list" style="font-size:12px;color:var(--text3)"><div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div></div>';
-    html += '</div>';
-
-    // ── Links ──
-    var _rLinks = proj.links || {};
-    var _rHasLinks = _rLinks.repo || _rLinks.live_url || _rLinks.docs || (_rLinks.custom && _rLinks.custom.length);
-    if (_rHasLinks) {
-      html += '<div style="margin-top:12px"><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Links</div>';
-      html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
-      if (_rLinks.repo) html += '<a href="' + escHtml(_rLinks.repo) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Repo</a>';
-      if (_rLinks.live_url) html += '<a href="' + escHtml(_rLinks.live_url) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Live</a>';
-      if (_rLinks.docs) html += '<a href="' + escHtml(_rLinks.docs) + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">Docs</a>';
-      (_rLinks.custom || []).forEach(function(lk) { html += '<a href="' + escHtml(lk.url || '') + '" target="_blank" rel="noopener" style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--accent);text-decoration:none">' + escHtml(lk.label || 'Link') + '</a>'; });
-      html += '</div></div>';
-    }
-    // ── Linked Projects ──
-    var _rLinkedProjs = proj.linked_projects || [];
-    if (_rLinkedProjs.length) {
-      html += '<div style="margin-top:12px"><div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Linked Projects</div>';
-      html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
-      _rLinkedProjs.forEach(function(lp) {
-        var linked = _projList.find(function(p) { return p.id === lp.project_id; });
-        var linkName = linked ? linked.name : lp.project_id.slice(0,8);
-        html += '<button onclick="_projOpen(\x27' + escHtml(lp.project_id) + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px">' + escHtml(linkName) + '</button>';
-      });
-      html += '</div></div>';
-    }
-
-    // ── State / Notes ──
-    html += '<div id="proj-state-view" style="margin-top:12px;font-size:12px;color:var(--text3)">Loading state...</div>';
-
-    // ── Project Settings ──
-    html += '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">';
-    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Project Settings</div>';
-
-    html += '<div style="display:flex;flex-direction:column;gap:12px">';
-    html += '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Project Name</label>';
-    html += '<input type="text" id="proj-edit-name" value="' + escHtml(proj.name || '') + '" style="width:100%;font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)"></div>';
-    html += '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Description</label>';
-    html += '<textarea id="proj-edit-desc" rows="3" style="width:100%;font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);resize:vertical">' + escHtml(proj.description || '') + '</textarea></div>';
-    html += '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Type</label>';
-    html += '<select id="proj-edit-type" style="font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)">';
-    ['website','app','presentation','research','content','design','ops','custom'].forEach(function(t) {
-      var info = _PROJECT_TYPES[t] || {};
-      html += '<option value="' + t + '"' + (proj.type === t ? ' selected' : '') + '>' + (info.label || t) + '</option>';
-    });
-    html += '</select></div>';
-    html += '<div style="display:flex;gap:8px;margin-top:8px">';
-    html += '<button onclick="_projSave(\x27' + proj.id + '\x27)" class="btn btn-primary" style="font-size:12px">Save</button>';
-    html += '<button onclick="_projSetActive(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:12px">' + (proj.id === _projActive ? 'Deactivate' : 'Set as Active') + '</button>';
-    html += '<button onclick="_projDelete(\x27' + proj.id + '\x27)" class="btn btn-ghost" style="font-size:12px;color:var(--danger,#ef4444)">Delete</button>';
-    html += '</div></div>';
-    html += '</div>';
-
-    content.innerHTML = html;
-    _projLoadCollaborators(proj.id);
-    _projLoadApps(proj.id);
-    _projLoadState(proj.id);
-    return;
-  }
-
-  content.innerHTML = html;
-}
-
 async function _projLoadNowTasks(projId) {
   var el = document.getElementById('proj-now-tasks');
   if (!el) return;
@@ -44926,7 +44465,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.7"})
+            self.reply_json({"v": "0.33.8"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -45088,7 +44627,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.33.7"
+                health["porter_version"] = "0.33.8"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -47422,7 +46961,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.7'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.8'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -51469,7 +51008,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.33.7"
+                _ws_health["porter_version"] = "0.33.8"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -54464,7 +54003,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.7 ready (localhost only)")
+    print(f"\n  Porter v0.33.8 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
