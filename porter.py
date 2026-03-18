@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.10 — Fix chat prefill routing"""
+"""Porter v0.33.11 — Project detail overhaul"""
 
 
 import email
@@ -15590,7 +15590,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.10</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.11</div>
   </div>
 </aside>
 
@@ -16731,6 +16731,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.11', date:'2026-03-18', notes:['Project detail overhaul: header actions, meta bar, inline tasks, team avatars, 2-column layout'] },
   { ver:'v0.33.10', date:'2026-03-18', notes:['Fix: chat prefill now routes to popup widget (embedded bar was hidden)'] },
   { ver:'v0.33.9', date:'2026-03-18', notes:['Project detail: empty state prompts for To-Do and Team','Agent cards: role text truncated to 1 line'] },
   { ver:'v0.33.8', date:'2026-03-18', notes:['Fix: removed duplicate Active badge on project cards','Cleanup: removed 460 lines of dead legacy tab renderer'] },
@@ -20584,18 +20585,62 @@ async function _projOpen(id) {
   document.getElementById('project-detail-view').style.display = '';
   document.getElementById('proj-detail-name').textContent = proj.name || 'Untitled';
   var sb = document.getElementById('proj-detail-status');
-  if (sb) {
-    var done = !!proj.completed_at;
-    sb.textContent = done ? 'Completed' : (proj.status || 'Active');
-    sb.style.background = done ? 'color-mix(in srgb,#22c55e 15%,transparent)' : 'color-mix(in srgb,#3b82f6 15%,transparent)';
-    sb.style.color = done ? '#22c55e' : '#3b82f6';
-  }
+  if (sb) { _projUpdateStatusBadge(sb, proj); }
   window._projCurrent = proj;
   var actions = document.getElementById('proj-detail-actions');
-  if (actions) actions.innerHTML = '';
+  if (actions) {
+    var pid = proj.id;
+    var curStatus = proj.status || 'active';
+    var isActive = pid === _projActive;
+    var ah = '';
+    ah += '<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="_projSetActive(\x27' + pid + '\x27)">' + (isActive ? 'Deactivate' : 'Set Active') + '</button>';
+    ah += '<div style="position:relative;display:inline-block">';
+    ah += '<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'block\'?\'none\':\'block\'">Status \u25be</button>';
+    ah += '<div style="display:none;position:absolute;top:100%;right:0;z-index:50;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px;min-width:120px;box-shadow:0 8px 24px rgba(0,0,0,.3)">';
+    ['active','paused','completed','archived'].forEach(function(s) {
+      ah += '<div onclick="_projSetStatus(\x27' + pid + '\x27,\x27' + s + '\x27);this.parentElement.style.display=\'none\'" style="padding:6px 10px;font-size:11px;border-radius:4px;cursor:pointer;color:' + (s===curStatus ? 'var(--accent)' : 'var(--text)') + '" onmouseover="this.style.background=\'var(--raised)\'" onmouseout="this.style.background=\'\'">' + s.charAt(0).toUpperCase() + s.slice(1) + (s===curStatus ? ' \u2713' : '') + '</div>';
+    });
+    ah += '</div></div>';
+    ah += '<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="_projEditInline(\x27' + pid + '\x27)">Edit</button>';
+    ah += '<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;color:var(--danger,#ef4444)" onclick="_projDelete(\x27' + pid + '\x27)">Delete</button>';
+    actions.innerHTML = ah;
+  }
   var tabs = document.getElementById('proj-detail-tabs');
   if (tabs) tabs.innerHTML = '';
   _renderProjectPage();
+}
+function _projUpdateStatusBadge(sb, proj) {
+  var s = proj.status || (proj.completed_at ? 'completed' : 'active');
+  var colors = { active:'#3b82f6', paused:'#f59e0b', completed:'#22c55e', archived:'#6b7280' };
+  var c = colors[s] || colors.active;
+  sb.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+  sb.style.background = 'color-mix(in srgb,' + c + ' 15%,transparent)';
+  sb.style.color = c;
+}
+async function _projEditInline(pid) {
+  var proj = _projList.find(function(p) { return p.id === pid; });
+  if (!proj) return;
+  _porterPrompt('Edit Project', [
+    {name:'name', label:'Name', type:'text', value:proj.name||''},
+    {name:'desc', label:'Description', type:'textarea', value:proj.description||''},
+    {name:'success', label:'Success criteria', type:'text', value:proj.success_bar||''},
+    {name:'start', label:'Start date', type:'text', value:proj.start_date||'', placeholder:'YYYY-MM-DD'},
+    {name:'deadline', label:'Deadline', type:'text', value:proj.deadline||'', placeholder:'YYYY-MM-DD'}
+  ], async function(vals) {
+    var updates = {action:'update', project_id:pid};
+    if (vals.name !== undefined) updates.name = vals.name;
+    if (vals.desc !== undefined) updates.description = vals.desc;
+    if (vals.success !== undefined) updates.success_bar = vals.success;
+    if (vals.start !== undefined) updates.start_date = vals.start;
+    if (vals.deadline !== undefined) updates.deadline = vals.deadline;
+    var r = await api('/api/projects', updates);
+    if (r && r.ok) {
+      toast('Saved', 'ok');
+      await loadProjects();
+      var updated = _projList.find(function(p) { return p.id === pid; });
+      if (updated) { window._projCurrent = updated; document.getElementById('proj-detail-name').textContent = updated.name || 'Untitled'; _renderProjectPage(); }
+    } else { toast(r && r.error || 'Failed', 'err'); }
+  });
 }
 
 function _renderProjTabs() { /* V2: no tabs */ }
@@ -20765,9 +20810,7 @@ async function _renderProjectPage() {
   if (!proj) return;
   var el = document.getElementById('proj-detail-content');
   if (!el) return;
-  // Ensure personas are loaded for worker name resolution
   if (!_personas || !_personas.length) { try { await loadPersonas(); } catch(e) {} }
-  // Fetch all project data in parallel
   var pid = proj.id;
   var [tasksRes, contentRes, collabRes, actRes] = await Promise.all([
     api('/api/workspace/tasks', {action:'list', project_id:pid}),
@@ -20788,151 +20831,144 @@ async function _renderProjectPage() {
   var todoTasks = tasks.filter(function(t) { return t.status === 'todo'; });
   var ipTasks = tasks.filter(function(t) { return t.status === 'in_progress'; });
   var doneTasks = tasks.filter(function(t) { return t.status === 'done'; });
-  var hasTeam = workers.length || collabs.length;
-  var hasTasks = tasks.length > 0;
-  var hasInputs = inputs.length > 0;
-  var hasOutputs = outputs.length > 0;
-  var hasFiles = files.length > 0;
-  var hasMilestones = milestones.length > 0;
-  var hasActivity = activity.length > 0;
-  var hasAnything = hasTeam || hasTasks || hasInputs || hasOutputs || hasFiles || hasMilestones || hasActivity;
   var h = '';
+  // ── Meta bar ──
+  var metaParts = [];
+  var typeInfo = _projTypeInfo(proj.type);
+  metaParts.push('<span style="color:' + typeInfo.color + '">' + escHtml(typeInfo.label) + '</span>');
+  if (proj.start_date) metaParts.push('Started ' + escHtml(proj.start_date));
+  if (proj.deadline) metaParts.push('<span style="color:var(--accent)">Due ' + escHtml(proj.deadline) + '</span>');
+  if (workers.length) metaParts.push(workers.length + ' worker' + (workers.length > 1 ? 's' : ''));
+  h += '<div style="display:flex;gap:12px;font-size:11px;color:var(--text3);margin-bottom:14px;flex-wrap:wrap">' + metaParts.join('<span style="opacity:.3"> \u00b7 </span>') + '</div>';
   // ── Objective ──
   if (objective) {
-    h += '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:16px;max-width:560px">' + escHtml(objective) + '</div>';
+    h += '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:16px;max-width:600px">' + escHtml(objective) + '</div>';
   }
-  // ── Progress bar (only if tasks exist) ──
-  if (hasTasks) {
+  if (proj.success_bar) {
+    h += '<div style="font-size:11px;color:var(--text3);margin-bottom:16px"><span style="font-weight:600;color:var(--text2)">Success:</span> ' + escHtml(proj.success_bar) + '</div>';
+  }
+  // ── Progress bar ──
+  if (tasks.length) {
     var pct = Math.round(doneTasks.length / tasks.length * 100);
     h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">';
     h += '<div style="flex:1;height:3px;background:var(--border);border-radius:2px"><div style="height:100%;width:' + pct + '%;background:' + (pct === 100 ? '#22c55e' : 'var(--accent)') + ';border-radius:2px;transition:width .3s"></div></div>';
-    h += '<span style="font-size:11px;color:var(--text3);white-space:nowrap">' + doneTasks.length + '/' + tasks.length + ' done</span>';
+    h += '<span style="font-size:11px;color:var(--text3);white-space:nowrap">' + pct + '%</span>';
     h += '</div>';
   }
-  // If project is completely empty, show a clean welcome
-  if (!hasAnything && !objective) {
-    h += '<div style="text-align:center;padding:40px 20px;max-width:400px;margin:0 auto">';
-    h += '<div style="font-size:14px;color:var(--text);margin-bottom:8px">Fresh project</div>';
-    h += '<div style="font-size:12px;color:var(--text3);line-height:1.5">Use Ask Porter to set it up: define the objective, add inputs and outputs, assign team members.</div>';
-    h += '</div>';
-    el.innerHTML = h;
-    return;
-  }
-  // ── Content grid — only show sections that have data ──
-  var leftParts = [];
-  var rightParts = [];
-  // LEFT: Inputs
-  if (hasInputs) {
-    var s = '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Inputs</div>';
-    inputs.forEach(function(c) {
-      s += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
-      if (c.url) s += '<a href="' + escHtml(c.url) + '" target="_blank" style="color:var(--accent);text-decoration:none">' + escHtml(c.title || c.url) + '</a>';
-      else s += '<span style="color:var(--text)">' + escHtml(c.title || 'Untitled') + '</span>';
-      s += '</div>';
-    });
-    leftParts.push(s);
-  }
-  // LEFT: Outputs
-  if (hasOutputs) {
-    var s = '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Outputs</div>';
-    outputs.forEach(function(c) {
-      s += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
-      s += '<span style="color:var(--text)">' + escHtml(c.title || 'Untitled') + '</span>';
-      s += '</div>';
-    });
-    leftParts.push(s);
-  }
-  // LEFT: To-Do
-  if (hasTasks) {
-    var s = '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">To-Do</div>';
-    var orderedTasks = ipTasks.concat(todoTasks).concat(doneTasks);
-    orderedTasks.forEach(function(t) {
-      var isDone = t.status === 'done';
-      var isIP = t.status === 'in_progress';
-      s += '<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px">';
-      s += '<span style="color:' + (isDone ? '#22c55e' : (isIP ? '#f59e0b' : 'var(--text3)')) + ';font-size:10px">' + (isDone ? '✓' : (isIP ? '◉' : '○')) + '</span>';
-      s += '<span style="color:' + (isDone ? 'var(--text3)' : 'var(--text)') + ';' + (isDone ? 'text-decoration:line-through' : '') + '">' + escHtml(t.title) + '</span>';
-      if (t.owner) s += '<span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(t.owner) + '</span>';
-      s += '</div>';
-    });
-    leftParts.push(s);
-  }
-  // RIGHT: Team
-  if (hasTeam) {
-    var s = '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Team</div>';
-    workers.forEach(function(wid) {
-      var wName = wid;
-      try { var p = (_personas || []).find(function(x){return x.id===wid}); if (p) wName = p.name || wid; } catch(e) {}
-      s += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
-      s += '<span style="color:var(--text)">' + escHtml(wName) + '</span>';
-      s += '<span style="font-size:10px;color:var(--text3)">worker</span>';
-      s += '</div>';
-    });
-    collabs.forEach(function(c) {
-      s += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
-      s += '<span style="color:var(--text)">' + escHtml(c.display_name || c.username) + '</span>';
-      s += '<span style="font-size:10px;color:var(--text3)">' + escHtml(c.role || 'member') + '</span>';
-      s += '</div>';
-    });
-    rightParts.push(s);
-  }
-  // RIGHT: Files
-  if (hasFiles) {
-    var s = '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Files</div>';
-    files.forEach(function(f) {
-      s += '<div style="padding:3px 0;font-size:12px;color:var(--text)">' + escHtml(f.title || f.file_path || 'File') + '</div>';
-    });
-    rightParts.push(s);
-  }
-  // RIGHT: Milestones
-  if (hasMilestones) {
-    var s = '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Milestones</div>';
-    milestones.forEach(function(m) {
-      s += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">';
-      s += '<span style="color:' + (m.done ? '#22c55e' : 'var(--text3)') + ';font-size:10px">' + (m.done ? '✓' : '○') + '</span>';
-      s += '<span style="color:var(--text)">' + escHtml(m.title || m.name || '?') + '</span>';
-      s += '</div>';
-    });
-    rightParts.push(s);
-  }
-  // Render grid — adapt columns based on content
-  if (leftParts.length || rightParts.length) {
-    if (leftParts.length && rightParts.length) {
-      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">';
-      h += '<div style="display:flex;flex-direction:column;gap:20px">' + leftParts.join('') + '</div>';
-      h += '<div style="display:flex;flex-direction:column;gap:20px">' + rightParts.join('') + '</div>';
-      h += '</div>';
-    } else {
-      // Single column if only one side has content
-      var parts = leftParts.concat(rightParts);
-      h += '<div style="display:flex;flex-direction:column;gap:20px;max-width:480px">';
-      parts.forEach(function(p) { h += p; });
-      h += '</div>';
+  // ── Two-column layout ──
+  h += '<div style="display:grid;grid-template-columns:1fr 260px;gap:24px;align-items:start">';
+  // === LEFT: Tasks + Content ===
+  h += '<div style="display:flex;flex-direction:column;gap:20px;min-width:0">';
+  // Tasks section (always show)
+  h += '<div>';
+  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+  h += '<span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Tasks</span>';
+  if (tasks.length) h += '<span style="font-size:10px;color:var(--text3)">' + doneTasks.length + '/' + tasks.length + '</span>';
+  h += '</div>';
+  h += '<div style="display:flex;gap:6px;margin-bottom:8px">';
+  h += '<input type="text" id="proj-task-input" placeholder="Add a task..." onkeydown="if(event.key===\'Enter\')_projAddTask(\x27' + pid + '\x27)" style="flex:1;font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none" onfocus="this.style.borderColor=\'var(--accent)\'" onblur="this.style.borderColor=\'var(--border)\'">';
+  h += '<button onclick="_projAddTask(\x27' + pid + '\x27)" class="btn btn-ghost" style="font-size:11px;padding:5px 10px">Add</button>';
+  h += '</div>';
+  h += '<div id="proj-task-list" style="font-size:12px;color:var(--text3)"></div>';
+  h += '</div>';
+  // Inputs / Outputs
+  if (inputs.length || outputs.length) {
+    h += '<div>';
+    if (inputs.length) {
+      h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Inputs</div>';
+      inputs.forEach(function(c) {
+        h += '<div style="padding:2px 0;font-size:12px">';
+        if (c.url) h += '<a href="' + escHtml(c.url) + '" target="_blank" style="color:var(--accent);text-decoration:none">' + escHtml(c.title || c.url) + '</a>';
+        else h += '<span style="color:var(--text)">' + escHtml(c.title || 'Untitled') + '</span>';
+        h += '</div>';
+      });
     }
-  }
-  // ── Empty state hints — show what's possible ──
-  if (!hasTasks || !hasTeam) {
-    h += '<div style="margin-top:20px;display:flex;flex-wrap:wrap;gap:8px">';
-    if (!hasTasks) h += '<div onclick="_projChatPrefill(\'Add tasks to this project\')" style="cursor:pointer;padding:10px 14px;border:1px dashed var(--border);border-radius:8px;font-size:11px;color:var(--text3);flex:1;min-width:140px;transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'\'"><div style="font-weight:600;color:var(--text2);margin-bottom:2px">To-Do</div>Add tasks via Ask Porter</div>';
-    if (!hasTeam) h += '<div onclick="_projChatPrefill(\'Assign a worker to this project\')" style="cursor:pointer;padding:10px 14px;border:1px dashed var(--border);border-radius:8px;font-size:11px;color:var(--text3);flex:1;min-width:140px;transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'\'"><div style="font-weight:600;color:var(--text2);margin-bottom:2px">Team</div>Assign workers via Ask Porter</div>';
+    if (outputs.length) {
+      h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin:' + (inputs.length ? '12px' : '0') + ' 0 6px">Outputs</div>';
+      outputs.forEach(function(c) { h += '<div style="padding:2px 0;font-size:12px;color:var(--text)">' + escHtml(c.title || 'Untitled') + '</div>'; });
+    }
     h += '</div>';
   }
-  // ── Timeline — compact, at the bottom ──
-  if (hasActivity) {
+  // Milestones
+  if (milestones.length) {
+    h += '<div>';
+    var msDone = milestones.filter(function(m) { return m.done; }).length;
+    h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Milestones</span><span style="font-size:10px;color:var(--text3)">' + msDone + '/' + milestones.length + '</span></div>';
+    milestones.forEach(function(m, i) {
+      h += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:12px"><input type="checkbox" ' + (m.done ? 'checked' : '') + ' onchange="_projToggleMilestone(\x27' + pid + '\x27,' + i + ')" style="margin:0;cursor:pointer;accent-color:var(--accent)"><span style="color:' + (m.done ? 'var(--text3)' : 'var(--text)') + ';' + (m.done ? 'text-decoration:line-through;' : '') + '">' + escHtml(m.name || m.title || '?') + '</span></div>';
+    });
+    h += '</div>';
+  }
+  h += '</div>'; // end left
+  // === RIGHT: Team + Files + Links ===
+  h += '<div style="display:flex;flex-direction:column;gap:20px">';
+  // Team
+  h += '<div>';
+  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Team</span><span style="font-size:10px;color:var(--text3)">' + (workers.length + collabs.length) + '</span></div>';
+  if (workers.length) {
+    workers.forEach(function(wid) {
+      var p = (_personas || []).find(function(x) { return x.id === wid; });
+      var wName = p ? (p.name || wid) : wid.slice(0,8);
+      var wRole = p ? (p.role || 'Worker') : 'Worker';
+      h += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer" onclick="switchModule(\x27agents\x27);selectPersona(\x27' + wid + '\x27)">';
+      h += '<div style="width:24px;height:24px;flex-shrink:0">' + (p ? _personaAvatarMarkup(p, 24) : '\ud83e\udd16') + '</div>';
+      h += '<div style="min-width:0"><div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(wName) + '</div>';
+      h += '<div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(wRole) + '</div></div></div>';
+    });
+  }
+  if (collabs.length) {
+    collabs.forEach(function(c) {
+      h += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0">';
+      h += '<div style="width:24px;height:24px;border-radius:50%;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--text);flex-shrink:0">' + escHtml((c.display_name||c.username||'?')[0].toUpperCase()) + '</div>';
+      h += '<div><div style="font-size:12px;color:var(--text)">' + escHtml(c.display_name || c.username) + '</div><div style="font-size:10px;color:var(--text3)">' + escHtml(c.role || 'member') + '</div></div></div>';
+    });
+  }
+  if (!workers.length && !collabs.length) h += '<div style="font-size:11px;color:var(--text3);padding:4px 0">No team members</div>';
+  h += '<button onclick="_projAssignAgent(\x27' + pid + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px;margin-top:4px">+ Assign</button>';
+  h += '</div>';
+  // Files
+  if (files.length) {
+    h += '<div><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Files</div>';
+    files.forEach(function(f) { h += '<div style="padding:2px 0;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(f.title || f.file_path || 'File') + '</div>'; });
+    h += '</div>';
+  }
+  // Links
+  var links = proj.links || {};
+  var hasLinks = links.repo || links.live_url || links.docs || (links.custom && links.custom.length);
+  if (hasLinks) {
+    h += '<div><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Links</div>';
+    if (links.repo) h += '<a href="' + escHtml(links.repo) + '" target="_blank" style="display:block;font-size:11px;color:var(--accent);text-decoration:none;padding:1px 0">\u2192 Repo</a>';
+    if (links.live_url) h += '<a href="' + escHtml(links.live_url) + '" target="_blank" style="display:block;font-size:11px;color:var(--accent);text-decoration:none;padding:1px 0">\u2192 Live</a>';
+    if (links.docs) h += '<a href="' + escHtml(links.docs) + '" target="_blank" style="display:block;font-size:11px;color:var(--accent);text-decoration:none;padding:1px 0">\u2192 Docs</a>';
+    (links.custom || []).forEach(function(lk) { h += '<a href="' + escHtml(lk.url || '') + '" target="_blank" style="display:block;font-size:11px;color:var(--accent);text-decoration:none;padding:1px 0">\u2192 ' + escHtml(lk.label || 'Link') + '</a>'; });
+    h += '</div>';
+  }
+  // Linked projects
+  var linkedProjs = proj.linked_projects || [];
+  if (linkedProjs.length) {
+    h += '<div><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Linked</div>';
+    linkedProjs.forEach(function(lp) {
+      var linked = _projList.find(function(p) { return p.id === lp.project_id; });
+      var lName = linked ? linked.name : lp.project_id.slice(0,8);
+      h += '<div onclick="_projOpen(\x27' + escHtml(lp.project_id) + '\x27)" style="cursor:pointer;font-size:11px;color:var(--accent);padding:2px 0">\u2192 ' + escHtml(lName) + '</div>';
+    });
+    h += '</div>';
+  }
+  h += '</div>'; // end right
+  h += '</div>'; // end grid
+  // ── Timeline ──
+  if (activity.length) {
     h += '<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">';
     h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Recent</div>';
     activity.slice(0, 8).forEach(function(ev) {
       var ts = ev.ts ? new Date(ev.ts * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short'}) : '';
-      h += '<div style="display:flex;gap:8px;padding:2px 0;font-size:11px">';
-      h += '<span style="color:var(--text3);min-width:50px">' + ts + '</span>';
-      h += '<span style="color:var(--text2)">' + escHtml((ev.summary || ev.text || ev.action || '').slice(0, 120)) + '</span>';
-      h += '</div>';
+      h += '<div style="display:flex;gap:8px;padding:2px 0;font-size:11px"><span style="color:var(--text3);min-width:50px">' + ts + '</span><span style="color:var(--text2)">' + escHtml((ev.summary || ev.text || ev.action || '').slice(0, 120)) + '</span></div>';
     });
     h += '</div>';
   }
   el.innerHTML = h;
+  _projLoadTasks(pid);
 }
-
 
 async function _renderProjTabContent() { return _renderProjectPage(); }
 async function _projLoadNowTasks(projId) {
@@ -44478,7 +44514,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.10"})
+            self.reply_json({"v": "0.33.11"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44640,7 +44676,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.33.10"
+                health["porter_version"] = "0.33.11"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -46974,7 +47010,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.10'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.11'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -51021,7 +51057,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.33.10"
+                _ws_health["porter_version"] = "0.33.11"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -54016,7 +54052,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.10 ready (localhost only)")
+    print(f"\n  Porter v0.33.11 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
