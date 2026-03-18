@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.15 — Agent cards: uniform sizing"""
+"""Porter v0.33.16 — Files: Finder-like UX"""
 
 
 import email
@@ -14713,6 +14713,15 @@ body.density-compact .file-name { padding: 6px 0; }
 .fm-act { background:none; border:none; color:var(--text3); font-size:11px; padding:2px 6px; border-radius:4px; cursor:pointer; }
 .fm-act:hover { color:var(--text); background:var(--raised); }
 .fm-act.danger:hover { color:#ef4444; }
+/* Finder-like file list (v0.33.16) */
+.fm-col-hdr { display:flex; align-items:center; gap:10px; padding:5px 12px; border-bottom:1px solid var(--border); background:var(--bg); font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; user-select:none; }
+.fm-col-hdr span { cursor:pointer; display:flex; align-items:center; gap:3px; }
+.fm-col-hdr span:hover { color:var(--text); }
+.fm-col-hdr .sort-arrow { font-size:8px; opacity:.6; }
+.fm-status-bar { display:flex; align-items:center; gap:12px; padding:6px 12px; border-top:1px solid var(--border); font-size:11px; color:var(--text3); background:var(--bg); border-radius:0 0 8px 8px; }
+.fm-search { padding:5px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text); font-size:12px; outline:none; width:200px; transition:border-color .15s; }
+.fm-search:focus { border-color:var(--accent); }
+.fm-row:nth-child(even) { background:color-mix(in srgb, var(--bg) 30%, var(--surface)); }
 .fm-pane { border:1px solid var(--border); border-radius:8px; background:var(--surface); margin-bottom:16px; }
 .fm-pane-hdr { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); }
 .fm-pane-title { font-size:12px; font-weight:600; color:var(--text); text-transform:uppercase; letter-spacing:.3px; }
@@ -15600,7 +15609,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.15</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.16</div>
   </div>
 </aside>
 
@@ -16080,6 +16089,9 @@ input[type="number"].settings-input { min-width: 60px; }
     <div class="module-hdr">
       <span class="module-title">Files</span>
       <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+        <input type="text" class="fm-search" id="fm-search" placeholder="Search files..." oninput="_fmFilterFiles()">
+        <button class="btn btn-ghost" style="font-size:11px" onclick="_fmNewFolder()">+ Folder</button>
+        <label class="btn btn-ghost" style="font-size:11px;cursor:pointer">Upload<input type="file" multiple style="display:none" onchange="_fmUploadFiles(this.files)"></label>
         <button class="btn btn-ghost" onclick="loadAllFiles()">&#8635;</button>
       </div>
     </div>
@@ -16716,6 +16728,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.16', date:'2026-03-18', notes:['Files: Finder-like UX with column headers, search filter, status bar, sortable columns'] },
   { ver:'v0.33.15', date:'2026-03-18', notes:['Agent cards: uniform avatar sizing (96px for all), view switcher properly closes detail'] },
   { ver:'v0.33.14', date:'2026-03-18', notes:['Agent detail: full-page view replaces slide-out drawer, back button, legacy panel removed'] },
   { ver:'v0.33.13', date:'2026-03-18', notes:['Dead code cleanup: removed 124 unused JS functions (~1900 lines)'] },
@@ -27194,6 +27207,61 @@ async function _createFromTemplate() {
 }
 
 var _fmCurrentPath = '/';
+var _fmSortCol = 'name';
+var _fmSortAsc = true;
+var _fmAllItems = []; // cache for filtering
+
+function _fmSetSort(col) {
+  if (_fmSortCol === col) _fmSortAsc = !_fmSortAsc;
+  else { _fmSortCol = col; _fmSortAsc = true; }
+  loadAllFiles();
+}
+
+function _fmSortItems(items) {
+  return items.slice().sort(function(a, b) {
+    // Folders always first
+    if (a.type === 'folder' && b.type !== 'folder') return -1;
+    if (a.type !== 'folder' && b.type === 'folder') return 1;
+    var va, vb;
+    if (_fmSortCol === 'size') { va = a.size || 0; vb = b.size || 0; }
+    else if (_fmSortCol === 'date') { va = a.modified || 0; vb = b.modified || 0; }
+    else { va = (a.name || '').toLowerCase(); vb = (b.name || '').toLowerCase(); }
+    var cmp = va < vb ? -1 : va > vb ? 1 : 0;
+    return _fmSortAsc ? cmp : -cmp;
+  });
+}
+
+function _fmFilterFiles() {
+  var q = (document.getElementById('fm-search') || {}).value || '';
+  q = q.toLowerCase().trim();
+  if (!q) { loadAllFiles(); return; }
+  // Filter cached items
+  var el = document.getElementById('allfiles-list');
+  if (!el || !_fmAllItems.length) return;
+  var filtered = _fmAllItems.filter(function(f) { return (f.name || '').toLowerCase().indexOf(q) !== -1; });
+  el.innerHTML = _fmColHeader() + _fmSortItems(filtered).map(function(f) { return _fmRow(f); }).join('') + _fmStatusBar(filtered);
+}
+
+function _fmColHeader() {
+  var arrow = function(col) { return _fmSortCol === col ? '<span class="sort-arrow">' + (_fmSortAsc ? '▲' : '▼') + '</span>' : ''; };
+  return '<div class="fm-col-hdr">'
+    + '<span style="flex:1;min-width:0;padding-left:26px" onclick="_fmSetSort(\x27name\x27)">Name ' + arrow('name') + '</span>'
+    + '<span style="min-width:60px;text-align:right" onclick="_fmSetSort(\x27size\x27)">Size ' + arrow('size') + '</span>'
+    + '<span style="min-width:80px;text-align:right" onclick="_fmSetSort(\x27date\x27)">Modified ' + arrow('date') + '</span>'
+    + '<span style="min-width:60px"></span>'
+    + '</div>';
+}
+
+function _fmStatusBar(items) {
+  var fileCount = items.filter(function(f) { return f.type !== 'folder'; }).length;
+  var folderCount = items.filter(function(f) { return f.type === 'folder'; }).length;
+  var totalSize = items.reduce(function(s, f) { return s + (f.size || 0); }, 0);
+  var parts = [];
+  if (folderCount) parts.push(folderCount + ' folder' + (folderCount !== 1 ? 's' : ''));
+  if (fileCount) parts.push(fileCount + ' file' + (fileCount !== 1 ? 's' : ''));
+  if (totalSize) parts.push(_fmFmtBytes(totalSize));
+  return '<div class="fm-status-bar">' + (parts.join(' · ') || 'Empty') + '</div>';
+}
 
 async function _fmSplitView(el) {
   var me = currentUser ? currentUser.username : 'default';
@@ -27208,21 +27276,23 @@ async function _fmSplitView(el) {
     var userItems = (userFilesData && userFilesData.items) || [];
     var rootItems = (rootData && rootData.items) || [];
     var projItems = rootItems.filter(function(f) { return f.project_id; });
+    // Cache all items for search
+    _fmAllItems = userItems.concat(projItems);
     var h = '';
-    // My Files pane
-    h += '<div class="fm-pane">';
-    h += '<div class="fm-pane-hdr"><span class="fm-pane-title">My Files</span><div style="flex:1"></div>';
-    h += '<button class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="_fmNewFolder()">+ Folder</button>';
-    h += '<label class="btn btn-ghost" style="font-size:11px;padding:2px 8px;cursor:pointer">Upload<input type="file" multiple style="display:none" onchange="_fmUploadFiles(this.files)"></label>';
-    h += '</div>';
-    h += '<div style="min-height:80px" ondragover="event.preventDefault();event.stopPropagation();this.style.background=\'color-mix(in srgb, var(--accent) 5%, var(--surface))\';this.style.outline=\'2px dashed var(--accent)\';this.style.outlineOffset=\'-4px\'" ondragleave="this.style.background=\'\';this.style.outline=\'\'" ondrop="event.preventDefault();event.stopPropagation();this.style.background=\'\';this.style.outline=\'\';_fmUploadFiles(event.dataTransfer.files)">';
+    // My Files section
+    h += '<div class="fm-pane" style="margin-bottom:12px">';
+    h += '<div class="fm-pane-hdr"><span class="fm-pane-title">My Files</span></div>';
+    h += _fmColHeader();
+    h += '<div style="min-height:60px" ondragover="event.preventDefault();event.stopPropagation();this.style.background=\'color-mix(in srgb, var(--accent) 5%, var(--surface))\';this.style.outline=\'2px dashed var(--accent)\';this.style.outlineOffset=\'-4px\'" ondragleave="this.style.background=\'\';this.style.outline=\'\'" ondrop="event.preventDefault();event.stopPropagation();this.style.background=\'\';this.style.outline=\'\';_fmUploadFiles(event.dataTransfer.files)">';
     if (userItems.length) {
-      userItems.forEach(function(f) { h += _fmRow(f); });
+      _fmSortItems(userItems).forEach(function(f) { h += _fmRow(f); });
     } else {
       h += '<div class="fm-pane-empty">Drop files here or click Upload</div>';
     }
-    h += '</div></div>';
-    // Projects pane
+    h += '</div>';
+    h += _fmStatusBar(userItems);
+    h += '</div>';
+    // Projects section
     h += '<div class="fm-pane">';
     h += '<div class="fm-pane-hdr"><span class="fm-pane-title">Projects</span></div>';
     if (projItems.length) {
@@ -27298,24 +27368,10 @@ async function loadAllFiles(path) {
           : '<a href="#" onclick="loadAllFiles(\x27' + escHtml(b.path) + '\x27);return false" style="color:var(--accent);text-decoration:none">' + escHtml(b.name) + '</a>');
       }).join('');
     }
+    _fmAllItems = items;
     if (!items.length) { el.innerHTML = '<div style="padding:48px 32px;text-align:center;color:var(--text3)"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;display:block;opacity:.4"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg><div style="font-size:13px;margin-bottom:4px">Drop files here or use Upload</div><div style="font-size:11px">You can also create folders with + Folder</div></div>'; return; }
-    el.innerHTML = items.map(function(f) {
-      var isDir = f.type === 'folder';
-      var ext = isDir ? '' : (f.name || '').split('.').pop().toLowerCase();
-      var iconColor = isDir ? '#f59e0b' : ({'py':'#3b82f6','js':'#f59e0b','ts':'#3178c6','md':'#8b949e','json':'#22c55e','html':'#ef4444','css':'#a855f7'}[ext] || 'var(--text3)');
-      var icon = isDir
-        ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="' + iconColor + '" stroke="none"><path d="M2 4a2 2 0 012-2h4l2 2h8a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V4z"/></svg>'
-        : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="' + iconColor + '" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
-      var size = (!isDir && f.size) ? _fmFmtBytes(f.size) : '';
-      var date = f.modified ? new Date(f.modified * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',year:'numeric'}) : '';
-      var onclick = isDir ? 'loadAllFiles(\x27' + escHtml(f.path) + '\x27)' : '_fmPreview(\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)';
-      return '<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--border);cursor:pointer" onclick="' + onclick + '" oncontextmenu="_fmCtx(event,\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)">'
-        + icon
-        + '<span style="flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(f.name) + '</span>'
-        + '<span style="font-size:11px;color:var(--text3);min-width:60px;text-align:right">' + size + '</span>'
-        + '<span style="font-size:11px;color:var(--text3);min-width:80px;text-align:right">' + date + '</span>'
-        + '</div>';
-    }).join('');
+    var sorted = _fmSortItems(items);
+    el.innerHTML = _fmColHeader() + sorted.map(function(f) { return _fmRow(f); }).join('') + _fmStatusBar(items);
   } catch(e) { el.innerHTML = '<div style="padding:24px;color:var(--err,#ef4444)">Error: ' + escHtml(e.message) + '</div>'; }
 }
 
@@ -27417,12 +27473,7 @@ function _fmCtx(event, path, name) {
   document.body.appendChild(ov);
 }
 
-function _fmtBytes(b) {
-  if (!b) return '';
-  if (b < 1024) return b + ' B';
-  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
-  return (b/1048576).toFixed(1) + ' MB';
-}
+/* _fmtBytes removed — use _fmFmtBytes */
 
 async function loadAgents() {
   loadPersonas(); // Also refresh persona org chart
@@ -42653,7 +42704,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.15"})
+            self.reply_json({"v": "0.33.16"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -45149,7 +45200,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.15'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.16'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -52196,7 +52247,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.15 ready (localhost only)")
+    print(f"\n  Porter v0.33.16 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
