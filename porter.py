@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.17 — Dead code cleanup: Python functions"""
+"""Porter v0.33.18 — Dead code cleanup: legacy CSS"""
 
 
 import email
@@ -12974,37 +12974,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 
 
-/* Flush wizard modal */
-/* v0.29.46 — flush wizard CSS removed (dead code) */
-  position:fixed; top:0; left:0; right:0; bottom:0;
-  background:rgba(0,0,0,.5); z-index:200; display:flex;
-  align-items:center; justify-content:center;
-}
-.flush-wizard {
-  background:var(--bg); border:1px solid var(--border); border-radius:12px;
-  width:90%; max-width:560px; max-height:85vh; overflow-y:auto;
-  padding:24px; box-shadow:0 8px 32px rgba(0,0,0,.3);
-}
-.flush-wizard h3 { font-size:16px; font-weight:700; margin:0 0 16px; color:var(--text); }
-.flush-wizard-section { margin-bottom:16px; }
-.flush-wizard-label { font-size:11px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
-.flush-wizard-preview {
-  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
-  padding:12px; font-size:12px; line-height:1.6; color:var(--text);
-  white-space:pre-wrap; word-break:break-word; max-height:200px; overflow-y:auto;
-}
-.flush-wizard-editor {
-  width:100%; min-height:150px; padding:12px; font-size:12px; line-height:1.6;
-  font-family:inherit; color:var(--text); background:var(--bg2);
-  border:1px solid var(--border); border-radius:8px; resize:vertical; box-sizing:border-box;
-}
-.flush-wizard-impact {
-  display:flex; gap:16px; font-size:12px; color:var(--text3);
-  padding:8px 12px; background:var(--surface2); border-radius:6px;
-}
-.flush-wizard-impact span { display:flex; flex-direction:column; gap:2px; }
-.flush-wizard-impact strong { font-size:11px; color:var(--text); }
-.flush-wizard-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+/* Flush wizard removed (v0.33.18) */
 .persona-card { cursor:pointer; user-select:none; -webkit-user-select:none; }
 .persona-card.drag-src { opacity:1; transform:none; pointer-events:auto; }
 .persona-cards-row { min-height:80px; }
@@ -13063,18 +13033,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 /* Admin tab */
 
 
-/* Delegation log */
-.deleg-entry {
-  display:flex; align-items:center; gap:10px; padding:8px 12px; font-size:12px;
-  border-bottom:1px solid var(--border);
-}
-.deleg-entry:last-child { border-bottom:none; }
-.deleg-backend { font-size:10px; padding:2px 6px; border-radius:4px; font-weight:600; }
-.deleg-backend.openclaw { background:color-mix(in srgb, #059669 15%, transparent); color:#059669; }
-.deleg-backend.gemini { background:color-mix(in srgb, #2563eb 15%, transparent); color:#2563eb; }
-.deleg-backend.ollama { background:color-mix(in srgb, #8b5cf6 15%, transparent); color:#8b5cf6; }
-.deleg-time { color:var(--text3); font-size:11px; margin-left:auto; white-space:nowrap; }
-.deleg-dur { color:var(--text3); font-size:11px; }
+/* Delegation log removed (v0.33.18) */
 
 /* ── Mission Control v3 ────────────────────────────────────────── */
 #logs-module.module-panel.active { overflow:hidden; display:flex; flex-direction:column; }
@@ -14239,11 +14198,9 @@ body.density-compact .file-name { padding: 6px 0; }
 .module-intro { font-size:13px; color:var(--text3); margin-bottom:16px; margin-top:-12px; }
 .wf-skill-card { padding:10px 12px; border:1px solid var(--border); border-radius:6px; background:var(--surface2); transition:border-color .15s; cursor:default; }
 .wf-skill-card:hover { border-color:var(--accent); }
-.orch-section { margin-bottom:4px; }
-.orch-section-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+/* orch-section removed (v0.33.18) */
 .orch-section-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.6px; margin-bottom:10px; }
-.orch-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
-@media (max-width: 900px) { .orch-grid { grid-template-columns:1fr !important; } }
+/* orch-grid removed (v0.33.18) */
 
 .orch-card {
   padding:16px 18px; background:var(--raised); border:1px solid var(--border);
@@ -14270,25 +14227,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .orch-card-usage-text { font-size:11px; color:var(--text3); margin-top:3px; }
 
 
-/* Flow arrow animation */
-@keyframes flow-pulse {
-  0%, 100% { opacity:.4; }
-  50% { opacity:1; }
-}
-@keyframes flow-dash {
-  to { stroke-dashoffset: -20; }
-}
-.flow-connector .flow-line {
-  stroke-dasharray: 6 4;
-  animation: flow-dash 1.2s linear infinite;
-}
-.flow-connector .flow-arrow {
-  animation: flow-pulse 2s ease-in-out infinite;
-}
-
-/* flow connectors — SVG based */
-.flow-connector { display:flex; flex-direction:column; align-items:center; padding:0; }
-.flow-connector svg { display:block; }
+/* Flow connector removed (v0.33.18) */
 
 /* porter hub */
 .orch-hub {
@@ -14632,19 +14571,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .chat-persona-bar { display:none; }
 
 /* ── Persona Org Chart ──────────────────────────────────────── */
-/* Trace feed */
-.trace-feed { max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg); }
-.trace-step { display:flex;gap:8px;padding:6px 12px;border-bottom:1px solid color-mix(in srgb, var(--border) 50%, transparent);font-size:12px;align-items:center; }
-.trace-step:last-child { border-bottom:none; }
-.trace-step-agent { font-weight:600;color:var(--accent);min-width:80px; }
-.trace-step-action { color:var(--text2);flex:1; }
-.trace-step-status { padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600; }
-.trace-step-status.running { background:#3b82f6;color:#fff; }
-.trace-step-status.complete { background:#22c55e;color:#fff; }
-.trace-step-status.failed { background:#ef4444;color:#fff; }
-.trace-step-status.blocked { background:#f59e0b;color:#fff; }
-.trace-step-time { color:var(--text3);font-size:10px;min-width:50px;text-align:right; }
-.trace-step-tokens { color:var(--text3);font-size:10px; }
+/* Trace feed removed (v0.33.18) */
 /* Task board */
 .task-board { display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px; }
 .task-board-col { background:var(--surface);border:1px solid var(--border);border-radius:8px;min-height:60px; }
@@ -14709,58 +14636,9 @@ body.density-compact .file-name { padding: 6px 0; }
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
 @keyframes pulse-grid-drift { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 0 24px, 32px 0, 0 0; } }
 @keyframes pulse-scan-sweep { 0% { transform: translateX(-120%); opacity: 0; } 20% { opacity: .4; } 100% { transform: translateX(140%); opacity: 0; } }
-.pulse-hero {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb,var(--accent) 18%,var(--border));
-  border-radius: 22px;
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb,var(--accent) 16%, transparent), transparent 42%),
-    linear-gradient(180deg, color-mix(in srgb,var(--surface) 96%, transparent), color-mix(in srgb,var(--bg) 98%, transparent));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 24px 60px rgba(0,0,0,.16);
-}
-.pulse-hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(to bottom, color-mix(in srgb,var(--border) 55%, transparent) 1px, transparent 1px),
-    linear-gradient(to right, color-mix(in srgb,var(--border) 35%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, transparent, color-mix(in srgb,var(--accent) 18%, transparent), transparent);
-  background-size: 100% 24px, 32px 100%, 28% 100%;
-  animation: pulse-grid-drift 16s linear infinite, pulse-scan-sweep 6s ease-in-out infinite;
-  opacity: .5;
-  pointer-events: none;
-}
-.pulse-card {
-  position: relative;
-  overflow: hidden;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: linear-gradient(180deg,color-mix(in srgb,var(--surface) 92%,transparent),color-mix(in srgb,var(--bg) 96%,transparent));
-}
-.pulse-card::after {
-  content: "";
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb,var(--accent) 32%, transparent), transparent);
-}
-.pulse-stage-title { font-size: 13px; font-weight: 700; color: var(--text); }
-.pulse-stage-copy { font-size: 12px; color: var(--text3); margin-top: 4px; line-height: 1.55; }
+/* Pulse hero/card/stage removed (v0.33.18) */
 .pulse-mini-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:12px; }
-.pulse-metric {
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: color-mix(in srgb,var(--bg) 90%, transparent);
-  backdrop-filter: blur(10px);
-}
-.pulse-metric-label { font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); }
-.pulse-metric-value { font-size:30px; font-weight:800; margin-top:6px; }
+/* Pulse metric removed (v0.33.18) */
 .cx-view-btn { background:transparent !important; color:var(--text3); border:1px solid transparent; }
 .cx-view-btn.active { background:var(--surface) !important; color:var(--text); border-color:var(--border); }
 .cx-view-btn:hover:not(.active) { color:var(--text2); }
@@ -14804,8 +14682,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .ma-session-meta { display:flex;flex-wrap:wrap;gap:6px;font-size:11px;color:var(--text3); }
 .ma-session-actions { display:flex;gap:4px;margin-top:6px; }
 .ma-session-actions button { font-size:10px;padding:2px 8px; }
-.ma-summary-modal { position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10010;display:flex;align-items:center;justify-content:center; }
-.ma-summary-box { background:var(--bg);border:1px solid var(--border);border-radius:12px;width:520px;max-height:80vh;overflow-y:auto;padding:20px; }
+/* ma-summary modal removed (v0.33.18) */
 .ma-summary-turn { padding:8px 12px;margin-bottom:4px;border-radius:6px;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word; }
 .ma-summary-turn.user { background:color-mix(in srgb, var(--accent) 8%, transparent); }
 .ma-summary-turn.assistant { background:var(--surface2); }
@@ -14919,9 +14796,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .persona-card.orchestrator .persona-figure { animation:none; }
 .persona-card.orchestrator.is-busy .persona-figure { animation:pixel-hero 1.8s ease-in-out infinite; }
 .persona-card.selected .persona-figure { filter:drop-shadow(0 20px 30px rgba(0,0,0,.24)); }
-.persona-card-xp { width:100%; height:3px; border-radius:2px; background:var(--border); margin-top:6px; overflow:hidden; }
-.persona-card-xp-fill { height:100%; border-radius:2px; background:linear-gradient(90deg,#3b82f6,#8b5cf6); transition:width .3s; }
-.persona-card-xp-label { font-size:9px; color:var(--text3); margin-top:2px; }
+/* Persona XP bar removed (v0.33.18) */
 
 /* v0.29.1 — Full-page Agent Detail View */
 .agent-detail-view { display:flex; flex-direction:column; gap:10px; min-height:0; height:calc(100vh - 80px); max-height:calc(100vh - 80px); overflow:hidden; }
@@ -14970,14 +14845,12 @@ body.density-compact .file-name { padding: 6px 0; }
 .project-card-desc { font-size:11px; line-height:1.4; color:var(--text3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .project-card-footer { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:auto; padding-top:6px; }
 .proj-type-badge { font-size:9px; padding:2px 6px; border-radius:4px; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
-.pulse-grid { display:grid; gap:14px; }
+/* pulse-grid removed (v0.33.18) */
 .pulse-status-strip { display:flex; gap:16px; flex-wrap:wrap; padding:8px 0 4px; font-size:12px; color:var(--text2); }
 .pulse-status-strip .ps-item { display:inline-flex; align-items:center; gap:5px; }
 .pulse-status-strip .ps-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
 .pulse-status-strip .ps-val { font-weight:700; color:var(--text); }
-.pulse-board { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1.2fr) minmax(300px,.85fr); gap:14px; }
-.pulse-pane { padding:14px 16px; border:1px solid var(--border); border-radius:12px; background:var(--surface); min-height:0; }
-.pulse-pane-title { font-size:13px; font-weight:700; color:var(--text); margin-bottom:2px; }
+/* pulse-board/pane removed (v0.33.18) */
 .pulse-routing-list, .pulse-lane-list, .pulse-runs-list { display:flex; flex-direction:column; gap:8px; }
 .pulse-routing-list { max-height:420px; overflow:auto; padding-right:2px; }
 .pulse-runs-list { max-height:420px; overflow:auto; padding-right:2px; }
@@ -15047,14 +14920,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .mem-section-label { font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px; }
 
 
-.mem-silos { display:flex;flex-direction:column;gap:2px; }
-
-
-.mem-coord-rail { display:flex;flex-direction:column;gap:2px; }
-.mem-coord-item { display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--raised);font-size:12px; }
-.mem-coord-item .coord-name { font-weight:500;color:var(--text); }
-.mem-coord-item .coord-desc { color:var(--text3);flex:1; }
-.mem-coord-item .coord-size { color:var(--text3);font-size:11px; }
+/* mem-silos/coord removed (v0.33.18) */
 
 /* Nav group label */
 .mnav-group-label { font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;padding:12px 8px 4px;pointer-events:none;user-select:none; }
@@ -15437,7 +15303,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.17</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.18</div>
   </div>
 </aside>
 
@@ -16556,6 +16422,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.18', date:'2026-03-18', notes:['Dead code cleanup: legacy CSS from removed features'] },
   { ver:'v0.33.17', date:'2026-03-18', notes:['Dead code cleanup: 11 unused Python functions removed'] },
   { ver:'v0.33.16', date:'2026-03-18', notes:['Files: Finder-like UX with column headers, search filter, status bar, sortable columns'] },
   { ver:'v0.33.15', date:'2026-03-18', notes:['Agent cards: uniform avatar sizing (96px for all), view switcher properly closes detail'] },
@@ -42477,7 +42344,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.17"})
+            self.reply_json({"v": "0.33.18"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44973,7 +44840,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.17'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.18'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -52020,7 +51887,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.17 ready (localhost only)")
+    print(f"\n  Porter v0.33.18 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
